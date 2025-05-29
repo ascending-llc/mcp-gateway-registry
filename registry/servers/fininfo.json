@@ -1,0 +1,167 @@
+{
+  "server_name": "Financial Info Proxy",
+  "description": "Secure gateway proxy for internal financial information systems.",
+  "path": "/fininfo",
+  "proxy_pass_url": "http://localhost:8002/",
+  "tags": [],
+  "num_tools": 2,
+  "num_stars": 0,
+  "is_python": true,
+  "license": "N/A",
+  "tool_list": [
+    {
+      "name": "get_stock_aggregates",
+      "parsed_description": {
+        "main": "Retrieve stock aggregate data from Polygon.io API.",
+        "args": "stock_ticker: Case-sensitive ticker symbol (e.g., 'AAPL'), multiplier: Size of the timespan multiplier, timespan: Size of the time window, from_date: Start date in YYYY-MM-DD format or millisecond timestamp, to_date: End date in YYYY-MM-DD format or millisecond timestamp, adjusted: Whether results are adjusted for splits, sort: Sort results by timestamp ('asc' or 'desc'), limit: Maximum number of base aggregates (max 50000)",
+        "returns": "Dict[str, Any]: Response data from Polygon API",
+        "raises": "requests.RequestException: If API call fails after retries"
+      },
+      "schema": {
+        "properties": {
+          "stock_ticker": {
+            "description": "Case-sensitive ticker symbol (e.g., 'AAPL')",
+            "title": "Stock Ticker",
+            "type": "string"
+          },
+          "multiplier": {
+            "description": "Size of the timespan multiplier",
+            "title": "Multiplier",
+            "type": "integer"
+          },
+          "timespan": {
+            "description": "Size of the time window",
+            "title": "Timespan",
+            "type": "string"
+          },
+          "from_date": {
+            "description": "Start date in YYYY-MM-DD format or millisecond timestamp",
+            "title": "From Date",
+            "type": "string"
+          },
+          "to_date": {
+            "description": "End date in YYYY-MM-DD format or millisecond timestamp",
+            "title": "To Date",
+            "type": "string"
+          },
+          "adjusted": {
+            "default": true,
+            "description": "Whether results are adjusted for splits",
+            "title": "Adjusted",
+            "type": "boolean"
+          },
+          "sort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Sort results by timestamp ('asc' or 'desc')",
+            "title": "Sort"
+          },
+          "limit": {
+            "default": 5000,
+            "description": "Maximum number of base aggregates (max 50000)",
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stock_ticker",
+          "multiplier",
+          "timespan",
+          "from_date",
+          "to_date"
+        ],
+        "title": "get_stock_aggregatesArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "print_stock_data",
+      "parsed_description": {
+        "main": "Format all fields from the Polygon.io stock aggregate response as a string.",
+        "args": "stock_ticker: Case-sensitive ticker symbol (e.g., 'AAPL'), multiplier: Size of the timespan multiplier, timespan: Size of the time window, from_date: Start date in YYYY-MM-DD format or millisecond timestamp, to_date: End date in YYYY-MM-DD format or millisecond timestamp, adjusted: Whether results are adjusted for splits, sort: Sort results by timestamp ('asc' or 'desc'), limit: Maximum number of base aggregates (max 50000)",
+        "returns": "str: Formatted string containing all stock data",
+        "raises": null
+      },
+      "schema": {
+        "properties": {
+          "stock_ticker": {
+            "description": "Case-sensitive ticker symbol (e.g., 'AAPL')",
+            "title": "Stock Ticker",
+            "type": "string"
+          },
+          "multiplier": {
+            "description": "Size of the timespan multiplier",
+            "title": "Multiplier",
+            "type": "integer"
+          },
+          "timespan": {
+            "description": "Size of the time window",
+            "title": "Timespan",
+            "type": "string"
+          },
+          "from_date": {
+            "description": "Start date in YYYY-MM-DD format or millisecond timestamp",
+            "title": "From Date",
+            "type": "string"
+          },
+          "to_date": {
+            "description": "End date in YYYY-MM-DD format or millisecond timestamp",
+            "title": "To Date",
+            "type": "string"
+          },
+          "adjusted": {
+            "default": true,
+            "description": "Whether results are adjusted for splits",
+            "title": "Adjusted",
+            "type": "boolean"
+          },
+          "sort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Sort results by timestamp ('asc' or 'desc')",
+            "title": "Sort"
+          },
+          "limit": {
+            "default": 5000,
+            "description": "Maximum number of base aggregates (max 50000)",
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stock_ticker",
+          "multiplier",
+          "timespan",
+          "from_date",
+          "to_date"
+        ],
+        "title": "print_stock_dataArguments",
+        "type": "object"
+      }
+    }
+  ],
+  "resource_list": [
+    {
+      "name": "get_config",
+      "uri": "config://app",
+      "parsed_description": {
+        "main": "Static configuration data",
+        "returns": "str: App configuration data"
+      }
+    }
+  ]
+}

@@ -1,0 +1,327 @@
+{
+  "server_name": "Real Server Fake Tools",
+  "description": "A collection of fake tools with interesting names that take different parameter types",
+  "path": "/realserverfaketools",
+  "proxy_pass_url": "http://localhost:8004/",
+  "tags": ["demo", "fake", "tools", "testing"],
+  "num_tools": 6,
+  "num_stars": 0,
+  "is_python": true,
+  "license": "MIT",
+  "tool_list": [
+    {
+      "name": "quantum_flux_analyzer",
+      "parsed_description": {
+        "main": "Analyzes quantum flux patterns with configurable energy levels and stabilization.",
+        "args": "energy_level: Energy level for quantum analysis (1-10), stabilization_factor: Stabilization factor for quantum flux, enable_temporal_shift: Whether to enable temporal shifting in the analysis",
+        "returns": "str: JSON response with mock quantum flux analysis results",
+        "raises": ""
+      },
+      "schema": {
+        "properties": {
+          "energy_level": {
+            "default": 5,
+            "description": "Energy level for quantum analysis (1-10)",
+            "maximum": 10,
+            "minimum": 1,
+            "title": "Energy Level",
+            "type": "integer"
+          },
+          "stabilization_factor": {
+            "default": 0.75,
+            "description": "Stabilization factor for quantum flux",
+            "title": "Stabilization Factor",
+            "type": "number"
+          },
+          "enable_temporal_shift": {
+            "default": false,
+            "description": "Whether to enable temporal shifting in the analysis",
+            "title": "Enable Temporal Shift",
+            "type": "boolean"
+          }
+        },
+        "title": "quantum_flux_analyzerArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "neural_pattern_synthesizer",
+      "parsed_description": {
+        "main": "Synthesizes neural patterns into coherent structures.",
+        "args": "input_patterns: List of neural patterns to synthesize, coherence_threshold: Threshold for pattern coherence (0.0-1.0), dimensions: Number of dimensions for synthesis (1-10)",
+        "returns": "Dict[str, Any]: Dictionary with mock neural pattern synthesis results",
+        "raises": ""
+      },
+      "schema": {
+        "properties": {
+          "input_patterns": {
+            "description": "List of neural patterns to synthesize",
+            "items": {
+              "type": "string"
+            },
+            "title": "Input Patterns",
+            "type": "array"
+          },
+          "coherence_threshold": {
+            "default": 0.7,
+            "description": "Threshold for pattern coherence (0.0-1.0)",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Coherence Threshold",
+            "type": "number"
+          },
+          "dimensions": {
+            "default": 3,
+            "description": "Number of dimensions for synthesis (1-10)",
+            "maximum": 10,
+            "minimum": 1,
+            "title": "Dimensions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "input_patterns"
+        ],
+        "title": "neural_pattern_synthesizerArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "hyper_dimensional_mapper",
+      "parsed_description": {
+        "main": "Maps geographical coordinates to hyper-dimensional space.",
+        "args": "coordinates: Geographical coordinates to map, dimension_count: Number of hyper-dimensions to map to (4-11), reality_anchoring: Reality anchoring factor (0.1-1.0)",
+        "returns": "str: JSON response with mock hyper-dimensional mapping results",
+        "raises": ""
+      },
+      "schema": {
+        "$defs": {
+          "GeoCoordinates": {
+            "properties": {
+              "latitude": {
+                "description": "Latitude coordinate",
+                "title": "Latitude",
+                "type": "number"
+              },
+              "longitude": {
+                "description": "Longitude coordinate",
+                "title": "Longitude",
+                "type": "number"
+              },
+              "altitude": {
+                "description": "Altitude in meters (optional)",
+                "title": "Altitude",
+                "type": ["number", "null"]
+              }
+            },
+            "required": [
+              "latitude",
+              "longitude"
+            ],
+            "title": "GeoCoordinates",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "coordinates": {
+            "$ref": "#/$defs/GeoCoordinates",
+            "description": "Geographical coordinates to map to hyper-dimensions"
+          },
+          "dimension_count": {
+            "default": 5,
+            "description": "Number of hyper-dimensions to map to (4-11)",
+            "maximum": 11,
+            "minimum": 4,
+            "title": "Dimension Count",
+            "type": "integer"
+          },
+          "reality_anchoring": {
+            "default": 0.8,
+            "description": "Reality anchoring factor (0.1-1.0)",
+            "maximum": 1.0,
+            "minimum": 0.1,
+            "title": "Reality Anchoring",
+            "type": "number"
+          }
+        },
+        "required": [
+          "coordinates"
+        ],
+        "title": "hyper_dimensional_mapperArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "temporal_anomaly_detector",
+      "parsed_description": {
+        "main": "Detects temporal anomalies within a specified timeframe.",
+        "args": "timeframe: Dictionary with 'start' and 'end' times for anomaly detection, sensitivity: Sensitivity level for detection (1-10), anomaly_types: Types of anomalies to detect",
+        "returns": "Dict[str, Any]: Dictionary with mock temporal anomaly detection results",
+        "raises": ""
+      },
+      "schema": {
+        "properties": {
+          "timeframe": {
+            "description": "Start and end times for anomaly detection",
+            "properties": {
+              "start": {
+                "type": "string"
+              },
+              "end": {
+                "type": "string"
+              }
+            },
+            "required": ["start", "end"],
+            "title": "Timeframe",
+            "type": "object"
+          },
+          "sensitivity": {
+            "default": 7,
+            "description": "Sensitivity level for detection (1-10)",
+            "maximum": 10,
+            "minimum": 1,
+            "title": "Sensitivity",
+            "type": "integer"
+          },
+          "anomaly_types": {
+            "default": ["temporal_shift", "causal_loop", "timeline_divergence"],
+            "description": "Types of anomalies to detect",
+            "items": {
+              "type": "string"
+            },
+            "title": "Anomaly Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "timeframe"
+        ],
+        "title": "temporal_anomaly_detectorArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "user_profile_analyzer",
+      "parsed_description": {
+        "main": "Analyzes a user profile with configurable analysis options.",
+        "args": "profile: User profile to analyze, analysis_options: Options for the analysis",
+        "returns": "str: JSON response with mock user profile analysis results",
+        "raises": ""
+      },
+      "schema": {
+        "$defs": {
+          "UserProfile": {
+            "properties": {
+              "username": {
+                "description": "User's username",
+                "title": "Username",
+                "type": "string"
+              },
+              "email": {
+                "description": "User's email address",
+                "title": "Email",
+                "type": "string"
+              },
+              "age": {
+                "description": "User's age (optional)",
+                "title": "Age",
+                "type": ["integer", "null"]
+              },
+              "interests": {
+                "default": [],
+                "description": "List of user interests",
+                "items": {
+                  "type": "string"
+                },
+                "title": "Interests",
+                "type": "array"
+              }
+            },
+            "required": [
+              "username",
+              "email"
+            ],
+            "title": "UserProfile",
+            "type": "object"
+          },
+          "AnalysisOptions": {
+            "properties": {
+              "depth": {
+                "default": 3,
+                "description": "Depth of analysis (1-10)",
+                "title": "Depth",
+                "type": "integer"
+              },
+              "include_metadata": {
+                "default": true,
+                "description": "Whether to include metadata",
+                "title": "Include Metadata",
+                "type": "boolean"
+              },
+              "filters": {
+                "default": {},
+                "description": "Filters to apply",
+                "title": "Filters",
+                "type": "object"
+              }
+            },
+            "title": "AnalysisOptions",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "profile": {
+            "$ref": "#/$defs/UserProfile",
+            "description": "User profile to analyze"
+          },
+          "analysis_options": {
+            "$ref": "#/$defs/AnalysisOptions",
+            "default": {},
+            "description": "Options for the analysis"
+          }
+        },
+        "required": [
+          "profile"
+        ],
+        "title": "user_profile_analyzerArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "synthetic_data_generator",
+      "parsed_description": {
+        "main": "Generates synthetic data based on a provided schema.",
+        "args": "schema: Schema defining the structure of synthetic data, record_count: Number of synthetic records to generate (1-1000), seed: Random seed for reproducibility (optional)",
+        "returns": "Dict[str, Any]: Dictionary with mock synthetic data generation results",
+        "raises": ""
+      },
+      "schema": {
+        "properties": {
+          "schema": {
+            "description": "Schema defining the structure of synthetic data",
+            "title": "Schema",
+            "type": "object"
+          },
+          "record_count": {
+            "default": 10,
+            "description": "Number of synthetic records to generate (1-1000)",
+            "maximum": 1000,
+            "minimum": 1,
+            "title": "Record Count",
+            "type": "integer"
+          },
+          "seed": {
+            "description": "Random seed for reproducibility (optional)",
+            "title": "Seed",
+            "type": ["integer", "null"]
+          }
+        },
+        "required": [
+          "schema"
+        ],
+        "title": "synthetic_data_generatorArguments",
+        "type": "object"
+      }
+    }
+  ]
+}

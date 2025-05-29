@@ -1,0 +1,2697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Gateway - Servers (Test)</title>
+    <!-- Google Font Link (Inter) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- End Google Font Link -->
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+    <style>
+        /* Keyframes for spinner animation */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* -- Theme Color Variables -- Nova-Inspired Light Mode */
+        :root {
+            --bg-color: #f8f9fa !important; /* Very light gray/off-white */
+            --text-color: #16191f !important; /* Very dark gray/near black */
+            --card-bg: #ffffff !important; /* White cards */
+            --card-border: #e0e0e0 !important; /* Lighter gray border */
+            --header-bg: #ffffff !important; /* White header */
+            --sidebar-bg: var(--bg-color) !important; /* Sidebar matches main background */
+            --accent-color: #7a00cc !important; /* Purple accent */
+            --accent-light-bg: #f7f5ff !important; /* Very light purple background */
+            --button-bg: var(--accent-color) !important; /* Purple button */
+            --button-text: #ffffff !important;
+            --secondary-button-bg: #e9ecef !important; /* Light gray secondary button */
+            --secondary-button-text: var(--text-color) !important;
+            --link-color: var(--accent-color) !important; /* Purple links */
+            --badge-bg: #e9ecef !important; /* Light gray badge */
+            --badge-text: var(--text-color) !important;
+            --official-badge-bg: var(--accent-light-bg) !important; /* Light purple badge */
+            --official-badge-text: var(--accent-color) !important; /* Purple text on badge */
+            --input-bg: #ffffff !important;
+            --input-text: var(--text-color) !important;
+            --input-placeholder: #6c757d !important;
+            --input-border: #ced4da !important;
+            --input-border-focus: var(--accent-color) !important; /* Purple focus border */
+            /* Theme Toggle (Keep consistent or adapt?) */
+            --toggle-button-bg: var(--input-bg) !important;
+            --toggle-button-text: var(--text-color) !important;
+            --toggle-button-border: var(--input-border) !important;
+            /* Sidebar Toggle (Keep consistent or adapt?) */
+            --sidebar-toggle-bg-light: none !important;
+            --sidebar-toggle-text-light: var(--text-color) !important;
+            --sidebar-toggle-border-light: none !important;
+        }
+
+        /* Dark mode would also need updating to match */
+        html.dark-mode {
+            /* TODO: Define Nova-inspired dark theme variables */
+            --bg-color: #212529 !important; /* Placeholder dark */
+            --text-color: #f8f9fa !important; /* Placeholder light text */
+            --card-bg: #343a40 !important; /* Placeholder dark card */
+            --card-border: #495057 !important;
+            --header-bg: #212529 !important; /* Dark header */
+            --accent-color: #a040ff !important; /* Lighter purple for dark */
+            --accent-light-bg: #3a304f !important; /* Darker purple bg */
+            --button-bg: var(--accent-color) !important;
+            --button-text: #ffffff !important;
+            --secondary-button-bg: #495057 !important; /* Dark gray secondary */
+            --secondary-button-text: var(--text-color) !important;
+            --link-color: var(--accent-color) !important;
+            --badge-bg: #495057 !important;
+            --badge-text: var(--text-color) !important;
+            --official-badge-bg: var(--accent-light-bg) !important;
+            --official-badge-text: var(--accent-color) !important;
+            --input-bg: #343a40 !important;
+            --input-text: var(--text-color) !important;
+            --input-placeholder: #adb5bd !important;
+            --input-border: #495057 !important;
+            --input-border-focus: var(--accent-color) !important;
+            /* Keep toggles simple for now */
+            --toggle-button-bg: #495057 !important;
+            --toggle-button-text: var(--text-color) !important;
+            --toggle-button-border: #6c757d !important;
+        }
+
+        /* Apply variables with !important to override style.css */
+        body {
+            background-color: var(--bg-color) !important;
+            color: var(--text-color) !important;
+            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6; /* Improve readability */
+        }
+        .main-header {
+            background-color: var(--header-bg) !important;
+            border-bottom: 1px solid var(--card-border) !important;
+            /* Add box-shadow for slight elevation */
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+            /* Assuming header text color is inherited or set in style.css */
+        }
+        .sidebar {
+             background-color: var(--sidebar-bg) !important;
+             color: var(--text-color) !important; /* Ensure sidebar uses main text color */
+        }
+        .sidebar h3 {
+            color: var(--text-color); /* Ensure heading uses text color */
+            border-bottom: 1px solid var(--card-border); /* Add separator */
+            padding-bottom: 0.5em;
+            margin-bottom: 1em;
+        }
+        .sidebar ul,
+        .sidebar ul li,
+        .sidebar ul li span,
+        .sidebar ul li span:first-child { /* Ensure all sidebar text inherits */
+             font-weight: 600; /* Make label slightly bolder */
+             color: var(--text-color);
+        }
+        .sidebar ul li span:last-child {
+             /* Assuming the count badge has its own styling */
+        }
+        .service-card {
+            background-color: var(--card-bg) !important;
+            border: 1px solid var(--card-border) !important;
+            color: var(--text-color) !important; /* Ensure card text uses theme color */
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); /* Subtle shadow */
+            border-radius: 12px; /* --- Add rounding --- */
+        }
+        .service-card h2, .service-card .owner, .service-card .description {
+             color: var(--text-color) !important; /* Explicitly set text color */
+        }
+        /* Example for a specific badge if needed */
+        .badge,
+        .official-badge {
+            /* background-color set by specific class/variable */
+            /* color set by specific class/variable */
+            padding: 0.25em 0.75em;
+            border-radius: 1em; /* Pill shape */
+            font-size: 0.8em;
+            font-weight: 600;
+            vertical-align: middle;
+            display: inline-block; /* Ensure padding applies */
+        }
+        .edit-button {
+            /* Assuming style.css defines button styles, override if needed */
+            /* background-color: var(--button-bg); */
+            /* color: var(--button-text); */
+            background-color: var(--button-bg) !important;
+            color: var(--button-text) !important;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px; /* --- Add rounding --- */
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        .edit-button:hover {
+            opacity: 0.9; /* Slight fade on hover */
+        }
+        a {
+            color: var(--link-color);
+        }
+        .toggle-label {
+            color: var(--text-color);
+        }
+        .logout-button,
+        .search-bar button {
+            background-color: var(--secondary-button-bg) !important;
+            color: var(--secondary-button-text) !important;
+            border: 1px solid var(--card-border); /* Use card border for light gray */
+            padding: 8px 16px;
+            border-radius: 8px; /* --- Add rounding --- */
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+        }
+        .logout-button:hover,
+        .search-bar button:hover {
+            background-color: var(--card-border); /* Darken slightly on hover */
+        }
+        .search-bar input[type="search"] {
+            background-color: var(--input-bg);
+            color: var(--input-text);
+            border: 1px solid var(--input-border);
+            border-radius: 8px; /* --- Add rounding --- */
+            padding: 8px 12px;
+        }
+        .search-bar input[type="search"]::placeholder {
+            color: var(--input-placeholder);
+            opacity: 1; /* Override browser defaults */
+        }
+        .search-bar input[type="search"]:focus {
+             outline: none;
+             border-color: var(--input-border-focus);
+             box-shadow: 0 0 0 2px rgba(122, 0, 204, 0.2); /* Optional focus ring */
+        }
+        .official-badge {
+            background-color: var(--official-badge-bg);
+            color: var(--official-badge-text);
+            padding: 0.2em 0.6em; /* Add padding if it doesn't have it */
+            border-radius: 0.8em; /* Add rounding if it doesn't have it */
+            font-size: 0.8em;
+            font-weight: bold;
+            vertical-align: middle;
+        }
+
+        /* Health Status Badge Styles */
+        .status-badge {
+            border-radius: 0.8em;
+            font-size: 0.8em;
+            font-weight: bold;
+            color: white;
+            vertical-align: middle;
+            white-space: nowrap;
+            display: inline-block;
+            padding: 0.2em 0.6em;
+            line-height: 1.4;
+            margin-right: 5px;
+        }
+        .status-healthy {
+            background-color: #28a745; /* Green */
+        }
+        .status-unhealthy {
+            background-color: #dc3545; /* Red */
+        }
+        .status-error {
+            background-color: #6c757d; /* Gray */
+        }
+        .status-disabled {
+            background-color: #adb5bd; /* Lighter Gray */
+            color: #333;
+        }
+        .status-unknown {
+            background-color: #adb5bd; /* Lighter Gray */
+             color: #333;
+        }
+
+        /* Style for the separate spinner */
+        .status-spinner {
+            /* display: none; /* Hidden by default - Let JS control this */
+            width: 1.2em;
+            height: 1.2em;
+            border: 2px solid rgba(253, 126, 20, 0.3); /* Light orange base border */
+            border-top-color: #fd7e14; /* Spinner color (Orange) */
+            border-radius: 50%;
+            vertical-align: middle;
+            display: inline-block; /* Keep inline-block for layout when visible */
+            animation: spin 1s linear infinite;
+            box-sizing: border-box;
+            position: relative; /* Allow relative positioning */
+            top: -5px; /* Nudge down slightly (adjust as needed) */
+        }
+
+        /* Wrapper for badge and spinner */
+        .status-indicator-area {
+            display: flex;
+            align-items: center; /* Back to center alignment */
+            margin-bottom: 10px; /* Space below this area */
+            /* height: 2em; */ /* Optional: Set a fixed height for the container? */
+        }
+
+        /* Adjust header items container */
+        .card-header .header-right-items {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0; /* --- Prevent icons from shrinking --- */
+        }
+
+        /* Added overflow:hidden to card-header */
+        .card-header {
+             display: flex;
+             align-items: center;
+             margin-bottom: 10px;
+             flex-wrap: nowrap; /* Explicitly prevent wrapping */
+        }
+
+        /* --- Add style for h2 within card-header --- */
+        .card-header h2 {
+            flex-grow: 1; /* Allow title to take up available space */
+            min-width: 0; /* Allow title to shrink below its content size */
+            margin-right: 10px; /* Add some space between title and right items */
+        }
+
+        /* New style for controls row */
+        .card-body .controls-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between; /* Push items to ends */
+            gap: 15px; /* Space between items if they were closer */
+            margin-top: 15px; /* Add some space above this row */
+        }
+
+        /* Ensure toggle form doesn't take extra space */
+        .card-body .toggle-form {
+            margin: 0; /* Remove default margins if any */
+        }
+
+        /* Style for the moved status badge */
+        .card-body .status-badge {
+            display: inline-block; /* Allow margin */
+            margin-bottom: 10px; /* Space below badge */
+        }
+
+        /* Ensure main title uses text color */
+        .content h1 {
+            color: var(--text-color) !important;
+        }
+
+        /* --- Theme Toggle Button --- */
+        .theme-toggle-button {
+            cursor: pointer;
+            font-size: 1.1em; /* Make icon smaller */
+            background: none; /* Transparent background */
+            border: none; /* No border */
+            color: var(--text-color); /* Use main text color for icon */
+            padding: 0; /* Remove padding */
+            margin-left: 10px; /* Add some space */
+            position: relative; /* Allow nudging */
+            top: -2px; /* Nudge up slightly (adjust px value if needed) */
+        }
+
+        /* Ensure header right items are vertically centered */
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 15px; /* Adjust spacing as needed */
+        }
+
+        /* Explicit alignment for non-button items */
+        .header-right .user-display {
+            vertical-align: middle;
+        }
+
+        /* Ensure form aligns correctly in flex context */
+        .header-right form {
+             margin: 0; /* Remove default form margin */
+             padding: 0; /* Remove default form padding */
+             display: inline-block; /* Treat form like an inline block */
+             vertical-align: middle;
+        }
+
+        /* --- Tool List Modal Styles --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: var(--card-bg);
+            color: var(--text-color);
+            padding: 20px 30px;
+            border-radius: 8px;
+            min-width: 300px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        .modal-close-button {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 1.8em;
+            font-weight: bold;
+            color: var(--text-color);
+            cursor: pointer;
+            line-height: 1;
+        }
+        .modal-close-button:hover {
+            opacity: 0.7;
+        }
+        #tool-modal-list-container ul {
+            list-style: disc;
+            padding-left: 20px;
+            margin-top: 10px;
+        }
+        #tool-modal-list-container li {
+            margin-bottom: 5px;
+        }
+        /* --- Style for clickable tool icon --- */
+        .clickable-tool-icon {
+            cursor: pointer;
+            text-decoration: none; /* Remove underline if wrapped in <a> */
+        }
+        .clickable-tool-icon:hover {
+             opacity: 0.8;
+        }
+
+        /* --- Sidebar Toggle Styles --- */
+        .header-left {
+            display: flex;
+            align-items: center;
+        }
+        .sidebar-toggle-button {
+            /* Remove absolute positioning styles */
+            /* position: absolute; */
+            /* top: 10px; */
+            /* right: 10px; */
+            /* z-index: 10; */
+            background: none;
+            border: none;
+            color: #ffffff; /* Set color explicitly to white */
+            font-size: 1.5em; /* Adjust size */
+            cursor: pointer;
+            /* Restore original padding/margin */
+            padding: 0 10px;
+            margin-right: 10px;
+            /* Add transition */
+            transition: opacity 0.2s ease; /* Only transition opacity */
+            position: relative; /* Allow manual position adjustment */
+            top: -2px; /* Nudge UP slightly */
+        }
+        .sidebar-toggle-button:hover {
+            opacity: 0.7;
+        }
+
+        /* Collapsible Sidebar Styles */
+        .sidebar {
+            /* Remove relative positioning */
+            /* position: relative; */
+            width: 250px; /* Standard width */
+            transition: width 0.3s ease, padding 0.3s ease;
+            overflow-x: hidden; /* Prevent horizontal scrollbar during transition */
+            padding: 20px;
+            flex-shrink: 0; /* Prevent sidebar from shrinking smaller than width */
+        }
+        .content {
+            flex-grow: 1;
+            margin-left: 20px; /* Standard margin */
+            transition: margin-left 0.3s ease;
+            overflow-y: auto; /* Allow content to scroll independently */
+            padding-bottom: 20px; /* Ensure space at bottom */
+        }
+        /* Styles when collapsed */
+        body.sidebar-collapsed .sidebar {
+            width: 0; /* Collapse completely */
+            padding: 20px 0; /* Collapse padding horizontally */
+        }
+        body.sidebar-collapsed .content {
+            margin-left: 0; /* No margin when sidebar is 0 width */
+        }
+        /* Hide sidebar content */
+        body.sidebar-collapsed .sidebar > * {
+            visibility: hidden;
+            opacity: 0;
+            transition: visibility 0s 0.3s, opacity 0.3s ease; /* Delay hiding until width transition ends */
+        }
+        /* Make sidebar content visible again when expanded */
+        .sidebar > * {
+            visibility: visible;
+            opacity: 1;
+            transition: opacity 0.3s ease 0.1s; /* Fade in slightly delayed */
+        }
+
+        /* --- New Sidebar Content Styles --- */
+        .sidebar-section {
+            margin-bottom: 2em;
+        }
+        .sidebar-section h3 {
+            font-size: 0.9em;
+            font-weight: 600;
+            color: var(--input-placeholder); /* Use subtle color for heading */
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.8em;
+            padding-left: 10px; /* Align with links */
+        }
+        .sidebar-nav ul,
+        .sidebar-stats {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .sidebar-nav li,
+        .sidebar-stats li {
+            margin-bottom: 0.5em;
+        }
+        .sidebar-link {
+            display: block;
+            color: var(--text-color);
+            text-decoration: none;
+            padding: 10px 12px; /* Adjust padding */
+            border-radius: 8px; /* --- Add rounding --- */
+            font-size: 0.95em;
+            font-weight: 500; /* Slightly less bold */
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+        .sidebar-link:hover {
+            background-color: var(--secondary-button-bg); /* Use light gray hover */
+            color: var(--text-color); /* Keep text dark on hover */
+        }
+        .sidebar-link.active-filter {
+            background-color: var(--accent-light-bg); /* Light purple background for active */
+            color: var(--accent-color); /* Purple text */
+            font-weight: 600;
+        }
+        .sidebar-stats li {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9em;
+            color: var(--text-color);
+            padding: 4px 10px;
+        }
+        .sidebar-stats span:first-child {
+            color: var(--input-placeholder); /* Dim label */
+        }
+        .sidebar-stats span:last-child {
+            font-weight: 600;
+        }
+
+        /* Refresh button specific styles */
+        .refresh-button {
+            background: none;
+            border: none;
+            padding: 0;
+            margin: 0 0 0 5px;
+            cursor: pointer;
+            vertical-align: middle;
+            color: inherit;
+            font-size: 1em; /* Match icon span */
+        }
+        .refresh-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        /* --- Logo Dark Mode Styling --- */
+        .main-header .logo img {
+            transition: filter 0.3s ease; /* Smooth transition for filter */
+            height: 3.5rem; /* Match toggle button effective size using root em */
+            width: auto; /* Maintain aspect ratio */
+        }
+        html.dark-mode .main-header .logo img {
+            /* filter: grayscale(100%) brightness(0) invert(100%) brightness(1.5); <<< Old filter */
+            filter: grayscale(100%) brightness(0) invert(100%) brightness(1.5); /* Restore: Force to white and brighten */
+        }
+
+        /* --- Style the logo container --- */
+        .logo {
+            display: flex; /* Make logo container a flexbox */
+            align-items: center; /* Vertically center items inside logo */
+            gap: 8px; /* Space between logo image and text */
+        }
+
+        /* Registration Modal Tabs */
+        .registration-tabs {
+            display: flex;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--card-border);
+        }
+        .tab-button {
+            padding: 10px 15px;
+            cursor: pointer;
+            border: none;
+            background-color: transparent;
+            color: var(--text-color);
+            font-weight: 600;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -1px; /* Overlap with container border */
+        }
+        .tab-button.active {
+            border-bottom-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+        .tab-button:hover {
+            background-color: var(--secondary-button-bg);
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .form-input {
+            width: 100%;
+            padding: 8px 10px;
+            margin-bottom: 10px;
+            border: 1px solid var(--input-border);
+            border-radius: 6px;
+            background-color: var(--input-bg);
+            color: var(--input-text);
+            box-sizing: border-box;
+        }
+        .form-input:focus {
+            border-color: var(--input-border-focus);
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(122, 0, 204, 0.2);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+        #registration-feedback.success {
+            background-color: #d4edda; /* Light green */
+            color: #155724; /* Dark green */
+            border: 1px solid #c3e6cb;
+        }
+        #registration-feedback.error {
+            background-color: #f8d7da; /* Light red */
+            color: #721c24; /* Dark red */
+            border: 1px solid #f5c6cb;
+        }
+
+        /* --- Register Server Button --- */
+        .register-server-button {
+            background-color: var(--accent-color);
+            color: var(--button-text);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            margin-left: 10px; /* Space from previous element */
+        }
+        .register-server-button:hover {
+            opacity: 0.9;
+        }
+
+        /* Registration Modal Styles */
+        /* (Reusing .modal-overlay and .modal-content from tool modal for consistency) */
+        /* Additional styles for registration modal specifics if needed */
+        #register-server-modal .modal-content {
+            min-width: 400px; /* Adjust as needed */
+            max-width: 700px; /* Adjust as needed */
+        }
+
+        /* Registration Modal Tabs */
+        .registration-tabs {
+            display: flex;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--card-border);
+        }
+        .tab-button {
+            padding: 10px 15px;
+            cursor: pointer;
+            border: none;
+            background-color: transparent;
+            color: var(--text-color);
+            font-weight: 600;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -1px; /* Overlap with container border */
+        }
+        .tab-button.active {
+            border-bottom-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+        .tab-button:hover {
+            background-color: var(--secondary-button-bg);
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .form-input {
+            width: 100%;
+            padding: 8px 10px;
+            margin-bottom: 10px;
+            border: 1px solid var(--input-border);
+            border-radius: 6px;
+            background-color: var(--input-bg);
+            color: var(--input-text);
+            box-sizing: border-box;
+        }
+        .form-input:focus {
+            border-color: var(--input-border-focus);
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(122, 0, 204, 0.2);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+        #registration-feedback.success {
+            background-color: #d4edda; /* Light green */
+            color: #155724; /* Dark green */
+            border: 1px solid #c3e6cb;
+        }
+        #registration-feedback.error {
+            background-color: #f8d7da; /* Light red */
+            color: #721c24; /* Dark red */
+            border: 1px solid #f5c6cb;
+        }
+
+        /* Add these additional style rules to explicitly override style.css colors */
+        .sidebar-toggle-button {
+            color: var(--text-color) !important;
+        }
+        .theme-toggle-button {
+            color: var(--text-color) !important;
+        }
+        .logo span {
+            color: var(--text-color) !important;
+        }
+        .header-right .user-display {
+            color: var(--text-color) !important;
+        }
+        .sidebar ul li span:first-child {
+            color: var(--text-color) !important;
+        }
+        .card-header h2 {
+            color: var(--text-color) !important;
+        }
+        .card-body .owner {
+            color: var(--text-color) !important;
+        }
+        .badge {
+            color: var(--text-color) !important;
+            background-color: var(--badge-bg) !important;
+        }
+        .search-bar input[type="search"] {
+            background-color: var(--input-bg) !important;
+            color: var(--input-text) !important;
+            border-color: var(--input-border) !important;
+        }
+        .modal-content {
+            background-color: var(--card-bg) !important;
+            color: var(--text-color) !important;
+        }
+    </style>
+    <script>
+        // =====================================================================
+        // == Initialization & Configuration
+        // =====================================================================
+
+        // --- Fix the initial theme setup function ---
+        (function() {
+            const savedTheme = localStorage.getItem('theme');
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            // Use saved theme if available, otherwise respect user's OS preference
+            const theme = savedTheme || (prefersDark ? 'dark' : 'light');
+            console.log('[HEAD SCRIPT] Initial theme setup:', theme, 'from:', savedTheme ? 'localStorage' : 'OS preference');
+            
+            const htmlElement = document.documentElement;
+            if (theme === 'dark') {
+                htmlElement.classList.add('dark-mode');
+                htmlElement.setAttribute('data-theme', 'dark');
+            } else {
+                htmlElement.classList.remove('dark-mode');
+                htmlElement.setAttribute('data-theme', 'light');
+            }
+        })();
+
+        // Global state map (initialized/updated by WebSocket)
+        window.currentHealthStatusMap = {};
+
+        // =====================================================================
+        // == Utility Functions
+        // =====================================================================
+
+        function formatTimeAgoJS(isoString) {
+            if (!isoString) return "Never";
+            // console.log(`[formatTimeAgoJS] Formatting: ${isoString}`);
+            try {
+                const dt = new Date(isoString);
+                if (isNaN(dt.getTime())) {
+                    console.error(`[formatTimeAgoJS] Invalid Date parsed from: ${isoString}`);
+                    return "Invalid date";
+                }
+                const now = new Date();
+                const diff = now.getTime() - dt.getTime();
+                const seconds = Math.floor(diff / 1000);
+                if (seconds < 2) return "Just now";
+                if (seconds < 60) return `${seconds}s ago`;
+                const minutes = Math.floor(seconds / 60);
+                if (minutes < 60) return `${minutes}m ago`;
+                const hours = Math.floor(minutes / 60);
+                if (hours < 24) return `${hours}h ago`;
+                const days = Math.floor(hours / 24);
+                return `${days}d ago`;
+            } catch (e) {
+                console.error("Error parsing date:", isoString, e);
+                return "Invalid date";
+            }
+        }
+
+        // --- Add Debounce Function ---
+        function debounce(func, wait) {
+          let timeout;
+          return function executedFunction(...args) {
+            const later = () => {
+              clearTimeout(timeout);
+              func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+          };
+        }
+
+        // =====================================================================
+        // == Core UI Update Functions
+        // =====================================================================
+
+        function updateAllTimestamps() {
+            document.querySelectorAll('.metadata[data-timestamp]').forEach(el => {
+                const isoString = el.dataset.timestamp;
+                const timeAgoEl = el.querySelector('.time-ago');
+                if (timeAgoEl) {
+                    timeAgoEl.textContent = formatTimeAgoJS(isoString);
+                } else {
+                    console.error('[updateAllTimestamps] Could not find .time-ago span within', el);
+                }
+            });
+        }
+
+        function updateServiceDisplay(badgeId, spinnerId, lastCheckedId, serviceData) {
+            const badge = document.getElementById(badgeId);
+            const spinner = document.getElementById(spinnerId);
+            const lastCheckedEl = document.getElementById(lastCheckedId);
+            const safePath = badgeId.replace('status-badge-', ''); // Used for num_tools, refresh button, toggle
+            const numToolsId = 'num-tools-' + safePath;
+            const numToolsEl = document.getElementById(numToolsId);
+
+            // --- Add IDs for toggle elements --- START
+            const toggleCheckId = 'toggle-check-' + safePath;
+            const toggleLabelId = 'toggle-label-' + safePath;
+            const toggleCheckbox = document.getElementById(toggleCheckId);
+            const toggleLabelSpan = document.getElementById(toggleLabelId);
+            // --- Add IDs for toggle elements --- END
+
+            // console.log(`Updating display for ${badgeId}. Data:`, serviceData);
+
+            if (!badge || !spinner || !lastCheckedEl) {
+                console.error(`Missing elements for ${badgeId}. Badge: ${!!badge}, Spinner: ${!!spinner}, Timestamp: ${!!lastCheckedEl}`);
+                return;
+            }
+             if (!numToolsEl) {
+                console.error(`Missing num_tools element with ID: ${numToolsId}`);
+            }
+            // --- Check if toggle elements exist --- START
+            if (!toggleCheckbox) {
+                 console.warn(`Missing toggle checkbox element with ID: ${toggleCheckId}`);
+            }
+            if (!toggleLabelSpan) {
+                 console.warn(`Missing toggle label span element with ID: ${toggleLabelId}`);
+            }
+            // --- Check if toggle elements exist --- END
+
+            const status = serviceData.status;
+            const lastCheckedIso = serviceData.last_checked_iso;
+            const numTools = serviceData.num_tools;
+
+            // --- Update Health Status Display ---
+            let statusClass = 'status-unknown';
+            let displayText = 'unknown';
+            let showSpinner = false;
+
+            if (status === 'healthy') {
+                statusClass = 'status-healthy';
+                displayText = 'healthy';
+            } else if (status.startsWith('unhealthy')) {
+                statusClass = 'status-unhealthy';
+                displayText = status.includes('(') ? status.split('(')[0].trim() : status;
+            } else if (status.startsWith('error')) {
+                statusClass = 'status-error';
+                displayText = status.includes('(') ? status.split('(')[0].trim() : status;
+            } else if (status === 'disabled') {
+                statusClass = 'status-disabled';
+                displayText = 'disabled';
+            } else if (status === 'checking') {
+                statusClass = 'status-unknown';
+                displayText = 'checking';
+                showSpinner = true;
+            }
+
+            badge.className = 'status-badge ' + statusClass;
+            badge.textContent = displayText;
+            badge.title = status; // Tooltip shows full status
+            spinner.style.display = showSpinner ? 'inline-block' : 'none';
+            // console.log(`[updateServiceDisplay] Status: ${status}, Class: ${statusClass}, Text: ${displayText}, Spinner: ${showSpinner}`);
+
+            // --- Update Last Checked Time ---
+            // console.log(`[updateServiceDisplay] Received lastCheckedIso: ${lastCheckedIso} for ${lastCheckedId}`);
+            lastCheckedEl.dataset.timestamp = lastCheckedIso || '';
+            const timeAgoEl = lastCheckedEl.querySelector('.time-ago');
+            if (timeAgoEl) {
+                timeAgoEl.textContent = formatTimeAgoJS(lastCheckedIso);
+            } else {
+                console.error('[updateServiceDisplay] Could not find .time-ago span within', lastCheckedEl);
+            }
+
+            // --- Update Num Tools Display ---
+            if (numToolsEl && numTools !== undefined && numTools !== null) {
+                numToolsEl.textContent = `🔧 ${numTools}`;
+            }
+
+            // --- Update Refresh Button State ---
+            try {
+                const originalPath = '/' + safePath.replace(/_/g, '/');
+                const refreshButton = document.querySelector(`.refresh-button[data-path="${originalPath}"]`);
+                if (refreshButton) {
+                    const shouldBeDisabled = (status === 'disabled');
+                    refreshButton.disabled = shouldBeDisabled;
+                    // console.log(`[updateServiceDisplay] Setting refresh button for ${originalPath} disabled state to: ${shouldBeDisabled}`);
+                } else {
+                    console.warn(`[updateServiceDisplay] Could not find refresh button for path: ${originalPath}`);
+                }
+            } catch (e) {
+                console.error("[updateServiceDisplay] Error finding or updating refresh button state:", e);
+            }
+
+            // --- Update Toggle Switch State and Label --- START
+            if (toggleCheckbox && toggleLabelSpan) {
+                const isCurrentlyEnabled = (status !== 'disabled');
+                toggleCheckbox.checked = isCurrentlyEnabled;
+                toggleLabelSpan.textContent = isCurrentlyEnabled ? 'Enabled' : 'Disabled';
+                // Ensure checkbox is re-enabled after potential async operations complete
+                toggleCheckbox.disabled = false;
+            }
+            // --- Update Toggle Switch State and Label --- END
+        }
+
+        function updateSidebarStats(currentServiceDataMap) {
+            // Update the global map used for calculation
+            Object.assign(window.currentHealthStatusMap, currentServiceDataMap);
+
+            const statEnabled = document.getElementById('stat-enabled');
+            const statDisabled = document.getElementById('stat-disabled');
+            const statIssues = document.getElementById('stat-issues');
+            const statTotal = document.getElementById('stat-total');
+
+            if (!statEnabled || !statDisabled || !statIssues || !statTotal) {
+                console.warn("Sidebar stat elements not found.");
+                return;
+            }
+
+            let enabledCount = 0;
+            let disabledCount = 0;
+            let issuesCount = 0;
+            const servicePaths = Object.keys(window.currentHealthStatusMap);
+
+            statTotal.textContent = servicePaths.length;
+
+            for (const path of servicePaths) {
+                 const statusData = window.currentHealthStatusMap[path];
+                 const status = statusData.status;
+                 if (status === 'disabled') {
+                     disabledCount++;
+                 } else {
+                     enabledCount++;
+                     if (status.startsWith('error') || status.startsWith('unhealthy')) {
+                         issuesCount++;
+                     }
+                 }
+            }
+
+            statEnabled.textContent = enabledCount;
+            statDisabled.textContent = disabledCount;
+            statIssues.textContent = issuesCount;
+        }
+
+        // =====================================================================
+        // == Card Filtering Logic
+        // =====================================================================
+
+        function applyCardFilter(filterType) {
+            console.log(`Applying filter: ${filterType}`);
+            const cards = document.querySelectorAll('.service-card');
+            let visibleCount = 0;
+
+            cards.forEach(card => {
+                let shouldShow = false;
+                const path = card.querySelector('.refresh-button')?.dataset.path; // Get path from refresh button
+                if (!path) {
+                    console.warn("Could not find path for card:", card);
+                    card.style.display = 'block'; // Show if path unknown
+                    visibleCount++;
+                    return;
+                }
+                // Construct badge ID based on path
+                const safePath = path.replace(/^\//, '').replace(/\//g, '_').replace(/:/g, '_');
+                const badgeId = 'status-badge-' + safePath;
+                const badge = document.getElementById(badgeId);
+                // Trim the status read from the title for robust comparison
+                const currentStatus = badge ? badge.title.trim() : 'unknown';
+                console.log(`Card Path: ${path}, Status Read: '${currentStatus}', Filter: ${filterType}`); // Add log
+
+                switch (filterType) {
+                    case 'all':
+                        shouldShow = true;
+                        break;
+                    case 'enabled':
+                        shouldShow = (currentStatus !== 'disabled');
+                        break;
+                    case 'disabled':
+                        shouldShow = (currentStatus === 'disabled');
+                        break;
+                    case 'issues':
+                        shouldShow = currentStatus.startsWith('error') || currentStatus.startsWith('unhealthy');
+                        break;
+                    default:
+                        shouldShow = true; // Default to showing if filter unknown
+                }
+
+                card.style.display = shouldShow ? 'block' : 'none';
+                if (shouldShow) {
+                    visibleCount++;
+                }
+            });
+            console.log(`Filter applied. Visible cards: ${visibleCount}`);
+            // TODO: Update a "no results" message visibility if needed
+        }
+
+        // =====================================================================
+        // == Dynamic Font Resizing Logic (for Card Titles)
+        // =====================================================================
+
+        function adjustTitleFontSize(element, defaultFontSizePx = 24, minFontSizePx = 12, stepPx = 1) {
+            if (!element) return;
+
+            // Reset to default size first to handle widening containers AND ensure CSS overrides apply correctly
+            element.style.fontSize = `${defaultFontSizePx}px`;
+
+            // Allow browser to reflow/repaint before measuring
+            // requestAnimationFrame helps but setTimeout might be more robust here if issues persist
+            // requestAnimationFrame(() => {
+                // Check if overflow happens at default size
+                if (element.scrollWidth > element.clientWidth) {
+                    let currentSize = defaultFontSizePx;
+                    // Reduce size step-by-step
+                    while (element.scrollWidth > element.clientWidth && currentSize > minFontSizePx) {
+                        currentSize -= stepPx;
+                        element.style.fontSize = `${currentSize}px`;
+                    }
+                    // Final check: if still overflowing at min size, ensure it's set to min
+                    if (element.scrollWidth > element.clientWidth && currentSize <= minFontSizePx) {
+                         element.style.fontSize = `${minFontSizePx}px`;
+                    }
+                }
+                // Optional: If it fits even at default, clear the inline style to inherit from CSS
+                // else {
+                //    element.style.fontSize = ''; // Let CSS rule apply
+                // }
+            // });
+        }
+
+        function adjustAllTitles() {
+            const titles = document.querySelectorAll('.service-card .card-header h2');
+            if (titles.length === 0) return;
+
+            // Get default font size from the first title (assuming they are the same via CSS)
+            // Important: Ensure CSS for h2 has a base font-size set (e.g., 1.5em)
+            const defaultFontSize = window.getComputedStyle(titles[0]).fontSize;
+            const defaultFontSizePx = parseFloat(defaultFontSize); // Handles 'px' unit correctly
+            if (isNaN(defaultFontSizePx) || defaultFontSizePx <= 0) {
+                console.warn("Could not determine default font size for titles. Using fallback.");
+                defaultFontSizePx = 24; // Fallback default size
+            }
+
+            // Define minimum size (adjust as needed)
+            const minFontSizePx = Math.max(10, defaultFontSizePx * 0.6); // Example: 60% of default, but at least 10px
+
+            titles.forEach(title => {
+                // Use a slight delay with setTimeout to ensure layout is stable before measuring/adjusting
+                setTimeout(() => {
+                    adjustTitleFontSize(title, defaultFontSizePx, minFontSizePx, 1); // Use 1px step
+                }, 0);
+            });
+        }
+
+        // =====================================================================
+        // == Modal Logic
+        // =====================================================================
+
+        // --- Tool Modal Handling ---
+        function showToolModal(servicePath, serviceName) {
+            const toolModal = document.getElementById('tool-modal');
+            const toolModalTitle = document.getElementById('tool-modal-title');
+            const toolModalListContainer = document.getElementById('tool-modal-list-container');
+
+            if (!toolModal || !toolModalTitle || !toolModalListContainer) {
+                console.error("Tool modal elements not found!"); return;
+            }
+
+            toolModalTitle.textContent = `Tools for ${serviceName}`;
+            toolModalListContainer.innerHTML = '<p>Loading...</p>';
+            toolModal.style.display = 'flex';
+
+            // Ensure the path is properly formatted with leading slash
+            const apiPath = servicePath.startsWith('/') ? servicePath : '/' + servicePath;
+            
+            // Explicitly construct the full URL through the gateway/proxy, NOT direct to port 7860
+            const proxyUrl = window.location.origin + '/api/tools' + apiPath;
+            console.log(`Fetching tools from: ${proxyUrl}`);
+            
+            // Use fetch with proper error handling
+            fetch(proxyUrl, {
+                method: 'GET',
+                credentials: 'same-origin'
+            })
+                .then(response => {
+                    console.log(`Tool fetch response: ${response.status} ${response.statusText}`);
+                    if (!response.ok) {
+                        return response.json().then(data => {
+                            throw new Error(data.detail || `Error: ${response.status} ${response.statusText}`);
+                        }).catch(e => {
+                            throw new Error(`Error: ${response.status} ${response.statusText}`);
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log(`Tool data received:`, data);
+                    toolModalListContainer.innerHTML = '';
+                    
+                    const tools = data.tools || [];
+                    
+                    if (tools && tools.length > 0) {
+                        tools.forEach(tool => {
+                            const toolDiv = document.createElement('div');
+                            toolDiv.style.marginBottom = '15px';
+                            toolDiv.style.borderBottom = '1px solid var(--card-border)';
+                            toolDiv.style.paddingBottom = '10px';
+
+                            const nameEl = document.createElement('h4');
+                            nameEl.textContent = tool.name || 'Unnamed Tool';
+                            nameEl.style.marginTop = '0'; nameEl.style.marginBottom = '5px';
+                            toolDiv.appendChild(nameEl);
+
+                            // Render Parsed Description
+                            if (tool.parsed_description) {
+                                const mainDescEl = document.createElement('p');
+                                mainDescEl.textContent = tool.parsed_description.main || 'No description available.';
+                                mainDescEl.style.whiteSpace = 'pre-wrap';
+                                toolDiv.appendChild(mainDescEl);
+
+                                const renderSection = (title, content) => {
+                                    if (!content) return;
+                                    const titleEl = document.createElement('strong');
+                                    titleEl.textContent = title + ':';
+                                    titleEl.style.display = 'block'; titleEl.style.marginTop = '8px';
+                                    toolDiv.appendChild(titleEl);
+                                    const preEl = document.createElement('pre');
+                                    preEl.textContent = content;
+                                    preEl.style.marginLeft = '10px'; preEl.style.marginTop = '3px';
+                                    preEl.style.whiteSpace = 'pre-wrap'; preEl.style.fontSize = '0.9em';
+                                    toolDiv.appendChild(preEl);
+                                };
+                                renderSection('Args', tool.parsed_description.args);
+                                renderSection('Returns', tool.parsed_description.returns);
+                                renderSection('Raises', tool.parsed_description.raises);
+                            } else if (tool.description) { // Fallback
+                                const descEl = document.createElement('p');
+                                descEl.textContent = tool.description;
+                                descEl.style.marginBottom = '8px';
+                                toolDiv.appendChild(descEl);
+                            }
+
+                            // Render Schema
+                            if (tool.schema && typeof tool.schema === 'object' && Object.keys(tool.schema).length > 0) {
+                                const schemaContainer = document.createElement('div');
+                                schemaContainer.style.marginTop = '10px';
+                                schemaContainer.innerHTML = '<strong>Input Schema:</strong>';
+
+                                const properties = tool.schema.properties;
+                                const required = tool.schema.required || [];
+
+                                if (properties && typeof properties === 'object' && Object.keys(properties).length > 0) {
+                                    const propsList = document.createElement('div');
+                                    propsList.style.marginLeft = '15px'; propsList.style.marginTop = '5px';
+                                    propsList.style.borderLeft = '2px solid var(--card-border)'; propsList.style.paddingLeft = '10px';
+
+                                    for (const [propName, propDetails] of Object.entries(properties)) {
+                                        const propDiv = document.createElement('div');
+                                        propDiv.style.marginBottom = '8px';
+
+                                        const nameSpan = document.createElement('strong');
+                                        nameSpan.textContent = propName;
+                                        propDiv.appendChild(nameSpan);
+
+                                        if (required.includes(propName)) {
+                                            const reqSpan = document.createElement('span');
+                                            reqSpan.textContent = ' (required)'; reqSpan.style.color = '#dc3545';
+                                            reqSpan.style.fontSize = '0.8em'; reqSpan.style.marginLeft = '3px';
+                                            propDiv.appendChild(reqSpan);
+                                        }
+                                        if (propDetails.type) {
+                                            const typeSpan = document.createElement('span');
+                                            typeSpan.textContent = ` - Type: ${propDetails.type}`;
+                                            typeSpan.style.color = 'var(--input-placeholder)'; typeSpan.style.marginLeft = '5px';
+                                            propDiv.appendChild(typeSpan);
+                                        }
+                                        if (propDetails.description) {
+                                            const descP = document.createElement('p');
+                                            descP.textContent = propDetails.description;
+                                            descP.style.margin = '3px 0 0 10px'; descP.style.fontSize = '0.85em';
+                                            propDiv.appendChild(descP);
+                                        }
+                                        if (propDetails.default !== undefined) {
+                                            const defaultP = document.createElement('p');
+                                            defaultP.textContent = `Default: ${JSON.stringify(propDetails.default)}`;
+                                            defaultP.style.margin = '3px 0 0 10px'; defaultP.style.fontSize = '0.85em';
+                                            defaultP.style.color = 'var(--input-placeholder)';
+                                            propDiv.appendChild(defaultP);
+                                        }
+                                        propsList.appendChild(propDiv);
+                                    }
+                                    schemaContainer.appendChild(propsList);
+                                } else {
+                                    schemaContainer.innerHTML += '<p style="margin-left: 15px; font-style: italic;">No input parameters defined.</p>';
+                                }
+                                // Optionally display $defs notice
+                                if (tool.schema.$defs && Object.keys(tool.schema.$defs).length > 0) {
+                                    schemaContainer.innerHTML += '<p style="margin-top: 10px; font-size: 0.8em; color: var(--input-placeholder);"><strong>Definitions:</strong> (Schema uses shared definitions not fully displayed here)</p>';
+                                }
+                                toolDiv.appendChild(schemaContainer);
+                            } else if (tool.schema && Object.keys(tool.schema).length === 0){
+                                toolDiv.innerHTML += '<p style="margin-top: 10px; font-style: italic;"><strong>Input Schema:</strong> No parameters defined.</p>';
+                            }
+                            toolModalListContainer.appendChild(toolDiv);
+                        });
+                    } else {
+                        toolModalListContainer.innerHTML = `
+                            <p>No tools listed for this service.</p>
+                            <p style="font-size: 0.9em; color: #6c757d; margin-top: 10px;">
+                                Service reports ${data.tools ? data.tools.length : 0} tools.
+                                <br>API path: ${apiPath}
+                                <br>Last response: ${new Date().toLocaleTimeString()}
+                            </p>
+                        `;
+                    }
+                })
+                .catch(error => {
+                    console.error("Failed to fetch or display tools:", error);
+                    toolModalListContainer.innerHTML = `<p style="color: red;">Could not load tools: ${error.message}</p>`;
+                });
+        }
+
+        function closeToolModal() {
+            const toolModal = document.getElementById('tool-modal');
+            const toolModalListContainer = document.getElementById('tool-modal-list-container');
+            if (toolModal) {
+                toolModal.style.display = 'none';
+                if (toolModalListContainer) {
+                    toolModalListContainer.innerHTML = ''; // Clear content
+                }
+            }
+        }
+
+        // =====================================================================
+        // == Registration Modal Logic
+        // =====================================================================
+        function showRegisterModal() {
+            const modal = document.getElementById('register-server-modal');
+            if (modal) {
+                modal.style.display = 'flex';
+                // Reset to the first tab
+                switchRegisterTab('upload');
+                document.getElementById('registration-feedback').style.display = 'none';
+                document.getElementById('registration-feedback').textContent = '';
+
+                // Clear previous inputs
+                const fileInput = document.getElementById('json-file-input');
+                if (fileInput) fileInput.value = ''; // Clear file input
+                const pasteArea = document.getElementById('json-paste-area');
+                if (pasteArea) pasteArea.value = ''; // Clear text area
+                const regForm = document.getElementById('register-server-form');
+                if (regForm) regForm.reset(); // Reset the form
+            }
+        }
+
+        function closeRegisterModal() {
+            const modal = document.getElementById('register-server-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+        function switchRegisterTab(tabName) {
+            document.querySelectorAll('.registration-tabs .tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            document.querySelectorAll('.modal-content .tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+
+            document.querySelector(`.registration-tabs .tab-button[data-tab="${tabName}"]`).classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+        }
+
+        function displayRegistrationFeedback(message, isSuccess) {
+            const feedbackDiv = document.getElementById('registration-feedback');
+            feedbackDiv.textContent = message;
+            feedbackDiv.className = isSuccess ? 'success' : 'error';
+            feedbackDiv.style.display = 'block';
+        }
+
+        // --- New JSON Validation Function --- START
+        function validateJsonData(jsonData) {
+            const errors = [];
+            if (!jsonData) {
+                errors.push('No JSON data provided.');
+                return { isValid: false, errors };
+            }
+
+            // Required fields
+            if (typeof jsonData.server_name !== 'string' || !jsonData.server_name.trim()) {
+                errors.push("'Server Name (server_name)' is required and must be a non-empty string.");
+            }
+            if (typeof jsonData.path !== 'string' || !jsonData.path.trim()) {
+                errors.push("'Path (path)' is required and must be a non-empty string.");
+            } else if (!jsonData.path.startsWith('/')) {
+                errors.push("'Path (path)' must start with a \"/\".");
+            }
+            if (typeof jsonData.proxy_pass_url !== 'string' || !jsonData.proxy_pass_url.trim()) {
+                errors.push("'Proxy Pass URL (proxy_pass_url)' is required and must be a non-empty string.");
+            } else {
+                try {
+                    new URL(jsonData.proxy_pass_url);
+                } catch (_) {
+                    errors.push("'Proxy Pass URL (proxy_pass_url)' must be a valid URL.");
+                }
+            }
+
+            // Optional fields type checks (if present)
+            if (jsonData.hasOwnProperty('description') && typeof jsonData.description !== 'string') {
+                errors.push("'Description (description)' must be a string if provided.");
+            }
+            if (jsonData.hasOwnProperty('tags') && !Array.isArray(jsonData.tags)) {
+                errors.push("'Tags (tags)' must be an array of strings if provided in JSON.");
+            } else if (jsonData.hasOwnProperty('tags') && Array.isArray(jsonData.tags)) {
+                if (!jsonData.tags.every(tag => typeof tag === 'string')) {
+                    errors.push("All items in 'Tags (tags)' must be strings.");
+                }
+            }
+
+            if (jsonData.hasOwnProperty('num_stars') && typeof jsonData.num_stars !== 'number') {
+                errors.push("'Stars (num_stars)' must be a number if provided.");
+            } else if (jsonData.hasOwnProperty('num_stars') && typeof jsonData.num_stars === 'number' && jsonData.num_stars < 0) {
+                 errors.push("'Stars (num_stars)' cannot be negative.");
+            }
+
+            if (jsonData.hasOwnProperty('is_python') && typeof jsonData.is_python !== 'boolean') {
+                errors.push("'Is Python (is_python)' must be a boolean (true/false) if provided.");
+            }
+            if (jsonData.hasOwnProperty('license') && typeof jsonData.license !== 'string') {
+                errors.push("'License (license)' must be a string if provided.");
+            }
+
+            return {
+                isValid: errors.length === 0,
+                errors: errors
+            };
+        }
+        // --- New JSON Validation Function --- END
+
+        async function handleRegistrationSubmit(formData) {
+            const feedbackDiv = document.getElementById('registration-feedback');
+            feedbackDiv.style.display = 'none'; // Hide previous messages
+
+            try {
+                const response = await fetch('/register', {
+                    method: 'POST',
+                    body: formData // FormData will set Content-Type to multipart/form-data
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    displayRegistrationFeedback(result.message || 'Server registered successfully!', true);
+                    setTimeout(() => {
+                        closeRegisterModal();
+                        // Assuming WebSocket will update the list, or manually trigger a refresh if needed
+                        // window.location.reload(); // Or a more targeted refresh
+                    }, 2000);
+                } else {
+                    displayRegistrationFeedback(result.error || `Error: ${response.statusText}`, false);
+                }
+            } catch (error) {
+                console.error('Registration error:', error);
+                displayRegistrationFeedback(`Client-side error: ${error.message}`, false);
+            }
+        }
+
+        function processJsonRegistration(jsonData) {
+            const formData = new FormData();
+
+            // --- Validate JSON data first --- START
+            const validationResult = validateJsonData(jsonData);
+            if (!validationResult.isValid) {
+                displayRegistrationFeedback('JSON validation failed: \n' + validationResult.errors.join('\n'), false);
+                return;
+            }
+            // --- Validate JSON data first --- END
+
+            // Map JSON fields to FormData expected by the /register endpoint
+            if (!jsonData.server_name || !jsonData.path || !jsonData.proxy_pass_url) {
+                displayRegistrationFeedback('Error: JSON data must include server_name, path, and proxy_pass_url.', false);
+                return;
+            }
+            formData.append('name', jsonData.server_name);
+            formData.append('description', jsonData.description || '');
+            formData.append('path', jsonData.path);
+            formData.append('proxy_pass_url', jsonData.proxy_pass_url);
+            formData.append('tags', Array.isArray(jsonData.tags) ? jsonData.tags.join(',') : (jsonData.tags || ''));
+            formData.append('num_stars', jsonData.num_stars !== undefined ? jsonData.num_stars.toString() : '0');
+            formData.append('is_python', jsonData.is_python ? 'true' : ''); // FastAPI expects 'true' or empty for bool
+            formData.append('license', jsonData.license || 'N/A');
+            
+            handleRegistrationSubmit(formData);
+        }
+
+        function handleJsonFileUpload() {
+            const fileInput = document.getElementById('json-file-input');
+            if (!fileInput.files.length) {
+                displayRegistrationFeedback('Please select a JSON file.', false);
+                return;
+            }
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    const jsonData = JSON.parse(event.target.result);
+                    processJsonRegistration(jsonData);
+                } catch (e) {
+                    displayRegistrationFeedback(`Error parsing JSON file: ${e.message}`, false);
+                }
+            };
+            reader.onerror = function() {
+                displayRegistrationFeedback('Error reading file.', false);
+            };
+            reader.readAsText(file);
+        }
+
+        function handleJsonPasteSubmit() {
+            const pasteArea = document.getElementById('json-paste-area');
+            try {
+                const jsonData = JSON.parse(pasteArea.value.trim()); // Trim whitespace before parsing
+                processJsonRegistration(jsonData);
+            } catch (e) {
+                displayRegistrationFeedback(`Error parsing pasted JSON: ${e.message}`, false);
+            }
+        }
+
+        function handleRegisterFormSubmit(event) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+
+            // FastAPI expects boolean Form fields to be 'true' or absent/empty string.
+            // If checkbox is not checked, 'is_python' won't be in formData if it's not set to a value.
+            // If it is checked, its value (e.g., 'true') will be sent.
+            // We need to ensure 'is_python' sends 'true' or an empty string for proper boolean conversion by FastAPI.
+            if (!formData.has('is_python')) { // If checkbox not checked, it won't be in FormData
+                formData.append('is_python', ''); // Send empty string, FastAPI bool conversion handles this as False
+            }
+            // For other fields, if they are empty, they will be sent as empty strings.
+            // The backend API handles default values for optional fields if they are empty.
+
+            handleRegistrationSubmit(formData);
+        }
+
+        // =====================================================================
+        // == WebSocket Logic
+        // =====================================================================
+
+        function connectWebSocket() {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws/health_status`;
+            console.log(`Attempting to connect WebSocket to ${wsUrl}...`);
+
+            const ws = new WebSocket(wsUrl);
+            let reconnectInterval = 5000; // Start with 5 seconds
+
+            ws.onopen = () => {
+                console.log("WebSocket connection established.");
+                reconnectInterval = 5000; // Reset reconnect interval on successful connection
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+
+                    // Update displays for each service in the message
+                    for (const path in data) {
+                        if (data.hasOwnProperty(path)) {
+                            const serviceData = data[path];
+                            // Construct IDs - Ensure consistent path normalization (replace / and :)
+                            const safePath = path.replace(/^\//, '').replace(/\//g, '_').replace(/:/g, '_');
+                            const badgeId = 'status-badge-' + safePath;
+                            const spinnerId = 'spinner-for-' + safePath;
+                            const lastCheckedId = 'last-checked-' + safePath;
+
+                            updateServiceDisplay(badgeId, spinnerId, lastCheckedId, serviceData);
+                        }
+                    }
+                     // Update sidebar stats after processing the message
+                     updateSidebarStats(data);
+                    
+                    // Re-bind event handlers after dynamic updates
+                    bindEventHandlers();
+
+                } catch (error) {
+                    console.error("Error parsing WebSocket message or updating UI:", error);
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error("WebSocket error:", error);
+            };
+
+            ws.onclose = (event) => {
+                console.log(`WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason}. Attempting to reconnect in ${reconnectInterval / 1000}s...`);
+                setTimeout(connectWebSocket, reconnectInterval);
+                // Optional: Exponential backoff
+                // reconnectInterval = Math.min(reconnectInterval * 2, 60000); // Double interval up to 60s
+            };
+        }
+
+        // =====================================================================
+        // == Event Binding
+        // =====================================================================
+
+        // Centralized function to bind all event handlers
+        function bindEventHandlers() {
+            // Bind toggle event handlers
+            document.querySelectorAll('.toggle-checkbox').forEach(checkbox => {
+                // Remove existing handler first to prevent duplicates
+                checkbox.removeEventListener('change', handleToggleClick);
+                checkbox.addEventListener('change', handleToggleClick);
+            });
+
+            // Bind tool icons click handlers using event delegation instead
+            document.querySelectorAll('.clickable-tool-icon').forEach(icon => {
+                // Remove existing handler first to prevent duplicates
+                icon.removeEventListener('click', handleToolIconClick);
+                icon.addEventListener('click', handleToolIconClick);
+            });
+        }
+
+        // Tool icon click handler as a separate named function so it can be removed/readded
+        function handleToolIconClick() {
+            const servicePath = this.dataset.path;
+            const serviceName = this.dataset.name;
+            if (servicePath && serviceName) {
+                showToolModal(servicePath, serviceName);
+            } else {
+                console.error("Missing data attributes on tool icon", this);
+            }
+        }
+
+        // Refresh button click handler
+        function handleRefreshClick(event) {
+            const refreshButton = event.target.closest('.refresh-button');
+            if (!refreshButton || refreshButton.disabled) {
+                return; // Ignore clicks not on an enabled refresh button
+            }
+
+            event.preventDefault(); // Prevent any default button action if needed
+
+            const servicePath = refreshButton.dataset.path;
+            if (!servicePath) {
+                console.error("Refresh button missing data-path attribute.");
+                return;
+            }
+            console.log(`Refresh button clicked for path: ${servicePath}`);
+
+            // Indicate loading state
+            refreshButton.disabled = true;
+            const originalIconHTML = refreshButton.innerHTML;
+            // Use a simple spinner for loading feedback
+            refreshButton.innerHTML = '<span class="status-spinner" style="width: 0.9em; height: 0.9em; border-width: 2px; top: 0;"></span>';
+
+            fetch(`/api/refresh${servicePath}`, { method: 'POST' })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(data => {
+                            throw new Error(data.detail || `Error refreshing: ${response.status} ${response.statusText}`);
+                        }).catch(e => {
+                            throw new Error(`Error refreshing: ${response.status} ${response.statusText}`);
+                        });
+                    }
+                    return response.json();
+                })
+                .then(result => {
+                    console.log(`Refresh successful for ${servicePath}:`, result);
+                    // UI update is handled by the WebSocket push triggered by the backend.
+                })
+                .catch(error => {
+                    console.error(`Failed to trigger refresh for ${servicePath}:`, error);
+                    alert(`Could not refresh service ${servicePath}: ${error.message}`);
+                })
+                .finally(() => {
+                    // Restore button state after a short delay to allow WS update if needed
+                    setTimeout(() => {
+                        refreshButton.innerHTML = originalIconHTML;
+                        // Find the current status from the badge title to decide if refresh button stays disabled
+                        const badgeId = 'status-badge-' + servicePath.replace(/^\//, '').replace(/\//g, '_').replace(/:/g, '_');
+                        const badge = document.getElementById(badgeId);
+                        if (badge && badge.title !== 'disabled') {
+                            refreshButton.disabled = false;
+                        }
+                    }, 300);
+                });
+        }
+
+        // =====================================================================
+        // == Event Handlers
+        // =====================================================================
+
+        async function handleToggleClick(event, checkboxElement, servicePath) {
+            event.preventDefault(); // Prevent default form submission
+            console.log(`Toggle clicked for path: ${servicePath}`);
+
+            const safePath = servicePath.replace(/^\//, '').replace(/\//g, '_').replace(/:/g, '_');
+            const spinnerId = 'spinner-for-' + safePath;
+            const spinner = document.getElementById(spinnerId);
+            const form = checkboxElement.form;
+            const isEnabling = checkboxElement.checked; // The state the user wants to set
+
+            // Show spinner and disable checkbox immediately for feedback
+            if (spinner) {
+                spinner.style.display = 'inline-block';
+            } else {
+                console.warn(`Spinner element not found for ID: ${spinnerId}`);
+            }
+            checkboxElement.disabled = true;
+
+            // Prepare form data
+            const formData = new FormData();
+            if (isEnabling) {
+                formData.append('enabled', 'on');
+            }
+            // Note: No need to explicitly send 'enabled=off', the absence of 'enabled' param means false
+
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    body: new URLSearchParams(formData) // Send as x-www-form-urlencoded
+                });
+
+                const responseData = await response.json(); // Always try to parse JSON
+
+                if (!response.ok) {
+                    // Log error from backend response if possible
+                    const errorMsg = responseData.detail || `HTTP error ${response.status}`;
+                    console.error(`Error toggling service ${servicePath}: ${errorMsg}`);
+                    alert(`Error toggling service: ${errorMsg}`);
+                    // Revert checkbox state on error? Maybe not, let WS handle the authoritative state.
+                } else {
+                    console.log(`Toggle request successful for ${servicePath}. Backend response:`, responseData);
+                    // Backend will trigger WebSocket update, which calls updateServiceDisplay
+                    // updateServiceDisplay will hide spinner, set correct checkbox state, label, etc.
+                }
+
+            } catch (error) {
+                console.error(`Network or fetch error toggling service ${servicePath}:`, error);
+                alert(`Failed to send toggle request: ${error}`);
+                // If fetch fails completely, maybe revert spinner/disable state here?
+                // But relying on WS might still be better for consistency.
+            } finally {
+                // Re-enable the checkbox ONLY IF the WS hasn't already done so
+                // updateServiceDisplay handles the definitive enabling/disabling and check state
+                // We might remove this re-enable here and solely rely on updateServiceDisplay.
+                // Let's test with it first. If double-enabling causes issues, remove this.
+                // Checkbox might still be disabled if WS update came through quickly.
+                // if (checkboxElement.disabled) {
+                //     checkboxElement.disabled = false;
+                // }
+                // Let's rely on updateServiceDisplay to manage the final enabled state.
+            }
+        }
+
+        // --- Fix the theme toggle function to be more robust ---
+        function handleThemeToggle() {
+            console.log("handleThemeToggle called");
+            const htmlElement = document.documentElement;
+            const wasDarkMode = htmlElement.classList.contains('dark-mode');
+            const newIsDarkMode = !wasDarkMode;
+            
+            console.log("Theme toggle state: was dark mode:", wasDarkMode, "→ new dark mode:", newIsDarkMode);
+            
+            if (newIsDarkMode) {
+                // Apply dark mode
+                htmlElement.classList.add('dark-mode');
+                htmlElement.setAttribute('data-theme', 'dark');
+                
+                // Force direct styles on key elements
+                document.body.style.backgroundColor = '#212529';
+                document.body.style.color = '#f8f9fa';
+                
+                // Force dark mode on specific elements
+                document.querySelectorAll('.main-header').forEach(el => {
+                    el.style.backgroundColor = '#212529';
+                    el.style.borderBottomColor = '#495057';
+                });
+                
+                document.querySelectorAll('.service-card').forEach(el => {
+                    el.style.backgroundColor = '#343a40';
+                    el.style.borderColor = '#495057';
+                });
+                
+                document.querySelectorAll('.sidebar').forEach(el => {
+                    el.style.backgroundColor = '#212529';
+                    el.style.color = '#f8f9fa';
+                });
+                
+                document.querySelectorAll('.card-header h2, .service-card .owner, .service-card .description').forEach(el => {
+                    el.style.color = '#f8f9fa';
+                });
+                
+                document.querySelectorAll('.sidebar-toggle-button, .theme-toggle-button, .logo span, .header-right .user-display').forEach(el => {
+                    el.style.color = '#f8f9fa';
+                });
+                
+                document.querySelectorAll('.content h1').forEach(el => {
+                    el.style.color = '#f8f9fa';
+                });
+
+                // Theme toggle button icon
+                const themeToggleButton = document.getElementById('theme-toggle');
+                if (themeToggleButton) {
+                    themeToggleButton.textContent = '☀️';
+                }
+            } else {
+                // Apply light mode
+                htmlElement.classList.remove('dark-mode');
+                htmlElement.setAttribute('data-theme', 'light');
+                
+                // Force direct styles on key elements
+                document.body.style.backgroundColor = '#f8f9fa';
+                document.body.style.color = '#16191f';
+                
+                // Force light mode on specific elements
+                document.querySelectorAll('.main-header').forEach(el => {
+                    el.style.backgroundColor = '#ffffff';
+                    el.style.borderBottomColor = '#e0e0e0';
+                });
+                
+                document.querySelectorAll('.service-card').forEach(el => {
+                    el.style.backgroundColor = '#ffffff';
+                    el.style.borderColor = '#e0e0e0';
+                });
+                
+                document.querySelectorAll('.sidebar').forEach(el => {
+                    el.style.backgroundColor = '#f8f9fa';
+                    el.style.color = '#16191f';
+                });
+                
+                document.querySelectorAll('.card-header h2, .service-card .owner, .service-card .description').forEach(el => {
+                    el.style.color = '#16191f';
+                });
+                
+                document.querySelectorAll('.sidebar-toggle-button, .theme-toggle-button, .logo span, .header-right .user-display').forEach(el => {
+                    el.style.color = '#16191f';
+                });
+                
+                document.querySelectorAll('.content h1').forEach(el => {
+                    el.style.color = '#16191f';
+                });
+
+                // Theme toggle button icon
+                const themeToggleButton = document.getElementById('theme-toggle');
+                if (themeToggleButton) {
+                    themeToggleButton.textContent = '🌙';
+                }
+            }
+            
+            // Save the new state to localStorage
+            localStorage.setItem('theme', newIsDarkMode ? 'dark' : 'light');
+            
+            console.log("Theme toggled to:", newIsDarkMode ? 'dark' : 'light');
+        }
+
+        function handleSidebarToggle() {
+            const bodyElement = document.body;
+            const isCollapsed = bodyElement.classList.toggle('sidebar-collapsed');
+            localStorage.setItem('sidebarCollapsed', isCollapsed ? 'true' : 'false');
+            console.log(`Sidebar toggled. Collapsed: ${isCollapsed}`);
+        }
+
+        function handleModalOverlayClick(event) {
+            if (event.target === document.getElementById('tool-modal')) {
+                closeToolModal();
+            }
+            // --- Add for Register Modal ---
+            if (event.target === document.getElementById('register-server-modal')) {
+                closeRegisterModal();
+            }
+        }
+
+        function handleFilterClick(event) {
+            const link = event.target.closest('.sidebar-link[data-filter]');
+            if (!link) return; // Ignore clicks outside filter links
+
+            event.preventDefault(); // Stop browser navigation
+
+            const filterType = link.dataset.filter;
+            console.log("Filter link clicked:", filterType);
+
+            // Update active link style
+            document.querySelectorAll('.sidebar-nav .sidebar-link').forEach(l => {
+                l.classList.remove('active-filter');
+            });
+            link.classList.add('active-filter');
+
+            // Apply the filter to cards
+            applyCardFilter(filterType);
+        }
+
+        // =====================================================================
+        // == DOMContentLoaded Initializer
+        // =====================================================================
+
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log("DOM fully loaded and parsed.");
+
+            // Setup Global Event Delegation
+            // 1. Handle tool icon clicks via event delegation
+            document.addEventListener('click', function(event) {
+                // Check if the click was on a tool icon or its child
+                const toolIcon = event.target.closest('.clickable-tool-icon');
+                if (toolIcon) {
+                    const servicePath = toolIcon.dataset.path;
+                    const serviceName = toolIcon.dataset.name;
+                    if (servicePath && serviceName) {
+                        showToolModal(servicePath, serviceName);
+                    } else {
+                        console.error("Missing data attributes on tool icon", toolIcon);
+                    }
+                }
+                
+                // Handle refresh button clicks
+                const refreshButton = event.target.closest('.refresh-button');
+                if (refreshButton && !refreshButton.disabled) {
+                    event.preventDefault();
+                    
+                    const servicePath = refreshButton.dataset.path;
+                    if (!servicePath) {
+                        console.error("Refresh button missing data-path attribute.");
+                        return;
+                    }
+                    
+                    // Indicate loading state
+                    refreshButton.disabled = true;
+                    const originalIconHTML = refreshButton.innerHTML;
+                    refreshButton.innerHTML = '<span class="status-spinner" style="width: 0.9em; height: 0.9em; border-width: 2px; top: 0;"></span>';
+                    
+                    // Make the refresh API call
+                    fetch(`/api/refresh${servicePath}`, { method: 'POST' })
+                        .then(response => {
+                            if (!response.ok) {
+                                return response.json().then(data => {
+                                    throw new Error(data.detail || `Error refreshing: ${response.status} ${response.statusText}`);
+                                }).catch(e => {
+                                    throw new Error(`Error refreshing: ${response.status} ${response.statusText}`);
+                                });
+                            }
+                            return response.json();
+                        })
+                        .then(result => {
+                            console.log(`Refresh successful for ${servicePath}:`, result);
+                        })
+                        .catch(error => {
+                            console.error(`Failed to trigger refresh for ${servicePath}:`, error);
+                            alert(`Could not refresh service ${servicePath}: ${error.message}`);
+                        })
+                        .finally(() => {
+                            setTimeout(() => {
+                                refreshButton.innerHTML = originalIconHTML;
+                                const badgeId = 'status-badge-' + servicePath.replace(/^\//, '').replace(/\//g, '_').replace(/:/g, '_');
+                                const badge = document.getElementById(badgeId);
+                                if (badge && badge.title !== 'disabled') {
+                                    refreshButton.disabled = false;
+                                }
+                            }, 300);
+                        });
+                }
+                
+                // Handle theme toggle button clicks
+                if (event.target.closest('#theme-toggle')) {
+                    handleThemeToggle();
+                }
+            });
+            
+            // 2. Handle toggle changes via event delegation
+            document.addEventListener('change', function(event) {
+                if (event.target.matches('.toggle-checkbox')) {
+                    const checkboxElement = event.target;
+                    const servicePath = checkboxElement.dataset.path;
+                    
+                    if (!servicePath) {
+                        console.error("Missing data-path attribute on toggle checkbox");
+                        return;
+                    }
+                    
+                    event.preventDefault(); // Prevent default form submission
+                    
+                    const safePath = servicePath.replace(/^\//, '').replace(/\//g, '_').replace(/:/g, '_');
+                    const spinnerId = 'spinner-for-' + safePath;
+                    const spinner = document.getElementById(spinnerId);
+                    const form = checkboxElement.form;
+                    const isEnabling = checkboxElement.checked;
+                    
+                    if (spinner) {
+                        spinner.style.display = 'inline-block';
+                    }
+                    checkboxElement.disabled = true;
+                    
+                    const formData = new FormData();
+                    if (isEnabling) {
+                        formData.append('enabled', 'on');
+                    }
+                    
+                    fetch(form.action, {
+                        method: 'POST',
+                        body: new URLSearchParams(formData)
+                    })
+                    .then(response => response.json())
+                    .then(responseData => {
+                        console.log(`Toggle request successful for ${servicePath}. Backend response:`, responseData);
+                    })
+                    .catch(error => {
+                        console.error(`Network or fetch error toggling service ${servicePath}:`, error);
+                        alert(`Failed to send toggle request: ${error}`);
+                    });
+                }
+            });
+            
+            // 3. Sidebar filter click handling
+            document.addEventListener('click', function(event) {
+                const link = event.target.closest('.sidebar-link[data-filter]');
+                if (link) {
+                    event.preventDefault();
+                    
+                    const filterType = link.dataset.filter;
+                    
+                    // Update active link style
+                    document.querySelectorAll('.sidebar-nav .sidebar-link').forEach(l => {
+                        l.classList.remove('active-filter');
+                    });
+                    link.classList.add('active-filter');
+                    
+                    // Apply the filter
+                    applyCardFilter(filterType);
+                }
+            });
+            
+            // 4. Modal overlay clicks (close when clicking outside)
+            document.querySelectorAll('.modal-overlay').forEach(modal => {
+                modal.addEventListener('click', function(event) {
+                    if (event.target === this) {
+                        if (this.id === 'tool-modal') closeToolModal();
+                        if (this.id === 'register-server-modal') closeRegisterModal();
+                    }
+                });
+            });
+            
+            // 5. Handle register server button
+            const registerButton = document.getElementById('register-server-button');
+            if (registerButton) {
+                registerButton.addEventListener('click', showRegisterModal);
+            }
+            
+            // 6. Tab switching in register modal
+            document.querySelectorAll('.registration-tabs .tab-button').forEach(button => {
+                button.addEventListener('click', function() {
+                    switchRegisterTab(this.dataset.tab);
+                });
+            });
+            
+            // 7. Handle sidebar toggle
+            const sidebarToggle = document.getElementById('sidebar-toggle');
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', handleSidebarToggle);
+            }
+            
+            // 8. Close modals with ESC key
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    const toolModal = document.getElementById('tool-modal');
+                    if (toolModal && toolModal.style.display !== 'none') {
+                        closeToolModal();
+                    }
+                    
+                    const registerModal = document.getElementById('register-server-modal');
+                    if (registerModal && registerModal.style.display !== 'none') {
+                        closeRegisterModal();
+                    }
+                }
+            });
+
+            // Register form handling
+            const registerForm = document.getElementById('register-server-form');
+            if (registerForm) {
+                registerForm.addEventListener('submit', function(event) {
+                    event.preventDefault();
+                    const formData = new FormData(this);
+                    
+                    // FastAPI expects 'true' or empty for boolean fields
+                    if (!formData.has('is_python')) {
+                        formData.append('is_python', '');
+                    }
+                    
+                    handleRegistrationSubmit(formData);
+                });
+            }
+            
+            // Set initial theme state
+            const savedTheme = localStorage.getItem('theme');
+            const themeToggle = document.getElementById('theme-toggle');
+            if (savedTheme) {
+                if (savedTheme === 'dark') {
+                    document.documentElement.classList.add('dark-mode');
+                    if (themeToggle) themeToggle.textContent = '☀️';
+            } else {
+                    document.documentElement.classList.remove('dark-mode');
+                    document.documentElement.setAttribute('data-theme', 'light');
+                    if (themeToggle) themeToggle.textContent = '🌙';
+                }
+            }
+
+            // Initialize the UI components
+            updateAllTimestamps();
+            applyThemeOnLoad(); // Add this line
+            applyCardFilter('all');
+            
+            // Initialize sidebar state from localStorage
+            if (localStorage.getItem('sidebarCollapsed') === 'true') {
+                document.body.classList.add('sidebar-collapsed');
+            }
+            
+            // Connect WebSocket
+            connectWebSocket();
+        });
+
+        // Replace the existing theme initialization function at the top
+        (function() {
+            const savedTheme = localStorage.getItem('theme');
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            // Use saved theme if available, otherwise respect user's OS preference
+            const theme = savedTheme || (prefersDark ? 'dark' : 'light');
+            console.log('[HEAD SCRIPT] Initial theme setup:', theme, 'from:', savedTheme ? 'localStorage' : 'OS preference');
+            
+            const htmlElement = document.documentElement;
+            if (theme === 'dark') {
+                htmlElement.classList.add('dark-mode');
+                htmlElement.setAttribute('data-theme', 'dark');
+            } else {
+                htmlElement.classList.remove('dark-mode');
+                htmlElement.setAttribute('data-theme', 'light');
+            }
+        })();
+
+        // Add this to the DOMContentLoaded event listener near the bottom
+        // Add this after updateAllTimestamps() and before applyCardFilter()
+        function applyThemeOnLoad() {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark') {
+                // Apply dark mode styles directly
+                document.body.style.backgroundColor = '#212529';
+                document.body.style.color = '#f8f9fa';
+                
+                // Force dark mode on specific elements
+                document.querySelectorAll('.main-header').forEach(el => {
+                    el.style.backgroundColor = '#212529';
+                    el.style.borderBottomColor = '#495057';
+                });
+                
+                document.querySelectorAll('.service-card').forEach(el => {
+                    el.style.backgroundColor = '#343a40';
+                    el.style.borderColor = '#495057';
+                });
+                
+                document.querySelectorAll('.sidebar').forEach(el => {
+                    el.style.backgroundColor = '#212529';
+                    el.style.color = '#f8f9fa';
+                });
+                
+                document.querySelectorAll('.card-header h2, .service-card .owner, .service-card .description').forEach(el => {
+                    el.style.color = '#f8f9fa';
+                });
+                
+                document.querySelectorAll('.sidebar-toggle-button, .theme-toggle-button, .logo span, .header-right .user-display').forEach(el => {
+                    el.style.color = '#f8f9fa';
+                });
+                
+                document.querySelectorAll('.content h1').forEach(el => {
+                    el.style.color = '#f8f9fa';
+                });
+                
+                // Theme toggle button icon
+                const themeToggle = document.getElementById('theme-toggle');
+                if (themeToggle) themeToggle.textContent = '☀️';
+            } else {
+                // Apply light mode styles directly
+                document.body.style.backgroundColor = '#f8f9fa';
+                document.body.style.color = '#16191f';
+                
+                // Force light mode on specific elements
+                document.querySelectorAll('.main-header').forEach(el => {
+                    el.style.backgroundColor = '#ffffff';
+                    el.style.borderBottomColor = '#e0e0e0';
+                });
+                
+                document.querySelectorAll('.service-card').forEach(el => {
+                    el.style.backgroundColor = '#ffffff';
+                    el.style.borderColor = '#e0e0e0';
+                });
+                
+                document.querySelectorAll('.sidebar').forEach(el => {
+                    el.style.backgroundColor = '#f8f9fa';
+                    el.style.color = '#16191f';
+                });
+                
+                document.querySelectorAll('.card-header h2, .service-card .owner, .service-card .description').forEach(el => {
+                    el.style.color = '#16191f';
+                });
+                
+                document.querySelectorAll('.sidebar-toggle-button, .theme-toggle-button, .logo span, .header-right .user-display').forEach(el => {
+                    el.style.color = '#16191f';
+                });
+                
+                document.querySelectorAll('.content h1').forEach(el => {
+                    el.style.color = '#16191f';
+                });
+                
+                // Theme toggle button icon
+                const themeToggle = document.getElementById('theme-toggle');
+                if (themeToggle) themeToggle.textContent = '🌙';
+            }
+            console.log('[applyThemeOnLoad] Theme applied:', savedTheme);
+        }
+    </script>
+</head>
+<body>
+    <!-- Main Header -->
+    <header class="main-header">
+        <div class="header-left">
+             {# Button Moved Back To Header #}
+             <button id="sidebar-toggle" class="sidebar-toggle-button" title="Toggle Sidebar">☰</button>
+            <div class="logo">
+                <img src="{{ url_for('static', path='/logo.png') }}" alt="MCP Gateway Logo"> <!-- Logo Image - Removed height attribute -->
+                <span>MCP Gateway</span>
+            </div>
+        </div>
+        <div class="header-right">
+            {% if username %}
+            <button id="register-server-button" class="secondary-button" style="margin-right: 10px; padding: 8px 16px; font-weight: 600; border-radius: 8px;">Register Server</button>
+            {% endif %}
+            <button id="theme-toggle" class="theme-toggle-button" title="Toggle Theme">🌙</button>
+            <span class="user-display">User: {{ username }}</span>
+            <form action="/logout" method="post" style="display: inline;">
+                <button type="submit" class="logout-button">Logout</button>
+            </form>
+        </div>
+    </header>
+
+    <!-- Main Container (Sidebar + Content) -->
+    <div class="container" id="main-container">
+        <!-- Sidebar (Simplified) -->
+        <aside class="sidebar" id="sidebar">
+            {# Button Moved Inside Sidebar #}
+            {# <button id="sidebar-toggle" class="sidebar-toggle-button" title="Toggle Sidebar">☰</button> #}
+
+            {# --- New Sidebar Content --- START #}
+            <div class="sidebar-section">
+                <h3>Filters</h3>
+                <nav class="sidebar-nav">
+                    <ul>
+                        <li><a href="/" class="sidebar-link active-filter" data-filter="all">All Servers</a></li>
+                        <li><a href="#" class="sidebar-link" data-filter="enabled">Enabled</a></li>
+                        <li><a href="#" class="sidebar-link" data-filter="disabled">Disabled</a></li>
+                        <li><a href="#" class="sidebar-link" data-filter="issues">With Issues</a></li>
+                        {# Add more filters later, e.g., by tag #}
+                    </ul>
+                </nav>
+            </div>
+
+            <div class="sidebar-section">
+                 <h3>Statistics</h3>
+                 <ul class="sidebar-stats">
+                     {# These counts need to be calculated/updated via JS or passed from backend #}
+                     <li><span>Total Servers:</span> <span id="stat-total">{{ services | length }}</span></li>
+                     <li><span>Enabled:</span> <span id="stat-enabled">?</span></li>
+                     <li><span>Disabled:</span> <span id="stat-disabled">?</span></li>
+                     <li><span>With Issues:</span> <span id="stat-issues">?</span></li>
+                 </ul>
+            </div>
+            {# --- New Sidebar Content --- END #}
+
+            {# Remove old Status section #}
+            {#
+            <h3>Status</h3>
+             <ul>
+                 <li><span>Discovered</span> <span>{{ services | length }}</span></li>
+             </ul>
+             #}
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="content">
+            <!-- Page Header Section (Simplified) -->
+            <div class="page-header">
+                 <h1>MCP Servers</h1>
+                <!-- Removed breadcrumbs, description, social icons -->
+            </div>
+
+            <!-- Controls Section (Simplified) -->
+            <div class="controls-area search-controls">
+                <!-- Search Form -->
+                <form action="/" method="get" class="search-bar">
+                    <input type="search" name="query" placeholder="Search by name or description..." value="{{ request.query_params.get('query', '') }}">
+                    <button type="submit">Search</button>
+                </form>
+            </div>
+
+             <!-- Service Cards Section -->
+            <div class="card-container">
+                {% if services %}
+                    {% for service in services %}
+                    <div class="service-card">
+                        <div class="card-header">
+                            <h2>{{ service.display_name }}</h2>
+                            <div class="header-right-items">
+                                <span class="official-badge">official</span>
+                                <span class="icons">
+                                    ☁️ 💻
+                                    {# Wrap the refresh icon in a button #}
+                                    <button class="refresh-button icon-button"
+                                            title="Refresh Status & Tools"
+                                            data-path="{{ service.path }}"
+                                            style="background: none; border: none; padding: 0; margin: 0 0 0 5px; vertical-align: middle; color: inherit;"
+                                            {% if not service.is_enabled %}disabled{% endif %}>
+                                        <span class="refresh-icon" style="font-size: 1em;">🔄</span>
+                                        {# Tooltip or accessible text can be added #}
+                                    </button>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <p class="owner">Path: {{ service.path }}</p>
+                            <div class="badges">
+                                {% for tag in service.tags %}
+                                <span class="badge">{{ tag }}</span>
+                                {% endfor %}
+                            </div>
+                            <p class="description">
+                                {{ service.description | default('No description provided.') }}
+                            </p>
+
+                            {# --- Moved Status Badge Logic Here --- #}
+                            {% set initial_status = service.health_status %}
+                            {# Determine initial class and text, avoiding 'checking' text #}
+                            {% set status_class = 'status-unknown' %}
+                            {% set display_text = 'unknown' %}
+
+                            {% if initial_status == 'healthy' %}
+                                {% set status_class = 'status-healthy' %}
+                                {% set display_text = 'healthy' %}
+                            {% elif initial_status.startswith('unhealthy') %}
+                                {% set status_class = 'status-unhealthy' %}
+                                {% set display_text = initial_status.split('(')[0].strip() %}
+                            {% elif initial_status.startswith('error') %}
+                                {% set status_class = 'status-error' %}
+                                {% set display_text = initial_status.split('(')[0].strip() %}
+                            {% elif initial_status == 'disabled' %}
+                                {% set status_class = 'status-disabled' %}
+                                {% set display_text = 'disabled' %}
+                            {% elif initial_status == 'checking' %}
+                                {# If checking initially, display as 'unknown' until first WS update #}
+                                {# Spinner will be shown by JS if needed #}
+                                {% set status_class = 'status-unknown' %}
+                                {% set display_text = 'unknown' %}
+                            {% endif %}
+
+                            {# Generate IDs - REMOVE leading slash BEFORE replacing #}
+                            {% set safe_path = service.path | replace('/', '', 1) | replace('/', '_') | replace(':', '_') %}
+                            {% set badge_id = 'status-badge-' + safe_path %}
+                            {% set spinner_id = 'spinner-for-' + safe_path %}
+                            {% set last_checked_id = 'last-checked-' + safe_path %}
+
+                            {# Render badge with determined initial text/class #}
+                            <div class="status-indicator-area">
+                                <span id="{{ badge_id }}" class="status-badge {{ status_class }}" title="{{ initial_status }}">{{ display_text }}</span>
+                                {# Always render spinner, hide initially with inline style #}
+                                <span id="{{ spinner_id }}" class="status-spinner" style="display: none;"></span>
+                            </div>
+
+                            <div class="controls-row">
+                                <a href="/edit{{ service.path }}" class="edit-button">Modify</a>
+                                {# Add ID to form if needed, but action URL is sufficient #}
+                                <form action="/toggle{{ service.path }}" method="post" class="toggle-form">
+                                    <label class="switch">
+                                        {# Change onchange to use data attributes instead #}
+                                        <input type="checkbox" name="enabled" value="on"
+                                               id="{{ 'toggle-check-' + safe_path }}"
+                                               {% if service.is_enabled %}checked{% endif %}
+                                               data-path="{{ service.path }}"
+                                               class="toggle-checkbox">
+                                        <span class="slider round"></span>
+                                    </label>
+                                    {# Add ID to label span #}
+                                    <span id="{{ 'toggle-label-' + safe_path }}" class="toggle-label">
+                                        {{ 'Enabled' if service.is_enabled else 'Disabled' }}
+                                    </span>
+                                </form>
+
+                            </div>
+                        </div>
+                        <div class="card-footer">
+                            {# Use the consistent safe_path variable defined earlier #}
+                            {% set last_checked_id = 'last-checked-' + safe_path %}
+                            {# Store ISO timestamp, display initial formatted text inside span #}
+                            <span id="{{ last_checked_id }}" class="metadata" data-timestamp="{{ service.last_checked_iso or '' }}">
+                                🕒 Last checked: <span class="time-ago">Never</span>
+                            </span>
+                            {# Use the consistent safe_path variable defined earlier #}
+                            {% set num_tools_id = 'num-tools-' + safe_path %}
+                            <span id="{{ num_tools_id }}" class="metadata clickable-tool-icon" data-path="{{ service.path }}" data-name="{{ service.display_name }}" title="Click to view tools">🔧 {{ service.num_tools }}</span>
+                            <span class="metadata">⭐ {{ service.num_stars }}</span>
+                            <div class="platform-icons">
+                                 {% if service.is_python %}<span>🐍 Python</span>{% endif %}
+                                 <span>⚖️ {{ service.license }}</span>
+                                 <!-- Consider adding OS icons dynamically if needed -->
+                                 <span>🐧</span> <span></span> <span>🪟</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p>No services found matching your query, or none registered. Try rescanning.</p>
+                {% endif %}
+            </div> <!-- end card-container -->
+
+        </main> <!-- end content -->
+    </div> <!-- end container -->
+
+    <!-- Tool List Modal -->
+    <div id="tool-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <span class="modal-close-button" onclick="closeToolModal()">&times;</span>
+            <h3 id="tool-modal-title">Tools for Service</h3>
+            <div id="tool-modal-list-container">
+                <!-- Tool list will be populated here by JS -->
+                <p>Loading...</p>
+            </div>
+        </div>
+    </div>
+    <!-- End Tool List Modal -->
+
+    <!-- Register Server Modal -->
+    <div id="register-server-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <span class="modal-close-button" onclick="closeRegisterModal()">&times;</span>
+            <h3>Register New Server</h3>
+
+            <div class="registration-tabs">
+                <button class="tab-button active" data-tab="form">Fill Form</button>
+                <button class="tab-button" data-tab="upload">Upload JSON</button>
+                <button class="tab-button" data-tab="paste">Paste JSON</button>
+            </div>
+
+            <!-- Tab Content: Fill Form -->
+            <div id="tab-form" class="tab-content active">
+                <h4>Register by Filling Form</h4>
+                <form id="register-server-form">
+                    <div class="form-group">
+                        <label for="reg-name">Server Name <span style="color:red;">*</span></label>
+                        <input type="text" id="reg-name" name="name" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-path">Path <span style="color:red;">*</span> (e.g., /my-service)</label>
+                        <input type="text" id="reg-path" name="path" class="form-input" required pattern="^/.*" title="Path must start with /">
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-proxy-pass-url">Proxy Pass URL <span style="color:red;">*</span> (e.g., http://localhost:8001)</label>
+                        <input type="url" id="reg-proxy-pass-url" name="proxy_pass_url" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-description">Description</label>
+                        <textarea id="reg-description" name="description" class="form-input" rows="3"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-tags">Tags (comma-separated)</label>
+                        <input type="text" id="reg-tags" name="tags" class="form-input">
+                    </div>
+                     <div class="form-group">
+                        <label for="reg-num-stars">Stars</label>
+                        <input type="number" id="reg-num-stars" name="num_stars" class="form-input" value="0" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-license">License</label>
+                        <input type="text" id="reg-license" name="license" class="form-input" value="N/A">
+                    </div>
+                    <div class="form-group">
+                        <input type="checkbox" id="reg-is-python" name="is_python" value="true"> <!-- Value 'true' is important for FastAPI -->
+                        <label for="reg-is-python" style="display: inline; font-weight: normal;">Is Python based?</label>
+                    </div>
+                    <button type="submit" class="edit-button">Register Server</button>
+                </form>
+            </div>
+
+            <!-- Tab Content: Upload JSON -->
+            <div id="tab-upload" class="tab-content">
+                <h4>Register by Uploading JSON File</h4>
+                <form id="upload-json-form">
+                    <div class="form-group">
+                        <label for="json-file-input">Select JSON File</label>
+                        <input type="file" id="json-file-input" name="json_file" class="form-input" accept=".json" required>
+                    </div>
+                    <button type="submit" class="edit-button">Upload and Register</button>
+                </form>
+            </div>
+
+            <!-- Tab Content: Paste JSON -->
+            <div id="tab-paste" class="tab-content">
+                <h4>Register by Pasting JSON</h4>
+                <form id="paste-json-form">
+                    <div class="form-group">
+                        <label for="json-paste-area">Paste JSON content here</label>
+                        <textarea id="json-paste-area" class="form-input" rows="10" required placeholder='''{
+    "server_name": "My Awesome Service",
+    "path": "/my-awesome-service",
+    "proxy_pass_url": "http://localhost:8080",
+    "description": "This is a great service.",
+    "tags": ["awesome", "example"],
+    "num_stars": 5,
+    "is_python": true,
+    "license": "MIT"
+}'''></textarea>
+                    </div>
+                    <button type="submit" class="edit-button">Paste and Register</button>
+                </form>
+            </div>
+
+            <div id="registration-feedback" style="display:none; padding: 10px; margin-top: 15px; border-radius: 5px;"></div>
+        </div>
+    </div>
+
+    <script>
+        // Move all scripting here to ensure functions are defined before they're used
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log("DOM fully loaded and parsed.");
+
+            // =====================================================================
+            // == Event Handlers
+            // =====================================================================
+
+            // Handle toggle click
+            async function handleToggleClick(event) {
+                const checkboxElement = event.target;
+                const servicePath = checkboxElement.dataset.path;
+                
+                if (!servicePath) {
+                    console.error("Missing data-path attribute on toggle checkbox");
+                    return;
+                }
+                
+                event.preventDefault(); // Prevent default form submission
+                console.log(`Toggle clicked for path: ${servicePath}`);
+
+                const safePath = servicePath.replace(/^\//, '').replace(/\//g, '_').replace(/:/g, '_');
+                const spinnerId = 'spinner-for-' + safePath;
+                const spinner = document.getElementById(spinnerId);
+                const form = checkboxElement.form;
+                const isEnabling = checkboxElement.checked; // The state the user wants to set
+
+                // Show spinner and disable checkbox immediately for feedback
+                if (spinner) {
+                    spinner.style.display = 'inline-block';
+                } else {
+                    console.warn(`Spinner element not found for ID: ${spinnerId}`);
+                }
+                checkboxElement.disabled = true;
+
+                // Prepare form data
+                const formData = new FormData();
+                if (isEnabling) {
+                    formData.append('enabled', 'on');
+                }
+
+                try {
+                    const response = await fetch(form.action, {
+                        method: 'POST',
+                        body: new URLSearchParams(formData) // Send as x-www-form-urlencoded
+                    });
+
+                    const responseData = await response.json(); // Always try to parse JSON
+
+                    if (!response.ok) {
+                        // Log error from backend response if possible
+                        const errorMsg = responseData.detail || `HTTP error ${response.status}`;
+                        console.error(`Error toggling service ${servicePath}: ${errorMsg}`);
+                        alert(`Error toggling service: ${errorMsg}`);
+                    } else {
+                        console.log(`Toggle request successful for ${servicePath}. Backend response:`, responseData);
+                    }
+
+                } catch (error) {
+                    console.error(`Network or fetch error toggling service ${servicePath}:`, error);
+                    alert(`Failed to send toggle request: ${error}`);
+                }
+            }
+
+            // Show tool modal
+            async function showToolModal(servicePath, serviceName) {
+                const toolModal = document.getElementById('tool-modal');
+                const toolModalTitle = document.getElementById('tool-modal-title');
+                const toolModalListContainer = document.getElementById('tool-modal-list-container');
+
+                if (!toolModal || !toolModalTitle || !toolModalListContainer) {
+                    console.error("Tool modal elements not found!"); return;
+                }
+
+                toolModalTitle.textContent = `Tools for ${serviceName}`;
+                toolModalListContainer.innerHTML = '<p>Loading...</p>';
+                toolModal.style.display = 'flex';
+
+                // Ensure the path is properly formatted with leading slash
+                const apiPath = servicePath.startsWith('/') ? servicePath : '/' + servicePath;
+                
+                // Explicitly construct the full URL through the gateway/proxy, NOT direct to port 7860
+                const proxyUrl = window.location.origin + '/api/tools' + apiPath;
+                console.log(`Fetching tools from: ${proxyUrl}`);
+                
+                // Use fetch with proper error handling
+                fetch(proxyUrl, {
+                    method: 'GET',
+                    credentials: 'same-origin'
+                })
+                    .then(response => {
+                        console.log(`Tool fetch response: ${response.status} ${response.statusText}`);
+                        if (!response.ok) {
+                            return response.json().then(data => {
+                                throw new Error(data.detail || `Error: ${response.status} ${response.statusText}`);
+                            }).catch(e => {
+                                throw new Error(`Error: ${response.status} ${response.statusText}`);
+                            });
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log(`Tool data received:`, data);
+                        toolModalListContainer.innerHTML = '';
+                        
+                        const tools = data.tools || [];
+                        
+                        if (tools && tools.length > 0) {
+                            tools.forEach(tool => {
+                                const toolDiv = document.createElement('div');
+                                toolDiv.style.marginBottom = '15px';
+                                toolDiv.style.borderBottom = '1px solid var(--card-border)';
+                                toolDiv.style.paddingBottom = '10px';
+
+                                const nameEl = document.createElement('h4');
+                                nameEl.textContent = tool.name || 'Unnamed Tool';
+                                nameEl.style.marginTop = '0'; nameEl.style.marginBottom = '5px';
+                                toolDiv.appendChild(nameEl);
+
+                                // Render Parsed Description
+                                if (tool.parsed_description) {
+                                    const mainDescEl = document.createElement('p');
+                                    mainDescEl.textContent = tool.parsed_description.main || 'No description available.';
+                                    mainDescEl.style.whiteSpace = 'pre-wrap';
+                                    toolDiv.appendChild(mainDescEl);
+
+                                    const renderSection = (title, content) => {
+                                        if (!content) return;
+                                        const titleEl = document.createElement('strong');
+                                        titleEl.textContent = title + ':';
+                                        titleEl.style.display = 'block'; titleEl.style.marginTop = '8px';
+                                        toolDiv.appendChild(titleEl);
+                                        const preEl = document.createElement('pre');
+                                        preEl.textContent = content;
+                                        preEl.style.marginLeft = '10px'; preEl.style.marginTop = '3px';
+                                        preEl.style.whiteSpace = 'pre-wrap'; preEl.style.fontSize = '0.9em';
+                                        toolDiv.appendChild(preEl);
+                                    };
+                                    renderSection('Args', tool.parsed_description.args);
+                                    renderSection('Returns', tool.parsed_description.returns);
+                                    renderSection('Raises', tool.parsed_description.raises);
+                                } else if (tool.description) { // Fallback
+                                    const descEl = document.createElement('p');
+                                    descEl.textContent = tool.description;
+                                    descEl.style.marginBottom = '8px';
+                                    toolDiv.appendChild(descEl);
+                                }
+
+                                // Render Schema
+                                if (tool.schema && typeof tool.schema === 'object' && Object.keys(tool.schema).length > 0) {
+                                    const schemaContainer = document.createElement('div');
+                                    schemaContainer.style.marginTop = '10px';
+                                    schemaContainer.innerHTML = '<strong>Input Schema:</strong>';
+
+                                    const properties = tool.schema.properties;
+                                    const required = tool.schema.required || [];
+
+                                    if (properties && typeof properties === 'object' && Object.keys(properties).length > 0) {
+                                        const propsList = document.createElement('div');
+                                        propsList.style.marginLeft = '15px'; propsList.style.marginTop = '5px';
+                                        propsList.style.borderLeft = '2px solid var(--card-border)'; propsList.style.paddingLeft = '10px';
+
+                                        for (const [propName, propDetails] of Object.entries(properties)) {
+                                            const propDiv = document.createElement('div');
+                                            propDiv.style.marginBottom = '8px';
+
+                                            const nameSpan = document.createElement('strong');
+                                            nameSpan.textContent = propName;
+                                            propDiv.appendChild(nameSpan);
+
+                                            if (required.includes(propName)) {
+                                                const reqSpan = document.createElement('span');
+                                                reqSpan.textContent = ' (required)'; reqSpan.style.color = '#dc3545';
+                                                reqSpan.style.fontSize = '0.8em'; reqSpan.style.marginLeft = '3px';
+                                                propDiv.appendChild(reqSpan);
+                                            }
+                                            if (propDetails.type) {
+                                                const typeSpan = document.createElement('span');
+                                                typeSpan.textContent = ` - Type: ${propDetails.type}`;
+                                                typeSpan.style.color = 'var(--input-placeholder)'; typeSpan.style.marginLeft = '5px';
+                                                propDiv.appendChild(typeSpan);
+                                            }
+                                            if (propDetails.description) {
+                                                const descP = document.createElement('p');
+                                                descP.textContent = propDetails.description;
+                                                descP.style.margin = '3px 0 0 10px'; descP.style.fontSize = '0.85em';
+                                                propDiv.appendChild(descP);
+                                            }
+                                            if (propDetails.default !== undefined) {
+                                                const defaultP = document.createElement('p');
+                                                defaultP.textContent = `Default: ${JSON.stringify(propDetails.default)}`;
+                                                defaultP.style.margin = '3px 0 0 10px'; defaultP.style.fontSize = '0.85em';
+                                                defaultP.style.color = 'var(--input-placeholder)';
+                                                propDiv.appendChild(defaultP);
+                                            }
+                                            propsList.appendChild(propDiv);
+                                        }
+                                        schemaContainer.appendChild(propsList);
+                                    } else {
+                                        schemaContainer.innerHTML += '<p style="margin-left: 15px; font-style: italic;">No input parameters defined.</p>';
+                                    }
+                                    // Optionally display $defs notice
+                                    if (tool.schema.$defs && Object.keys(tool.schema.$defs).length > 0) {
+                                        schemaContainer.innerHTML += '<p style="margin-top: 10px; font-size: 0.8em; color: var(--input-placeholder);"><strong>Definitions:</strong> (Schema uses shared definitions not fully displayed here)</p>';
+                                    }
+                                    toolDiv.appendChild(schemaContainer);
+                                } else if (tool.schema && Object.keys(tool.schema).length === 0){
+                                    toolDiv.innerHTML += '<p style="margin-top: 10px; font-style: italic;"><strong>Input Schema:</strong> No parameters defined.</p>';
+                                }
+                                toolModalListContainer.appendChild(toolDiv);
+                            });
+                        } else {
+                            toolModalListContainer.innerHTML = `
+                                <p>No tools listed for this service.</p>
+                                <p style="font-size: 0.9em; color: #6c757d; margin-top: 10px;">
+                                    Service reports ${data.tools ? data.tools.length : 0} tools.
+                                    <br>API path: ${apiPath}
+                                    <br>Last response: ${new Date().toLocaleTimeString()}
+                                </p>
+                            `;
+                        }
+                    })
+                    .catch(error => {
+                        console.error("Failed to fetch or display tools:", error);
+                        toolModalListContainer.innerHTML = `<p style="color: red;">Could not load tools: ${error.message}</p>`;
+                    });
+            }
+
+            // =====================================================================
+            // == Core UI Update Functions
+            // =====================================================================
+
+            function formatTimeAgoJS(isoString) {
+                if (!isoString) return "Never";
+                try {
+                    const dt = new Date(isoString);
+                    if (isNaN(dt.getTime())) {
+                        console.error(`[formatTimeAgoJS] Invalid Date parsed from: ${isoString}`);
+                        return "Invalid date";
+                    }
+                    const now = new Date();
+                    const diff = now.getTime() - dt.getTime();
+                    const seconds = Math.floor(diff / 1000);
+                    if (seconds < 2) return "Just now";
+                    if (seconds < 60) return `${seconds}s ago`;
+                    const minutes = Math.floor(seconds / 60);
+                    if (minutes < 60) return `${minutes}m ago`;
+                    const hours = Math.floor(minutes / 60);
+                    if (hours < 24) return `${hours}h ago`;

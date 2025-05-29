@@ -1,0 +1,556 @@
+body {
+    font-family: sans-serif;
+    margin: 0;
+    background-color: #121820; /* Dark background */
+    color: #cdd3dc; /* Light text */
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+header.main-header {
+    background-color: #1a222c; /* Slightly lighter dark */
+    padding: 10px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #333;
+}
+
+.logo {
+    display: flex; /* Align image and text */
+    align-items: center;
+    gap: 10px; /* Space between image and text */
+}
+
+.logo img {
+    vertical-align: middle; /* Helps alignment */
+}
+
+.logo span {
+    font-weight: bold;
+    font-size: 1.4em; /* Adjust size as needed */
+    color: #fff;
+}
+
+nav.main-nav a {
+    color: #cdd3dc;
+    text-decoration: none;
+    margin-left: 20px;
+    padding: 5px 10px;
+    border-radius: 4px;
+}
+
+nav.main-nav a.active {
+    background-color: #333;
+    color: #fff;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 15px; /* Space between items in header right */
+}
+
+.header-right .user-display {
+    color: #a0a8b4;
+    font-size: 0.9em;
+}
+
+.header-right .logout-button {
+    background-color: #444; /* Darker button */
+    color: #cdd3dc;
+    border: 1px solid #555;
+    padding: 5px 10px;
+    font-size: 0.85em;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.header-right .logout-button:hover {
+    background-color: #555;
+}
+
+.container {
+    display: flex;
+    flex-grow: 1;
+    padding: 20px 30px;
+}
+
+aside.sidebar {
+    width: 250px;
+    flex-shrink: 0;
+    padding-right: 20px;
+    border-right: 1px solid #333;
+}
+
+.sidebar h3 {
+    margin-top: 0;
+    color: #fff;
+    font-size: 0.9em;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 15px;
+}
+
+.sidebar ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.sidebar li {
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.95em;
+    color: #a0a8b4;
+}
+
+.sidebar li span:last-child {
+    background-color: #2a3441;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    color: #cdd3dc;
+}
+
+main.content {
+    flex-grow: 1;
+    padding-left: 30px;
+}
+
+.page-header {
+    margin-bottom: 25px;
+}
+
+.breadcrumbs {
+    font-size: 0.9em;
+    color: #a0a8b4;
+    margin-bottom: 5px;
+}
+
+.breadcrumbs a {
+    color: #a0a8b4;
+    text-decoration: none;
+}
+
+.breadcrumbs a:hover {
+    text-decoration: underline;
+}
+
+.page-header h1 {
+    margin: 5px 0;
+    color: #fff;
+}
+
+.page-header p {
+    color: #a0a8b4;
+    max-width: 600px;
+    margin-bottom: 15px;
+}
+
+.page-header .social-icons a {
+    color: #a0a8b4;
+    font-size: 1.2em;
+    margin-right: 10px;
+    text-decoration: none;
+}
+
+.controls-area {
+    display: flex;
+    align-items: center;
+    gap: 15px; /* Spacing between items */
+    margin-bottom: 20px;
+    flex-wrap: wrap; /* Allow wrapping on smaller screens */
+}
+
+.timestamp {
+    font-size: 0.9em;
+    color: #a0a8b4;
+}
+
+.search-bar input {
+    padding: 8px 12px;
+    border: 1px solid #333;
+    background-color: #1a222c;
+    color: #cdd3dc;
+    border-radius: 4px;
+    min-width: 300px; /* Example width */
+}
+
+.controls-area button, .controls-area select {
+    padding: 8px 15px;
+    background-color: #2a3441;
+    border: 1px solid #444;
+    color: #cdd3dc;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.controls-area button.primary {
+     background-color: #4a90e2; /* Example primary color */
+     color: #fff;
+}
+
+.controls-area button.new {
+    background-color: #50e3c2; /* Example green */
+    color: #121820;
+}
+
+.section-title {
+    font-size: 0.9em;
+    color: #a0a8b4;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* --- Card Styles --- */
+.card-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); /* Responsive grid */
+    gap: 20px;
+}
+
+.service-card {
+    background-color: #1a222c; /* Card background */
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between; /* Space between title and right items */
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.card-header h2 {
+    margin: 0;
+    font-size: 1.1em;
+    color: #e0e4eb;
+    margin-right: 10px; /* Add some space before right items */
+}
+
+.card-header .header-right-items {
+    display: flex;
+    align-items: center;
+    gap: 10px; /* Space between badge and icons */
+}
+
+.official-badge {
+    background-color: #4a90e2;
+    color: #fff;
+    font-size: 0.75em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    /* margin-right: 5px; Spacing handled by gap in parent */
+    text-transform: uppercase;
+    /* vertical-align: middle; Handled by flex parent */
+}
+
+.card-header .icons {
+    /* margin-left: auto; Removed - now part of flex group */
+    font-size: 0.9em;
+    color: #a0a8b4;
+}
+
+.card-body {
+    flex-grow: 1; /* Allows body to fill space */
+}
+
+.card-body .owner {
+    font-size: 0.85em;
+    color: #a0a8b4;
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+.badges {
+    margin-bottom: 10px; /* Add some space below badges */
+}
+
+.badge {
+    /* Original might be missing or have unsuitable color */
+    display: inline-block; /* Allow padding and margin */
+    padding: 3px 8px; /* Add some padding */
+    font-size: 0.8em; /* Slightly smaller text */
+    background-color: #444; /* Lighter grey background for more contrast */
+    color: #cdd3dc; /* Use the main light text color */
+    border-radius: 4px; /* Rounded corners */
+    margin-right: 5px; /* Space between badges */
+    margin-bottom: 5px; /* Space if badges wrap */
+}
+
+.description {
+    font-size: 0.9em;
+    color: #cdd3dc;
+    margin-bottom: 15px;
+    line-height: 1.4;
+}
+
+.card-footer {
+    border-top: 1px solid #333;
+    padding-top: 10px;
+    margin-top: 15px;
+    font-size: 0.8em;
+    color: #a0a8b4;
+}
+
+.metadata {
+    margin-right: 15px;
+}
+
+.platform-icons {
+    margin-top: 8px;
+}
+
+.platform-icons span {
+    margin-right: 8px;
+}
+
+/* --- Toggle Switch Styles (from W3Schools example, adapted) --- */
+.toggle-form {
+    display: flex;
+    align-items: center;
+    margin-top: 10px;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 46px; /* Smaller width */
+  height: 24px; /* Smaller height */
+  margin-right: 10px;
+}
+
+.switch input { 
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #444; /* Darker off state */
+  -webkit-transition: .4s;
+  transition: .4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px; /* Smaller handle */
+  width: 18px;  /* Smaller handle */
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  -webkit-transition: .4s;
+  transition: .4s;
+}
+
+input:checked + .slider {
+  background-color: #50e3c2; /* Greenish 'on' color */
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px #50e3c2;
+}
+
+input:checked + .slider:before {
+  -webkit-transform: translateX(22px); /* Adjust translation */
+  -ms-transform: translateX(22px);
+  transform: translateX(22px);
+}
+
+/* Rounded sliders */
+.slider.round {
+  border-radius: 24px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
+}
+
+.toggle-label {
+    font-size: 0.9em;
+}
+
+/* --- Login Page Styles --- */
+.login-body {
+    background-color: #1a222c; /* Slightly darker than main background */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.login-container {
+    background-color: #121820;
+    padding: 40px 50px; /* Increased padding */
+    border-radius: 8px;
+    border: 1px solid #333;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+    width: 100%;
+    max-width: 420px; /* Slightly wider */
+    text-align: center;
+}
+
+.login-header {
+    margin-bottom: 30px; /* More space after header */
+}
+
+.login-header .logo {
+    font-size: 1.8em; /* Make logo bigger */
+    font-weight: bold;
+    color: #fff;
+    display: block; /* Put on its own line */
+    margin-bottom: 5px;
+}
+
+.login-header h2 {
+    color: #a0a8b4; /* Subdue the 'Admin Login' text */
+    margin: 0;
+    font-size: 1.1em;
+    font-weight: normal;
+}
+
+.form-group {
+    margin-bottom: 20px;
+    text-align: left;
+}
+
+.form-group label {
+    display: block;
+    color: #a0a8b4;
+    margin-bottom: 8px; /* More space below label */
+    font-size: 0.9em;
+    font-weight: 500;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 12px 15px; /* Larger padding */
+    background-color: #2a3441;
+    border: 1px solid #444;
+    color: #cdd3dc;
+    border-radius: 4px;
+    box-sizing: border-box; /* Include padding in width */
+    font-size: 1em;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: #50e3c2; /* Highlight focus */
+    box-shadow: 0 0 0 2px rgba(80, 227, 194, 0.3); /* Subtle glow */
+}
+
+.login-container button {
+    padding: 12px 20px; /* Larger padding */
+    background-color: #50e3c2;
+    color: #121820;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1.1em; /* Slightly larger text */
+    font-weight: bold;
+    width: 100%;
+    margin-top: 15px; /* More space above button */
+    transition: background-color 0.2s ease;
+}
+
+.login-container button:hover {
+    background-color: #48c9a9;
+}
+
+.error-message {
+    color: #ff7b7b; /* Slightly less harsh red */
+    background-color: rgba(255, 107, 107, 0.1);
+    border: 1px solid #ff7b7b;
+    padding: 12px;
+    border-radius: 4px;
+    margin-bottom: 25px;
+    font-size: 0.9em;
+    text-align: left;
+}
+
+/* Controls Section styles */
+.search-controls {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+
+.search-controls .search-bar {
+    display: flex;
+    flex-grow: 1; /* Allow search bar to take up space */
+}
+
+.search-controls .search-bar input {
+    flex-grow: 1;
+    margin-right: 5px; /* Space between input and button */
+}
+
+.search-controls .rescan-form button {
+    /* Style specific to rescan button if needed */
+}
+
+.user-info {
+    margin-left: auto; /* Push user info to the right */
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #a0a8b4;
+    font-size: 0.9em;
+}
+
+.logout-link {
+    color: #a0a8b4;
+    text-decoration: none;
+    font-size: 0.9em;
+}
+
+.logout-link:hover {
+    color: #50e3c2;
+    text-decoration: underline;
+}
+
+/* Edit Button Styling - Visually Appealing Blue */
+.edit-button {
+    display: inline-block; 
+    padding: 4px 10px; /* Adjusted padding */
+    background-color: #4a90e2; /* Blue matching official badge */
+    border: 1px solid #3a80d2; /* Slightly darker border */
+    color: #fff; /* White text */
+    border-radius: 4px;
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 0.9em; /* Slightly larger */
+    font-weight: 500; /* Medium weight */
+    line-height: 1.3; 
+    margin-left: 0; /* No left margin needed now */
+    margin-right: 0; /* No right margin needed */
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.edit-button:hover {
+    background-color: #3a80d2; /* Darker blue hover */
+    border-color: #2a70c2;
+    color: #fff;
+} 

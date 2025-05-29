@@ -1,0 +1,5 @@
+**/.venv
+.venv/
+.venv
+registry/.venv/
+servers/*/.venv/

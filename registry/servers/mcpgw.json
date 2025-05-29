@@ -1,0 +1,265 @@
+{
+  "server_name": "MCP Gateway Tools",
+  "description": "Provides tools to interact with the MCP Gateway Registry API.",
+  "path": "/mcpgw",
+  "proxy_pass_url": "http://localhost:8003/",
+  "tags": ["registry", "management"],
+  "num_tools": 5,
+  "num_stars": 0,
+  "is_python": true,
+  "license": "N/A",
+  "tool_list": [
+    {
+      "name": "toggle_service",
+      "parsed_description": {
+        "main": "Toggles the enabled/disabled state of a registered MCP server in the gateway.",
+        "args": "params: ServicePathParams containing the service_path.",
+        "returns": "Dict[str, Any]: Response from the registry API indicating success or failure.",
+        "raises": "Exception: If the API call fails."
+      },
+      "schema": {
+        "$defs": {
+          "ServicePathParams": {
+            "properties": {
+              "service_path": {
+                "description": "The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'.",
+                "title": "Service Path",
+                "type": "string"
+              }
+            },
+            "required": [
+              "service_path"
+            ],
+            "title": "ServicePathParams",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "params": {
+            "$ref": "#/$defs/ServicePathParams"
+          }
+        },
+        "required": [
+          "params"
+        ],
+        "title": "toggle_serviceArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "register_service",
+      "parsed_description": {
+        "main": "Registers a new MCP server with the gateway.",
+        "args": "params: RegisterServiceParams containing the details of the server to register.",
+        "returns": "Dict[str, Any]: Response from the registry API, likely including the registered server details.",
+        "raises": "Exception: If the API call fails."
+      },
+      "schema": {
+        "$defs": {
+          "RegisterServiceParams": {
+            "properties": {
+              "server_name": {
+                "description": "Display name for the server.",
+                "title": "Server Name",
+                "type": "string"
+              },
+              "path": {
+                "description": "Unique URL path prefix for the server (e.g., '/my-service'). Must start with '/'.",
+                "title": "Path",
+                "type": "string"
+              },
+              "proxy_pass_url": {
+                "description": "The internal URL where the actual MCP server is running (e.g., 'http://localhost:8001').",
+                "title": "Proxy Pass Url",
+                "type": "string"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Optional description of the server.",
+                "title": "Description"
+              },
+              "tags": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Optional list of tags for categorization.",
+                "title": "Tags"
+              },
+              "is_python": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": false,
+                "description": "Whether the server is implemented in Python.",
+                "title": "Is Python"
+              },
+              "license": {
+                 "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": "N/A",
+                "description": "License information for the server.",
+                "title": "License"
+              }
+            },
+            "required": [
+              "server_name",
+              "path",
+              "proxy_pass_url"
+            ],
+            "title": "RegisterServiceParams",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "params": {
+            "$ref": "#/$defs/RegisterServiceParams"
+          }
+        },
+        "required": [
+          "params"
+        ],
+        "title": "register_serviceArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_server_details",
+      "parsed_description": {
+        "main": "Retrieves the configuration details for a specific registered MCP server.",
+        "args": "params: ServicePathParams containing the service_path.",
+        "returns": "Dict[str, Any]: Detailed information about the specified server.",
+        "raises": "Exception: If the API call fails or the server is not found."
+      },
+      "schema": {
+        "$defs": {
+          "ServicePathParams": {
+            "properties": {
+              "service_path": {
+                "description": "The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'.",
+                "title": "Service Path",
+                "type": "string"
+              }
+            },
+            "required": [
+              "service_path"
+            ],
+            "title": "ServicePathParams",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "params": {
+            "$ref": "#/$defs/ServicePathParams"
+          }
+        },
+        "required": [
+          "params"
+        ],
+        "title": "get_server_detailsArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_service_tools",
+      "parsed_description": {
+        "main": "Lists the tools provided by a specific registered MCP server.",
+        "args": "params: ServicePathParams containing the service_path.",
+        "returns": "Dict[str, Any]: A list of tools exposed by the specified server.",
+        "raises": "Exception: If the API call fails or the server cannot be reached."
+      },
+      "schema": {
+        "$defs": {
+          "ServicePathParams": {
+            "properties": {
+              "service_path": {
+                "description": "The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'.",
+                "title": "Service Path",
+                "type": "string"
+              }
+            },
+            "required": [
+              "service_path"
+            ],
+            "title": "ServicePathParams",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "params": {
+            "$ref": "#/$defs/ServicePathParams"
+          }
+        },
+        "required": [
+          "params"
+        ],
+        "title": "get_service_toolsArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "refresh_service",
+      "parsed_description": {
+        "main": "Triggers a refresh of the tool list for a specific registered MCP server.\nThe registry will re-connect to the target server to get its latest tools.",
+        "args": "params: ServicePathParams containing the service_path.",
+        "returns": "Dict[str, Any]: Response from the registry API indicating the result of the refresh attempt.",
+        "raises": "Exception: If the API call fails."
+      },
+      "schema": {
+        "$defs": {
+          "ServicePathParams": {
+            "properties": {
+              "service_path": {
+                "description": "The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'.",
+                "title": "Service Path",
+                "type": "string"
+              }
+            },
+            "required": [
+              "service_path"
+            ],
+            "title": "ServicePathParams",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "params": {
+            "$ref": "#/$defs/ServicePathParams"
+          }
+        },
+        "required": [
+          "params"
+        ],
+        "title": "refresh_serviceArguments",
+        "type": "object"
+      }
+    }
+  ]
+}

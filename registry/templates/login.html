@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - MCP Gateway</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+</head>
+<body class="login-body">
+
+    <div class="login-container">
+        <div class="login-header">
+             <img src="{{ url_for('static', path='/logo.png') }}" alt="MCP Gateway Logo" height="40" style="margin-bottom: 15px;"> <!-- Logo Image -->
+            <h2>Admin Login</h2>
+        </div>
+
+        {% if error %}
+        <p class="error-message">{{ error }}</p>
+        {% endif %}
+
+        <form action="/login" method="post">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required placeholder="Enter username">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required placeholder="Enter password">
+            </div>
+            <button type="submit">Login</button>
+        </form>
+        <!-- Add link to OAuth providers here later if implemented -->
+    </div>
+
+</body>
+</html> 

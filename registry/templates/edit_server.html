@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Server - {{ server.server_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+    <style>
+        /* Add some specific styles for the edit form */
+        .edit-form-container {
+            max-width: 600px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .edit-form-container h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input[type="text"],
+        .form-group input[type="url"],
+        .form-group input[type="number"],
+        .form-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box; /* Important for padding */
+        }
+        .form-group textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+        .form-group input[type="checkbox"] {
+             margin-right: 5px;
+        }
+        .form-actions {
+            text-align: right;
+            margin-top: 20px;
+        }
+        .form-actions button,
+        .form-actions a {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            margin-left: 10px;
+        }
+        .form-actions button[type="submit"] {
+            background-color: #007bff;
+            color: white;
+        }
+        .form-actions a {
+            background-color: #ccc;
+            color: #333;
+        }
+        .path-display {
+            background-color: #eee;
+            padding: 8px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="edit-form-container">
+        <h1>Edit Server: {{ server.server_name }}</h1>
+        <form action="/edit{{ server.path }}" method="post">
+            <div class="form-group">
+                <label for="path">Path (Read-only)</label>
+                <div class="path-display">{{ server.path }}</div>
+                <!-- Path is not editable to avoid filename/state issues -->
+            </div>
+            <div class="form-group">
+                <label for="name">Server Name</label>
+                <input type="text" id="name" name="name" value="{{ server.server_name }}" required>
+            </div>
+            <div class="form-group">
+                <label for="description">Description</label>
+                <textarea id="description" name="description">{{ server.description | default('') }}</textarea>
+            </div>
+            <div class="form-group">
+                <label for="proxy_pass_url">Proxy Pass URL</label>
+                <input type="url" id="proxy_pass_url" name="proxy_pass_url" value="{{ server.proxy_pass_url | default('') }}" required>
+            </div>
+            <div class="form-group">
+                <label for="tags">Tags (comma-separated)</label>
+                <input type="text" id="tags" name="tags" value="{{ server.tags | join(', ') }}">
+            </div>
+            <div class="form-group">
+                <label for="num_tools">Number of Tools</label>
+                <input type="number" id="num_tools" name="num_tools" value="{{ server.num_tools | default(0) }}" min="0">
+            </div>
+            <div class="form-group">
+                <label for="num_stars">Stars</label>
+                <input type="number" id="num_stars" name="num_stars" value="{{ server.num_stars | default(0) }}" min="0">
+            </div>
+            <div class="form-group">
+                <label for="is_python">Is Python Server?</label>
+                <input type="checkbox" id="is_python" name="is_python" value="true" {% if server.is_python %}checked{% endif %}>
+            </div>
+            <div class="form-group">
+                <label for="license">License</label>
+                <input type="text" id="license" name="license" value="{{ server.license | default('N/A') }}">
+            </div>
+            <div class="form-actions">
+                <a href="{{ url_for('read_root') }}">Cancel</a>
+                <button type="submit">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</body>
+</html> 
