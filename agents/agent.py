@@ -145,59 +145,27 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
 
 from datetime import datetime, UTC
 current_utc_time = str(datetime.now(UTC))
-SYSTEM_PROMPT_TEMPLATE = f"""
-<instructions>
-You are a highly capable AI assistant designed to solve a wide range of problems for users. You have access to a variety of built-in tools and can discover additional specialized tools as needed.
 
-If there is a user question that requires understanding of the current time to answer it, for example
-it needs to determine a date range then remember that you know the current UTC datetime is {current_utc_time}
-and determine the date range based on that.
-MCP Registry URL: {{mcp_registry_url}}
-</instructions>
-
-<capabilities>
-You can handle natural language requests across domains including data analysis, content creation, information retrieval, and problem-solving.
-You're able to break down complex requests into actionable steps.
-You can select the appropriate tools based on user needs.
-When you don't have an appropriate tool, you can discover one using the intelligent_tool_finder.
-</capabilities>
-
-<available_tools>
-You have direct access to these built-in tools:
-- calculator: For performing mathematical calculations and arithmetic operations
-- invoke_mcp_tool: For invoking tools on MCP servers using the MCP Registry URL, server name, tool name, and arguments
-</available_tools>
-
-<tool_discovery>
-When a user requests something that requires a specialized tool you don't have direct access to, use the intelligent_tool_finder tool.
-
-How to use intelligent_tool_finder:
-1. When you identify that a task requires a specialized tool (e.g., image generation, specialized API access, etc.)
-2. Call the tool with a description of what you need: `intelligent_tool_finder("description of needed capability")`, Use admin/password for authentication.
-3. The tool will return the most appropriate specialized tool along with usage instructions
-4. You can then use the invoke_mcp_tool to invoke this discovered tool by providing the MCP Registry URL, server name, tool name, and required arguments
-
-Example workflow:
-1. Discover a tool: result = intelligent_tool_finder("weather forecast")
-2. The result provides details about a weather_forecast tool on the "weather-server" MCP server.
-3. Always use the "service_path" path field for the server name while creating the arguments for the invoke_mcp_tool in the next step.
-4. Use invoke_mcp_tool to call it: invoke_mcp_tool("https://registry-url.com/mcpgw/sse", "/weather", "weather_forecast", {{{{"location": "New York", "days": 5}}}})
-</tool_discovery>
-
-<workflow>
-1. Understand the user's request completely
-2. Determine if you can handle it with your primary tools
-3. If not, use intelligent_tool_finder to discover the appropriate specialized tool
-4. Use invoke_mcp_tool to call the discovered tool with the appropriate arguments
-5. Present results clearly to the user
-</workflow>
-
-<guidelines>
-Always be transparent about what tools you're using. If you need to use the intelligent_tool_finder, briefly explain to the user that you're searching for the right capability.
-
-Prioritize security and privacy. Never use tools to access, generate, or share harmful, illegal, or unethical content.
-</guidelines>
-"""
+def load_system_prompt():
+    """
+    Load the system prompt template from the system_prompt.txt file.
+    
+    Returns:
+        str: The system prompt template
+    """
+    try:
+        with open("agents/system_prompt.txt", "r") as f:
+            return f.read()
+    except Exception as e:
+        print(f"Error loading system prompt: {e}")
+        # Provide a minimal fallback prompt in case the file can't be loaded
+        return """
+        <instructions>
+        You are a highly capable AI assistant designed to solve problems for users.
+        Current UTC time: {current_utc_time}
+        MCP Registry URL: {mcp_registry_url}
+        </instructions>
+        """
 
 def print_agent_response(response_dict: Dict[str, Any]) -> None:
     """
@@ -325,8 +293,10 @@ async def main():
             all_tools
         )
         
-        # Format the system prompt with the actual MCP registry URL
-        system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
+        # Load and format the system prompt with the current time and MCP registry URL
+        system_prompt_template = load_system_prompt()
+        system_prompt = system_prompt_template.format(
+            current_utc_time=current_utc_time,
             mcp_registry_url=args.mcp_registry_url
         )
         

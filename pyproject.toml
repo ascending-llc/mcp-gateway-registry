@@ -25,6 +25,8 @@ dependencies = [
     "langgraph>=0.4.3",
     "langchain-aws>=0.2.23",
     "pytz>=2025.2",
+    "strands-agents>=0.1.6",
+    "strands-agents-tools>=0.1.4",
 ]
 
 [tool.setuptools]

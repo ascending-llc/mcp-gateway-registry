@@ -6,11 +6,12 @@ This script runs a series of test commands against the agent.py script,
 captures the output, and uses an LLM to evaluate the correctness of the responses.
 
 Usage:
-    python agents/test_suite.py [--mcp-registry-url URL] [--num-tests N]
+    python agents/test_suite.py [--mcp-registry-url URL] [--num-tests N] [--use-strands]
 
 Options:
     --mcp-registry-url URL    MCP Registry URL (default: http://localhost/mcpgw/sse)
     --num-tests N             Number of tests to run (default: run all tests)
+    --use-strands             Use Strands agent instead of regular agent (default: False)
 """
 
 import subprocess
@@ -25,16 +26,22 @@ from typing import Dict, List, Any, Tuple
 from langchain_aws import ChatBedrockConverse
 
 # Configure logging
-def setup_logging():
+def setup_logging_with_agent_type(agent_type):
     """
-    Configure the logging system with detailed formatting.
+    Configure the logging system with detailed formatting and agent type in the filename.
+    
+    Args:
+        agent_type (str): The type of agent being tested (e.g., "regular" or "strands")
+        
+    Returns:
+        str: The path to the log file
     """
     # Create logs directory if it doesn't exist
     os.makedirs("agents/test_results/logs", exist_ok=True)
     
-    # Generate log filename with timestamp
+    # Generate log filename with timestamp and agent type
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = f"agents/test_results/logs/test_suite_{timestamp}.log"
+    log_file = f"agents/test_results/logs/test_suite_{agent_type}_{timestamp}.log"
     
     # Configure root logger
     logger = logging.getLogger()
@@ -76,26 +83,42 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument('--num-tests', type=int, default=None,
                         help='Number of tests to run (default: run all tests)')
     
+    # Agent type argument
+    parser.add_argument('--use-strands', action='store_true',
+                        help='Use Strands agent instead of regular agent')
+    
     return parser.parse_args()
 
-# Define the test cases
-TEST_CASES = [
-    {
-        "id": "test1",
-        "command_template": "python agents/agent.py --mcp-registry-url {mcp_registry_url} --message \"what mcp servers do i have access to\"",
-        "description": "Query available MCP servers"
-    },
-    {
-        "id": "test2",
-        "command_template": "python agents/agent.py --mcp-registry-url {mcp_registry_url} --message \"what is the current time in clarksburg, md\"",
-        "description": "Query current time in Clarksburg, MD"
-    },
-    {
-        "id": "test3",
-        "command_template": "python agents/agent.py --mcp-registry-url {mcp_registry_url} --message \"stock performance for apple in the last one week\"",
-        "description": "Query Apple stock performance for the last week"
-    }
-]
+# Define the test case templates for different agent types
+def get_test_cases(use_strands=False):
+    """
+    Get the appropriate test cases based on the agent type.
+    
+    Args:
+        use_strands (bool): Whether to use Strands agent
+        
+    Returns:
+        List[Dict]: List of test case dictionaries
+    """
+    agent_script = "agents/strands_agent.py" if use_strands else "agents/agent.py"
+    
+    return [
+        {
+            "id": "test1",
+            "command_template": f"python {agent_script} --mcp-registry-url {{mcp_registry_url}} --message \"what mcp servers do i have access to\"",
+            "description": "Query available MCP servers"
+        },
+        {
+            "id": "test2",
+            "command_template": f"python {agent_script} --mcp-registry-url {{mcp_registry_url}} --message \"what is the current time in clarksburg, md\"",
+            "description": "Query current time in Clarksburg, MD"
+        },
+        {
+            "id": "test3",
+            "command_template": f"python {agent_script} --mcp-registry-url {{mcp_registry_url}} --message \"stock performance for apple in the last one week\"",
+            "description": "Query Apple stock performance for the last week"
+        }
+    ]
 
 def ensure_directories_exist():
     """
@@ -323,29 +346,40 @@ def main():
     """
     Run all test cases and display the results.
     """
-    # Setup logging
-    log_file = setup_logging()
+    # Parse command line arguments first to get agent type
+    args = parse_arguments()
+    use_strands = args.use_strands
+    agent_type = "strands" if use_strands else "regular"
+    
+    # Setup logging with agent type
+    log_file = setup_logging_with_agent_type(agent_type)
     
     # Log start of test suite with Python version
     logging.info(f"Starting MCP Agent Test Suite")
     logging.info(f"Python version: {sys.version}")
     
-    # Parse command line arguments
-    args = parse_arguments()
+    # Get the rest of the arguments
     mcp_registry_url = args.mcp_registry_url
     num_tests = args.num_tests
+    
+    # Log configuration
     logging.info(f"Using MCP Registry URL: {mcp_registry_url}")
+    agent_type_display = "Strands" if use_strands else "Regular LangGraph"
+    logging.info(f"Using agent type: {agent_type_display}")
     
     # Ensure the necessary directories exist
     ensure_directories_exist()
     
+    # Get the appropriate test cases based on agent type
+    all_test_cases = get_test_cases(use_strands)
+    
     # Determine how many tests to run
-    tests_to_run = TEST_CASES
+    tests_to_run = all_test_cases
     if num_tests is not None and num_tests > 0:
-        tests_to_run = TEST_CASES[:num_tests]
-        logging.info(f"Running first {num_tests} of {len(TEST_CASES)} test cases")
+        tests_to_run = all_test_cases[:num_tests]
+        logging.info(f"Running first {num_tests} of {len(all_test_cases)} test cases")
     else:
-        logging.info(f"Running all {len(TEST_CASES)} test cases")
+        logging.info(f"Running all {len(all_test_cases)} test cases")
     
     results = []
     
@@ -392,8 +426,8 @@ def main():
     logging.info(f"Results: {passed}/{len(results)} tests passed")
     logging.info(f"{'=' * 80}")
     
-    # Save summary results to a JSON file
-    results_path = "agents/test_results/summary.json"
+    # Save summary results to a JSON file with agent type in the filename
+    results_path = f"agents/test_results/summary_{agent_type}.json"
     try:
         with open(results_path, "w") as f:
             json.dump(results, f, indent=2)
@@ -412,7 +446,8 @@ def main():
         "accuracy": round(accuracy, 2)  # Round to 2 decimal places
     }
     
-    accuracy_path = "agents/test_results/accuracy.json"
+    # Include agent type in the accuracy filename
+    accuracy_path = f"agents/test_results/accuracy_{agent_type}.json"
     try:
         with open(accuracy_path, "w") as f:
             json.dump(accuracy_data, f, indent=2)
@@ -421,7 +456,7 @@ def main():
     except Exception as e:
         logging.error(f"Failed to save accuracy metrics: {str(e)}")
     
-    logging.info(f"Test suite execution completed")
+    logging.info(f"Test suite execution completed for {agent_type} agent")
     logging.info(f"Log file: {log_file}")
 
 if __name__ == "__main__":

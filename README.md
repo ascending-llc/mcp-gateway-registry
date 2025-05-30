@@ -26,6 +26,12 @@ The MCP Gateway & Registry solves these challenges by providing a unified platfo
 
 You can deploy the gateway and registry on Amazon EC2 or Amazon EKS for production environments. Jump to [installation on EC2](#installation-on-ec2) or [installation on EKS](#installation-on-eks) for deployment instructions.
 
+## What's New
+
+* **Integration with [Strands Agents](https://github.com/strands-agents/sdk-python):** Enhanced agent capabilities with the Strands SDK
+* **Dynamic tool discovery and invocation:** User agents can discover new tools through the registry and have limitless capabilities
+* **[Installation on EKS](#installation-on-eks):** Deploy on Kubernetes for production environments
+
 ## Architecture
 
 The Gateway works by using an [Nginx server](https://docs.nginx.com/nginx/admin-guide/web-server/reverse-proxy/) as a reverse proxy, where each MCP server is handled as a different _path_ and the Nginx reverse proxy sitting between the MCP clients (contained in AI Agents for example) and backend server forwards client requests to appropriate backend servers and returns the responses back to clients. The requested resources are then returned to the client.
@@ -229,16 +235,21 @@ The Gateway and the Registry are available as a Docker container. The package in
    The repo includes a test agent that can connect to the Registry to discover tools and invoke them to do interesting tasks. This functionality can be invoked either standalone or as part of a test suite.
 
    ```{.python}
-   python agents\agent.py --mcp-registry-url http://localhost/mcpgw/sse --message "what is the current time in clarksburg, md"
+   python agents/agent.py --mcp-registry-url http://localhost/mcpgw/sse --message "what is the current time in clarksburg, md"
+
+   # With Strands agent
+   # python agents/strands_agent.py --mcp-registry-url http://localhost/mcpgw/sse --message "what is the current time in clarksburg, md"
    ```
 
-    You can also run the full test suite and get a handy agent evaluation report. This test suite exercises the Registry functionality as well as tests the multiple built-in MCP servers provided by the Gateway.
+   You can also run the full test suite and get a handy agent evaluation report. This test suite exercises the Registry functionality as well as tests the multiple built-in MCP servers provided by the Gateway.
 
-    ```{.python}
-    python agents/test_suite.py --mcp-registry-url http://localhost/mcpgw/sse
-    ```
+   ```{.python}
+   python agents/test_suite.py --mcp-registry-url http://localhost/mcpgw/sse
+   # With Strands agent
+   # python agents/test_suite.py --mcp-registry-url http://localhost/mcpgw/sse --use-strands
+   ```
 
-    The result of the tests suites are available in the agents/test_results folder. It contains an accuracy.json, a summary.json, a logs folder and a raw_data folder that contains the verbose output from the agent. The test suite uses an LLM as a judge to evaluate the results for accuracy and tool usage quality.
+   The result of the tests suites are available in the agents/test_results folder. It contains an accuracy.json, a summary.json, a logs folder and a raw_data folder that contains the verbose output from the agent. The test suite uses an LLM as a judge to evaluate the results for accuracy and tool usage quality.
 
 #### Running the Gateway over HTTPS
 
