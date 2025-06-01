@@ -48,5 +48,9 @@ ENV ADMIN_USER=$ADMIN_USER
 ENV ADMIN_PASSWORD=$ADMIN_PASSWORD
 ENV POLYGON_API_KEY=$POLYGON_API_KEY
 
+# Add health check using the new HTTP endpoint
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:7860/health || exit 1
+
 # Run the entrypoint script when the container launches
 ENTRYPOINT ["/app/docker/entrypoint.sh"]

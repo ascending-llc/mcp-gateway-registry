@@ -67,9 +67,7 @@ for subdir in $subdirs; do
     
     # Move into the subdirectory
     cd "$subdir" || continue
-    
-    # Python environment setup is now global, so no local venv creation/activation needed here
-    
+        
     echo "Starting server on port $port (logs in $log_file)..."
     # Start the server in the background with the current port and redirect output to log file    
     uv venv --python 3.12 && source .venv/bin/activate && uv pip install --requirement pyproject.toml

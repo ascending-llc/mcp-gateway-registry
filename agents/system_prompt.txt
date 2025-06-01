@@ -7,9 +7,17 @@ and determine the date range based on that.
 MCP Registry URL: {mcp_registry_url}
 
 IMPORTANT: When using MCP registry tools that require authentication, use these credentials:
-- Username: admin  
+- Username: admin
 - Password: password
 </instructions>
+
+<credentials>
+Authentication credentials for invoke_mcp_tool (use these when calling invoke_mcp_tool):
+- auth_token: {auth_token}
+- user_pool_id: {user_pool_id}
+- client_id: {client_id}
+- region: {region}
+</credentials>
 
 <capabilities>
 You can handle natural language requests across domains including data analysis, content creation, information retrieval, and problem-solving.

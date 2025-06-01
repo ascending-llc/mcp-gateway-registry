@@ -27,6 +27,7 @@ dependencies = [
     "pytz>=2025.2",
     "strands-agents>=0.1.6",
     "strands-agents-tools>=0.1.4",
+    "pyjwt>=2.10.1",
 ]
 
 [tool.setuptools]

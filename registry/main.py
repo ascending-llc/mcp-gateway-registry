@@ -361,23 +361,72 @@ SESSION_MAX_AGE_SECONDS = 60 * 60 * 8  # 8 hours
 
 LOCATION_BLOCK_TEMPLATE = """
     location {path}/ {{
+        # Authenticate request - pass entire request to auth server
+        auth_request /validate;
+        
+        # Proxy to MCP server
         proxy_pass {proxy_pass_url};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Add original URL for auth server scope validation
+        proxy_set_header X-Original-URL $scheme://$host$request_uri;
+        
+        # Pass through the original authentication headers
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header X-User-Pool-Id $http_x_user_pool_id;
+        proxy_set_header X-Client-Id $http_x_client_id;
+        proxy_set_header X-Region $http_x_region;
+        
+        # For SSE connections and WebSocket upgrades
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_set_header Connection $http_connection;
+        proxy_set_header Upgrade $http_upgrade;
+        chunked_transfer_encoding off;
+        
+        # Handle auth errors
+        error_page 401 = @auth_error;
+        error_page 403 = @forbidden_error;
     }}
 """
 
 COMMENTED_LOCATION_BLOCK_TEMPLATE = """
 #    location {path}/ {{
+#
+#        # Authenticate request - pass entire request to auth server
+#        auth_request /validate;
+#
+#        # Proxy to MCP server
 #        proxy_pass {proxy_pass_url};
 #        proxy_http_version 1.1;
 #        proxy_set_header Host $host;
 #        proxy_set_header X-Real-IP $remote_addr;
 #        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 #        proxy_set_header X-Forwarded-Proto $scheme;
+#
+#        # Add original URL for auth server scope validation
+#        proxy_set_header X-Original-URL $scheme://$host$request_uri;
+#
+#        # Pass through the original authentication headers
+#        proxy_set_header Authorization $http_authorization;
+#        proxy_set_header X-User-Pool-Id $http_x_user_pool_id;
+#        proxy_set_header X-Client-Id $http_x_client_id;
+#        proxy_set_header X-Region $http_x_region;
+#
+#        # For SSE connections and WebSocket upgrades
+#        proxy_buffering off;
+#        proxy_cache off;
+#        proxy_set_header Connection $http_connection;
+#        proxy_set_header Upgrade $http_upgrade;
+#        chunked_transfer_encoding off;
+#
+#        # Handle auth errors
+#        error_page 401 = @auth_error;
+#        error_page 403 = @forbidden_error;
 #    }}
 """
 
@@ -409,9 +458,17 @@ def regenerate_nginx_config():
                 continue
 
             if is_enabled and health_status == "healthy":
-                block = LOCATION_BLOCK_TEMPLATE.format(path=path, proxy_pass_url=proxy_url)
+                block = LOCATION_BLOCK_TEMPLATE.format(
+                    path=path,
+                    proxy_pass_url=proxy_url,
+                    server_name=server_info.get('server_name', 'unknown')
+                )
             else:
-                block = COMMENTED_LOCATION_BLOCK_TEMPLATE.format(path=path, proxy_pass_url=proxy_url)
+                block = COMMENTED_LOCATION_BLOCK_TEMPLATE.format(
+                    path=path,
+                    proxy_pass_url=proxy_url,
+                    server_name=server_info.get('server_name', 'unknown')
+                )
             location_blocks_content.append(block)
         
         generated_section = "\n".join(location_blocks_content).strip()
@@ -1810,6 +1867,32 @@ async def websocket_endpoint(websocket: WebSocket):
         if websocket in active_connections:
             active_connections.remove(websocket)
             logger.info(f"WebSocket connection removed: {websocket.client}")
+
+
+# --- HTTP Health Check Endpoint ---
+@app.get("/health")
+async def health_check():
+    """Simple HTTP health check endpoint for Docker health checks and load balancers."""
+    return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@app.get("/ws/health_status")
+async def health_status_http():
+    """HTTP endpoint that returns the same health status data as the WebSocket endpoint.
+    This handles cases where health checks are done via HTTP GET instead of WebSocket."""
+    data_to_send = {}
+    for path, status in SERVER_HEALTH_STATUS.items():
+        last_checked_dt = SERVER_LAST_CHECK_TIME.get(path)
+        last_checked_iso = last_checked_dt.isoformat() if last_checked_dt else None
+        num_tools = REGISTERED_SERVERS.get(path, {}).get("num_tools", 0)
+        
+        data_to_send[path] = {
+            "status": status,
+            "last_checked_iso": last_checked_iso,
+            "num_tools": num_tools
+        }
+    
+    return data_to_send
 
 
 # --- Run (for local testing) ---

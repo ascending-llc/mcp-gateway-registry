@@ -56,6 +56,7 @@ docker run -d \
     -p 80:80 \
     -p 443:443 \
     -p 7860:7860 \
+    -p 8888:8888 \
     --env-file .env.docker \
     -v /path/to/certs:/etc/ssl/certs \
     -v /path/to/private:/etc/ssl/private \

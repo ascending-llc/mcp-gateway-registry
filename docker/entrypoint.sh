@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e # Exit immediately if a command exits with a non-zero status.
 
+# Create logs directory if it doesn't exist
+mkdir -p /app/logs
+
 # --- Configuration ---
 # Get the absolute path of the directory where this script is run from
 SCRIPT_DIR="$(pwd)"
@@ -182,6 +185,18 @@ cd /app/registry
 source "$SCRIPT_DIR/.venv/bin/activate"
 cd /app/registry && uvicorn main:app --host 0.0.0.0 --port 7860 &
 echo "MCP Registry start command issued."
+# Give registry a moment to initialize and generate initial nginx config
+sleep 10
+
+# 3. Start Auth Server
+echo "Starting Auth Server in the background..."
+cd /app/auth_server
+uv venv --python 3.12 && source .venv/bin/activate && uv pip install --requirement pyproject.toml
+# Start auth_server with logging to file
+AUTH_LOG_FILE="/app/logs/auth_server.log"
+echo "Auth Server logs will be written to: $AUTH_LOG_FILE"
+uvicorn server:app --host 0.0.0.0 --port 8888 2>&1 | tee -a "$AUTH_LOG_FILE" &
+echo "Auth Server start command issued."
 # Give registry a moment to initialize and generate initial nginx config
 sleep 10
 
