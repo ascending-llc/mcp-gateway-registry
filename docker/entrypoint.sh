@@ -120,6 +120,33 @@ else
   echo "SSL certificates already exist, skipping generation."
 fi
 
+# --- Lua Module Installation and Script Creation ---
+echo "Setting up Lua support for nginx..."
+
+# Create directory for Lua scripts
+LUA_SCRIPTS_DIR="/etc/nginx/lua"
+mkdir -p "$LUA_SCRIPTS_DIR"
+
+# Create the body capture Lua script
+cat > "$LUA_SCRIPTS_DIR/capture_body.lua" << 'EOF'
+-- capture_body.lua: Read request body and encode it in X-Body header for auth_request
+local cjson = require "cjson"
+
+-- Read the request body
+ngx.req.read_body()
+local body_data = ngx.req.get_body_data()
+
+if body_data then
+    -- Set the X-Body header with the raw body data
+    ngx.req.set_header("X-Body", body_data)
+    ngx.log(ngx.INFO, "Captured request body (" .. string.len(body_data) .. " bytes) for auth validation")
+else
+    ngx.log(ngx.INFO, "No request body found")
+end
+EOF
+
+echo "Lua script created at $LUA_SCRIPTS_DIR/capture_body.lua"
+
 # --- Nginx Configuration ---
 echo "Copying custom Nginx configuration..."
 cp "$NGINX_CONF_SRC" "$NGINX_CONF_DEST"

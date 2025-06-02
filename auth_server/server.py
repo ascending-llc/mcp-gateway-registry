@@ -70,43 +70,102 @@ def parse_server_and_tool_from_url(original_url: str) -> tuple[Optional[str], Op
         logger.error(f"Failed to parse server/tool from URL {original_url}: {e}")
         return None, None
 
-def validate_server_tool_access(server_name: str, tool_name: str, user_scopes: List[str]) -> bool:
+def validate_server_tool_access(server_name: str, method: str, tool_name: str, user_scopes: List[str]) -> bool:
     """
-    Validate if the user has access to the specified server and tool based on scopes.
+    Validate if the user has access to the specified server method/tool based on scopes.
     
     Args:
         server_name: Name of the MCP server
-        tool_name: Name of the tool being accessed
+        method: Name of the method being accessed (e.g., 'initialize', 'notifications/initialized', 'tools/list')
+        tool_name: Name of the specific tool being accessed (optional, for tools/call)
         user_scopes: List of user scopes from token
         
     Returns:
         True if access is allowed, False otherwise
     """
     try:
+        # Verbose logging: Print input parameters
+        logger.info(f"=== VALIDATE_SERVER_TOOL_ACCESS START ===")
+        logger.info(f"Requested server: '{server_name}'")
+        logger.info(f"Requested method: '{method}'")
+        logger.info(f"Requested tool: '{tool_name}'")
+        logger.info(f"User scopes: {user_scopes}")
+        logger.info(f"Available scopes config keys: {list(SCOPES_CONFIG.keys()) if SCOPES_CONFIG else 'None'}")
+        
         if not SCOPES_CONFIG:
             logger.warning("No scopes configuration loaded, allowing access")
+            logger.info(f"=== VALIDATE_SERVER_TOOL_ACCESS END: ALLOWED (no config) ===")
             return True
             
         # Check each user scope to see if it grants access
         for scope in user_scopes:
-            scope_config = SCOPES_CONFIG.get(scope, {})
+            logger.info(f"--- Checking scope: '{scope}' ---")
+            scope_config = SCOPES_CONFIG.get(scope, [])
             
-            # Check both 'read' and 'execute' permissions
-            for permission_type in ['read', 'execute']:
-                servers = scope_config.get(permission_type, [])
+            if not scope_config:
+                logger.info(f"Scope '{scope}' not found in configuration")
+                continue
                 
-                for server_config in servers:
-                    if server_config.get('server') == server_name:
-                        allowed_tools = server_config.get('tools', [])
+            logger.info(f"Scope '{scope}' config: {scope_config}")
+            
+            # The scope_config is directly a list of server configurations
+            # since the permission type is already encoded in the scope name
+            for server_config in scope_config:
+                logger.info(f"  Examining server config: {server_config}")
+                server_config_name = server_config.get('server')
+                logger.info(f"  Server name in config: '{server_config_name}' vs requested: '{server_name}'")
+                
+                if server_config_name == server_name:
+                    logger.info(f"  ✓ Server name matches!")
+                    
+                    # Check methods first
+                    allowed_methods = server_config.get('methods', [])
+                    logger.info(f"  Allowed methods for server '{server_name}': {allowed_methods}")
+                    logger.info(f"  Checking if method '{method}' is in allowed methods...")
+                    
+                    # for all methods except tools/call we are good if the method is allowed
+                    # for tools/call we need to do an extra validation to check if the tool
+                    # itself is allowed or not
+                    if method in allowed_methods and method != 'tools/call':
+                        logger.info(f"  ✓ Method '{method}' found in allowed methods!")
+                        logger.info(f"Access granted: scope '{scope}' allows access to {server_name}.{method}")
+                        logger.info(f"=== VALIDATE_SERVER_TOOL_ACCESS END: GRANTED ===")
+                        return True
+                    
+                    # Check tools if method not found in methods
+                    allowed_tools = server_config.get('tools', [])
+                    logger.info(f"  Allowed tools for server '{server_name}': {allowed_tools}")
+                    
+                    # For tools/call, check if the specific tool is allowed
+                    if method == 'tools/call' and tool_name:
+                        logger.info(f"  Checking if tool '{tool_name}' is in allowed tools for tools/call...")
                         if tool_name in allowed_tools:
-                            logger.debug(f"Access granted: scope '{scope}' allows {permission_type} access to {server_name}.{tool_name}")
+                            logger.info(f"  ✓ Tool '{tool_name}' found in allowed tools!")
+                            logger.info(f"Access granted: scope '{scope}' allows access to {server_name}.{method} for tool {tool_name}")
+                            logger.info(f"=== VALIDATE_SERVER_TOOL_ACCESS END: GRANTED ===")
                             return True
+                        else:
+                            logger.info(f"  ✗ Tool '{tool_name}' NOT found in allowed tools")
+                    else:
+                        # For other methods, check if method is in tools list (backward compatibility)
+                        logger.info(f"  Checking if method '{method}' is in allowed tools...")
+                        if method in allowed_tools:
+                            logger.info(f"  ✓ Method '{method}' found in allowed tools!")
+                            logger.info(f"Access granted: scope '{scope}' allows access to {server_name}.{method}")
+                            logger.info(f"=== VALIDATE_SERVER_TOOL_ACCESS END: GRANTED ===")
+                            return True
+                        else:
+                            logger.info(f"  ✗ Method '{method}' NOT found in allowed tools")
+                else:
+                    logger.info(f"  ✗ Server name does not match")
         
-        logger.warning(f"Access denied: no scope allows access to {server_name}.{tool_name} for user scopes: {user_scopes}")
+        logger.warning(f"Access denied: no scope allows access to {server_name}.{method} (tool: {tool_name}) for user scopes: {user_scopes}")
+        logger.info(f"=== VALIDATE_SERVER_TOOL_ACCESS END: DENIED ===")
         return False
         
     except Exception as e:
         logger.error(f"Error validating server/tool access: {e}")
+        logger.info(f"=== VALIDATE_SERVER_TOOL_ACCESS END: ERROR ===")
         return False  # Deny access on error
 
 # Create FastAPI app
@@ -478,21 +537,23 @@ async def validate_request(request: Request):
             raise HTTPException(
                 status_code=401,
                 detail="Missing or invalid Authorization header. Expected: Bearer <token>",
-                headers={"WWW-Authenticate": "Bearer"}
+                headers={"WWW-Authenticate": "Bearer", "Connection": "close"}
             )
         
         if not user_pool_id:
             logger.warning("Missing X-User-Pool-Id header")
             raise HTTPException(
                 status_code=400,
-                detail="Missing X-User-Pool-Id header"
+                detail="Missing X-User-Pool-Id header",
+                headers={"Connection": "close"}
             )
         
         if not client_id:
             logger.warning("Missing X-Client-Id header")
             raise HTTPException(
                 status_code=400,
-                detail="Missing X-Client-Id header"
+                detail="Missing X-Client-Id header",
+                headers={"Connection": "close"}
             )
         
         # Extract token
@@ -544,13 +605,25 @@ async def validate_request(request: Request):
         # Validate scope-based access if we have server/tool information
         user_scopes = validation_result.get('scopes', [])
         if request_payload and server_name and tool_name and user_scopes:
-            if not validate_server_tool_access(server_name, tool_name, user_scopes):
-                logger.warning(f"Access denied for user {validation_result.get('username')} to {server_name}.{tool_name}")
+            # Extract method and actual tool name
+            method = tool_name  # The extracted tool_name is actually the method
+            actual_tool_name = None
+            
+            # For tools/call, extract the actual tool name from params
+            if method == 'tools/call' and isinstance(request_payload, dict):
+                params = request_payload.get('params', {})
+                if isinstance(params, dict):
+                    actual_tool_name = params.get('name')
+                    logger.info(f"Extracted actual tool name for tools/call: '{actual_tool_name}'")
+            
+            if not validate_server_tool_access(server_name, method, actual_tool_name, user_scopes):
+                logger.warning(f"Access denied for user {validation_result.get('username')} to {server_name}.{method} (tool: {actual_tool_name})")
                 raise HTTPException(
                     status_code=403,
-                    detail=f"Access denied to {server_name}.{tool_name}"
+                    detail=f"Access denied to {server_name}.{method}",
+                    headers={"Connection": "close"}
                 )
-            logger.info(f"Scope validation passed for {server_name}.{tool_name}")
+            logger.info(f"Scope validation passed for {server_name}.{method} (tool: {actual_tool_name})")
         elif server_name or tool_name:
             logger.debug(f"Partial server/tool info available (server='{server_name}', tool='{tool_name}'), skipping scope validation")
         else:
@@ -587,13 +660,25 @@ async def validate_request(request: Request):
         raise HTTPException(
             status_code=401,
             detail=str(e),
-            headers={"WWW-Authenticate": "Bearer"}
+            headers={"WWW-Authenticate": "Bearer", "Connection": "close"}
+        )
+    except HTTPException as e:
+        # If it's a 403 HTTPException, re-raise it as is
+        if e.status_code == 403:
+            raise
+        # For other HTTPExceptions, let them fall through to general handler
+        logger.error(f"HTTP error during validation: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal validation error: {str(e)}",
+            headers={"Connection": "close"}
         )
     except Exception as e:
         logger.error(f"Unexpected error during validation: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Internal validation error: {str(e)}"
+            detail=f"Internal validation error: {str(e)}",
+            headers={"Connection": "close"}
         )
     finally:
         pass

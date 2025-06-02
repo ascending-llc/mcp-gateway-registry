@@ -361,6 +361,9 @@ SESSION_MAX_AGE_SECONDS = 60 * 60 * 8  # 8 hours
 
 LOCATION_BLOCK_TEMPLATE = """
     location {path}/ {{
+        # Capture request body for auth validation using Lua
+        rewrite_by_lua_file /etc/nginx/lua/capture_body.lua;
+        
         # Authenticate request - pass entire request to auth server
         auth_request /validate;
         
@@ -396,6 +399,9 @@ LOCATION_BLOCK_TEMPLATE = """
 
 COMMENTED_LOCATION_BLOCK_TEMPLATE = """
 #    location {path}/ {{
+#
+#        # Capture request body for auth validation using Lua
+#        rewrite_by_lua_file /etc/nginx/lua/capture_body.lua;
 #
 #        # Authenticate request - pass entire request to auth server
 #        auth_request /validate;

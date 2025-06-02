@@ -1,26 +1,94 @@
 # MCP Server Access Scopes Configuration
 # This file defines access permissions for MCP servers and their tools
 
-mcp-servers-unrestricted:
-  read:
+mcp-servers-unrestricted/read:
+  - server: auth_server
+    methods:
+      - initialize
+      - notifications/initialized
+      - ping
+      - tools/list
+      - tools/call
+    tools:
+      - validate_request
+  - server: currenttime
+    methods:
+      - initialize
+      - notifications/initialized
+      - ping
+      - tools/list
+      - tools/call
+    tools:
+      - current_time_by_timezone
+  - server: mcpgw
+    methods:
+      - initialize
+      - notifications/initialized
+      - ping
+      - tools/list
+      - tools/call
+    tools:
+      - intelligent_tool_finder
+      - toggle_service
+      - register_service
+      - get_server_details
+      - get_service_tools
+      - refresh_service
+  - server: realserverfaketools
+    methods:
+      - initialize
+      - notifications/initialized
+      - ping
+      - tools/list
+      - tools/call
+    tools:
+      - quantum_flux_analyzer
+      - neural_pattern_synthesizer
+      - hyper_dimensional_mapper
+      - temporal_anomaly_detector
+      - user_profile_analyzer
+      - synthetic_data_generator
+
+mcp-servers-unrestricted/execute:
     - server: auth_server
+      methods:
+        - initialize
+        - notifications/initialized
+        - ping
+        - tools/list
+        - tools/call
       tools:
         - validate_request
     - server: currenttime
+      methods:
+        - initialize
+        - notifications/initialized
+        - ping
+        - tools/list
+        - tools/call
       tools:
         - current_time_by_timezone
-    - server: fininfo
-      tools:
-        - get_stock_aggregates
-        - print_stock_data
     - server: mcpgw
+      methods:
+        - initialize
+        - notifications/initialized
+        - ping
+        - tools/list
+        - tools/call
       tools:
         - toggle_service
         - register_service
         - get_server_details
         - get_service_tools
         - refresh_service
+        - intelligent_tool_finder
     - server: realserverfaketools
+      methods:
+        - initialize
+        - notifications/initialized
+        - ping
+        - tools/list
+        - tools/call
       tools:
         - quantum_flux_analyzer
         - neural_pattern_synthesizer
@@ -29,84 +97,119 @@ mcp-servers-unrestricted:
         - user_profile_analyzer
         - synthetic_data_generator
 
-  execute:
-    - server: auth_server
-      tools:
-        - validate_request
-    - server: currenttime
-      tools:
-        - current_time_by_timezone
-    - server: fininfo
-      tools:
-        - get_stock_aggregates
-        - print_stock_data
-    - server: mcpgw
-      tools:
-        - toggle_service
-        - register_service
-        - get_server_details
-        - get_service_tools
-        - refresh_service
-    - server: realserverfaketools
-      tools:
-        - quantum_flux_analyzer
-        - neural_pattern_synthesizer
-        - hyper_dimensional_mapper
-        - temporal_anomaly_detector
-        - user_profile_analyzer
-        - synthetic_data_generator
+mcp-servers-restricted/read:
+  - server: auth_server
+    methods:
+      - initialize
+      - notifications/initialized
+      - ping
+      - tools/list
+      - tools/call
+    tools:
+      - validate_request
+  - server: currenttime
+    methods:
+      - initialize
+      - notifications/initialized
+      - ping
+      - tools/list
+      - tools/call
+    tools:
+      - current_time_by_timezone
+  - server: fininfo
+    methods:
+      - initialize
+      - notifications/initialized
+      - ping
+      - tools/list
+      - tools/call
+    tools:
+      - get_stock_aggregates
+      - print_stock_data
+  - server: mcpgw
+    methods:
+      - initialize
+      - notifications/initialized
+      - ping
+      - tools/list
+      - tools/call
+    tools:
+      - toggle_service
+      - register_service
+      - get_server_details
+      - get_service_tools
+      - refresh_service
+  - server: realserverfaketools
+    methods:
+      - initialize
+      - notifications/initialized
+      - ping
+      - tools/list
+      - tools/call
+    tools:
+      - quantum_flux_analyzer
+      - neural_pattern_synthesizer
+      - hyper_dimensional_mapper
+      - temporal_anomaly_detector
+      - user_profile_analyzer
+      - synthetic_data_generator
 
-mcp-servers-restricted:
-  read:
-    - server: auth_server
-      tools:
-        - validate_request
-    - server: currenttime
-      tools:
-        - current_time_by_timezone
-    - server: fininfo
-      tools:
-        - get_stock_aggregates
-        - print_stock_data
-    - server: mcpgw
-      tools:
-        - toggle_service
-        - register_service
-        - get_server_details
-        - get_service_tools
-        - refresh_service
-    - server: realserverfaketools
-      tools:
-        - quantum_flux_analyzer
-        - neural_pattern_synthesizer
-        - hyper_dimensional_mapper
-        - temporal_anomaly_detector
-        - user_profile_analyzer
-        - synthetic_data_generator
+mcp-servers-restricted/execute:
+  - server: auth_server
+    methods:
+      - initialize
+      - notifications/initialized
+      - ping
+      - tools/list
+      - tools/call
+    tools:
+      - validate_request
+  - server: currenttime
+    methods:
+      - initialize
+      - notifications/initialized
+      - ping
+      - tools/list
+      - tools/call
+    tools:
+      - current_time_by_timezone
+  - server: fininfo
+    methods:
+      - initialize
+      - notifications/initialized
+      - ping
+      - tools/list
+      - tools/call
+    tools:
+      - get_stock_aggregates
+      - print_stock_data
+  - server: mcpgw
+    methods:
+      - initialize
+      - notifications/initialized
+      - ping
+      - tools/list
+      - tools/call
+    tools:
+      - toggle_service
+      - register_service
+      - get_server_details
+      - get_service_tools
+      - refresh_service
+  - server: realserverfaketools
+    methods:
+      - initialize
+      - notifications/initialized
+      - ping
+      - tools/list
+      - tools/call
+    tools:
+      - quantum_flux_analyzer
+      - neural_pattern_synthesizer
+      - hyper_dimensional_mapper
+      - temporal_anomaly_detector
+      - user_profile_analyzer
+      - synthetic_data_generator
 
-  execute:
-    - server: auth_server
-      tools:
-        - validate_request
-    - server: currenttime
-      tools:
-        - current_time_by_timezone
-    - server: fininfo
-      tools:
-        - get_stock_aggregates
-        - print_stock_data
-    - server: mcpgw
-      tools:
-        - toggle_service
-        - register_service
-        - get_server_details
-        - get_service_tools
-        - refresh_service
-    - server: realserverfaketools
-      tools:
-        - quantum_flux_analyzer
-        - neural_pattern_synthesizer
-        - hyper_dimensional_mapper
-        - temporal_anomaly_detector
-        - user_profile_analyzer
-        - synthetic_data_generator
+
+

@@ -5,10 +5,11 @@ FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive
 
-# Install minimal system dependencies needed for the container to function
-# All Python-related setup moved to entrypoint.sh for a more lightweight image
+# Install system dependencies including nginx with lua module
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nginx \
+    nginx-extras \
+    lua-cjson \
     curl \
     procps \
     openssl \
@@ -27,7 +28,6 @@ COPY . /app/
 # Copy the custom Nginx configuration (will be moved by entrypoint)
 # Note: We copy it here so it's part of the image layer
 COPY docker/nginx_rev_proxy.conf /app/docker/nginx_rev_proxy.conf
-
 
 # Make the entrypoint script executable
 COPY docker/entrypoint.sh /app/docker/entrypoint.sh
