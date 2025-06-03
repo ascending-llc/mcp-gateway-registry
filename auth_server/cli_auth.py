@@ -1,0 +1,378 @@
+#!/usr/bin/env python3
+"""
+CLI tool for MCP Gateway user authentication via Cognito OAuth.
+Captures session cookie and saves to local file for agent use.
+
+Usage:
+    python cli_auth.py [--cookie-file PATH]
+
+Environment variables required:
+    COGNITO_DOMAIN: Cognito domain (e.g., 'mcp-gateway' or full URL)
+    COGNITO_CLIENT_ID: OAuth client ID
+    SECRET_KEY: Must match the registry SECRET_KEY for cookie compatibility
+    AWS_REGION: AWS region (optional, defaults to us-east-1)
+"""
+
+import os
+import sys
+import json
+import secrets
+import hashlib
+import base64
+import threading
+import webbrowser
+import argparse
+import logging
+from pathlib import Path
+from urllib.parse import urlencode, parse_qs
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from itsdangerous import URLSafeTimedSerializer
+import requests
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Configuration from environment
+COGNITO_DOMAIN = os.environ.get('COGNITO_DOMAIN')
+COGNITO_CLIENT_ID = os.environ.get('COGNITO_CLIENT_ID')
+COGNITO_CLIENT_SECRET = os.environ.get('COGNITO_CLIENT_SECRET')
+SECRET_KEY = os.environ.get('SECRET_KEY')
+COGNITO_REDIRECT_URI = "http://localhost:8080/callback"
+AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
+
+# Validate required environment variables
+if not all([COGNITO_DOMAIN, COGNITO_CLIENT_ID, SECRET_KEY]):
+    logger.error("Missing required environment variables")
+    logger.error("Required: COGNITO_DOMAIN, COGNITO_CLIENT_ID, SECRET_KEY")
+    sys.exit(1)
+
+# Build full domain URL if needed
+if not COGNITO_DOMAIN.startswith('https://'):
+    # If just the domain prefix is provided, build the full URL
+    COGNITO_DOMAIN_URL = f"https://{COGNITO_DOMAIN}.auth.{AWS_REGION}.amazoncognito.com"
+else:
+    # If full URL is provided, use as-is
+    COGNITO_DOMAIN_URL = COGNITO_DOMAIN
+
+# OAuth endpoints
+AUTHORIZE_URL = f"{COGNITO_DOMAIN_URL}/oauth2/authorize"
+TOKEN_URL = f"{COGNITO_DOMAIN_URL}/oauth2/token"
+
+# Global variables for OAuth flow
+auth_result = None
+auth_complete = threading.Event()
+pkce_verifier = None
+
+
+class OAuthCallbackHandler(BaseHTTPRequestHandler):
+    """HTTP request handler for OAuth callback"""
+    
+    def log_message(self, format, *args):
+        """Override to use logger instead of stderr"""
+        logger.debug(f"Callback server: {format}", *args)
+    
+    def do_GET(self):
+        """Handle OAuth callback"""
+        global auth_result
+        
+        if self.path.startswith('/callback'):
+            # Parse query parameters
+            query_string = self.path.split('?', 1)[1] if '?' in self.path else ''
+            params = parse_qs(query_string)
+            
+            # Check for authorization code
+            if 'code' in params:
+                auth_code = params['code'][0]
+                logger.info("Authorization code received")
+                
+                # Exchange code for tokens
+                token_result = self.exchange_code_for_tokens(auth_code)
+                
+                if token_result:
+                    # Create session cookie
+                    cookie_value = self.create_session_cookie(token_result)
+                    if cookie_value:
+                        auth_result = {
+                            'success': True,
+                            'cookie': cookie_value,
+                            'user_info': token_result
+                        }
+                        self.send_success_response()
+                    else:
+                        self.send_error_response("Failed to create session cookie")
+                else:
+                    self.send_error_response("Failed to exchange authorization code")
+            
+            elif 'error' in params:
+                error = params.get('error', ['Unknown error'])[0]
+                error_description = params.get('error_description', [''])[0]
+                logger.error(f"OAuth error: {error} - {error_description}")
+                self.send_error_response(f"Authentication failed: {error}")
+            
+            else:
+                self.send_error_response("Invalid callback parameters")
+            
+            # Signal completion
+            auth_complete.set()
+        else:
+            self.send_404()
+    
+    def exchange_code_for_tokens(self, auth_code):
+        """Exchange authorization code for tokens"""
+        global pkce_verifier
+        
+        try:
+            # Basic auth with client credentials
+            auth_string = f"{COGNITO_CLIENT_ID}:{COGNITO_CLIENT_SECRET}"
+            auth_bytes = auth_string.encode('utf-8')
+            auth_b64 = base64.b64encode(auth_bytes).decode('utf-8')
+            
+            headers = {
+                'Authorization': f'Basic {auth_b64}',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
+            
+            data = {
+                'grant_type': 'authorization_code',
+                'client_id': COGNITO_CLIENT_ID,
+                'code': auth_code,
+                'redirect_uri': COGNITO_REDIRECT_URI,
+                'code_verifier': pkce_verifier
+            }
+            
+            response = requests.post(TOKEN_URL, headers=headers, data=data)
+            response.raise_for_status()
+            
+            token_data = response.json()
+            logger.info("Successfully exchanged code for tokens")
+            
+            # Decode ID token to get user info
+            id_token = token_data.get('id_token')
+            if id_token:
+                # Simple JWT decode without verification (Cognito already verified)
+                # In production, should verify with Cognito JWKS
+                payload = id_token.split('.')[1]
+                # Add padding if needed
+                payload += '=' * (4 - len(payload) % 4)
+                user_info = json.loads(base64.urlsafe_b64decode(payload))
+                
+                return {
+                    'username': user_info.get('cognito:username', user_info.get('email')),
+                    'groups': user_info.get('cognito:groups', []),
+                    'email': user_info.get('email'),
+                    'sub': user_info.get('sub')
+                }
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Token exchange failed: {e}")
+            return None
+    
+    def create_session_cookie(self, user_info):
+        """Create session cookie matching registry format"""
+        try:
+            signer = URLSafeTimedSerializer(SECRET_KEY)
+            
+            # Create session data matching old implementation format
+            session_data = {
+                'username': user_info['username'],
+                'groups': user_info.get('groups', []),
+                'provider_type': 'cognito',
+                'is_oauth': True,
+                'session_id': secrets.token_urlsafe(16),
+                'login_time': None  # Will be set by registry if needed
+            }
+            
+            # Serialize the session data
+            cookie_value = signer.dumps(session_data)
+            logger.info(f"Session cookie created for user: {user_info['username']}")
+            
+            return cookie_value
+            
+        except Exception as e:
+            logger.error(f"Failed to create session cookie: {e}")
+            return None
+    
+    def send_success_response(self):
+        """Send success response to browser"""
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        
+        html = """
+        <html>
+        <head>
+            <title>Authentication Successful</title>
+            <style>
+                body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+                .success { color: green; }
+                .info { margin-top: 20px; padding: 20px; background: #f0f0f0; border-radius: 5px; }
+            </style>
+        </head>
+        <body>
+            <h1 class="success">✓ Authentication Successful!</h1>
+            <div class="info">
+                <p>Your session cookie has been saved.</p>
+                <p>You can now close this window and return to the terminal.</p>
+            </div>
+            <script>setTimeout(() => window.close(), 5000);</script>
+        </body>
+        </html>
+        """
+        self.wfile.write(html.encode())
+    
+    def send_error_response(self, error_message):
+        """Send error response to browser"""
+        self.send_response(400)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        
+        html = f"""
+        <html>
+        <head>
+            <title>Authentication Failed</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; text-align: center; padding: 50px; }}
+                .error {{ color: red; }}
+            </style>
+        </head>
+        <body>
+            <h1 class="error">✗ Authentication Failed</h1>
+            <p>{error_message}</p>
+            <p>Please close this window and try again.</p>
+        </body>
+        </html>
+        """
+        self.wfile.write(html.encode())
+    
+    def send_404(self):
+        """Send 404 response"""
+        self.send_response(404)
+        self.end_headers()
+
+
+def generate_pkce_challenge():
+    """Generate PKCE code verifier and challenge"""
+    # Generate code verifier (43-128 characters)
+    code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8').rstrip('=')
+    
+    # Generate code challenge (SHA256 of verifier)
+    challenge_bytes = hashlib.sha256(code_verifier.encode('utf-8')).digest()
+    code_challenge = base64.urlsafe_b64encode(challenge_bytes).decode('utf-8').rstrip('=')
+    
+    return code_verifier, code_challenge
+
+
+def start_callback_server():
+    """Start the OAuth callback server"""
+    server = HTTPServer(('localhost', 8080), OAuthCallbackHandler)
+    server_thread = threading.Thread(target=server.serve_forever)
+    server_thread.daemon = True
+    server_thread.start()
+    
+    logger.info("Callback server started on http://localhost:8080")
+    return server
+
+
+def save_cookie_to_file(cookie_value, file_path):
+    """Save cookie to file with secure permissions"""
+    try:
+        # Expand user path and create directory if needed
+        cookie_path = Path(file_path).expanduser()
+        cookie_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        
+        # Write cookie to file
+        cookie_path.write_text(cookie_value)
+        
+        # Set secure permissions (owner read/write only)
+        cookie_path.chmod(0o600)
+        
+        logger.info(f"Session cookie saved to: {cookie_path}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to save cookie: {e}")
+        return False
+
+
+def main():
+    """Main authentication flow"""
+    global pkce_verifier
+    
+    parser = argparse.ArgumentParser(description='MCP Gateway CLI Authentication')
+    parser.add_argument(
+        '--cookie-file',
+        default='~/.mcp/session_cookie',
+        help='Path to save session cookie (default: ~/.mcp/session_cookie)'
+    )
+    args = parser.parse_args()
+    
+    try:
+        # Generate PKCE challenge
+        pkce_verifier, pkce_challenge = generate_pkce_challenge()
+        
+        # Start callback server
+        server = start_callback_server()
+        
+        # Build authorization URL
+        auth_params = {
+            'response_type': 'code',
+            'client_id': COGNITO_CLIENT_ID,
+            'redirect_uri': COGNITO_REDIRECT_URI,
+            'scope': 'openid email profile',
+            'code_challenge': pkce_challenge,
+            'code_challenge_method': 'S256'
+        }
+        auth_url = f"{AUTHORIZE_URL}?{urlencode(auth_params)}"
+        
+        # Open browser for authentication
+        logger.info("Opening browser for Cognito login...")
+        print("\n" + "="*50)
+        print("Opening your browser for authentication...")
+        print("Please complete the login process.")
+        print("="*50 + "\n")
+        
+        webbrowser.open(auth_url)
+        
+        # Wait for callback
+        logger.info("Waiting for authentication callback...")
+        auth_complete.wait(timeout=300)  # 5 minute timeout
+        
+        # Shutdown callback server
+        server.shutdown()
+        
+        # Check results
+        if auth_result and auth_result.get('success'):
+            cookie_value = auth_result['cookie']
+            
+            if save_cookie_to_file(cookie_value, args.cookie_file):
+                print("\n" + "="*50)
+                print("✓ Authentication successful!")
+                print(f"✓ Session cookie saved to: {Path(args.cookie_file).expanduser()}")
+                print("\nYou can now use this cookie with agents:")
+                print(f"  python agents/agent_w_auth.py --use-session-cookie")
+                print("="*50 + "\n")
+                return 0
+            else:
+                print("\n✗ Failed to save session cookie")
+                return 1
+        else:
+            print("\n✗ Authentication failed")
+            return 1
+            
+    except KeyboardInterrupt:
+        print("\n\nAuthentication cancelled by user")
+        return 1
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        print(f"\n✗ Error: {e}")
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

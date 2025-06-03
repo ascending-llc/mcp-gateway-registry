@@ -48,6 +48,16 @@ mcp-servers-unrestricted/read:
       - temporal_anomaly_detector
       - user_profile_analyzer
       - synthetic_data_generator
+  - server: fininfo
+    methods:
+      - initialize
+      - notifications/initialized
+      - ping
+      - tools/list
+      - tools/call
+    tools:
+      - get_stock_aggregates
+      - print_stock_data
 
 mcp-servers-unrestricted/execute:
     - server: auth_server
@@ -96,6 +106,16 @@ mcp-servers-unrestricted/execute:
         - temporal_anomaly_detector
         - user_profile_analyzer
         - synthetic_data_generator
+    - server: fininfo
+      methods:
+        - initialize
+        - notifications/initialized
+        - ping
+        - tools/list
+        - tools/call
+      tools:
+        - get_stock_aggregates
+        - print_stock_data
 
 mcp-servers-restricted/read:
   - server: auth_server

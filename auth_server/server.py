@@ -5,6 +5,7 @@ Configuration is passed via headers instead of environment variables.
 
 import argparse
 import logging
+import os
 import boto3
 import jwt
 import requests
@@ -20,6 +21,7 @@ from fastapi.responses import JSONResponse, Response
 import uvicorn
 from pydantic import BaseModel
 from pathlib import Path
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 
 # Configure logging
 logging.basicConfig(
@@ -41,6 +43,107 @@ def load_scopes_config():
 
 # Global scopes configuration
 SCOPES_CONFIG = load_scopes_config()
+
+def map_cognito_groups_to_scopes(groups: List[str]) -> List[str]:
+    """
+    Map Cognito groups to MCP scopes using the same format as M2M resource server scopes.
+    
+    Args:
+        groups: List of Cognito group names
+        
+    Returns:
+        List of MCP scopes in resource server format
+    """
+    scopes = []
+    
+    for group in groups:
+        if group == 'mcp-admin':
+            # Admin gets unrestricted read and execute access
+            scopes.append('mcp-servers-unrestricted/read')
+            scopes.append('mcp-servers-unrestricted/execute')
+        elif group == 'mcp-user':
+            # Regular users get restricted read access by default
+            scopes.append('mcp-servers-restricted/read')
+        elif group.startswith('mcp-server-'):
+            # Server-specific groups grant access based on server permissions
+            # For now, grant restricted execute access for specific servers
+            # This allows access to the servers defined in the restricted scope
+            scopes.append('mcp-servers-restricted/execute')
+            
+            # Note: The actual server access control is handled by the
+            # validate_server_tool_access function which checks the scopes.yml
+            # configuration. The group names are preserved in the 'groups' field
+            # for potential future fine-grained access control.
+    
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_scopes = []
+    for scope in scopes:
+        if scope not in seen:
+            seen.add(scope)
+            unique_scopes.append(scope)
+    
+    return unique_scopes
+
+def validate_session_cookie(cookie_value: str) -> Dict[str, any]:
+    """
+    Validate session cookie using itsdangerous serializer.
+    
+    Args:
+        cookie_value: The session cookie value
+        
+    Returns:
+        Dict containing validation results matching JWT validation format:
+        {
+            'valid': True,
+            'username': str,
+            'scopes': List[str],
+            'method': 'session_cookie',
+            'groups': List[str]
+        }
+        
+    Raises:
+        ValueError: If cookie is invalid or expired
+    """
+    # Get SECRET_KEY from environment
+    secret_key = os.environ.get('SECRET_KEY')
+    if not secret_key:
+        logger.warning("SECRET_KEY not configured for session cookie validation")
+        raise ValueError("Session cookie validation not configured")
+    
+    signer = URLSafeTimedSerializer(secret_key)
+    
+    try:
+        # Decrypt cookie (max_age=28800 for 8 hours)
+        data = signer.loads(cookie_value, max_age=28800)
+        
+        # Extract user info
+        username = data.get('username')
+        groups = data.get('groups', [])
+        
+        # Map groups to scopes
+        scopes = map_cognito_groups_to_scopes(groups)
+        
+        logger.info(f"Session cookie validated for user: {username}")
+        
+        return {
+            'valid': True,
+            'username': username,
+            'scopes': scopes,
+            'method': 'session_cookie',
+            'groups': groups,
+            'client_id': '',  # Not applicable for session
+            'data': data  # Include full data for consistency
+        }
+    except SignatureExpired:
+        logger.warning("Session cookie has expired")
+        raise ValueError("Session cookie has expired")
+    except BadSignature:
+        logger.warning("Invalid session cookie signature")
+        raise ValueError("Invalid session cookie")
+    except Exception as e:
+        logger.error(f"Session cookie validation error: {e}")
+        raise ValueError(f"Session cookie validation failed: {e}")
 
 def parse_server_and_tool_from_url(original_url: str) -> tuple[Optional[str], Optional[str]]:
     """
@@ -481,6 +584,7 @@ async def validate_request(request: Request):
     try:
         # Extract headers
         authorization = request.headers.get("Authorization")
+        cookie_header = request.headers.get("Cookie", "")
         user_pool_id = request.headers.get("X-User-Pool-Id")
         client_id = request.headers.get("X-Client-Id")
         region = request.headers.get("X-Region", "us-east-1")
@@ -526,46 +630,69 @@ async def validate_request(request: Request):
         logger.info(f"All HTTP Headers: {json.dumps(all_headers, indent=2)}")
         
         # Log specific headers for debugging
-        logger.info(f"Key Headers: Authorization={bool(authorization)}, "
+        logger.info(f"Key Headers: Authorization={bool(authorization)}, Cookie={bool(cookie_header)}, "
                     f"User-Pool-Id={user_pool_id}, Client-Id={client_id}, Region={region}, "
                     f"Original-URL={original_url}")
         logger.info(f"Server Name from URL: {server_name_from_url}")
         
-        # Validate required headers
-        if not authorization or not authorization.startswith("Bearer "):
-            logger.warning("Missing or invalid Authorization header")
-            raise HTTPException(
-                status_code=401,
-                detail="Missing or invalid Authorization header. Expected: Bearer <token>",
-                headers={"WWW-Authenticate": "Bearer", "Connection": "close"}
+        # Initialize validation result
+        validation_result = None
+        
+        # FIRST: Check for session cookie if present
+        if "mcp_gateway_session=" in cookie_header:
+            logger.info("Session cookie detected, attempting session validation")
+            # Extract cookie value
+            cookie_value = None
+            for cookie in cookie_header.split(';'):
+                if cookie.strip().startswith('mcp_gateway_session='):
+                    cookie_value = cookie.strip().split('=', 1)[1]
+                    break
+            
+            if cookie_value:
+                try:
+                    validation_result = validate_session_cookie(cookie_value)
+                    logger.info(f"Session cookie validation successful for user: {validation_result['username']}")
+                except ValueError as e:
+                    logger.warning(f"Session cookie validation failed: {e}")
+                    # Fall through to JWT validation
+        
+        # SECOND: If no valid session cookie, check for JWT token
+        if not validation_result:
+            # Validate required headers for JWT
+            if not authorization or not authorization.startswith("Bearer "):
+                logger.warning("Missing or invalid Authorization header and no valid session cookie")
+                raise HTTPException(
+                    status_code=401,
+                    detail="Missing or invalid Authorization header. Expected: Bearer <token> or valid session cookie",
+                    headers={"WWW-Authenticate": "Bearer", "Connection": "close"}
+                )
+            
+            if not user_pool_id:
+                logger.warning("Missing X-User-Pool-Id header")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Missing X-User-Pool-Id header",
+                    headers={"Connection": "close"}
+                )
+            
+            if not client_id:
+                logger.warning("Missing X-Client-Id header")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Missing X-Client-Id header",
+                    headers={"Connection": "close"}
+                )
+            
+            # Extract token
+            access_token = authorization.split(" ")[1]
+            
+            # Validate the token
+            validation_result = validator.validate_token(
+                access_token=access_token,
+                user_pool_id=user_pool_id,
+                client_id=client_id,
+                region=region
             )
-        
-        if not user_pool_id:
-            logger.warning("Missing X-User-Pool-Id header")
-            raise HTTPException(
-                status_code=400,
-                detail="Missing X-User-Pool-Id header",
-                headers={"Connection": "close"}
-            )
-        
-        if not client_id:
-            logger.warning("Missing X-Client-Id header")
-            raise HTTPException(
-                status_code=400,
-                detail="Missing X-Client-Id header",
-                headers={"Connection": "close"}
-            )
-        
-        # Extract token
-        access_token = authorization.split(" ")[1]
-        
-        # Validate the token
-        validation_result = validator.validate_token(
-            access_token=access_token,
-            user_pool_id=user_pool_id,
-            client_id=client_id,
-            region=region
-        )
         
         logger.info(f"Token validation successful using method: {validation_result['method']}")
         

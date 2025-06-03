@@ -23,6 +23,9 @@ graph LR
     %% AI Agent
     Agent[AI Agent]
     
+    %% CLI Auth Tool
+    CLIAuth[CLI Auth Tool<br/>cli_auth.py]
+    
     %% Identity Provider
     IdP[Identity Provider]
     
@@ -30,7 +33,7 @@ graph LR
     subgraph GwReg["Gateway & Registry"]
         Gateway["Gateway<br/>(Reverse Proxy)"]
         Registry[Registry]
-        AuthServer["Auth Server"]
+        AuthServer["Auth Server<br/>(Dual Auth)"]
     end
     
     %% MCP Server Farm
@@ -51,19 +54,23 @@ graph LR
     Gateway -->|Proxy requests| MCPn
     
     %% Auth flow
-    IdP -.->|Identity/tokens| Agent
-    AuthServer -.->|Validate tokens| IdP
+    IdP -.->|M2M: JWT tokens| Agent
+    IdP -.->|User: OAuth flow| CLIAuth
+    CLIAuth -.->|Session cookie| Agent
+    AuthServer -.->|Validate tokens/cookies| IdP
     
     %% Styling
     classDef agentStyle fill:#e1f5fe,stroke:#01579b,stroke-width:2px
     classDef idpStyle fill:#fff3e0,stroke:#e65100,stroke-width:2px
     classDef gwregStyle fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
     classDef mcpStyle fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef cliStyle fill:#fce4ec,stroke:#880e4f,stroke-width:2px
     
     class Agent agentStyle
     class IdP idpStyle
     class Gateway,Registry,AuthServer gwregStyle
     class MCP1,MCP2,MCP3,MCPn mcpStyle
+    class CLIAuth cliStyle
 ```
 
 At a high-level the flow works as follows:
@@ -84,24 +91,38 @@ sequenceDiagram
 
     %% Step 1: Get credentials
     Note over User,IdP: Step 1: Credential Acquisition (Choose One)
-    alt Agent Identity
-        Agent->>IdP: Request auth credentials
-        IdP->>Agent: Return credentials + metadata
-    else On-behalf of User
-        User->>IdP: Sign-in (web/CLI)
-        IdP->>User: Return credentials + metadata
-        User->>Agent: Provide credentials
+    alt M2M Authentication (Agent Identity)
+        Agent->>IdP: Request auth credentials (client_id/secret)
+        IdP->>Agent: Return JWT token + scopes
+    else Session Cookie (On-behalf of User)
+        participant CLIAuth as CLI Auth Tool
+        User->>CLIAuth: Run cli_auth.py
+        CLIAuth->>IdP: OAuth PKCE flow
+        IdP->>CLIAuth: Auth code + user info
+        CLIAuth->>CLIAuth: Create session cookie
+        CLIAuth->>User: Save to ~/.mcp/session_cookie
+        User->>Agent: Provide cookie file path
     end
 
     %% Step 2: Embed credentials in headers
     Note over Agent: Step 2: Embed credentials + IdP metadata
+    alt M2M Headers
+        Note over Agent: Authorization: Bearer {JWT}<br/>X-User-Pool-Id: {pool_id}<br/>X-Client-Id: {client_id}<br/>X-Region: {region}
+    else Session Cookie Headers
+        Note over Agent: Cookie: mcp_gateway_session={cookie}<br/>X-User-Pool-Id: {pool_id}<br/>X-Client-Id: {client_id}<br/>X-Region: {region}
+    end
 
     %% Step 3: Tool Discovery with scoped access
     Note over Agent,Registry: Step 3: Scoped Tool Discovery
     Agent->>Gateway: Tool discovery request with auth headers
     Gateway->>AuthServer: Validate credentials
-    AuthServer->>IdP: Verify credentials
-    IdP->>AuthServer: Auth response + scope
+    alt JWT Token Validation
+        AuthServer->>IdP: Verify JWT signature + claims
+        IdP->>AuthServer: Token valid + scopes from token
+    else Session Cookie Validation
+        AuthServer->>AuthServer: Decode cookie with SECRET_KEY
+        AuthServer->>AuthServer: Map user groups to scopes
+    end
     AuthServer->>Gateway: 200 OK + allowed scopes
     Gateway->>Registry: Tool discovery request + scope headers
     
@@ -143,46 +164,102 @@ sequenceDiagram
 The above implementation provides an OAuth compliant way to MCP security without the MCP servers being involved in enforcing this security greatly simplifying the MCP server implementation (as compared to every MCP server having to implement authentication and authorization).
 
 
-## Amazon Cognito based reference implementation (_work in progress_)
+## Amazon Cognito based reference implementation
 
-This section discusses a reference implementation using Amazon Cognito as the IdP.
+This section discusses the reference implementation using Amazon Cognito as the IdP, supporting both Machine-to-Machine (M2M) and Session Cookie authentication methods.
 
-### Agent uses on-behalf of identity
+### Key Components
 
-### 1. Session Cookie Implementation
+#### 1. Auth Server (`auth_server/server.py`)
+The enhanced auth server provides dual authentication support:
+- **Primary Check**: Session cookie validation using `itsdangerous.URLSafeTimedSerializer`
+- **Fallback**: JWT token validation with Cognito
+- **Group Mapping**: Maps Cognito groups to MCP scopes
+  - `mcp-admin` → Full unrestricted access
+  - `mcp-user` → Restricted read access
+  - `mcp-server-*` → Server-specific execute access
 
-The proposed session cookie approach, which encodes user metadata from Cognito, is a valuable addition to our system. However, there are two crucial considerations:
+#### 2. CLI Authentication Tool (`auth_server/cli_auth.py`)
+A standalone tool for user-based authentication:
+- Implements OAuth 2.0 PKCE flow with Cognito hosted UI
+- Opens browser for user authentication
+- Runs local callback server on port 8080
+- Creates session cookie compatible with registry format
+- Saves to `~/.mcp/session_cookie` with secure permissions (0600)
 
-#### a. Out-of-Band Cookie Retrieval
+#### 3. Enhanced Agent (`agents/agent_w_auth.py`)
+The agent now supports both authentication methods:
+- `--use-session-cookie` flag for session-based auth
+- `--session-cookie-file` parameter (default: `~/.mcp/session_cookie`)
+- Maintains full backward compatibility with M2M authentication
+- Automatically includes appropriate headers based on auth method
 
-- A separate CLI tool will be required to run before the agent execution.
-- Process:
-  1. CLI opens the browser
-  2. User authenticates
-  3. Cookie is retrieved and stored in a local file
-  4. Agent reads the cookie from the local file
-  5. Agent uses the cookie in the MCP client
+### 1. Machine-to-Machine (M2M) Authentication
 
-#### b. Validation Server Implementation
+### 2. Session Cookie Authentication
 
-- A dedicated Validation Server (Auth Server) will handle cookie validation instead of the Registry.
-- Key points:
-  - Runs in a container, accessible at port 8888
-  - Performs the same functionality as current `main.py`, `auth`, and related modules
-  - Triggered by an auth command in the Nginx location section for each server
-  - Creates a pipeline:
-    1. Request goes to the Validation Server first
-    2. If Validation Server returns 200 OK, request proceeds to the MCP server
-  - MCP server remains unburdened by authentication tasks
+Session cookie authentication enables agents to act on behalf of users, using their Cognito identity and group memberships for authorization.
 
-#### Advantages:
-1. Eliminates need for MCP client in Registry for every client-server communication
-2. Maintains Registry as a control plane application
-3. Improves scalability
-4. Auth server can scale independently in the future
-5. Simplifies MCP servers by removing authentication responsibilities
+#### Implementation Components
 
-### 2. Machine-to-Machine Authentication
+##### a. CLI Authentication Tool (`auth_server/cli_auth.py`)
+
+The CLI tool handles the OAuth flow with Cognito and saves the session cookie locally:
+
+```bash
+# Run the CLI authentication tool
+cd auth_server
+python cli_auth.py
+
+# This will:
+# 1. Open your browser to Cognito hosted UI
+# 2. After login, capture the authorization code
+# 3. Exchange code for user information
+# 4. Create and save session cookie to ~/.mcp/session_cookie
+```
+
+Required environment variables:
+- `COGNITO_DOMAIN`: Your Cognito domain (e.g., 'mcp-gateway')
+- `COGNITO_CLIENT_ID`: OAuth client ID configured for PKCE flow
+- `SECRET_KEY`: Must match the registry's SECRET_KEY for cookie compatibility
+
+##### b. Agent with Session Cookie Support
+
+The enhanced agent (`agents/agent_w_auth.py`) now supports session cookie authentication:
+
+```bash
+# Use agent with session cookie
+python agent_w_auth.py \
+  --use-session-cookie \
+  --message "What time is it in Tokyo?" \
+  --mcp-registry-url http://localhost/mcpgw/sse
+```
+
+Key features:
+- `--use-session-cookie`: Enable session cookie authentication mode
+- `--session-cookie-file`: Cookie file path (default: `~/.mcp/session_cookie`)
+- Automatically reads cookie and includes in request headers
+- Falls back to M2M if session cookie flag not provided
+
+##### c. Auth Server Enhancements
+
+The auth server validates session cookies alongside JWT tokens:
+- Checks for `mcp_gateway_session` cookie in request headers
+- Validates cookie signature using `itsdangerous.URLSafeTimedSerializer`
+- Maps Cognito groups to MCP scopes:
+  - `mcp-admin` → unrestricted read/execute access
+  - `mcp-user` → restricted read access
+  - `mcp-server-{name}` → server-specific execute access
+- Falls back to JWT validation if no valid cookie found
+
+#### Advantages
+1. Leverages existing Cognito user identities and groups
+2. No need to manage separate M2M credentials for user-initiated actions
+3. Maintains user context throughout the session
+4. Compatible with existing web-based authentication flow
+5. Auth server handles both authentication methods transparently
+
+### 3. Machine-to-Machine Authentication
 
 Cognito supports machine-to-machine authentication, enabling Agents to have their own identity separate from user identity.
 

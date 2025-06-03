@@ -88,7 +88,8 @@ def load_env_config() -> Dict[str, Optional[str]]:
         'client_id': None,
         'client_secret': None,
         'region': None,
-        'user_pool_id': None
+        'user_pool_id': None,
+        'domain': None
     }
     
     if DOTENV_AVAILABLE:
@@ -113,6 +114,7 @@ def load_env_config() -> Dict[str, Optional[str]]:
         env_config['client_secret'] = os.getenv('COGNITO_CLIENT_SECRET')
         env_config['region'] = os.getenv('AWS_REGION')
         env_config['user_pool_id'] = os.getenv('COGNITO_USER_POOL_ID')
+        env_config['domain'] = os.getenv('COGNITO_DOMAIN')
     
     return env_config
 
@@ -141,6 +143,12 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument('--message', type=str, default='what is the current time in Clarksburg, MD',
                         help='Message to send to the agent')
     
+    # Authentication method arguments
+    parser.add_argument('--use-session-cookie', action='store_true',
+                        help='Use session cookie authentication instead of M2M')
+    parser.add_argument('--session-cookie-file', type=str, default='~/.mcp/session_cookie',
+                        help='Path to session cookie file (default: ~/.mcp/session_cookie)')
+    
     # Cognito authentication arguments - now optional if available in environment
     parser.add_argument('--client-id', type=str, default=env_config['client_id'],
                         help='Cognito App Client ID (can be set via COGNITO_CLIENT_ID env var)')
@@ -150,24 +158,34 @@ def parse_arguments() -> argparse.Namespace:
                         help='Cognito User Pool ID (can be set via COGNITO_USER_POOL_ID env var)')
     parser.add_argument('--region', type=str, default=env_config['region'],
                         help='AWS region for Cognito (can be set via AWS_REGION env var)')
+    parser.add_argument('--domain', type=str, default=env_config['domain'],
+                        help='Cognito custom domain (can be set via COGNITO_DOMAIN env var)')
     parser.add_argument('--scopes', type=str, nargs='*', default=None,
                         help='Optional scopes for the token request')
     
     args = parser.parse_args()
     
-    # Validate that required Cognito parameters are available (either from command line or environment)
-    missing_params = []
-    if not args.client_id:
-        missing_params.append('--client-id (or COGNITO_CLIENT_ID env var)')
-    if not args.client_secret:
-        missing_params.append('--client-secret (or COGNITO_CLIENT_SECRET env var)')
-    if not args.user_pool_id:
-        missing_params.append('--user-pool-id (or COGNITO_USER_POOL_ID env var)')
-    if not args.region:
-        missing_params.append('--region (or AWS_REGION env var)')
-    
-    if missing_params:
-        parser.error(f"Missing required parameters: {', '.join(missing_params)}")
+    # Validate authentication parameters based on method
+    if args.use_session_cookie:
+        # For session cookie auth, we just need the cookie file
+        cookie_path = os.path.expanduser(args.session_cookie_file)
+        if not os.path.exists(cookie_path):
+            parser.error(f"Session cookie file not found: {cookie_path}\n"
+                        f"Run 'python auth_server/cli_auth.py' to authenticate first")
+    else:
+        # For M2M auth, validate Cognito parameters
+        missing_params = []
+        if not args.client_id:
+            missing_params.append('--client-id (or COGNITO_CLIENT_ID env var)')
+        if not args.client_secret:
+            missing_params.append('--client-secret (or COGNITO_CLIENT_SECRET env var)')
+        if not args.user_pool_id:
+            missing_params.append('--user-pool-id (or COGNITO_USER_POOL_ID env var)')
+        if not args.region:
+            missing_params.append('--region (or AWS_REGION env var)')
+        
+        if missing_params:
+            parser.error(f"Missing required parameters for M2M authentication: {', '.join(missing_params)}")
     
     return args
 
@@ -210,21 +228,25 @@ def calculator(expression: str) -> str:
 
 @tool
 async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: str, arguments: Dict[str, Any],
-                         auth_token: str, user_pool_id: str, client_id: str, region: str) -> str:
+                         auth_token: str = None, user_pool_id: str = None, client_id: str = None, region: str = None,
+                         auth_method: str = "m2m", session_cookie: str = None) -> str:
     """
     Invoke a tool on an MCP server using the MCP Registry URL and server name with authentication.
     
     This tool creates an MCP SSE client and calls the specified tool with the provided arguments.
+    Supports both M2M (JWT) and session cookie authentication.
     
     Args:
         mcp_registry_url (str): The URL of the MCP Registry
         server_name (str): The name of the MCP server to connect to
         tool_name (str): The name of the tool to invoke
         arguments (Dict[str, Any]): Dictionary containing the arguments for the tool
-        auth_token (str): Bearer token for authentication
+        auth_token (str): Bearer token for authentication (for M2M)
         user_pool_id (str): Cognito User Pool ID for X-User-Pool-Id header
         client_id (str): Cognito Client ID for X-Client-Id header
         region (str): AWS region for X-Region header
+        auth_method (str): Authentication method ("m2m" or "session_cookie")
+        session_cookie (str): Session cookie value (for session auth)
     
     Returns:
         str: The result of the tool invocation as a string
@@ -246,21 +268,29 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
     server_url = urljoin(base_url, f"{server_name}/sse")
     print(f"Server URL: {server_url}")
     
-    # Prepare headers for authentication
+    # Prepare headers based on authentication method
     headers = {
-        'Authorization': f'Bearer {auth_token}',
-        'X-User-Pool-Id': user_pool_id,
-        'X-Client-Id': client_id,
-        'X-Region': region
+        'X-User-Pool-Id': user_pool_id or '',
+        'X-Client-Id': client_id or '',
+        'X-Region': region or 'us-east-1'
     }
     
-    # Create redacted headers for logging (mask sensitive information)
-    redacted_headers = {
-        'Authorization': f'Bearer {redact_sensitive_value(auth_token)}',
-        'X-User-Pool-Id': redact_sensitive_value(user_pool_id),
-        'X-Client-Id': redact_sensitive_value(client_id),
-        'X-Region': region  # Region is not sensitive
-    }
+    if auth_method == "session_cookie" and session_cookie:
+        headers['Cookie'] = f'mcp_gateway_session={session_cookie}'
+        redacted_headers = {
+            'Cookie': f'mcp_gateway_session={redact_sensitive_value(session_cookie)}',
+            'X-User-Pool-Id': redact_sensitive_value(user_pool_id) if user_pool_id else '',
+            'X-Client-Id': redact_sensitive_value(client_id) if client_id else '',
+            'X-Region': region or 'us-east-1'
+        }
+    else:
+        headers['Authorization'] = f'Bearer {auth_token}'
+        redacted_headers = {
+            'Authorization': f'Bearer {redact_sensitive_value(auth_token)}',
+            'X-User-Pool-Id': redact_sensitive_value(user_pool_id) if user_pool_id else '',
+            'X-Client-Id': redact_sensitive_value(client_id) if client_id else '',
+            'X-Region': region or 'us-east-1'
+        }
     
     try:
         # Create an MCP SSE client and call the tool with authentication headers
@@ -400,7 +430,7 @@ async def main():
     """
     Main function that:
     1. Parses command line arguments
-    2. Generates Cognito M2M authentication token
+    2. Generates Cognito M2M authentication token OR loads session cookie
     3. Sets up the LangChain MCP client and Bedrock model with authentication
     4. Creates a LangGraph agent with available tools
     5. Invokes the agent with the provided message
@@ -414,40 +444,75 @@ async def main():
     logger.info(f"Connecting to MCP server: {server_url}")
     logger.info(f"Using model: {args.model}")
     logger.info(f"Message: {args.message}")
-    logger.info(f"Cognito User Pool ID: {redact_sensitive_value(args.user_pool_id)}")
-    logger.info(f"Cognito Client ID: {redact_sensitive_value(args.client_id)}")
-    logger.info(f"AWS Region: {args.region}")
+    logger.info(f"Authentication method: {'Session Cookie' if args.use_session_cookie else 'M2M Token'}")
     
-    # Generate Cognito M2M authentication token
-    try:
-        logger.info("Generating Cognito M2M authentication token...")
-        token_data = generate_token(
-            client_id=args.client_id,
-            client_secret=args.client_secret,
-            user_pool_id=args.user_pool_id,
-            region=args.region,
-            scopes=args.scopes
-        )
-        access_token = token_data.get('access_token')
-        if not access_token:
-            raise ValueError("No access token received from Cognito")
-        logger.info("Successfully generated authentication token")
-    except Exception as e:
-        logger.error(f"Failed to generate authentication token: {e}")
-        return
+    # Initialize authentication variables
+    access_token = None
+    session_cookie = None
+    auth_method = "session_cookie" if args.use_session_cookie else "m2m"
+    
+    if args.use_session_cookie:
+        # Load session cookie from file
+        try:
+            cookie_path = os.path.expanduser(args.session_cookie_file)
+            with open(cookie_path, 'r') as f:
+                session_cookie = f.read().strip()
+            logger.info(f"Successfully loaded session cookie from {cookie_path}")
+        except Exception as e:
+            logger.error(f"Failed to load session cookie: {e}")
+            return
+    else:
+        # Generate Cognito M2M authentication token
+        logger.info(f"Cognito User Pool ID: {redact_sensitive_value(args.user_pool_id)}")
+        logger.info(f"Cognito Client ID: {redact_sensitive_value(args.client_id)}")
+        logger.info(f"AWS Region: {args.region}")
+        
+        try:
+            logger.info("Generating Cognito M2M authentication token...")
+            token_data = generate_token(
+                client_id=args.client_id,
+                client_secret=args.client_secret,
+                user_pool_id=args.user_pool_id,
+                region=args.region,
+                scopes=args.scopes,
+                domain=args.domain
+            )
+            access_token = token_data.get('access_token')
+            if not access_token:
+                raise ValueError("No access token received from Cognito")
+            logger.info("Successfully generated authentication token")
+        except Exception as e:
+            logger.error(f"Failed to generate authentication token: {e}")
+            return
     
     # Initialize the model
     model = ChatBedrockConverse(model_id=args.model, region_name='us-east-1')
     
     try:
-        # Prepare headers for MCP client authentication
-        auth_headers = {
-            'Authorization': f'Bearer {access_token}',
-            'X-User-Pool-Id': args.user_pool_id,
-            'X-Client-Id': args.client_id,
-            'X-Region': args.region
-        }
-        logger.info(f"Using authentication headers: {auth_headers}")
+        # Prepare headers for MCP client authentication based on method
+        if args.use_session_cookie:
+            auth_headers = {
+                'Cookie': f'mcp_gateway_session={session_cookie}',
+                'X-User-Pool-Id': args.user_pool_id or '',
+                'X-Client-Id': args.client_id or '',
+                'X-Region': args.region or 'us-east-1'
+            }
+        else:
+            auth_headers = {
+                'Authorization': f'Bearer {access_token}',
+                'X-User-Pool-Id': args.user_pool_id,
+                'X-Client-Id': args.client_id,
+                'X-Region': args.region
+            }
+        
+        # Log redacted headers
+        redacted_headers = {}
+        for k, v in auth_headers.items():
+            if k in ['Authorization', 'Cookie', 'X-User-Pool-Id', 'X-Client-Id']:
+                redacted_headers[k] = redact_sensitive_value(v) if v else ''
+            else:
+                redacted_headers[k] = v
+        logger.info(f"Using authentication headers: {redacted_headers}")
         
         # Initialize MCP client with the server configuration and authentication headers
         client = MultiServerMCPClient(
@@ -478,14 +543,30 @@ async def main():
         
         # Load and format the system prompt with the current time and MCP registry URL
         system_prompt_template = load_system_prompt()
-        system_prompt = system_prompt_template.format(
-            current_utc_time=current_utc_time,
-            mcp_registry_url=args.mcp_registry_url,
-            auth_token=access_token,
-            user_pool_id=args.user_pool_id,
-            client_id=args.client_id,
-            region=args.region
-        )
+        
+        # Prepare authentication parameters for system prompt
+        if args.use_session_cookie:
+            system_prompt = system_prompt_template.format(
+                current_utc_time=current_utc_time,
+                mcp_registry_url=args.mcp_registry_url,
+                auth_token='',  # Not used for session cookie auth
+                user_pool_id=args.user_pool_id or '',
+                client_id=args.client_id or '',
+                region=args.region or 'us-east-1',
+                auth_method=auth_method,
+                session_cookie=session_cookie
+            )
+        else:
+            system_prompt = system_prompt_template.format(
+                current_utc_time=current_utc_time,
+                mcp_registry_url=args.mcp_registry_url,
+                auth_token=access_token,
+                user_pool_id=args.user_pool_id,
+                client_id=args.client_id,
+                region=args.region,
+                auth_method=auth_method,
+                session_cookie=''  # Not used for M2M auth
+            )
         
         # Format the message with system message first
         formatted_messages = [
