@@ -24,7 +24,7 @@ graph LR
     Agent[AI Agent]
     
     %% CLI Auth Tool
-    CLIAuth[CLI Auth Tool<br/>cli_auth.py]
+    CLIAuth[CLI Auth Tool]
     
     %% Identity Provider
     IdP[Identity Provider]
@@ -187,14 +187,42 @@ A standalone tool for user-based authentication:
 - Creates session cookie compatible with registry format
 - Saves to `~/.mcp/session_cookie` with secure permissions (0600)
 
-#### 3. Enhanced Agent (`agents/agent_w_auth.py`)
-The agent now supports both authentication methods:
+#### 3. Agent (`agents/agent_w_auth.py`)
+The agent supports both authentication methods:
 - `--use-session-cookie` flag for session-based auth
 - `--session-cookie-file` parameter (default: `~/.mcp/session_cookie`)
 - Maintains full backward compatibility with M2M authentication
 - Automatically includes appropriate headers based on auth method
 
-### 1. Machine-to-Machine (M2M) Authentication
+### 1. Machine-to-Machine Authentication
+
+Cognito supports machine-to-machine authentication, enabling Agents to have their own identity separate from user identity.
+
+#### Implementation Details:
+- Reference: [AWS Blog on Machine-to-Machine Authentication](https://aws.amazon.com/blogs/mt/configuring-machine-to-machine-authentication-with-amazon-cognito-and-amazon-api-gateway-part-2/)
+- Agents are treated as App Clients (Cognito terminology)
+- MCP Server(s) function as resource servers
+
+#### Authentication Flow:
+1. Agent startup:
+   - Configured with client ID, client secret, and a set of scopes
+   - Requests scopes (e.g., MCP Registry with tool finder and basic MCP servers)
+2. Cognito issues a JWT token
+3. Agent includes the JWT token in MCP headers
+4. Auth server on Nginx side:
+   - Retrieves JWT token
+   - Calls Cognito to validate token and get allowed scopes
+   - Returns 200 or 403 based on:
+     - URL (MCP server)
+     - Payload (Tools)
+     - Agent's allowed scopes
+
+#### Advantages
+1. Leverages existing Cognito user identities and groups
+2. No need to manage separate M2M credentials for user-initiated actions
+3. Maintains user context throughout the session
+4. Compatible with existing web-based authentication flow
+5. Auth server handles both authentication methods transparently
 
 ### 2. Session Cookie Authentication
 
@@ -251,36 +279,6 @@ The auth server validates session cookies alongside JWT tokens:
   - `mcp-user` → restricted read access
   - `mcp-server-{name}` → server-specific execute access
 - Falls back to JWT validation if no valid cookie found
-
-#### Advantages
-1. Leverages existing Cognito user identities and groups
-2. No need to manage separate M2M credentials for user-initiated actions
-3. Maintains user context throughout the session
-4. Compatible with existing web-based authentication flow
-5. Auth server handles both authentication methods transparently
-
-### 3. Machine-to-Machine Authentication
-
-Cognito supports machine-to-machine authentication, enabling Agents to have their own identity separate from user identity.
-
-#### Implementation Details:
-- Reference: [AWS Blog on Machine-to-Machine Authentication](https://aws.amazon.com/blogs/mt/configuring-machine-to-machine-authentication-with-amazon-cognito-and-amazon-api-gateway-part-2/)
-- Agents are treated as App Clients (Cognito terminology)
-- MCP Server(s) function as resource servers
-
-#### Authentication Flow:
-1. Agent startup:
-   - Configured with client ID, client secret, and a set of scopes
-   - Requests scopes (e.g., MCP Registry with tool finder and basic MCP servers)
-2. Cognito issues a JWT token
-3. Agent includes the JWT token in MCP headers
-4. Auth server on Nginx side:
-   - Retrieves JWT token
-   - Calls Cognito to validate token and get allowed scopes
-   - Returns 200 or 403 based on:
-     - URL (MCP server)
-     - Payload (Tools)
-     - Agent's allowed scopes
 
 #### Advantages:
 - Simpler implementation compared to user-based authentication
