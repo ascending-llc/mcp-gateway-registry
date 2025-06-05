@@ -367,5 +367,4 @@ See the full API spec [here](docs/registry_api.md).
 
 ## License
 
-- Free for non-commercial use under AGPL-3.0
-- Commercial use requires a paid license
+This project is licensed under the Apache-2.0 License.
