@@ -5,19 +5,112 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - MCP Gateway</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+    <style>
+        .oauth-providers {
+            margin: 20px 0;
+            padding: 20px 0;
+            border-top: 1px solid #e0e0e0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .oauth-button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: white;
+            color: #333;
+            text-decoration: none;
+            text-align: center;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .oauth-button:hover {
+            background: #f8f9fa;
+            border-color: #007bff;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .oauth-button.cognito {
+            background: linear-gradient(45deg, #ff6b35, #f7931e);
+            color: white;
+            border: none;
+        }
+        
+        .oauth-button.github {
+            background: #24292e;
+            color: white;
+            border: none;
+        }
+        
+        .oauth-button.google {
+            background: white;
+            color: #757575;
+            border: 1px solid #dadce0;
+        }
+        
+        .divider {
+            text-align: center;
+            margin: 20px 0;
+            position: relative;
+            color: #666;
+        }
+        
+        .divider::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: #e0e0e0;
+        }
+        
+        .divider span {
+            background: white;
+            padding: 0 15px;
+        }
+        
+        .login-subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+    </style>
 </head>
 <body class="login-body">
 
     <div class="login-container">
         <div class="login-header">
-             <img src="{{ url_for('static', path='/logo.png') }}" alt="MCP Gateway Logo" height="40" style="margin-bottom: 15px;"> <!-- Logo Image -->
-            <h2>Admin Login</h2>
+             <img src="{{ url_for('static', path='/logo.png') }}" alt="MCP Gateway Logo" height="40" style="margin-bottom: 15px;">
+            <h2>Welcome to MCP Gateway</h2>
+            <p class="login-subtitle">Choose your preferred login method</p>
         </div>
 
         {% if error %}
         <p class="error-message">{{ error }}</p>
         {% endif %}
 
+        <!-- OAuth2 Providers Section -->
+        <div class="oauth-providers">
+            {% for provider in oauth_providers %}
+            <a href="/auth/{{ provider.name }}" class="oauth-button {{ provider.name }}">
+                <strong>Continue with {{ provider.display_name }}</strong>
+            </a>
+            {% endfor %}
+        </div>
+
+        <div class="divider">
+            <span>or use local credentials</span>
+        </div>
+
+        <!-- Traditional Username/Password Form -->
         <form action="/login" method="post">
             <div class="form-group">
                 <label for="username">Username</label>
@@ -27,9 +120,8 @@
                 <label for="password">Password</label>
                 <input type="password" id="password" name="password" required placeholder="Enter password">
             </div>
-            <button type="submit">Login</button>
+            <button type="submit">Login with Credentials</button>
         </form>
-        <!-- Add link to OAuth providers here later if implemented -->
     </div>
 
 </body>

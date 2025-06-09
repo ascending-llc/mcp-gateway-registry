@@ -1368,7 +1368,8 @@
             try {
                 const response = await fetch('/register', {
                     method: 'POST',
-                    body: formData // FormData will set Content-Type to multipart/form-data
+                    body: formData, // FormData will set Content-Type to multipart/form-data
+                    credentials: 'same-origin'  // Include cookies for authentication
                 });
 
                 const result = await response.json();
@@ -1530,13 +1531,9 @@
 
         // Centralized function to bind all event handlers
         function bindEventHandlers() {
-            // Bind toggle event handlers
-            document.querySelectorAll('.toggle-checkbox').forEach(checkbox => {
-                // Remove existing handler first to prevent duplicates
-                checkbox.removeEventListener('change', handleToggleClick);
-                checkbox.addEventListener('change', handleToggleClick);
-            });
-
+            // Remove individual toggle event handlers - using event delegation instead
+            // (Individual handlers were causing duplicate toggle requests)
+            
             // Bind tool icons click handlers using event delegation instead
             document.querySelectorAll('.clickable-tool-icon').forEach(icon => {
                 // Remove existing handler first to prevent duplicates
@@ -1578,7 +1575,10 @@
             // Use a simple spinner for loading feedback
             refreshButton.innerHTML = '<span class="status-spinner" style="width: 0.9em; height: 0.9em; border-width: 2px; top: 0;"></span>';
 
-            fetch(`/api/refresh${servicePath}`, { method: 'POST' })
+            fetch(`/api/refresh${servicePath}`, { 
+                method: 'POST',
+                credentials: 'same-origin'  // Include cookies for authentication
+            })
                 .then(response => {
                     if (!response.ok) {
                         return response.json().then(data => {
@@ -1643,7 +1643,8 @@
             try {
                 const response = await fetch(form.action, {
                     method: 'POST',
-                    body: new URLSearchParams(formData) // Send as x-www-form-urlencoded
+                    body: new URLSearchParams(formData), // Send as x-www-form-urlencoded
+                    credentials: 'same-origin'  // Include cookies for authentication
                 });
 
                 const responseData = await response.json(); // Always try to parse JSON
@@ -1854,7 +1855,10 @@
                     refreshButton.innerHTML = '<span class="status-spinner" style="width: 0.9em; height: 0.9em; border-width: 2px; top: 0;"></span>';
                     
                     // Make the refresh API call
-                    fetch(`/api/refresh${servicePath}`, { method: 'POST' })
+                    fetch(`/api/refresh${servicePath}`, { 
+                        method: 'POST',
+                        credentials: 'same-origin'  // Include cookies for authentication
+                    })
                         .then(response => {
                             if (!response.ok) {
                                 return response.json().then(data => {
@@ -1901,36 +1905,8 @@
                         return;
                     }
                     
-                    event.preventDefault(); // Prevent default form submission
-                    
-                    const safePath = servicePath.replace(/^\//, '').replace(/\//g, '_').replace(/:/g, '_');
-                    const spinnerId = 'spinner-for-' + safePath;
-                    const spinner = document.getElementById(spinnerId);
-                    const form = checkboxElement.form;
-                    const isEnabling = checkboxElement.checked;
-                    
-                    if (spinner) {
-                        spinner.style.display = 'inline-block';
-                    }
-                    checkboxElement.disabled = true;
-                    
-                    const formData = new FormData();
-                    if (isEnabling) {
-                        formData.append('enabled', 'on');
-                    }
-                    
-                    fetch(form.action, {
-                        method: 'POST',
-                        body: new URLSearchParams(formData)
-                    })
-                    .then(response => response.json())
-                    .then(responseData => {
-                        console.log(`Toggle request successful for ${servicePath}. Backend response:`, responseData);
-                    })
-                    .catch(error => {
-                        console.error(`Network or fetch error toggling service ${servicePath}:`, error);
-                        alert(`Failed to send toggle request: ${error}`);
-                    });
+                    // Call the existing handleToggleClick function with proper parameters
+                    handleToggleClick(event, checkboxElement, servicePath);
                 }
             });
             
@@ -2490,7 +2466,8 @@
                 try {
                     const response = await fetch(form.action, {
                         method: 'POST',
-                        body: new URLSearchParams(formData) // Send as x-www-form-urlencoded
+                        body: new URLSearchParams(formData), // Send as x-www-form-urlencoded
+                        credentials: 'same-origin'  // Include cookies for authentication
                     });
 
                     const responseData = await response.json(); // Always try to parse JSON
