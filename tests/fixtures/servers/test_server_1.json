@@ -1,0 +1,17 @@
+{
+  "server_name": "Test Server 1",
+  "description": "A test server for unit testing",
+  "path": "/test1",
+  "proxy_pass_url": "http://localhost:8001/",
+  "tags": ["test", "demo"],
+  "num_tools": 2,
+  "num_stars": 5,
+  "is_python": true,
+  "license": "MIT",
+  "tool_list": [
+    {
+      "name": "test_tool",
+      "description": "A test tool"
+    }
+  ]
+} 

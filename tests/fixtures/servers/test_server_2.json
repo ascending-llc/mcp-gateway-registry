@@ -1,0 +1,12 @@
+{
+  "server_name": "Test Server 2",
+  "description": "Another test server for unit testing",
+  "path": "/test2",
+  "proxy_pass_url": "http://localhost:8002/",
+  "tags": ["test", "sample"],
+  "num_tools": 1,
+  "num_stars": 3,
+  "is_python": false,
+  "license": "Apache-2.0",
+  "tool_list": []
+} 
