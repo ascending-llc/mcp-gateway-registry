@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  # Registry service (includes nginx, SSL, FAISS, models)
+  registry:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.registry
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "7860:7860"
+    volumes:
+      - /opt/mcp-gateway/servers:/app/registry/servers
+      - ssl_data:/etc/ssl
+      - /var/log/mcp-gateway:/app/logs
+    restart: unless-stopped
+
+  # Auth service (separate and scalable)
+  auth-server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.auth
+    ports:
+      - "8888:8888"
+    volumes:
+      - /var/log/mcp-gateway:/app/logs
+    restart: unless-stopped
+
+  # Current Time MCP Server
+  currenttime-server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.mcp-server
+      args:
+        SERVER_PATH: servers/currenttime
+    environment:
+      - PORT=8000
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  # Financial Info MCP Server
+  fininfo-server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.mcp-server
+      args:
+        SERVER_PATH: servers/fininfo
+    environment:
+      - PORT=8001
+      - POLYGON_API_KEY=${POLYGON_API_KEY}
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+
+  # MCP Gateway Server
+  mcpgw-server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.mcp-server
+      args:
+        SERVER_PATH: servers/mcpgw
+    environment:
+      - PORT=8003
+      - REGISTRY_BASE_URL=http://registry:7860
+      - REGISTRY_USERNAME=${ADMIN_USER:-admin}
+      - REGISTRY_PASSWORD=${ADMIN_PASSWORD}
+    ports:
+      - "8003:8003"
+    depends_on:
+      - registry
+    restart: unless-stopped
+
+  # Real Server Fake Tools MCP Server
+  realserverfaketools-server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.mcp-server
+      args:
+        SERVER_PATH: servers/realserverfaketools
+    environment:
+      - PORT=8002
+    ports:
+      - "8002:8002"
+    restart: unless-stopped
+
+volumes:
+  ssl_data: 

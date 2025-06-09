@@ -1,0 +1,36 @@
+# Auth Dockerfile - separate and scalable auth service
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    git \
+    build-essential \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy only auth server files
+COPY auth_server/ /app/
+
+# Install uv and setup Python environment
+RUN pip install uv && \
+    uv venv .venv --python 3.12 && \
+    . .venv/bin/activate && \
+    uv pip install --requirement pyproject.toml
+
+# Create logs directory
+RUN mkdir -p /app/logs
+
+# Expose port
+EXPOSE 8888
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8888/health || exit 1
+
+# Start the auth server
+CMD ["/bin/bash", "-c", "source .venv/bin/activate && uvicorn server:app --host 0.0.0.0 --port 8888"] 
