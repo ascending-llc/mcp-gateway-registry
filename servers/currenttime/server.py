@@ -45,7 +45,7 @@ def parse_arguments():
 args = parse_arguments()
 
 # Initialize FastMCP server using parsed arguments
-mcp = FastMCP("current_time", port=args.port)
+mcp = FastMCP("current_time", port=args.port, host="0.0.0.0")
 
 
 @mcp.prompt()
