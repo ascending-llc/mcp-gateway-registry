@@ -8,8 +8,9 @@ dependencies = [
     "fastapi>=0.115.12",
     "itsdangerous>=2.2.0",
     "jinja2>=3.1.6",
-    "mcp>=1.8.0",
+    "mcp>=1.9.3",
     "pydantic>=2.11.3",
+    "pydantic-settings>=2.0.0",
     "httpx>=0.27.0",
     "python-dotenv>=1.1.0",
     "python-multipart>=0.0.20",
@@ -28,7 +29,100 @@ dependencies = [
     "strands-agents>=0.1.6",
     "strands-agents-tools>=0.1.4",
     "pyjwt>=2.10.1",
+    "typing-extensions>=4.8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "pytest-xdist>=3.5.0",
+    "coverage[toml]>=7.4.0",
+    "httpx>=0.27.0",  # For testing HTTP clients
+    "pytest-html>=4.1.1",
+    "pytest-json-report>=1.5.0",
+    "factory-boy>=3.3.0",
+    "faker>=24.0.0",
+    "freezegun>=1.4.0",
 ]
 
 [tool.setuptools]
 packages = ["registry"]
+
+# Pytest Configuration
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--cov=registry",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+    "--cov-report=xml:coverage.xml",
+    "--cov-fail-under=80",
+    "--html=tests/reports/report.html",
+    "--self-contained-html",
+    "--json-report",
+    "--json-report-file=tests/reports/report.json",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "e2e: End-to-end tests",
+    "auth: Authentication tests",
+    "servers: Server management tests", 
+    "search: Search and AI tests",
+    "health: Health monitoring tests",
+    "core: Core infrastructure tests",
+    "slow: Slow running tests",
+]
+
+# Coverage Configuration
+[tool.coverage.run]
+source = ["registry"]
+branch = true
+parallel = true
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/migrations/*",
+    "*/venv/*",
+    "*/.venv/*",
+    "registry/main_old.py",
+]
+
+[tool.coverage.paths]
+source = [
+    "registry/",
+    "*/site-packages/registry/",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+skip_empty = true
+sort = "cover"
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"
+title = "MCP Registry Coverage Report"
