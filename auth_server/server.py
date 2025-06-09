@@ -16,12 +16,16 @@ from datetime import datetime
 from typing import Dict, Optional, List
 from functools import lru_cache
 from botocore.exceptions import ClientError
-from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi import FastAPI, Header, HTTPException, Request, Cookie
+from fastapi.responses import JSONResponse, Response, RedirectResponse
 import uvicorn
 from pydantic import BaseModel
 from pathlib import Path
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
+import secrets
+import urllib.parse
+import httpx
+from string import Template
 
 # Configure logging
 logging.basicConfig(
@@ -105,13 +109,11 @@ def validate_session_cookie(cookie_value: str) -> Dict[str, any]:
     Raises:
         ValueError: If cookie is invalid or expired
     """
-    # Get SECRET_KEY from environment
-    secret_key = os.environ.get('SECRET_KEY')
-    if not secret_key:
-        logger.warning("SECRET_KEY not configured for session cookie validation")
+    # Use global signer initialized at startup
+    global signer
+    if not signer:
+        logger.warning("Global signer not configured for session cookie validation")
         raise ValueError("Session cookie validation not configured")
-    
-    signer = URLSafeTimedSerializer(secret_key)
     
     try:
         # Decrypt cookie (max_age=28800 for 8 hours)
@@ -868,3 +870,286 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Load OAuth2 providers configuration
+def load_oauth2_config():
+    """Load the OAuth2 providers configuration from oauth2_providers.yml"""
+    try:
+        oauth2_file = Path(__file__).parent / "oauth2_providers.yml"
+        with open(oauth2_file, 'r') as f:
+            config = yaml.safe_load(f)
+            
+        # Substitute environment variables in configuration
+        processed_config = substitute_env_vars(config)
+        return processed_config
+    except Exception as e:
+        logger.error(f"Failed to load OAuth2 configuration: {e}")
+        return {"providers": {}, "session": {}, "registry": {}}
+
+def auto_derive_cognito_domain(user_pool_id: str) -> str:
+    """
+    Auto-derive Cognito domain from User Pool ID.
+    
+    Example: us-east-1_KmP5A3La3 → us-east-1kmp5a3la3
+    """
+    if not user_pool_id:
+        return ""
+    
+    # Remove underscore and convert to lowercase
+    domain = user_pool_id.replace('_', '').lower()
+    logger.info(f"Auto-derived Cognito domain '{domain}' from user pool ID '{user_pool_id}'")
+    return domain
+
+def substitute_env_vars(config):
+    """Recursively substitute environment variables in configuration"""
+    if isinstance(config, dict):
+        return {k: substitute_env_vars(v) for k, v in config.items()}
+    elif isinstance(config, list):
+        return [substitute_env_vars(item) for item in config]
+    elif isinstance(config, str) and "${" in config:
+        try:
+            # Handle special case for auto-derived Cognito domain
+            if "COGNITO_DOMAIN:-auto" in config:
+                # Check if COGNITO_DOMAIN is set, if not auto-derive from user pool ID
+                cognito_domain = os.environ.get('COGNITO_DOMAIN')
+                if not cognito_domain:
+                    user_pool_id = os.environ.get('COGNITO_USER_POOL_ID', '')
+                    cognito_domain = auto_derive_cognito_domain(user_pool_id)
+                
+                # Replace the template with the derived domain
+                config = config.replace('${COGNITO_DOMAIN:-auto}', cognito_domain)
+            
+            template = Template(config)
+            return template.substitute(os.environ)
+        except KeyError as e:
+            logger.warning(f"Environment variable not found for template {config}: {e}")
+            return config
+    else:
+        return config
+
+# Global OAuth2 configuration
+OAUTH2_CONFIG = load_oauth2_config()
+
+# Initialize SECRET_KEY and signer for session management
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    # Generate a secure random key (32 bytes = 256 bits of entropy)
+    SECRET_KEY = secrets.token_hex(32)
+    logger.warning("No SECRET_KEY environment variable found. Using a randomly generated key. "
+                   "While this is more secure than a hardcoded default, it will change on restart. "
+                   "Set a permanent SECRET_KEY environment variable for production.")
+
+signer = URLSafeTimedSerializer(SECRET_KEY)
+
+def get_enabled_providers():
+    """Get list of enabled OAuth2 providers"""
+    enabled = []
+    for provider_name, config in OAUTH2_CONFIG.get("providers", {}).items():
+        if config.get("enabled", False):
+            enabled.append({
+                "name": provider_name,
+                "display_name": config.get("display_name", provider_name.title())
+            })
+    return enabled
+
+@app.get("/oauth2/providers")
+async def get_oauth2_providers():
+    """Get list of enabled OAuth2 providers for the login page"""
+    try:
+        providers = get_enabled_providers()
+        return {"providers": providers}
+    except Exception as e:
+        logger.error(f"Error getting OAuth2 providers: {e}")
+        return {"providers": [], "error": str(e)}
+
+@app.get("/oauth2/login/{provider}")
+async def oauth2_login(provider: str, redirect_uri: str = None):
+    """Initiate OAuth2 login flow"""
+    try:
+        if provider not in OAUTH2_CONFIG.get("providers", {}):
+            raise HTTPException(status_code=404, detail=f"Provider {provider} not found")
+        
+        provider_config = OAUTH2_CONFIG["providers"][provider]
+        if not provider_config.get("enabled", False):
+            raise HTTPException(status_code=400, detail=f"Provider {provider} is disabled")
+        
+        # Generate state parameter for security
+        state = secrets.token_urlsafe(32)
+        
+        # Store state and redirect URI in session for callback validation
+        session_data = {
+            "state": state,
+            "provider": provider,
+            "redirect_uri": redirect_uri or OAUTH2_CONFIG.get("registry", {}).get("success_redirect", "/")
+        }
+        
+        # Create temporary session for OAuth2 flow
+        temp_session = signer.dumps(session_data)
+        
+        # Build authorization URL
+        auth_params = {
+            "client_id": provider_config["client_id"],
+            "response_type": provider_config["response_type"],
+            "scope": " ".join(provider_config["scopes"]),
+            "state": state,
+            "redirect_uri": f"{os.environ.get('AUTH_SERVER_URL', 'http://localhost:8888')}/oauth2/callback/{provider}"
+        }
+        
+        auth_url = f"{provider_config['auth_url']}?{urllib.parse.urlencode(auth_params)}"
+        
+        # Create response with temporary session cookie
+        response = RedirectResponse(url=auth_url, status_code=302)
+        response.set_cookie(
+            key="oauth2_temp_session",
+            value=temp_session,
+            max_age=600,  # 10 minutes for OAuth2 flow
+            httponly=True,
+            samesite="lax"
+        )
+        
+        logger.info(f"Initiated OAuth2 login for provider {provider}")
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error initiating OAuth2 login for {provider}: {e}")
+        error_url = OAUTH2_CONFIG.get("registry", {}).get("error_redirect", "/login")
+        return RedirectResponse(url=f"{error_url}?error=oauth2_init_failed", status_code=302)
+
+@app.get("/oauth2/callback/{provider}")
+async def oauth2_callback(
+    provider: str, 
+    code: str = None, 
+    state: str = None, 
+    error: str = None,
+    oauth2_temp_session: str = Cookie(None)
+):
+    """Handle OAuth2 callback and create user session"""
+    try:
+        if error:
+            logger.warning(f"OAuth2 error from {provider}: {error}")
+            error_url = OAUTH2_CONFIG.get("registry", {}).get("error_redirect", "/login")
+            return RedirectResponse(url=f"{error_url}?error=oauth2_error&details={error}", status_code=302)
+        
+        if not code or not state or not oauth2_temp_session:
+            raise HTTPException(status_code=400, detail="Missing required OAuth2 parameters")
+        
+        # Validate temporary session
+        try:
+            temp_session_data = signer.loads(oauth2_temp_session, max_age=600)
+        except (SignatureExpired, BadSignature):
+            raise HTTPException(status_code=400, detail="Invalid or expired OAuth2 session")
+        
+        # Validate state parameter
+        if state != temp_session_data.get("state"):
+            raise HTTPException(status_code=400, detail="Invalid state parameter")
+        
+        # Validate provider
+        if provider != temp_session_data.get("provider"):
+            raise HTTPException(status_code=400, detail="Provider mismatch")
+        
+        provider_config = OAUTH2_CONFIG["providers"][provider]
+        
+        # Exchange authorization code for access token
+        token_data = await exchange_code_for_token(provider, code, provider_config)
+        
+        # Get user information
+        user_info = await get_user_info(provider, token_data["access_token"], provider_config)
+        
+        # Map user info to our format
+        mapped_user = map_user_info(user_info, provider_config)
+        
+        # Create session cookie compatible with registry
+        session_data = {
+            "username": mapped_user["username"],
+            "email": mapped_user.get("email"),
+            "name": mapped_user.get("name"),
+            "groups": mapped_user.get("groups", []),
+            "provider": provider,
+            "auth_method": "oauth2"
+        }
+        
+        registry_session = signer.dumps(session_data)
+        
+        # Redirect to registry with session cookie
+        redirect_url = temp_session_data.get("redirect_uri", OAUTH2_CONFIG.get("registry", {}).get("success_redirect", "/"))
+        response = RedirectResponse(url=redirect_url, status_code=302)
+        
+        # Set registry-compatible session cookie
+        response.set_cookie(
+            key="mcp_gateway_session",  # Same as registry SESSION_COOKIE_NAME
+            value=registry_session,
+            max_age=OAUTH2_CONFIG.get("session", {}).get("max_age_seconds", 28800),
+            httponly=OAUTH2_CONFIG.get("session", {}).get("httponly", True),
+            samesite=OAUTH2_CONFIG.get("session", {}).get("samesite", "lax"),
+            secure=OAUTH2_CONFIG.get("session", {}).get("secure", False)
+        )
+        
+        # Clear temporary OAuth2 session
+        response.delete_cookie("oauth2_temp_session")
+        
+        logger.info(f"Successfully authenticated user {mapped_user['username']} via {provider}")
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in OAuth2 callback for {provider}: {e}")
+        error_url = OAUTH2_CONFIG.get("registry", {}).get("error_redirect", "/login")
+        return RedirectResponse(url=f"{error_url}?error=oauth2_callback_failed", status_code=302)
+
+async def exchange_code_for_token(provider: str, code: str, provider_config: dict) -> dict:
+    """Exchange authorization code for access token"""
+    async with httpx.AsyncClient() as client:
+        token_data = {
+            "grant_type": provider_config["grant_type"],
+            "client_id": provider_config["client_id"],
+            "client_secret": provider_config["client_secret"],
+            "code": code,
+            "redirect_uri": f"{os.environ.get('AUTH_SERVER_URL', 'http://localhost:8888')}/oauth2/callback/{provider}"
+        }
+        
+        headers = {"Accept": "application/json"}
+        if provider == "github":
+            headers["Accept"] = "application/json"
+        
+        response = await client.post(
+            provider_config["token_url"],
+            data=token_data,
+            headers=headers
+        )
+        response.raise_for_status()
+        return response.json()
+
+async def get_user_info(provider: str, access_token: str, provider_config: dict) -> dict:
+    """Get user information from OAuth2 provider"""
+    async with httpx.AsyncClient() as client:
+        headers = {"Authorization": f"Bearer {access_token}"}
+        
+        response = await client.get(
+            provider_config["user_info_url"],
+            headers=headers
+        )
+        response.raise_for_status()
+        return response.json()
+
+def map_user_info(user_info: dict, provider_config: dict) -> dict:
+    """Map provider-specific user info to our standard format"""
+    mapped = {
+        "username": user_info.get(provider_config["username_claim"]),
+        "email": user_info.get(provider_config["email_claim"]),
+        "name": user_info.get(provider_config["name_claim"]),
+        "groups": []
+    }
+    
+    # Handle groups if provider supports them
+    groups_claim = provider_config.get("groups_claim")
+    if groups_claim and groups_claim in user_info:
+        groups = user_info[groups_claim]
+        if isinstance(groups, list):
+            mapped["groups"] = groups
+        elif isinstance(groups, str):
+            mapped["groups"] = [groups]
+    
+    return mapped
