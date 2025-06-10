@@ -174,10 +174,10 @@ This section discusses the reference implementation using Amazon Cognito as the 
 The enhanced auth server provides dual authentication support:
 - **Primary Check**: Session cookie validation using `itsdangerous.URLSafeTimedSerializer`
 - **Fallback**: JWT token validation with Cognito
-- **Group Mapping**: Maps Cognito groups to MCP scopes
-  - `mcp-admin` → Full unrestricted access
-  - `mcp-user` → Restricted read access
-  - `mcp-server-*` → Server-specific execute access
+- **Group Mapping**: Maps Cognito groups to MCP scopes via `scopes.yml` configuration
+  - Groups are mapped to scopes using the `group_mappings` section in `scopes.yml`
+  - Both M2M and session cookie auth use the same scope definitions
+  - Example mappings: `mcp-admin` → unrestricted access, `mcp-user` → restricted read
 
 #### 2. CLI Authentication Tool (`auth_server/cli_auth.py`)
 A standalone tool for user-based authentication:
@@ -274,10 +274,10 @@ Key features:
 The auth server validates session cookies alongside JWT tokens:
 - Checks for `mcp_gateway_session` cookie in request headers
 - Validates cookie signature using `itsdangerous.URLSafeTimedSerializer`
-- Maps Cognito groups to MCP scopes:
-  - `mcp-admin` → unrestricted read/execute access
-  - `mcp-user` → restricted read access
-  - `mcp-server-{name}` → server-specific execute access
+- Maps Cognito groups to MCP scopes using `scopes.yml` configuration:
+  - Configuration-driven mapping ensures consistency with M2M authentication
+  - Group mappings defined in `group_mappings` section of `scopes.yml`
+  - Single source of truth for all permission definitions
 - Falls back to JWT validation if no valid cookie found
 
 #### Advantages:
