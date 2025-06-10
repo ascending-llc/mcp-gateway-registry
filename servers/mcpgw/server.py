@@ -252,8 +252,9 @@ def parse_arguments():
 # Parse arguments at module level to make them available
 args = parse_arguments()
 
-# Initialize FastMCP server using parsed arguments
-mcp = FastMCP("mcpgw", port=args.port) # Changed server name
+# Initialize FastMCP server
+mcp = FastMCP("MCPGateway", host="0.0.0.0", port=int(args.port))
+mcp.settings.mount_path = "/mcpgw"
 
 
 # --- Pydantic Models for Credentials and Parameters ---
@@ -785,9 +786,8 @@ async def intelligent_tool_finder(
 
 def main():
     # Run the server with the specified transport from command line args
-    mount_path = "/mcpgw"
-    mcp.run(transport=args.transport, mount_path=mount_path)
-    logger.info(f"Server is running on port {args.port} with transport {args.transport}, mount path {mount_path}")
+    mcp.run(transport=args.transport)
+    logger.info(f"Server is running on port {args.port} with transport {args.transport}")
 
 
 if __name__ == "__main__":
