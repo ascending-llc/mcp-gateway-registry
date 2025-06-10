@@ -362,7 +362,6 @@ See the full API spec [here](docs/registry_api.md).
 ## Roadmap
 
 1. Store the server information in persistent storage.
-1. Add OAUTH 2.1 support to Gateway and Registry.
 1. Use GitHub API to retrieve information (license, programming language etc.) about MCP servers.
 1. Add option to deploy MCP servers.
 
