@@ -1,6 +1,34 @@
 # MCP Server Access Scopes Configuration
 # This file defines access permissions for MCP servers and their tools
 
+# Group to scope mappings for user authentication
+# Maps Cognito groups to MCP scopes for consistent authorization
+group_mappings:
+  # Administrative access
+  mcp-admin:
+    - mcp-servers-unrestricted/read
+    - mcp-servers-unrestricted/execute
+  
+  # Standard user access
+  mcp-user:
+    - mcp-servers-restricted/read
+  
+  # Server-specific access groups
+  mcp-server-currenttime:
+    - mcp-servers-restricted/execute
+  mcp-server-fininfo:
+    - mcp-servers-restricted/execute
+  mcp-server-mcpgw:
+    - mcp-servers-restricted/execute
+  
+  # Fine-grained tool access (optional)
+  mcp-server-currenttime-tool-current_time_by_timezone:
+    - mcp-servers-restricted/execute
+  mcp-server-fininfo-tool-get_stock_price:
+    - mcp-servers-restricted/execute
+  mcp-server-fininfo-tool-get_company_info:
+    - mcp-servers-restricted/execute
+
 mcp-servers-unrestricted/read:
   - server: auth_server
     methods:

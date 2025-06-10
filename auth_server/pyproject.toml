@@ -20,7 +20,8 @@ dependencies = [
     "boto3>=1.28.0",
     "pyjwt>=2.6.0",
     "cryptography>=40.0.0",
-    "pyyaml>=6.0.0"
+    "pyyaml>=6.0.0",
+    "itsdangerous>=2.0.0"
 ]
 
 [project.optional-dependencies]
