@@ -44,8 +44,9 @@ def parse_arguments():
 # Parse arguments at module level to make them available
 args = parse_arguments()
 
-# Initialize FastMCP server using parsed arguments
-mcp = FastMCP("current_time", port=args.port, host="0.0.0.0")
+# Initialize FastMCP server
+mcp = FastMCP("CurrentTimeAPI", host="0.0.0.0", port=int(args.port))
+mcp.settings.mount_path = "/currenttime"
 
 
 @mcp.prompt()
@@ -131,9 +132,8 @@ def get_config() -> str:
 
 def main():
     # Run the server with the specified transport from command line args
-    mount_path = "/currenttime"
-    mcp.run(transport=args.transport, mount_path=mount_path)
-    logger.info(f"Server is running on port {args.port} with transport {args.transport}, mount path {mount_path}")
+    mcp.run(transport=args.transport)
+    logger.info(f"Server is running on port {args.port} with transport {args.transport}")
 
 
 if __name__ == "__main__":
