@@ -10,14 +10,25 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - ADMIN_USER=${ADMIN_USER:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - AUTH_SERVER_URL=http://auth-server:8888
+      - AUTH_SERVER_EXTERNAL_URL=http://localhost:8888
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
+      - COGNITO_CLIENT_SECRET=${COGNITO_CLIENT_SECRET}
+      - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
     ports:
       - "80:80"
       - "443:443"
       - "7860:7860"
     volumes:
       - /opt/mcp-gateway/servers:/app/registry/servers
+      - /opt/mcp-gateway/models:/app/registry/models
       - ssl_data:/etc/ssl
       - /var/log/mcp-gateway:/app/logs
+    depends_on:
+      - auth-server
     restart: unless-stopped
 
   # Auth service (separate and scalable)
@@ -25,6 +36,14 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.auth
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
+      - COGNITO_CLIENT_SECRET=${COGNITO_CLIENT_SECRET}
+      - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
     ports:
       - "8888:8888"
     volumes:
@@ -70,6 +89,8 @@ services:
       - REGISTRY_BASE_URL=http://registry:7860
       - REGISTRY_USERNAME=${ADMIN_USER:-admin}
       - REGISTRY_PASSWORD=${ADMIN_PASSWORD}
+    volumes:
+      - /opt/mcp-gateway/models:/app/registry/models
     ports:
       - "8003:8003"
     depends_on:

@@ -96,7 +96,7 @@ if [ ! -d "$EMBEDDINGS_MODEL_DIR" ] || [ -z "$(ls -A "$EMBEDDINGS_MODEL_DIR")" ]
         echo "Model downloaded successfully using standard method."
     else
         echo "Standard download failed, trying alternative methods..."
-        uv pip install "huggingface-hub[hf_xet]" "hf_xet>=0.1.0" --quiet
+        pip install "huggingface-hub[hf_xet]" "hf_xet>=0.1.0" --quiet
         
         if ! huggingface-cli download sentence-transformers/$EMBEDDINGS_MODEL_NAME --local-dir "$EMBEDDINGS_MODEL_DIR" --quiet; then
             echo "Trying download with SSL verification disabled..."
@@ -115,9 +115,9 @@ export EMBEDDINGS_MODEL_NAME=$EMBEDDINGS_MODEL_NAME
 export EMBEDDINGS_MODEL_DIMENSIONS=384
 
 echo "Starting MCP Registry in the background..."
-cd /app/registry
-source "/app/.venv/bin/activate"
-uvicorn main:app --host 0.0.0.0 --port 7860 &
+cd /app
+source /app/.venv/bin/activate
+uvicorn registry.main:app --host 0.0.0.0 --port 7860 &
 echo "MCP Registry started."
 
 # Give registry a moment to initialize
