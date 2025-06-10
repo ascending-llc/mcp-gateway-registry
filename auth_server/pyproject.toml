@@ -21,7 +21,8 @@ dependencies = [
     "pyjwt>=2.6.0",
     "cryptography>=40.0.0",
     "pyyaml>=6.0.0",
-    "itsdangerous>=2.0.0"
+    "httpx>=0.25.0",
+    "itsdangerous>=2.1.0"
 ]
 
 [project.optional-dependencies]

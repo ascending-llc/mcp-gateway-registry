@@ -77,9 +77,58 @@ logging.basicConfig(
 # Get logger
 logger = logging.getLogger(__name__)
 
-def load_env_config() -> Dict[str, Optional[str]]:
+def get_auth_mode_from_args() -> bool:
     """
-    Load configuration from .env file if available.
+    Parse command line arguments to determine authentication mode.
+    This is done before loading environment variables to choose the correct .env file.
+    
+    Returns:
+        bool: True if using session cookie authentication, False for M2M authentication
+    """
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('--use-session-cookie', action='store_true',
+                        help='Use session cookie authentication instead of M2M')
+    args, _ = parser.parse_known_args()
+    return args.use_session_cookie
+
+def print_env_file_banner(env_file_name: str, use_session_cookie: bool, file_found: bool, file_path: str = None):
+    """
+    Print a prominent banner showing which .env file is being used and why.
+    
+    Args:
+        env_file_name: Name of the .env file being used
+        use_session_cookie: Whether session cookie authentication is being used
+        file_found: Whether the .env file was found
+        file_path: Full path to the .env file if found
+    """
+    print("\n" + "="*80)
+    print("🔧 ENVIRONMENT CONFIGURATION")
+    print("="*80)
+    
+    auth_mode = "Session Cookie Authentication" if use_session_cookie else "M2M Authentication"
+    print(f"Authentication Mode: {auth_mode}")
+    print(f"Expected .env file: {env_file_name}")
+    
+    if use_session_cookie:
+        print("Reason: --use-session-cookie flag specified, using .env.user for user credentials")
+    else:
+        print("Reason: M2M authentication (default), using .env.agent for machine credentials")
+    
+    if file_found and file_path:
+        print(f"✅ Found and loaded: {file_path}")
+    else:
+        print(f"⚠️  File not found: {env_file_name}")
+        print("   Falling back to system environment variables")
+    
+    print("="*80 + "\n")
+
+def load_env_config(use_session_cookie: bool) -> Dict[str, Optional[str]]:
+    """
+    Load configuration from .env file based on authentication mode.
+    Uses .env.user for session cookie auth, .env.agent for M2M auth.
+    
+    Args:
+        use_session_cookie: True for session cookie auth (.env.user), False for M2M auth (.env.agent)
     
     Returns:
         Dict[str, Optional[str]]: Dictionary containing environment variables
@@ -92,22 +141,43 @@ def load_env_config() -> Dict[str, Optional[str]]:
         'domain': None
     }
     
+    # Choose .env file based on authentication mode
+    env_file_name = '.env.user' if use_session_cookie else '.env.agent'
+    
     if DOTENV_AVAILABLE:
+        file_found = False
+        file_path = None
+        
         # Try to load from .env file in the current directory
-        env_file = os.path.join(os.path.dirname(__file__), '.env')
+        env_file = os.path.join(os.path.dirname(__file__), env_file_name)
         if os.path.exists(env_file):
             load_dotenv(env_file)
+            file_found = True
+            file_path = env_file
             logger.info(f"Loading environment variables from {env_file}")
         else:
             # Try to load from .env file in the parent directory
-            env_file = os.path.join(os.path.dirname(__file__), '..', '.env')
+            env_file = os.path.join(os.path.dirname(__file__), '..', env_file_name)
             if os.path.exists(env_file):
                 load_dotenv(env_file)
+                file_found = True
+                file_path = env_file
                 logger.info(f"Loading environment variables from {env_file}")
             else:
                 # Try to load from current working directory
-                load_dotenv()
-                logger.info("Loading environment variables from current directory")
+                env_file = os.path.join(os.getcwd(), env_file_name)
+                if os.path.exists(env_file):
+                    load_dotenv(env_file)
+                    file_found = True
+                    file_path = env_file
+                    logger.info(f"Loading environment variables from {env_file}")
+                else:
+                    # Fallback to default .env loading
+                    load_dotenv()
+                    logger.info("Loading environment variables from default .env file")
+        
+        # Print banner showing which file is being used
+        print_env_file_banner(env_file_name, use_session_cookie, file_found, file_path)
         
         # Get values from environment
         env_config['client_id'] = os.getenv('COGNITO_CLIENT_ID')
@@ -115,6 +185,9 @@ def load_env_config() -> Dict[str, Optional[str]]:
         env_config['region'] = os.getenv('AWS_REGION')
         env_config['user_pool_id'] = os.getenv('COGNITO_USER_POOL_ID')
         env_config['domain'] = os.getenv('COGNITO_DOMAIN')
+    else:
+        # Print banner even when dotenv is not available
+        print_env_file_banner(env_file_name, use_session_cookie, False)
     
     return env_config
 
@@ -126,8 +199,11 @@ def parse_arguments() -> argparse.Namespace:
     Returns:
         argparse.Namespace: The parsed command line arguments
     """
-    # Load environment configuration first
-    env_config = load_env_config()
+    # First, determine authentication mode to choose correct .env file
+    use_session_cookie = get_auth_mode_from_args()
+    
+    # Load environment configuration using the appropriate .env file
+    env_config = load_env_config(use_session_cookie)
     
     parser = argparse.ArgumentParser(description='LangGraph MCP Client with Cognito Authentication')
     
@@ -145,7 +221,7 @@ def parse_arguments() -> argparse.Namespace:
     
     # Authentication method arguments
     parser.add_argument('--use-session-cookie', action='store_true',
-                        help='Use session cookie authentication instead of M2M')
+                        help='Use session cookie authentication instead of M2M (loads .env.user instead of .env.agent)')
     parser.add_argument('--session-cookie-file', type=str, default='~/.mcp/session_cookie',
                         help='Path to session cookie file (default: ~/.mcp/session_cookie)')
     

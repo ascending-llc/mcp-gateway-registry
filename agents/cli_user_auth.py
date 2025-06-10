@@ -28,6 +28,7 @@ from urllib.parse import urlencode, parse_qs
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from itsdangerous import URLSafeTimedSerializer
 import requests
+from dotenv import load_dotenv
 
 # Configure logging
 logging.basicConfig(
@@ -36,7 +37,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Load environment variables from .env file
+# Look for .env file in the same directory as this script
+script_dir = Path(__file__).parent
+env_file = script_dir / '.env.user'
+if env_file.exists():
+    load_dotenv(env_file)
+    logger.info(f"Loaded environment variables from {env_file}")
+else:
+    logger.warning(f"No .env file found at {env_file}")
+
 # Configuration from environment
+COGNITO_USER_POOL_ID = os.environ.get('COGNITO_USER_POOL_ID')
 COGNITO_DOMAIN = os.environ.get('COGNITO_DOMAIN')
 COGNITO_CLIENT_ID = os.environ.get('COGNITO_CLIENT_ID')
 COGNITO_CLIENT_SECRET = os.environ.get('COGNITO_CLIENT_SECRET')
@@ -45,18 +57,19 @@ COGNITO_REDIRECT_URI = "http://localhost:8080/callback"
 AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
 
 # Validate required environment variables
-if not all([COGNITO_DOMAIN, COGNITO_CLIENT_ID, SECRET_KEY]):
+if not all([COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID, SECRET_KEY]):
     logger.error("Missing required environment variables")
-    logger.error("Required: COGNITO_DOMAIN, COGNITO_CLIENT_ID, SECRET_KEY")
+    logger.error("Required: COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID, SECRET_KEY")
     sys.exit(1)
 
-# Build full domain URL if needed
-if not COGNITO_DOMAIN.startswith('https://'):
-    # If just the domain prefix is provided, build the full URL
+# Construct the Cognito domain
+if COGNITO_DOMAIN:
+    # Use custom domain if provided
     COGNITO_DOMAIN_URL = f"https://{COGNITO_DOMAIN}.auth.{AWS_REGION}.amazoncognito.com"
 else:
-    # If full URL is provided, use as-is
-    COGNITO_DOMAIN_URL = COGNITO_DOMAIN
+    # Otherwise use user pool ID without underscores (standard format)
+    user_pool_id_wo_underscore = COGNITO_USER_POOL_ID.replace('_', '')
+    COGNITO_DOMAIN_URL = f"https://{user_pool_id_wo_underscore}.auth.{AWS_REGION}.amazoncognito.com"
 
 # OAuth endpoints
 AUTHORIZE_URL = f"{COGNITO_DOMAIN_URL}/oauth2/authorize"

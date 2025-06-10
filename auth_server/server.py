@@ -46,9 +46,7 @@ SCOPES_CONFIG = load_scopes_config()
 
 def map_cognito_groups_to_scopes(groups: List[str]) -> List[str]:
     """
-    Map Cognito groups to MCP scopes using scopes.yml configuration.
-    
-    Uses the same scope format as M2M tokens for consistency.
+    Map Cognito groups to MCP scopes using the same format as M2M resource server scopes.
     
     Args:
         groups: List of Cognito group names
@@ -57,28 +55,36 @@ def map_cognito_groups_to_scopes(groups: List[str]) -> List[str]:
         List of MCP scopes in resource server format
     """
     scopes = []
-    
-    # Use group mappings from scopes.yml if available
-    group_mappings = SCOPES_CONFIG.get('group_mappings', {})
+    logger.info(f"Mapping Cognito groups to MCP scopes: {groups}")
     
     for group in groups:
-        if group in group_mappings:
-            # Use configured mapping
-            scopes.extend(group_mappings[group])
-        else:
-            # Legacy fallback for backward compatibility
-            logger.debug(f"Group '{group}' not in group_mappings, using legacy mapping")
+        if group == 'mcp-admin':
+            # Admin gets unrestricted read and execute access
+            scopes.append('mcp-servers-unrestricted/read')
+            scopes.append('mcp-servers-unrestricted/execute')
+        elif group == 'mcp-user':
+            # Regular users get restricted read access by default
+            scopes.append('mcp-servers-restricted/read')
+        elif group.startswith('mcp-server-'):
+            # Server-specific groups grant access based on server permissions
+            # For now, grant restricted execute access for specific servers
+            # This allows access to the servers defined in the restricted scope
+            scopes.append('mcp-servers-restricted/execute')
             
-            if group == 'mcp-admin':
-                scopes.extend(['mcp-servers-unrestricted/read', 
-                              'mcp-servers-unrestricted/execute'])
-            elif group == 'mcp-user':
-                scopes.append('mcp-servers-restricted/read')
-            elif group.startswith('mcp-server-'):
-                scopes.append('mcp-servers-restricted/execute')
+            # Note: The actual server access control is handled by the
+            # validate_server_tool_access function which checks the scopes.yml
+            # configuration. The group names are preserved in the 'groups' field
+            # for potential future fine-grained access control.
     
     # Remove duplicates while preserving order
-    return list(dict.fromkeys(scopes))
+    seen = set()
+    unique_scopes = []
+    for scope in scopes:
+        if scope not in seen:
+            seen.add(scope)
+            unique_scopes.append(scope)
+    
+    return unique_scopes
 
 def validate_session_cookie(cookie_value: str) -> Dict[str, any]:
     """
@@ -646,6 +652,7 @@ async def validate_request(request: Request):
             if cookie_value:
                 try:
                     validation_result = validate_session_cookie(cookie_value)
+                    logger.info(f"Session cookie validation result: {validation_result}")
                     logger.info(f"Session cookie validation successful for user: {validation_result['username']}")
                 except ValueError as e:
                     logger.warning(f"Session cookie validation failed: {e}")

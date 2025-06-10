@@ -132,6 +132,8 @@ celerybeat.pid
 
 # Environments
 .env
+.env.user
+.env.agent
 .env.docker
 .venv
 env/
