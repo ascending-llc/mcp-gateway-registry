@@ -100,7 +100,7 @@ async def lifespan(app: FastAPI):
             path: server_service.get_server_info(path) 
             for path in server_service.get_enabled_services()
         }
-        nginx_service.generate_config(enabled_servers)
+        await nginx_service.generate_config_async(enabled_servers)
         
         logger.info("✅ All services initialized successfully!")
         

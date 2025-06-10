@@ -1,6 +1,8 @@
 import logging
+import asyncio
+import httpx
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from .config import settings
 
@@ -11,13 +13,82 @@ class NginxConfigService:
     """Service for generating Nginx configuration for registered servers."""
     
     def __init__(self):
-        self.nginx_template_path = settings.container_registry_dir / "nginx_template.conf"
+        # Use the docker template file as the source template
+        # Handle both container and local development paths
+        if Path("/app/docker/nginx_rev_proxy.conf").exists():
+            self.nginx_template_path = Path("/app/docker/nginx_rev_proxy.conf")
+        else:
+            # Fallback for local development
+            self.nginx_template_path = Path("docker/nginx_rev_proxy.conf")
         
+    async def get_ec2_public_dns(self) -> str:
+        """Fetch EC2 public DNS from metadata service."""
+        try:
+            # EC2 Instance Metadata Service v2 (IMDSv2) 
+            # First get session token
+            async with httpx.AsyncClient() as client:
+                # Get session token
+                token_response = await client.put(
+                    "http://169.254.169.254/latest/api/token",
+                    headers={"X-aws-ec2-metadata-token-ttl-seconds": "21600"},
+                    timeout=2.0
+                )
+                
+                if token_response.status_code == 200:
+                    token = token_response.text
+                    
+                    # Get public hostname using the token
+                    dns_response = await client.get(
+                        "http://169.254.169.254/latest/meta-data/public-hostname",
+                        headers={"X-aws-ec2-metadata-token": token},
+                        timeout=2.0
+                    )
+                    
+                    if dns_response.status_code == 200:
+                        public_dns = dns_response.text.strip()
+                        logger.info(f"Successfully fetched EC2 public DNS: {public_dns}")
+                        return public_dns
+                    else:
+                        logger.warning(f"Failed to get public hostname: HTTP {dns_response.status_code}")
+                else:
+                    logger.warning(f"Failed to get metadata token: HTTP {token_response.status_code}")
+                    
+        except httpx.TimeoutException:
+            logger.warning("Timeout while fetching EC2 metadata - likely not running on EC2")
+        except httpx.ConnectError:
+            logger.warning("Cannot connect to EC2 metadata service - likely not running on EC2")
+        except Exception as e:
+            logger.warning(f"Error fetching EC2 public DNS: {e}")
+            
+        # Fallback: try environment variable or return empty string
+        import os
+        fallback_dns = os.environ.get('EC2_PUBLIC_DNS', '')
+        if fallback_dns:
+            logger.info(f"Using EC2_PUBLIC_DNS environment variable: {fallback_dns}")
+            return fallback_dns
+        
+        logger.info("No EC2 public DNS available, using empty string")
+        return ""
+
     def generate_config(self, servers: Dict[str, Dict[str, Any]]) -> bool:
-        """Generate Nginx configuration file based on registered servers.
+        """Generate Nginx configuration (synchronous version for non-async contexts)."""
+        try:
+            # Check if we're in an async context
+            try:
+                # If we're already in an event loop, we need to run this differently
+                loop = asyncio.get_running_loop()
+                # We're in an async context, this won't work
+                logger.error("generate_config called from async context - use generate_config_async instead")
+                return False
+            except RuntimeError:
+                # No running loop, we can use asyncio.run()
+                return asyncio.run(self.generate_config_async(servers))
+        except Exception as e:
+            logger.error(f"Failed to generate Nginx configuration: {e}", exc_info=True)
+            return False
         
-        Only includes enabled servers that are healthy in the configuration.
-        """
+    async def generate_config_async(self, servers: Dict[str, Dict[str, Any]]) -> bool:
+        """Generate Nginx configuration with EC2 DNS and dynamic location blocks."""
         try:
             # Read template
             if not self.nginx_template_path.exists():
@@ -93,14 +164,18 @@ class NginxConfigService:
                         location_blocks.append(commented_block)
                         logger.debug(f"Added commented location block for unhealthy service {path} (status: {health_status})")
             
-            # Replace placeholder in template
+            # Fetch EC2 public DNS
+            ec2_public_dns = await self.get_ec2_public_dns()
+            
+            # Replace placeholders in template
             config_content = template_content.replace("{{LOCATION_BLOCKS}}", "\n".join(location_blocks))
+            config_content = config_content.replace("{{EC2_PUBLIC_DNS}}", ec2_public_dns)
             
             # Write config file
             with open(settings.nginx_config_path, "w") as f:
                 f.write(config_content)
                 
-            logger.info(f"Generated Nginx configuration with {len(location_blocks)} healthy location blocks")
+            logger.info(f"Generated Nginx configuration with {len(location_blocks)} location blocks and EC2 DNS: {ec2_public_dns}")
             
             # Automatically reload nginx after generating config
             self.reload_nginx()
