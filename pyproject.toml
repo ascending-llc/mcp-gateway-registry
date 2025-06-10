@@ -30,6 +30,7 @@ dependencies = [
     "strands-agents-tools>=0.1.4",
     "pyjwt>=2.10.1",
     "typing-extensions>=4.8.0",
+    "httpcore[asyncio]>=1.0.9",
 ]
 
 [project.optional-dependencies]
