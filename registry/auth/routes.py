@@ -49,9 +49,10 @@ async def login_form(request: Request, error: str | None = None):
 async def oauth2_login_redirect(provider: str, request: Request):
     """Redirect to auth server for OAuth2 login"""
     try:
-        # Build redirect URL to auth server
+        # Build redirect URL to auth server - use external URL for browser redirects
         registry_url = str(request.base_url).rstrip('/')
-        auth_url = f"{settings.auth_server_url}/oauth2/login/{provider}?redirect_uri={registry_url}/"
+        auth_external_url = settings.auth_server_external_url
+        auth_url = f"{auth_external_url}/oauth2/login/{provider}?redirect_uri={registry_url}/"
         
         logger.info(f"Redirecting to OAuth2 login for provider {provider}: {auth_url}")
         return RedirectResponse(url=auth_url, status_code=302)
