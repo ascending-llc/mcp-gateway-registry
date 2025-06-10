@@ -32,7 +32,7 @@ providers:
     groups_claim: null  # GitHub doesn't provide groups in basic scope
     email_claim: "email"
     name_claim: "name"
-    enabled: false  # Disabled by default
+    enabled: true  # Enable web-based OAuth2 flow for GitHub
 
   google:
     display_name: "Google"
