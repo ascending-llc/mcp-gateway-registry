@@ -69,8 +69,9 @@ def parse_arguments():
 # Parse arguments at module level to make them available
 args = parse_arguments()
 
-# Initialize FastMCP server using parsed arguments
-mcp = FastMCP("real_server_fake_tools", port=args.port)
+# Initialize FastMCP server with host and port settings
+mcp = FastMCP("RealServerFakeTools", host="0.0.0.0", port=int(args.port))
+mcp.settings.mount_path = "/realserverfaketools"
 
 
 # Define some Pydantic models for complex parameter types
@@ -582,9 +583,8 @@ def get_tools_documentation() -> str:
 
 def main():
     # Run the server with the specified transport from command line args
-    mount_path = "/realserverfaketools"
-    mcp.run(transport=args.transport, mount_path=mount_path)
-    logger.info(f"Server is running on port {args.port} with transport {args.transport}, mount path {mount_path}")
+    mcp.run(transport=args.transport)
+    logger.info(f"Server is running on port {args.port} with transport {args.transport}")
 
 
 if __name__ == "__main__":
