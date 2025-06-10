@@ -1,0 +1,52 @@
+{
+  "name": "auth_server",
+  "description": "Authentication server for validating JWT tokens against Amazon Cognito",
+  "version": "0.1.0",
+  "proxy_pass_url": "http://localhost:8010/auth",
+  "transport": "sse",
+  "user_pool_id": "us-east-1_EXAMPLE",
+  "client_id": "example_client_id",
+  "region": "us-east-1",
+  "tools": [
+    {
+      "name": "validate_request",
+      "description": "Validate a request by extracting and validating the bearer token from the Authorization header",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "authorization": {
+            "type": "string",
+            "description": "The Authorization header containing the bearer token"
+          }
+        },
+        "required": ["authorization"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "valid": {
+            "type": "boolean",
+            "description": "Whether the token is valid"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of scopes associated with the token"
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message if validation failed"
+          }
+        }
+      }
+    }
+  ],
+  "resources": [
+    {
+      "uri": "auth://config",
+      "description": "Authentication configuration"
+    }
+  ]
+}

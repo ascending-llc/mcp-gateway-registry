@@ -301,8 +301,12 @@ def load_system_prompt():
     Returns:
         str: The system prompt template
     """
+    import os
     try:
-        with open("agents/system_prompt.txt", "r") as f:
+        # Get the directory where this Python file is located
+        current_dir = os.path.dirname(__file__)
+        system_prompt_path = os.path.join(current_dir, "system_prompt.txt")
+        with open(system_prompt_path, "r") as f:
             return f.read()
     except Exception as e:
         print(f"Error loading system prompt: {e}")
@@ -449,7 +453,11 @@ async def main():
         system_prompt_template = load_system_prompt()
         system_prompt = system_prompt_template.format(
             current_utc_time=current_utc_time,
-            mcp_registry_url=args.mcp_registry_url
+            mcp_registry_url=args.mcp_registry_url,
+            auth_token="",
+            user_pool_id="",
+            client_id="",
+            region=""
         )
         
         # Create the Strands agent with the model, tools, and system prompt

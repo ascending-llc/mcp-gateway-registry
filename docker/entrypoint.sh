@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e # Exit immediately if a command exits with a non-zero status.
 
+# Create logs directory if it doesn't exist
+mkdir -p /app/logs
+
 # --- Configuration ---
 # Get the absolute path of the directory where this script is run from
 SCRIPT_DIR="$(pwd)"
@@ -117,6 +120,33 @@ else
   echo "SSL certificates already exist, skipping generation."
 fi
 
+# --- Lua Module Installation and Script Creation ---
+echo "Setting up Lua support for nginx..."
+
+# Create directory for Lua scripts
+LUA_SCRIPTS_DIR="/etc/nginx/lua"
+mkdir -p "$LUA_SCRIPTS_DIR"
+
+# Create the body capture Lua script
+cat > "$LUA_SCRIPTS_DIR/capture_body.lua" << 'EOF'
+-- capture_body.lua: Read request body and encode it in X-Body header for auth_request
+local cjson = require "cjson"
+
+-- Read the request body
+ngx.req.read_body()
+local body_data = ngx.req.get_body_data()
+
+if body_data then
+    -- Set the X-Body header with the raw body data
+    ngx.req.set_header("X-Body", body_data)
+    ngx.log(ngx.INFO, "Captured request body (" .. string.len(body_data) .. " bytes) for auth validation")
+else
+    ngx.log(ngx.INFO, "No request body found")
+end
+EOF
+
+echo "Lua script created at $LUA_SCRIPTS_DIR/capture_body.lua"
+
 # --- Nginx Configuration ---
 echo "Copying custom Nginx configuration..."
 cp "$NGINX_CONF_SRC" "$NGINX_CONF_DEST"
@@ -182,6 +212,18 @@ cd /app/registry
 source "$SCRIPT_DIR/.venv/bin/activate"
 cd /app/registry && uvicorn main:app --host 0.0.0.0 --port 7860 &
 echo "MCP Registry start command issued."
+# Give registry a moment to initialize and generate initial nginx config
+sleep 10
+
+# 3. Start Auth Server
+echo "Starting Auth Server in the background..."
+cd /app/auth_server
+uv venv --python 3.12 && source .venv/bin/activate && uv pip install --requirement pyproject.toml
+# Start auth_server with logging to file
+AUTH_LOG_FILE="/app/logs/auth_server.log"
+echo "Auth Server logs will be written to: $AUTH_LOG_FILE"
+uvicorn server:app --host 0.0.0.0 --port 8888 2>&1 | tee -a "$AUTH_LOG_FILE" &
+echo "Auth Server start command issued."
 # Give registry a moment to initialize and generate initial nginx config
 sleep 10
 

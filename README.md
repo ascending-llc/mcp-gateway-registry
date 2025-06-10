@@ -184,7 +184,7 @@ The Gateway and the Registry are available as a Docker container. The package in
     export POLYGON_API_KEY=your-polygon-api-key
     # stop any previous instance
     docker stop mcp-gateway-container && docker rm mcp-gateway-container 
-    docker run -p 80:80 -p 443:443 -p 7860:7860 \
+    docker run -p 80:80 -p 443:443 -p 7860:7860 -p 8888:8888 \
     -e ADMIN_USER=$ADMIN_USER \
     -e ADMIN_PASSWORD=$ADMIN_PASSWORD \
     -e POLYGON_API_KEY=$POLYGON_API_KEY \
@@ -262,7 +262,7 @@ The Gateway and the Registry are available as a Docker container. The package in
 1. Run the container with the `-v` switch to map the local folder containing the cert and the private key to the container. Replace `/path/to/certs/` and `/path/private` as appropriate in the command provided below.
 
     ```bash
-    docker run -p 80:80 -p 443:443 -p 7860:7860 \
+    docker run -p 80:80 -p 443:443 -p 7860:7860 -p 8888:8888 \
       -e ADMIN_USER=$ADMIN_USER \
       -e ADMIN_PASSWORD=$ADMIN_PASSWORD \
       -e POLYGON_API_KEY=$POLYGON_API_KEY \
