@@ -388,6 +388,23 @@ input:checked + .slider:before {
     font-size: 0.9em;
 }
 
+/* Read-only status styling */
+.read-only-status {
+    display: flex;
+    align-items: center;
+    margin-top: 10px;
+    padding: 8px 12px;
+    background-color: rgba(160, 168, 180, 0.1);
+    border-radius: 4px;
+    border-left: 3px solid #a0a8b4;
+}
+
+.read-only-status .status-text {
+    font-size: 0.9em;
+    color: #a0a8b4;
+    font-weight: 500;
+}
+
 /* --- Login Page Styles --- */
 .login-body {
     background-color: #1a222c; /* Slightly darker than main background */

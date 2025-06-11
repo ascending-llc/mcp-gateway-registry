@@ -2129,10 +2129,31 @@
         </div>
         <div class="header-right">
             {% if username %}
-            <button id="register-server-button" class="secondary-button" style="margin-right: 10px; padding: 8px 16px; font-weight: 600; border-radius: 8px;">Register Server</button>
+                                {% if user_context.can_modify_servers %}
+                        <button id="register-server-button" class="secondary-button" style="margin-right: 10px; padding: 8px 16px; font-weight: 600; border-radius: 8px;">Register Server</button>
+                    {% endif %}
             {% endif %}
             <button id="theme-toggle" class="theme-toggle-button" title="Toggle Theme">🌙</button>
-            <span class="user-display">User: {{ username }}</span>
+            <div class="user-display" style="display: flex; flex-direction: column; align-items: flex-end; margin-right: 15px;">
+                <span style="font-weight: bold;">{{ username }}</span>
+                <span style="font-size: 0.8em; opacity: 0.8;">
+                    {% if user_context.is_admin %}
+                        🔑 Admin Access
+                    {% elif user_context.can_modify_servers %}
+                        ⚙️ Modify Access 
+                    {% else %}
+                        👁️ Read-only Access
+                    {% endif %}
+                    {% if user_context.auth_method == 'oauth2' %}
+                        ({{ user_context.provider | title }})
+                    {% endif %}
+                </span>
+                {% if not user_context.is_admin %}
+                    <span style="font-size: 0.7em; opacity: 0.7;" title="Servers you have access to: {{ user_context.accessible_servers | join(', ') }}">
+                        Access: {{ user_context.accessible_servers | length }} server(s)
+                    </span>
+                {% endif %}
+            </div>
             <form action="/logout" method="post" style="display: inline;">
                 <button type="submit" class="logout-button">Logout</button>
             </form>
@@ -2271,24 +2292,32 @@
                             </div>
 
                             <div class="controls-row">
-                                <a href="/edit{{ service.path }}" class="edit-button">Modify</a>
-                                {# Add ID to form if needed, but action URL is sufficient #}
-                                <form action="/toggle{{ service.path }}" method="post" class="toggle-form">
-                                    <label class="switch">
-                                        {# Change onchange to use data attributes instead #}
-                                        <input type="checkbox" name="enabled" value="on"
-                                               id="{{ 'toggle-check-' + safe_path }}"
-                                               {% if service.is_enabled %}checked{% endif %}
-                                               data-path="{{ service.path }}"
-                                               class="toggle-checkbox">
-                                        <span class="slider round"></span>
-                                    </label>
-                                    {# Add ID to label span #}
-                                    <span id="{{ 'toggle-label-' + safe_path }}" class="toggle-label">
-                                        {{ 'Enabled' if service.is_enabled else 'Disabled' }}
-                                    </span>
-                                </form>
-
+                                {% if user_context.can_modify_servers %}
+                                    <a href="/edit{{ service.path }}" class="edit-button">Modify</a>
+                                    {# Add ID to form if needed, but action URL is sufficient #}
+                                    <form action="/toggle{{ service.path }}" method="post" class="toggle-form">
+                                        <label class="switch">
+                                            {# Change onchange to use data attributes instead #}
+                                            <input type="checkbox" name="enabled" value="on"
+                                                   id="{{ 'toggle-check-' + safe_path }}"
+                                                   {% if service.is_enabled %}checked{% endif %}
+                                                   data-path="{{ service.path }}"
+                                                   class="toggle-checkbox">
+                                            <span class="slider round"></span>
+                                        </label>
+                                        {# Add ID to label span #}
+                                        <span id="{{ 'toggle-label-' + safe_path }}" class="toggle-label">
+                                            {{ 'Enabled' if service.is_enabled else 'Disabled' }}
+                                        </span>
+                                    </form>
+                                {% else %}
+                                    {# Read-only users: just show status without any controls #}
+                                    <div class="read-only-status">
+                                        <span class="status-text" title="Read-only access - you cannot modify this server">
+                                            📖 {{ 'Enabled' if service.is_enabled else 'Disabled' }} (Read-only)
+                                        </span>
+                                    </div>
+                                {% endif %}
                             </div>
                         </div>
                         <div class="card-footer">
