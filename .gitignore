@@ -186,3 +186,4 @@ logs/
 
 # Agent testing
 agents/test_results/
+agents/.env.user
