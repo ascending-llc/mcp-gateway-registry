@@ -31,6 +31,7 @@ dependencies = [
     "pyjwt>=2.10.1",
     "typing-extensions>=4.8.0",
     "httpcore[asyncio]>=1.0.9",
+    "pyyaml>=6.0.0",
 ]
 
 [project.optional-dependencies]
