@@ -963,7 +963,7 @@ async def get_oauth2_providers():
         return {"providers": [], "error": str(e)}
 
 @app.get("/oauth2/login/{provider}")
-async def oauth2_login(provider: str, redirect_uri: str = None):
+async def oauth2_login(provider: str, request: Request, redirect_uri: str = None):
     """Initiate OAuth2 login flow"""
     try:
         if provider not in OAUTH2_CONFIG.get("providers", {}):
@@ -986,13 +986,22 @@ async def oauth2_login(provider: str, redirect_uri: str = None):
         # Create temporary session for OAuth2 flow
         temp_session = signer.dumps(session_data)
         
-        # Build authorization URL
+        # Build authorization URL with dynamic auth server URL
+        host = request.headers.get("host", "localhost:8888")
+        scheme = "https" if request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https" else "http"
+        
+        # Special case for localhost to include port
+        if "localhost" in host and ":" not in host:
+            auth_server_url = f"{scheme}://localhost:8888"
+        else:
+            auth_server_url = f"{scheme}://{host}"
+        
         auth_params = {
             "client_id": provider_config["client_id"],
             "response_type": provider_config["response_type"],
             "scope": " ".join(provider_config["scopes"]),
             "state": state,
-            "redirect_uri": f"{os.environ.get('AUTH_SERVER_URL', 'http://localhost:8888')}/oauth2/callback/{provider}"
+            "redirect_uri": f"{auth_server_url}/oauth2/callback/{provider}"
         }
         
         auth_url = f"{provider_config['auth_url']}?{urllib.parse.urlencode(auth_params)}"
@@ -1019,7 +1028,8 @@ async def oauth2_login(provider: str, redirect_uri: str = None):
 
 @app.get("/oauth2/callback/{provider}")
 async def oauth2_callback(
-    provider: str, 
+    provider: str,
+    request: Request,
     code: str = None, 
     state: str = None, 
     error: str = None,
@@ -1052,13 +1062,64 @@ async def oauth2_callback(
         provider_config = OAUTH2_CONFIG["providers"][provider]
         
         # Exchange authorization code for access token
-        token_data = await exchange_code_for_token(provider, code, provider_config)
+        # Build dynamic auth server URL for token exchange
+        host = request.headers.get("host", "localhost:8888")
+        scheme = "https" if request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https" else "http"
         
-        # Get user information
-        user_info = await get_user_info(provider, token_data["access_token"], provider_config)
+        # Special case for localhost to include port
+        if "localhost" in host and ":" not in host:
+            auth_server_url = f"{scheme}://localhost:8888"
+        else:
+            auth_server_url = f"{scheme}://{host}"
+            
+        token_data = await exchange_code_for_token(provider, code, provider_config, auth_server_url)
+        logger.info(f"Token data keys: {list(token_data.keys())}")
         
-        # Map user info to our format
-        mapped_user = map_user_info(user_info, provider_config)
+        # For Cognito, validate the access token to get groups from JWT claims
+        if provider == "cognito":
+            try:
+                # Extract Cognito configuration from environment
+                user_pool_id = os.environ.get('COGNITO_USER_POOL_ID')
+                client_id = provider_config["client_id"]
+                region = os.environ.get('AWS_REGION', 'us-east-1')
+                
+                if user_pool_id and client_id:
+                    # Use our existing token validation to get groups from JWT
+                    validator = SimplifiedCognitoValidator(region)
+                    token_validation = validator.validate_token(
+                        token_data["access_token"], 
+                        user_pool_id, 
+                        client_id, 
+                        region
+                    )
+                    
+                    logger.info(f"Token validation result: {token_validation}")
+                    
+                    # Extract user info from token validation
+                    mapped_user = {
+                        "username": token_validation.get("username"),
+                        "email": token_validation.get("username"),  # Cognito username is usually email
+                        "name": token_validation.get("username"),
+                        "groups": token_validation.get("groups", [])
+                    }
+                    logger.info(f"User extracted from JWT token: {mapped_user}")
+                else:
+                    logger.warning("Missing Cognito configuration for JWT validation, falling back to userInfo")
+                    raise ValueError("Missing Cognito config")
+                    
+            except Exception as e:
+                logger.warning(f"JWT token validation failed: {e}, falling back to userInfo endpoint")
+                # Fallback to userInfo endpoint
+                user_info = await get_user_info(provider, token_data["access_token"], provider_config)
+                logger.info(f"Raw user info from {provider}: {user_info}")
+                mapped_user = map_user_info(user_info, provider_config)
+                logger.info(f"Mapped user info from userInfo: {mapped_user}")
+        else:
+            # For other providers, use userInfo endpoint
+            user_info = await get_user_info(provider, token_data["access_token"], provider_config)
+            logger.info(f"Raw user info from {provider}: {user_info}")
+            mapped_user = map_user_info(user_info, provider_config)
+            logger.info(f"Mapped user info: {mapped_user}")
         
         # Create session cookie compatible with registry
         session_data = {
@@ -1099,15 +1160,18 @@ async def oauth2_callback(
         error_url = OAUTH2_CONFIG.get("registry", {}).get("error_redirect", "/login")
         return RedirectResponse(url=f"{error_url}?error=oauth2_callback_failed", status_code=302)
 
-async def exchange_code_for_token(provider: str, code: str, provider_config: dict) -> dict:
+async def exchange_code_for_token(provider: str, code: str, provider_config: dict, auth_server_url: str = None) -> dict:
     """Exchange authorization code for access token"""
+    if auth_server_url is None:
+        auth_server_url = os.environ.get('AUTH_SERVER_URL', 'http://localhost:8888')
+        
     async with httpx.AsyncClient() as client:
         token_data = {
             "grant_type": provider_config["grant_type"],
             "client_id": provider_config["client_id"],
             "client_secret": provider_config["client_secret"],
             "code": code,
-            "redirect_uri": f"{os.environ.get('AUTH_SERVER_URL', 'http://localhost:8888')}/oauth2/callback/{provider}"
+            "redirect_uri": f"{auth_server_url}/oauth2/callback/{provider}"
         }
         
         headers = {"Accept": "application/json"}
@@ -1145,11 +1209,80 @@ def map_user_info(user_info: dict, provider_config: dict) -> dict:
     
     # Handle groups if provider supports them
     groups_claim = provider_config.get("groups_claim")
+    logger.info(f"Looking for groups using claim: {groups_claim}")
+    logger.info(f"Available claims in user_info: {list(user_info.keys())}")
+    
     if groups_claim and groups_claim in user_info:
         groups = user_info[groups_claim]
         if isinstance(groups, list):
             mapped["groups"] = groups
         elif isinstance(groups, str):
             mapped["groups"] = [groups]
+        logger.info(f"Found groups via {groups_claim}: {mapped['groups']}")
+    else:
+        # Try alternative group claims for Cognito
+        for possible_group_claim in ["cognito:groups", "groups", "custom:groups"]:
+            if possible_group_claim in user_info:
+                groups = user_info[possible_group_claim]
+                if isinstance(groups, list):
+                    mapped["groups"] = groups
+                elif isinstance(groups, str):
+                    mapped["groups"] = [groups]
+                logger.info(f"Found groups via alternative claim {possible_group_claim}: {mapped['groups']}")
+                break
+        
+        if not mapped["groups"]:
+            logger.warning(f"No groups found in user_info. Available fields: {list(user_info.keys())}")
     
     return mapped
+
+@app.get("/oauth2/logout/{provider}")
+async def oauth2_logout(provider: str, request: Request, redirect_uri: str = None):
+    """Initiate OAuth2 logout flow to clear provider session"""
+    try:
+        if provider not in OAUTH2_CONFIG.get("providers", {}):
+            raise HTTPException(status_code=404, detail=f"Provider {provider} not found")
+        
+        provider_config = OAUTH2_CONFIG["providers"][provider]
+        logout_url = provider_config.get("logout_url")
+        
+        if not logout_url:
+            # If provider doesn't support logout URL, just redirect
+            redirect_url = redirect_uri or OAUTH2_CONFIG.get("registry", {}).get("success_redirect", "/login")
+            return RedirectResponse(url=redirect_url, status_code=302)
+        
+        # For Cognito, we need to construct the full redirect URI
+        full_redirect_uri = redirect_uri or "/logout"
+        if not full_redirect_uri.startswith("http"):
+            # Make it a full URL - extract registry URL from request's referer or use environment
+            registry_base = os.environ.get('REGISTRY_URL')
+            if not registry_base:
+                # Try to derive from the request
+                referer = request.headers.get("referer", "")
+                if referer:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(referer)
+                    registry_base = f"{parsed.scheme}://{parsed.netloc}"
+                else:
+                    registry_base = "http://localhost"
+            
+            full_redirect_uri = f"{registry_base.rstrip('/')}{full_redirect_uri}"
+        
+        # Build logout URL with correct parameters for Cognito
+        logout_params = {
+            "client_id": provider_config["client_id"],
+            "logout_uri": full_redirect_uri
+        }
+        
+        logout_redirect_url = f"{logout_url}?{urllib.parse.urlencode(logout_params)}"
+        
+        logger.info(f"Redirecting to {provider} logout: {logout_redirect_url}")
+        return RedirectResponse(url=logout_redirect_url, status_code=302)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error initiating logout for {provider}: {e}")
+        # Fallback to local redirect
+        redirect_url = redirect_uri or OAUTH2_CONFIG.get("registry", {}).get("success_redirect", "/login")
+        return RedirectResponse(url=redirect_url, status_code=302)
