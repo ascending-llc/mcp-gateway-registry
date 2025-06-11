@@ -90,6 +90,7 @@ services:
       - REGISTRY_USERNAME=${ADMIN_USER:-admin}
       - REGISTRY_PASSWORD=${ADMIN_PASSWORD}
     volumes:
+      - /opt/mcp-gateway/servers:/app/registry/servers
       - /opt/mcp-gateway/models:/app/registry/models
     ports:
       - "8003:8003"
