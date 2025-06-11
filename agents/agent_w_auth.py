@@ -1,20 +1,15 @@
 #!/usr/bin/env python3
 """
-LangGraph MCP Client with Multi-method Authentication
+LangGraph MCP Client with Cognito Authentication
 
 This script demonstrates using LangGraph with the MultiServerMCPClient adapter to connect to an
-MCP-compatible server with multiple authentication methods and query information using a Bedrock-hosted Claude model.
-
-Supported authentication methods:
-1. Cognito M2M authentication (machine-to-machine)
-2. Session cookie authentication (from CLI auth or OAuth2 login)
-3. GitHub OAuth2 authentication (via CLI auth tool)
+MCP-compatible server with Cognito M2M authentication and query information using a Bedrock-hosted Claude model.
 
 The script accepts command line arguments for:
 - Server host and port
 - Model ID to use
 - User message to process
-- Authentication method and parameters
+- Cognito authentication parameters
 
 Configuration can be provided via command line arguments or environment variables.
 Command line arguments take precedence over environment variables.
@@ -24,30 +19,24 @@ Environment Variables:
 - COGNITO_CLIENT_SECRET: Cognito App Client Secret
 - COGNITO_USER_POOL_ID: Cognito User Pool ID
 - AWS_REGION: AWS region for Cognito
-- GITHUB_CLIENT_ID: GitHub OAuth2 App Client ID
-- GITHUB_CLIENT_SECRET: GitHub OAuth2 App Client Secret
 
-Usage Examples:
-
-1. Cognito M2M Authentication:
+Usage:
     python agent_w_auth.py --mcp-registry-url URL --model model_id --message "your question" \
         --client-id CLIENT_ID --client-secret CLIENT_SECRET --user-pool-id USER_POOL_ID --region REGION
 
-2. Session Cookie Authentication:
-    python agent_w_auth.py --use-session-cookie --message "your question"
-
-3. GitHub OAuth2 Authentication:
-    python agent_w_auth.py --use-github-auth --message "your question"
+Example with command line arguments:
+    python agent_w_auth.py --mcp-registry-url http://localhost/mcpgw/sse \
+        --model anthropic.claude-3-haiku-20240307-v1:0 --message "current time in new delhi" \
+        --client-id [REDACTED] --client-secret [REDACTED] \
+        --user-pool-id [REDACTED] --region us-east-1
 
 Example with environment variables (create a .env file):
     COGNITO_CLIENT_ID=your_client_id
     COGNITO_CLIENT_SECRET=your_client_secret
     COGNITO_USER_POOL_ID=your_user_pool_id
     AWS_REGION=us-east-1
-    GITHUB_CLIENT_ID=your_github_client_id
-    GITHUB_CLIENT_SECRET=your_github_client_secret
     
-    python agent_w_auth.py --use-github-auth --message "current time in new delhi"
+    python agent_w_auth.py --message "current time in new delhi"
 """
 
 import asyncio
@@ -88,9 +77,58 @@ logging.basicConfig(
 # Get logger
 logger = logging.getLogger(__name__)
 
-def load_env_config() -> Dict[str, Optional[str]]:
+def get_auth_mode_from_args() -> bool:
     """
-    Load configuration from .env file if available.
+    Parse command line arguments to determine authentication mode.
+    This is done before loading environment variables to choose the correct .env file.
+    
+    Returns:
+        bool: True if using session cookie authentication, False for M2M authentication
+    """
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('--use-session-cookie', action='store_true',
+                        help='Use session cookie authentication instead of M2M')
+    args, _ = parser.parse_known_args()
+    return args.use_session_cookie
+
+def print_env_file_banner(env_file_name: str, use_session_cookie: bool, file_found: bool, file_path: str = None):
+    """
+    Print a prominent banner showing which .env file is being used and why.
+    
+    Args:
+        env_file_name: Name of the .env file being used
+        use_session_cookie: Whether session cookie authentication is being used
+        file_found: Whether the .env file was found
+        file_path: Full path to the .env file if found
+    """
+    print("\n" + "="*80)
+    print("🔧 ENVIRONMENT CONFIGURATION")
+    print("="*80)
+    
+    auth_mode = "Session Cookie Authentication" if use_session_cookie else "M2M Authentication"
+    print(f"Authentication Mode: {auth_mode}")
+    print(f"Expected .env file: {env_file_name}")
+    
+    if use_session_cookie:
+        print("Reason: --use-session-cookie flag specified, using .env.user for user credentials")
+    else:
+        print("Reason: M2M authentication (default), using .env.agent for machine credentials")
+    
+    if file_found and file_path:
+        print(f"✅ Found and loaded: {file_path}")
+    else:
+        print(f"⚠️  File not found: {env_file_name}")
+        print("   Falling back to system environment variables")
+    
+    print("="*80 + "\n")
+
+def load_env_config(use_session_cookie: bool) -> Dict[str, Optional[str]]:
+    """
+    Load configuration from .env file based on authentication mode.
+    Uses .env.user for session cookie auth, .env.agent for M2M auth.
+    
+    Args:
+        use_session_cookie: True for session cookie auth (.env.user), False for M2M auth (.env.agent)
     
     Returns:
         Dict[str, Optional[str]]: Dictionary containing environment variables
@@ -100,40 +138,56 @@ def load_env_config() -> Dict[str, Optional[str]]:
         'client_secret': None,
         'region': None,
         'user_pool_id': None,
-        'domain': None,
-        'github_client_id': None,
-        'github_client_secret': None,
-        'secret_key': None
+        'domain': None
     }
     
+    # Choose .env file based on authentication mode
+    env_file_name = '.env.user' if use_session_cookie else '.env.agent'
+    
     if DOTENV_AVAILABLE:
+        file_found = False
+        file_path = None
+        
         # Try to load from .env file in the current directory
-        env_file = os.path.join(os.path.dirname(__file__), '.env')
+        env_file = os.path.join(os.path.dirname(__file__), env_file_name)
         if os.path.exists(env_file):
             load_dotenv(env_file)
+            file_found = True
+            file_path = env_file
             logger.info(f"Loading environment variables from {env_file}")
         else:
             # Try to load from .env file in the parent directory
-            env_file = os.path.join(os.path.dirname(__file__), '..', '.env')
+            env_file = os.path.join(os.path.dirname(__file__), '..', env_file_name)
             if os.path.exists(env_file):
                 load_dotenv(env_file)
+                file_found = True
+                file_path = env_file
                 logger.info(f"Loading environment variables from {env_file}")
             else:
                 # Try to load from current working directory
-                load_dotenv()
-                logger.info("Loading environment variables from current directory")
+                env_file = os.path.join(os.getcwd(), env_file_name)
+                if os.path.exists(env_file):
+                    load_dotenv(env_file)
+                    file_found = True
+                    file_path = env_file
+                    logger.info(f"Loading environment variables from {env_file}")
+                else:
+                    # Fallback to default .env loading
+                    load_dotenv()
+                    logger.info("Loading environment variables from default .env file")
         
-        # Get values from environment - Cognito
+        # Print banner showing which file is being used
+        print_env_file_banner(env_file_name, use_session_cookie, file_found, file_path)
+        
+        # Get values from environment
         env_config['client_id'] = os.getenv('COGNITO_CLIENT_ID')
         env_config['client_secret'] = os.getenv('COGNITO_CLIENT_SECRET')
         env_config['region'] = os.getenv('AWS_REGION')
         env_config['user_pool_id'] = os.getenv('COGNITO_USER_POOL_ID')
         env_config['domain'] = os.getenv('COGNITO_DOMAIN')
-        
-        # Get values from environment - GitHub OAuth2
-        env_config['github_client_id'] = os.getenv('GITHUB_CLIENT_ID')
-        env_config['github_client_secret'] = os.getenv('GITHUB_CLIENT_SECRET')
-        env_config['secret_key'] = os.getenv('SECRET_KEY')
+    else:
+        # Print banner even when dotenv is not available
+        print_env_file_banner(env_file_name, use_session_cookie, False)
     
     return env_config
 
@@ -145,13 +199,16 @@ def parse_arguments() -> argparse.Namespace:
     Returns:
         argparse.Namespace: The parsed command line arguments
     """
-    # Load environment configuration first
-    env_config = load_env_config()
+    # First, determine authentication mode to choose correct .env file
+    use_session_cookie = get_auth_mode_from_args()
+    
+    # Load environment configuration using the appropriate .env file
+    env_config = load_env_config(use_session_cookie)
     
     parser = argparse.ArgumentParser(description='LangGraph MCP Client with Cognito Authentication')
     
     # Server connection arguments
-    parser.add_argument('--mcp-registry-url', type=str, default='https://mcpgateway.ddns.net/mcpgw/sse',
+    parser.add_argument('--mcp-registry-url', type=str, default='http://ec2-54-146-182-47.compute-1.amazonaws.com/mcpgw/sse',
                         help='Hostname of the MCP Registry')
     
     # Model arguments
@@ -164,17 +221,9 @@ def parse_arguments() -> argparse.Namespace:
     
     # Authentication method arguments
     parser.add_argument('--use-session-cookie', action='store_true',
-                        help='Use session cookie authentication instead of M2M')
+                        help='Use session cookie authentication instead of M2M (loads .env.user instead of .env.agent)')
     parser.add_argument('--session-cookie-file', type=str, default='~/.mcp/session_cookie',
                         help='Path to session cookie file (default: ~/.mcp/session_cookie)')
-    parser.add_argument('--use-github-auth', action='store_true',
-                        help='Use GitHub OAuth2 authentication (requires CLI auth setup)')
-    parser.add_argument('--github-client-id', type=str, default=env_config['github_client_id'],
-                        help='GitHub OAuth2 Client ID (can be set via GITHUB_CLIENT_ID env var)')
-    parser.add_argument('--github-client-secret', type=str, default=env_config['github_client_secret'],
-                        help='GitHub OAuth2 Client Secret (can be set via GITHUB_CLIENT_SECRET env var)')
-    parser.add_argument('--secret-key', type=str, default=env_config['secret_key'],
-                        help='Secret key for session cookie validation (can be set via SECRET_KEY env var)')
     
     # Cognito authentication arguments - now optional if available in environment
     parser.add_argument('--client-id', type=str, default=env_config['client_id'],
@@ -193,28 +242,12 @@ def parse_arguments() -> argparse.Namespace:
     args = parser.parse_args()
     
     # Validate authentication parameters based on method
-    auth_methods = sum([args.use_session_cookie, args.use_github_auth])
-    if auth_methods > 1:
-        parser.error("Please specify only one authentication method: --use-session-cookie, --use-github-auth, or neither (for M2M)")
-    
     if args.use_session_cookie:
         # For session cookie auth, we just need the cookie file
         cookie_path = os.path.expanduser(args.session_cookie_file)
         if not os.path.exists(cookie_path):
             parser.error(f"Session cookie file not found: {cookie_path}\n"
                         f"Run 'python auth_server/cli_auth.py' to authenticate first")
-    elif args.use_github_auth:
-        # For GitHub auth, validate GitHub parameters
-        missing_params = []
-        if not args.github_client_id:
-            missing_params.append('--github-client-id (or GITHUB_CLIENT_ID env var)')
-        if not args.github_client_secret:
-            missing_params.append('--github-client-secret (or GITHUB_CLIENT_SECRET env var)')
-        if not args.secret_key:
-            missing_params.append('--secret-key (or SECRET_KEY env var)')
-        
-        if missing_params:
-            parser.error(f"Missing required parameters for GitHub authentication: {', '.join(missing_params)}")
     else:
         # For M2M auth, validate Cognito parameters
         missing_params = []
@@ -469,116 +502,6 @@ def print_agent_response(response_dict: Dict[str, Any]) -> None:
         logger.info(f"{'=' * 20} END OF {msg_type} MESSAGE #{i} {'=' * 20}{reset}")
         logger.info("")
 
-def perform_github_device_flow(github_client_id: str, github_client_secret: str, secret_key: str) -> str:
-    """
-    Perform GitHub device flow authentication.
-    
-    Args:
-        github_client_id: GitHub OAuth2 App Client ID
-        github_client_secret: GitHub OAuth2 App Client Secret  
-        secret_key: Secret key for session cookie validation
-        
-    Returns:
-        str: Session cookie value
-        
-    Raises:
-        Exception: If authentication fails
-    """
-    import requests
-    import time
-    from itsdangerous import URLSafeTimedSerializer
-    
-    logger.info("Starting GitHub device flow authentication...")
-    
-    try:
-        # Step 1: Request device and user codes
-        device_response = requests.post(
-            'https://github.com/login/device/code',
-            data={
-                'client_id': github_client_id,
-                'scope': 'read:user user:email'
-            },
-            headers={'Accept': 'application/json'}
-        )
-        device_response.raise_for_status()
-        device_data = device_response.json()
-        
-        device_code = device_data['device_code']
-        user_code = device_data['user_code']
-        verification_uri = device_data['verification_uri']
-        interval = device_data.get('interval', 5)
-        
-        # Step 2: Display user code and instructions
-        print(f"\nTo authenticate with GitHub:")
-        print(f"1. Go to: {verification_uri}")
-        print(f"2. Enter code: {user_code}")
-        print("3. Complete the authorization in your browser")
-        print("Waiting for authorization...")
-        
-        # Step 3: Poll for token
-        access_token = None
-        while True:
-            token_response = requests.post(
-                'https://github.com/login/oauth/access_token',
-                data={
-                    'client_id': github_client_id,
-                    'device_code': device_code,
-                    'grant_type': 'urn:ietf:params:oauth:grant-type:device_code'
-                },
-                headers={'Accept': 'application/json'}
-            )
-            token_response.raise_for_status()
-            token_data = token_response.json()
-            
-            if 'access_token' in token_data:
-                access_token = token_data['access_token']
-                break
-            elif token_data.get('error') == 'authorization_pending':
-                time.sleep(interval)
-                continue
-            elif token_data.get('error') == 'slow_down':
-                interval += 5
-                time.sleep(interval)
-                continue
-            elif token_data.get('error') == 'expired_token':
-                raise Exception("Device code expired. Please try again.")
-            elif token_data.get('error') == 'access_denied':
-                raise Exception("Authorization denied by user.")
-            else:
-                raise Exception(f"Unknown error: {token_data.get('error', 'Unknown')}")
-        
-        # Step 4: Get user information
-        user_response = requests.get(
-            'https://api.github.com/user',
-            headers={
-                'Authorization': f'token {access_token}',
-                'Accept': 'application/json'
-            }
-        )
-        user_response.raise_for_status()
-        user_info = user_response.json()
-        
-        # Step 5: Create session cookie
-        session_data = {
-            "username": user_info.get('login'),
-            "email": user_info.get('email'),
-            "name": user_info.get('name'),
-            "groups": [],
-            "provider": "github",
-            "auth_method": "device_flow"
-        }
-        
-        signer = URLSafeTimedSerializer(secret_key)
-        session_cookie = signer.dumps(session_data)
-        
-        logger.info(f"Successfully authenticated GitHub user: {user_info.get('login')}")
-        return session_cookie
-        
-    except requests.RequestException as e:
-        raise Exception(f"GitHub API error: {e}")
-    except Exception as e:
-        raise Exception(f"Device flow authentication failed: {e}")
-
 async def main():
     """
     Main function that:
@@ -597,22 +520,12 @@ async def main():
     logger.info(f"Connecting to MCP server: {server_url}")
     logger.info(f"Using model: {args.model}")
     logger.info(f"Message: {args.message}")
-    # Determine authentication method
-    if args.use_session_cookie:
-        auth_method_name = "Session Cookie"
-        auth_method = "session_cookie"
-    elif args.use_github_auth:
-        auth_method_name = "GitHub OAuth2"
-        auth_method = "github_oauth2"
-    else:
-        auth_method_name = "M2M Token"
-        auth_method = "m2m"
-    
-    logger.info(f"Authentication method: {auth_method_name}")
+    logger.info(f"Authentication method: {'Session Cookie' if args.use_session_cookie else 'M2M Token'}")
     
     # Initialize authentication variables
     access_token = None
     session_cookie = None
+    auth_method = "session_cookie" if args.use_session_cookie else "m2m"
     
     if args.use_session_cookie:
         # Load session cookie from file
@@ -623,18 +536,6 @@ async def main():
             logger.info(f"Successfully loaded session cookie from {cookie_path}")
         except Exception as e:
             logger.error(f"Failed to load session cookie: {e}")
-            return
-    elif args.use_github_auth:
-        # Perform GitHub OAuth2 authentication
-        try:
-            session_cookie = perform_github_device_flow(
-                args.github_client_id,
-                args.github_client_secret,
-                args.secret_key
-            )
-            logger.info("Successfully completed GitHub OAuth2 authentication")
-        except Exception as e:
-            logger.error(f"Failed to complete GitHub OAuth2 authentication: {e}")
             return
     else:
         # Generate Cognito M2M authentication token
@@ -665,7 +566,7 @@ async def main():
     
     try:
         # Prepare headers for MCP client authentication based on method
-        if args.use_session_cookie or args.use_github_auth:
+        if args.use_session_cookie:
             auth_headers = {
                 'Cookie': f'mcp_gateway_session={session_cookie}',
                 'X-User-Pool-Id': args.user_pool_id or '',
@@ -720,7 +621,7 @@ async def main():
         system_prompt_template = load_system_prompt()
         
         # Prepare authentication parameters for system prompt
-        if args.use_session_cookie or args.use_github_auth:
+        if args.use_session_cookie:
             system_prompt = system_prompt_template.format(
                 current_utc_time=current_utc_time,
                 mcp_registry_url=args.mcp_registry_url,

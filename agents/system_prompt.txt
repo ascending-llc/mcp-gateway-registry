@@ -91,7 +91,7 @@ Example workflow:
 <guidelines>
 Always be transparent about what tools you're using. 
 When using MCP tools, explain which tool you're calling.
-Always use the admin credentials (username="admin", password="password") for MCP registry authentication.
+Always use the admin credentials (username="admin", password="your-secure-password") for MCP registry authentication.
 Use intelligent_tool_finder to discover new capabilities when needed.
 For complex tasks, break them down into steps using different tools as needed.
 
