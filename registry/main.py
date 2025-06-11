@@ -9,10 +9,12 @@ domain routers while handling core app configuration.
 
 import logging
 from contextlib import asynccontextmanager
+from typing import Annotated
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Cookie
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.responses import RedirectResponse
 
 # Import domain routers
 from registry.auth.routes import router as auth_router
@@ -143,6 +145,9 @@ app.include_router(health_router, tags=["Health Monitoring"])
 async def health_check():
     """Simple health check for load balancers and monitoring."""
     return {"status": "healthy", "service": "mcp-gateway-registry"}
+
+
+
 
 
 if __name__ == "__main__":
