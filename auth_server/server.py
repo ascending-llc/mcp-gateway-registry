@@ -986,22 +986,34 @@ async def oauth2_login(provider: str, request: Request, redirect_uri: str = None
         # Create temporary session for OAuth2 flow
         temp_session = signer.dumps(session_data)
         
-        # Build authorization URL with dynamic auth server URL
-        host = request.headers.get("host", "localhost:8888")
-        scheme = "https" if request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https" else "http"
-        
-        # Special case for localhost to include port
-        if "localhost" in host and ":" not in host:
-            auth_server_url = f"{scheme}://localhost:8888"
+        # Use configured external URL or build dynamically
+        auth_server_external_url = os.environ.get('AUTH_SERVER_EXTERNAL_URL')
+        if auth_server_external_url:
+            # Use configured external URL (recommended for production)
+            auth_server_url = auth_server_external_url.rstrip('/')
+            logger.info(f"Using configured AUTH_SERVER_EXTERNAL_URL: {auth_server_url}")
         else:
-            auth_server_url = f"{scheme}://{host}"
+            # Fall back to dynamic construction (for development)
+            host = request.headers.get("host", "localhost:8888")
+            scheme = "https" if request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https" else "http"
+            
+            # Special case for localhost to include port
+            if "localhost" in host and ":" not in host:
+                auth_server_url = f"{scheme}://localhost:8888"
+            else:
+                auth_server_url = f"{scheme}://{host}"
+            
+            logger.warning(f"AUTH_SERVER_EXTERNAL_URL not set, using dynamic URL: {auth_server_url}")
+        
+        callback_uri = f"{auth_server_url}/oauth2/callback/{provider}"
+        logger.info(f"OAuth2 callback URI: {callback_uri}")
         
         auth_params = {
             "client_id": provider_config["client_id"],
             "response_type": provider_config["response_type"],
             "scope": " ".join(provider_config["scopes"]),
             "state": state,
-            "redirect_uri": f"{auth_server_url}/oauth2/callback/{provider}"
+            "redirect_uri": callback_uri
         }
         
         auth_url = f"{provider_config['auth_url']}?{urllib.parse.urlencode(auth_params)}"
@@ -1062,15 +1074,24 @@ async def oauth2_callback(
         provider_config = OAUTH2_CONFIG["providers"][provider]
         
         # Exchange authorization code for access token
-        # Build dynamic auth server URL for token exchange
-        host = request.headers.get("host", "localhost:8888")
-        scheme = "https" if request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https" else "http"
-        
-        # Special case for localhost to include port
-        if "localhost" in host and ":" not in host:
-            auth_server_url = f"{scheme}://localhost:8888"
+        # Use configured external URL or build dynamically
+        auth_server_external_url = os.environ.get('AUTH_SERVER_EXTERNAL_URL')
+        if auth_server_external_url:
+            # Use configured external URL (recommended for production)
+            auth_server_url = auth_server_external_url.rstrip('/')
+            logger.info(f"Using configured AUTH_SERVER_EXTERNAL_URL for token exchange: {auth_server_url}")
         else:
-            auth_server_url = f"{scheme}://{host}"
+            # Fall back to dynamic construction (for development)
+            host = request.headers.get("host", "localhost:8888")
+            scheme = "https" if request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https" else "http"
+            
+            # Special case for localhost to include port
+            if "localhost" in host and ":" not in host:
+                auth_server_url = f"{scheme}://localhost:8888"
+            else:
+                auth_server_url = f"{scheme}://{host}"
+            
+            logger.warning(f"AUTH_SERVER_EXTERNAL_URL not set, using dynamic URL for token exchange: {auth_server_url}")
             
         token_data = await exchange_code_for_token(provider, code, provider_config, auth_server_url)
         logger.info(f"Token data keys: {list(token_data.keys())}")
@@ -1159,7 +1180,7 @@ async def oauth2_callback(
         logger.error(f"Error in OAuth2 callback for {provider}: {e}")
         error_url = OAUTH2_CONFIG.get("registry", {}).get("error_redirect", "/login")
         return RedirectResponse(url=f"{error_url}?error=oauth2_callback_failed", status_code=302)
-
+    
 async def exchange_code_for_token(provider: str, code: str, provider_config: dict, auth_server_url: str = None) -> dict:
     """Exchange authorization code for access token"""
     if auth_server_url is None:

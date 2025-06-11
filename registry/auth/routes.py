@@ -53,7 +53,7 @@ async def oauth2_login_redirect(provider: str, request: Request):
         registry_url = str(request.base_url).rstrip('/')
         auth_external_url = settings.auth_server_external_url
         auth_url = f"{auth_external_url}/oauth2/login/{provider}?redirect_uri={registry_url}/"
-        
+        logger.info(f"request.base_url: {request.base_url}, registry_url: {registry_url}, auth_external_url: {auth_external_url}, auth_url: {auth_url}")
         logger.info(f"Redirecting to OAuth2 login for provider {provider}: {auth_url}")
         return RedirectResponse(url=auth_url, status_code=302)
         

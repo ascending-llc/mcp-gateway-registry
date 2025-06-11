@@ -10,8 +10,8 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - ADMIN_USER=${ADMIN_USER:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      - AUTH_SERVER_URL=http://auth-server:8888
-      - AUTH_SERVER_EXTERNAL_URL=http://localhost:8888
+      - AUTH_SERVER_URL=${AUTH_SERVER_URL}
+      - AUTH_SERVER_EXTERNAL_URL=${AUTH_SERVER_EXTERNAL_URL}
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
       - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
@@ -25,7 +25,7 @@ services:
     volumes:
       - /opt/mcp-gateway/servers:/app/registry/servers
       - /opt/mcp-gateway/models:/app/registry/models
-      - ssl_data:/etc/ssl
+      - /home/ubuntu/ssl_data:/etc/ssl
       - /var/log/mcp-gateway:/app/logs
     depends_on:
       - auth-server
@@ -37,6 +37,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.auth
     environment:
+      - REGISTRY_URL=${REGISTRY_URL}
       - SECRET_KEY=${SECRET_KEY}
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
