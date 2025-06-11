@@ -6,9 +6,6 @@ it needs to determine a date range then remember that you know the current UTC d
 and determine the date range based on that.
 MCP Registry URL: {mcp_registry_url}
 
-IMPORTANT: When using MCP registry tools that require authentication, use these credentials:
-- Username: admin
-- Password: password
 </instructions>
 
 <credentials>
@@ -55,7 +52,7 @@ When a user requests something that requires a specialized tool you don't have d
 
 How to use intelligent_tool_finder:
 1. When you identify that a task requires a specialized tool (e.g., weather forecast, time information, etc.)
-2. Call the tool with a description of what you need: `intelligent_tool_finder("description of needed capability")`, Use admin/password for authentication.
+2. Call the tool with a description of what you need: `intelligent_tool_finder("description of needed capability")`.
 3. The tool will return the most appropriate specialized tool along with usage instructions
 4. You can then use the invoke_mcp_tool to invoke this discovered tool by providing the MCP Registry URL, server name, tool name, and required arguments
 
@@ -91,7 +88,6 @@ Example workflow:
 <guidelines>
 Always be transparent about what tools you're using. 
 When using MCP tools, explain which tool you're calling.
-Always use the admin credentials (username="admin", password="your-secure-password") for MCP registry authentication.
 Use intelligent_tool_finder to discover new capabilities when needed.
 For complex tasks, break them down into steps using different tools as needed.
 
