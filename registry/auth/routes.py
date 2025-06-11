@@ -2,7 +2,7 @@ import urllib.parse
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Request, Form, HTTPException, status
+from fastapi import APIRouter, Request, Form, HTTPException, status, Cookie
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 import httpx
@@ -135,10 +135,74 @@ async def login_submit(
         )
 
 
+async def logout_handler(
+    request: Request,
+    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None
+):
+    """Shared logout logic for both GET and POST requests"""
+    try:
+        # Check if user was logged in via OAuth2
+        provider = None
+        if session:
+            try:
+                from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
+                serializer = URLSafeTimedSerializer(settings.secret_key)
+                session_data = serializer.loads(session, max_age=settings.session_max_age_seconds)
+                
+                if session_data.get('auth_method') == 'oauth2':
+                    provider = session_data.get('provider')
+                    logger.info(f"User was authenticated via OAuth2 provider: {provider}")
+                    
+            except (SignatureExpired, BadSignature, Exception) as e:
+                logger.debug(f"Could not decode session for logout: {e}")
+        
+        # Clear local session cookie
+        response = RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+        response.delete_cookie(settings.session_cookie_name)
+        
+        # If user was logged in via OAuth2, redirect to provider logout
+        if provider:
+            auth_external_url = settings.auth_server_external_url
+            
+            # Build redirect URI based on current host
+            host = request.headers.get("host", "localhost:7860")
+            scheme = "https" if request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https" else "http"
+            
+            # Handle localhost specially to ensure correct port
+            if "localhost" in host and ":" not in host:
+                redirect_uri = f"{scheme}://localhost:7860/logout"
+            else:
+                redirect_uri = f"{scheme}://{host}/logout"
+            
+            logout_url = f"{auth_external_url}/oauth2/logout/{provider}?redirect_uri={redirect_uri}"
+            logger.info(f"Redirecting to {provider} logout: {logout_url}")
+            response = RedirectResponse(url=logout_url, status_code=status.HTTP_303_SEE_OTHER)
+            response.delete_cookie(settings.session_cookie_name)
+        
+        logger.info("User logged out.")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error during logout: {e}")
+        # Fallback to simple logout
+        response = RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+        response.delete_cookie(settings.session_cookie_name)
+        return response
+
+
+@router.get("/logout")
+async def logout_get(
+    request: Request,
+    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None
+):
+    """Handle logout via GET request (for URL navigation)"""
+    return await logout_handler(request, session)
+
+
 @router.post("/logout")
-async def logout():
-    """Handle logout"""
-    logger.info("User logged out.")
-    response = RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
-    response.delete_cookie(settings.session_cookie_name)
-    return response 
+async def logout_post(
+    request: Request,
+    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None
+):
+    """Handle logout via POST request (for forms)"""
+    return await logout_handler(request, session) 

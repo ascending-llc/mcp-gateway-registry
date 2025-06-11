@@ -3,12 +3,12 @@ import asyncio
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Request, Form, Depends, HTTPException, status
+from fastapi import APIRouter, Request, Form, Depends, HTTPException, status, Cookie
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 from ..core.config import settings
-from ..auth.dependencies import web_auth, api_auth
+from ..auth.dependencies import web_auth, api_auth, enhanced_auth
 from ..services.server_service import server_service
 
 logger = logging.getLogger(__name__)
@@ -22,15 +22,34 @@ templates = Jinja2Templates(directory=settings.templates_dir)
 @router.get("/", response_class=HTMLResponse)
 async def read_root(
     request: Request,
-    username: Annotated[str, Depends(web_auth)],
     query: str | None = None,
+    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
 ):
-    """Main dashboard page showing all registered services."""
+    """Main dashboard page showing services based on user permissions."""
+    # Check authentication first and redirect if not authenticated
+    if not session:
+        logger.info("No session cookie at root route, redirecting to login")
+        return RedirectResponse(url="/login", status_code=302)
+    
+    try:
+        # Get user context
+        user_context = enhanced_auth(session)
+    except HTTPException as e:
+        logger.info(f"Authentication failed at root route: {e.detail}, redirecting to login")
+        return RedirectResponse(url="/login", status_code=302)
     service_data = []
     search_query = query.lower() if query else ""
     
-    # Get all servers and sort by name
-    all_servers = server_service.get_all_servers()
+    # Get servers based on user permissions
+    if user_context['is_admin']:
+        # Admin users see all servers
+        all_servers = server_service.get_all_servers()
+        logger.info(f"Admin user {user_context['username']} accessing all {len(all_servers)} servers")
+    else:
+        # Filtered users see only accessible servers
+        all_servers = server_service.get_all_servers_with_permissions(user_context['accessible_servers'])
+        logger.info(f"User {user_context['username']} accessing {len(all_servers)} of {len(server_service.get_all_servers())} total servers")
+    
     sorted_server_paths = sorted(
         all_servers.keys(), 
         key=lambda p: all_servers[p]["server_name"]
@@ -65,7 +84,12 @@ async def read_root(
     
     return templates.TemplateResponse(
         "index.html",
-        {"request": request, "services": service_data, "username": username},
+        {
+            "request": request, 
+            "services": service_data, 
+            "username": user_context['username'],
+            "user_context": user_context  # Pass full user context to template
+        },
     )
 
 
@@ -74,12 +98,20 @@ async def toggle_service_route(
     request: Request,
     service_path: str,
     enabled: Annotated[str | None, Form()] = None,
-    username: Annotated[str, Depends(web_auth)] = None,
+    user_context: Annotated[dict, Depends(enhanced_auth)] = None,
 ):
-    """Toggle a service on/off."""
+    """Toggle a service on/off (requires modification permissions)."""
     from ..search.service import faiss_service
     from ..health.service import health_service
     from ..core.nginx_service import nginx_service
+    
+    # Check if user can modify servers
+    if not user_context['can_modify_servers']:
+        logger.warning(f"User {user_context['username']} attempted to toggle service {service_path} without modify permissions")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="You do not have permission to modify servers"
+        )
     
     if not service_path.startswith("/"):
         service_path = "/" + service_path
@@ -88,6 +120,15 @@ async def toggle_service_route(
     if not server_info:
         raise HTTPException(status_code=404, detail="Service path not registered")
 
+    # For non-admin users, check if they have access to this specific server
+    if not user_context['is_admin']:
+        if not server_service.user_can_access_server_path(service_path, user_context['accessible_servers']):
+            logger.warning(f"User {user_context['username']} attempted to toggle service {service_path} without access")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="You do not have access to this server"
+            )
+
     new_state = enabled == "on"
     success = server_service.toggle_service(service_path, new_state)
     
@@ -95,7 +136,7 @@ async def toggle_service_route(
         raise HTTPException(status_code=500, detail="Failed to toggle service")
     
     server_name = server_info["server_name"]
-    logger.info(f"Toggled '{server_name}' ({service_path}) to {new_state} by user '{username}'")
+    logger.info(f"Toggled '{server_name}' ({service_path}) to {new_state} by user '{user_context['username']}'")
 
     # If enabling, perform immediate health check
     status = "disabled"
@@ -122,7 +163,7 @@ async def toggle_service_route(
         path: server_service.get_server_info(path) 
         for path in server_service.get_enabled_services()
     }
-    nginx_service.generate_config(enabled_servers)
+    await nginx_service.generate_config_async(enabled_servers)
     
     # Broadcast health status update to WebSocket clients
     await health_service.broadcast_health_update(service_path)
@@ -151,13 +192,22 @@ async def register_service(
     num_stars: Annotated[int, Form()] = 0,
     is_python: Annotated[bool, Form()] = False,
     license_str: Annotated[str, Form(alias="license")] = "N/A",
-    username: Annotated[str, Depends(api_auth)] = None,
+    user_context: Annotated[dict, Depends(enhanced_auth)] = None,
 ):
-    """Register a new service."""
+    """Register a new service (requires modification permissions)."""
     from ..search.service import faiss_service
     from ..health.service import health_service
     from ..core.nginx_service import nginx_service
-    logger.info(f"Service registration request from user '{username}'")
+    
+    # Check if user can modify servers
+    if not user_context['can_modify_servers']:
+        logger.warning(f"User {user_context['username']} attempted to register service without modify permissions")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="You do not have permission to register new servers"
+        )
+    
+    logger.info(f"Service registration request from user '{user_context['username']}'")
     logger.info(f"Name: {name}, Path: {path}, URL: {proxy_pass_url}")
 
     # Ensure path starts with a slash
@@ -198,12 +248,12 @@ async def register_service(
         server_path: server_service.get_server_info(server_path) 
         for server_path in server_service.get_enabled_services()
     }
-    nginx_service.generate_config(enabled_servers)
+    await nginx_service.generate_config_async(enabled_servers)
     
     # Broadcast health status update to WebSocket clients
     await health_service.broadcast_health_update(path)
     
-    logger.info(f"New service registered: '{name}' at path '{path}' by user '{username}'")
+    logger.info(f"New service registered: '{name}' at path '{path}' by user '{user_context['username']}'")
 
     return JSONResponse(
         status_code=201,
@@ -218,9 +268,17 @@ async def register_service(
 async def edit_server_form(
     request: Request, 
     service_path: str, 
-    username: Annotated[str, Depends(web_auth)]
+    user_context: Annotated[dict, Depends(enhanced_auth)]
 ):
-    """Show edit form for a service."""
+    """Show edit form for a service (requires modification permissions)."""
+    # Check if user can modify servers
+    if not user_context['can_modify_servers']:
+        logger.warning(f"User {user_context['username']} attempted to access edit form for {service_path} without modify permissions")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="You do not have permission to edit servers"
+        )
+    
     if not service_path.startswith('/'):
         service_path = '/' + service_path
 
@@ -228,9 +286,23 @@ async def edit_server_form(
     if not server_info:
         raise HTTPException(status_code=404, detail="Service path not found")
     
+    # For non-admin users, check if they have access to this specific server
+    if not user_context['is_admin']:
+        if not server_service.user_can_access_server_path(service_path, user_context['accessible_servers']):
+            logger.warning(f"User {user_context['username']} attempted to edit service {service_path} without access")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="You do not have access to edit this server"
+            )
+    
     return templates.TemplateResponse(
         "edit_server.html", 
-        {"request": request, "server": server_info, "username": username}
+        {
+            "request": request, 
+            "server": server_info, 
+            "username": user_context['username'],
+            "user_context": user_context
+        }
     )
 
 
@@ -239,7 +311,7 @@ async def edit_server_submit(
     service_path: str, 
     name: Annotated[str, Form()], 
     proxy_pass_url: Annotated[str, Form()], 
-    username: Annotated[str, Depends(web_auth)], 
+    user_context: Annotated[dict, Depends(enhanced_auth)], 
     description: Annotated[str, Form()] = "", 
     tags: Annotated[str, Form()] = "", 
     num_tools: Annotated[int, Form()] = 0, 
@@ -247,15 +319,33 @@ async def edit_server_submit(
     is_python: Annotated[bool | None, Form()] = False,  
     license_str: Annotated[str, Form(alias="license")] = "N/A", 
 ):
-    """Handle server edit form submission."""
+    """Handle server edit form submission (requires modification permissions)."""
     from ..search.service import faiss_service
     from ..core.nginx_service import nginx_service
+    
+    # Check if user can modify servers
+    if not user_context['can_modify_servers']:
+        logger.warning(f"User {user_context['username']} attempted to edit service {service_path} without modify permissions")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="You do not have permission to edit servers"
+        )
+    
     if not service_path.startswith('/'):
         service_path = '/' + service_path
 
     # Check if the server exists
     if not server_service.get_server_info(service_path):
         raise HTTPException(status_code=404, detail="Service path not found")
+
+    # For non-admin users, check if they have access to this specific server
+    if not user_context['is_admin']:
+        if not server_service.user_can_access_server_path(service_path, user_context['accessible_servers']):
+            logger.warning(f"User {user_context['username']} attempted to edit service {service_path} without access")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="You do not have access to edit this server"
+            )
 
     # Process tags
     tag_list = [tag.strip() for tag in tags.split(',') if tag.strip()]
@@ -289,9 +379,9 @@ async def edit_server_submit(
         path: server_service.get_server_info(path) 
         for path in server_service.get_enabled_services()
     }
-    nginx_service.generate_config(enabled_servers)
+    await nginx_service.generate_config_async(enabled_servers)
     
-    logger.info(f"Server '{name}' ({service_path}) updated by user '{username}'")
+    logger.info(f"Server '{name}' ({service_path}) updated by user '{user_context['username']}'")
 
     # Redirect back to the main page
     return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
@@ -300,21 +390,33 @@ async def edit_server_submit(
 @router.get("/api/server_details/{service_path:path}")
 async def get_server_details(
     service_path: str,
-    username: Annotated[str, Depends(api_auth)]
+    user_context: Annotated[dict, Depends(enhanced_auth)]
 ):
-    """Get server details by path, or all servers if path is 'all'."""
+    """Get server details by path, or all servers if path is 'all' (filtered by permissions)."""
     # Normalize the path to ensure it starts with '/'
     if not service_path.startswith('/'):
         service_path = '/' + service_path
     
-    # Special case: if path is 'all' or '/all', return details for all servers
+    # Special case: if path is 'all' or '/all', return details for all accessible servers
     if service_path == '/all':
-        return server_service.get_all_servers()
+        if user_context['is_admin']:
+            return server_service.get_all_servers()
+        else:
+            return server_service.get_all_servers_with_permissions(user_context['accessible_servers'])
     
     # Regular case: return details for a specific server
     server_info = server_service.get_server_info(service_path)
     if not server_info:
         raise HTTPException(status_code=404, detail="Service path not registered")
+    
+    # For non-admin users, check if they have access to this specific server
+    if not user_context['is_admin']:
+        if not server_service.user_can_access_server_path(service_path, user_context['accessible_servers']):
+            logger.warning(f"User {user_context['username']} attempted to access server details for {service_path} without access")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="You do not have access to this server"
+            )
     
     return server_info
 
@@ -322,21 +424,26 @@ async def get_server_details(
 @router.get("/api/tools/{service_path:path}")
 async def get_service_tools(
     service_path: str,
-    username: Annotated[str, Depends(api_auth)]
+    user_context: Annotated[dict, Depends(enhanced_auth)]
 ):
-    """Get tool list for a service by calling MCP client to fetch fresh tools."""
+    """Get tool list for a service (filtered by permissions)."""
     from ..core.mcp_client import mcp_client_service
     from ..search.service import faiss_service
     
     if not service_path.startswith('/'):
         service_path = '/' + service_path
 
-    # Handle special case for '/all' to return tools from all servers  
+    # Handle special case for '/all' to return tools from all accessible servers  
     if service_path == '/all':
         all_tools = []
         all_servers_tools = {}
         
-        all_servers = server_service.get_all_servers()
+        # Get servers based on user permissions
+        if user_context['is_admin']:
+            all_servers = server_service.get_all_servers()
+        else:
+            all_servers = server_service.get_all_servers_with_permissions(user_context['accessible_servers'])
+        
         for path, server_info in all_servers.items():
             # For '/all', we can use cached data to avoid too many MCP calls
             tool_list = server_info.get("tool_list")
@@ -364,6 +471,15 @@ async def get_service_tools(
     server_info = server_service.get_server_info(service_path)
     if not server_info:
         raise HTTPException(status_code=404, detail="Service path not registered")
+
+    # For non-admin users, check if they have access to this specific server
+    if not user_context['is_admin']:
+        if not server_service.user_can_access_server_path(service_path, user_context['accessible_servers']):
+            logger.warning(f"User {user_context['username']} attempted to access tools for {service_path} without access")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="You do not have access to this server"
+            )
 
     # Check if service is enabled and healthy
     is_enabled = server_service.is_service_enabled(service_path)
@@ -419,27 +535,41 @@ async def get_service_tools(
 @router.post("/api/refresh/{service_path:path}")
 async def refresh_service(
     service_path: str, 
-    username: Annotated[str, Depends(api_auth)]
+    user_context: Annotated[dict, Depends(enhanced_auth)]
 ):
-    """Refresh a specific service by re-checking its health and updating FAISS index."""
+    """Refresh service health and tool information (requires read access)."""
     from ..search.service import faiss_service
     from ..health.service import health_service
+    from ..core.mcp_client import mcp_client_service
     from ..core.nginx_service import nginx_service
     
     if not service_path.startswith('/'):
         service_path = '/' + service_path
-    
-    # Check if service exists
+
     server_info = server_service.get_server_info(service_path)
     if not server_info:
-        raise HTTPException(status_code=404, detail="Service not found")
-    
+        raise HTTPException(status_code=404, detail="Service path not registered")
+
+    # For non-admin users, check if they have access to this specific server
+    if not user_context['is_admin']:
+        if not server_service.user_can_access_server_path(service_path, user_context['accessible_servers']):
+            logger.warning(f"User {user_context['username']} attempted to refresh service {service_path} without access")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="You do not have access to this server"
+            )
+
     # Check if service is enabled
     is_enabled = server_service.is_service_enabled(service_path)
     if not is_enabled:
-        raise HTTPException(status_code=400, detail="Cannot refresh a disabled service")
+        raise HTTPException(status_code=400, detail="Cannot refresh disabled service")
 
-    logger.info(f"Manual refresh requested for {service_path} by user '{username}'...")
+    proxy_pass_url = server_info.get("proxy_pass_url")
+    if not proxy_pass_url:
+        raise HTTPException(status_code=500, detail="Service has no proxy URL configured")
+
+    logger.info(f"Refreshing service {service_path} at {proxy_pass_url} by user '{user_context['username']}'")
+
     try:
         # Perform immediate health check
         status, last_checked_dt = await health_service.perform_immediate_health_check(service_path)
@@ -452,7 +582,7 @@ async def refresh_service(
             path: server_service.get_server_info(path) 
             for path in server_service.get_enabled_services()
         }
-        nginx_service.generate_config(enabled_servers)
+        await nginx_service.generate_config_async(enabled_servers)
         
     except Exception as e:
         logger.error(f"ERROR during manual refresh check for {service_path}: {e}")
@@ -466,7 +596,7 @@ async def refresh_service(
     # Broadcast the updated status
     await health_service.broadcast_health_update(service_path)
     
-    logger.info(f"Service '{service_path}' refreshed by user '{username}'")
+    logger.info(f"Service '{service_path}' refreshed by user '{user_context['username']}'")
     return {
         "message": f"Service {service_path} refreshed successfully",
         "service_path": service_path,
