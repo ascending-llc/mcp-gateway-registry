@@ -341,6 +341,18 @@ class HealthMonitoringService:
         if status_changed:
             await self.broadcast_health_update()
             
+            # Regenerate nginx configuration when health status changes
+            try:
+                from ..core.nginx_service import nginx_service
+                enabled_servers = {
+                    path: server_service.get_server_info(path) 
+                    for path in server_service.get_enabled_services()
+                }
+                await nginx_service.generate_config_async(enabled_servers)
+                logger.info("Nginx configuration regenerated due to health status changes")
+            except Exception as e:
+                logger.error(f"Failed to regenerate nginx configuration after health status change: {e}")
+            
     async def _check_single_service(self, client: httpx.AsyncClient, service_path: str, server_info: Dict) -> bool:
         """Check a single service and return True if status changed."""
         from ..services.server_service import server_service
@@ -440,6 +452,7 @@ class HealthMonitoringService:
 
         # Set status to 'checking' before performing the check
         logger.info(f"Setting status to 'checking' for {service_path} ({proxy_pass_url})...")
+        previous_status = self.server_health_status.get(service_path, "unknown")
         self.server_health_status[service_path] = "checking"
 
         try:
@@ -472,6 +485,19 @@ class HealthMonitoringService:
         # Update the status
         self.server_health_status[service_path] = current_status
         logger.info(f"Final health status for {service_path}: {current_status}")
+
+        # Regenerate nginx configuration if status changed
+        if previous_status != current_status:
+            try:
+                from ..core.nginx_service import nginx_service
+                enabled_servers = {
+                    path: server_service.get_server_info(path) 
+                    for path in server_service.get_enabled_services()
+                }
+                await nginx_service.generate_config_async(enabled_servers)
+                logger.info(f"Nginx configuration regenerated due to status change for {service_path}: {previous_status} -> {current_status}")
+            except Exception as e:
+                logger.error(f"Failed to regenerate nginx configuration after immediate health check: {e}")
 
         return current_status, last_checked_time
 
