@@ -7,7 +7,9 @@ mcp-registry-admin:
   - modify_service
 
 mcp-registry-user:
-  - list_service
+  - list_service:
+    - mcpgw
+
 
 mcp-servers-unrestricted/read:
   - server: auth_server
