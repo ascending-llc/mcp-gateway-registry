@@ -1,4 +1,14 @@
 # This file defines the scopes for the MCP servers, detailing which servers and tools are accessible under different scopes.
+mcp-registry-admin:
+  - list_service
+  - register_service
+  - health_check_service
+  - toggle_service
+  - modify_service
+
+mcp-registry-user:
+  - list_service
+
 mcp-servers-unrestricted/read:
   - server: auth_server
     methods:
