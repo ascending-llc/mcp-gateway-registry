@@ -37,6 +37,14 @@ async def read_root(
     except HTTPException as e:
         logger.info(f"Authentication failed at root route: {e.detail}, redirecting to login")
         return RedirectResponse(url="/login", status_code=302)
+        
+    from ..auth.dependencies import user_has_ui_permission_for_service
+    
+    # Helper function for templates
+    def can_perform_action(permission: str, service_name: str) -> bool:
+        """Check if user has UI permission for a specific service"""
+        return user_has_ui_permission_for_service(permission, service_name, user_context.get('ui_permissions', {}))
+    
     service_data = []
     search_query = query.lower() if query else ""
     
@@ -55,9 +63,17 @@ async def read_root(
         key=lambda p: all_servers[p]["server_name"]
     )
     
+    # Filter services based on UI permissions
+    accessible_services = user_context.get('accessible_services', [])
+    
     for path in sorted_server_paths:
         server_info = all_servers[path]
         server_name = server_info["server_name"]
+        
+        # Check if user can list this service
+        if 'all' not in accessible_services and server_name not in accessible_services:
+            logger.debug(f"Filtering out service '{server_name}' - user doesn't have list_service permission")
+            continue
         
         # Include description and tags in search
         searchable_text = f"{server_name.lower()} {server_info.get('description', '').lower()} {' '.join(server_info.get('tags', []))}"
@@ -88,7 +104,8 @@ async def read_root(
             "request": request, 
             "services": service_data, 
             "username": user_context['username'],
-            "user_context": user_context  # Pass full user context to template
+            "user_context": user_context,  # Pass full user context to template
+            "can_perform_action": can_perform_action  # Helper function for permission checks
         },
     )
 
@@ -100,18 +117,11 @@ async def toggle_service_route(
     enabled: Annotated[str | None, Form()] = None,
     user_context: Annotated[dict, Depends(enhanced_auth)] = None,
 ):
-    """Toggle a service on/off (requires modification permissions)."""
+    """Toggle a service on/off (requires toggle_service UI permission)."""
     from ..search.service import faiss_service
     from ..health.service import health_service
     from ..core.nginx_service import nginx_service
-    
-    # Check if user can modify servers
-    if not user_context['can_modify_servers']:
-        logger.warning(f"User {user_context['username']} attempted to toggle service {service_path} without modify permissions")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
-            detail="You do not have permission to modify servers"
-        )
+    from ..auth.dependencies import user_has_ui_permission_for_service
     
     if not service_path.startswith("/"):
         service_path = "/" + service_path
@@ -119,6 +129,16 @@ async def toggle_service_route(
     server_info = server_service.get_server_info(service_path)
     if not server_info:
         raise HTTPException(status_code=404, detail="Service path not registered")
+    
+    service_name = server_info["server_name"]
+    
+    # Check if user has toggle_service permission for this specific service
+    if not user_has_ui_permission_for_service('toggle_service', service_name, user_context.get('ui_permissions', {})):
+        logger.warning(f"User {user_context['username']} attempted to toggle service {service_name} without toggle_service permission")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail=f"You do not have permission to toggle {service_name}"
+        )
 
     # For non-admin users, check if they have access to this specific server
     if not user_context['is_admin']:
@@ -194,17 +214,21 @@ async def register_service(
     license_str: Annotated[str, Form(alias="license")] = "N/A",
     user_context: Annotated[dict, Depends(enhanced_auth)] = None,
 ):
-    """Register a new service (requires modification permissions)."""
+    """Register a new service (requires register_service UI permission)."""
     from ..search.service import faiss_service
     from ..health.service import health_service
     from ..core.nginx_service import nginx_service
+    from ..auth.dependencies import user_has_ui_permission_for_service
     
-    # Check if user can modify servers
-    if not user_context['can_modify_servers']:
-        logger.warning(f"User {user_context['username']} attempted to register service without modify permissions")
+    # Check if user has register_service permission for any service
+    ui_permissions = user_context.get('ui_permissions', {})
+    register_permissions = ui_permissions.get('register_service', [])
+    
+    if not register_permissions:
+        logger.warning(f"User {user_context['username']} attempted to register service without register_service permission")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
-            detail="You do not have permission to register new servers"
+            detail="You do not have permission to register new services"
         )
     
     logger.info(f"Service registration request from user '{user_context['username']}'")
@@ -270,14 +294,8 @@ async def edit_server_form(
     service_path: str, 
     user_context: Annotated[dict, Depends(enhanced_auth)]
 ):
-    """Show edit form for a service (requires modification permissions)."""
-    # Check if user can modify servers
-    if not user_context['can_modify_servers']:
-        logger.warning(f"User {user_context['username']} attempted to access edit form for {service_path} without modify permissions")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
-            detail="You do not have permission to edit servers"
-        )
+    """Show edit form for a service (requires modify_service UI permission)."""
+    from ..auth.dependencies import user_has_ui_permission_for_service
     
     if not service_path.startswith('/'):
         service_path = '/' + service_path
@@ -285,6 +303,16 @@ async def edit_server_form(
     server_info = server_service.get_server_info(service_path)
     if not server_info:
         raise HTTPException(status_code=404, detail="Service path not found")
+    
+    service_name = server_info["server_name"]
+    
+    # Check if user has modify_service permission for this specific service
+    if not user_has_ui_permission_for_service('modify_service', service_name, user_context.get('ui_permissions', {})):
+        logger.warning(f"User {user_context['username']} attempted to access edit form for {service_name} without modify_service permission")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail=f"You do not have permission to modify {service_name}"
+        )
     
     # For non-admin users, check if they have access to this specific server
     if not user_context['is_admin']:
@@ -319,24 +347,29 @@ async def edit_server_submit(
     is_python: Annotated[bool | None, Form()] = False,  
     license_str: Annotated[str, Form(alias="license")] = "N/A", 
 ):
-    """Handle server edit form submission (requires modification permissions)."""
+    """Handle server edit form submission (requires modify_service UI permission)."""
     from ..search.service import faiss_service
     from ..core.nginx_service import nginx_service
-    
-    # Check if user can modify servers
-    if not user_context['can_modify_servers']:
-        logger.warning(f"User {user_context['username']} attempted to edit service {service_path} without modify permissions")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
-            detail="You do not have permission to edit servers"
-        )
+    from ..auth.dependencies import user_has_ui_permission_for_service
     
     if not service_path.startswith('/'):
         service_path = '/' + service_path
 
-    # Check if the server exists
-    if not server_service.get_server_info(service_path):
+    # Check if the server exists and get service name
+    server_info = server_service.get_server_info(service_path)
+    if not server_info:
         raise HTTPException(status_code=404, detail="Service path not found")
+    
+    service_name = server_info["server_name"]
+    
+    # Check if user has modify_service permission for this specific service
+    if not user_has_ui_permission_for_service('modify_service', service_name, user_context.get('ui_permissions', {})):
+        logger.warning(f"User {user_context['username']} attempted to edit service {service_name} without modify_service permission")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail=f"You do not have permission to modify {service_name}"
+        )
+
 
     # For non-admin users, check if they have access to this specific server
     if not user_context['is_admin']:
@@ -537,11 +570,12 @@ async def refresh_service(
     service_path: str, 
     user_context: Annotated[dict, Depends(enhanced_auth)]
 ):
-    """Refresh service health and tool information (requires read access)."""
+    """Refresh service health and tool information (requires health_check_service permission)."""
     from ..search.service import faiss_service
     from ..health.service import health_service
     from ..core.mcp_client import mcp_client_service
     from ..core.nginx_service import nginx_service
+    from ..auth.dependencies import user_has_ui_permission_for_service
     
     if not service_path.startswith('/'):
         service_path = '/' + service_path
@@ -549,6 +583,16 @@ async def refresh_service(
     server_info = server_service.get_server_info(service_path)
     if not server_info:
         raise HTTPException(status_code=404, detail="Service path not registered")
+    
+    service_name = server_info["server_name"]
+    
+    # Check if user has health_check_service permission for this specific service
+    if not user_has_ui_permission_for_service('health_check_service', service_name, user_context.get('ui_permissions', {})):
+        logger.warning(f"User {user_context['username']} attempted to refresh service {service_name} without health_check_service permission")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail=f"You do not have permission to refresh {service_name}"
+        )
 
     # For non-admin users, check if they have access to this specific server
     if not user_context['is_admin']:

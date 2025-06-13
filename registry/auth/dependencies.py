@@ -181,6 +181,88 @@ def map_cognito_groups_to_scopes(groups: List[str]) -> List[str]:
     return unique_scopes
 
 
+def get_ui_permissions_for_user(user_scopes: List[str]) -> Dict[str, List[str]]:
+    """
+    Get UI permissions for a user based on their scopes.
+    
+    Args:
+        user_scopes: List of user's scopes (includes UI scope names like 'mcp-registry-admin')
+        
+    Returns:
+        Dict mapping UI actions to lists of services they can perform the action on
+        Example: {'list_service': ['mcpgw', 'auth_server'], 'toggle_service': ['mcpgw']}
+    """
+    ui_permissions = {}
+    ui_scopes = SCOPES_CONFIG.get('UI-Scopes', {})
+    
+    for scope in user_scopes:
+        if scope in ui_scopes:
+            scope_config = ui_scopes[scope]
+            logger.debug(f"Processing UI scope '{scope}' with config: {scope_config}")
+            
+            # Process each permission in the scope
+            for permission, services in scope_config.items():
+                if permission not in ui_permissions:
+                    ui_permissions[permission] = set()
+                
+                # Handle "all" case
+                if services == ['all'] or (isinstance(services, list) and 'all' in services):
+                    ui_permissions[permission].add('all')
+                    logger.debug(f"UI permission '{permission}' granted for all services")
+                else:
+                    # Add specific services
+                    if isinstance(services, list):
+                        ui_permissions[permission].update(services)
+                        logger.debug(f"UI permission '{permission}' granted for services: {services}")
+    
+    # Convert sets back to lists
+    result = {k: list(v) for k, v in ui_permissions.items()}
+    logger.info(f"Final UI permissions for user: {result}")
+    return result
+
+
+def user_has_ui_permission_for_service(permission: str, service_name: str, user_ui_permissions: Dict[str, List[str]]) -> bool:
+    """
+    Check if user has a specific UI permission for a specific service.
+    
+    Args:
+        permission: The UI permission to check (e.g., 'list_service', 'toggle_service')
+        service_name: The service name to check permission for
+        user_ui_permissions: User's UI permissions dict from get_ui_permissions_for_user()
+        
+    Returns:
+        True if user has the permission for the service, False otherwise
+    """
+    if permission not in user_ui_permissions:
+        return False
+    
+    allowed_services = user_ui_permissions[permission]
+    
+    # Check if user has permission for all services or the specific service
+    has_permission = 'all' in allowed_services or service_name in allowed_services
+    
+    logger.debug(f"Permission check: {permission} for {service_name} = {has_permission} (allowed: {allowed_services})")
+    return has_permission
+
+
+def get_accessible_services_for_user(user_ui_permissions: Dict[str, List[str]]) -> List[str]:
+    """
+    Get list of services the user can see based on their list_service permission.
+    
+    Args:
+        user_ui_permissions: User's UI permissions dict from get_ui_permissions_for_user()
+        
+    Returns:
+        List of service names the user can see, or ['all'] if they can see all services
+    """
+    list_permissions = user_ui_permissions.get('list_service', [])
+    
+    if 'all' in list_permissions:
+        return ['all']
+    
+    return list_permissions
+
+
 def get_servers_for_scope(scope: str) -> List[str]:
     """
     Get list of server names that a scope provides access to.
@@ -239,15 +321,15 @@ def user_can_modify_servers(user_groups: List[str], user_scopes: List[str]) -> b
         True if user can modify servers, False otherwise
     """
     # Admin users can always modify
-    if 'mcp-admin' in user_groups:
+    if 'mcp-registry-admin' in user_groups:
         return True
     
     # Users with unrestricted execute access can modify
     if 'mcp-servers-unrestricted/execute' in user_scopes:
         return True
     
-    # mcp-user group cannot modify servers
-    if 'mcp-user' in user_groups and 'mcp-admin' not in user_groups:
+    # mcp-registry-user group cannot modify servers
+    if 'mcp-registry-user' in user_groups and 'mcp-registry-admin' not in user_groups:
         return False
     
     # For other cases, check if they have any execute permissions
@@ -313,14 +395,24 @@ def enhanced_auth(
         if not groups:
             logger.warning(f"OAuth2 user {username} has no groups! This user may not have proper group assignments in Cognito.")
     else:
-        # Traditional users get admin scopes  
-        scopes = session_data.get('scopes', ['mcp-servers-unrestricted/read', 'mcp-servers-unrestricted/execute'])
+        # Traditional users dynamically map to admin
         if not groups:
-            groups = ['mcp-admin']
-            logger.info(f"Traditional user {username} has no groups, assigning mcp-admin group and unrestricted scopes")
+            groups = ['mcp-registry-admin']
+        # Map traditional admin groups to scopes dynamically
+        scopes = map_cognito_groups_to_scopes(groups)
+        if not scopes:
+            # Fallback for traditional users if no mapping exists
+            scopes = ['mcp-registry-admin', 'mcp-servers-unrestricted/read', 'mcp-servers-unrestricted/execute']
+        logger.info(f"Traditional user {username} with groups {groups} mapped to scopes: {scopes}")
     
-    # Get accessible servers
+    # Get UI permissions
+    ui_permissions = get_ui_permissions_for_user(scopes)
+    
+    # Get accessible servers (from server scopes)
     accessible_servers = get_user_accessible_servers(scopes)
+    
+    # Get accessible services (from UI permissions)
+    accessible_services = get_accessible_services_for_user(ui_permissions)
     
     # Check modification permissions
     can_modify = user_can_modify_servers(groups, scopes)
@@ -332,8 +424,10 @@ def enhanced_auth(
         'auth_method': auth_method,
         'provider': session_data.get('provider', 'local'),
         'accessible_servers': accessible_servers,
+        'accessible_services': accessible_services,
+        'ui_permissions': ui_permissions,
         'can_modify_servers': can_modify,
-        'is_admin': 'mcp-admin' in groups
+        'is_admin': 'mcp-registry-admin' in groups
     }
     
     logger.debug(f"Enhanced auth context for {username}: {user_context}")
@@ -352,4 +446,40 @@ def create_session_cookie(username: str, auth_method: str = "traditional", provi
 
 def validate_login_credentials(username: str, password: str) -> bool:
     """Validate traditional login credentials."""
-    return username == settings.admin_user and password == settings.admin_password 
+    return username == settings.admin_user and password == settings.admin_password
+
+
+def ui_permission_required(permission: str, service_name: str = None):
+    """
+    Decorator to require a specific UI permission for a route.
+    
+    Args:
+        permission: The UI permission required (e.g., 'register_service')
+        service_name: Optional service name to check permission for. If None, checks if user has permission for any service.
+    
+    Returns:
+        Dependency function that checks the permission
+    """
+    def check_permission(user_context: Dict[str, Any] = Depends(enhanced_auth)) -> Dict[str, Any]:
+        ui_permissions = user_context.get('ui_permissions', {})
+        
+        if service_name:
+            # Check permission for specific service
+            if not user_has_ui_permission_for_service(permission, service_name, ui_permissions):
+                logger.warning(f"User {user_context.get('username')} lacks UI permission '{permission}' for service '{service_name}'")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Insufficient permissions. Required: {permission} for {service_name}"
+                )
+        else:
+            # Check if user has permission for any service
+            if permission not in ui_permissions or not ui_permissions[permission]:
+                logger.warning(f"User {user_context.get('username')} lacks UI permission: {permission}")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Insufficient permissions. Required: {permission}"
+                )
+        
+        return user_context
+    
+    return check_permission 
