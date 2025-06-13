@@ -1,14 +1,62 @@
 # This file defines the scopes for the MCP servers, detailing which servers and tools are accessible under different scopes.
-mcp-registry-admin:
-  - list_service
-  - register_service
-  - health_check_service
-  - toggle_service
-  - modify_service
 
-mcp-registry-user:
-  - list_service:
-    - mcpgw
+UI-Scopes:
+  mcp-registry-admin:
+    list_service:
+      - all
+    register_service:
+      - all
+    health_check_service:
+      - all
+    toggle_service:
+      - all
+    modify_service:
+      - all
+
+  mcp-registry-user:
+    list_service:
+      - mcpgw
+      - realserverfaketools
+    health_check_service:
+      - mcpgw
+
+  mcp-registry-developer:
+    list_service:
+      - all
+    register_service:
+      - all
+    health_check_service:
+      - all
+
+  mcp-registry-operator:
+    list_service:
+      - all
+    health_check_service:
+      - all
+    toggle_service:
+      - all
+
+# Group mappings - maps Cognito groups to both UI scopes AND server scopes
+group_mappings:
+  mcp-registry-admin:
+    # Admin gets both UI permissions and unrestricted server access
+    - mcp-registry-admin
+    - mcp-servers-unrestricted/read
+    - mcp-servers-unrestricted/execute
+  mcp-registry-user:
+    # Users get limited UI permissions and restricted server access
+    - mcp-registry-user
+    - mcp-servers-restricted/read
+  mcp-registry-developer:
+    # Developers can register services and have restricted access
+    - mcp-registry-developer
+    - mcp-servers-restricted/read
+    - mcp-servers-restricted/execute
+  mcp-registry-operator:
+    # Operators can control services but not register new ones
+    - mcp-registry-operator
+    - mcp-servers-restricted/read
+    - mcp-servers-restricted/execute
 
 
 mcp-servers-unrestricted/read:

@@ -50,34 +50,24 @@ SCOPES_CONFIG = load_scopes_config()
 
 def map_cognito_groups_to_scopes(groups: List[str]) -> List[str]:
     """
-    Map Cognito groups to MCP scopes using the same format as M2M resource server scopes.
+    Map Cognito groups to MCP scopes using the group_mappings from scopes.yml configuration.
     
     Args:
         groups: List of Cognito group names
         
     Returns:
-        List of MCP scopes in resource server format
+        List of MCP scopes
     """
     scopes = []
+    group_mappings = SCOPES_CONFIG.get('group_mappings', {})
     
     for group in groups:
-        if group == 'mcp-admin':
-            # Admin gets unrestricted read and execute access
-            scopes.append('mcp-servers-unrestricted/read')
-            scopes.append('mcp-servers-unrestricted/execute')
-        elif group == 'mcp-user':
-            # Regular users get restricted read access by default
-            scopes.append('mcp-servers-restricted/read')
-        elif group.startswith('mcp-server-'):
-            # Server-specific groups grant access based on server permissions
-            # For now, grant restricted execute access for specific servers
-            # This allows access to the servers defined in the restricted scope
-            scopes.append('mcp-servers-restricted/execute')
-            
-            # Note: The actual server access control is handled by the
-            # validate_server_tool_access function which checks the scopes.yml
-            # configuration. The group names are preserved in the 'groups' field
-            # for potential future fine-grained access control.
+        if group in group_mappings:
+            group_scopes = group_mappings[group]
+            scopes.extend(group_scopes)
+            logger.debug(f"Mapped group '{group}' to scopes: {group_scopes}")
+        else:
+            logger.debug(f"No scope mapping found for group: {group}")
     
     # Remove duplicates while preserving order
     seen = set()
@@ -87,6 +77,7 @@ def map_cognito_groups_to_scopes(groups: List[str]) -> List[str]:
             seen.add(scope)
             unique_scopes.append(scope)
     
+    logger.info(f"Final mapped scopes: {unique_scopes}")
     return unique_scopes
 
 def validate_session_cookie(cookie_value: str) -> Dict[str, any]:
