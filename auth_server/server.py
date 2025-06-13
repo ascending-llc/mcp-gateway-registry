@@ -644,6 +644,7 @@ async def validate_request(request: Request):
             if cookie_value:
                 try:
                     validation_result = validate_session_cookie(cookie_value)
+                    logger.info(f"Session cookie validation result: {validation_result}")
                     logger.info(f"Session cookie validation successful for user: {validation_result['username']}")
                 except ValueError as e:
                     logger.warning(f"Session cookie validation failed: {e}")

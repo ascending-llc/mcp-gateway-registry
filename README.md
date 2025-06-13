@@ -148,6 +148,7 @@ flowchart TB
 *   An Amazon EC2 machine (`ml.t3.2xlarge`) with a standard Ubuntu AMI for running this solution.
 *   An SSL cert for securing the communication to the Gateway. _This Gateway uses a self-signed cert by default and is also available over HTTP_. 
 *   One of the example MCP servers packaged in this repo uses the [`Polygon`](https://polygon.io/stocks) API for stock ticker data. Get an API key from [here](https://polygon.io/dashboard/signup?redirect=%2Fdashboard%2Fkeys). The server will still start without the API key but you will get a 401 Unauthorized error when using the tools provided by this server.
+*   Setup authentication using Amazon Cognito as per instructions [here](docs/auth.md).
 
 ## Installation
 
@@ -361,11 +362,9 @@ See the full API spec [here](docs/registry_api.md).
 ## Roadmap
 
 1. Store the server information in persistent storage.
-1. Add OAUTH 2.1 support to Gateway and Registry.
 1. Use GitHub API to retrieve information (license, programming language etc.) about MCP servers.
 1. Add option to deploy MCP servers.
 
 ## License
 
-- Free for non-commercial use under AGPL-3.0
-- Commercial use requires a paid license
+This project is licensed under the Apache-2.0 License.

@@ -168,16 +168,16 @@ The above implementation provides an OAuth compliant way to MCP security without
 
 This section discusses the reference implementation using Amazon Cognito as the IdP, supporting both Machine-to-Machine (M2M) and Session Cookie authentication methods.
 
+>This section will soon be updated with detailed steps for Cognito configuration.
+
 ### Key Components
 
 #### 1. Auth Server (`auth_server/server.py`)
-The enhanced auth server provides dual authentication support:
+The auth server provides dual authentication support:
 - **Primary Check**: Session cookie validation using `itsdangerous.URLSafeTimedSerializer`
 - **Fallback**: JWT token validation with Cognito
-- **Group Mapping**: Maps Cognito groups to MCP scopes
-  - `mcp-admin` → Full unrestricted access
-  - `mcp-user` → Restricted read access
-  - `mcp-server-*` → Server-specific execute access
+- **Group Mapping**: Maps Cognito groups to MCP scopes via `scopes.yml` configuration
+  - Both M2M and session cookie auth use the same scope definitions
 
 #### 2. CLI Authentication Tool (`auth_server/cli_auth.py`)
 A standalone tool for user-based authentication:
@@ -204,12 +204,17 @@ Cognito supports machine-to-machine authentication, enabling Agents to have thei
 - MCP Server(s) function as resource servers
 
 #### Authentication Flow:
+Run the Agent with the following command:
+```{.bash}
+python agents/agent_w_auth.py
+```
+1. Copy `agents/.env.template` to `agents/.env.agent` and set the environment variables (`COGNITO_CLIENT_ID`, `COGNITO_CLIENT_SECRET`, `COGNITO_USER_POOL_ID`) as appropriate for your setup.
 1. Agent startup:
-   - Configured with client ID, client secret, and a set of scopes
+   - Configured with client ID, client secret, and a set of scopes. _Each agent is an App Client in a Cognito user pool_.
    - Requests scopes (e.g., MCP Registry with tool finder and basic MCP servers)
-2. Cognito issues a JWT token
-3. Agent includes the JWT token in MCP headers
-4. Auth server on Nginx side:
+1. Cognito issues a JWT token
+1. Agent includes the JWT token in MCP headers
+1. Auth server on Nginx side:
    - Retrieves JWT token
    - Calls Cognito to validate token and get allowed scopes
    - Returns 200 or 403 based on:
@@ -219,10 +224,10 @@ Cognito supports machine-to-machine authentication, enabling Agents to have thei
 
 #### Advantages
 1. Leverages existing Cognito user identities and groups
-2. No need to manage separate M2M credentials for user-initiated actions
-3. Maintains user context throughout the session
-4. Compatible with existing web-based authentication flow
-5. Auth server handles both authentication methods transparently
+1. No need to manage separate M2M credentials for user-initiated actions
+1. Maintains user context throughout the session
+1. Compatible with existing web-based authentication flow
+1. Auth server handles both authentication methods transparently
 
 ### 2. Session Cookie Authentication
 
@@ -236,8 +241,7 @@ The CLI tool handles the OAuth flow with Cognito and saves the session cookie lo
 
 ```bash
 # Run the CLI authentication tool
-cd auth_server
-python cli_auth.py
+python agents/cli_auth.py
 
 # This will:
 # 1. Open your browser to Cognito hosted UI
@@ -247,13 +251,15 @@ python cli_auth.py
 ```
 
 Required environment variables:
-- `COGNITO_DOMAIN`: Your Cognito domain (e.g., 'mcp-gateway')
+- `COGNITO_USER_POOL_ID`: Your Cognito user pool id 
 - `COGNITO_CLIENT_ID`: OAuth client ID configured for PKCE flow
 - `SECRET_KEY`: Must match the registry's SECRET_KEY for cookie compatibility
 
 ##### b. Agent with Session Cookie Support
 
-The enhanced agent (`agents/agent_w_auth.py`) now supports session cookie authentication:
+Copy `agents/.env.template` to `agents/.env.user` and set the environment variables (`COGNITO_CLIENT_ID`, `COGNITO_CLIENT_SECRET`, `COGNITO_USER_POOL_ID`, `SECRET_KEY`) as appropriate for your setup.
+
+The agent (`agents/agent_w_auth.py`) supports session cookie authentication:
 
 ```bash
 # Use agent with session cookie
@@ -269,15 +275,14 @@ Key features:
 - Automatically reads cookie and includes in request headers
 - Falls back to M2M if session cookie flag not provided
 
-##### c. Auth Server Enhancements
+##### c. Auth Server
 
 The auth server validates session cookies alongside JWT tokens:
 - Checks for `mcp_gateway_session` cookie in request headers
 - Validates cookie signature using `itsdangerous.URLSafeTimedSerializer`
-- Maps Cognito groups to MCP scopes:
-  - `mcp-admin` → unrestricted read/execute access
-  - `mcp-user` → restricted read access
-  - `mcp-server-{name}` → server-specific execute access
+- Maps Cognito groups to MCP scopes using `scopes.yml` configuration:
+  - Configuration-driven mapping ensures consistency with M2M authentication
+  - Single source of truth for all permission definitions
 - Falls back to JWT validation if no valid cookie found
 
 #### Advantages:

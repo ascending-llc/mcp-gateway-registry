@@ -163,8 +163,6 @@ def load_env_config(use_session_cookie: bool) -> Dict[str, Optional[str]]:
             if os.path.exists(env_file):
                 logger.info(f"Found .env file in parent directory: {env_file}")
                 load_dotenv(env_file, override=True)
-                file_found = True
-                file_path = env_file
                 logger.info(f"Loading environment variables from {env_file}")
             else:
                 # Try to load from current working directory
@@ -172,8 +170,6 @@ def load_env_config(use_session_cookie: bool) -> Dict[str, Optional[str]]:
                 if os.path.exists(env_file):
                     logger.info(f"Found .env file in current working directory: {env_file}")
                     load_dotenv(env_file, override=True)
-                    file_found = True
-                    file_path = env_file
                     logger.info(f"Loading environment variables from {env_file}")
                 else:
                     # Fallback to default .env loading
