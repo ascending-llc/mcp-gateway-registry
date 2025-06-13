@@ -5,7 +5,7 @@ description = "MCP server with fake tools that take different parameter types"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-   "mcp>=1.8.0",
+   "mcp>=1.9.3",
    "pydantic>=2.11.3",
    "requests>=2.32.3",
 ]

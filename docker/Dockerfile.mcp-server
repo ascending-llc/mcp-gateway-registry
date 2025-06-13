@@ -1,0 +1,63 @@
+# Generic MCP Server Dockerfile - each server has pyproject.toml and server.py
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    git \
+    build-essential \
+    netcat-openbsd \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Build argument for server path
+ARG SERVER_PATH
+
+# Copy the specific MCP server files
+COPY ${SERVER_PATH}/ /app/
+
+# Install uv and setup Python environment
+RUN pip install uv && \
+    uv venv .venv --python 3.12
+
+# Install dependencies from pyproject.toml
+RUN . .venv/bin/activate && \
+    if [ -f pyproject.toml ]; then \
+        uv pip install --requirement pyproject.toml; \
+    fi
+
+# Expose default port (can be overridden by environment variable)
+EXPOSE 8000
+
+# Health check (generic for all MCP servers)
+HEALTHCHECK --interval=500s --timeout=10s --start-period=30s --retries=3 \
+    CMD nc -z localhost ${PORT:-8000} || exit 1
+
+# Create entrypoint script that handles environment setup and runs server.py
+RUN echo '#!/bin/bash\n\
+set -e\n\
+\n\
+# Set default port\n\
+SERVER_PORT=${PORT:-8000}\n\
+\n\
+# Create .env file if needed (for servers that require it)\n\
+if [ ! -z "$POLYGON_API_KEY" ]; then\n\
+    echo "POLYGON_API_KEY=$POLYGON_API_KEY" > /app/.env\n\
+fi\n\
+\n\
+if [ ! -z "$REGISTRY_BASE_URL" ]; then\n\
+    echo "REGISTRY_BASE_URL=$REGISTRY_BASE_URL" > /app/.env\n\
+    echo "REGISTRY_USERNAME=$REGISTRY_USERNAME" >> /app/.env\n\
+    echo "REGISTRY_PASSWORD=$REGISTRY_PASSWORD" >> /app/.env\n\
+fi\n\
+\n\
+# Activate virtual environment and run the server\n\
+source .venv/bin/activate\n\
+exec python server.py --port $SERVER_PORT --transport sse' > /entrypoint.sh && \
+    chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"] 

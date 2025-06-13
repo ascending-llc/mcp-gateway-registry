@@ -14,72 +14,123 @@ handle_error() {
     exit 1
 }
 
-log "Starting MCP Gateway deployment script"
+log "Starting MCP Gateway Docker Compose deployment script"
 
-# Check if .env.docker file exists
-if [ ! -f .env.docker ]; then
-    log "ERROR: .env.docker file not found"
-    log "Please create a .env.docker file by copying .env.docker.template and filling in your values:"
-    log "cp .env.docker.template .env.docker"
-    log "Then edit .env.docker with your configuration values"
+# Check if .env file exists
+if [ ! -f .env ]; then
+    log "ERROR: .env file not found"
+    log "Please create a .env file with your configuration values:"
+    log "Example .env file:"
+    log "SECRET_KEY=your_secret_key_here"
+    log "ADMIN_USER=admin"
+    log "ADMIN_PASSWORD=your_secure_password"
+    log "POLYGON_API_KEY=your_polygon_api_key_here"
     exit 1
 fi
 
-log "Found .env.docker file"
+log "Found .env file"
 
-# Stop and remove existing container if it exists
-log "Stopping and removing existing container (if any)..."
-if docker ps -a | grep -q mcp-gateway-container; then
-    docker stop mcp-gateway-container || log "Container was not running"
-    docker rm mcp-gateway-container || handle_error "Failed to remove container"
-    log "Container stopped and removed successfully"
-else
-    log "No existing container found"
+# Check if docker-compose is installed
+if ! command -v docker-compose &> /dev/null; then
+    log "ERROR: docker-compose is not installed"
+    log "Please install docker-compose: https://docs.docker.com/compose/install/"
+    exit 1
 fi
 
-# Build the Docker image
-log "Building Docker image..."
-docker build -t mcp-gateway . || handle_error "Docker build failed"
-log "Docker image built successfully"
+# Stop and remove existing services if they exist
+log "Stopping existing services (if any)..."
+docker-compose down --remove-orphans || log "No existing services to stop"
+log "Existing services stopped"
 
-# Generate a random SECRET_KEY if not already in .env.docker
-if ! grep -q "SECRET_KEY=" .env.docker; then
+# Generate a random SECRET_KEY if not already in .env
+if ! grep -q "SECRET_KEY=" .env || grep -q "SECRET_KEY=$" .env || grep -q "SECRET_KEY=\"\"" .env; then
     log "Generating SECRET_KEY..."
     SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))') || handle_error "Failed to generate SECRET_KEY"
-    echo "SECRET_KEY=$SECRET_KEY" >> .env.docker
-    log "SECRET_KEY added to .env.docker"
+    
+    # Remove any existing empty SECRET_KEY line
+    sed -i '/^SECRET_KEY=$/d' .env 2>/dev/null || true
+    sed -i '/^SECRET_KEY=""$/d' .env 2>/dev/null || true
+    
+    # Add new SECRET_KEY
+    echo "SECRET_KEY=$SECRET_KEY" >> .env
+    log "SECRET_KEY added to .env"
+else
+    log "SECRET_KEY already exists in .env"
 fi
 
-# Run the Docker container
-log "Starting Docker container..."
-docker run -d \
-    -p 80:80 \
-    -p 443:443 \
-    -p 7860:7860 \
-    -p 8888:8888 \
-    --env-file .env.docker \
-    -v /path/to/certs:/etc/ssl/certs \
-    -v /path/to/private:/etc/ssl/private \
-    -v /var/log/mcp-gateway:/app/logs \
-    -v /opt/mcp-gateway/servers:/app/registry/servers \
-    --name mcp-gateway-container \
-    mcp-gateway || handle_error "Failed to start container"
+# Validate required environment variables
+log "Validating required environment variables..."
+source .env
 
-# Keep .env.docker file for future runs
-log "Keeping .env.docker file for future runs"
+if [ -z "$ADMIN_PASSWORD" ] || [ "$ADMIN_PASSWORD" = "your_secure_password" ]; then
+    log "ERROR: ADMIN_PASSWORD must be set to a secure value in .env file"
+    exit 1
+fi
 
-# Verify container is running
-if docker ps | grep -q mcp-gateway-container; then
-    log "Container started successfully"
-    log "MCP Gateway is now running"
-    docker ps | grep mcp-gateway-container
+# Build the Docker images
+log "Building Docker images..."
+docker-compose build || handle_error "Docker Compose build failed"
+log "Docker images built successfully"
+
+# Start the services
+log "Starting Docker Compose services..."
+docker-compose up -d || handle_error "Failed to start services"
+
+# Wait a moment for services to initialize
+log "Waiting for services to initialize..."
+sleep 10
+
+# Check service status
+log "Checking service status..."
+docker-compose ps
+
+# Verify key services are running
+log "Verifying services are healthy..."
+
+# Check registry service
+if curl -f http://localhost:7860/health &>/dev/null; then
+    log "✓ Registry service is healthy"
 else
-    handle_error "Container failed to start properly"
+    log "⚠ Registry service may still be starting up..."
+fi
+
+# Check auth service
+if curl -f http://localhost:8888/health &>/dev/null; then
+    log "✓ Auth service is healthy"
+else
+    log "⚠ Auth service may still be starting up..."
+fi
+
+# Check nginx is responding
+if curl -f http://localhost:80 &>/dev/null || curl -k -f https://localhost:443 &>/dev/null; then
+    log "✓ Nginx is responding"
+else
+    log "⚠ Nginx may still be starting up..."
 fi
 
 log "Deployment completed successfully"
+log ""
+log "Services are available at:"
+log "  - Main interface: http://localhost or https://localhost"
+log "  - Registry API: http://localhost:7860"
+log "  - Auth service: http://localhost:8888"
+log "  - Current Time MCP: http://localhost:8000"
+log "  - Financial Info MCP: http://localhost:8001"
+log "  - Real Server Fake Tools MCP: http://localhost:8002"
+log "  - MCP Gateway MCP: http://localhost:8003"
+log ""
+log "To view logs for all services: docker-compose logs -f"
+log "To view logs for a specific service: docker-compose logs -f <service-name>"
+log "To stop services: docker-compose down"
+log ""
 
-# Follow container logs
-log "Following container logs (press Ctrl+C to stop following logs without stopping the container):"
-echo "---------- CONTAINER LOGS ----------"
-docker logs -f mcp-gateway-container
+# Ask if user wants to follow logs
+read -p "Do you want to follow the logs? (y/n): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    log "Following container logs (press Ctrl+C to stop following logs without stopping the services):"
+    echo "---------- DOCKER COMPOSE LOGS ----------"
+    docker-compose logs -f
+else
+    log "Services are running in the background. Use 'docker-compose logs -f' to view logs."
+fi

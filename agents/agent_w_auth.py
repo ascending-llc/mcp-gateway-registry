@@ -143,7 +143,7 @@ def load_env_config(use_session_cookie: bool) -> Dict[str, Optional[str]]:
     
     # Choose .env file based on authentication mode
     env_file_name = '.env.user' if use_session_cookie else '.env.agent'
-    
+    logger.info(f"Using .env file: {env_file_name}")
     if DOTENV_AVAILABLE:
         file_found = False
         file_path = None
@@ -151,29 +151,29 @@ def load_env_config(use_session_cookie: bool) -> Dict[str, Optional[str]]:
         # Try to load from .env file in the current directory
         env_file = os.path.join(os.path.dirname(__file__), env_file_name)
         if os.path.exists(env_file):
-            load_dotenv(env_file)
+            logger.info(f"Found .env file: {env_file}")
+            load_dotenv(env_file, override=True)
             file_found = True
             file_path = env_file
             logger.info(f"Loading environment variables from {env_file}")
+            logger.info(f"user pool id {os.environ.get('COGNITO_USER_POOL_ID')}")
         else:
             # Try to load from .env file in the parent directory
             env_file = os.path.join(os.path.dirname(__file__), '..', env_file_name)
             if os.path.exists(env_file):
-                load_dotenv(env_file)
-                file_found = True
-                file_path = env_file
+                logger.info(f"Found .env file in parent directory: {env_file}")
+                load_dotenv(env_file, override=True)
                 logger.info(f"Loading environment variables from {env_file}")
             else:
                 # Try to load from current working directory
                 env_file = os.path.join(os.getcwd(), env_file_name)
                 if os.path.exists(env_file):
-                    load_dotenv(env_file)
-                    file_found = True
-                    file_path = env_file
+                    logger.info(f"Found .env file in current working directory: {env_file}")
+                    load_dotenv(env_file, override=True)
                     logger.info(f"Loading environment variables from {env_file}")
                 else:
                     # Fallback to default .env loading
-                    load_dotenv()
+                    load_dotenv(override=True)
                     logger.info("Loading environment variables from default .env file")
         
         # Print banner showing which file is being used
@@ -201,6 +201,7 @@ def parse_arguments() -> argparse.Namespace:
     """
     # First, determine authentication mode to choose correct .env file
     use_session_cookie = get_auth_mode_from_args()
+    logger.info(f"Using session cookie authentication: {use_session_cookie}")
     
     # Load environment configuration using the appropriate .env file
     env_config = load_env_config(use_session_cookie)
@@ -514,6 +515,7 @@ async def main():
     """
     # Parse command line arguments
     args = parse_arguments()
+    logger.info(f"Parsed command line arguments successfully, args={args}")
     
     # Display configuration
     server_url = args.mcp_registry_url
@@ -540,6 +542,7 @@ async def main():
     else:
         # Generate Cognito M2M authentication token
         logger.info(f"Cognito User Pool ID: {redact_sensitive_value(args.user_pool_id)}")
+        logger.info(f"Cognito User Pool ID: {args.user_pool_id}")
         logger.info(f"Cognito Client ID: {redact_sensitive_value(args.client_id)}")
         logger.info(f"AWS Region: {args.region}")
         

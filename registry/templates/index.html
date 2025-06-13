@@ -1368,7 +1368,8 @@
             try {
                 const response = await fetch('/register', {
                     method: 'POST',
-                    body: formData // FormData will set Content-Type to multipart/form-data
+                    body: formData, // FormData will set Content-Type to multipart/form-data
+                    credentials: 'same-origin'  // Include cookies for authentication
                 });
 
                 const result = await response.json();
@@ -1530,13 +1531,9 @@
 
         // Centralized function to bind all event handlers
         function bindEventHandlers() {
-            // Bind toggle event handlers
-            document.querySelectorAll('.toggle-checkbox').forEach(checkbox => {
-                // Remove existing handler first to prevent duplicates
-                checkbox.removeEventListener('change', handleToggleClick);
-                checkbox.addEventListener('change', handleToggleClick);
-            });
-
+            // Remove individual toggle event handlers - using event delegation instead
+            // (Individual handlers were causing duplicate toggle requests)
+            
             // Bind tool icons click handlers using event delegation instead
             document.querySelectorAll('.clickable-tool-icon').forEach(icon => {
                 // Remove existing handler first to prevent duplicates
@@ -1578,7 +1575,10 @@
             // Use a simple spinner for loading feedback
             refreshButton.innerHTML = '<span class="status-spinner" style="width: 0.9em; height: 0.9em; border-width: 2px; top: 0;"></span>';
 
-            fetch(`/api/refresh${servicePath}`, { method: 'POST' })
+            fetch(`/api/refresh${servicePath}`, { 
+                method: 'POST',
+                credentials: 'same-origin'  // Include cookies for authentication
+            })
                 .then(response => {
                     if (!response.ok) {
                         return response.json().then(data => {
@@ -1643,7 +1643,8 @@
             try {
                 const response = await fetch(form.action, {
                     method: 'POST',
-                    body: new URLSearchParams(formData) // Send as x-www-form-urlencoded
+                    body: new URLSearchParams(formData), // Send as x-www-form-urlencoded
+                    credentials: 'same-origin'  // Include cookies for authentication
                 });
 
                 const responseData = await response.json(); // Always try to parse JSON
@@ -1854,7 +1855,10 @@
                     refreshButton.innerHTML = '<span class="status-spinner" style="width: 0.9em; height: 0.9em; border-width: 2px; top: 0;"></span>';
                     
                     // Make the refresh API call
-                    fetch(`/api/refresh${servicePath}`, { method: 'POST' })
+                    fetch(`/api/refresh${servicePath}`, { 
+                        method: 'POST',
+                        credentials: 'same-origin'  // Include cookies for authentication
+                    })
                         .then(response => {
                             if (!response.ok) {
                                 return response.json().then(data => {
@@ -1901,36 +1905,8 @@
                         return;
                     }
                     
-                    event.preventDefault(); // Prevent default form submission
-                    
-                    const safePath = servicePath.replace(/^\//, '').replace(/\//g, '_').replace(/:/g, '_');
-                    const spinnerId = 'spinner-for-' + safePath;
-                    const spinner = document.getElementById(spinnerId);
-                    const form = checkboxElement.form;
-                    const isEnabling = checkboxElement.checked;
-                    
-                    if (spinner) {
-                        spinner.style.display = 'inline-block';
-                    }
-                    checkboxElement.disabled = true;
-                    
-                    const formData = new FormData();
-                    if (isEnabling) {
-                        formData.append('enabled', 'on');
-                    }
-                    
-                    fetch(form.action, {
-                        method: 'POST',
-                        body: new URLSearchParams(formData)
-                    })
-                    .then(response => response.json())
-                    .then(responseData => {
-                        console.log(`Toggle request successful for ${servicePath}. Backend response:`, responseData);
-                    })
-                    .catch(error => {
-                        console.error(`Network or fetch error toggling service ${servicePath}:`, error);
-                        alert(`Failed to send toggle request: ${error}`);
-                    });
+                    // Call the existing handleToggleClick function with proper parameters
+                    handleToggleClick(event, checkboxElement, servicePath);
                 }
             });
             
@@ -2153,10 +2129,32 @@
         </div>
         <div class="header-right">
             {% if username %}
-            <button id="register-server-button" class="secondary-button" style="margin-right: 10px; padding: 8px 16px; font-weight: 600; border-radius: 8px;">Register Server</button>
+                {# Check if user has register_service permission for any service #}
+                {% if 'register_service' in user_context.ui_permissions and user_context.ui_permissions.register_service %}
+                    <button id="register-server-button" class="secondary-button" style="margin-right: 10px; padding: 8px 16px; font-weight: 600; border-radius: 8px;">Register Server</button>
+                {% endif %}
             {% endif %}
             <button id="theme-toggle" class="theme-toggle-button" title="Toggle Theme">🌙</button>
-            <span class="user-display">User: {{ username }}</span>
+            <div class="user-display" style="display: flex; flex-direction: column; align-items: flex-end; margin-right: 15px;">
+                <span style="font-weight: bold;">{{ username }}</span>
+                <span style="font-size: 0.8em; opacity: 0.8;">
+                    {% if user_context.is_admin %}
+                        🔑 Admin Access
+                    {% elif user_context.can_modify_servers %}
+                        ⚙️ Modify Access 
+                    {% else %}
+                        👁️ Read-only Access
+                    {% endif %}
+                    {% if user_context.auth_method == 'oauth2' %}
+                        ({{ user_context.provider | title }})
+                    {% endif %}
+                </span>
+                {% if not user_context.is_admin %}
+                    <span style="font-size: 0.7em; opacity: 0.7;" title="Servers you have access to: {{ user_context.accessible_servers | join(', ') }}">
+                        Access: {{ user_context.accessible_servers | length }} server(s)
+                    </span>
+                {% endif %}
+            </div>
             <form action="/logout" method="post" style="display: inline;">
                 <button type="submit" class="logout-button">Logout</button>
             </form>
@@ -2233,15 +2231,17 @@
                                 <span class="official-badge">official</span>
                                 <span class="icons">
                                     ☁️ 💻
-                                    {# Wrap the refresh icon in a button #}
-                                    <button class="refresh-button icon-button"
-                                            title="Refresh Status & Tools"
-                                            data-path="{{ service.path }}"
-                                            style="background: none; border: none; padding: 0; margin: 0 0 0 5px; vertical-align: middle; color: inherit;"
-                                            {% if not service.is_enabled %}disabled{% endif %}>
-                                        <span class="refresh-icon" style="font-size: 1em;">🔄</span>
-                                        {# Tooltip or accessible text can be added #}
-                                    </button>
+                                    {# Refresh button - only show if user has health_check_service permission #}
+                                    {% if can_perform_action('health_check_service', service.display_name) %}
+                                        <button class="refresh-button icon-button"
+                                                title="Refresh Status & Tools"
+                                                data-path="{{ service.path }}"
+                                                style="background: none; border: none; padding: 0; margin: 0 0 0 5px; vertical-align: middle; color: inherit;"
+                                                {% if not service.is_enabled %}disabled{% endif %}>
+                                            <span class="refresh-icon" style="font-size: 1em;">🔄</span>
+                                            {# Tooltip or accessible text can be added #}
+                                        </button>
+                                    {% endif %}
                                 </span>
                             </div>
                         </div>
@@ -2295,24 +2295,37 @@
                             </div>
 
                             <div class="controls-row">
-                                <a href="/edit{{ service.path }}" class="edit-button">Modify</a>
-                                {# Add ID to form if needed, but action URL is sufficient #}
-                                <form action="/toggle{{ service.path }}" method="post" class="toggle-form">
-                                    <label class="switch">
-                                        {# Change onchange to use data attributes instead #}
-                                        <input type="checkbox" name="enabled" value="on"
-                                               id="{{ 'toggle-check-' + safe_path }}"
-                                               {% if service.is_enabled %}checked{% endif %}
-                                               data-path="{{ service.path }}"
-                                               class="toggle-checkbox">
-                                        <span class="slider round"></span>
-                                    </label>
-                                    {# Add ID to label span #}
-                                    <span id="{{ 'toggle-label-' + safe_path }}" class="toggle-label">
-                                        {{ 'Enabled' if service.is_enabled else 'Disabled' }}
-                                    </span>
-                                </form>
-
+                                {# Check if user has modify_service permission for this specific service #}
+                                {% if can_perform_action('modify_service', service.display_name) %}
+                                    <a href="/edit{{ service.path }}" class="edit-button">Modify</a>
+                                {% endif %}
+                                
+                                {# Check if user has toggle_service permission for this specific service #}
+                                {% if can_perform_action('toggle_service', service.display_name) %}
+                                    {# Add ID to form if needed, but action URL is sufficient #}
+                                    <form action="/toggle{{ service.path }}" method="post" class="toggle-form">
+                                        <label class="switch">
+                                            {# Change onchange to use data attributes instead #}
+                                            <input type="checkbox" name="enabled" value="on"
+                                                   id="{{ 'toggle-check-' + safe_path }}"
+                                                   {% if service.is_enabled %}checked{% endif %}
+                                                   data-path="{{ service.path }}"
+                                                   class="toggle-checkbox">
+                                            <span class="slider round"></span>
+                                        </label>
+                                        {# Add ID to label span #}
+                                        <span id="{{ 'toggle-label-' + safe_path }}" class="toggle-label">
+                                            {{ 'Enabled' if service.is_enabled else 'Disabled' }}
+                                        </span>
+                                    </form>
+                                {% elif can_perform_action('list_service', service.display_name) %}
+                                    {# Users who can list but not toggle: show read-only status #}
+                                    <div class="read-only-status">
+                                        <span class="status-text" title="Read-only access - you cannot modify this server">
+                                            📖 {{ 'Enabled' if service.is_enabled else 'Disabled' }} (Read-only)
+                                        </span>
+                                    </div>
+                                {% endif %}
                             </div>
                         </div>
                         <div class="card-footer">
@@ -2324,7 +2337,12 @@
                             </span>
                             {# Use the consistent safe_path variable defined earlier #}
                             {% set num_tools_id = 'num-tools-' + safe_path %}
-                            <span id="{{ num_tools_id }}" class="metadata clickable-tool-icon" data-path="{{ service.path }}" data-name="{{ service.display_name }}" title="Click to view tools">🔧 {{ service.num_tools }}</span>
+                            {# Tools icon - only clickable if user has view permissions for this service #}
+                            {% if can_perform_action('list_service', service.display_name) %}
+                                <span id="{{ num_tools_id }}" class="metadata clickable-tool-icon" data-path="{{ service.path }}" data-name="{{ service.display_name }}" title="Click to view tools">🔧 {{ service.num_tools }}</span>
+                            {% else %}
+                                <span id="{{ num_tools_id }}" class="metadata" title="Tools info not available">🔧 {{ service.num_tools }}</span>
+                            {% endif %}
                             <span class="metadata">⭐ {{ service.num_stars }}</span>
                             <div class="platform-icons">
                                  {% if service.is_python %}<span>🐍 Python</span>{% endif %}
@@ -2490,7 +2508,8 @@
                 try {
                     const response = await fetch(form.action, {
                         method: 'POST',
-                        body: new URLSearchParams(formData) // Send as x-www-form-urlencoded
+                        body: new URLSearchParams(formData), // Send as x-www-form-urlencoded
+                        credentials: 'same-origin'  // Include cookies for authentication
                     });
 
                     const responseData = await response.json(); // Always try to parse JSON

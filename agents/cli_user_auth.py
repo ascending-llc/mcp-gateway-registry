@@ -53,7 +53,22 @@ COGNITO_DOMAIN = os.environ.get('COGNITO_DOMAIN')
 COGNITO_CLIENT_ID = os.environ.get('COGNITO_CLIENT_ID')
 COGNITO_CLIENT_SECRET = os.environ.get('COGNITO_CLIENT_SECRET')
 SECRET_KEY = os.environ.get('SECRET_KEY')
-COGNITO_REDIRECT_URI = "http://localhost:8080/callback"
+
+# Make redirect URI configurable based on environment
+REGISTRY_URL = os.environ.get('REGISTRY_URL', 'http://localhost')
+USE_DIRECT_CALLBACK = os.environ.get('USE_DIRECT_CALLBACK', 'true').lower() == 'true'
+
+if USE_DIRECT_CALLBACK:
+    # Direct callback to local server (original behavior)
+    COGNITO_REDIRECT_URI = "http://localhost:8080/callback"
+    CALLBACK_PORT = 8080
+    CALLBACK_PATH = "/callback"
+else:
+    # Use nginx proxy callback (for Docker environments)
+    COGNITO_REDIRECT_URI = f"{REGISTRY_URL}/oauth2/callback/cognito"
+    CALLBACK_PORT = 8081  # Different port to avoid conflicts
+    CALLBACK_PATH = "/auth_complete"
+
 AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
 
 # Validate required environment variables
@@ -70,6 +85,9 @@ else:
     # Otherwise use user pool ID without underscores (standard format)
     user_pool_id_wo_underscore = COGNITO_USER_POOL_ID.replace('_', '')
     COGNITO_DOMAIN_URL = f"https://{user_pool_id_wo_underscore}.auth.{AWS_REGION}.amazoncognito.com"
+
+logger.info(f"Using Cognito domain: {COGNITO_DOMAIN_URL}")
+logger.info(f"Redirect URI configured: {COGNITO_REDIRECT_URI if 'COGNITO_REDIRECT_URI' in globals() else 'Not yet configured'}")
 
 # OAuth endpoints
 AUTHORIZE_URL = f"{COGNITO_DOMAIN_URL}/oauth2/authorize"
@@ -92,7 +110,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
         """Handle OAuth callback"""
         global auth_result
         
-        if self.path.startswith('/callback'):
+        if self.path.startswith(CALLBACK_PATH):
             # Parse query parameters
             query_string = self.path.split('?', 1)[1] if '?' in self.path else ''
             params = parse_qs(query_string)
@@ -283,12 +301,12 @@ def generate_pkce_challenge():
 
 def start_callback_server():
     """Start the OAuth callback server"""
-    server = HTTPServer(('localhost', 8080), OAuthCallbackHandler)
+    server = HTTPServer(('localhost', CALLBACK_PORT), OAuthCallbackHandler)
     server_thread = threading.Thread(target=server.serve_forever)
     server_thread.daemon = True
     server_thread.start()
     
-    logger.info("Callback server started on http://localhost:8080")
+    logger.info(f"Callback server started on http://localhost:{CALLBACK_PORT}")
     return server
 
 
@@ -323,7 +341,26 @@ def main():
         default='~/.mcp/session_cookie',
         help='Path to save session cookie (default: ~/.mcp/session_cookie)'
     )
+    parser.add_argument(
+        '--use-proxy',
+        action='store_true',
+        help='Use nginx proxy callback instead of direct callback (for Docker environments)'
+    )
+    parser.add_argument(
+        '--registry-url',
+        default='http://localhost',
+        help='Registry URL for proxy-based auth (default: http://localhost)'
+    )
     args = parser.parse_args()
+    
+    # Override environment variables with CLI arguments
+    if args.use_proxy:
+        global USE_DIRECT_CALLBACK, COGNITO_REDIRECT_URI, CALLBACK_PORT, CALLBACK_PATH, REGISTRY_URL
+        USE_DIRECT_CALLBACK = False
+        REGISTRY_URL = args.registry_url
+        COGNITO_REDIRECT_URI = f"{REGISTRY_URL}/oauth2/callback/cognito"
+        CALLBACK_PORT = 8081
+        CALLBACK_PATH = "/auth_complete"
     
     try:
         # Generate PKCE challenge
@@ -348,8 +385,11 @@ def main():
         print("\n" + "="*50)
         print("Opening your browser for authentication...")
         print("Please complete the login process.")
+        print(f"Redirect URI: {COGNITO_REDIRECT_URI}")
+        print(f"Callback server: http://localhost:{CALLBACK_PORT}")
         print("="*50 + "\n")
         
+        logger.info(f"Authorization URL: {auth_url}")
         webbrowser.open(auth_url)
         
         # Wait for callback

@@ -76,6 +76,11 @@
 <body>
     <div class="edit-form-container">
         <h1>Edit Server: {{ server.server_name }}</h1>
+        {% if user_context and not user_context.can_modify_servers %}
+            <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
+                <strong>⚠️ Warning:</strong> You do not have sufficient permissions to edit servers.
+            </div>
+        {% endif %}
         <form action="/edit{{ server.path }}" method="post">
             <div class="form-group">
                 <label for="path">Path (Read-only)</label>
