@@ -144,7 +144,7 @@ sequenceDiagram
         IdP->>Agent: Return JWT token + scopes
     else Session Cookie (On-behalf of User)
         participant CLIAuth as CLI Auth Tool
-        User->>CLIAuth: Run cli_auth.py
+        User->>CLIAuth: Run cli_user_auth.py
         CLIAuth->>IdP: OAuth PKCE flow
         IdP->>CLIAuth: Auth code + user info
         CLIAuth->>CLIAuth: Create session cookie
@@ -227,7 +227,7 @@ The auth server provides dual authentication support:
 - **Group Mapping**: Maps Cognito groups to MCP scopes via `scopes.yml` configuration
   - Both M2M and session cookie auth use the same scope definitions
 
-#### 2. CLI Authentication Tool (`auth_server/cli_auth.py`)
+#### 2. CLI Authentication Tool (`agents/cli_user_auth.py`)
 A standalone tool for user-based authentication:
 - Implements OAuth 2.0 PKCE flow with Cognito hosted UI
 - Opens browser for user authentication
@@ -235,7 +235,7 @@ A standalone tool for user-based authentication:
 - Creates session cookie compatible with registry format
 - Saves to `~/.mcp/session_cookie` with secure permissions (0600)
 
-#### 3. Agent (`agents/agent_w_auth.py`)
+#### 3. Agent (`agents/agent.py`)
 The agent supports both authentication methods:
 - `--use-session-cookie` flag for session-based auth
 - `--session-cookie-file` parameter (default: `~/.mcp/session_cookie`)
@@ -254,7 +254,7 @@ Cognito supports machine-to-machine authentication, enabling Agents to have thei
 #### Authentication Flow:
 Run the Agent with the following command:
 ```{.bash}
-python agents/agent_w_auth.py
+python agents/agent.py
 ```
 1. Copy `agents/.env.template` to `agents/.env.agent` and set the environment variables (`COGNITO_CLIENT_ID`, `COGNITO_CLIENT_SECRET`, `COGNITO_USER_POOL_ID`) as appropriate for your setup. For detailed Cognito configuration steps, see [`docs/cognito.md`](cognito.md).
 1. Agent startup:
@@ -283,13 +283,13 @@ Session cookie authentication enables agents to act on behalf of users, using th
 
 #### Implementation Components
 
-##### a. CLI Authentication Tool (`auth_server/cli_auth.py`)
+##### a. CLI Authentication Tool (`agents/cli_user_auth.py`)
 
 The CLI tool handles the OAuth flow with Cognito and saves the session cookie locally:
 
 ```bash
 # Run the CLI authentication tool
-python agents/cli_auth.py
+python agents/cli_user_auth.py
 
 # This will:
 # 1. Open your browser to Cognito hosted UI
@@ -307,11 +307,11 @@ Required environment variables:
 
 Copy `agents/.env.template` to `agents/.env.user` and set the environment variables (`COGNITO_CLIENT_ID`, `COGNITO_CLIENT_SECRET`, `COGNITO_USER_POOL_ID`, `SECRET_KEY`) as appropriate for your setup. For detailed Cognito configuration steps, see [`docs/cognito.md`](cognito.md).
 
-The agent (`agents/agent_w_auth.py`) supports session cookie authentication:
+The agent (`agents/agent.py`) supports session cookie authentication:
 
 ```bash
 # Use agent with session cookie
-python agent_w_auth.py \
+python agent.py \
   --use-session-cookie \
   --message "What time is it in Tokyo?" \
   --mcp-registry-url http://localhost/mcpgw/sse

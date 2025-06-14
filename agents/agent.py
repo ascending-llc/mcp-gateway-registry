@@ -21,11 +21,11 @@ Environment Variables:
 - AWS_REGION: AWS region for Cognito
 
 Usage:
-    python agent_w_auth.py --mcp-registry-url URL --model model_id --message "your question" \
+    python agent.py --mcp-registry-url URL --model model_id --message "your question" \
         --client-id CLIENT_ID --client-secret CLIENT_SECRET --user-pool-id USER_POOL_ID --region REGION
 
 Example with command line arguments:
-    python agent_w_auth.py --mcp-registry-url http://localhost/mcpgw/sse \
+    python agent.py --mcp-registry-url http://localhost/mcpgw/sse \
         --model anthropic.claude-3-haiku-20240307-v1:0 --message "current time in new delhi" \
         --client-id [REDACTED] --client-secret [REDACTED] \
         --user-pool-id [REDACTED] --region us-east-1
@@ -36,7 +36,7 @@ Example with environment variables (create a .env file):
     COGNITO_USER_POOL_ID=your_user_pool_id
     AWS_REGION=us-east-1
     
-    python agent_w_auth.py --message "current time in new delhi"
+    python agent.py --message "current time in new delhi"
 """
 
 import asyncio
@@ -248,7 +248,7 @@ def parse_arguments() -> argparse.Namespace:
         cookie_path = os.path.expanduser(args.session_cookie_file)
         if not os.path.exists(cookie_path):
             parser.error(f"Session cookie file not found: {cookie_path}\n"
-                        f"Run 'python auth_server/cli_auth.py' to authenticate first")
+                        f"Run 'python agents/cli_user_auth.py' to authenticate first")
     else:
         # For M2M auth, validate Cognito parameters
         missing_params = []
