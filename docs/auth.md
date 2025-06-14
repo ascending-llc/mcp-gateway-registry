@@ -19,59 +19,107 @@ The MCP gateway and Registry provides an enterprise ready solution that integrat
 Here is an architecture diagram of the system.
 
 ```mermaid
-graph LR
-    %% AI Agent
-    Agent[AI Agent]
+graph TB
+    %% Users and Agents at same level - stacked on top
+    subgraph Clients["Client Layer"]
+        direction TB
+        User[User<br/>Human Administrator]
+        CLIAuth[CLI Auth Tool]
+        Agent[AI Agent]
+        User --- CLIAuth
+    end
     
-    %% CLI Auth Tool
-    CLIAuth[CLI Auth Tool]
+    %% MCP Gateway & Registry Components (Separate)
+    subgraph Infrastructure["MCP Gateway & Registry Infrastructure"]
+        direction TB
+        Nginx["Nginx<br/>Reverse Proxy"]
+        AuthServer["Auth Server<br/>(Dual Auth)"]
+        Registry["Registry<br/>Web UI"]
+        RegistryMCP["Registry<br/>MCP Server"]
+    end
     
     %% Identity Provider
-    IdP[Identity Provider]
-    
-    %% Gateway and Registry Block
-    subgraph GwReg["Gateway & Registry"]
-        Gateway["Gateway<br/>(Reverse Proxy)"]
-        Registry[Registry]
-        AuthServer["Auth Server<br/>(Dual Auth)"]
-    end
+    IdP[Identity Provider<br/>Amazon Cognito]
     
     %% MCP Server Farm
     subgraph MCPFarm["MCP Server Farm"]
-        MCP1[MCP Server 1]
-        MCP2[MCP Server 2]
-        MCP3[MCP Server 3]
-        MCPn[MCP Server n]
+        direction TB
+        MCP1[MCP Server 1<br/>CurrentTime]
+        MCP2[MCP Server 2<br/>FinInfo]
+        MCP3[MCP Server 3<br/>Custom]
+        MCPn[MCP Server n<br/>...]
     end
     
-    %% Connections
-    Agent -->|Discover servers/tools| Registry
-    Agent -->|Data plane requests| Gateway
-    Gateway -->|Auth verification| AuthServer
-    Gateway -->|Proxy requests| MCP1
-    Gateway -->|Proxy requests| MCP2
-    Gateway -->|Proxy requests| MCP3
-    Gateway -->|Proxy requests| MCPn
+    %% All connections go through gateway/registry only
+    User -->|1. Web UI access<br/>Server management| Nginx
+    User -->|2. Registry access<br/>Tool discovery| Registry
     
-    %% Auth flow
-    IdP -.->|M2M: JWT tokens| Agent
-    IdP -.->|User: OAuth flow| CLIAuth
-    CLIAuth -.->|Session cookie| Agent
-    AuthServer -.->|Validate tokens/cookies| IdP
+    Agent -->|1. Discover tools<br/>with auth headers| Nginx
+    Agent -->|2. MCP requests<br/>with auth headers| Nginx
+    
+    %% Internal routing
+    Nginx -->|Route /mcpgw/*<br/>Auth validation| AuthServer
+    Nginx -->|Route /mcpgw/*<br/>Tool discovery| RegistryMCP
+    Nginx -->|Route /registry/*<br/>Web UI| Registry
+    Nginx -->|Route /server1/*<br/>Proxy to MCP servers| MCP1
+    Nginx -->|Route /server2/*<br/>Proxy to MCP servers| MCP2
+    Nginx -->|Route /serverN/*<br/>Proxy to MCP servers| MCP3
+    Nginx -->|Route /serverN/*<br/>Proxy to MCP servers| MCPn
+    
+    %% Auth flows
+    IdP -.->|M2M: JWT tokens<br/>Client Credentials| Agent
+    IdP -.->|User: OAuth PKCE flow<br/>Authorization Code| CLIAuth
+    CLIAuth -.->|Session cookie<br/>Signed with SECRET_KEY| User
+    AuthServer -.->|Validate JWT/cookies<br/>Get user groups/scopes| IdP
+    
+    %% Registry management (User-driven)
+    Registry -->|Server registration<br/>Health monitoring| RegistryMCP
+    RegistryMCP -->|Tool metadata<br/>Health checks| MCP1
+    RegistryMCP -->|Tool metadata<br/>Health checks| MCP2
+    RegistryMCP -->|Tool metadata<br/>Health checks| MCP3
+    RegistryMCP -->|Tool metadata<br/>Health checks| MCPn
     
     %% Styling
+    classDef userStyle fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
     classDef agentStyle fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef clientStyle fill:#f5f5f5,stroke:#424242,stroke-width:2px
     classDef idpStyle fill:#fff3e0,stroke:#e65100,stroke-width:2px
-    classDef gwregStyle fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-    classDef mcpStyle fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef nginxStyle fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef authStyle fill:#ffebee,stroke:#c62828,stroke-width:2px
+    classDef registryStyle fill:#fff8e1,stroke:#f57f17,stroke-width:2px
+    classDef mcpStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
     classDef cliStyle fill:#fce4ec,stroke:#880e4f,stroke-width:2px
     
+    class Clients clientStyle
+    class User userStyle
     class Agent agentStyle
     class IdP idpStyle
-    class Gateway,Registry,AuthServer gwregStyle
+    class Nginx nginxStyle
+    class AuthServer authStyle
+    class Registry,RegistryMCP registryStyle
     class MCP1,MCP2,MCP3,MCPn mcpStyle
     class CLIAuth cliStyle
 ```
+### Architecture Components Explained
+
+The updated architecture diagram above shows the clear separation of components that work together to provide secure, enterprise-ready MCP access:
+
+#### Client Layer
+- **User (Human Administrator)**: Manages the registry through the web UI, registers new MCP servers, and monitors system health
+- **CLI Auth Tool**: Handles OAuth authentication flows for users, creating session cookies for web UI access
+- **AI Agent**: Programmatic clients that discover and invoke MCP tools with proper authentication
+
+#### MCP Gateway & Registry Infrastructure
+- **Nginx Reverse Proxy**: Single entry point that routes all requests and handles SSL termination
+- **Auth Server**: Validates JWT tokens and session cookies against Amazon Cognito, enforces fine-grained access control
+- **Registry Web UI**: Administrative interface for managing MCP servers and viewing system status
+- **Registry MCP Server**: Provides tool discovery capabilities to agents, returns filtered results based on permissions
+
+#### External Components
+- **Amazon Cognito**: Identity Provider (IdP) that handles user authentication and group management
+- **MCP Server Farm**: Collection of individual MCP servers providing various tools and capabilities
+
+> **For detailed setup instructions**, see the comprehensive guide in [`docs/cognito.md`](cognito.md) which covers both user identity and agent identity authentication modes.
 
 At a high-level the flow works as follows:
 
@@ -168,7 +216,7 @@ The above implementation provides an OAuth compliant way to MCP security without
 
 This section discusses the reference implementation using Amazon Cognito as the IdP, supporting both Machine-to-Machine (M2M) and Session Cookie authentication methods.
 
->This section will soon be updated with detailed steps for Cognito configuration.
+>For comprehensive Cognito setup instructions, see [`docs/cognito.md`](cognito.md) which covers both user identity and agent identity authentication modes with step-by-step configuration guides.
 
 ### Key Components
 
@@ -208,7 +256,7 @@ Run the Agent with the following command:
 ```{.bash}
 python agents/agent_w_auth.py
 ```
-1. Copy `agents/.env.template` to `agents/.env.agent` and set the environment variables (`COGNITO_CLIENT_ID`, `COGNITO_CLIENT_SECRET`, `COGNITO_USER_POOL_ID`) as appropriate for your setup.
+1. Copy `agents/.env.template` to `agents/.env.agent` and set the environment variables (`COGNITO_CLIENT_ID`, `COGNITO_CLIENT_SECRET`, `COGNITO_USER_POOL_ID`) as appropriate for your setup. For detailed Cognito configuration steps, see [`docs/cognito.md`](cognito.md).
 1. Agent startup:
    - Configured with client ID, client secret, and a set of scopes. _Each agent is an App Client in a Cognito user pool_.
    - Requests scopes (e.g., MCP Registry with tool finder and basic MCP servers)
@@ -257,7 +305,7 @@ Required environment variables:
 
 ##### b. Agent with Session Cookie Support
 
-Copy `agents/.env.template` to `agents/.env.user` and set the environment variables (`COGNITO_CLIENT_ID`, `COGNITO_CLIENT_SECRET`, `COGNITO_USER_POOL_ID`, `SECRET_KEY`) as appropriate for your setup.
+Copy `agents/.env.template` to `agents/.env.user` and set the environment variables (`COGNITO_CLIENT_ID`, `COGNITO_CLIENT_SECRET`, `COGNITO_USER_POOL_ID`, `SECRET_KEY`) as appropriate for your setup. For detailed Cognito configuration steps, see [`docs/cognito.md`](cognito.md).
 
 The agent (`agents/agent_w_auth.py`) supports session cookie authentication:
 
