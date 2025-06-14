@@ -6,6 +6,13 @@
 
 ![Under Construction](https://img.shields.io/badge/Status-Under%20Construction-yellow)
 ![Stability](https://img.shields.io/badge/API%20Stability-Experimental-orange)
+![GitHub stars](https://img.shields.io/github/stars/agentic-community/mcp-gateway-registry?style=flat&logo=github)
+![GitHub forks](https://img.shields.io/github/forks/agentic-community/mcp-gateway-registry?style=flat&logo=github)
+![GitHub issues](https://img.shields.io/github/issues/agentic-community/mcp-gateway-registry?style=flat&logo=github)
+![GitHub pull requests](https://img.shields.io/github/issues-pr/agentic-community/mcp-gateway-registry?style=flat&logo=github)
+![GitHub release](https://img.shields.io/github/v/release/agentic-community/mcp-gateway-registry?style=flat&logo=github)
+![GitHub commits](https://img.shields.io/github/commit-activity/m/agentic-community/mcp-gateway-registry?style=flat&logo=github)
+![License](https://img.shields.io/github/license/agentic-community/mcp-gateway-registry?style=flat)
 
 # MCP Gateway & Registry
 
