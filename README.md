@@ -377,21 +377,7 @@ The MCP Gateway & Registry can be used in multiple ways depending on your needs:
 
 ### MCP Client Integration
 
-The MCP Registry provides an [API](#api-endpoints-brief-overview) that is also exposed as an MCP server, allowing you to manage the MCP Registry programmatically. Any MCP client that supports remote MCP servers over SSE can connect to the registry.
-
-#### Configuration for MCP Clients
-
-To connect your MCP client to the registry, use the following configuration pattern:
-
-```json
-{
-  "mcpServers": {
-    "mcpgw": {
-      "url": "https://your-mcp-gateway.com/mcpgw/sse"
-    }
-  }
-}
-```
+The MCP Registry provides an API that is also exposed as an MCP server, allowing you to manage the MCP Registry programmatically. Any MCP client that supports remote MCP servers over SSE can connect to the registry.
 
 > **Note:** Using the MCP Gateway with remote clients requires HTTPS. See instructions [here](#running-the-gateway-over-https) for setting up SSL certificates.
 
@@ -402,24 +388,6 @@ Once connected, your MCP client can:
 - Register new MCP servers programmatically
 - Manage server configurations
 - Monitor server health and status
-
-### Adding New MCP Servers to the Registry
-
-**Option 1 - Via MCP Registry UI:**
-Click the "Register Server" button on the top right corner of the Registry web interface and follow the instructions. You'll need to provide the following parameters:
-
-- **Server Name**: Display name for the server
-- **Path**: Unique URL path prefix for the server (e.g., '/my-service'). Must start with '/'
-- **Proxy Pass URL**: The internal or external URL where the MCP server is running (e.g., 'http://localhost:8001')
-- **Description**: Description of the server (optional)
-- **Tags**: List of tags for categorization (optional)
-- **Number of Tools**: Number of tools provided by the server (optional)
-- **Number of Stars**: Rating for the server (optional)
-- **Is Python**: Whether the server is implemented in Python (optional)
-- **License**: License information for the server (optional)
-
-**Option 2 - Via MCP Host:**
-_Coming soon_ - Use MCP Host applications such as VSCode-insiders or Cursor to register servers directly through their MCP client interfaces.
 
 #### Integration Example
 
@@ -449,6 +417,24 @@ async with sse_client(server_url, headers=headers) as (read, write):
         for r in result.content:
             response += r.text + "\n"
 ```
+
+### Adding New MCP Servers to the Registry
+
+**Option 1 - Via MCP Registry UI:**
+Click the "Register Server" button on the top right corner of the Registry web interface and follow the instructions. You'll need to provide the following parameters:
+
+- **Server Name**: Display name for the server
+- **Path**: Unique URL path prefix for the server (e.g., '/my-service'). Must start with '/'
+- **Proxy Pass URL**: The internal or external URL where the MCP server is running (e.g., 'http://localhost:8001')
+- **Description**: Description of the server (optional)
+- **Tags**: List of tags for categorization (optional)
+- **Number of Tools**: Number of tools provided by the server (optional)
+- **Number of Stars**: Rating for the server (optional)
+- **Is Python**: Whether the server is implemented in Python (optional)
+- **License**: License information for the server (optional)
+
+**Option 2 - Via MCP Host:**
+_Coming soon_ - Use MCP Host applications such as VSCode-insiders or Cursor to register servers directly through their MCP client interfaces.
 
 
 ## Roadmap
