@@ -319,67 +319,107 @@ For production deployments you might want to run this solution on EKS, the [Dist
 
 ## Usage
 
+The MCP Gateway & Registry can be used in multiple ways depending on your needs:
+
+### Web Interface Usage
+
 1.  **Login:** Use the `ADMIN_USER` and `ADMIN_PASSWORD` specified while starting the Gateway container.
-1.  **Manage Services:**
+2.  **Manage Services:**
     *   Toggle the Enabled/Disabled switch. The Nginx config automatically comments/uncomments the relevant `location` block.
     *   Click "Modify" to edit service details.
     *   Click the refresh icon (🔄) in the card header to manually trigger a health check and tool list update for enabled services.
-1.  **View Tools:** Click the tool count icon (🔧) in the card footer to open a modal displaying discovered tools and their schemas for healthy services.
-1.  **Filter:** Use the sidebar links to filter the displayed services.
+3.  **View Tools:** Click the tool count icon (🔧) in the card footer to open a modal displaying discovered tools and their schemas for healthy services.
+4.  **Filter:** Use the sidebar links to filter the displayed services.
 
-### Interact with the MCP Registry via its own built-in MCP server!
+### MCP Client Integration
 
-The MCP Registry provides an [API](#api-endpoints-brief-overview), this API is also exposed as an MCP server so we have an MCP Server to manage the MCP Registry itself. You can use any MCP Host such as [`Cursor`](https://www.cursor.com/) or others that support remote MCP Servers over SSE. To add the MCP Registry's MCP server to Cursor, simply add the following JSON to Cursor's `mcp.json` file.
+The MCP Registry provides an [API](#api-endpoints-brief-overview) that is also exposed as an MCP server, allowing you to manage the MCP Registry programmatically. Any MCP client that supports remote MCP servers over SSE can connect to the registry.
 
->Using the MCP Gateway in Agents and hosts such as Cursor does require that you run the Gateway over HTTPS, see instructions [here](#running-the-gateway-over-https).
+#### Configuration for MCP Clients
+
+To connect your MCP client to the registry, use the following configuration pattern:
 
 ```json
 {
   "mcpServers": {
     "mcpgw": {
-      "url": "https://mymcpgateway.mycorp.com//mcpgw/sse"
+      "url": "https://your-mcp-gateway.com/mcpgw/sse"
     }
   }
 }
 ```
 
-Cursor should now be able to talk to the MCP Gateway and you should be able to use the tools it provides.
+> **Note:** Using the MCP Gateway with remote clients requires HTTPS. See instructions [here](#running-the-gateway-over-https) for setting up SSL certificates.
 
-![Cursor MCP server](./docs/img/cursor-mcp-server.png)
+#### Programmatic Access
 
-### Steps to add a new MCP server to the Gateway and Registry
+Once connected, your MCP client can:
+- Discover available tools through natural language queries
+- Register new MCP servers programmatically
+- Manage server configurations
+- Monitor server health and status
 
-1. Option 1 (_recommended_): Use `Cursor` or your favorite MCP host of choice that supports SSE to add the MCP Gateway as a server as an MCP server and then simple ask it in natural language to register a new MCP server and follow the prompts.
+### API Usage
 
-1. Option 2: Use `/register` API (first call the `/login` API and get the secure cookie value), see steps in the [API endpoints](#api-endpoints-brief-overview) section. Note the value for the `mcp_gateway_session` cookie from the `/login` API and then use it in `/register` API.
-    ```bash
-    # Login to get the session cookie
-    curl -X POST \
-      -H "Content-Type: application/x-www-form-urlencoded" \
-      -d "username=admin&password=$ADMIN_PASSWORD" \
-      -c cookies.txt \
-      http://localhost:7860/login
-    ```
+#### Adding New MCP Servers
 
-    Use the value of the `mcp_gateway_session` in `cookies.txt` in the following command.
-    ```bash
-    # Set the session cookie value in a variable
-    SESSION_COOKIE="session-cookie-from-login"
+**Option 1 - Via MCP Client (_recommended_):**
+Connect any MCP client that supports SSE to the registry and use natural language to register new servers. The registry will guide you through the registration process.
 
-    # Use the variable in the curl command
-    curl -X POST http://localhost:7860/register \
-      -H "Content-Type: application/x-www-form-urlencoded" \
-      -b cookies.txt \
-      --data-urlencode "name=My New Service" \
-      --data-urlencode "description=A fantastic new service" \
-      --data-urlencode "path=/new-service" \
-      --data-urlencode "proxy_pass_url=http://localhost:8004" \
-      --data-urlencode "tags=new,experimental" \
-      --data-urlencode "num_tools=2" \
-      --data-urlencode "num_stars=0" \
-      --data-urlencode "is_python=true" \
-      --data-urlencode "license=MIT"
-    ```
+**Option 2 - Direct API Access:**
+Use the REST API endpoints directly. First authenticate, then use the registration endpoint:
+
+```bash
+# Login to get the session cookie
+curl -X POST \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=admin&password=$ADMIN_PASSWORD" \
+  -c cookies.txt \
+  http://localhost:7860/login
+
+# Register a new MCP server
+curl -X POST http://localhost:7860/register \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -b cookies.txt \
+  --data-urlencode "name=My New Service" \
+  --data-urlencode "description=A fantastic new service" \
+  --data-urlencode "path=/new-service" \
+  --data-urlencode "proxy_pass_url=http://localhost:8004" \
+  --data-urlencode "tags=new,experimental" \
+  --data-urlencode "num_tools=2" \
+  --data-urlencode "num_stars=0" \
+  --data-urlencode "is_python=true" \
+  --data-urlencode "license=MIT"
+```
+
+#### Integration Example
+
+**Python MCP Client:**
+```python
+import mcp
+from mcp.client.sse import sse_client
+
+# Connect to the MCP Gateway with authentication
+headers = {
+    'Authorization': f'Bearer {auth_token}',
+    'X-User-Pool-Id': user_pool_id,
+    'X-Client-Id': client_id,
+    'X-Region': region
+}
+
+async with sse_client(server_url, headers=headers) as (read, write):
+    async with mcp.ClientSession(read, write) as session:
+        # Initialize the connection
+        await session.initialize()
+        
+        # Call a tool with arguments
+        result = await session.call_tool(tool_name, arguments=arguments)
+        
+        # Process the result
+        response = ""
+        for r in result.content:
+            response += r.text + "\n"
+```
 
 
 ## API Endpoints (Brief Overview)
