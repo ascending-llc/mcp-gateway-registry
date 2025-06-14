@@ -44,6 +44,12 @@ The MCP Gateway provides a single endpoint to access multiple MCP servers and th
 
 ```mermaid
 flowchart TB
+    subgraph Human_Users["Human Users"]
+        User1["Human User 1"]
+        User2["Human User 2"]
+        UserN["Human User N"]
+    end
+
     subgraph AI_Agents["AI Agents"]
         Agent1["AI Agent 1"]
         Agent2["AI Agent 2"]
@@ -90,6 +96,14 @@ flowchart TB
         API3["External API 3"]
     end
     
+    %% Connections from Human Users
+    User1 -->|Web Browser<br>Authentication| IdP
+    User2 -->|Web Browser<br>Authentication| IdP
+    UserN -->|Web Browser<br>Authentication| IdP
+    User1 -->|Web Browser<br>HTTPS| Registry
+    User2 -->|Web Browser<br>HTTPS| Registry
+    UserN -->|Web Browser<br>HTTPS| Registry
+    
     %% Connections from Agents to Gateway
     Agent1 -->|MCP Protocol<br>SSE with Auth| RP
     Agent2 -->|MCP Protocol<br>SSE with Auth| RP
@@ -99,6 +113,7 @@ flowchart TB
     %% Auth flow connections
     RP -->|Auth validation| AuthServer
     AuthServer -.->|Validate credentials| IdP
+    Registry -.->|User authentication| IdP
     RP -->|Tool discovery| RegistryMCP
     RP -->|Web UI access| Registry
     
@@ -121,6 +136,7 @@ flowchart TB
     Lambda1 -->|Tool Connection| API3
 
     %% Style definitions
+    classDef user fill:#fff9c4,stroke:#f57f17,stroke-width:2px
     classDef agent fill:#e1f5fe,stroke:#29b6f6,stroke-width:2px
     classDef gateway fill:#e8f5e9,stroke:#66bb6a,stroke-width:2px
     classDef nginx fill:#f3e5f5,stroke:#ab47bc,stroke-width:2px
@@ -131,6 +147,7 @@ flowchart TB
     classDef dataSource fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
     
     %% Apply styles
+    class User1,User2,UserN user
     class Agent1,Agent2,Agent3,AgentN agent
     class EC2_Gateway,NGINX gateway
     class RP nginx
