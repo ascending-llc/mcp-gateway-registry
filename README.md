@@ -30,7 +30,7 @@ You can deploy the gateway and registry on Amazon EC2 or Amazon EKS for producti
 
 ## What's New
 
-* **IdP Integration with Amazon Cognito:** Complete identity provider integration supporting both user identity and agent identity modes
+* **IdP Integration with Amazon Cognito:** Complete identity provider integration supporting both user identity and agent identity modes. See [detailed Cognito setup guide](docs/cognito.md) for configuration instructions.
 * **Fine-Grained Access Control (FGAC) for MCP servers and tools:** Granular permissions system allowing precise control over which agents can access specific servers and tools
 * **Integration with [Strands Agents](https://github.com/strands-agents/sdk-python):** Enhanced agent capabilities with the Strands SDK
 * **Dynamic tool discovery and invocation:** User agents can discover new tools through the registry and have limitless capabilities
@@ -197,7 +197,7 @@ flowchart TB
 
 *   **External API Keys (Optional):** One of the example MCP servers uses the [`Polygon`](https://polygon.io/stocks) API for stock ticker data. Get an API key from [here](https://polygon.io/dashboard/signup?redirect=%2Fdashboard%2Fkeys). The server will still start without the API key but you will get a 401 Unauthorized error when using the tools provided by this server.
 
-*   **Authentication Setup:** Setup authentication using Amazon Cognito as per instructions [here](docs/auth.md).
+*   **Authentication Setup:** Setup authentication using Amazon Cognito as per instructions [here](docs/auth.md). For detailed Cognito configuration, see the [Cognito setup guide](docs/cognito.md).
 
 ## Installation
 
@@ -262,6 +262,7 @@ The deployment includes these containers:
    - Click "Login with Cognito" to authenticate via your configured Cognito User Pool
    - Access permissions will be based on the Cognito group you are a member of
    - Provides fine-grained access control based on your organizational roles
+   - For detailed Cognito setup instructions, see [docs/cognito.md](docs/cognito.md)
    
    **Option 2 - Username/Password (Testing Only):**
    - Use the traditional login with:
@@ -324,6 +325,7 @@ For production deployments with SSL certificates:
    ```bash
    cp agents/.env.template agents/.env.user
    # Edit agents/.env.user with your Cognito configuration
+   # See [`docs/cognito.md`](docs/cognito.md) for detailed Cognito setup instructions
    ```
 
 2. **Authenticate with user identity:**
@@ -348,6 +350,7 @@ For production deployments with SSL certificates:
    ```bash
    cp agents/.env.template agents/.env.agent
    # Edit agents/.env.agent with your Cognito configuration
+   # See docs/cognito.md for detailed Cognito setup instructions
    ```
 
 2. **Run the agent with agentic identity:**
