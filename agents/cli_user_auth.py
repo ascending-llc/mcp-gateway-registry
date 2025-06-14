@@ -408,7 +408,7 @@ def main():
                 print("✓ Authentication successful!")
                 print(f"✓ Session cookie saved to: {Path(args.cookie_file).expanduser()}")
                 print("\nYou can now use this cookie with agents:")
-                print(f"  python agents/agent_w_auth.py --use-session-cookie")
+                print(f"  python agents/agent.py --use-session-cookie")
                 print("="*50 + "\n")
                 return 0
             else:
