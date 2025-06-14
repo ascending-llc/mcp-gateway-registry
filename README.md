@@ -35,6 +35,8 @@ You can deploy the gateway and registry on Amazon EC2 or Amazon EKS for producti
 
 ## What's New
 
+* **IdP Integration with Amazon Cognito:** Complete identity provider integration supporting both user identity and agent identity modes
+* **Fine-Grained Access Control (FGAC) for MCP servers and tools:** Granular permissions system allowing precise control over which agents can access specific servers and tools
 * **Integration with [Strands Agents](https://github.com/strands-agents/sdk-python):** Enhanced agent capabilities with the Strands SDK
 * **Dynamic tool discovery and invocation:** User agents can discover new tools through the registry and have limitless capabilities
 * **[Installation on EKS](#installation-on-eks):** Deploy on Kubernetes for production environments
