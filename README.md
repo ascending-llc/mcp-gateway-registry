@@ -1,11 +1,6 @@
 <img src="registry/static/mcp_gateway_horizontal_white_logo.png" alt="MCP Gateway Logo" width="100%">
 
-# ⚠️ ACTIVE DEVELOPMENT - WORK IN PROGRESS ⚠️
 
-> **WARNING**: This repository is under active development. Expect frequent updates and breaking changes as we improve functionality and refine APIs. We recommend pinning to specific versions for production use. Star the repository to track our progress!
-
-![Under Construction](https://img.shields.io/badge/Status-Under%20Construction-yellow)
-![Stability](https://img.shields.io/badge/API%20Stability-Experimental-orange)
 ![GitHub stars](https://img.shields.io/github/stars/agentic-community/mcp-gateway-registry?style=flat&logo=github)
 ![GitHub forks](https://img.shields.io/github/forks/agentic-community/mcp-gateway-registry?style=flat&logo=github)
 ![GitHub issues](https://img.shields.io/github/issues/agentic-community/mcp-gateway-registry?style=flat&logo=github)
@@ -61,11 +56,20 @@ flowchart TB
             RP["Reverse Proxy Router"]
         end
         
+        subgraph AuthRegistry["Authentication & Registry Services"]
+            AuthServer["Auth Server<br/>(Dual Auth)"]
+            Registry["Registry<br/>Web UI"]
+            RegistryMCP["Registry<br/>MCP Server"]
+        end
+        
         subgraph LocalMCPServers["Local MCP Servers"]
             MCP_Local1["MCP Server 1"]
             MCP_Local2["MCP Server 2"]
         end
     end
+    
+    %% Identity Provider
+    IdP[Identity Provider<br/>Amazon Cognito]
     
     subgraph EKS_Cluster["Amazon EKS/EC2 Cluster"]
         MCP_EKS1["MCP Server 3"]
@@ -87,10 +91,16 @@ flowchart TB
     end
     
     %% Connections from Agents to Gateway
-    Agent1 -->|MCP Protocol<br>SSE| RP
-    Agent2 -->|MCP Protocol<br>SSE| RP
-    Agent3 -->|MCP Protocol<br>Streamable HTTP| RP
-    AgentN -->|MCP Protocol<br>Streamable HTTP| RP
+    Agent1 -->|MCP Protocol<br>SSE with Auth| RP
+    Agent2 -->|MCP Protocol<br>SSE with Auth| RP
+    Agent3 -->|MCP Protocol<br>Streamable HTTP with Auth| RP
+    AgentN -->|MCP Protocol<br>Streamable HTTP with Auth| RP
+    
+    %% Auth flow connections
+    RP -->|Auth validation| AuthServer
+    AuthServer -.->|Validate credentials| IdP
+    RP -->|Tool discovery| RegistryMCP
+    RP -->|Web UI access| Registry
     
     %% Connections from Gateway to MCP Servers
     RP -->|SSE| MCP_Local1
@@ -124,6 +134,8 @@ flowchart TB
     class Agent1,Agent2,Agent3,AgentN agent
     class EC2_Gateway,NGINX gateway
     class RP nginx
+    class AuthServer,Registry,RegistryMCP gateway
+    class IdP apiGw
     class MCP_Local1,MCP_Local2 mcpServer
     class EKS_Cluster,MCP_EKS1,MCP_EKS2 eks
     class API_GW apiGw
