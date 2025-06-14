@@ -28,6 +28,31 @@ The MCP Gateway & Registry solves these challenges by providing a unified platfo
 
 You can deploy the gateway and registry on Amazon EC2 or Amazon EKS for production environments. Jump to [installation on EC2](#installation-on-ec2) or [installation on EKS](#installation-on-eks) for deployment instructions.
 
+## Table of Contents
+
+- [What's New](#whats-new)
+- [Architecture](#architecture)
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+  - [Installation on EC2](#installation-on-ec2)
+    - [Docker Compose Architecture](#docker-compose-architecture)
+    - [Quick Start Installation](#quick-start-installation)
+    - [Post-Installation](#post-installation)
+    - [Running the Gateway over HTTPS](#running-the-gateway-over-https)
+  - [Installation on EKS](#installation-on-eks)
+- [Using the Gateway and Registry with AI Agents](#using-the-gateway-and-registry-with-ai-agents)
+  - [Run Agent with User Identity](#run-agent-with-user-identity)
+  - [Run Agent with Its Own Agentic Identity](#run-agent-with-its-own-agentic-identity)
+- [Usage](#usage)
+  - [Web Interface Usage](#web-interface-usage)
+  - [MCP Client Integration](#mcp-client-integration)
+    - [Programmatic Access](#programmatic-access)
+    - [Integration Example](#integration-example)
+  - [Adding New MCP Servers to the Registry](#adding-new-mcp-servers-to-the-registry)
+- [Roadmap](#roadmap)
+- [License](#license)
+
 ## What's New
 
 * **IdP Integration with Amazon Cognito:** Complete identity provider integration supporting both user identity and agent identity modes. See [detailed Cognito setup guide](docs/cognito.md) for configuration instructions.
