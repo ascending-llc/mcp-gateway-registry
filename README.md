@@ -403,38 +403,23 @@ Once connected, your MCP client can:
 - Manage server configurations
 - Monitor server health and status
 
-### API Usage
+### Adding New MCP Servers to the Registry
 
-#### Adding New MCP Servers
+**Option 1 - Via MCP Registry UI:**
+Click the "Register Server" button on the top right corner of the Registry web interface and follow the instructions. You'll need to provide the following parameters:
 
-**Option 1 - Via MCP Client (_recommended_):**
-Connect any MCP client that supports SSE to the registry and use natural language to register new servers. The registry will guide you through the registration process.
+- **Server Name**: Display name for the server
+- **Path**: Unique URL path prefix for the server (e.g., '/my-service'). Must start with '/'
+- **Proxy Pass URL**: The internal or external URL where the MCP server is running (e.g., 'http://localhost:8001')
+- **Description**: Description of the server (optional)
+- **Tags**: List of tags for categorization (optional)
+- **Number of Tools**: Number of tools provided by the server (optional)
+- **Number of Stars**: Rating for the server (optional)
+- **Is Python**: Whether the server is implemented in Python (optional)
+- **License**: License information for the server (optional)
 
-**Option 2 - Direct API Access:**
-Use the REST API endpoints directly. First authenticate, then use the registration endpoint:
-
-```bash
-# Login to get the session cookie
-curl -X POST \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=admin&password=$ADMIN_PASSWORD" \
-  -c cookies.txt \
-  http://localhost:7860/login
-
-# Register a new MCP server
-curl -X POST http://localhost:7860/register \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -b cookies.txt \
-  --data-urlencode "name=My New Service" \
-  --data-urlencode "description=A fantastic new service" \
-  --data-urlencode "path=/new-service" \
-  --data-urlencode "proxy_pass_url=http://localhost:8004" \
-  --data-urlencode "tags=new,experimental" \
-  --data-urlencode "num_tools=2" \
-  --data-urlencode "num_stars=0" \
-  --data-urlencode "is_python=true" \
-  --data-urlencode "license=MIT"
-```
+**Option 2 - Via MCP Host:**
+_Coming soon_ - Use MCP Host applications such as VSCode-insiders or Cursor to register servers directly through their MCP client interfaces.
 
 #### Integration Example
 
@@ -465,21 +450,6 @@ async with sse_client(server_url, headers=headers) as (read, write):
             response += r.text + "\n"
 ```
 
-
-## API Endpoints (Brief Overview)
-
-See the full API spec [here](docs/registry_api.md).
-
-*   `POST /register`: Register a new service (form data).
-*   `POST /toggle/{service_path}`: Enable/disable a service (form data).
-*   `POST /edit/{service_path}`: Update service details (form data).
-*   `GET /api/server_details/{service_path}`: Get full details for a service (JSON).
-*   `GET /api/tools/{service_path}`: Get the discovered tool list for a service (JSON).
-*   `POST /api/refresh/{service_path}`: Manually trigger a health check/tool update.
-*   `GET /login`, `POST /login`, `POST /logout`: Authentication routes.
-*   `WebSocket /ws/health_status`: Real-time connection for receiving server health status updates.
-
-*(Authentication via session cookie is required for most non-login routes)*
 
 ## Roadmap
 
