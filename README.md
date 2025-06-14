@@ -287,26 +287,6 @@ The deployment includes these containers:
 2. **View MCP server metadata:**
    Metadata about all MCP servers is available in `/opt/mcp-gateway/servers` directory. The metadata includes information gathered from `ListTools` as well as information provided during server registration.
 
-3. **Test the Gateway and Registry:**
-   The repo includes a test agent that can connect to the Registry to discover tools and invoke them:
-
-   ```bash
-   python agents/agent.py --mcp-registry-url http://localhost/mcpgw/sse --message "what is the current time in clarksburg, md"
-
-   # With Strands agent
-   # python agents/strands_agent.py --mcp-registry-url http://localhost/mcpgw/sse --message "what is the current time in clarksburg, md"
-   ```
-
-   You can also run the full test suite:
-
-   ```bash
-   python agents/test_suite.py --mcp-registry-url http://localhost/mcpgw/sse
-   # With Strands agent
-   # python agents/test_suite.py --mcp-registry-url http://localhost/mcpgw/sse --use-strands
-   ```
-
-   Test results are available in the `agents/test_results` folder with accuracy metrics and detailed logs.
-
 #### Running the Gateway over HTTPS
 
 For production deployments with SSL certificates:
@@ -333,6 +313,49 @@ For production deployments with SSL certificates:
    - Main interface: `https://your-domain.com`
    - Registry API: `https://your-domain.com:7860` (if port 7860 is opened in security group)
    - MCP servers: `https://your-domain.com/server-name/sse`
+
+## Using the Gateway and Registry with AI Agents
+
+### Run Agent with User Identity
+
+1. **Configure environment for user authentication:**
+   Copy the template and configure the environment variables:
+   
+   ```bash
+   cp agents/.env.template agents/.env.user
+   # Edit agents/.env.user with your Cognito configuration
+   ```
+
+2. **Authenticate with user identity:**
+   Run the CLI user authentication script which will prompt you to open a browser window to authenticate with Cognito:
+   
+   ```bash
+   python agents/cli_user_auth.py
+   ```
+   
+   This will save a cookie locally in `/home/ubuntu/.mcp` and this cookie will be used when you run the agent.
+
+3. **Run the agent with session cookie:**
+   ```bash
+   python agents/agent.py --use-session-cookie --mcp-registry-url your_registry_url --message "what is the current time in clarksburg, md"
+   ```
+
+### Run Agent with Its Own Agentic Identity
+
+1. **Configure environment for agent authentication:**
+   Copy the template and configure the environment variables:
+   
+   ```bash
+   cp agents/.env.template agents/.env.agent
+   # Edit agents/.env.agent with your Cognito configuration
+   ```
+
+2. **Run the agent with agentic identity:**
+   The agent will communicate with Cognito to obtain a JWT token which will include information about the groups it is part of. This information is then used by the Auth server for authorization decisions.
+   
+   ```bash
+   python agents/agent.py --mcp-registry-url your_registry_url --message "what is the current time in clarksburg, md"
+   ```
 
 ### Installation on EKS
 
