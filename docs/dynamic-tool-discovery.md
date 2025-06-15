@@ -143,6 +143,8 @@ if weather_tools:
 
 The more powerful approach is when AI agents themselves use dynamic tool discovery autonomously. The agent has access to both `intelligent_tool_finder` and `invoke_mcp_tool` as available tools, allowing it to discover and execute new capabilities on-demand.
 
+**Demo Video**: [Watch the agent integration in action](https://github.com/user-attachments/assets/cee1847d-ecc1-406b-a83e-ebc80768430d)
+
 #### System Prompt Configuration
 
 Agents are configured with instructions on how to use dynamic tool discovery:

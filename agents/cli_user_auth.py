@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 script_dir = Path(__file__).parent
 env_file = script_dir / '.env.user'
 if env_file.exists():
-    load_dotenv(env_file)
+    load_dotenv(env_file, override=True)
     logger.info(f"Loaded environment variables from {env_file}")
 else:
     logger.warning(f"No .env file found at {env_file}")

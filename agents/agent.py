@@ -596,7 +596,7 @@ async def main():
         # Initialize MCP client with the server configuration and authentication headers
         client = MultiServerMCPClient(
             {
-                "default_server": {
+                "mcp_registry": {
                     "url": server_url,
                     "transport": "sse",
                     "headers": auth_headers

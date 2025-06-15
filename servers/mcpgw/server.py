@@ -36,9 +36,6 @@ REGISTRY_BASE_URL = os.environ.get("REGISTRY_BASE_URL", "http://localhost:7860")
 if not REGISTRY_BASE_URL:
     raise ValueError("REGISTRY_BASE_URL environment variable is not set.")
 
-# --- Global state for authentication ---
-_session_cookie: Optional[str] = None
-_auth_lock = asyncio.Lock()
 
 # --- FAISS and Sentence Transformer Integration for mcpgw --- START
 _faiss_data_lock = asyncio.Lock()
@@ -153,65 +150,6 @@ async def load_faiss_data_for_mcpgw():
 
 # --- FAISS and Sentence Transformer Integration for mcpgw --- END
 
-# --- Pydantic Models for Credentials and Parameters ---
-
-class Credentials(BaseModel):
-    """Credentials for authentication with the registry API."""
-    username: str = Field(..., description="Username for registry authentication")
-    password: str = Field(..., description="Password for registry authentication")
-
-
-async def _ensure_authenticated(credentials: Credentials):
-    """Ensures an active session cookie exists, attempts login if not."""
-    global _session_cookie
-    if _session_cookie is None:
-        async with _auth_lock: # Ensure only one coroutine attempts login at a time
-            # Double-check after acquiring the lock
-            if _session_cookie is None:
-                logger.info("MCPGW: No active session cookie. Attempting to authenticate with the main registry...")
-                login_url = f"{REGISTRY_BASE_URL.rstrip('/')}/login"
-                try:
-                    async with httpx.AsyncClient(timeout=Constants.REQUEST_TIMEOUT) as client:
-                        login_response = await client.post(
-                            login_url,
-                            data={"username": credentials.username, "password": credentials.password},
-                            headers={"Content-Type": "application/x-www-form-urlencoded"},
-                            follow_redirects=False
-                        )
-                        if login_response.status_code not in [200, 303]:
-                            login_response.raise_for_status()
-                        
-                        cookie_value = login_response.cookies.get("mcp_gateway_session")
-                        if not cookie_value and 'set-cookie' in login_response.headers:
-                            cookie_header = login_response.headers['set-cookie']
-                            if 'mcp_gateway_session=' in cookie_header:
-                                cookie_value = cookie_header.split('mcp_gateway_session=')[1].split(';')[0].strip()
-
-                        if cookie_value:
-                            _session_cookie = cookie_value
-                            logger.info("MCPGW: Authentication successful. Session cookie obtained.")
-                        else:
-                            # Simplified error logging for brevity in this new function
-                            logger.error("MCPGW: Authentication failed: 'mcp_gateway_session' cookie not found.")
-                            raise Exception("Authentication failed: Session cookie not found.")
-                except httpx.HTTPStatusError as e:
-                    error_detail = f"HTTP Status {e.response.status_code}"
-                    try:
-                        error_detail += f" - Detail: {e.response.json().get('detail', 'N/A')}"
-                    except Exception as json_error:
-                        # Log attempt to extract JSON details failed, but continue with basic error info
-                        logger.debug(f"MCPGW: Could not extract error details from JSON response: {json_error}")
-                    logger.error(f"MCPGW: Authentication failed: {error_detail}")
-                    raise Exception(f"Authentication failed: {error_detail}") from e
-                except httpx.RequestError as e:
-                    logger.error(f"MCPGW: Authentication failed: Could not connect to registry at {login_url}. Error: {e}")
-                    raise Exception(f"Authentication failed: Request Error {e}") from e
-                except Exception as e:
-                    logger.error(f"MCPGW: An unexpected error occurred during authentication: {e}")
-                    raise Exception(f"An unexpected error occurred during authentication: {e}") from e
-    # If we reach here, cookie should exist or an error was raised.
-    if _session_cookie is None: # Should be redundant given the logic above, but as a safeguard.
-        raise Exception("MCPGW: Unable to establish authenticated session.")
 
 class Constants(BaseModel):
     # Using ClassVar to define class-level constants
@@ -256,40 +194,23 @@ mcp = FastMCP("MCPGateway", host="0.0.0.0", port=int(args.port))
 mcp.settings.mount_path = "/mcpgw"
 
 
-# --- Pydantic Models for Credentials and Parameters ---
-
-# Pydantic classes for ServicePathParams and RegisterServiceParams have been removed
-# as they are no longer needed. The parameters are now directly defined in the functions.
-
-
-# --- Helper function for making requests to the registry (with authentication) ---
-async def _call_registry_api(method: str, endpoint: str, credentials: Credentials, **kwargs) -> Dict[str, Any]:
+# --- Helper function for making requests to the registry ---
+async def _call_registry_api(method: str, endpoint: str, **kwargs) -> Dict[str, Any]:
     """
     Helper function to make async requests to the registry API.
-    Handles authentication automatically.
     
     Args:
         method: HTTP method (GET, POST, etc.)
         endpoint: API endpoint path
-        credentials: Credentials model with username and password
         **kwargs: Additional arguments to pass to the HTTP request
         
     Returns:
         Dict[str, Any]: JSON response from the API
     """
-    global _session_cookie # Still needed here to use it
     url = f"{REGISTRY_BASE_URL.rstrip('/')}{endpoint}"
-
-    # Only ensure authenticated session if we don't already have a session cookie
-    if _session_cookie is None:
-        await _ensure_authenticated(credentials)
 
     # Use a single client instance for potential connection pooling benefits
     async with httpx.AsyncClient(timeout=Constants.REQUEST_TIMEOUT) as client:
-        # --- Make the actual API request with the cookie ---
-        request_cookies = {"mcp_gateway_session": _session_cookie}
-        kwargs['cookies'] = request_cookies # Add/overwrite cookies in kwargs
-
         try:
             logger.info(f"Calling Registry API: {method} {url}") # Log the actual call
             response = await client.request(method, url, **kwargs)
@@ -301,23 +222,14 @@ async def _call_registry_api(method: str, endpoint: str, credentials: Credential
             return response.json()
 
         except httpx.HTTPStatusError as e:
-            # Check if it's an authentication error (e.g., cookie expired/invalid)
-            if e.response.status_code in [401, 403]:
-                logger.warning(f"API call failed with {e.response.status_code}. Cookie might be invalid or expired. Clearing cookie for re-authentication on next call.")
-                # Clear the cookie so the next call re-authenticates
-                async with _auth_lock:
-                    _session_cookie = None
-                # Raise a specific error indicating auth failure during API call
-                raise Exception(f"Registry API Authentication Error ({e.response.status_code}) for {method} {url}. Please retry.") from e
-            else:
-                # Handle other HTTP errors as before
-                error_detail = "No specific error detail provided."
-                try:
-                    error_detail = e.response.json().get("detail", error_detail)
-                except Exception as json_error:
-                    # Log that we couldn't get detailed error from JSON, but continue with existing error info
-                    logger.debug(f"MCPGW: Could not extract detailed error from response: {json_error}")
-                raise Exception(f"Registry API Error ({e.response.status_code}): {error_detail} for {method} {url}") from e
+            # Handle HTTP errors
+            error_detail = "No specific error detail provided."
+            try:
+                error_detail = e.response.json().get("detail", error_detail)
+            except Exception as json_error:
+                # Log that we couldn't get detailed error from JSON, but continue with existing error info
+                logger.debug(f"MCPGW: Could not extract detailed error from response: {json_error}")
+            raise Exception(f"Registry API Error ({e.response.status_code}): {error_detail} for {method} {url}") from e
         except httpx.RequestError as e:
             # Network or connection error during the API call
             raise Exception(f"Registry API Request Error: Failed to connect or communicate with {url}. Details: {e}") from e
@@ -330,18 +242,12 @@ async def _call_registry_api(method: str, endpoint: str, credentials: Credential
 @mcp.tool()
 async def toggle_service(
     service_path: str = Field(..., description="The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'."),
-    username: str = Field(None, description="Username for registry authentication (optional if session_cookie is provided)"),
-    password: str = Field(None, description="Password for registry authentication (optional if session_cookie is provided)"),
-    session_cookie: str = Field(None, description="Session cookie for registry authentication (optional if username/password is provided)")
 ) -> Dict[str, Any]:
     """
     Toggles the enabled/disabled state of a registered MCP server in the gateway.
 
     Args:
         service_path: The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'.
-        username: Username for registry authentication (optional if session_cookie is provided).
-        password: Password for registry authentication (optional if session_cookie is provided).
-        session_cookie: Session cookie for registry authentication (optional if username/password is provided).
 
     Returns:
         Dict[str, Any]: Response from the registry API indicating success or failure.
@@ -350,22 +256,8 @@ async def toggle_service(
         Exception: If the API call fails.
     """
     endpoint = f"/toggle/{service_path.lstrip('/')}" # Ensure path doesn't have double slash
-    
-    # Handle authentication - support both methods
-    if session_cookie:
-        # Use session cookie directly
-        global _session_cookie
-        _session_cookie = session_cookie
-        # Create dummy credentials since they won't be used
-        credentials = Credentials(username="", password="")
-    elif username and password:
-        # Authenticate with username/password to get session cookie
-        credentials = Credentials(username=username, password=password)
-        await _ensure_authenticated(credentials)
-    else:
-        raise Exception("Either session_cookie OR (username AND password) must be provided for authentication")
         
-    return await _call_registry_api("POST", endpoint, credentials=credentials)
+    return await _call_registry_api("POST", endpoint)
 
 
 @mcp.tool()
@@ -379,9 +271,6 @@ async def register_service(
     num_stars: Optional[int] = Field(0, description="Number of stars/rating for the server."),
     is_python: Optional[bool] = Field(False, description="Whether the server is implemented in Python."),
     license: Optional[str] = Field("N/A", description="License information for the server."),
-    username: str = Field(None, description="Username for registry authentication (optional if session_cookie is provided)"),
-    password: str = Field(None, description="Password for registry authentication (optional if session_cookie is provided)"),
-    session_cookie: str = Field(None, description="Session cookie for registry authentication (optional if username/password is provided)")
 ) -> Dict[str, Any]:
     """
     Registers a new MCP server with the gateway.
@@ -396,9 +285,6 @@ async def register_service(
         num_stars: Number of stars/rating for the server.
         is_python: Whether the server is implemented in Python.
         license: License information for the server.
-        username: Username for registry authentication (optional if session_cookie is provided).
-        password: Password for registry authentication (optional if session_cookie is provided).
-        session_cookie: Session cookie for registry authentication (optional if username/password is provided).
         
     Returns:
         Dict[str, Any]: Response from the registry API, likely including the registered server details.
@@ -407,19 +293,6 @@ async def register_service(
         Exception: If the API call fails.
     """
     endpoint = "/register"
-    
-    # Handle authentication - support both methods
-    if session_cookie:
-        # Use session cookie directly
-        global _session_cookie
-        _session_cookie = session_cookie
-        credentials = Credentials(username="", password="")
-    elif username and password:
-        # Authenticate with username/password to get session cookie
-        credentials = Credentials(username=username, password=password)
-        await _ensure_authenticated(credentials)
-    else:
-        raise Exception("Either session_cookie OR (username AND password) must be provided for authentication")
     
     # Convert tags list to comma-separated string if it's a list
     tags_str = ",".join(tags) if isinstance(tags, list) and tags is not None else tags
@@ -440,14 +313,11 @@ async def register_service(
     form_data = {k: v for k, v in form_data.items() if v is not None}
     
     # Send as form data instead of JSON
-    return await _call_registry_api("POST", endpoint, credentials=credentials, data=form_data)
+    return await _call_registry_api("POST", endpoint, data=form_data)
 
 @mcp.tool()
 async def get_service_tools(
     service_path: str = Field(..., description="The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'. Use '/all' to get tools from all registered servers."),
-    username: str = Field(None, description="Username for registry authentication (optional if session_cookie is provided)"),
-    password: str = Field(None, description="Password for registry authentication (optional if session_cookie is provided)"),
-    session_cookie: str = Field(None, description="Session cookie for registry authentication (optional if username/password is provided)")
 ) -> Dict[str, Any]:
     """
     Lists the tools provided by a specific registered MCP server.
@@ -455,9 +325,6 @@ async def get_service_tools(
     Args:
         service_path: The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'.
                       Use '/all' to get tools from all registered servers.
-        username: Username for registry authentication (optional if session_cookie is provided).
-        password: Password for registry authentication (optional if session_cookie is provided).
-        session_cookie: Session cookie for registry authentication (optional if username/password is provided).
 
     Returns:
         Dict[str, Any]: A list of tools exposed by the specified server.
@@ -466,28 +333,12 @@ async def get_service_tools(
         Exception: If the API call fails or the server cannot be reached.
     """
     endpoint = f"/api/tools/{service_path.lstrip('/')}"
-    
-    # Handle authentication - support both methods
-    if session_cookie:
-        # Use session cookie directly
-        global _session_cookie
-        _session_cookie = session_cookie
-        credentials = Credentials(username="", password="")
-    elif username and password:
-        # Authenticate with username/password to get session cookie
-        credentials = Credentials(username=username, password=password)
-        await _ensure_authenticated(credentials)
-    else:
-        raise Exception("Either session_cookie OR (username AND password) must be provided for authentication")
         
-    return await _call_registry_api("GET", endpoint, credentials=credentials)
+    return await _call_registry_api("GET", endpoint)
 
 @mcp.tool()
 async def refresh_service(
     service_path: str = Field(..., description="The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'."),
-    username: str = Field(None, description="Username for registry authentication (optional if session_cookie is provided)"),
-    password: str = Field(None, description="Password for registry authentication (optional if session_cookie is provided)"),
-    session_cookie: str = Field(None, description="Session cookie for registry authentication (optional if username/password is provided)")
 ) -> Dict[str, Any]:
     """
     Triggers a refresh of the tool list for a specific registered MCP server.
@@ -495,9 +346,6 @@ async def refresh_service(
 
     Args:
         service_path: The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'.
-        username: Username for registry authentication (optional if session_cookie is provided).
-        password: Password for registry authentication (optional if session_cookie is provided).
-        session_cookie: Session cookie for registry authentication (optional if username/password is provided).
 
     Returns:
         Dict[str, Any]: Response from the registry API indicating the result of the refresh attempt.
@@ -506,29 +354,13 @@ async def refresh_service(
         Exception: If the API call fails.
     """
     endpoint = f"/api/refresh/{service_path.lstrip('/')}"
-    
-    # Handle authentication - support both methods
-    if session_cookie:
-        # Use session cookie directly
-        global _session_cookie
-        _session_cookie = session_cookie
-        credentials = Credentials(username="", password="")
-    elif username and password:
-        # Authenticate with username/password to get session cookie
-        credentials = Credentials(username=username, password=password)
-        await _ensure_authenticated(credentials)
-    else:
-        raise Exception("Either session_cookie OR (username AND password) must be provided for authentication")
         
-    return await _call_registry_api("POST", endpoint, credentials=credentials)
+    return await _call_registry_api("POST", endpoint)
 
 
 @mcp.tool()
 async def get_server_details(
     service_path: str = Field(..., description="The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'. Use '/all' to get details for all registered servers."),
-    username: str = Field(None, description="Username for registry authentication (optional if session_cookie is provided)"),
-    password: str = Field(None, description="Password for registry authentication (optional if session_cookie is provided)"),
-    session_cookie: str = Field(None, description="Session cookie for registry authentication (optional if username/password is provided)")
 ) -> Dict[str, Any]:
     """
     Retrieves detailed information about a registered MCP server.
@@ -536,9 +368,6 @@ async def get_server_details(
     Args:
         service_path: The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'.
                       Use '/all' to get details for all registered servers.
-        username: Username for registry authentication (optional if session_cookie is provided).
-        password: Password for registry authentication (optional if session_cookie is provided).
-        session_cookie: Session cookie for registry authentication (optional if username/password is provided).
         
     Returns:
         Dict[str, Any]: Detailed information about the specified server or all servers if '/all' is specified.
@@ -547,21 +376,8 @@ async def get_server_details(
         Exception: If the API call fails or the server is not registered.
     """
     endpoint = f"/api/server_details/{service_path.lstrip('/')}"
-    
-    # Handle authentication - support both methods
-    if session_cookie:
-        # Use session cookie directly
-        global _session_cookie
-        _session_cookie = session_cookie
-        credentials = Credentials(username="", password="")
-    elif username and password:
-        # Authenticate with username/password to get session cookie
-        credentials = Credentials(username=username, password=password)
-        await _ensure_authenticated(credentials)
-    else:
-        raise Exception("Either session_cookie OR (username AND password) must be provided for authentication")
         
-    return await _call_registry_api("GET", endpoint, credentials=credentials)
+    return await _call_registry_api("GET", endpoint)
 
 
 @mcp.tool()
@@ -608,21 +424,15 @@ async def healthcheck() -> Dict[str, Any]:
 @mcp.tool()
 async def intelligent_tool_finder(
     natural_language_query: str = Field(..., description="Your query in natural language describing the task you want to perform."),
-    username: str = Field(None, description="Username for mcpgw server authentication (optional if session_cookie is provided)."),
-    password: str = Field(None, description="Password for mcpgw server authentication (optional if session_cookie is provided)."),
-    session_cookie: str = Field(None, description="Session cookie for registry authentication (optional if username/password is provided)."),
     top_k_services: int = Field(3, description="Number of top services to consider from initial FAISS search."),
     top_n_tools: int = Field(1, description="Number of best matching tools to return.")
 ) -> List[Dict[str, Any]]:
     """
-    Finds the most relevant MCP tool(s) across all registered and enabled services 
+    Finds the most relevant MCP tool(s) across all registered and enabled services
     based on a natural language query, using semantic search on the registry's FAISS index.
 
     Args:
         natural_language_query: The user's natural language query.
-        username: Username for authentication (optional if session_cookie is provided).
-        password: Password for authentication (optional if session_cookie is provided).
-        session_cookie: Session cookie for registry authentication (optional if username/password is provided).
         top_k_services: How many top-matching services to analyze for tools.
         top_n_tools: How many best tools to return from the combined list.
 
@@ -630,22 +440,6 @@ async def intelligent_tool_finder(
         A list of dictionaries, each describing a recommended tool, its parent service, and similarity.
     """
     global _embedding_model_mcpgw, _faiss_index_mcpgw, _faiss_metadata_mcpgw
-
-    # --- Handle authentication - support both session cookie and username/password --- START
-    global _session_cookie
-    
-    if session_cookie:
-        # Use provided session cookie directly
-        _session_cookie = session_cookie
-        logger.info("MCPGW: Using provided session cookie for registry authentication")
-    elif username and password:
-        # Authenticate with username/password to get session cookie
-        auth_credentials = Credentials(username=username, password=password)
-        await _ensure_authenticated(auth_credentials)
-        logger.info("MCPGW: Authenticated with username/password and obtained session cookie")
-    else:
-        raise Exception("MCPGW: Either session_cookie OR (username AND password) must be provided for authentication")
-    # --- Handle authentication - support both session cookie and username/password --- END
 
     # Ensure FAISS data and model are loaded
     if _embedding_model_mcpgw is None or _faiss_index_mcpgw is None or _faiss_metadata_mcpgw is None:
