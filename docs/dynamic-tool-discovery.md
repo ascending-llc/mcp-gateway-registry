@@ -44,26 +44,24 @@ The dynamic tool discovery process follows these steps:
 graph TB
     subgraph "Agent Layer"
         A[AI Agent] --> B[Natural Language Query]
+        A --> H[invoke_mcp_tool]
     end
     
     subgraph "Discovery Layer"
         B --> C[intelligent_tool_finder]
         C --> D[Sentence Transformer]
         C --> E[FAISS Index]
-    end
-    
-    subgraph "Registry Layer"
         E --> F[Tool Metadata]
         F --> G[Server Information]
+        G --> K[Tool Discovery Results]
+        K --> A
     end
     
     subgraph "Execution Layer"
-        G --> H[invoke_mcp_tool]
         H --> I[Target MCP Server]
+        I --> J[Tool Result]
+        J --> A
     end
-    
-    I --> J[Tool Result]
-    J --> A
 ```
 
 ### Key Technologies
@@ -75,33 +73,60 @@ graph TB
 
 ## Usage Examples
 
-### Basic Tool Discovery
+Dynamic tool discovery can be used in two primary ways:
+
+### 1. Direct Developer Usage
+
+Agent developers can directly call the `intelligent_tool_finder` in their code to discover tools, then use the results with the `invoke_mcp_tool` function to call the discovered tool.
+
+#### Basic Discovery
 
 ```python
-# Agent discovers time-related tools
-result = intelligent_tool_finder("current time in different timezone")
+# Basic usage with session cookie
+tools = await intelligent_tool_finder(
+    natural_language_query="what time is it in Tokyo",
+    session_cookie="your_session_cookie_here"
+)
 
 # Returns information about relevant tools:
-# {
-#   "tool_name": "current_time_by_timezone",
-#   "service_path": "/currenttime",
-#   "service_name": "Current Time Server",
-#   "tool_schema": {...},
-#   "overall_similarity_score": 0.89
-# }
+# [
+#   {
+#     "tool_name": "current_time_by_timezone",
+#     "service_path": "/currenttime",
+#     "service_name": "Current Time Server",
+#     "tool_schema": {...},
+#     "overall_similarity_score": 0.89
+#   }
+# ]
 ```
 
-### Complete Workflow Example
+#### Advanced Discovery
+
+```python
+# Advanced usage with multiple results
+tools = await intelligent_tool_finder(
+    natural_language_query="stock market information and financial data",
+    username="admin",
+    password="your_password",
+    top_k_services=5,
+    top_n_tools=3
+)
+```
+
+#### Complete Workflow
 
 ```python
 # 1. Discover tools for weather information
-weather_tools = intelligent_tool_finder("weather forecast for tomorrow")
+weather_tools = await intelligent_tool_finder(
+    natural_language_query="weather forecast for tomorrow",
+    session_cookie="your_session_cookie"
+)
 
 # 2. Use the discovered tool
 if weather_tools:
     tool_info = weather_tools[0]  # Get the best match
     
-    result = invoke_mcp_tool(
+    result = await invoke_mcp_tool(
         mcp_registry_url="https://your-registry.com/mcpgw/sse",
         server_name=tool_info["service_path"],  # e.g., "/weather"
         tool_name=tool_info["tool_name"],       # e.g., "get_forecast"
@@ -114,9 +139,11 @@ if weather_tools:
     )
 ```
 
-## Agent Integration
+### 2. Agent Integration
 
-### System Prompt Configuration
+The more powerful approach is when AI agents themselves use dynamic tool discovery autonomously. The agent has access to both `intelligent_tool_finder` and `invoke_mcp_tool` as available tools, allowing it to discover and execute new capabilities on-demand.
+
+#### System Prompt Configuration
 
 Agents are configured with instructions on how to use dynamic tool discovery:
 
@@ -138,7 +165,7 @@ Example workflow:
 </tool_discovery>
 ```
 
-### Agent Implementation
+#### Agent Implementation
 
 The agent implementation in [`agents/agent.py`](../agents/agent.py) shows how to:
 
@@ -162,6 +189,8 @@ logger.info(f"All available tools: {[tool.name if hasattr(tool, 'name') else too
 # Create the agent with the model and all tools
 agent = create_react_agent(model, all_tools)
 ```
+
+This integration enables agents to have **limitless capabilities** - they can handle any task for which there's an appropriate MCP tool registered in the system, even if they weren't originally programmed with knowledge of that tool.
 
 ## API Reference
 
