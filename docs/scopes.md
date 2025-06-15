@@ -1,5 +1,7 @@
 # Fine-Grained Access Control System Documentation
 
+> **Note**: While this document discusses Fine-Grained Access Control (FGAC) in the context of Amazon Cognito, the concepts and implementation apply to any Identity Provider (IdP). The same scope-based authorization model can be used with other OAuth2/OIDC providers by adapting the group mapping and token validation mechanisms.
+
 This document provides comprehensive documentation for the fine-grained access control system in the MCP Gateway Registry, explaining how the scope-based authorization model works and how to configure it properly.
 
 ## Table of Contents
@@ -107,6 +109,8 @@ group_mappings:
     - mcp-registry-user                     # Limited UI permissions
     - mcp-servers-restricted/read           # Limited server access
 ```
+
+> **Important**: All group names (such as `mcp-registry-admin`, `mcp-registry-user`) and scope names (such as `mcp-servers-unrestricted/read`, `mcp-servers-restricted/execute`) are completely customizable by the platform administrator deploying this solution. These names are examples and can be changed to match your organization's naming conventions and security requirements. The same group names must be configured consistently in both your Identity Provider (IdP) and the `scopes.yml` configuration file.
 
 ## Methods vs Tools Access Control
 
