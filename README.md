@@ -56,7 +56,7 @@ You can deploy the gateway and registry on Amazon EC2 or Amazon EKS for producti
 ## What's New
 
 * **IdP Integration with Amazon Cognito:** Complete identity provider integration supporting both user identity and agent identity modes. See [detailed Cognito setup guide](docs/cognito.md) for configuration instructions.
-* **Fine-Grained Access Control (FGAC) for MCP servers and tools:** Granular permissions system allowing precise control over which agents can access specific servers and tools
+* **Fine-Grained Access Control (FGAC) for MCP servers and tools:** Granular permissions system allowing precise control over which agents can access specific servers and tools. See [detailed FGAC documentation](docs/scopes.md) for scope configuration and access control setup.
 * **Integration with [Strands Agents](https://github.com/strands-agents/sdk-python):** Enhanced agent capabilities with the Strands SDK
 * **Dynamic tool discovery and invocation:** AI agents can autonomously discover and execute specialized tools beyond their initial capabilities using semantic search with FAISS indexing and sentence transformers. This breakthrough feature enables agents to handle tasks they weren't originally designed for by intelligently matching natural language queries to the most relevant MCP tools across all registered servers. [Learn more about Dynamic Tool Discovery →](docs/dynamic-tool-discovery.md)
 * **[Installation on EKS](#installation-on-eks):** Deploy on Kubernetes for production environments
@@ -222,7 +222,7 @@ flowchart TB
 
 *   **External API Keys (Optional):** One of the example MCP servers uses the [`Polygon`](https://polygon.io/stocks) API for stock ticker data. Get an API key from [here](https://polygon.io/dashboard/signup?redirect=%2Fdashboard%2Fkeys). The server will still start without the API key but you will get a 401 Unauthorized error when using the tools provided by this server.
 
-*   **Authentication Setup:** Setup authentication using Amazon Cognito as per instructions [here](docs/auth.md). For detailed Cognito configuration, see the [Cognito setup guide](docs/cognito.md).
+*   **Authentication Setup:** Setup authentication using Amazon Cognito as per instructions [here](docs/auth.md). For detailed Cognito configuration, see the [Cognito setup guide](docs/cognito.md). For Fine-Grained Access Control (FGAC) configuration, see the [scopes documentation](docs/scopes.md).
 
 ## Installation
 
@@ -288,6 +288,7 @@ The deployment includes these containers:
    - Access permissions will be based on the Cognito group you are a member of
    - Provides fine-grained access control based on your organizational roles
    - For detailed Cognito setup instructions, see [docs/cognito.md](docs/cognito.md)
+   - For Fine-Grained Access Control (FGAC) configuration and scope management, see [docs/scopes.md](docs/scopes.md)
    
    **Option 2 - Username/Password (Testing Only):**
    - Use the traditional login with:
