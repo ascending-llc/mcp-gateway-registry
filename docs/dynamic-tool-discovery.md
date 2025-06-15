@@ -337,10 +337,7 @@ _embedding_model_mcpgw = SentenceTransformer(EMBEDDINGS_MODEL_NAME, cache_folder
 
 ### Performance Metrics
 
-- **Search Speed**: < 100ms for typical queries
-- **Accuracy**: 85-95% relevance for well-described tools
-- **Scalability**: Handles 1000+ registered tools efficiently
-- **Memory Usage**: ~200MB for model and index data
+_Coming soon._
 
 ## Best Practices
 
