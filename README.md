@@ -216,9 +216,9 @@ flowchart TB
     - **Default Configuration:** Gateway is available over HTTP for development
 
 *   **Security Group Configuration:** Configure your EC2 security group based on your deployment scenario:
-    - **HTTPS with SSL certificate:** Only port **443** needs to be opened
-    - **HTTP with EC2 domain name:** Only port **80** needs to be opened
-    - **HTTP with localhost (port forwarding):** Ports **80**, **7860**, and **8888** need to be opened
+    - **HTTPS with SSL certificate:**  Port **8080**, **443** need to be opened
+    - **HTTP with EC2 domain name:** Port **8080**, **80** need to be opened
+    - **HTTP with localhost (port forwarding):** Ports **80**, **7860**, and **8080** need to be opened
 
 *   **External API Keys (Optional):** One of the example MCP servers uses the [`Polygon`](https://polygon.io/stocks) API for stock ticker data. Get an API key from [here](https://polygon.io/dashboard/signup?redirect=%2Fdashboard%2Fkeys). The server will still start without the API key but you will get a 401 Unauthorized error when using the tools provided by this server.
 

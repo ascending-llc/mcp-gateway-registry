@@ -22,129 +22,128 @@ Both modes integrate with Amazon Cognito as the Identity Provider (IdP) and use 
 
 ## Amazon Cognito Setup
 
-### Step 1: Create Cognito User Pool
+This section covers setting up Amazon Cognito for two distinct authentication modes used by the MCP Gateway Registry system.
+
+### User Group Setup (For Users and Agents Using User Identity)
+
+This setup is for users who will authenticate through the web interface and for agents that act on behalf of users using their identity and permissions.
+
+#### Step 1: Create User Pool
 
 1. **Navigate to Amazon Cognito Console**
    - Go to [AWS Cognito Console](https://console.aws.amazon.com/cognito/)
    - Select your desired AWS region (e.g., `us-east-1`)
-   - Click "Create user pool"
+   - Click the **"Create User pool"** button
 
-2. **Configure Sign-in Experience**
-   - **Authentication providers**: Choose "Cognito user pool"
-   - **Cognito user pool sign-in options**: Select "Email" and optionally "Username"
-   - Click "Next"
+2. **Configure Application Type**
+   - Select **"Traditional Web App"** for application type
+   - Name your application **"MCP Gateway"**
 
-3. **Configure Security Requirements**
-   - **Password policy**: Choose "Cognito defaults" or customize as needed
-   - **Multi-factor authentication**: Choose "Optional" or "Required" based on your security requirements
-   - **User account recovery**: Enable "Email only"
-   - Click "Next"
+3. **Configure Sign-in Options**
+   - Under "Options for sign-in identifiers", select:
+     - **Email**
+     - **Username**
+     - **Phone number**
 
-4. **Configure Sign-up Experience**
-   - **Self-service sign-up**: Enable if you want users to self-register
-   - **Required attributes**: Select "email" at minimum
-   - **Custom attributes**: Add any custom attributes if needed
-   - Click "Next"
+4. **Set Required Attributes**
+   - Under "Required attributes for sign-up", select:
+     - **Email** (required)
 
-5. **Configure Message Delivery**
-   - **Email provider**: Choose "Send email with Cognito" for development or configure SES for production
-   - Click "Next"
+5. **Create User Directory**
+   - Click on **"Create User Directory"**
+   - Once created, click on **"Go to overview"** (typically on the bottom right corner of the page)
 
-6. **Integrate Your App**
-   - **User pool name**: Enter a descriptive name (e.g., `mcp-gateway-users`)
-   - **Hosted authentication pages**: Check "Use the Cognito Hosted UI"
-   - **Domain**: Choose "Use a Cognito domain" and enter a unique domain prefix
-   - Click "Next"
+#### Step 2: Configure App Client for Users
 
-7. **Review and Create**
-   - Review all settings
-   - Click "Create user pool"
+1. **Access App Clients**
+   - Click on **"App Clients"** in the left navigation
+   - Click on **"MCP Gateway"** from the App Client list
 
-### Step 2: Configure App Clients
+2. **Copy Client Credentials**
+   - Copy and paste the **Client ID** and **Client Secret**
+   - Note them separately - you'll need them later for `.env` files for the MCP Gateway and agent. 
 
-You'll need to create two app clients: one for user authentication (PKCE flow) and one for M2M authentication.
+3. **Configure Login Pages**
+   - Click on **"Login Pages"** and then **"Edit"**
 
-#### App Client for User Authentication (PKCE Flow)
+4. **Set Callback URLs**
+   - For the allowed callback URLs, add the following 3 URLs:
+     - `http://localhost:8080/callback`
+     - `http://localhost:8080/oauth2/callback/cognito`
+     - `https://your_mcp_gateway_domain_name/oauth2/callback/cognito`
 
-1. **Navigate to App Integration**
+5. **Configure OpenID Connect Scopes**
+   - From OpenID Connect Scopes section:
+     - **Email**, **openid**, **phone** would already be there
+     - **Remove** phone
+     - **Add** profile
+     - **Add** aws.cognito.signin.user.admin
+
+#### Step 3: Create Users and Groups
+
+1. **Create a User**
+   - Click on **"Users"** in the main menu
+   - Create a new user with the following settings:
+     - Select **email** as identifier
+     - **Don't send invitation**
+     - Provide **username** and **email address**
+     - Mark **email address as verified** (check the checkbox)
+     - Choose a desired **username** and set a **password**
+
+2. **Create Admin Group**
+   - Create a group called **"mcp-registry-admin"**
+   - Leave everything as default
+
+3. **Add User to Group**
+   - Once the group is created, click on the **group name**
+   - Click on **"Add user to group"**
+   - Add the user you created in the previous step to this group
+
+### Machine-to-Machine (M2M) Setup (For Agents Using Their Own Identity)
+
+This setup is for agents that have their own identity and authenticate using client credentials flow without user interaction.
+
+#### Step 1: Create M2M App Client
+
+1. **Create Machine-to-Machine App Client**
    - In your user pool, go to "App integration" tab
-   - Click "Create app client"
-
-2. **Configure App Client**
-   - **App type**: Select "Public client"
-   - **App client name**: Enter `mcp-gateway-user-client`
-   - **Client secret**: Select "Don't generate a client secret"
-   - **Authentication flows**: Enable "ALLOW_USER_SRP_AUTH" and "ALLOW_REFRESH_TOKEN_AUTH"
-
-3. **Configure Hosted UI Settings**
-   - **Allowed callback URLs**: Add:
-     - `http://localhost:8080/callback` (for local development)
-     - `https://your-domain.com/oauth2/callback/cognito` (for production)
-   - **Allowed sign-out URLs**: Add:
-     - `http://localhost:7860` (for local development)
-     - `https://your-domain.com` (for production)
-   - **Identity providers**: Select "Cognito user pool"
-   - **OAuth 2.0 grant types**: Enable "Authorization code grant"
-   - **OpenID Connect scopes**: Enable "openid", "email", "profile"
-
-#### App Client for M2M Authentication
-
-1. **Create Second App Client**
-   - Click "Create app client" again
-   - **App type**: Select "Confidential client"
-   - **App client name**: Enter `mcp-gateway-m2m-client`
+   - Click **"Create app client"**
+   - **App type**: Select "Machine to Machine"
+   - **App client name**: Enter `Agent` (or `My AI Assistant` or any name that reflects what the agent will do)
    - **Client secret**: Select "Generate a client secret"
-   - **Authentication flows**: Enable "ALLOW_USER_SRP_AUTH" and "ALLOW_REFRESH_TOKEN_AUTH"
+   - **Copy and save** the **Client ID** and **Client Secret** - you'll need these for the [`agents/.env.agent`](../agents/.env.agent) file
 
-2. **Configure M2M Settings**
-   - **OAuth 2.0 grant types**: Enable "Client credentials"
-   - **Custom scopes**: Add custom scopes for your MCP servers (see [Scope Configuration](#scope-configuration))
+#### Step 2: Create Resource Server and Custom Scopes
 
-### Step 3: Create User Groups
-
-Groups are used to map users to specific scopes and permissions.
-
-1. **Navigate to Groups**
-   - In your user pool, go to "Groups" tab
-   - Click "Create group"
-
-2. **Create Required Groups**
-   Create the following groups based on your [`scopes.yml`](../auth_server/scopes.yml) configuration:
-
-   - **mcp-registry-admin**
-     - Description: "Full administrative access to MCP registry and all servers"
-     - Precedence: 1
-
-   - **mcp-registry-developer**
-     - Description: "Developer access with ability to register services"
-     - Precedence: 2
-
-   - **mcp-registry-operator**
-     - Description: "Operator access with ability to control services"
-     - Precedence: 3
-
-   - **mcp-registry-user**
-     - Description: "Basic user access to limited MCP servers"
-     - Precedence: 4
-
-### Step 4: Configure Custom Scopes (for M2M)
-
-1. **Navigate to Resource Servers**
-   - In your user pool, go to "App integration" → "Resource servers"
-   - Click "Create resource server"
+1. **Navigate to Domain Settings**
+   - In the sidebar, click on **"Branding"**
+   - Under Branding, click on **"Domain"**
 
 2. **Create Resource Server**
-   - **Name**: `mcp-gateway-api`
-   - **Identifier**: `mcp-gateway`
-   - **Scopes**: Add the following custom scopes based on your [`scopes.yml`](../auth_server/scopes.yml):
-     - `mcp-servers-unrestricted/read`: "Read access to all MCP servers"
-     - `mcp-servers-unrestricted/execute`: "Execute access to all MCP servers"
-     - `mcp-servers-restricted/read`: "Read access to restricted MCP servers"
-     - `mcp-servers-restricted/execute`: "Execute access to restricted MCP servers"
+   - Click **"Create resource server"**
+   - **Name**: `mcp-servers-unrestricted`
+   - **Identifier**: `mcp-servers-unrestricted` (use the same name as identifier)
 
-3. **Update M2M App Client**
-   - Go back to your M2M app client
-   - In "Hosted UI settings", add the custom scopes you just created
+3. **Add Custom Scopes**
+   - Add two custom scopes:
+     - `read`: "Read access to all MCP servers"
+     - `execute`: "Execute access to all MCP servers"
+   - This group gives your agent access to all MCP servers and tools accessible via the MCP Gateway
+   - See [`auth_server/scopes.yml`](../auth_server/scopes.yml) file for more details on scope configuration
+
+#### Step 3: Assign Scopes to Agent App Client
+
+1. **Configure Agent Client Scopes**
+   - Go back to **"App Clients"**
+   - Select your **Agent** app client
+   - Click on **"Login Pages"** → **"Edit"**
+
+2. **Select Custom Scopes**
+   - Under "Custom scopes" section, select:
+     - `mcp-servers-unrestricted/read`
+     - `mcp-servers-unrestricted/execute`
+   - Click **"Save changes"**
+
 
 ## Agent Uses User Identity Mode
 
@@ -301,22 +300,7 @@ AWS_REGION=us-east-1
 MCP_REGISTRY_URL=http://localhost/mcpgw/sse
 ```
 
-#### 5. Scope and Permission Configuration
-
-M2M clients must be granted specific scopes in Cognito:
-
-1. **Navigate to App Client**
-   - Go to your M2M app client in Cognito console
-   - Edit "Hosted UI settings"
-
-2. **Assign Custom Scopes**
-   - Select appropriate scopes from your resource server:
-     - `mcp-gateway/mcp-servers-unrestricted/read`
-     - `mcp-gateway/mcp-servers-unrestricted/execute`
-     - `mcp-gateway/mcp-servers-restricted/read`
-     - `mcp-gateway/mcp-servers-restricted/execute`
-
-#### 6. Agent Usage with M2M Authentication
+#### 5. Agent Usage with M2M Authentication
 
 ```bash
 # Use agent with M2M authentication (default mode)
@@ -325,89 +309,22 @@ python agent.py \
   --mcp-registry-url http://localhost/mcpgw/sse
 ```
 
-## Environment Configuration Examples
-
-### Complete `.env.user` Example
-
-```bash
-# =============================================================================
-# USER IDENTITY MODE CONFIGURATION
-# =============================================================================
-# This configuration is used when agents act on behalf of users
-
-# Cognito User Pool Configuration
-COGNITO_USER_POOL_ID=us-east-1_ABC123DEF
-COGNITO_CLIENT_ID=1a2b3c4d5e6f7g8h9i0j
-# Note: No client secret for public PKCE client
-
-# Secret key for session cookie signing (must match registry SECRET_KEY)
-SECRET_KEY=your-64-character-hex-secret-key-here
-
-# Optional: Custom Cognito domain (if configured)
-# COGNITO_DOMAIN=mcp-gateway
-
-# AWS Region
-AWS_REGION=us-east-1
-
-# Registry URL for callback configuration
-REGISTRY_URL=http://localhost:7860
-
-# Callback configuration
-USE_DIRECT_CALLBACK=true
-
-# =============================================================================
-# USAGE INSTRUCTIONS
-# =============================================================================
-# 1. Run: python cli_user_auth.py
-# 2. Complete browser authentication
-# 3. Run: python agent.py --use-session-cookie --message "your question"
-```
-
-### Complete `.env.agent` Example
-
-```bash
-# =============================================================================
-# AGENT IDENTITY MODE CONFIGURATION (M2M)
-# =============================================================================
-# This configuration is used when agents have their own identity
-
-# Cognito M2M App Client Configuration
-COGNITO_CLIENT_ID=2b3c4d5e6f7g8h9i0j1k
-COGNITO_CLIENT_SECRET=your-confidential-client-secret-here
-COGNITO_USER_POOL_ID=us-east-1_ABC123DEF
-
-# AWS Region
-AWS_REGION=us-east-1
-
-# MCP Registry URL
-MCP_REGISTRY_URL=http://localhost/mcpgw/sse
-
-# Optional: Bedrock model configuration
-BEDROCK_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
-
-# =============================================================================
-# USAGE INSTRUCTIONS
-# =============================================================================
-# 1. Ensure M2M client has appropriate scopes in Cognito
-# 2. Run: python agent.py --message "your question"
-```
-
 ### Common Configuration Pitfalls and Solutions
 
 #### 1. Callback URL Mismatch
 
 **Problem**: `redirect_uri_mismatch` error during OAuth flow
 
-**Solution**: Ensure callback URLs in Cognito match your configuration:
-- Local development: `http://localhost:8080/callback`
-- Docker environment: `http://localhost:7860/oauth2/callback/cognito`
-- Production: `https://your-domain.com/oauth2/callback/cognito`
+**Solution**: Ensure all 3 callback URLs are present in your Cognito configuration:
+- `http://localhost:8080/callback`
+- `http://localhost:8080/oauth2/callback/cognito`
+- `https://your-domain.com/oauth2/callback/cognito`
 
 #### 2. Secret Key Mismatch
 
 **Problem**: Session cookie validation fails
 
-**Solution**: Ensure `SECRET_KEY` in `.env.user` matches the registry's `SECRET_KEY`:
+**Solution**: Ensure `SECRET_KEY` in `.env.user` matches the registry's `SECRET_KEY` in `.env` in the project root directory:
 ```bash
 # Generate a new secret key
 python -c 'import secrets; print(secrets.token_hex(32))'
@@ -543,8 +460,9 @@ python agent.py \
 
 ```bash
 # Test with M2M authentication
+cd agents
 python agent.py \
-  --message "What MCP servers are available?" \
+  --message "What MCP tools are available?" \
   --mcp-registry-url http://localhost/mcpgw/sse
 
 # Expected: Agent uses its own permissions based on assigned scopes
@@ -555,10 +473,6 @@ python agent.py \
 #### Enable Debug Logging
 
 ```bash
-# Set environment variable for detailed logging
-export PYTHONPATH="${PYTHONPATH}:$(pwd)/auth_server"
-export LOG_LEVEL=DEBUG
-
 # Run agent with debug logging
 python agent.py --message "test" --mcp-registry-url http://localhost/mcpgw/sse
 ```
@@ -567,7 +481,7 @@ python agent.py --message "test" --mcp-registry-url http://localhost/mcpgw/sse
 
 ```bash
 # View auth server logs for validation details
-docker logs mcp-gateway-registry-auth-server-1
+docker-compose logs -f auth-server
 
 # Look for:
 # - Token validation attempts
@@ -613,3 +527,80 @@ For additional support:
 4. **Review Scopes**: Verify scope mappings match your intended access control
 
 This guide provides comprehensive coverage of Amazon Cognito setup for both authentication modes. Follow the step-by-step instructions and use the troubleshooting section to resolve common issues.
+
+## Saving Client Credentials to Agent Environment Files
+
+After completing the Cognito setup and obtaining your client ID and secret, you need to configure the agent environment files to use these credentials.
+
+### Step 1: Copy Template to Environment File
+
+Navigate to the `agents/` directory and copy the template file:
+
+```bash
+cd agents/
+cp .env.template .env.user
+```
+
+### Step 2: Configure Client Credentials
+
+Edit the [`agents/.env.user`](../agents/.env.user) file with your Cognito credentials obtained from the [User Group Setup](#user-group-setup-for-users-and-agents-using-user-identity) section:
+
+```bash
+# Cognito Authentication Configuration
+# Copy this file to .env and fill in your actual values
+
+# Cognito App Client ID (from Step 2 of User Group Setup)
+COGNITO_CLIENT_ID=your_actual_cognito_client_id_here
+
+# Cognito App Client Secret (from Step 2 of User Group Setup)
+COGNITO_CLIENT_SECRET=your_actual_cognito_client_secret_here
+
+# Cognito User Pool ID (from Step 1 of User Group Setup)
+COGNITO_USER_POOL_ID=your_actual_cognito_user_pool_id_here
+
+# AWS Region for Cognito
+AWS_REGION=us-east-1
+
+# Cognito Domain (without https:// prefix, just the domain name)
+# Example: mcp-gateway or your-custom-domain
+# COGNITO_DOMAIN=
+
+# Secret key for session cookie signing (must match registry SECRET_KEY), string of hex characters
+# To generate: python -c 'import secrets; print(secrets.token_hex(32))'
+SECRET_KEY=your-secret-key-here
+
+# Either http://localhost:8000 or the HTTPS URL of your deployed MCP Gateway
+REGISTRY_URL=your_registry_url_here
+```
+
+### Step 3: Replace Placeholder Values
+
+Replace the following placeholder values with your actual Cognito configuration:
+
+1. **COGNITO_CLIENT_ID**: The Client ID copied from Step 2 of the [User Group Setup](#step-2-configure-app-client-for-users)
+2. **COGNITO_CLIENT_SECRET**: The Client Secret copied from Step 2 of the [User Group Setup](#step-2-configure-app-client-for-users)
+3. **COGNITO_USER_POOL_ID**: Your User Pool ID from Step 1 of the [User Group Setup](#step-1-create-user-pool)
+4. **AWS_REGION**: The AWS region where your Cognito User Pool is located (e.g., `us-east-1`)
+5. **SECRET_KEY**: Generate a secure secret key using: `python -c 'import secrets; print(secrets.token_hex(32))'`
+6. **REGISTRY_URL**: Your MCP Gateway URL (e.g., `http://localhost:7860` for local development)
+
+### Step 4: Verify Configuration
+
+After saving the file, verify your configuration by testing the authentication flow:
+
+```bash
+# Test user authentication
+python cli_user_auth.py
+
+# Test agent with session cookie
+python agent.py --use-session-cookie --message "test authentication"
+```
+
+### Important Notes
+
+- **Security**: Keep your `.env.user` file secure and never commit it to version control
+- **Secret Key Matching**: Ensure the `SECRET_KEY` in `agents/.env.user` matches the `SECRET_KEY` in your main registry `.env` file
+- **Multiple Agents**: If you have multiple agent instances, each can use the same `.env.user` file or have separate configuration files
+- **Environment Separation**: Use different `.env.user` files for different environments (development, staging, production)
+
+This completes the client credential configuration for your MCP Gateway agents using Amazon Cognito authentication.
