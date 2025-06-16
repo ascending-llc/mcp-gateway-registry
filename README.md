@@ -51,6 +51,7 @@ You can deploy the gateway and registry on Amazon EC2 or Amazon EKS for producti
     - [Programmatic Access](#programmatic-access)
     - [Integration Example](#integration-example)
   - [Adding New MCP Servers to the Registry](#adding-new-mcp-servers-to-the-registry)
+- [Documentation](#documentation)
 - [Roadmap](#roadmap)
 - [License](#license)
 
@@ -484,6 +485,15 @@ Click the "Register Server" button on the top right corner of the Registry web i
 **Option 2 - Via MCP Host:**
 _Coming soon_ - Use MCP Host applications such as VSCode-insiders or Cursor to register servers directly through their MCP client interfaces.
 
+## Documentation
+
+For comprehensive information about using the MCP Gateway & Registry, see our detailed documentation:
+
+- **[Frequently Asked Questions (FAQ)](docs/FAQ.md)** - Common questions and answers for developers and platform engineers
+- **[Authentication Guide](docs/auth.md)** - Detailed authentication and authorization patterns
+- **[Cognito Setup Guide](docs/cognito.md)** - Step-by-step Amazon Cognito configuration
+- **[Fine-Grained Access Control](docs/scopes.md)** - Scope configuration and access control setup
+- **[Dynamic Tool Discovery](docs/dynamic-tool-discovery.md)** - AI agent autonomous tool discovery capabilities
 
 ## Roadmap
 
