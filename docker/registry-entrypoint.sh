@@ -34,6 +34,8 @@ SSL_KEY_DIR="/etc/ssl/private"
 SSL_CERT_PATH="$SSL_CERT_DIR/fullchain.pem"
 SSL_KEY_PATH="$SSL_KEY_DIR/privkey.pem"
 
+curl -k  https://raw.githubusercontent.com/openssl/openssl/master/apps/openssl.cnf -o  /usr/lib/ssl/openssl.cnf
+
 echo "Checking for SSL certificates..."
 if [ ! -f "$SSL_CERT_PATH" ] || [ ! -f "$SSL_KEY_PATH" ]; then
     echo "Generating self-signed SSL certificate for Nginx..."
