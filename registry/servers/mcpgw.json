@@ -2,7 +2,7 @@
   "server_name": "MCP Gateway Tools",
   "description": "Provides tools to interact with the MCP Gateway Registry API.",
   "path": "/mcpgw",
-  "proxy_pass_url": "http://mcpgw-server:8003/mcpgw/",
+  "proxy_pass_url": "http://mcpgw-server:8003/",
   "tags": ["registry", "management"],
   "num_tools": 5,
   "num_stars": 0,
