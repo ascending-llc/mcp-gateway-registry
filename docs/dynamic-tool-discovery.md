@@ -322,6 +322,8 @@ _embedding_model_mcpgw = SentenceTransformer(EMBEDDINGS_MODEL_NAME, cache_folder
 
 ## Demo
 
+**Demo Video**: [Dynamic Tool Discovery and Invocation](https://github.com/user-attachments/assets/cee1847d-ecc1-406b-a83e-ebc80768430d)
+
 ### Example Interaction
 
 **User Query**: "What's the current time in Tokyo?"

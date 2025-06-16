@@ -23,7 +23,7 @@ The MCP Gateway & Registry solves these challenges by providing a unified platfo
 
 | Resource | Link |
 |----------|------|
-| **Demo Video** | _coming soon_ |
+| **Demo Video** | [Dynamic Tool Discovery and Invocation](https://github.com/user-attachments/assets/cee1847d-ecc1-406b-a83e-ebc80768430d) |
 | **Blog Post** | [How the MCP Gateway Centralizes Your AI Model's Tools](https://community.aws/content/2xmhMS0eVnA10kZA0eES46KlyMU/how-the-mcp-gateway-centralizes-your-ai-model-s-tools) |
 
 You can deploy the gateway and registry on Amazon EC2 or Amazon EKS for production environments. Jump to [installation on EC2](#installation-on-ec2) or [installation on EKS](#installation-on-eks) for deployment instructions.
@@ -32,6 +32,7 @@ You can deploy the gateway and registry on Amazon EC2 or Amazon EKS for producti
 
 - [What's New](#whats-new)
 - [Architecture](#architecture)
+  - [Authentication and Authorization](#authentication-and-authorization)
 - [Features](#features)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
@@ -184,6 +185,15 @@ flowchart TB
     class Lambda1,Lambda2 lambda
     class DB1,DB2,API1,API2,API3 dataSource
 ```
+
+### Authentication and Authorization
+
+Authentication and authorization are very key aspects of this solution. The MCP Gateway & Registry supports both:
+
+- **On-behalf-of (User) Flows**: Where AI agents act on behalf of authenticated users using OAuth 2.0 PKCE flow
+- **AI Agents with Their Own Identity Flows**: Where agents use their own Machine-to-Machine credentials for autonomous operation
+
+These authentication patterns are discussed in detail in [`docs/auth.md`](docs/auth.md). An Amazon Cognito-based implementation with step-by-step setup details is provided in [`docs/cognito.md`](docs/cognito.md).
 
 ## Features
 
