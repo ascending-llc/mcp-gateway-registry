@@ -487,9 +487,30 @@ _Coming soon_ - Use MCP Host applications such as VSCode-insiders or Cursor to r
 
 ## Roadmap
 
-1. Store the server information in persistent storage.
-1. Use GitHub API to retrieve information (license, programming language etc.) about MCP servers.
-1. Add option to deploy MCP servers.
+The following GitHub issues represent our current development roadmap and planned features:
+
+### 🚀 Major Features
+
+- **[#37 - Multi-Level Registry Support](https://github.com/agentic-community/mcp-gateway-registry/issues/37)**
+  Add support for federated registries that can connect to other registries, enabling hierarchical MCP infrastructure with cross-IdP authentication.
+
+- **[#38 - Usage Metrics and Analytics System](https://github.com/agentic-community/mcp-gateway-registry/issues/38)**
+  Implement comprehensive usage tracking across user and agent identities, with metrics emission from auth server, registry, and intelligent tool finder.
+
+- **[#39 - Tool Popularity Scoring and Rating System](https://github.com/agentic-community/mcp-gateway-registry/issues/39)**
+  Enhance tool discovery with popularity scores and star ratings based on usage patterns and agent feedback. *Depends on #38.*
+
+### 🔐 Authentication & Identity
+
+- **[#18 - Add Token Vending Capability to Auth Server](https://github.com/agentic-community/mcp-gateway-registry/issues/18)**
+  Extend the auth server to provide token vending capabilities for enhanced authentication workflows.
+
+- **[#5 - Add Support for KeyCloak as IdP Provider](https://github.com/agentic-community/mcp-gateway-registry/issues/5)**
+  Add KeyCloak integration as an alternative Identity Provider alongside Amazon Cognito.
+
+### 📋 View All Issues
+
+For the complete list of open issues, feature requests, and bug reports, visit our [GitHub Issues page](https://github.com/agentic-community/mcp-gateway-registry/issues).
 
 ## License
 
