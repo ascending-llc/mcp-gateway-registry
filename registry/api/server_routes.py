@@ -65,6 +65,9 @@ async def read_root(
     
     # Filter services based on UI permissions
     accessible_services = user_context.get('accessible_services', [])
+    logger.info(f"DEBUG: User {user_context['username']} accessible_services: {accessible_services}")
+    logger.info(f"DEBUG: User {user_context['username']} ui_permissions: {user_context.get('ui_permissions', {})}")
+    logger.info(f"DEBUG: User {user_context['username']} scopes: {user_context.get('scopes', [])}")
     
     for path in sorted_server_paths:
         server_info = all_servers[path]

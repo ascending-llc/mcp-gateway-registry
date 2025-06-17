@@ -5,7 +5,7 @@ description = "MCP server to interact with the MCP Gateway Registry API" # Updat
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-   "mcp>=1.9.3",
+   "fastmcp>=2.0.0",  # Updated to FastMCP 2.0
    "pydantic>=2.11.3",
    "httpx>=0.27.0", # Added httpx
    "python-dotenv>=1.0.0", # Added dotenv as it's used in server.py

@@ -11,7 +11,8 @@ import json
 import websockets # For WebSocket connections
 from pathlib import Path # Added Path
 from pydantic import BaseModel, Field
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP, Context  # Updated import for FastMCP 2.0
+from fastmcp.server.dependencies import get_http_request  # New dependency function for HTTP access
 from typing import Dict, Any, Optional, ClassVar, List
 from dotenv import load_dotenv
 import os
@@ -34,6 +35,268 @@ REGISTRY_BASE_URL = os.environ.get("REGISTRY_BASE_URL", "http://localhost:7860")
 
 if not REGISTRY_BASE_URL:
     raise ValueError("REGISTRY_BASE_URL environment variable is not set.")
+
+
+# --- Authentication Context Helper Functions ---
+async def extract_auth_context(ctx: Context) -> Dict[str, Any]:
+    """
+    Extract authentication context from the MCP Context.
+    FastMCP 2.0 version with improved HTTP header access.
+    
+    Args:
+        ctx: FastMCP Context object
+        
+    Returns:
+        Dict containing authentication information
+    """
+    try:
+        # Basic context information we can reliably access
+        auth_context = {
+            "request_id": ctx.request_id,
+            "client_id": ctx.client_id,
+            "session_available": ctx.session is not None,
+            "request_context_available": ctx.request_context is not None,
+        }
+        
+        # Try to get HTTP request information using FastMCP 2.0 dependency system
+        try:
+            http_request = get_http_request()
+            if http_request:
+                auth_context["http_request_available"] = True
+                
+                # Access HTTP headers directly
+                headers = dict(http_request.headers)
+                auth_headers = {}
+                
+                # Extract auth-related headers
+                for key, value in headers.items():
+                    key_lower = key.lower()
+                    if key_lower in ['authorization', 'x-user-pool-id', 'x-client-id', 'x-region', 'cookie']:
+                        if key_lower == 'authorization':
+                            # Don't log full auth token, just indicate presence
+                            auth_headers[key] = "Bearer Token Present" if value.startswith('Bearer ') else "Auth Header Present"
+                        elif key_lower == 'cookie' and 'mcp_gateway_session=' in value:
+                            # Extract session cookie safely
+                            import re
+                            match = re.search(r'mcp_gateway_session=([^;]+)', value)
+                            if match:
+                                cookie_value = match.group(1)
+                                auth_headers["session_cookie"] = cookie_value[:20] + "..." if len(cookie_value) > 20 else cookie_value
+                        else:
+                            auth_headers[key] = str(value)[:100]  # Truncate long values
+                
+                if auth_headers:
+                    auth_context["auth_headers"] = auth_headers
+                else:
+                    auth_context["auth_headers"] = "No auth headers found"
+                
+                # Additional HTTP request info
+                auth_context["http_info"] = {
+                    "method": http_request.method,
+                    "url": str(http_request.url),
+                    "client_host": http_request.client.host if http_request.client else "Unknown",
+                    "user_agent": headers.get("user-agent", "Unknown")
+                }
+            else:
+                auth_context["http_request_available"] = False
+                auth_context["auth_headers"] = "No HTTP request context"
+                
+        except RuntimeError as e:
+            # get_http_request() raises RuntimeError when not in HTTP context
+            auth_context["http_request_available"] = False
+            auth_context["auth_headers"] = f"Not in HTTP context: {str(e)}"
+        except Exception as http_error:
+            logger.debug(f"Could not access HTTP request: {http_error}")
+            auth_context["http_request_available"] = False
+            auth_context["auth_headers"] = f"HTTP access error: {str(http_error)}"
+        
+        # Try to inspect the session for transport-level information (fallback)
+        session_info = {}
+        try:
+            session = ctx.session
+            if session:
+                session_info["session_type"] = type(session).__name__
+                
+                # Check if session has transport
+                if hasattr(session, 'transport'):
+                    transport = session.transport
+                    if transport:
+                        session_info["transport_type"] = type(transport).__name__
+                        
+                        # Try to access any available transport attributes
+                        transport_attrs = [attr for attr in dir(transport) if not attr.startswith('_')]
+                        session_info["transport_attributes"] = transport_attrs[:10]  # Limit to avoid spam
+                        
+        except Exception as session_error:
+            logger.debug(f"Could not access session info: {session_error}")
+            session_info["error"] = str(session_error)
+        
+        auth_context["session_info"] = session_info
+        
+        # Try to access request context metadata
+        request_info = {}
+        try:
+            request_context = ctx.request_context
+            if request_context:
+                request_info["request_context_type"] = type(request_context).__name__
+                
+                if hasattr(request_context, 'meta') and request_context.meta:
+                    meta = request_context.meta
+                    meta_info = {}
+                    
+                    # Check for standard meta attributes
+                    for attr in ['client_id', 'user_pool_id', 'region', 'progressToken']:
+                        if hasattr(meta, attr):
+                            value = getattr(meta, attr)
+                            meta_info[attr] = str(value) if value is not None else None
+                    
+                    request_info["meta"] = meta_info
+                    
+        except Exception as request_error:
+            logger.debug(f"Could not access request context info: {request_error}")
+            request_info["error"] = str(request_error)
+        
+        auth_context["request_info"] = request_info
+        
+        return auth_context
+        
+    except Exception as e:
+        logger.error(f"Failed to extract auth context: {e}")
+        return {
+            "error": f"Failed to extract auth context: {str(e)}",
+            "request_id": getattr(ctx, 'request_id', 'unknown'),
+            "client_id": getattr(ctx, 'client_id', None)
+        }
+
+
+async def log_auth_context(tool_name: str, ctx: Context) -> Dict[str, Any]:
+    """
+    Log authentication context for a tool call and return the context.
+    
+    Args:
+        tool_name: Name of the tool being called
+        ctx: FastMCP Context object
+        
+    Returns:
+        Dict containing the auth context
+    """
+    auth_context = await extract_auth_context(ctx)
+    
+    # Log the context for debugging via MCP logging
+    await ctx.info(f"🔐 Auth Context for {tool_name}:")
+    await ctx.info(f"   Request ID: {auth_context.get('request_id', 'Unknown')}")
+    await ctx.info(f"   Client ID: {auth_context.get('client_id', 'Not present')}")
+    await ctx.info(f"   Session Available: {auth_context.get('session_available', False)}")
+    
+    # Log auth headers if found
+    auth_headers = auth_context.get('auth_headers', {})
+    if auth_headers:
+        await ctx.info(f"   Auth Headers Found:")
+        for key, value in auth_headers.items():
+            await ctx.info(f"     {key}: {value}")
+    else:
+        await ctx.info(f"   No auth headers detected")
+    
+    # Log session info if available
+    session_info = auth_context.get('session_info', {})
+    if session_info.get('session_type'):
+        await ctx.info(f"   Session Type: {session_info['session_type']}")
+        if session_info.get('transport_type'):
+            await ctx.info(f"   Transport Type: {session_info['transport_type']}")
+    
+    # Log request info if available
+    request_info = auth_context.get('request_info', {})
+    if request_info.get('meta'):
+        await ctx.info(f"   Request Meta: {request_info['meta']}")
+    
+    # Also log to server logs for debugging
+    logger.info(f"AUTH_CONTEXT for {tool_name}: {json.dumps(auth_context, indent=2, default=str)}")
+    
+    return auth_context
+
+
+async def validate_session_cookie_with_auth_server(session_cookie: str, auth_server_url: str = "http://localhost:8888") -> Dict[str, Any]:
+    """
+    Validate a session cookie with the auth server and return user context.
+    
+    Args:
+        session_cookie: The session cookie value
+        auth_server_url: URL of the auth server
+        
+    Returns:
+        Dict containing user context information including username, groups, scopes, etc.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Call the auth server to validate the session cookie
+            response = await client.post(
+                f"{auth_server_url}/validate",
+                headers={
+                    "Cookie": f"mcp_gateway_session={session_cookie}",
+                    "Content-Type": "application/json"
+                },
+                json={"action": "validate_session"}  # Indicate we want session validation
+            )
+            
+            if response.status_code == 200:
+                user_context = response.json()
+                logger.info(f"Session validation successful for user: {user_context.get('username', 'unknown')}")
+                return user_context
+            else:
+                logger.warning(f"Session validation failed: HTTP {response.status_code}")
+                return {"valid": False, "error": f"HTTP {response.status_code}"}
+                
+    except Exception as e:
+        logger.error(f"Error validating session cookie: {e}")
+        return {"valid": False, "error": str(e)}
+
+
+async def check_user_permission_for_tool(auth_context: Dict[str, Any], tool_name: str, action: str = "execute") -> bool:
+    """
+    Check if a user has permission to execute a specific tool based on their auth context.
+    
+    Args:
+        auth_context: User authentication context from session validation
+        tool_name: Name of the tool being accessed
+        action: Action being performed (e.g., "execute", "read")
+        
+    Returns:
+        True if user has permission, False otherwise
+    """
+    # For now, implement basic permission checking
+    # This is where you would implement your fine-grained access control logic
+    
+    if not auth_context.get("valid", False):
+        logger.warning(f"Access denied for {tool_name}: Invalid auth context")
+        return False
+    
+    username = auth_context.get("username", "unknown")
+    scopes = auth_context.get("scopes", [])
+    groups = auth_context.get("groups", [])
+    
+    # Example permission logic - you can customize this based on your needs
+    
+    # Admin users can access everything
+    if "mcp-registry-admin" in groups:
+        logger.info(f"Access granted for {tool_name}: Admin user {username}")
+        return True
+    
+    # Check for specific tool permissions in scopes
+    # You could implement more sophisticated scope checking here
+    tool_permission = f"mcp-tools/{tool_name}/{action}"
+    if tool_permission in scopes:
+        logger.info(f"Access granted for {tool_name}: User {username} has scope {tool_permission}")
+        return True
+    
+    # Check for wildcard permissions
+    wildcard_permission = f"mcp-tools/*/{action}"
+    if wildcard_permission in scopes:
+        logger.info(f"Access granted for {tool_name}: User {username} has wildcard scope")
+        return True
+    
+    # Deny access by default
+    logger.warning(f"Access denied for {tool_name}: User {username} lacks required permissions. Available scopes: {scopes}")
+    return False
 
 
 # --- FAISS and Sentence Transformer Integration for mcpgw --- START
@@ -188,9 +451,10 @@ def parse_arguments():
 # Parse arguments at module level to make them available
 args = parse_arguments()
 
-# Initialize FastMCP server
-mcp = FastMCP("MCPGateway", host="0.0.0.0", port=int(args.port))
-mcp.settings.mount_path = "/mcpgw"
+# Initialize FastMCP 2.0 server
+mcp = FastMCP("MCPGateway")
+# Note: FastMCP 2.0 handles host/port differently - set in run() method
+# Mount path is now handled directly in the run() method for HTTP transports
 
 
 # --- Helper function for making requests to the registry ---
@@ -239,8 +503,176 @@ async def _call_registry_api(method: str, endpoint: str, **kwargs) -> Dict[str, 
 # --- MCP Tools ---
 
 @mcp.tool()
+async def debug_auth_context(ctx: Context = None) -> Dict[str, Any]:
+    """
+    Debug tool to explore what authentication context is available.
+    This tool helps understand what auth information can be accessed through the MCP Context.
+    
+    Returns:
+        Dict[str, Any]: Detailed debug information about available auth context
+    """
+    if not ctx:
+        return {"error": "No context available"}
+    
+    debug_info = {
+        "context_type": type(ctx).__name__,
+        "available_attributes": sorted([attr for attr in dir(ctx) if not attr.startswith('_')]),
+        "context_properties": {}
+    }
+    
+    # Try to access each property safely
+    for prop in ['client_id', 'request_id', 'session', 'request_context', 'fastmcp']:
+        try:
+            value = getattr(ctx, prop, "NOT_AVAILABLE")
+            if value == "NOT_AVAILABLE":
+                debug_info["context_properties"][prop] = "NOT_AVAILABLE"
+            elif value is None:
+                debug_info["context_properties"][prop] = "None"
+            else:
+                debug_info["context_properties"][prop] = {
+                    "type": type(value).__name__,
+                    "available": True
+                }
+                
+                # For session, explore further
+                if prop == "session" and value:
+                    session_attrs = [attr for attr in dir(value) if not attr.startswith('_')]
+                    debug_info["context_properties"][prop]["attributes"] = session_attrs[:20]
+                    
+                    # Check for transport
+                    if hasattr(value, 'transport') and value.transport:
+                        transport = value.transport
+                        transport_attrs = [attr for attr in dir(transport) if not attr.startswith('_')]
+                        debug_info["context_properties"][prop]["transport"] = {
+                            "type": type(transport).__name__,
+                            "attributes": transport_attrs[:20]
+                        }
+                
+                # For request_context, explore further
+                if prop == "request_context" and value:
+                    rc_attrs = [attr for attr in dir(value) if not attr.startswith('_')]
+                    debug_info["context_properties"][prop]["attributes"] = rc_attrs[:20]
+                    
+                    if hasattr(value, 'meta') and value.meta:
+                        meta = value.meta
+                        meta_attrs = [attr for attr in dir(meta) if not attr.startswith('_')]
+                        debug_info["context_properties"][prop]["meta"] = {
+                            "type": type(meta).__name__,
+                            "attributes": meta_attrs[:20]
+                        }
+                        
+        except Exception as e:
+            debug_info["context_properties"][prop] = f"ERROR: {str(e)}"
+    
+    # Log the full auth context
+    auth_context = await log_auth_context("debug_auth_context", ctx)
+    debug_info["extracted_auth_context"] = auth_context
+    
+    return debug_info
+
+
+@mcp.tool()
+async def get_http_headers(ctx: Context = None) -> Dict[str, Any]:
+    """
+    FastMCP 2.0 tool to access HTTP headers directly using the new dependency system.
+    This tool demonstrates how to get HTTP request information including auth headers.
+    
+    Returns:
+        Dict[str, Any]: HTTP request information including headers
+    """
+    if not ctx:
+        return {"error": "No context available"}
+    
+    result = {
+        "fastmcp_version": "2.0",
+        "tool_name": "get_http_headers",
+        "timestamp": str(asyncio.get_event_loop().time())
+    }
+    
+    try:
+        # Use FastMCP 2.0's dependency function to get HTTP request
+        http_request = get_http_request()
+        
+        if http_request:
+            # Extract all headers
+            all_headers = dict(http_request.headers)
+            
+            # Separate auth-related headers for easy viewing
+            auth_headers = {}
+            other_headers = {}
+            
+            for key, value in all_headers.items():
+                key_lower = key.lower()
+                if key_lower in ['authorization', 'x-user-pool-id', 'x-client-id', 'x-region', 'cookie', 'x-api-key']:
+                    if key_lower == 'authorization':
+                        # Show type of auth but not full token
+                        if value.startswith('Bearer '):
+                            auth_headers[key] = f"Bearer <TOKEN_HIDDEN> (length: {len(value)})"
+                        else:
+                            auth_headers[key] = f"<AUTH_HIDDEN> (length: {len(value)})"
+                    elif key_lower == 'cookie':
+                        # Show cookie names but hide values
+                        cookies = [c.split('=')[0] for c in value.split(';')]
+                        auth_headers[key] = f"Cookies: {', '.join(cookies)}"
+                    else:
+                        auth_headers[key] = value
+                else:
+                    other_headers[key] = value
+            
+            result.update({
+                "http_request_available": True,
+                "method": http_request.method,
+                "url": str(http_request.url),
+                "path": http_request.url.path,
+                "query_params": dict(http_request.query_params),
+                "client_info": {
+                    "host": http_request.client.host if http_request.client else "Unknown",
+                    "port": http_request.client.port if http_request.client else "Unknown"
+                },
+                "auth_headers": auth_headers,
+                "other_headers": other_headers,
+                "total_headers_count": len(all_headers)
+            })
+            
+            # Log the auth headers for server-side debugging
+            await ctx.info(f"🔐 HTTP Headers Debug - Auth Headers Found: {list(auth_headers.keys())}")
+            if auth_headers:
+                for key, value in auth_headers.items():
+                    await ctx.info(f"   {key}: {value}")
+            else:
+                await ctx.info("   No auth-related headers found")
+                
+        else:
+            result.update({
+                "http_request_available": False,
+                "error": "No HTTP request context available"
+            })
+            await ctx.warning("No HTTP request context available - may be running in non-HTTP transport mode")
+            
+    except RuntimeError as e:
+        # This happens when not in HTTP context (e.g., stdio transport)
+        result.update({
+            "http_request_available": False,
+            "error": f"Not in HTTP context: {str(e)}",
+            "transport_mode": "Likely STDIO or other non-HTTP transport"
+        })
+        await ctx.info(f"Not in HTTP context - this is expected for STDIO transport: {e}")
+        
+    except Exception as e:
+        result.update({
+            "http_request_available": False,
+            "error": f"Error accessing HTTP request: {str(e)}"
+        })
+        await ctx.error(f"Error accessing HTTP request: {e}")
+        logger.error(f"Error in get_http_headers: {e}", exc_info=True)
+    
+    return result
+
+
+@mcp.tool()
 async def toggle_service(
     service_path: str = Field(..., description="The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'."),
+    ctx: Context = None
 ) -> Dict[str, Any]:
     """
     Toggles the enabled/disabled state of a registered MCP server in the gateway.
@@ -254,6 +686,10 @@ async def toggle_service(
     Raises:
         Exception: If the API call fails.
     """
+    # Log authentication context
+    if ctx:
+        auth_context = await log_auth_context("toggle_service", ctx)
+    
     endpoint = f"/toggle/{service_path.lstrip('/')}" # Ensure path doesn't have double slash
         
     return await _call_registry_api("POST", endpoint)
@@ -270,6 +706,7 @@ async def register_service(
     num_stars: Optional[int] = Field(0, description="Number of stars/rating for the server."),
     is_python: Optional[bool] = Field(False, description="Whether the server is implemented in Python."),
     license: Optional[str] = Field("N/A", description="License information for the server."),
+    ctx: Context = None
 ) -> Dict[str, Any]:
     """
     Registers a new MCP server with the gateway.
@@ -291,6 +728,10 @@ async def register_service(
     Raises:
         Exception: If the API call fails.
     """
+    # Log authentication context
+    if ctx:
+        auth_context = await log_auth_context("register_service", ctx)
+    
     endpoint = "/register"
     
     # Convert tags list to comma-separated string if it's a list
@@ -317,6 +758,7 @@ async def register_service(
 @mcp.tool()
 async def get_service_tools(
     service_path: str = Field(..., description="The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'. Use '/all' to get tools from all registered servers."),
+    ctx: Context = None
 ) -> Dict[str, Any]:
     """
     Lists the tools provided by a specific registered MCP server.
@@ -331,6 +773,10 @@ async def get_service_tools(
     Raises:
         Exception: If the API call fails or the server cannot be reached.
     """
+    # Log authentication context
+    if ctx:
+        auth_context = await log_auth_context("get_service_tools", ctx)
+    
     endpoint = f"/api/tools/{service_path.lstrip('/')}"
         
     return await _call_registry_api("GET", endpoint)
@@ -338,6 +784,7 @@ async def get_service_tools(
 @mcp.tool()
 async def refresh_service(
     service_path: str = Field(..., description="The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'."),
+    ctx: Context = None
 ) -> Dict[str, Any]:
     """
     Triggers a refresh of the tool list for a specific registered MCP server.
@@ -352,6 +799,10 @@ async def refresh_service(
     Raises:
         Exception: If the API call fails.
     """
+    # Log authentication context
+    if ctx:
+        auth_context = await log_auth_context("refresh_service", ctx)
+    
     endpoint = f"/api/refresh/{service_path.lstrip('/')}"
         
     return await _call_registry_api("POST", endpoint)
@@ -360,6 +811,7 @@ async def refresh_service(
 @mcp.tool()
 async def get_server_details(
     service_path: str = Field(..., description="The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'. Use '/all' to get details for all registered servers."),
+    ctx: Context = None
 ) -> Dict[str, Any]:
     """
     Retrieves detailed information about a registered MCP server.
@@ -374,13 +826,17 @@ async def get_server_details(
     Raises:
         Exception: If the API call fails or the server is not registered.
     """
+    # Log authentication context
+    if ctx:
+        auth_context = await log_auth_context("get_server_details", ctx)
+    
     endpoint = f"/api/server_details/{service_path.lstrip('/')}"
         
     return await _call_registry_api("GET", endpoint)
 
 
 @mcp.tool()
-async def healthcheck() -> Dict[str, Any]:
+async def healthcheck(ctx: Context = None) -> Dict[str, Any]:
     """
     Retrieves health status information from all registered MCP servers via the registry's WebSocket endpoint.
     
@@ -393,6 +849,10 @@ async def healthcheck() -> Dict[str, Any]:
     Raises:
         Exception: If the WebSocket connection fails or the data cannot be retrieved.
     """
+    # Log authentication context
+    if ctx:
+        auth_context = await log_auth_context("healthcheck", ctx)
+    
     try:
         # Connect to the WebSocket endpoint
         registry_ws_url = f"ws://localhost:7860/ws/health_status"
@@ -424,7 +884,8 @@ async def healthcheck() -> Dict[str, Any]:
 async def intelligent_tool_finder(
     natural_language_query: str = Field(..., description="Your query in natural language describing the task you want to perform."),
     top_k_services: int = Field(3, description="Number of top services to consider from initial FAISS search."),
-    top_n_tools: int = Field(1, description="Number of best matching tools to return.")
+    top_n_tools: int = Field(1, description="Number of best matching tools to return."),
+    ctx: Context = None
 ) -> List[Dict[str, Any]]:
     """
     Finds the most relevant MCP tool(s) across all registered and enabled services
@@ -438,6 +899,10 @@ async def intelligent_tool_finder(
     Returns:
         A list of dictionaries, each describing a recommended tool, its parent service, and similarity.
     """
+    # Log authentication context
+    if ctx:
+        auth_context = await log_auth_context("intelligent_tool_finder", ctx)
+    
     global _embedding_model_mcpgw, _faiss_index_mcpgw, _faiss_metadata_mcpgw
 
     # Ensure FAISS data and model are loaded
@@ -567,9 +1032,7 @@ async def intelligent_tool_finder(
 
 def main():
     # Run the server with the specified transport from command line args
-    mcp.run(transport=args.transport)
-    logger.info(f"Server is running on port {args.port} with transport {args.transport}")
-
-
+    # FastMCP 2.0 supports different transport types
+    mcp.run(transport="sse", host="0.0.0.0", port=int(args.port), path="/sse")
 if __name__ == "__main__":
     main()

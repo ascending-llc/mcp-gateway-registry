@@ -116,6 +116,23 @@ mcp-servers-unrestricted/read:
     tools:
       - get_stock_aggregates
       - print_stock_data
+  - server: mcpgw2
+    methods:
+      - initialize
+      - notifications/initialized
+      - ping
+      - tools/list
+      - tools/call
+    tools:
+      - debug_auth_context
+      - get_http_headers
+      - toggle_service
+      - register_service
+      - get_server_details
+      - get_service_tools
+      - refresh_service
+      - intelligent_tool_finder
+      - healthcheck
 
 mcp-servers-unrestricted/execute:
     - server: auth_server
@@ -174,6 +191,23 @@ mcp-servers-unrestricted/execute:
       tools:
         - get_stock_aggregates
         - print_stock_data
+    - server: mcpgw2
+      methods:
+        - initialize
+        - notifications/initialized
+        - ping
+        - tools/list
+        - tools/call
+      tools:
+        - debug_auth_context
+        - get_http_headers
+        - toggle_service
+        - register_service
+        - get_server_details
+        - get_service_tools
+        - refresh_service
+        - intelligent_tool_finder
+        - healthcheck
 
 mcp-servers-restricted/read:
   - server: auth_server
