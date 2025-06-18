@@ -20,6 +20,7 @@ from sentence_transformers import SentenceTransformer # Added
 import numpy as np # Added
 from sklearn.metrics.pairwise import cosine_similarity # Added
 import faiss # Added
+import yaml # Added for scopes.yml parsing
 
 # Configure logging
 logging.basicConfig(
@@ -35,6 +36,132 @@ REGISTRY_BASE_URL = os.environ.get("REGISTRY_BASE_URL", "http://localhost:7860")
 
 if not REGISTRY_BASE_URL:
     raise ValueError("REGISTRY_BASE_URL environment variable is not set.")
+
+# Global variable to cache loaded scopes
+_scopes_config = None
+
+
+# --- Scopes Management Helper Functions ---
+async def load_scopes_config() -> Dict[str, Any]:
+    """
+    Load and parse the scopes.yml configuration file.
+    
+    Returns:
+        Dict containing the parsed scopes configuration
+    """
+    global _scopes_config
+    
+    if _scopes_config is not None:
+        return _scopes_config
+    
+    try:
+        # Look for scopes.yml in the auth_server directory
+        # First try the docker container path, then fallback to local development path
+        scopes_path = Path("/app/auth_server/scopes.yml")
+        if not scopes_path.exists():
+            scopes_path = Path(__file__).parent.parent / "auth_server" / "scopes.yml"
+        
+        if not scopes_path.exists():
+            logger.warning(f"Scopes file not found at {scopes_path}")
+            return {}
+        
+        with open(scopes_path, 'r') as f:
+            _scopes_config = yaml.safe_load(f)
+        
+        logger.info(f"Successfully loaded scopes configuration from {scopes_path}")
+        return _scopes_config
+        
+    except Exception as e:
+        logger.error(f"Failed to load scopes configuration: {e}")
+        return {}
+
+
+def extract_user_scopes_from_headers(headers: Dict[str, str]) -> List[str]:
+    """
+    Extract user scopes from HTTP headers.
+    
+    Args:
+        headers: Dictionary of HTTP headers
+        
+    Returns:
+        List of scopes the user has access to
+    """
+    scopes = []
+    
+    # Check for scopes in various header formats
+    scope_headers = ['x-scopes', 'x-user-scopes', 'scopes']
+    
+    for header_name in scope_headers:
+        header_value = headers.get(header_name) or headers.get(header_name.lower())
+        if header_value:
+            # Scopes might be comma-separated or space-separated
+            if ',' in header_value:
+                scopes.extend([s.strip() for s in header_value.split(',')])
+            else:
+                scopes.extend([s.strip() for s in header_value.split()])
+            break
+    
+    logger.info(f"Extracted scopes from headers: {scopes}")
+    return scopes
+
+
+def check_tool_access(server_name: str, tool_name: str, user_scopes: List[str], scopes_config: Dict[str, Any]) -> bool:
+    """
+    Check if a user has access to a specific tool based on their scopes.
+    
+    Args:
+        server_name: Name of the server (e.g., 'mcpgw', 'fininfo')
+        tool_name: Name of the tool 
+        user_scopes: List of scopes the user has
+        scopes_config: Parsed scopes configuration
+        
+    Returns:
+        True if user has access, False otherwise
+    """
+    if not scopes_config or not user_scopes:
+        logger.debug(f"Access denied: {server_name}.{tool_name} - no scopes config or user scopes")
+        return False
+    
+    logger.debug(f"Checking access for {server_name}.{tool_name} with user scopes: {user_scopes}")
+    logger.debug(f"Available scope keys in config: {list(scopes_config.keys())}")
+    
+    # Check direct scope access
+    for user_scope in user_scopes:
+        logger.debug(f"Checking user scope: {user_scope}")
+        if user_scope in scopes_config:
+            scope_data = scopes_config[user_scope]
+            logger.debug(f"Found scope data for {user_scope}: {type(scope_data)}")
+            if isinstance(scope_data, list):
+                # This is a server scope (like mcp-servers-unrestricted/read)
+                for server_config in scope_data:
+                    logger.debug(f"Checking server config: {server_config.get('server')} vs {server_name}")
+                    if server_config.get('server') == server_name:
+                        tools = server_config.get('tools', [])
+                        logger.debug(f"Available tools for {server_name}: {tools}")
+                        if tool_name in tools:
+                            logger.info(f"Access granted: {server_name}.{tool_name} via scope {user_scope}")
+                            return True
+    
+    # Check group mappings for additional access
+    group_mappings = scopes_config.get('group_mappings', {})
+    logger.debug(f"Checking group mappings: {group_mappings}")
+    for group, mapped_scopes in group_mappings.items():
+        if group in user_scopes:
+            logger.debug(f"User is in group {group}, checking mapped scopes: {mapped_scopes}")
+            # User is in this group, check the mapped scopes
+            for mapped_scope in mapped_scopes:
+                if mapped_scope in scopes_config:
+                    scope_data = scopes_config[mapped_scope]
+                    if isinstance(scope_data, list):
+                        for server_config in scope_data:
+                            if server_config.get('server') == server_name:
+                                tools = server_config.get('tools', [])
+                                if tool_name in tools:
+                                    logger.info(f"Access granted: {server_name}.{tool_name} via group {group} -> {mapped_scope}")
+                                    return True
+    
+    logger.debug(f"Access denied: {server_name}.{tool_name} for scopes {user_scopes}")
+    return False
 
 
 # --- Authentication Context Helper Functions ---
@@ -71,7 +198,7 @@ async def extract_auth_context(ctx: Context) -> Dict[str, Any]:
                 # Extract auth-related headers
                 for key, value in headers.items():
                     key_lower = key.lower()
-                    if key_lower in ['authorization', 'x-user-pool-id', 'x-client-id', 'x-region', 'cookie']:
+                    if key_lower in ['authorization', 'x-user-pool-id', 'x-client-id', 'x-region', 'x-scopes', 'x-user', 'x-username', 'x-auth-method', 'cookie']:
                         if key_lower == 'authorization':
                             # Don't log full auth token, just indicate presence
                             auth_headers[key] = "Bearer Token Present" if value.startswith('Bearer ') else "Auth Header Present"
@@ -251,20 +378,88 @@ async def validate_session_cookie_with_auth_server(session_cookie: str, auth_ser
         return {"valid": False, "error": str(e)}
 
 
-async def check_user_permission_for_tool(auth_context: Dict[str, Any], tool_name: str, action: str = "execute") -> bool:
+async def extract_user_scopes_from_auth_context(auth_context: Dict[str, Any]) -> List[str]:
     """
-    Check if a user has permission to execute a specific tool based on their auth context.
+    Extract user scopes from the authentication context.
     
     Args:
-        auth_context: User authentication context from session validation
-        tool_name: Name of the tool being accessed
-        action: Action being performed (e.g., "execute", "read")
+        auth_context: Authentication context from extract_auth_context()
         
     Returns:
-        True if user has permission, False otherwise
+        List of user scopes
     """
-    # For now, implement basic permission checking
-    # This is where you would implement your fine-grained access control logic
+    # Try to get scopes from auth headers (set by nginx from auth server)
+    auth_headers = auth_context.get("auth_headers", {})
+    if isinstance(auth_headers, dict) and "x-scopes" in auth_headers:
+        scopes_header = auth_headers["x-scopes"]
+        if scopes_header and scopes_header.strip():
+            # Scopes are space-separated in the header
+            scopes = scopes_header.split()
+            logger.info(f"Extracted scopes from auth headers: {scopes}")
+            return scopes
+    
+    logger.warning("No scopes found in auth context")
+    return []
+
+
+async def validate_user_access_to_tool(ctx: Context, tool_name: str, server_name: str = "mcpgw", action: str = "execute") -> bool:
+    """
+    Validate if the authenticated user has access to execute a specific tool.
+    
+    Args:
+        ctx: FastMCP Context object
+        tool_name: Name of the tool being accessed
+        server_name: Name of the server (default: "mcpgw")  
+        action: Action being performed ("read" or "execute")
+        
+    Returns:
+        True if access is granted, False otherwise
+        
+    Raises:
+        Exception: If access is denied
+    """
+    # Extract authentication context
+    auth_context = await extract_auth_context(ctx)
+    
+    # Get user info
+    auth_headers = auth_context.get("auth_headers", {})
+    username = auth_headers.get("x-user", "unknown") or auth_headers.get("x-username", "unknown")
+    
+    # Extract scopes
+    user_scopes = await extract_user_scopes_from_auth_context(auth_context)
+    
+    if not user_scopes:
+        logger.error(f"FGAC: Access denied for user '{username}' to tool '{tool_name}' - no scopes available")
+        raise Exception(f"Access denied: No scopes configured for user")
+    
+    logger.info(f"FGAC: Validating access for user '{username}' to tool '{tool_name}' on server '{server_name}' with action '{action}'")
+    logger.info(f"FGAC: User scopes: {user_scopes}")
+    
+    # Check for server-specific scopes that allow this action
+    required_scope_patterns = [
+        f"mcp-servers-unrestricted/{action}",  # Unrestricted access for this action
+        f"mcp-servers-restricted/{action}",    # Restricted access for this action
+    ]
+    
+    for scope in user_scopes:
+        if scope in required_scope_patterns:
+            logger.info(f"FGAC: Access granted - user '{username}' has scope '{scope}' for tool '{tool_name}'")
+            return True
+    
+    # If no matching scope found, deny access
+    logger.error(f"FGAC: Access denied for user '{username}' to tool '{tool_name}' - insufficient permissions")
+    logger.error(f"FGAC: Required one of: {required_scope_patterns}")
+    logger.error(f"FGAC: User has: {user_scopes}")
+    
+    raise Exception(f"Access denied: Insufficient permissions to execute '{tool_name}'. Required scopes: {required_scope_patterns}")
+
+
+async def check_user_permission_for_tool(auth_context: Dict[str, Any], tool_name: str, action: str = "execute") -> bool:
+    """
+    DEPRECATED: Legacy function for backward compatibility.
+    Use validate_user_access_to_tool() instead for proper FGAC.
+    """
+    logger.warning(f"Using deprecated check_user_permission_for_tool - consider upgrading to validate_user_access_to_tool")
     
     if not auth_context.get("valid", False):
         logger.warning(f"Access denied for {tool_name}: Invalid auth context")
@@ -458,19 +653,50 @@ mcp = FastMCP("MCPGateway")
 
 
 # --- Helper function for making requests to the registry ---
-async def _call_registry_api(method: str, endpoint: str, **kwargs) -> Dict[str, Any]:
+async def _call_registry_api(method: str, endpoint: str, ctx: Context = None, **kwargs) -> Dict[str, Any]:
     """
-    Helper function to make async requests to the registry API.
+    Helper function to make async requests to the registry API with auth passthrough.
     
     Args:
         method: HTTP method (GET, POST, etc.)
         endpoint: API endpoint path
+        ctx: FastMCP Context to extract auth headers from
         **kwargs: Additional arguments to pass to the HTTP request
         
     Returns:
         Dict[str, Any]: JSON response from the API
     """
     url = f"{REGISTRY_BASE_URL.rstrip('/')}{endpoint}"
+
+    # Extract auth headers to pass through to registry
+    auth_headers = {}
+    if ctx:
+        try:
+            http_request = get_http_request()
+            if http_request:
+                # Extract auth-related headers to pass through
+                for key, value in http_request.headers.items():
+                    key_lower = key.lower()
+                    if key_lower in ['authorization', 'x-user-pool-id', 'x-client-id', 'x-region', 'x-scopes', 'x-user', 'x-username', 'x-auth-method', 'cookie']:
+                        auth_headers[key] = value
+                        
+                if auth_headers:
+                    logger.info(f"Passing through auth headers to registry: {list(auth_headers.keys())}")
+                else:
+                    logger.info("No auth headers found to pass through")
+            else:
+                logger.info("No HTTP request context available for auth passthrough")
+        except RuntimeError:
+            # Not in HTTP context, no auth headers to pass through
+            logger.info("Not in HTTP context, no auth headers to pass through")
+        except Exception as e:
+            logger.warning(f"Could not extract auth headers for passthrough: {e}")
+
+    # Merge auth headers with any existing headers in kwargs
+    if 'headers' in kwargs:
+        kwargs['headers'].update(auth_headers)
+    else:
+        kwargs['headers'] = auth_headers
 
     # Use a single client instance for potential connection pooling benefits
     async with httpx.AsyncClient(timeout=Constants.REQUEST_TIMEOUT) as client:
@@ -686,13 +912,9 @@ async def toggle_service(
     Raises:
         Exception: If the API call fails.
     """
-    # Log authentication context
-    if ctx:
-        auth_context = await log_auth_context("toggle_service", ctx)
-    
     endpoint = f"/toggle/{service_path.lstrip('/')}" # Ensure path doesn't have double slash
         
-    return await _call_registry_api("POST", endpoint)
+    return await _call_registry_api("POST", endpoint, ctx)
 
 
 @mcp.tool()
@@ -728,10 +950,6 @@ async def register_service(
     Raises:
         Exception: If the API call fails.
     """
-    # Log authentication context
-    if ctx:
-        auth_context = await log_auth_context("register_service", ctx)
-    
     endpoint = "/register"
     
     # Convert tags list to comma-separated string if it's a list
@@ -753,7 +971,7 @@ async def register_service(
     form_data = {k: v for k, v in form_data.items() if v is not None}
     
     # Send as form data instead of JSON
-    return await _call_registry_api("POST", endpoint, data=form_data)
+    return await _call_registry_api("POST", endpoint, ctx, data=form_data)
 
 @mcp.tool()
 async def get_service_tools(
@@ -773,13 +991,9 @@ async def get_service_tools(
     Raises:
         Exception: If the API call fails or the server cannot be reached.
     """
-    # Log authentication context
-    if ctx:
-        auth_context = await log_auth_context("get_service_tools", ctx)
-    
     endpoint = f"/api/tools/{service_path.lstrip('/')}"
         
-    return await _call_registry_api("GET", endpoint)
+    return await _call_registry_api("GET", endpoint, ctx)
 
 @mcp.tool()
 async def refresh_service(
@@ -799,13 +1013,9 @@ async def refresh_service(
     Raises:
         Exception: If the API call fails.
     """
-    # Log authentication context
-    if ctx:
-        auth_context = await log_auth_context("refresh_service", ctx)
-    
     endpoint = f"/api/refresh/{service_path.lstrip('/')}"
         
-    return await _call_registry_api("POST", endpoint)
+    return await _call_registry_api("POST", endpoint, ctx)
 
 
 @mcp.tool()
@@ -826,13 +1036,9 @@ async def get_server_details(
     Raises:
         Exception: If the API call fails or the server is not registered.
     """
-    # Log authentication context
-    if ctx:
-        auth_context = await log_auth_context("get_server_details", ctx)
-    
     endpoint = f"/api/server_details/{service_path.lstrip('/')}"
         
-    return await _call_registry_api("GET", endpoint)
+    return await _call_registry_api("GET", endpoint, ctx)
 
 
 @mcp.tool()
@@ -849,10 +1055,6 @@ async def healthcheck(ctx: Context = None) -> Dict[str, Any]:
     Raises:
         Exception: If the WebSocket connection fails or the data cannot be retrieved.
     """
-    # Log authentication context
-    if ctx:
-        auth_context = await log_auth_context("healthcheck", ctx)
-    
     try:
         # Connect to the WebSocket endpoint
         registry_ws_url = f"ws://localhost:7860/ws/health_status"
@@ -899,9 +1101,26 @@ async def intelligent_tool_finder(
     Returns:
         A list of dictionaries, each describing a recommended tool, its parent service, and similarity.
     """
-    # Log authentication context
+    # Load scopes configuration and extract user scopes from headers
+    scopes_config = await load_scopes_config()
+    user_scopes = []
+    
     if ctx:
-        auth_context = await log_auth_context("intelligent_tool_finder", ctx)
+        try:
+            http_request = get_http_request()
+            if http_request:
+                headers = dict(http_request.headers)
+                user_scopes = extract_user_scopes_from_headers(headers)
+            else:
+                logger.warning("No HTTP request context available for scope extraction")
+        except RuntimeError:
+            logger.warning("Not in HTTP context, no scopes to extract")
+        except Exception as e:
+            logger.warning(f"Could not extract scopes from headers: {e}")
+    
+    if not user_scopes:
+        logger.warning("No user scopes found - user may not have access to any tools")
+        return []
     
     global _embedding_model_mcpgw, _faiss_index_mcpgw, _faiss_metadata_mcpgw
 
@@ -937,6 +1156,7 @@ async def intelligent_tool_finder(
         raise Exception(f"MCPGW: Error searching FAISS index: {e}")
 
     candidate_tools = []
+    tools_before_scope_filter = 0
     
     # Create a reverse map from FAISS internal ID to service_path for quick lookup
     id_to_service_path_map = {}
@@ -978,6 +1198,16 @@ async def intelligent_tool_finder(
             parsed_desc = tool_info.get("parsed_description", {})
             main_desc = parsed_desc.get("main", "No description.")
             
+            tools_before_scope_filter += 1
+            
+            # Check if user has access to this tool based on scopes
+            # Map service_path to server name for scope checking
+            server_name = service_path.lstrip('/') if service_path.startswith('/') else service_path
+            
+            if not check_tool_access(server_name, tool_name, user_scopes, scopes_config):
+                logger.debug(f"User does not have access to tool {server_name}.{tool_name}, skipping")
+                continue
+            
             # Create descriptive text for this specific tool
             tool_text_for_embedding = f"Service: {service_name}. Tool: {tool_name}. Description: {main_desc}"
             
@@ -990,12 +1220,14 @@ async def intelligent_tool_finder(
                 "service_name": service_name,
             })
 
+    logger.info(f"MCPGW: Scope filtering results - {tools_before_scope_filter} tools found, {len(candidate_tools)} accessible after filtering")
+    
     if not candidate_tools:
-        logger.info("MCPGW: No enabled tools found in the top services from FAISS search.")
+        logger.info("MCPGW: No accessible tools found in the top services from FAISS search after scope filtering.")
         return []
 
     # 4. Embed all candidate tool descriptions
-    logger.info(f"MCPGW: Embedding {len(candidate_tools)} candidate tools for secondary ranking.")
+    logger.info(f"MCPGW: Embedding {len(candidate_tools)} candidate tools (after scope filtering) for secondary ranking.")
     try:
         tool_texts = [tool["text_for_embedding"] for tool in candidate_tools]
         tool_embeddings = await asyncio.to_thread(_embedding_model_mcpgw.encode, tool_texts)
@@ -1019,7 +1251,11 @@ async def intelligent_tool_finder(
 
     # 7. Select top N tools
     final_results = ranked_tools[:top_n_tools]
-    logger.info(f"MCPGW: Top {len(final_results)} tools found: {json.dumps(final_results, indent=2)}")
+    logger.info(f"MCPGW: Top {len(final_results)} tools found after scope filtering and ranking")
+    
+    # Log which tools were returned for debugging
+    for i, tool in enumerate(final_results):
+        logger.info(f"  {i+1}. {tool['service_name']}.{tool['tool_name']} (similarity: {tool['overall_similarity_score']:.3f})")
     
     # Remove the temporary 'text_for_embedding' field from results
     for res in final_results:
