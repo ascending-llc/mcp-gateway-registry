@@ -118,6 +118,15 @@ class NginxConfigService:
         # Authenticate request - pass entire request to auth server
         auth_request /validate;
         
+        # Capture auth server response headers for forwarding
+        auth_request_set $auth_user $upstream_http_x_user;
+        auth_request_set $auth_username $upstream_http_x_username;
+        auth_request_set $auth_client_id $upstream_http_x_client_id;
+        auth_request_set $auth_scopes $upstream_http_x_scopes;
+        auth_request_set $auth_method $upstream_http_x_auth_method;
+        auth_request_set $auth_server_name $upstream_http_x_server_name;
+        auth_request_set $auth_tool_name $upstream_http_x_tool_name;
+        
         # Proxy to MCP server
         proxy_pass {proxy_pass_url};
         proxy_http_version 1.1;
@@ -134,6 +143,15 @@ class NginxConfigService:
         proxy_set_header X-User-Pool-Id $http_x_user_pool_id;
         proxy_set_header X-Client-Id $http_x_client_id;
         proxy_set_header X-Region $http_x_region;
+        
+        # Forward auth server response headers to backend
+        proxy_set_header X-User $auth_user;
+        proxy_set_header X-Username $auth_username;
+        proxy_set_header X-Client-Id-Auth $auth_client_id;
+        proxy_set_header X-Scopes $auth_scopes;
+        proxy_set_header X-Auth-Method $auth_method;
+        proxy_set_header X-Server-Name $auth_server_name;
+        proxy_set_header X-Tool-Name $auth_tool_name;
         
         # For SSE connections and WebSocket upgrades
         proxy_buffering off;
