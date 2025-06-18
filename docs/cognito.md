@@ -201,6 +201,7 @@ Create `.env.user` file in the `agents/` directory:
 # Cognito Configuration
 COGNITO_USER_POOL_ID=us-east-1_XXXXXXXXX
 COGNITO_CLIENT_ID=your-public-client-id
+COGNITO_CLIENT_SECRET=your-client-secret
 SECRET_KEY=your-secret-key-matching-registry
 
 # Optional: Custom domain
