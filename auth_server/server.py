@@ -725,7 +725,7 @@ async def validate_request(request: Request):
         
         # Validate scope-based access if we have server/tool information
         user_scopes = validation_result.get('scopes', [])
-        if request_payload and server_name and tool_name and user_scopes:
+        if request_payload and server_name and tool_name:
             # Extract method and actual tool name
             method = tool_name  # The extracted tool_name is actually the method
             actual_tool_name = None
@@ -736,6 +736,15 @@ async def validate_request(request: Request):
                 if isinstance(params, dict):
                     actual_tool_name = params.get('name')
                     logger.info(f"Extracted actual tool name for tools/call: '{actual_tool_name}'")
+            
+            # Check if user has any scopes - if not, deny access (fail closed)
+            if not user_scopes:
+                logger.warning(f"Access denied for user {validation_result.get('username')} to {server_name}.{method} (tool: {actual_tool_name}) - no scopes configured")
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Access denied to {server_name}.{method} - user has no scopes configured",
+                    headers={"Connection": "close"}
+                )
             
             if not validate_server_tool_access(server_name, method, actual_tool_name, user_scopes):
                 logger.warning(f"Access denied for user {validation_result.get('username')} to {server_name}.{method} (tool: {actual_tool_name})")
