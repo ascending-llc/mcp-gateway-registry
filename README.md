@@ -362,6 +362,9 @@ For production deployments with SSL certificates:
    sudo mkdir -p /home/ubuntu/ssl_data/certs
    sudo mkdir -p /home/ubuntu/ssl_data/private
    # Copy your certificate and private key files to these directories
+   # Important: Name your files as follows:
+   # - Certificate file: fullchain.pem (goes in /home/ubuntu/ssl_data/certs/)
+   # - Private key file: privkey.pem (goes in /home/ubuntu/ssl_data/private/)
    ```
 
 4. **Deploy with HTTPS:** Run the deployment script as normal:
@@ -400,6 +403,7 @@ For production deployments with SSL certificates:
 
 3. **Run the agent with session cookie:**
    ```bash
+   # your_registry_url would typically be http://localhost/mcpgw/sse or https://mymcpgateway.mycorp.com/mcpgw/sse
    python agents/agent.py --use-session-cookie --mcp-registry-url your_registry_url --message "what is the current time in clarksburg, md"
    ```
 
@@ -418,6 +422,7 @@ For production deployments with SSL certificates:
    The agent will communicate with Cognito to obtain a JWT token which will include information about the groups it is part of. This information is then used by the Auth server for authorization decisions.
    
    ```bash
+   # your_registry_url would typically be http://localhost/mcpgw/sse or https://mymcpgateway.mycorp.com/mcpgw/sse
    python agents/agent.py --mcp-registry-url your_registry_url --message "what is the current time in clarksburg, md"
    ```
 

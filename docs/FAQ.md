@@ -258,6 +258,9 @@ The script handles Docker image building, service orchestration, and health chec
    sudo mkdir -p /home/ubuntu/ssl_data/certs
    sudo mkdir -p /home/ubuntu/ssl_data/private
    # Copy your certificate files to these directories
+   # Important: Name your files as follows:
+   # - Certificate file: fullchain.pem (goes in /home/ubuntu/ssl_data/certs/)
+   # - Private key file: privkey.pem (goes in /home/ubuntu/ssl_data/private/)
    ```
 
 2. **Update security group** to allow port 443
