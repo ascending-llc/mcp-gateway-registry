@@ -1,3 +1,6 @@
 {
-  "/knowledge-not": false
+  "/currenttime": true,
+  "/fininfo": true,
+  "/mcpgw": true,
+  "/realserverfaketools": true
 }

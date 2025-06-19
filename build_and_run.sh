@@ -42,6 +42,39 @@ log "Stopping existing services (if any)..."
 docker-compose down --remove-orphans || log "No existing services to stop"
 log "Existing services stopped"
 
+# Clean up FAISS index files to force registry to recreate them
+log "Cleaning up FAISS index files..."
+MCPGATEWAY_SERVERS_DIR="/opt/mcpgateway/servers"
+FAISS_FILES=("service_index.faiss" "service_index_metadata.json")
+
+for file in "${FAISS_FILES[@]}"; do
+    file_path="$MCPGATEWAY_SERVERS_DIR/$file"
+    if [ -f "$file_path" ]; then
+        rm -f "$file_path"
+        log "Deleted $file_path"
+    else
+        log "$file not found (already clean)"
+    fi
+done
+log "FAISS index cleanup completed"
+
+# Copy JSON files from registry/servers to /opt/mcpgateway/servers
+log "Copying JSON files from registry/servers to $MCPGATEWAY_SERVERS_DIR..."
+if [ -d "registry/servers" ]; then
+    # Create the target directory if it doesn't exist
+    sudo mkdir -p "$MCPGATEWAY_SERVERS_DIR"
+    
+    # Copy all JSON files
+    if ls registry/servers/*.json 1> /dev/null 2>&1; then
+        sudo cp registry/servers/*.json "$MCPGATEWAY_SERVERS_DIR/"
+        log "JSON files copied successfully"
+    else
+        log "No JSON files found in registry/servers"
+    fi
+else
+    log "WARNING: registry/servers directory not found"
+fi
+
 # Generate a random SECRET_KEY if not already in .env
 if ! grep -q "SECRET_KEY=" .env || grep -q "SECRET_KEY=$" .env || grep -q "SECRET_KEY=\"\"" .env; then
     log "Generating SECRET_KEY..."

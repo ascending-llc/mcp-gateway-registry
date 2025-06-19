@@ -580,6 +580,7 @@ async def load_faiss_data_for_mcpgw():
         metadata_file_changed = False
         if FAISS_METADATA_PATH_MCPGW.exists():
             try:
+                logger.info(f"MCPGW: Checking FAISS metadata file {FAISS_METADATA_PATH_MCPGW} for changes...")
                 current_metadata_mtime = await asyncio.to_thread(os.path.getmtime, FAISS_METADATA_PATH_MCPGW)
                 if _faiss_metadata_mcpgw is None or _last_faiss_metadata_mtime is None or current_metadata_mtime > _last_faiss_metadata_mtime or index_file_changed:
                     logger.info(f"MCPGW: FAISS metadata file {FAISS_METADATA_PATH_MCPGW} has changed, not loaded, or index changed. Reloading...")
@@ -589,6 +590,7 @@ async def load_faiss_data_for_mcpgw():
                     _last_faiss_metadata_mtime = current_metadata_mtime
                     metadata_file_changed = True
                     logger.info(f"MCPGW: FAISS metadata loaded. Paths: {len(_faiss_metadata_mcpgw.get('metadata', {})) if _faiss_metadata_mcpgw else 'N/A'}")
+                    logger.info(f"MCPGW: FAISS metadata _faiss_metadata_mcpgw {_faiss_metadata_mcpgw.get('metadata')}")
                 else:
                     logger.debug("MCPGW: FAISS metadata file unchanged since last load.")
             except Exception as e:
@@ -895,6 +897,80 @@ async def get_http_headers(ctx: Context = None) -> Dict[str, Any]:
     return result
 
 
+async def print_all_http_headers(ctx: Context = None) -> str:
+    """
+    Helper function to print out all HTTP request headers in a formatted string.
+    This function can be called internally by other tools to display HTTP headers.
+    
+    Args:
+        ctx: FastMCP Context object
+        
+    Returns:
+        str: Formatted string containing all HTTP headers
+    """
+    if not ctx:
+        return "Error: No context available"
+    
+    output = []
+    output.append("=== HTTP Request Headers ===")
+    output.append(f"Server: mcpgw")
+    output.append(f"Timestamp: {asyncio.get_event_loop().time()}")
+    output.append("")
+    
+    try:
+        # Use FastMCP 2.0's dependency function to get HTTP request
+        http_request = get_http_request()
+        
+        if http_request:
+            # Extract all headers
+            all_headers = dict(http_request.headers)
+            
+            output.append(f"Total Headers: {len(all_headers)}")
+            output.append(f"HTTP Method: {http_request.method}")
+            output.append(f"URL: {http_request.url}")
+            output.append(f"Path: {http_request.url.path}")
+            output.append("")
+            output.append("Headers:")
+            output.append("-" * 50)
+            
+            # Sort headers for consistent output
+            for key in sorted(all_headers.keys()):
+                value = all_headers[key]
+                # Mask sensitive headers
+                if key.lower() in ['authorization', 'cookie']:
+                    if key.lower() == 'authorization':
+                        if value.startswith('Bearer '):
+                            masked_value = f"Bearer <TOKEN_MASKED> (length: {len(value)})"
+                        else:
+                            masked_value = f"<AUTH_MASKED> (length: {len(value)})"
+                    else:  # cookie
+                        cookie_names = [c.split('=')[0] for c in value.split(';')]
+                        masked_value = f"<COOKIES_MASKED>: {', '.join(cookie_names)}"
+                    output.append(f"{key}: {masked_value}")
+                else:
+                    output.append(f"{key}: {value}")
+            
+            # Log to context as well
+            await ctx.info(f"📋 Printed all HTTP headers - Total: {len(all_headers)}")
+            
+        else:
+            output.append("No HTTP request context available")
+            output.append("This may occur when using STDIO transport")
+            await ctx.warning("No HTTP request context available")
+            
+    except RuntimeError as e:
+        output.append(f"Not in HTTP context: {str(e)}")
+        output.append("This is expected for STDIO transport")
+        await ctx.info(f"Not in HTTP context - this is expected for STDIO transport: {e}")
+        
+    except Exception as e:
+        output.append(f"Error accessing HTTP request: {str(e)}")
+        await ctx.error(f"Error accessing HTTP request: {e}")
+        logger.error(f"Error in print_all_http_headers: {e}", exc_info=True)
+    
+    return "\n".join(output)
+
+
 @mcp.tool()
 async def toggle_service(
     service_path: str = Field(..., description="The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'."),
@@ -1178,21 +1254,24 @@ async def intelligent_tool_finder(
         if not service_path:
             logger.warning(f"MCPGW: Could not find service_path for FAISS ID {faiss_id}. Skipping.")
             continue
+        else:
+            logger.debug(f"MCPGW: Found service_path {service_path} for FAISS ID {faiss_id}")
             
         service_metadata = registry_faiss_metadata.get(service_path)
         if not service_metadata or "full_server_info" not in service_metadata:
             logger.warning(f"MCPGW: Metadata or full_server_info not found for service path {service_path}. Skipping.")
             continue
-            
+        else:
+            logger.debug(f"MCPGW: Found metadata for service path {service_path}, service_metadata: {service_metadata}")    
         full_server_info = service_metadata["full_server_info"]
 
         if not full_server_info.get("is_enabled", False):
             logger.info(f"MCPGW: Service {service_path} is disabled. Skipping its tools.")
             continue
-
+        logger.info(f"MCPGW: Processing service {service_path} with full_server_info: {full_server_info}")
         service_name = full_server_info.get("server_name", "Unknown Service")
         tool_list = full_server_info.get("tool_list", [])
-
+        logger.info(f"MCPGW: Found {len(tool_list)} tools for service {service_name} at path {service_path}") 
         for tool_info in tool_list:
             tool_name = tool_info.get("name", "Unknown Tool")
             parsed_desc = tool_info.get("parsed_description", {})
@@ -1203,7 +1282,7 @@ async def intelligent_tool_finder(
             # Check if user has access to this tool based on scopes
             # Map service_path to server name for scope checking
             server_name = service_path.lstrip('/') if service_path.startswith('/') else service_path
-            
+            logger.info(f"MCPGW: Checking access for user to tool {server_name}.{tool_name} with scopes {user_scopes}")
             if not check_tool_access(server_name, tool_name, user_scopes, scopes_config):
                 logger.debug(f"User does not have access to tool {server_name}.{tool_name}, skipping")
                 continue
