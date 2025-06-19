@@ -1,5 +1,5 @@
 """
-This server provides stoack market data using the Polygon.io API.
+This server provides stock market data using the Polygon.io API.
 """
 
 import os
@@ -7,8 +7,10 @@ import time
 import requests
 import argparse
 import logging
+import asyncio
 from pydantic import BaseModel, Field
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP, Context  # Updated import for FastMCP 2.0
+from fastmcp.server.dependencies import get_http_request  # New dependency function for HTTP access
 from typing import Dict, Any, Optional, ClassVar, Annotated
 from pydantic import validator
 from dotenv import load_dotenv
@@ -66,12 +68,186 @@ def parse_arguments():
 # Parse arguments at module level to make them available
 args = parse_arguments()
 
-# Initialize FastMCP server using parsed arguments with mount path configured via settings
-mcp = FastMCP("fininfo", port=args.port, host="0.0.0.0")
-mcp.settings.mount_path = "/fininfo"
+# Initialize FastMCP 2.0 server
+mcp = FastMCP("fininfo")
+# Note: FastMCP 2.0 handles host/port differently - set in run() method
+
 
 @mcp.tool()
-def get_stock_aggregates(
+async def get_http_headers(ctx: Context = None) -> Dict[str, Any]:
+    """
+    FastMCP 2.0 tool to access HTTP headers directly using the new dependency system.
+    This tool demonstrates how to get HTTP request information including auth headers.
+    
+    Returns:
+        Dict[str, Any]: HTTP request information including headers
+    """
+    if not ctx:
+        return {"error": "No context available"}
+    
+    result = {
+        "fastmcp_version": "2.0",
+        "tool_name": "get_http_headers",
+        "server": "fininfo",
+        "timestamp": str(asyncio.get_event_loop().time())
+    }
+    
+    try:
+        # Use FastMCP 2.0's dependency function to get HTTP request
+        http_request = get_http_request()
+        
+        if http_request:
+            # Extract all headers
+            all_headers = dict(http_request.headers)
+            
+            # Separate auth-related headers for easy viewing
+            auth_headers = {}
+            other_headers = {}
+            
+            for key, value in all_headers.items():
+                key_lower = key.lower()
+                if key_lower in ['authorization', 'x-user-pool-id', 'x-client-id', 'x-region', 'cookie', 'x-api-key', 'x-scopes', 'x-user', 'x-username', 'x-auth-method']:
+                    if key_lower == 'authorization':
+                        # Show type of auth but not full token
+                        if value.startswith('Bearer '):
+                            auth_headers[key] = f"Bearer <TOKEN_HIDDEN> (length: {len(value)})"
+                        else:
+                            auth_headers[key] = f"<AUTH_HIDDEN> (length: {len(value)})"
+                    elif key_lower == 'cookie':
+                        # Show cookie names but hide values
+                        cookies = [c.split('=')[0] for c in value.split(';')]
+                        auth_headers[key] = f"Cookies: {', '.join(cookies)}"
+                    else:
+                        auth_headers[key] = value
+                else:
+                    other_headers[key] = value
+            
+            result.update({
+                "http_request_available": True,
+                "method": http_request.method,
+                "url": str(http_request.url),
+                "path": http_request.url.path,
+                "query_params": dict(http_request.query_params),
+                "client_info": {
+                    "host": http_request.client.host if http_request.client else "Unknown",
+                    "port": http_request.client.port if http_request.client else "Unknown"
+                },
+                "auth_headers": auth_headers,
+                "other_headers": other_headers,
+                "total_headers_count": len(all_headers)
+            })
+            
+            # Log the auth headers for server-side debugging
+            await ctx.info(f"🔐 HTTP Headers Debug - Auth Headers Found: {list(auth_headers.keys())}")
+            if auth_headers:
+                for key, value in auth_headers.items():
+                    await ctx.info(f"   {key}: {value}")
+            else:
+                await ctx.info("   No auth-related headers found")
+                
+        else:
+            result.update({
+                "http_request_available": False,
+                "error": "No HTTP request context available"
+            })
+            await ctx.warning("No HTTP request context available - may be running in non-HTTP transport mode")
+            
+    except RuntimeError as e:
+        # This happens when not in HTTP context (e.g., stdio transport)
+        result.update({
+            "http_request_available": False,
+            "error": f"Not in HTTP context: {str(e)}",
+            "transport_mode": "Likely STDIO or other non-HTTP transport"
+        })
+        await ctx.info(f"Not in HTTP context - this is expected for STDIO transport: {e}")
+        
+    except Exception as e:
+        result.update({
+            "http_request_available": False,
+            "error": f"Error accessing HTTP request: {str(e)}"
+        })
+        await ctx.error(f"Error accessing HTTP request: {e}")
+        logger.error(f"Error in get_http_headers: {e}", exc_info=True)
+    
+    return result
+
+
+async def print_all_http_headers(ctx: Context = None) -> str:
+    """
+    Helper function to print out all HTTP request headers in a formatted string.
+    This function can be called internally by other tools to display HTTP headers.
+    
+    Args:
+        ctx: FastMCP Context object
+        
+    Returns:
+        str: Formatted string containing all HTTP headers
+    """
+    if not ctx:
+        return "Error: No context available"
+    
+    output = []
+    output.append("=== HTTP Request Headers ===")
+    output.append(f"Server: fininfo")
+    output.append(f"Timestamp: {asyncio.get_event_loop().time()}")
+    output.append("")
+    
+    try:
+        # Use FastMCP 2.0's dependency function to get HTTP request
+        http_request = get_http_request()
+        
+        if http_request:
+            # Extract all headers
+            all_headers = dict(http_request.headers)
+            
+            output.append(f"Total Headers: {len(all_headers)}")
+            output.append(f"HTTP Method: {http_request.method}")
+            output.append(f"URL: {http_request.url}")
+            output.append(f"Path: {http_request.url.path}")
+            output.append("")
+            output.append("Headers:")
+            output.append("-" * 50)
+            
+            # Sort headers for consistent output
+            for key in sorted(all_headers.keys()):
+                value = all_headers[key]
+                # Mask sensitive headers
+                if key.lower() in ['authorization', 'cookie']:
+                    if key.lower() == 'authorization':
+                        if value.startswith('Bearer '):
+                            masked_value = f"Bearer <TOKEN_MASKED> (length: {len(value)})"
+                        else:
+                            masked_value = f"<AUTH_MASKED> (length: {len(value)})"
+                    else:  # cookie
+                        cookie_names = [c.split('=')[0] for c in value.split(';')]
+                        masked_value = f"<COOKIES_MASKED>: {', '.join(cookie_names)}"
+                    output.append(f"{key}: {masked_value}")
+                else:
+                    output.append(f"{key}: {value}")
+            
+            # Log to context as well
+            await ctx.info(f"📋 Printed all HTTP headers - Total: {len(all_headers)}")
+            
+        else:
+            output.append("No HTTP request context available")
+            output.append("This may occur when using STDIO transport")
+            await ctx.warning("No HTTP request context available")
+            
+    except RuntimeError as e:
+        output.append(f"Not in HTTP context: {str(e)}")
+        output.append("This is expected for STDIO transport")
+        await ctx.info(f"Not in HTTP context - this is expected for STDIO transport: {e}")
+        
+    except Exception as e:
+        output.append(f"Error accessing HTTP request: {str(e)}")
+        await ctx.error(f"Error accessing HTTP request: {e}")
+        logger.error(f"Error in print_all_http_headers: {e}", exc_info=True)
+    
+    return "\n".join(output)
+
+
+@mcp.tool()
+async def get_stock_aggregates(
     stock_ticker: Annotated[str, Field(..., description="Case-sensitive ticker symbol (e.g., 'AAPL')")],
     multiplier: Annotated[int, Field(..., description="Size of the timespan multiplier")],
     timespan: Annotated[str, Field(..., description="Size of the time window")],
@@ -79,7 +255,8 @@ def get_stock_aggregates(
     to_date: Annotated[str, Field(..., description="End date in YYYY-MM-DD format or millisecond timestamp")],
     adjusted: Annotated[bool, Field(True, description="Whether results are adjusted for splits")] = True,
     sort: Annotated[Optional[str], Field(None, description="Sort results by timestamp ('asc' or 'desc')")] = None,
-    limit: Annotated[int, Field(5000, description="Maximum number of base aggregates (max 50000)")] = 5000
+    limit: Annotated[int, Field(5000, description="Maximum number of base aggregates (max 50000)")] = 5000,
+    ctx: Context = None
 ) -> Dict[str, Any]:
     """
     Retrieve stock aggregate data from Polygon.io API.
@@ -101,6 +278,17 @@ def get_stock_aggregates(
         ValueError: If input parameters are invalid
         requests.RequestException: If API call fails after retries
     """
+    # Log context information if available
+    if ctx:
+        await ctx.info(f"🔍 Getting stock aggregates for {stock_ticker} from {from_date} to {to_date}")
+        
+        # Use the helper function to print HTTP headers for debugging
+        try:
+            headers_info = await print_all_http_headers(ctx)
+            await ctx.info(f"📋 HTTP Headers Debug:\n{headers_info}")
+        except Exception as e:
+            await ctx.warning(f"Could not print HTTP headers: {e}")
+    
     # Validate timespan
     valid_timespans = ["minute", "hour", "day", "week", "month", "quarter", "year"]
     if timespan not in valid_timespans:
@@ -155,7 +343,7 @@ def get_stock_aggregates(
 
 
 @mcp.tool()
-def print_stock_data(
+async def print_stock_data(
     stock_ticker: Annotated[str, Field(..., description="Case-sensitive ticker symbol (e.g., 'AAPL')")],
     multiplier: Annotated[int, Field(..., description="Size of the timespan multiplier")],
     timespan: Annotated[str, Field(..., description="Size of the time window")],
@@ -163,7 +351,8 @@ def print_stock_data(
     to_date: Annotated[str, Field(..., description="End date in YYYY-MM-DD format or millisecond timestamp")],
     adjusted: Annotated[bool, Field(True, description="Whether results are adjusted for splits")] = True,
     sort: Annotated[Optional[str], Field(None, description="Sort results by timestamp ('asc' or 'desc')")] = None,
-    limit: Annotated[int, Field(5000, description="Maximum number of base aggregates (max 50000)")] = 5000
+    limit: Annotated[int, Field(5000, description="Maximum number of base aggregates (max 50000)")] = 5000,
+    ctx: Context = None
 ) -> str:
     """
     Format all fields from the Polygon.io stock aggregate response as a string.
@@ -184,7 +373,7 @@ def print_stock_data(
     # Initialize an empty string to collect all output
     output = []
 
-    response_data = get_stock_aggregates(
+    response_data = await get_stock_aggregates(
         stock_ticker=stock_ticker,
         multiplier=multiplier,
         timespan=timespan,
@@ -192,7 +381,8 @@ def print_stock_data(
         to_date=to_date,
         adjusted=adjusted,
         sort=sort,
-        limit=limit
+        limit=limit,
+        ctx=ctx
     )
     
     if not response_data:
@@ -274,8 +464,9 @@ def get_config() -> str:
 
 def main():
     # Run the server with the specified transport from command line args
-    mcp.run(transport=args.transport)
-    logger.info(f"Server is running on port {args.port} with transport {args.transport}")
+    # FastMCP 2.0 handles port and host in the run method
+    logger.info(f"Starting fininfo server on port {args.port} with transport {args.transport}")
+    mcp.run(transport=args.transport, host="0.0.0.0", port=int(args.port), path="/sse")
 
 if __name__ == "__main__":
     main()
