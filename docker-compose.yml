@@ -50,7 +50,7 @@ services:
       - "8888:8888"
     volumes:
       - /var/log/mcp-gateway:/app/logs
-      - /opt/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
+      - /opt/mcp-gateway/auth_server/scopes.yml:/app/scopes.yml
     restart: unless-stopped
 
   # Current Time MCP Server
