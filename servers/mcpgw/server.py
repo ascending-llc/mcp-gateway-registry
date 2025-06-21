@@ -501,6 +501,8 @@ _faiss_index_mcpgw: Optional[faiss.Index] = None
 _faiss_metadata_mcpgw: Optional[Dict[str, Any]] = None # This will store the content of service_index_metadata.json
 _last_faiss_index_mtime: Optional[float] = None
 _last_faiss_metadata_mtime: Optional[float] = None
+_last_faiss_check_time: Optional[float] = None  # Track when we last checked for file updates
+_faiss_check_interval: float = 5.0  # Only check for file updates every 5 seconds
 
 # Determine base path for mcpgw server to find registry's server data
 # When running in Docker, server.py is at /app/server.py and registry files are at /app/registry/servers/
@@ -1198,12 +1200,22 @@ async def intelligent_tool_finder(
         logger.warning("No user scopes found - user may not have access to any tools")
         return []
     
-    global _embedding_model_mcpgw, _faiss_index_mcpgw, _faiss_metadata_mcpgw
+    global _embedding_model_mcpgw, _faiss_index_mcpgw, _faiss_metadata_mcpgw, _last_faiss_check_time
+    import time
 
-    # Ensure FAISS data and model are loaded
-    if _embedding_model_mcpgw is None or _faiss_index_mcpgw is None or _faiss_metadata_mcpgw is None:
-        logger.info("MCPGW: FAISS data or model not yet loaded. Attempting to load now for intelligent_tool_finder...")
+    # Check for FAISS data updates, but only if enough time has passed since last check
+    current_time = time.time()
+    should_check_for_updates = (
+        _embedding_model_mcpgw is None or 
+        _faiss_index_mcpgw is None or 
+        _faiss_metadata_mcpgw is None or
+        _last_faiss_check_time is None or
+        (current_time - _last_faiss_check_time) >= _faiss_check_interval
+    )
+    
+    if should_check_for_updates:
         await load_faiss_data_for_mcpgw()
+        _last_faiss_check_time = current_time
 
     if _embedding_model_mcpgw is None:
         raise Exception("MCPGW: Sentence embedding model is not available. Cannot perform intelligent search.")
