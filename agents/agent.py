@@ -37,6 +37,9 @@ Example with environment variables (create a .env file):
     AWS_REGION=us-east-1
     
     python agent.py --message "current time in new delhi"
+
+Example with custom environment files:
+    python agent.py --user-env-file .env.myuser --agent-env-file .env.myagent --message "your question"
 """
 
 import asyncio
@@ -82,19 +85,26 @@ logging.basicConfig(
 # Get logger
 logger = logging.getLogger(__name__)
 
-def get_auth_mode_from_args() -> bool:
+def get_auth_mode_from_args() -> tuple[bool, str, str]:
     """
-    Parse command line arguments to determine authentication mode.
+    Parse command line arguments to determine authentication mode and env file names.
     This is done before loading environment variables to choose the correct .env file.
     
     Returns:
-        bool: True if using session cookie authentication, False for M2M authentication
+        tuple: (use_session_cookie, user_env_file, agent_env_file)
+            - use_session_cookie: True if using session cookie authentication, False for M2M authentication
+            - user_env_file: Name of the env file for user authentication
+            - agent_env_file: Name of the env file for agent authentication
     """
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--use-session-cookie', action='store_true',
                         help='Use session cookie authentication instead of M2M')
+    parser.add_argument('--user-env-file', type=str, default='.env.user',
+                        help='Name of the environment file for user authentication (default: .env.user)')
+    parser.add_argument('--agent-env-file', type=str, default='.env.agent',
+                        help='Name of the environment file for agent authentication (default: .env.agent)')
     args, _ = parser.parse_known_args()
-    return args.use_session_cookie
+    return args.use_session_cookie, args.user_env_file, args.agent_env_file
 
 def print_env_file_banner(env_file_name: str, use_session_cookie: bool, file_found: bool, file_path: str = None):
     """
@@ -115,9 +125,9 @@ def print_env_file_banner(env_file_name: str, use_session_cookie: bool, file_fou
     print(f"Expected .env file: {env_file_name}")
     
     if use_session_cookie:
-        print("Reason: --use-session-cookie flag specified, using .env.user for user credentials")
+        print(f"Reason: --use-session-cookie flag specified, using {env_file_name} for user credentials")
     else:
-        print("Reason: M2M authentication (default), using .env.agent for machine credentials")
+        print(f"Reason: M2M authentication (default), using {env_file_name} for machine credentials")
     
     if file_found and file_path:
         print(f"✅ Found and loaded: {file_path}")
@@ -127,7 +137,7 @@ def print_env_file_banner(env_file_name: str, use_session_cookie: bool, file_fou
     
     print("="*80 + "\n")
 
-def load_env_config(use_session_cookie: bool) -> Dict[str, Optional[str]]:
+def load_env_config(use_session_cookie: bool, user_env_file: str = '.env.user', agent_env_file: str = '.env.agent') -> Dict[str, Optional[str]]:
     """
     Load configuration from .env file based on authentication mode.
     Uses .env.user for session cookie auth, .env.agent for M2M auth.
@@ -147,7 +157,7 @@ def load_env_config(use_session_cookie: bool) -> Dict[str, Optional[str]]:
     }
     
     # Choose .env file based on authentication mode
-    env_file_name = '.env.user' if use_session_cookie else '.env.agent'
+    env_file_name = user_env_file if use_session_cookie else agent_env_file
     logger.info(f"Using .env file: {env_file_name}")
     if DOTENV_AVAILABLE:
         file_found = False
@@ -204,12 +214,13 @@ def parse_arguments() -> argparse.Namespace:
     Returns:
         argparse.Namespace: The parsed command line arguments
     """
-    # First, determine authentication mode to choose correct .env file
-    use_session_cookie = get_auth_mode_from_args()
+    # First, determine authentication mode and env file names to choose correct .env file
+    use_session_cookie, user_env_file, agent_env_file = get_auth_mode_from_args()
     logger.info(f"Using session cookie authentication: {use_session_cookie}")
+    logger.info(f"User env file: {user_env_file}, Agent env file: {agent_env_file}")
     
     # Load environment configuration using the appropriate .env file
-    env_config = load_env_config(use_session_cookie)
+    env_config = load_env_config(use_session_cookie, user_env_file, agent_env_file)
     
     parser = argparse.ArgumentParser(description='LangGraph MCP Client with Cognito Authentication')
     
@@ -227,9 +238,15 @@ def parse_arguments() -> argparse.Namespace:
     
     # Authentication method arguments
     parser.add_argument('--use-session-cookie', action='store_true',
-                        help='Use session cookie authentication instead of M2M (loads .env.user instead of .env.agent)')
+                        help='Use session cookie authentication instead of M2M')
     parser.add_argument('--session-cookie-file', type=str, default='~/.mcp/session_cookie',
                         help='Path to session cookie file (default: ~/.mcp/session_cookie)')
+    
+    # Environment file configuration arguments
+    parser.add_argument('--user-env-file', type=str, default=user_env_file,
+                        help=f'Name of the environment file for user authentication (default: {user_env_file})')
+    parser.add_argument('--agent-env-file', type=str, default=agent_env_file,
+                        help=f'Name of the environment file for agent authentication (default: {agent_env_file})')
     
     # Cognito authentication arguments - now optional if available in environment
     parser.add_argument('--client-id', type=str, default=env_config['client_id'],
