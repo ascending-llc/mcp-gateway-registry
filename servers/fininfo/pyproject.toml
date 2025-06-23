@@ -9,4 +9,6 @@ dependencies = [
    "pydantic>=2.11.3",
    "requests>=2.32.3",
    "python-dotenv>=1.0.0",  # Added dotenv as it's used in server.py
+   "PyYAML>=6.0.0",  # For YAML secrets file parsing
+   "cryptography>=41.0.0",  # For potential encryption support
 ]

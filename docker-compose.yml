@@ -75,7 +75,9 @@ services:
         SERVER_PATH: servers/fininfo
     environment:
       - PORT=8001
-      - POLYGON_API_KEY=${POLYGON_API_KEY}
+      - SECRET_KEY=${SECRET_KEY}
+    volumes:
+      - /opt/mcp-gateway/secrets/fininfo/:/app/fininfo/
     ports:
       - "8001:8001"
     restart: unless-stopped

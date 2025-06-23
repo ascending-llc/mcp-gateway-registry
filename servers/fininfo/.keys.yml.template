@@ -1,0 +1,23 @@
+# Financial Info MCP Server - Client API Keys Configuration
+# 
+# This file maps client IDs to their respective Polygon API keys.
+# Format: client_id: api_key
+#
+# Example:
+# client1: your_polygon_api_key_1
+# client2: your_polygon_api_key_2
+# default: fallback_api_key
+#
+# Note: In production, this file should be:
+# - Stored securely with appropriate file permissions (600)
+# - Backed up and version controlled separately from code
+# - Potentially encrypted using the SECRET_KEY
+# - Monitored for unauthorized access
+
+# Default fallback key (uses the existing POLYGON_API_KEY from environment)
+default: default_polygon_key_here
+
+# Example client configurations (uncomment and modify as needed)
+# client_demo: oN7dCYnQLIGMN1uCrHFpjX4YluM0EKTp
+# client_prod: your_production_polygon_api_key_here
+# client_test: your_test_polygon_api_key_here
