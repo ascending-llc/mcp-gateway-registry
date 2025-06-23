@@ -1,5 +1,6 @@
 """
 This server provides stock market data using the Polygon.io API.
+Now supports client-specific API keys via x-client-id header and secrets manager.
 """
 
 import os
@@ -14,6 +15,7 @@ from fastmcp.server.dependencies import get_http_request  # New dependency funct
 from typing import Dict, Any, Optional, ClassVar, Annotated
 from pydantic import validator
 from dotenv import load_dotenv
+from secrets_manager import SecretsManager
 
 # Configure logging
 logging.basicConfig(
@@ -23,9 +25,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 load_dotenv()  # Load environment variables from .env file
-API_KEY = os.environ.get("POLYGON_API_KEY")
-if API_KEY is None:
-    raise ValueError("POLYGON_API_KEY environment variable is not set.")
+
+# Initialize secrets manager for client-specific API keys
+secrets_manager = SecretsManager("/app/fininfo/.keys.yml")
+
+# Fallback API key from environment (for backward compatibility)
+FALLBACK_API_KEY = os.environ.get("POLYGON_API_KEY")
+if FALLBACK_API_KEY is None:
+    logger.warning("POLYGON_API_KEY environment variable is not set. Relying on secrets manager only.")
 
 
 class Constants(BaseModel):
@@ -73,7 +80,57 @@ mcp = FastMCP("fininfo")
 # Note: FastMCP 2.0 handles host/port differently - set in run() method
 
 
-@mcp.tool()
+def get_api_key_for_request() -> str:
+    """
+    Extract client ID from x-client-id header and retrieve the corresponding API key.
+    
+    Returns:
+        str: API key for the client, or fallback key if client ID not found
+    """
+    try:
+        # Get HTTP request to extract headers
+        http_request = get_http_request()
+        
+        if http_request:
+            # Extract x-client-id header
+            client_id = http_request.headers.get('x-client-id')
+            
+            if client_id:
+                logger.info(f"🔑 Client ID found in header: {client_id}")
+                
+                # Get API key for this client
+                api_key = secrets_manager.get_api_key(client_id)
+                
+                if api_key:
+                    logger.info(f"✅ Using client-specific API key for client: {client_id}")
+                    return api_key
+                else:
+                    logger.warning(f"❌ No API key found for client: {client_id}, using fallback")
+            else:
+                logger.info("ℹ️  No x-client-id header found, using fallback API key")
+        else:
+            logger.info("ℹ️  No HTTP request context available, using fallback API key")
+            
+    except RuntimeError:
+        # This happens when not in HTTP context (e.g., stdio transport)
+        logger.info("ℹ️  Not in HTTP context, using fallback API key")
+    except Exception as e:
+        logger.error(f"❌ Error extracting client ID: {e}")
+    
+    # Use fallback API key
+    if FALLBACK_API_KEY:
+        logger.info("🔄 Using fallback API key from environment")
+        return FALLBACK_API_KEY
+    else:
+        # Try to get default key from secrets manager
+        default_key = secrets_manager.get_api_key('default')
+        if default_key:
+            logger.info("🔄 Using default API key from secrets manager")
+            return default_key
+        else:
+            raise ValueError("No API key available: neither client-specific, fallback, nor default key found")
+
+
 async def get_http_headers(ctx: Context = None) -> Dict[str, Any]:
     """
     FastMCP 2.0 tool to access HTTP headers directly using the new dependency system.
@@ -138,19 +195,19 @@ async def get_http_headers(ctx: Context = None) -> Dict[str, Any]:
             })
             
             # Log the auth headers for server-side debugging
-            await ctx.info(f"🔐 HTTP Headers Debug - Auth Headers Found: {list(auth_headers.keys())}")
+            logger.info(f"🔐 HTTP Headers Debug - Auth Headers Found: {list(auth_headers.keys())}")
             if auth_headers:
                 for key, value in auth_headers.items():
-                    await ctx.info(f"   {key}: {value}")
+                    logger.info(f"   {key}: {value}")
             else:
-                await ctx.info("   No auth-related headers found")
+                logger.info("   No auth-related headers found")
                 
         else:
             result.update({
                 "http_request_available": False,
                 "error": "No HTTP request context available"
             })
-            await ctx.warning("No HTTP request context available - may be running in non-HTTP transport mode")
+            logger.warning("No HTTP request context available - may be running in non-HTTP transport mode")
             
     except RuntimeError as e:
         # This happens when not in HTTP context (e.g., stdio transport)
@@ -159,14 +216,14 @@ async def get_http_headers(ctx: Context = None) -> Dict[str, Any]:
             "error": f"Not in HTTP context: {str(e)}",
             "transport_mode": "Likely STDIO or other non-HTTP transport"
         })
-        await ctx.info(f"Not in HTTP context - this is expected for STDIO transport: {e}")
+        logger.info(f"Not in HTTP context - this is expected for STDIO transport: {e}")
         
     except Exception as e:
         result.update({
             "http_request_available": False,
             "error": f"Error accessing HTTP request: {str(e)}"
         })
-        await ctx.error(f"Error accessing HTTP request: {e}")
+        logger.error(f"Error accessing HTTP request: {e}")
         logger.error(f"Error in get_http_headers: {e}", exc_info=True)
     
     return result
@@ -225,41 +282,41 @@ async def print_all_http_headers(ctx: Context = None) -> str:
                 else:
                     output.append(f"{key}: {value}")
             
-            # Log to context as well
-            await ctx.info(f"📋 Printed all HTTP headers - Total: {len(all_headers)}")
+            # Log to server logs
+            logger.info(f"📋 Printed all HTTP headers - Total: {len(all_headers)}")
             
         else:
             output.append("No HTTP request context available")
             output.append("This may occur when using STDIO transport")
-            await ctx.warning("No HTTP request context available")
+            logger.warning("No HTTP request context available")
             
     except RuntimeError as e:
         output.append(f"Not in HTTP context: {str(e)}")
         output.append("This is expected for STDIO transport")
-        await ctx.info(f"Not in HTTP context - this is expected for STDIO transport: {e}")
+        logger.info(f"Not in HTTP context - this is expected for STDIO transport: {e}")
         
     except Exception as e:
         output.append(f"Error accessing HTTP request: {str(e)}")
-        await ctx.error(f"Error accessing HTTP request: {e}")
+        logger.error(f"Error accessing HTTP request: {e}")
         logger.error(f"Error in print_all_http_headers: {e}", exc_info=True)
     
     return "\n".join(output)
 
 
-@mcp.tool()
-async def get_stock_aggregates(
-    stock_ticker: Annotated[str, Field(..., description="Case-sensitive ticker symbol (e.g., 'AAPL')")],
-    multiplier: Annotated[int, Field(..., description="Size of the timespan multiplier")],
-    timespan: Annotated[str, Field(..., description="Size of the time window")],
-    from_date: Annotated[str, Field(..., description="Start date in YYYY-MM-DD format or millisecond timestamp")],
-    to_date: Annotated[str, Field(..., description="End date in YYYY-MM-DD format or millisecond timestamp")],
-    adjusted: Annotated[bool, Field(True, description="Whether results are adjusted for splits")] = True,
-    sort: Annotated[Optional[str], Field(None, description="Sort results by timestamp ('asc' or 'desc')")] = None,
-    limit: Annotated[int, Field(5000, description="Maximum number of base aggregates (max 50000)")] = 5000,
+async def _fetch_stock_data(
+    stock_ticker: str,
+    multiplier: int,
+    timespan: str,
+    from_date: str,
+    to_date: str,
+    adjusted: bool = True,
+    sort: Optional[str] = None,
+    limit: int = 5000,
     ctx: Context = None
 ) -> Dict[str, Any]:
     """
-    Retrieve stock aggregate data from Polygon.io API.
+    Private function to fetch stock aggregate data from Polygon.io API.
+    This function is shared by both get_stock_aggregates and print_stock_data.
 
     Args:
         stock_ticker: Case-sensitive ticker symbol (e.g., 'AAPL')
@@ -270,6 +327,7 @@ async def get_stock_aggregates(
         adjusted: Whether results are adjusted for splits (default: True)
         sort: Sort results by timestamp ('asc' or 'desc', default: None)
         limit: Maximum number of base aggregates (max 50000, default: 5000)
+        ctx: FastMCP Context object
 
     Returns:
         Dict[str, Any]: Response data from Polygon API
@@ -278,16 +336,16 @@ async def get_stock_aggregates(
         ValueError: If input parameters are invalid
         requests.RequestException: If API call fails after retries
     """
-    # Log context information if available
+    # Log request information
+    logger.info(f"🔍 Getting stock aggregates for {stock_ticker} from {from_date} to {to_date}")
+    
+    # Use the helper function to print HTTP headers for debugging
     if ctx:
-        await ctx.info(f"🔍 Getting stock aggregates for {stock_ticker} from {from_date} to {to_date}")
-        
-        # Use the helper function to print HTTP headers for debugging
         try:
             headers_info = await print_all_http_headers(ctx)
-            await ctx.info(f"📋 HTTP Headers Debug:\n{headers_info}")
+            logger.info(f"📋 HTTP Headers Debug:\n{headers_info}")
         except Exception as e:
-            await ctx.warning(f"Could not print HTTP headers: {e}")
+            logger.warning(f"Could not print HTTP headers: {e}")
     
     # Validate timespan
     valid_timespans = ["minute", "hour", "day", "week", "month", "quarter", "year"]
@@ -302,13 +360,16 @@ async def get_stock_aggregates(
     if limit > 50000:
         raise ValueError("Limit cannot exceed 50000")
     
+    # Get the appropriate API key for this request
+    api_key = get_api_key_for_request()
+    
     # Build URL and parameters
     base_url = "https://api.polygon.io"
     endpoint = f"/v2/aggs/ticker/{stock_ticker}/range/{multiplier}/{timespan}/{from_date}/{to_date}"
     url = f"{base_url}{endpoint}"
 
     # Prepare query parameters
-    query_params = {"adjusted": str(adjusted).lower(), "apiKey": API_KEY}
+    query_params = {"adjusted": str(adjusted).lower(), "apiKey": api_key}
 
     if sort:
         query_params["sort"] = sort
@@ -343,6 +404,51 @@ async def get_stock_aggregates(
 
 
 @mcp.tool()
+async def get_stock_aggregates(
+    stock_ticker: Annotated[str, Field(..., description="Case-sensitive ticker symbol (e.g., 'AAPL')")],
+    multiplier: Annotated[int, Field(..., description="Size of the timespan multiplier")],
+    timespan: Annotated[str, Field(..., description="Size of the time window")],
+    from_date: Annotated[str, Field(..., description="Start date in YYYY-MM-DD format or millisecond timestamp")],
+    to_date: Annotated[str, Field(..., description="End date in YYYY-MM-DD format or millisecond timestamp")],
+    adjusted: Annotated[bool, Field(True, description="Whether results are adjusted for splits")] = True,
+    sort: Annotated[Optional[str], Field(None, description="Sort results by timestamp ('asc' or 'desc')")] = None,
+    limit: Annotated[int, Field(5000, description="Maximum number of base aggregates (max 50000)")] = 5000,
+    ctx: Context = None
+) -> Dict[str, Any]:
+    """
+    Retrieve stock aggregate data from Polygon.io API.
+
+    Args:
+        stock_ticker: Case-sensitive ticker symbol (e.g., 'AAPL')
+        multiplier: Size of the timespan multiplier
+        timespan: Size of the time window (minute, hour, day, week, month, quarter, year)
+        from_date: Start date in YYYY-MM-DD format or millisecond timestamp
+        to_date: End date in YYYY-MM-DD format or millisecond timestamp
+        adjusted: Whether results are adjusted for splits (default: True)
+        sort: Sort results by timestamp ('asc' or 'desc', default: None)
+        limit: Maximum number of base aggregates (max 50000, default: 5000)
+
+    Returns:
+        Dict[str, Any]: Response data from Polygon API
+
+    Raises:
+        ValueError: If input parameters are invalid
+        requests.RequestException: If API call fails after retries
+    """
+    return await _fetch_stock_data(
+        stock_ticker=stock_ticker,
+        multiplier=multiplier,
+        timespan=timespan,
+        from_date=from_date,
+        to_date=to_date,
+        adjusted=adjusted,
+        sort=sort,
+        limit=limit,
+        ctx=ctx
+    )
+
+
+@mcp.tool()
 async def print_stock_data(
     stock_ticker: Annotated[str, Field(..., description="Case-sensitive ticker symbol (e.g., 'AAPL')")],
     multiplier: Annotated[int, Field(..., description="Size of the timespan multiplier")],
@@ -373,7 +479,7 @@ async def print_stock_data(
     # Initialize an empty string to collect all output
     output = []
 
-    response_data = await get_stock_aggregates(
+    response_data = await _fetch_stock_data(
         stock_ticker=stock_ticker,
         multiplier=multiplier,
         timespan=timespan,
