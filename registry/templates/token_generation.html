@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generate JWT Token - MCP Registry</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
+    <style>
+        .token-form {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .form-section {
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .form-section:last-child {
+            border-bottom: none;
+        }
+        
+        .form-section h3 {
+            margin-bottom: 1rem;
+            color: #333;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #555;
+        }
+        
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+            font-family: inherit;
+        }
+        
+        .form-group textarea {
+            height: 200px;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        
+        .current-scopes {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+        }
+        
+        .scope-item {
+            display: inline-block;
+            background: #007bff;
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 15px;
+            font-size: 0.85rem;
+            margin: 0.25rem;
+        }
+        
+        .token-result {
+            background: #f8f9fa;
+            border: 1px solid #28a745;
+            border-radius: 4px;
+            padding: 1.5rem;
+            margin-top: 2rem;
+            display: none;
+        }
+        
+        .token-result.success {
+            display: block;
+        }
+        
+        .token-field {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 1rem;
+            font-family: monospace;
+            font-size: 0.9rem;
+            word-break: break-all;
+            margin: 1rem 0;
+            position: relative;
+        }
+        
+        .token-field span {
+            cursor: pointer;
+            user-select: all; /* Make text easier to select */
+            -webkit-user-select: all;
+            -moz-user-select: all;
+            -ms-user-select: all;
+            display: block;
+            padding-right: 80px; /* Make room for copy button */
+        }
+        
+        .token-field span:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .copy-button {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+        
+        .copy-button:hover {
+            background: #0056b3;
+        }
+        
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            border-radius: 4px;
+            padding: 1rem;
+            margin-top: 1rem;
+            display: none;
+        }
+        
+        .error-message.show {
+            display: block;
+        }
+        
+        .submit-button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            width: 100%;
+        }
+        
+        .submit-button:hover {
+            background: #218838;
+        }
+        
+        .submit-button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .radio-group {
+            display: flex;
+            gap: 2rem;
+            margin-bottom: 1rem;
+        }
+        
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .json-section {
+            display: none;
+        }
+        
+        .json-section.active {
+            display: block;
+        }
+        
+        /* Navigation improvements */
+        .header-left {
+            display: flex;
+            align-items: center;
+        }
+        
+        .breadcrumbs {
+            font-size: 0.9em;
+            color: #6c757d;
+            margin-bottom: 1rem;
+            padding: 0.5rem 0;
+        }
+        
+        .breadcrumbs a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        
+        .breadcrumbs a:hover {
+            text-decoration: underline;
+        }
+        
+        .breadcrumbs span {
+            color: #6c757d;
+        }
+        
+        .main-nav a {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .navigation-footer {
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid #dee2e6;
+            text-align: center;
+        }
+        
+        .back-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #6c757d;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+        
+        .back-button:hover {
+            color: #007bff;
+            border-color: #007bff;
+            text-decoration: none;
+        }
+        
+        .usage-instructions {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .usage-instructions h4 {
+            margin-top: 0;
+            color: #495057;
+        }
+        
+        .usage-instructions code {
+            background: #e9ecef;
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 0.9rem;
+            display: block;
+            margin: 0.5rem 0;
+        }
+    </style>
+</head>
+<body>
+    <header class="main-header">
+        <div class="header-left">
+            <div class="logo">
+                <a href="/" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 10px;">
+                    <span>MCP Registry</span>
+                </a>
+            </div>
+        </div>
+        <nav class="main-nav">
+            <a href="/">← Back to Services</a>
+            <a href="/tokens" class="active">Generate Token</a>
+        </nav>
+        <div class="header-right">
+            <div class="user-display">{{ username }}</div>
+            <a href="/logout" class="logout-button">Logout</a>
+        </div>
+    </header>
+
+    <div class="container">
+        <main class="content">
+            <div class="breadcrumbs">
+                <a href="/">Home</a> / <span>Generate Token</span>
+            </div>
+            <div class="page-header">
+                <h1>Generate JWT Token</h1>
+                <p>Generate a personal access token for programmatic access to MCP servers.</p>
+            </div>
+
+            <div class="token-form">
+                <div class="form-section">
+                    <h3>Your Current Permissions</h3>
+                    <div class="current-scopes">
+                        <strong>Current Scopes:</strong><br>
+                        {% for scope in user_scopes %}
+                            <span class="scope-item">{{ scope }}</span>
+                        {% endfor %}
+                    </div>
+                    <p><em>Generated tokens can have the same or fewer permissions than your current scopes.</em></p>
+                </div>
+
+                <form id="tokenForm">
+                    <div class="form-section">
+                        <h3>Token Configuration</h3>
+                        
+                        <div class="form-group">
+                            <label for="description">Description (optional)</label>
+                            <input type="text" id="description" name="description" placeholder="e.g., Token for automation script">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="expires_in_hours">Expires In (hours)</label>
+                            <select id="expires_in_hours" name="expires_in_hours">
+                                <option value="1">1 hour</option>
+                                <option value="8" selected>8 hours</option>
+                                <option value="24">24 hours</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h3>Scope Configuration</h3>
+                        
+                        <div class="radio-group">
+                            <div class="radio-option">
+                                <input type="radio" id="useCurrentScopes" name="scopeMethod" value="current" checked>
+                                <label for="useCurrentScopes">Use my current scopes</label>
+                            </div>
+                            <div class="radio-option">
+                                <input type="radio" id="useCustomScopes" name="scopeMethod" value="custom">
+                                <label for="useCustomScopes">Upload custom scopes (JSON)</label>
+                            </div>
+                        </div>
+                        
+                        <div id="jsonSection" class="json-section">
+                            <div class="form-group">
+                                <label for="customScopes">Custom Scopes (JSON format)</label>
+                                <textarea id="customScopes" name="customScopes" placeholder='["mcp-servers-restricted/read", "mcp-registry-user"]'></textarea>
+                                <small>Enter a JSON array of scope names. Must be a subset of your current scopes.</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="submit-button" id="generateButton">
+                        Generate Token
+                    </button>
+                </form>
+
+                <div id="tokenResult" class="token-result">
+                    <h3>✅ Token Generated Successfully</h3>
+                    <p><strong>Access Token:</strong></p>
+                    <div class="token-field">
+                        <span id="generatedToken" onclick="selectToken()" title="Click to select token"></span>
+                        <button type="button" class="copy-button" onclick="copyToken()">Copy</button>
+                    </div>
+                    <div id="tokenDetails"></div>
+                    <div class="usage-instructions">
+                        <h4>📋 Usage Instructions</h4>
+                        <p>Use this token in your API requests:</p>
+                        <code>Authorization: Bearer YOUR_TOKEN_HERE</code>
+                        <p><small>Replace YOUR_TOKEN_HERE with the token above.</small></p>
+                    </div>
+                    <p><strong>⚠️ Important:</strong> This token will not be shown again. Save it securely!</p>
+                </div>
+
+                <div id="errorMessage" class="error-message">
+                    <span id="errorText"></span>
+                </div>
+                
+                <div class="navigation-footer">
+                    <a href="/" class="back-button">← Back to Services</a>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Toggle JSON section based on radio selection
+        document.querySelectorAll('input[name="scopeMethod"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                const jsonSection = document.getElementById('jsonSection');
+                if (this.value === 'custom') {
+                    jsonSection.classList.add('active');
+                } else {
+                    jsonSection.classList.remove('active');
+                }
+            });
+        });
+
+        // Form submission
+        document.getElementById('tokenForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const button = document.getElementById('generateButton');
+            const errorDiv = document.getElementById('errorMessage');
+            const resultDiv = document.getElementById('tokenResult');
+            
+            // Reset UI
+            button.disabled = true;
+            button.textContent = 'Generating...';
+            errorDiv.classList.remove('show');
+            resultDiv.classList.remove('success');
+            
+            try {
+                // Prepare request data
+                const requestData = {
+                    description: document.getElementById('description').value,
+                    expires_in_hours: parseInt(document.getElementById('expires_in_hours').value)
+                };
+                
+                // Handle scopes
+                const scopeMethod = document.querySelector('input[name="scopeMethod"]:checked').value;
+                if (scopeMethod === 'custom') {
+                    const customScopesText = document.getElementById('customScopes').value.trim();
+                    if (customScopesText) {
+                        try {
+                            requestData.requested_scopes = JSON.parse(customScopesText);
+                        } catch (e) {
+                            throw new Error('Invalid JSON format for custom scopes');
+                        }
+                    }
+                }
+                
+                // Make API request
+                const response = await fetch('/api/tokens/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    // Show success
+                    document.getElementById('generatedToken').textContent = data.token_data.access_token;
+                    
+                    const details = `
+                        <p><strong>Expires:</strong> ${new Date(Date.now() + data.token_data.expires_in * 1000).toLocaleString()}</p>
+                        <p><strong>Scopes:</strong> ${data.requested_scopes.join(', ')}</p>
+                        ${data.token_data.description ? `<p><strong>Description:</strong> ${data.token_data.description}</p>` : ''}
+                        <p><strong>✅ Token ready!</strong> You can now use this token for API access. <a href="/">Return to Services →</a></p>
+                    `;
+                    document.getElementById('tokenDetails').innerHTML = details;
+                    
+                    resultDiv.classList.add('success');
+                } else {
+                    throw new Error(data.detail || 'Failed to generate token');
+                }
+                
+            } catch (error) {
+                // Show error
+                document.getElementById('errorText').textContent = error.message;
+                errorDiv.classList.add('show');
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Generate Token';
+            }
+        });
+
+        // Copy token to clipboard with multiple fallback methods
+        async function copyToken() {
+            const token = document.getElementById('generatedToken').textContent;
+            const button = event.target;
+            const originalText = button.textContent;
+            
+            try {
+                // Method 1: Modern Clipboard API
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(token);
+                    button.textContent = 'Copied!';
+                    button.style.backgroundColor = '#28a745';
+                    setTimeout(() => {
+                        button.textContent = originalText;
+                        button.style.backgroundColor = '';
+                    }, 2000);
+                    return;
+                }
+                
+                // Method 2: Fallback using execCommand (deprecated but widely supported)
+                const textArea = document.createElement('textarea');
+                textArea.value = token;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                if (successful) {
+                    button.textContent = 'Copied!';
+                    button.style.backgroundColor = '#28a745';
+                    setTimeout(() => {
+                        button.textContent = originalText;
+                        button.style.backgroundColor = '';
+                    }, 2000);
+                } else {
+                    throw new Error('execCommand failed');
+                }
+                
+            } catch (err) {
+                console.error('Failed to copy token:', err);
+                
+                // Method 3: Final fallback - select text and show instructions
+                const tokenElement = document.getElementById('generatedToken');
+                if (tokenElement) {
+                    // Create a range and select the token text
+                    const range = document.createRange();
+                    range.selectNodeContents(tokenElement);
+                    const selection = window.getSelection();
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                    
+                    // Show user instructions
+                    button.textContent = 'Selected! Press Ctrl+C';
+                    button.style.backgroundColor = '#ffc107';
+                    setTimeout(() => {
+                        button.textContent = originalText;
+                        button.style.backgroundColor = '';
+                    }, 3000);
+                } else {
+                    alert('Copy failed. Please manually select and copy the token.');
+                }
+            }
+        }
+        
+        // Select token text when clicked
+        function selectToken() {
+            const tokenElement = document.getElementById('generatedToken');
+            if (tokenElement) {
+                const range = document.createRange();
+                range.selectNodeContents(tokenElement);
+                const selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(range);
+            }
+        }
+    </script>
+</body>
+</html> 

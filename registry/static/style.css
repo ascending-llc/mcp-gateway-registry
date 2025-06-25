@@ -25,6 +25,10 @@ header.main-header {
 
 .logo img {
     vertical-align: middle; /* Helps alignment */
+    max-height: 40px; /* Limit logo height */
+    max-width: 200px; /* Limit logo width */
+    height: auto; /* Maintain aspect ratio */
+    width: auto; /* Maintain aspect ratio */
 }
 
 .logo span {

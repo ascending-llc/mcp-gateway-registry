@@ -1,0 +1,47 @@
+{% macro sidebar_filters(stats) %}
+<div class="sidebar-section">
+    <h3>Filters</h3>
+    <ul class="filter-list">
+        <li class="filter-item active" data-filter="all">
+            <span class="filter-name">All Servers</span>
+            <span class="filter-count">{{ stats.total }}</span>
+        </li>
+        <li class="filter-item" data-filter="enabled">
+            <span class="filter-name">Enabled</span>
+            <span class="filter-count">{{ stats.enabled }}</span>
+        </li>
+        <li class="filter-item" data-filter="disabled">
+            <span class="filter-name">Disabled</span>
+            <span class="filter-count">{{ stats.disabled }}</span>
+        </li>
+        <li class="filter-item" data-filter="issues">
+            <span class="filter-name">With Issues</span>
+            <span class="filter-count">{{ stats.with_issues }}</span>
+        </li>
+    </ul>
+</div>
+{% endmacro %}
+
+{% macro sidebar_stats(stats) %}
+<div class="sidebar-section">
+    <h3>Statistics</h3>
+    <div class="stats-grid">
+        <div class="stat-item">
+            <div class="stat-value">{{ stats.total }}</div>
+            <div class="stat-label">Total Servers</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">{{ stats.enabled }}</div>
+            <div class="stat-label">Enabled</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">{{ stats.disabled }}</div>
+            <div class="stat-label">Disabled</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">{{ stats.with_issues }}</div>
+            <div class="stat-label">With Issues</div>
+        </div>
+    </div>
+</div>
+{% endmacro %} 

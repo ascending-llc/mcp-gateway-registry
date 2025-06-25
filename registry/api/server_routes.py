@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Request, Form, Depends, HTTPException, status, Cookie
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+import httpx
 
 from ..core.config import settings
 from ..auth.dependencies import web_auth, api_auth, enhanced_auth
@@ -111,6 +112,63 @@ async def read_root(
             "can_perform_action": can_perform_action  # Helper function for permission checks
         },
     )
+
+
+@router.get("/servers")
+async def get_servers_json(
+    query: str | None = None,
+    user_context: Annotated[dict, Depends(enhanced_auth)] = None,
+):
+    """Get servers data as JSON for React frontend (reuses root route logic)."""
+    service_data = []
+    search_query = query.lower() if query else ""
+    
+    # Get servers based on user permissions (same logic as root route)
+    if user_context['is_admin']:
+        all_servers = server_service.get_all_servers()
+    else:
+        all_servers = server_service.get_all_servers_with_permissions(user_context['accessible_servers'])
+    
+    sorted_server_paths = sorted(
+        all_servers.keys(), 
+        key=lambda p: all_servers[p]["server_name"]
+    )
+    
+    # Filter services based on UI permissions (same logic as root route)
+    accessible_services = user_context.get('accessible_services', [])
+    
+    for path in sorted_server_paths:
+        server_info = all_servers[path]
+        server_name = server_info["server_name"]
+        
+        # Check if user can list this service
+        if 'all' not in accessible_services and server_name not in accessible_services:
+            continue
+        
+        # Include description and tags in search
+        searchable_text = f"{server_name.lower()} {server_info.get('description', '').lower()} {' '.join(server_info.get('tags', []))}"
+        if not search_query or search_query in searchable_text:
+            # Get real health status from health service
+            from ..health.service import health_service
+            health_data = health_service._get_service_health_data(path)
+            
+            service_data.append(
+                {
+                    "display_name": server_name,
+                    "path": path,
+                    "description": server_info.get("description", ""),
+                    "is_enabled": server_service.is_service_enabled(path),
+                    "tags": server_info.get("tags", []),
+                    "num_tools": server_info.get("num_tools", 0),
+                    "num_stars": server_info.get("num_stars", 0),
+                    "is_python": server_info.get("is_python", False),
+                    "license": server_info.get("license", "N/A"),
+                    "health_status": health_data["status"],  
+                    "last_checked_iso": health_data["last_checked_iso"]
+                }
+            )
+    
+    return {"servers": service_data}
 
 
 @router.post("/toggle/{service_path:path}")
@@ -423,7 +481,28 @@ async def edit_server_submit(
     return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@router.get("/api/server_details/{service_path:path}")
+@router.get("/tokens", response_class=HTMLResponse)
+async def token_generation_page(
+    request: Request,
+    user_context: Annotated[dict, Depends(enhanced_auth)]
+):
+    """Show token generation page for authenticated users."""
+    return templates.TemplateResponse(
+        "token_generation.html",
+        {
+            "request": request,
+            "username": user_context['username'],
+            "user_context": user_context,
+            "user_scopes": user_context['scopes'],
+            "available_scopes": user_context['scopes']  # For the UI to show what's available
+        }
+    )
+
+
+
+
+
+@router.get("/server_details/{service_path:path}")
 async def get_server_details(
     service_path: str,
     user_context: Annotated[dict, Depends(enhanced_auth)]
@@ -457,7 +536,7 @@ async def get_server_details(
     return server_info
 
 
-@router.get("/api/tools/{service_path:path}")
+@router.get("/tools/{service_path:path}")
 async def get_service_tools(
     service_path: str,
     user_context: Annotated[dict, Depends(enhanced_auth)]
@@ -568,7 +647,7 @@ async def get_service_tools(
         raise HTTPException(status_code=500, detail=f"Error fetching tools: {str(e)}")
 
 
-@router.post("/api/refresh/{service_path:path}")
+@router.post("/refresh/{service_path:path}")
 async def refresh_service(
     service_path: str, 
     user_context: Annotated[dict, Depends(enhanced_auth)]
@@ -650,4 +729,114 @@ async def refresh_service(
         "status": status,
         "last_checked_iso": last_checked_iso,
         "num_tools": server_info.get("num_tools", 0)
-    } 
+    }
+
+@router.post("/tokens/generate")
+async def generate_user_token(
+    request: Request,
+    user_context: Annotated[dict, Depends(enhanced_auth)]
+):
+    """
+    Generate a JWT token for the authenticated user.
+    
+    Request body should contain:
+    {
+        "requested_scopes": ["scope1", "scope2"],  // Optional, defaults to user's current scopes
+        "expires_in_hours": 8,                     // Optional, defaults to 8 hours
+        "description": "Token for automation"      // Optional description
+    }
+    
+    Returns:
+        Generated JWT token with expiration info
+        
+    Raises:
+        HTTPException: If request fails or user lacks permissions
+    """
+    try:
+        # Parse request body
+        try:
+            body = await request.json()
+        except Exception as e:
+            logger.warning(f"Invalid JSON in token generation request: {e}")
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid JSON in request body"
+            )
+        
+        requested_scopes = body.get("requested_scopes", [])
+        expires_in_hours = body.get("expires_in_hours", 8)
+        description = body.get("description", "")
+        
+        # Validate expires_in_hours
+        if not isinstance(expires_in_hours, int) or expires_in_hours <= 0 or expires_in_hours > 24:
+            raise HTTPException(
+                status_code=400,
+                detail="expires_in_hours must be an integer between 1 and 24"
+            )
+        
+        # Validate requested_scopes
+        if requested_scopes and not isinstance(requested_scopes, list):
+            raise HTTPException(
+                status_code=400,
+                detail="requested_scopes must be a list of strings"
+            )
+        
+        # Prepare request to auth server
+        auth_request = {
+            "user_context": {
+                "username": user_context["username"],
+                "scopes": user_context["scopes"],
+                "groups": user_context["groups"]
+            },
+            "requested_scopes": requested_scopes,
+            "expires_in_hours": expires_in_hours,
+            "description": description
+        }
+        
+        # Call auth server internal API (no authentication needed since both are trusted internal services)
+        async with httpx.AsyncClient() as client:
+            headers = {
+                "Content-Type": "application/json"
+            }
+            
+            auth_server_url = settings.auth_server_url
+            response = await client.post(
+                f"{auth_server_url}/internal/tokens",
+                json=auth_request,
+                headers=headers,
+                timeout=10.0
+            )
+            
+            if response.status_code == 200:
+                token_data = response.json()
+                logger.info(f"Successfully generated token for user '{user_context['username']}'")
+                return {
+                    "success": True,
+                    "token_data": token_data,
+                    "user_scopes": user_context["scopes"],
+                    "requested_scopes": requested_scopes or user_context["scopes"]
+                }
+            else:
+                error_detail = "Unknown error"
+                try:
+                    error_response = response.json()
+                    error_detail = error_response.get("detail", "Unknown error")
+                except:
+                    error_detail = response.text
+                
+                logger.warning(f"Auth server returned error {response.status_code}: {error_detail}")
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Token generation failed: {error_detail}"
+                )
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error generating token for user '{user_context['username']}': {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal error generating token"
+        )
+
+ 

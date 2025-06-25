@@ -3,7 +3,7 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Request, Form, HTTPException, status, Cookie
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 import httpx
 
@@ -109,15 +109,27 @@ async def oauth2_callback(request: Request, error: str = None, details: str = No
 
 @router.post("/login")
 async def login_submit(
+    request: Request,
     username: Annotated[str, Form()], 
     password: Annotated[str, Form()]
 ):
-    """Handle traditional login form submission"""
+    """Handle login form submission - supports both traditional and API calls"""
     logger.info(f"Login attempt for username: {username}")
+    
+    # Check if this is an API call (React) or traditional form submission
+    accept_header = request.headers.get("accept", "")
+    is_api_call = "application/json" in accept_header
     
     if validate_login_credentials(username, password):
         session_data = create_session_cookie(username)
-        response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+        
+        if is_api_call:
+            # API response for React
+            response = JSONResponse(content={"success": True, "message": "Login successful"})
+        else:
+            # Traditional redirect response
+            response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+        
         response.set_cookie(
             key=settings.session_cookie_name,
             value=session_data,
@@ -129,10 +141,22 @@ async def login_submit(
         return response
     else:
         logger.info(f"Login failed for user '{username}'.")
-        return RedirectResponse(
-            url="/login?error=Invalid+username+or+password",
-            status_code=status.HTTP_303_SEE_OTHER,
-        )
+        
+        if is_api_call:
+            # API error response for React
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid username or password"
+            )
+        else:
+            # Traditional redirect with error
+            return RedirectResponse(
+                url="/login?error=Invalid+username+or+password",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+
+
+
 
 
 async def logout_handler(
@@ -205,4 +229,11 @@ async def logout_post(
     session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None
 ):
     """Handle logout via POST request (for forms)"""
-    return await logout_handler(request, session) 
+    return await logout_handler(request, session)
+
+
+@router.get("/providers")
+async def get_providers_api():
+    """API endpoint to get available OAuth2 providers for React frontend"""
+    providers = await get_oauth2_providers()
+    return {"providers": providers} 
