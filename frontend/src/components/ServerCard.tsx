@@ -174,54 +174,54 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
     <>
       <div className="group bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600 shadow-sm hover:shadow-xl transition-all duration-300 h-full flex flex-col">
         {/* Header */}
-        <div className="p-8 pb-6">
-          <div className="flex items-start justify-between mb-6">
+        <div className="p-5 pb-4">
+          <div className="flex items-start justify-between mb-4">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-3 mb-4">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white truncate">
+              <div className="flex items-center gap-2 mb-3">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white truncate">
                   {server.name}
                 </h3>
                 {server.official && (
-                  <span className="px-3 py-1 text-xs font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded-full flex-shrink-0">
+                  <span className="px-2 py-0.5 text-xs font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded-full flex-shrink-0">
                     OFFICIAL
                   </span>
                 )}
               </div>
               
-              <code className="text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/50 px-3 py-2 rounded-lg font-mono">
+              <code className="text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/50 px-2 py-1 rounded font-mono">
                 {server.path}
               </code>
             </div>
 
             {canModify && (
               <button
-                className="p-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-xl transition-all duration-200 flex-shrink-0"
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-all duration-200 flex-shrink-0"
                 onClick={() => onEdit?.(server)}
                 title="Edit server"
               >
-                <PencilIcon className="h-5 w-5" />
+                <PencilIcon className="h-4 w-4" />
               </button>
             )}
           </div>
 
           {/* Description */}
-          <p className="text-gray-600 dark:text-gray-300 text-base leading-relaxed line-clamp-3 mb-6">
+          <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed line-clamp-2 mb-4">
             {server.description || 'No description available'}
           </p>
 
           {/* Tags */}
           {server.tags && server.tags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-6">
+            <div className="flex flex-wrap gap-1.5 mb-4">
               {server.tags.slice(0, 3).map((tag) => (
                 <span
                   key={tag}
-                  className="px-3 py-1.5 text-sm font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg"
+                  className="px-2 py-1 text-xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded"
                 >
                   #{tag}
                 </span>
               ))}
               {server.tags.length > 3 && (
-                <span className="px-3 py-1.5 text-sm font-medium bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg">
+                <span className="px-2 py-1 text-xs font-medium bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded">
                   +{server.tags.length - 3}
                 </span>
               )}
@@ -230,41 +230,41 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
         </div>
 
         {/* Stats */}
-        <div className="px-8 pb-6">
-          <div className="grid grid-cols-2 gap-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-50 dark:bg-yellow-900/30 rounded-lg">
-                <StarIcon className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+        <div className="px-5 pb-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-yellow-50 dark:bg-yellow-900/30 rounded">
+                <StarIcon className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
               </div>
               <div>
-                <div className="text-lg font-semibold text-gray-900 dark:text-white">{server.rating || 0}</div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">Rating</div>
+                <div className="text-sm font-semibold text-gray-900 dark:text-white">{server.rating || 0}</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">Rating</div>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               {(server.num_tools || 0) > 0 ? (
                 <button
                   onClick={handleViewTools}
                   disabled={loadingTools}
-                  className="flex items-center gap-3 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 disabled:opacity-50 hover:bg-blue-50 dark:hover:bg-blue-900/20 px-3 py-2 -mx-3 -my-2 rounded-lg transition-all"
+                  className="flex items-center gap-2 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 disabled:opacity-50 hover:bg-blue-50 dark:hover:bg-blue-900/20 px-2 py-1 -mx-2 -my-1 rounded transition-all"
                   title="View tools"
                 >
-                  <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
-                    <WrenchScrewdriverIcon className="h-5 w-5" />
+                  <div className="p-1.5 bg-blue-50 dark:bg-blue-900/30 rounded">
+                    <WrenchScrewdriverIcon className="h-4 w-4" />
                   </div>
                   <div>
-                    <div className="text-lg font-semibold">{server.num_tools}</div>
-                    <div className="text-sm">Tools</div>
+                    <div className="text-sm font-semibold">{server.num_tools}</div>
+                    <div className="text-xs">Tools</div>
                   </div>
                 </button>
               ) : (
-                <div className="flex items-center gap-3 text-gray-400 dark:text-gray-500">
-                  <div className="p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                    <WrenchScrewdriverIcon className="h-5 w-5" />
+                <div className="flex items-center gap-2 text-gray-400 dark:text-gray-500">
+                  <div className="p-1.5 bg-gray-50 dark:bg-gray-800 rounded">
+                    <WrenchScrewdriverIcon className="h-4 w-4" />
                   </div>
                   <div>
-                    <div className="text-lg font-semibold">{server.num_tools || 0}</div>
-                    <div className="text-sm">Tools</div>
+                    <div className="text-sm font-semibold">{server.num_tools || 0}</div>
+                    <div className="text-xs">Tools</div>
                   </div>
                 </div>
               )}
@@ -273,7 +273,7 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
         </div>
 
         {/* Footer */}
-        <div className="mt-auto px-8 py-6 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/30 rounded-b-2xl">
+        <div className="mt-auto px-5 py-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/30 rounded-b-2xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               {/* Status Indicators */}

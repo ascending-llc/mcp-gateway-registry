@@ -57,6 +57,8 @@ You can deploy the gateway and registry on Amazon EC2 or Amazon EKS for producti
 
 ## What's New
 
+* **JWT Token Vending Service:** Generate personal access tokens for programmatic access to MCP servers through a user-friendly web interface. Features include scope validation, rate limiting, and secure HMAC-SHA256 token generation. Perfect for automation, scripting, and agent access. [Learn more →](docs/jwt-token-vending.md)
+* **Modern React Frontend:** Complete UI overhaul with React 18 + TypeScript, featuring responsive design, dark/light themes, real-time updates, and integrated token management interface.
 * **IdP Integration with Amazon Cognito:** Complete identity provider integration supporting both user identity and agent identity modes. See [detailed Cognito setup guide](docs/cognito.md) for configuration instructions.
 * **Fine-Grained Access Control (FGAC) for MCP servers and tools:** Granular permissions system allowing precise control over which agents can access specific servers and tools. See [detailed FGAC documentation](docs/scopes.md) for scope configuration and access control setup.
 * **Integration with [Strands Agents](https://github.com/strands-agents/sdk-python):** Enhanced agent capabilities with the Strands SDK
@@ -200,6 +202,12 @@ These authentication patterns are discussed in detail in [`docs/auth.md`](docs/a
 
 *   **MCP Tool Discovery:** Enables automatic tool discovery by AI Agents and Agent developers. Fetches and displays the list of tools (name, description, schema) based on natural language queries (e.g. _do I have tools to get stock information?_).
 *   **Unified access to a governed list of MCP servers:** Access multiple MCP servers through a common MCP gateway, enabling AI Agents to dynamically discover and execute MCP tools.
+*   **JWT Token Vending Service:** Generate personal access tokens for programmatic access to MCP servers. Users can create scoped JWT tokens through the web interface for automation, scripting, and agent access. Features include rate limiting, scope validation, and secure token generation. See [detailed documentation →](docs/jwt-token-vending.md)
+*   **Modern React Frontend:** Built with React 18 + TypeScript, featuring:
+    *   **Responsive Design:** Modern UI with Tailwind CSS and dark/light theme support
+    *   **Real-time Updates:** WebSocket integration for live status updates
+    *   **Enhanced UX:** Compact server cards, improved navigation, and accessibility features
+    *   **Token Management:** Integrated JWT token generation interface
 *   **Service Registration:** Register MCP services via JSON files or the web UI/API.
 *   **Web UI:** Manage services, view status, and monitor health through a web interface.
 *   **Authentication:** Secure login system for the web UI and API access.
@@ -218,6 +226,9 @@ These authentication patterns are discussed in detail in [`docs/auth.md`](docs/a
 *   **State Persistence:** Enabled/Disabled state is saved to `registry/server_state.json` (and ignored by Git).
 
 ## Prerequisites
+
+*   **Node.js 16+**: Required for building the React frontend. Install from [nodejs.org](https://nodejs.org/)
+*   **npm**: Package manager for frontend dependencies (usually comes with Node.js)
 
 *   **Amazon EC2 Instance:** An Amazon EC2 machine (`ml.t3.2xlarge`) with a standard Ubuntu AMI for running this solution.
 
@@ -512,6 +523,7 @@ For comprehensive information about using the MCP Gateway & Registry, see our de
 - **[Frequently Asked Questions (FAQ)](docs/FAQ.md)** - Common questions and answers for developers and platform engineers
 - **[Authentication Guide](docs/auth.md)** - Detailed authentication and authorization patterns
 - **[Cognito Setup Guide](docs/cognito.md)** - Step-by-step Amazon Cognito configuration
+- **[JWT Token Vending Service](docs/jwt-token-vending.md)** - Generate personal access tokens for programmatic access to MCP servers
 - **[Fine-Grained Access Control](docs/scopes.md)** - Scope configuration and access control setup
 - **[Dynamic Tool Discovery](docs/dynamic-tool-discovery.md)** - AI agent autonomous tool discovery capabilities
 

@@ -1,6 +1,6 @@
 # JWT Token Vending Service for MCP Gateway
 
-The JWT Token Vending Service provides a user-friendly mechanism for generating personal access tokens that can be used for programmatic access to MCP servers. This service bridges the gap between human authentication (web UI sessions) and machine authentication (JWT tokens), enabling users to create tokens with scoped permissions for automation, scripting, and agent access.
+The JWT Token Vending Service provides a user-friendly mechanism for generating personal access tokens _without the use of an external IdP_ that can be used for programmatic access to MCP servers. This service bridges the gap between human authentication (web UI sessions) and machine authentication (JWT tokens), enabling users to create tokens with scoped permissions for automation, scripting, and agent access.
 
 ## The Challenge with Token Management in Enterprise MCP Deployments
 
@@ -404,38 +404,5 @@ The token generation interface provides:
 - **Copy Functionality**: Multiple copy methods with fallbacks for different browsers
 - **Usage Instructions**: Clear examples of how to use the generated token
 - **Security Warnings**: Prominent warnings about token storage and sharing
-
-## Monitoring and Future Enhancements
-
-### Recommended Monitoring
-
-#### Token Generation Metrics
-- **Generation Rate**: Tokens generated per hour/day by user
-- **Scope Patterns**: Most commonly requested scope combinations
-- **Expiration Distribution**: Analysis of chosen token lifetimes
-- **Rate Limit Events**: Users hitting generation limits
-
-#### Token Usage Metrics
-- **Authentication Success Rate**: Percentage of successful validations
-- **Scope Violations**: Attempts to access unauthorized resources
-- **Token Lifetime Utilization**: Actual usage vs. expiration time
-
-### Future Enhancement Opportunities
-
-#### Token Management
-- **Token Revocation**: Ability to revoke active tokens before expiration
-- **Token Listing**: Interface to view and manage active tokens
-- **Usage Analytics**: Dashboard showing token usage patterns
-
-#### Advanced Features
-- **Template Scopes**: Pre-defined scope combinations for common use cases
-- **Conditional Scopes**: Time-based or context-dependent permissions
-- **API Key Alternative**: Generate API keys that map to JWT tokens
-- **Mobile Interface**: Mobile-optimized token generation
-
-#### Integration Enhancements
-- **Webhook Notifications**: Alerts for token generation and usage events
-- **SIEM Integration**: Export audit logs to security information systems
-- **Compliance Reporting**: Automated reports for security audits
 
 By implementing the JWT Token Vending Service, organizations can provide their users with a secure, user-friendly way to generate programmatic access tokens while maintaining enterprise-grade security controls and comprehensive audit capabilities. The service seamlessly integrates with existing MCP Gateway infrastructure and provides a foundation for advanced token management features. 

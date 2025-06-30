@@ -413,11 +413,10 @@ const Dashboard: React.FC = () => {
             </div>
           ) : (
             <div 
-              className="grid auto-rows-fr pb-12"
+              className="grid pb-12"
               style={{ 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))',
-                gap: 'clamp(1.5rem, 3vw, 2.5rem)',
-                minHeight: '70vh'
+                gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+                gap: 'clamp(1.5rem, 3vw, 2.5rem)'
               }}
             >
               {filteredServers.map((server) => (

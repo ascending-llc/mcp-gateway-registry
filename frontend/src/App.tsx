@@ -6,6 +6,7 @@ import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import TokenGeneration from './pages/TokenGeneration';
 import Login from './pages/Login';
+import OAuthCallback from './pages/OAuthCallback';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -15,6 +16,7 @@ function App() {
         <Router>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/auth/callback" element={<OAuthCallback />} />
             <Route path="/" element={
               <ProtectedRoute>
                 <Layout>

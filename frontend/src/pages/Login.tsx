@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
 import logo from '../assets/logo.png';
@@ -22,9 +22,17 @@ const Login: React.FC = () => {
   const [rememberMe, setRememberMe] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     fetchOAuthProviders();
+    
+    // Check for error parameter from URL (e.g., from OAuth callback)
+    const urlError = searchParams.get('error');
+    if (urlError) {
+      setError(decodeURIComponent(urlError));
+    }
+    
     // Check if user preferences exist
     const savedRememberMe = localStorage.getItem('rememberMe') === 'true';
     const savedUsername = localStorage.getItem('savedUsername');
@@ -32,7 +40,7 @@ const Login: React.FC = () => {
     if (savedRememberMe && savedUsername) {
       setCredentials(prev => ({ ...prev, username: savedUsername }));
     }
-  }, []);
+  }, [searchParams]);
 
   const fetchOAuthProviders = async () => {
     try {
@@ -131,8 +139,8 @@ const Login: React.FC = () => {
   };
 
   const handleOAuthLogin = (provider: string) => {
-    // Redirect to the registry auth endpoint which will handle the OAuth flow
-    window.location.href = `/auth/${provider}`;
+    // Redirect to the OAuth2 login endpoint which will handle the OAuth flow
+    window.location.href = `/oauth2/login/${provider}`;
   };
 
   return (
