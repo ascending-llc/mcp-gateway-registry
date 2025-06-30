@@ -194,16 +194,6 @@ mcp-servers-restricted/read:
       - tools/call
     tools:
       - current_time_by_timezone
-  - server: fininfo
-    methods:
-      - initialize
-      - notifications/initialized
-      - ping
-      - tools/list
-      - tools/call
-    tools:
-      - get_stock_aggregates
-      - print_stock_data
   - server: mcpgw
     methods:
       - initialize
@@ -212,11 +202,7 @@ mcp-servers-restricted/read:
       - tools/list
       - tools/call
     tools:
-      - toggle_service
-      - register_service
-      - get_server_details
-      - get_service_tools
-      - refresh_service
+      - intelligent_tool_finder
   - server: realserverfaketools
     methods:
       - initialize
@@ -251,16 +237,6 @@ mcp-servers-restricted/execute:
       - tools/call
     tools:
       - current_time_by_timezone
-  - server: fininfo
-    methods:
-      - initialize
-      - notifications/initialized
-      - ping
-      - tools/list
-      - tools/call
-    tools:
-      - get_stock_aggregates
-      - print_stock_data
   - server: mcpgw
     methods:
       - initialize
@@ -269,11 +245,7 @@ mcp-servers-restricted/execute:
       - tools/list
       - tools/call
     tools:
-      - toggle_service
-      - register_service
-      - get_server_details
-      - get_service_tools
-      - refresh_service
+      - intelligent_tool_finder
   - server: realserverfaketools
     methods:
       - initialize

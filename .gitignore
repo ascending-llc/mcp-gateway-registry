@@ -134,7 +134,7 @@ celerybeat.pid
 .env*
 
 .env.user
-.env.agent
+.env*
 .env.docker
 .venv
 env/
@@ -186,6 +186,12 @@ cookies.txt
 registry/server_state.json
 registry/nginx_mcp_revproxy.conf
 logs/
+
+# Secrets and API keys - never commit these!
+.keys.yml
+.keys.yml.encrypted
+*.keys.yml
+*.keys.yml.encrypted
 
 # Agent testing
 agents/test_results/

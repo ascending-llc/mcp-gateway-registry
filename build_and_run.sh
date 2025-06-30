@@ -65,7 +65,7 @@ if [ ! -f .env ]; then
     log "SECRET_KEY=your_secret_key_here"
     log "ADMIN_USER=admin"
     log "ADMIN_PASSWORD=your_secure_password"
-    log "POLYGON_API_KEY=your_polygon_api_key_here"
+    log "# For Financial Info server API keys, see servers/fininfo/README_SECRETS.md"
     exit 1
 fi
 
@@ -85,13 +85,13 @@ log "Existing services stopped"
 
 # Clean up FAISS index files to force registry to recreate them
 log "Cleaning up FAISS index files..."
-MCPGATEWAY_SERVERS_DIR="/opt/mcpgateway/servers"
+MCPGATEWAY_SERVERS_DIR="/opt/mcp-gateway/servers"
 FAISS_FILES=("service_index.faiss" "service_index_metadata.json")
 
 for file in "${FAISS_FILES[@]}"; do
     file_path="$MCPGATEWAY_SERVERS_DIR/$file"
     if [ -f "$file_path" ]; then
-        rm -f "$file_path"
+        sudo rm -f "$file_path"
         log "Deleted $file_path"
     else
         log "$file not found (already clean)"
@@ -99,7 +99,7 @@ for file in "${FAISS_FILES[@]}"; do
 done
 log "FAISS index cleanup completed"
 
-# Copy JSON files from registry/servers to /opt/mcpgateway/servers
+# Copy JSON files from registry/servers to /opt/mcp-gateway/servers
 log "Copying JSON files from registry/servers to $MCPGATEWAY_SERVERS_DIR..."
 if [ -d "registry/servers" ]; then
     # Create the target directory if it doesn't exist

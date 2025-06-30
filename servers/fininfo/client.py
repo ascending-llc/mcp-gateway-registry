@@ -4,14 +4,15 @@ It shows how to access the different MCP server capabilities (prompts, tools etc
 supported by the protocol. See: https://modelcontextprotocol.io/docs/concepts/architecture.
 
 Usage:
-  python mcp_sse_client.py [--host HOSTNAME] [--port PORT]
+  python client.py [--host HOSTNAME] [--port PORT]
 
 Example:
-  python mcp_sse_client.py --host ec2-44-192-72-20.compute-1.amazonaws.com --port 8000
+  python client.py --host localhost --port 8000
 """
 
 import argparse
 import logging
+import os
 from mcp import ClientSession
 from mcp.client.sse import sse_client
 
@@ -26,8 +27,14 @@ logger = logging.getLogger(__name__)
 
 async def run(server_url, args):
     logger.info(f"Connecting to MCP server at: {server_url}")
+    logger.info(f"Using client ID: {args.client_id}")
+    
+    # Set up headers including x-client-id
+    headers = {
+        "x-client-id": args.client_id
+    }
 
-    async with sse_client(server_url) as (read, write):
+    async with sse_client(server_url, headers=headers) as (read, write):
         async with ClientSession(read, write, sampling_callback=None) as session:
             # Initialize the connection
             await session.initialize()
@@ -72,8 +79,9 @@ async def run(server_url, args):
 
             # Get daily data for Apple stock
             logger.info(f"\nCalling print_stock_data tool with params={params}")
+            
             result = await session.call_tool(
-                "print_stock_data", arguments={"params": params}
+                "print_stock_data", arguments=params
             )
 
             # Display the results
@@ -99,6 +107,12 @@ if __name__ == "__main__":
         type=str,
         default=None,
         help='Name of the MCP server to connect to (e.g., "fininfo")',
+    )
+    parser.add_argument(
+        "--client-id",
+        type=str,
+        default="test-client",
+        help='Client ID to send in x-client-id header (default: "test-client")',
     )
 
     # Parse the arguments
