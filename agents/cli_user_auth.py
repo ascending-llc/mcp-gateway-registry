@@ -59,14 +59,15 @@ REGISTRY_URL = os.environ.get('REGISTRY_URL', 'http://localhost')
 USE_DIRECT_CALLBACK = os.environ.get('USE_DIRECT_CALLBACK', 'true').lower() == 'true'
 
 if USE_DIRECT_CALLBACK:
+    logger.info("Using direct callback")
     # Direct callback to local server (original behavior)
-    COGNITO_REDIRECT_URI = "http://localhost:8080/callback"
-    CALLBACK_PORT = 8080
+    COGNITO_REDIRECT_URI = "http://localhost:9090/callback"
+    CALLBACK_PORT = 9090
     CALLBACK_PATH = "/callback"
 else:
     # Use nginx proxy callback (for Docker environments)
     COGNITO_REDIRECT_URI = f"{REGISTRY_URL}/oauth2/callback/cognito"
-    CALLBACK_PORT = 8081  # Different port to avoid conflicts
+    CALLBACK_PORT = 8080  # Different port to avoid conflicts
     CALLBACK_PATH = "/auth_complete"
 
 AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')

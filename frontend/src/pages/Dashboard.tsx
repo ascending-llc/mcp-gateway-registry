@@ -368,6 +368,14 @@ const Dashboard: React.FC = () => {
             </div>
             
             <button
+              onClick={handleRegisterServer}
+              className="btn-primary flex items-center space-x-2 flex-shrink-0"
+            >
+              <PlusIcon className="h-4 w-4" />
+              <span>Register Server</span>
+            </button>
+            
+            <button
               onClick={handleRefreshHealth}
               disabled={refreshing}
               className="btn-secondary flex items-center space-x-2 flex-shrink-0"
