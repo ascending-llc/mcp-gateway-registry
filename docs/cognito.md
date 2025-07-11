@@ -67,9 +67,10 @@ This setup is for users who will authenticate through the web interface and for 
    - Click on **"Login Pages"** and then **"Edit"**
 
 4. **Set Callback URLs**
-   - For the allowed callback URLs, add the following 3 URLs:
+   - For the allowed callback URLs, add the following 4 URLs:
      - `http://localhost:9090/callback` - for creating a session cookie for auth flow where the agent uses a user's identity
      - `http://localhost/oauth2/callback/cognito` - for testing without an https endpoint and cert
+     - `http://localhost:8888/oauth2/callback/cognito` - for local development and testing with frontend
      - `https://your_mcp_gateway_domain_name/oauth2/callback/cognito` - for https with SSL cert (replace mcpgateway.ddns.net with your_secure_domain)
 
 5. **Configure OpenID Connect Scopes**
@@ -316,9 +317,10 @@ python agent.py \
 
 **Problem**: `redirect_uri_mismatch` error during OAuth flow
 
-**Solution**: Ensure all 3 callback URLs are present in your Cognito configuration:
+**Solution**: Ensure all 4 callback URLs are present in your Cognito configuration:
 - `http://localhost:9090/callback` - for creating a session cookie for auth flow where the agent uses a user's identity
 - `http://localhost/oauth2/callback/cognito` - for testing without an https endpoint and cert
+- `http://localhost:8888/oauth2/callback/cognito` - for local development and testing with frontend
 - `https://mcpgateway.ddns.net/oauth2/callback/cognito` - for https with SSL cert (replace mcpgateway.ddns.net with your_secure_domain)
 
 #### 2. Secret Key Mismatch
