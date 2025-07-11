@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% from "components/server_card.html" import server_card %}
+{% from "components/sidebar.html" import sidebar_filters, sidebar_stats %}
+
+{% block title %}Dashboard - MCP Gateway Registry{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="breadcrumbs">
+    <span class="breadcrumb-item current">MCP Servers</span>
+</nav>
+{% endblock %}
+
+{% block sidebar %}
+{{ sidebar_filters(stats) }}
+{{ sidebar_stats(stats) }}
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <div class="header-actions">
+        <div class="search-container">
+            <form class="search-form" onsubmit="searchServers(event)">
+                <input type="search" 
+                       id="searchInput"
+                       placeholder="Search by name or description..." 
+                       class="search-input"
+                       oninput="debounceSearch(this.value)">
+                <button type="submit" class="search-button">
+                    <span class="search-icon">🔍</span>
+                </button>
+            </form>
+        </div>
+        
+        <button class="primary-button" onclick="registerNewServer()">
+            <span class="button-icon">➕</span>
+            Register Server
+        </button>
+    </div>
+</div>
+
+<div class="servers-grid" id="serversGrid">
+    {% for server_path, server_info in servers.items() %}
+        {% set is_enabled = enabled_services[server_path] %}
+        {{ server_card(server_info, is_enabled) }}
+    {% endfor %}
+</div>
+
+<!-- Empty State -->
+<div class="empty-state" id="emptyState" style="display: none;">
+    <div class="empty-icon">📭</div>
+    <h3>No servers found</h3>
+    <p>Try adjusting your search or filters</p>
+</div>
+
+<!-- Loading State -->
+<div class="loading-state" id="loadingState" style="display: none;">
+    <div class="spinner"></div>
+    <p>Loading servers...</p>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let searchTimeout;
+    
+    // Debounced search
+    function debounceSearch(query) {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            filterServers(query);
+        }, 300);
+    }
+
+    // Search servers
+    function filterServers(query = '') {
+        const cards = document.querySelectorAll('.service-card');
+        const emptyState = document.getElementById('emptyState');
+        let visibleCount = 0;
+
+        cards.forEach(card => {
+            const title = card.querySelector('.server-title').textContent.toLowerCase();
+            const description = card.querySelector('.server-description')?.textContent.toLowerCase() || '';
+            
+            const matches = title.includes(query.toLowerCase()) || 
+                          description.includes(query.toLowerCase());
+            
+            if (matches) {
+                card.style.display = 'block';
+                visibleCount++;
+            } else {
+                card.style.display = 'none';
+            }
+        });
+
+        // Show/hide empty state
+        emptyState.style.display = visibleCount === 0 ? 'block' : 'none';
+    }
+
+    // Filter by status
+    document.querySelectorAll('.filter-item').forEach(item => {
+        item.addEventListener('click', function() {
+            // Remove active class from all filters
+            document.querySelectorAll('.filter-item').forEach(f => f.classList.remove('active'));
+            // Add active class to clicked filter
+            this.classList.add('active');
+            
+            const filter = this.dataset.filter;
+            applyFilter(filter);
+        });
+    });
+
+    function applyFilter(filter) {
+        const cards = document.querySelectorAll('.service-card');
+        
+        cards.forEach(card => {
+            const isEnabled = card.querySelector('input[type="checkbox"]').checked;
+            const hasIssues = card.classList.contains('has-issues'); // You'd set this based on server status
+            
+            let show = true;
+            
+            switch(filter) {
+                case 'enabled':
+                    show = isEnabled;
+                    break;
+                case 'disabled':
+                    show = !isEnabled;
+                    break;
+                case 'issues':
+                    show = hasIssues;
+                    break;
+                case 'all':
+                default:
+                    show = true;
+            }
+            
+            card.style.display = show ? 'block' : 'none';
+        });
+    }
+
+    // Server actions
+    function toggleServer(serverPath, enabled) {
+        const card = document.querySelector(`[data-server-path="${serverPath}"]`);
+        const statusBadge = card.querySelector('.status-badge');
+        const toggleLabel = card.querySelector('.toggle-label');
+        
+        // Update UI optimistically
+        statusBadge.textContent = enabled ? 'Enabled' : 'Disabled';
+        statusBadge.className = `badge status-badge ${enabled ? 'enabled' : 'disabled'}`;
+        toggleLabel.textContent = enabled ? 'Enabled' : 'Disabled';
+        
+        // Make API call
+        fetch(`/api/servers/${serverPath}/toggle`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ enabled: enabled })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (!data.success) {
+                // Revert UI on failure
+                toggleServer(serverPath, !enabled);
+                alert('Failed to update server status');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            // Revert UI on error
+            toggleServer(serverPath, !enabled);
+            alert('Failed to update server status');
+        });
+    }
+
+    function editServer(serverPath) {
+        window.location.href = `/servers/${serverPath}/edit`;
+    }
+
+    function registerNewServer() {
+        window.location.href = '/servers/register';
+    }
+
+    function searchServers(event) {
+        event.preventDefault();
+        const query = document.getElementById('searchInput').value;
+        filterServers(query);
+    }
+</script>
+{% endblock %} 

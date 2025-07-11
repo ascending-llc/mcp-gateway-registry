@@ -241,6 +241,8 @@ def parse_arguments() -> argparse.Namespace:
                         help='Use session cookie authentication instead of M2M')
     parser.add_argument('--session-cookie-file', type=str, default='~/.mcp/session_cookie',
                         help='Path to session cookie file (default: ~/.mcp/session_cookie)')
+    parser.add_argument('--jwt-token', type=str,
+                        help='Use a pre-generated JWT token instead of generating M2M token')
     
     # Environment file configuration arguments
     parser.add_argument('--user-env-file', type=str, default=user_env_file,
@@ -271,6 +273,14 @@ def parse_arguments() -> argparse.Namespace:
         if not os.path.exists(cookie_path):
             parser.error(f"Session cookie file not found: {cookie_path}\n"
                         f"Run 'python agents/cli_user_auth.py' to authenticate first")
+    elif args.jwt_token:
+        # For pre-generated JWT token, we only need the token and basic headers
+        if not args.user_pool_id:
+            args.user_pool_id = 'us-east-1_EXAMPLE'  # Default fallback
+        if not args.client_id:
+            args.client_id = 'user-generated'  # Default for user-generated tokens
+        if not args.region:
+            args.region = 'us-east-1'  # Default region
     else:
         # For M2M auth, validate Cognito parameters
         missing_params = []
@@ -555,14 +565,24 @@ async def main():
     logger.info(f"Connecting to MCP server: {server_url}")
     logger.info(f"Using model: {args.model}")
     logger.info(f"Message: {args.message}")
-    logger.info(f"Authentication method: {'Session Cookie' if args.use_session_cookie else 'M2M Token'}")
+    if args.jwt_token:
+        auth_display = 'Pre-generated JWT Token'
+    elif args.use_session_cookie:
+        auth_display = 'Session Cookie'
+    else:
+        auth_display = 'M2M Token'
+    logger.info(f"Authentication method: {auth_display}")
     
     # Initialize authentication variables
     access_token = None
     session_cookie = None
     auth_method = "session_cookie" if args.use_session_cookie else "m2m"
     
-    if args.use_session_cookie:
+    if args.jwt_token:
+        # Use pre-generated JWT token
+        access_token = args.jwt_token
+        logger.info("Using pre-generated JWT token")
+    elif args.use_session_cookie:
         # Load session cookie from file
         try:
             cookie_path = os.path.expanduser(args.session_cookie_file)
@@ -610,6 +630,7 @@ async def main():
                 'X-Region': args.region or 'us-east-1'
             }
         else:
+            # For both M2M and pre-generated JWT tokens
             auth_headers = {
                 'Authorization': f'Bearer {access_token}',
                 'X-User-Pool-Id': args.user_pool_id,
@@ -671,6 +692,7 @@ async def main():
                         session_cookie=session_cookie
                     )
                 else:
+                    # For both M2M and pre-generated JWT tokens
                     system_prompt = system_prompt_template.format(
                         current_utc_time=current_utc_time,
                         mcp_registry_url=args.mcp_registry_url,
@@ -679,7 +701,7 @@ async def main():
                         client_id=args.client_id,
                         region=args.region,
                         auth_method=auth_method,
-                        session_cookie=''  # Not used for M2M auth
+                        session_cookie=''  # Not used for JWT auth
                     )
                 
                 # Format the message with system message first

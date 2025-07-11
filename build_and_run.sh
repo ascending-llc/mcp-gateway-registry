@@ -16,6 +16,47 @@ handle_error() {
 
 log "Starting MCP Gateway Docker Compose deployment script"
 
+# Check if Node.js and npm are installed
+if ! command -v node &> /dev/null; then
+    log "ERROR: Node.js is not installed"
+    log "Please install Node.js (version 16 or higher): https://nodejs.org/"
+    exit 1
+fi
+
+if ! command -v npm &> /dev/null; then
+    log "ERROR: npm is not installed"
+    log "Please install npm (usually comes with Node.js): https://nodejs.org/"
+    exit 1
+fi
+
+# Check Node.js version
+NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+if [ "$NODE_VERSION" -lt 16 ]; then
+    log "ERROR: Node.js version $NODE_VERSION is too old. Please install Node.js 16 or higher."
+    exit 1
+fi
+
+log "Node.js $(node -v) and npm $(npm -v) are available"
+
+# Build the React frontend
+log "Building React frontend..."
+if [ ! -d "frontend" ]; then
+    handle_error "Frontend directory not found"
+fi
+
+cd frontend
+
+# Install frontend dependencies
+log "Installing frontend dependencies..."
+npm install || handle_error "Failed to install frontend dependencies"
+
+# Build the React application
+log "Building React application for production..."
+npm run build || handle_error "Failed to build React application"
+
+log "Frontend build completed successfully"
+cd ..
+
 # Check if .env file exists
 if [ ! -f .env ]; then
     log "ERROR: .env file not found"

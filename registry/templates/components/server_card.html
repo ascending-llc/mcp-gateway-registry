@@ -1,0 +1,72 @@
+{% macro server_card(server, is_enabled) %}
+<div class="service-card" data-server-path="{{ server.path }}">
+    <div class="card-header">
+        <div class="card-title-section">
+            <h2 class="server-title">{{ server.name }}</h2>
+            <div class="badges">
+                {% if server.official %}
+                    <span class="badge official-badge">OFFICIAL</span>
+                {% endif %}
+                <span class="badge status-badge {{ 'enabled' if is_enabled else 'disabled' }}">
+                    {{ 'Enabled' if is_enabled else 'Disabled' }}
+                </span>
+            </div>
+        </div>
+        
+        <div class="card-actions">
+            <button class="edit-button" onclick="editServer('{{ server.path }}')">
+                Modify
+            </button>
+            
+            <div class="toggle-container">
+                <label class="toggle-switch">
+                    <input type="checkbox" 
+                           {{ 'checked' if is_enabled else '' }}
+                           onchange="toggleServer('{{ server.path }}', this.checked)">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span class="toggle-label">{{ 'Enabled' if is_enabled else 'Disabled' }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="card-body">
+        <div class="server-info">
+            <div class="server-path">
+                <strong>Path:</strong> <code>{{ server.path }}</code>
+            </div>
+            
+            {% if server.description %}
+                <div class="server-description">
+                    {{ server.description }}
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="server-tags">
+            {% if server.tags %}
+                {% for tag in server.tags %}
+                    <span class="tag">{{ tag }}</span>
+                {% endfor %}
+            {% endif %}
+        </div>
+
+        <div class="server-meta">
+            <div class="meta-item">
+                <span class="meta-icon">⏰</span>
+                <span>Last checked: {{ server.last_checked or 'Never' }}</span>
+            </div>
+            
+            <div class="meta-item">
+                <span class="meta-icon">👥</span>
+                <span>{{ server.users_count or 0 }} users</span>
+            </div>
+            
+            <div class="meta-item">
+                <span class="meta-icon">⭐</span>
+                <span>{{ server.rating or 0 }} stars</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endmacro %} 

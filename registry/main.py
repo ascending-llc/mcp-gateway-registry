@@ -9,17 +9,21 @@ domain routers while handling core app configuration.
 
 import logging
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, Dict, Any
+from pathlib import Path
 
-from fastapi import FastAPI, Cookie
+from fastapi import FastAPI, Cookie, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 # Import domain routers
 from registry.auth.routes import router as auth_router
 from registry.api.server_routes import router as servers_router
 from registry.health.routes import router as health_router
+
+# Import auth dependencies
+from registry.auth.dependencies import enhanced_auth
 
 # Import services for initialization
 from registry.services.server_service import server_service
@@ -141,14 +145,34 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure static files and templates
-app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
-templates = Jinja2Templates(directory=settings.templates_dir)
+# Add CORS middleware for React development and Docker deployment
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"https?://(localhost(:[0-9]+)?|.*\.compute.*\.amazonaws\.com(:[0-9]+)?)",
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
 
-# Register domain routers
-app.include_router(auth_router, tags=["Authentication"])
-app.include_router(servers_router, tags=["Server Management"])
-app.include_router(health_router, tags=["Health Monitoring"])
+# Register API routers with /api prefix
+app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(servers_router, prefix="/api", tags=["Server Management"])
+app.include_router(health_router, prefix="/api/health", tags=["Health Monitoring"])
+
+# Add user info endpoint for React auth context
+@app.get("/api/auth/me")
+async def get_current_user(user_context: Dict[str, Any] = Depends(enhanced_auth)):
+    """Get current user information for React auth context"""
+    # Return user info with scopes for token generation
+    return {
+        "username": user_context["username"],
+        "auth_method": user_context.get("auth_method", "basic"),
+        "provider": user_context.get("provider"),
+        "scopes": user_context.get("scopes", []),
+        "groups": user_context.get("groups", []),
+        "can_modify_servers": user_context.get("can_modify_servers", False),
+        "is_admin": user_context.get("is_admin", False)
+    }
 
 # Basic health check endpoint
 @app.get("/health")
@@ -156,8 +180,29 @@ async def health_check():
     """Simple health check for load balancers and monitoring."""
     return {"status": "healthy", "service": "mcp-gateway-registry"}
 
+# Serve React static files
+FRONTEND_BUILD_PATH = Path(__file__).parent.parent / "frontend" / "build"
 
-
+if FRONTEND_BUILD_PATH.exists():
+    # Serve static assets
+    app.mount("/static", StaticFiles(directory=FRONTEND_BUILD_PATH / "static"), name="static")
+    
+    # Serve React app for all other routes (SPA)
+    @app.get("/{full_path:path}")
+    async def serve_react_app(full_path: str):
+        """Serve React app for all non-API routes"""
+        # Don't serve React for API routes
+        if full_path.startswith("api/") or full_path.startswith("health"):
+            raise HTTPException(status_code=404)
+        
+        return FileResponse(FRONTEND_BUILD_PATH / "index.html")
+else:
+    logger.warning("React build directory not found. Serve React app separately during development.")
+    
+    # Serve legacy templates and static files during development
+    from fastapi.templating import Jinja2Templates
+    app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
+    templates = Jinja2Templates(directory=settings.templates_dir)
 
 
 if __name__ == "__main__":
