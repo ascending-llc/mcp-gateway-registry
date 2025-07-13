@@ -201,8 +201,8 @@ These authentication patterns are discussed in detail in [`docs/auth.md`](docs/a
 ## Features
 
 *   **MCP Tool Discovery:** Enables automatic tool discovery by AI Agents and Agent developers. Fetches and displays the list of tools (name, description, schema) based on natural language queries (e.g. _do I have tools to get stock information?_).
-*   **Unified access to a governed list of MCP servers:** Access multiple MCP servers through a common MCP gateway, enabling AI Agents to dynamically discover and execute MCP tools.
-*   **JWT Token Vending Service:** Generate personal access tokens for programmatic access to MCP servers. Users can create scoped JWT tokens through the web interface for automation, scripting, and agent access. Features include rate limiting, scope validation, and secure token generation. See [detailed documentation →](docs/jwt-token-vending.md)
+*   **Integration with an IdP (Amazon Cognito, more coming soon):** Secure authentication and authorization through external identity providers for both user identity and agent identity modes.
+    *   **JWT Token Vending Service:** Alternative option to test the solution without an external IdP by generating self-signed JWT tokens through the web interface. See [detailed documentation →](docs/jwt-token-vending.md).
 *   **Modern React Frontend:** Built with React 18 + TypeScript, featuring:
     *   **Responsive Design:** Modern UI with Tailwind CSS and dark/light theme support
     *   **Real-time Updates:** WebSocket integration for live status updates
@@ -231,6 +231,8 @@ These authentication patterns are discussed in detail in [`docs/auth.md`](docs/a
 *   **npm**: Package manager for frontend dependencies (usually comes with Node.js)
 
 *   **Amazon EC2 Instance:** An Amazon EC2 machine (`ml.t3.2xlarge`) with a standard Ubuntu AMI for running this solution.
+
+*   **Amazon Cognito Configuration**: Set up an Amazon Cognito User Pool for authentication and authorization. This is required for both user identity and agent identity authentication modes. See [docs/cognito.md](docs/cognito.md) for complete step-by-step configuration instructions including user pools, app clients, groups, and callback URLs.
 
 *   **SSL Certificate Options:**
     - **Production Deployments:** SSL certificate is preferred for secure communication to the Gateway
@@ -279,7 +281,6 @@ The deployment includes these containers:
    sudo mkdir -p /opt/mcp-gateway/auth_server
    sudo cp auth_server/scopes.yml /opt/mcp-gateway/auth_server/scopes.yml
    sudo mkdir -p /opt/mcp-gateway/secrets/
-   sudo cp servers/fininfo/.keys.yml* /opt/mcp-gateway/secrets/
    sudo mkdir /var/log/mcp-gateway
    ```
 
@@ -303,6 +304,9 @@ The deployment includes these containers:
    **Financial Data Configuration:**
    - For Polygon API keys, refer to the [Financial Info Secrets Configuration](servers/fininfo/README_SECRETS.md)
    - Configure client-specific API keys in `servers/fininfo/.keys.yml`
+   - ```bash
+      sudo cp servers/fininfo/.keys.yml* /opt/mcp-gateway/secrets/
+     ```
 
 4. **Install prerequisites (uv and Docker):**
    ```bash
@@ -392,7 +396,6 @@ For production deployments with SSL certificates:
 
 5. **Access via HTTPS:** Your services will be available at:
    - Main interface: `https://your-domain.com`
-   - Registry API: `https://your-domain.com:7860` (if port 7860 is opened in security group)
    - MCP servers: `https://your-domain.com/server-name/sse`
 
 ## Using the Gateway and Registry with AI Agents

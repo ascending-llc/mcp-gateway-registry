@@ -139,8 +139,15 @@ const Login: React.FC = () => {
   };
 
   const handleOAuthLogin = (provider: string) => {
-    // Redirect to the OAuth2 login endpoint which will handle the OAuth flow
-    window.location.href = `/oauth2/login/${provider}`;
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const currentOrigin = window.location.origin;
+    const redirectUri = encodeURIComponent(currentOrigin + '/');
+    
+    if (isLocalhost) {
+      window.location.href = `http://localhost:8888/oauth2/login/${provider}?redirect_uri=${redirectUri}`;
+    } else {
+      window.location.href = `/oauth2/login/${provider}?redirect_uri=${redirectUri}`;
+    }
   };
 
   return (
