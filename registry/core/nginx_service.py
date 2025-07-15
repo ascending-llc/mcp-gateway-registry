@@ -101,7 +101,7 @@ class NginxConfigService:
             # Get health service to check server health
             from ..health.service import health_service
             
-            # Generate location blocks for enabled and healthy servers only
+            # Generate location blocks for enabled and healthy servers with transport support
             location_blocks = []
             for path, server_info in servers.items():
                 proxy_pass_url = server_info.get("proxy_pass_url")
@@ -110,62 +110,10 @@ class NginxConfigService:
                     health_status = health_service.server_health_status.get(path, "unknown")
                     
                     if health_status == "healthy":
-                        location_block = f"""
-    location {path}/ {{
-        # Capture request body for auth validation using Lua
-        rewrite_by_lua_file /etc/nginx/lua/capture_body.lua;
-        
-        # Authenticate request - pass entire request to auth server
-        auth_request /validate;
-        
-        # Capture auth server response headers for forwarding
-        auth_request_set $auth_user $upstream_http_x_user;
-        auth_request_set $auth_username $upstream_http_x_username;
-        auth_request_set $auth_client_id $upstream_http_x_client_id;
-        auth_request_set $auth_scopes $upstream_http_x_scopes;
-        auth_request_set $auth_method $upstream_http_x_auth_method;
-        auth_request_set $auth_server_name $upstream_http_x_server_name;
-        auth_request_set $auth_tool_name $upstream_http_x_tool_name;
-        
-        # Proxy to MCP server
-        proxy_pass {proxy_pass_url};
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        
-        # Add original URL for auth server scope validation
-        proxy_set_header X-Original-URL $scheme://$host$request_uri;
-        
-        # Pass through the original authentication headers
-        proxy_set_header Authorization $http_authorization;
-        proxy_set_header X-User-Pool-Id $http_x_user_pool_id;
-        proxy_set_header X-Client-Id $http_x_client_id;
-        proxy_set_header X-Region $http_x_region;
-        
-        # Forward auth server response headers to backend
-        proxy_set_header X-User $auth_user;
-        proxy_set_header X-Username $auth_username;
-        proxy_set_header X-Client-Id-Auth $auth_client_id;
-        proxy_set_header X-Scopes $auth_scopes;
-        proxy_set_header X-Auth-Method $auth_method;
-        proxy_set_header X-Server-Name $auth_server_name;
-        proxy_set_header X-Tool-Name $auth_tool_name;
-        
-        # For SSE connections and WebSocket upgrades
-        proxy_buffering off;
-        proxy_cache off;
-        proxy_set_header Connection $http_connection;
-        proxy_set_header Upgrade $http_upgrade;
-        chunked_transfer_encoding off;
-        
-        # Handle auth errors
-        error_page 401 = @auth_error;
-        error_page 403 = @forbidden_error;
-    }}"""
-                        location_blocks.append(location_block)
-                        logger.debug(f"Added location block for healthy service: {path}")
+                        # Generate transport-aware location blocks
+                        transport_blocks = self._generate_transport_location_blocks(path, server_info)
+                        location_blocks.extend(transport_blocks)
+                        logger.debug(f"Added location blocks for healthy service: {path}")
                     else:
                         # Add commented out block for unhealthy services
                         commented_block = f"""
@@ -221,6 +169,150 @@ class NginxConfigService:
         except Exception as e:
             logger.error(f"Error reloading Nginx: {e}")
             return False
+
+
+    def _generate_transport_location_blocks(self, path: str, server_info: Dict[str, Any]) -> list:
+        """Generate nginx location blocks for different transport types."""
+        blocks = []
+        proxy_pass_url = server_info.get("proxy_pass_url", "")
+        supported_transports = server_info.get("supported_transports", ["streamable-http"])
+        
+        # Generate broad location blocks based on supported transports
+        base_url = proxy_pass_url.rstrip('/')
+        
+        # Determine transport type based on supported_transports
+        if not supported_transports:
+            # Default to streamable-http if no transports specified
+            transport_type = "streamable-http"
+            logger.info(f"Server {path}: No supported_transports specified, defaulting to streamable-http")
+        elif "streamable-http" in supported_transports and "sse" in supported_transports:
+            # If both are supported, prefer streamable-http
+            transport_type = "streamable-http"
+            logger.info(f"Server {path}: Both streamable-http and sse supported, preferring streamable-http")
+        elif "sse" in supported_transports:
+            # SSE only
+            transport_type = "sse"
+            logger.info(f"Server {path}: Only sse transport supported, using sse")
+        elif "streamable-http" in supported_transports:
+            # Streamable-http only
+            transport_type = "streamable-http"
+            logger.info(f"Server {path}: Only streamable-http transport supported, using streamable-http")
+        else:
+            # Default to streamable-http if unknown transport
+            transport_type = "streamable-http"
+            logger.info(f"Server {path}: Unknown transport types {supported_transports}, defaulting to streamable-http")
+        
+        # Create a single broad location block that handles all requests for this server
+        # This allows SSE to work properly (catches both /sse and /messages requests)
+        # Adjust proxy_pass URL based on transport type to handle nginx path stripping correctly
+        if transport_type == "streamable-http":
+            # For streamable-http, we need to handle the /mcp path specifically
+            # The agent sends requests to /currenttime/mcp, we need to forward to /mcp/
+            proxy_url = base_url + "/mcp/"
+        else:
+            # For SSE and other transports with location /path/ (with trailing slash),
+            # we need proxy_pass with trailing slash for proper nginx proxying
+            proxy_url = base_url + "/" if not base_url.endswith("/") else base_url
+        
+        block = self._create_location_block(path, proxy_url, transport_type)
+        blocks.append(block)
+        
+        return blocks
+
+
+    def _create_location_block(self, path: str, proxy_pass_url: str, transport_type: str) -> str:
+        """Create a single nginx location block with transport-specific configuration."""
+        
+        # Common proxy settings
+        common_settings = f"""
+        # Authenticate request - pass entire request to auth server
+        auth_request /validate;
+        
+        # Capture auth server response headers for forwarding
+        auth_request_set $auth_user $upstream_http_x_user;
+        auth_request_set $auth_username $upstream_http_x_username;
+        auth_request_set $auth_client_id $upstream_http_x_client_id;
+        auth_request_set $auth_scopes $upstream_http_x_scopes;
+        auth_request_set $auth_method $upstream_http_x_auth_method;
+        auth_request_set $auth_server_name $upstream_http_x_server_name;
+        auth_request_set $auth_tool_name $upstream_http_x_tool_name;
+        
+        # Proxy to MCP server
+        proxy_pass {proxy_pass_url};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Add original URL for auth server scope validation
+        proxy_set_header X-Original-URL $scheme://$host$request_uri;
+        
+        # Pass through the original authentication headers
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header X-User-Pool-Id $http_x_user_pool_id;
+        proxy_set_header X-Client-Id $http_x_client_id;
+        proxy_set_header X-Region $http_x_region;
+        
+        # Forward auth server response headers to backend
+        proxy_set_header X-User $auth_user;
+        proxy_set_header X-Username $auth_username;
+        proxy_set_header X-Client-Id-Auth $auth_client_id;
+        proxy_set_header X-Scopes $auth_scopes;
+        proxy_set_header X-Auth-Method $auth_method;
+        proxy_set_header X-Server-Name $auth_server_name;
+        proxy_set_header X-Tool-Name $auth_tool_name;
+        
+        # Handle auth errors
+        error_page 401 = @auth_error;
+        error_page 403 = @forbidden_error;"""
+        
+        # Transport-specific settings
+        if transport_type == "sse":
+            transport_settings = """
+        # Capture request body for auth validation using Lua
+        rewrite_by_lua_file /etc/nginx/lua/capture_body.lua;
+        
+        # For SSE connections and WebSocket upgrades
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_set_header Connection $http_connection;
+        proxy_set_header Upgrade $http_upgrade;
+        chunked_transfer_encoding off;"""
+        
+        elif transport_type == "streamable-http":
+            transport_settings = """
+        # Capture request body for auth validation using Lua
+        rewrite_by_lua_file /etc/nginx/lua/capture_body.lua;
+        
+        # HTTP transport configuration
+        proxy_buffering off;
+        proxy_set_header Connection "";"""
+        
+        else:  # direct
+            transport_settings = """
+        # Capture request body for auth validation using Lua
+        rewrite_by_lua_file /etc/nginx/lua/capture_body.lua;
+        
+        # Generic transport configuration
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_set_header Connection $http_connection;
+        proxy_set_header Upgrade $http_upgrade;
+        chunked_transfer_encoding off;"""
+        
+        # For streamable-http, use path with /mcp to match agent requests
+        # For SSE and other transports, use path with trailing slash for consistency
+        if transport_type == "streamable-http":
+            location_path = f"{path}/mcp"
+            logger.info(f"Creating location block for {path}/mcp with streamable-http transport")
+        else:
+            location_path = f"{path}/"
+            logger.info(f"Creating location block for {path}/ with {transport_type} transport (with trailing slash)")
+        
+        return f"""
+    location {location_path} {{{transport_settings}{common_settings}
+    }}"""
 
 
 # Global nginx service instance
