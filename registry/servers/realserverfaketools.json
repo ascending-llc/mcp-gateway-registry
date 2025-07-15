@@ -3,6 +3,7 @@
   "description": "A collection of fake tools with interesting names that take different parameter types",
   "path": "/realserverfaketools",
   "proxy_pass_url": "http://realserverfaketools-server:8002/",
+  "supported_transports": ["sse"],
   "tags": ["demo", "fake", "tools", "testing"],
   "num_tools": 6,
   "num_stars": 0,

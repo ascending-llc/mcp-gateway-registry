@@ -3,6 +3,7 @@
   "description": "Provides tools to interact with the MCP Gateway Registry API.",
   "path": "/mcpgw",
   "proxy_pass_url": "http://mcpgw-server:8003/",
+  "supported_transports": ["sse"],
   "tags": ["registry", "management"],
   "num_tools": 5,
   "num_stars": 0,

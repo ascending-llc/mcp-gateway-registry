@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 # MCP Client imports
 from mcp import ClientSession
 from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamablehttp_client
 
 logger = logging.getLogger(__name__)
 
@@ -84,146 +85,300 @@ def normalize_sse_endpoint_url_for_request(url_str: str) -> str:
     return url_str
 
 
-async def get_tools_from_server(base_url: str) -> List[dict] | None:
+async def detect_server_transport_aware(base_url: str, server_info: dict = None) -> str:
     """
-    Connects to an MCP server via SSE, lists tools, and returns their details
-    (name, description, schema).
+    Detect which transport a server supports by checking configuration and testing endpoints.
+    Uses server_info supported_transports if available, otherwise falls back to auto-detection.
+    
+    Args:
+        base_url: The base URL of the MCP server
+        server_info: Optional server configuration dict containing supported_transports
+        
+    Returns:
+        The preferred transport type ("sse" or "streamable-http")
+    """
+    # If URL already has a transport endpoint, detect from it
+    if base_url.endswith('/sse') or '/sse/' in base_url:
+        logger.debug(f"Server URL {base_url} already has SSE endpoint")
+        return "sse"
+    elif base_url.endswith('/mcp') or '/mcp/' in base_url:
+        logger.debug(f"Server URL {base_url} already has MCP endpoint")
+        return "streamable-http"
+    
+    # Use server configuration if available
+    if server_info:
+        supported_transports = server_info.get("supported_transports", [])
+        logger.debug(f"Server configuration specifies supported transports: {supported_transports}")
+        
+        # Prefer SSE if it's the only option or explicitly listed first
+        if supported_transports == ["sse"]:
+            logger.debug("Server only supports SSE transport")
+            return "sse"
+        elif supported_transports and "sse" in supported_transports and "streamable-http" not in supported_transports:
+            logger.debug("Server supports SSE but not streamable-http")
+            return "sse"
+        elif supported_transports and "streamable-http" in supported_transports:
+            logger.debug("Server supports streamable-http (preferred)")
+            return "streamable-http"
+    
+    # Fall back to auto-detection
+    return await detect_server_transport(base_url)
 
+
+async def detect_server_transport(base_url: str) -> str:
+    """
+    Detect which transport a server supports by testing endpoints.
+    Returns the preferred transport type.
+    """
+    # If URL already has a transport endpoint, detect from it
+    if base_url.endswith('/sse') or '/sse/' in base_url:
+        logger.debug(f"Server URL {base_url} already has SSE endpoint")
+        return "sse"
+    elif base_url.endswith('/mcp') or '/mcp/' in base_url:
+        logger.debug(f"Server URL {base_url} already has MCP endpoint")
+        return "streamable-http"
+    
+    # Test streamable-http first (default preference)
+    try:
+        mcp_url = base_url.rstrip('/') + "/mcp/"
+        async with streamablehttp_client(url=mcp_url) as connection:
+            logger.debug(f"Server at {base_url} supports streamable-http transport")
+            return "streamable-http"
+    except Exception as e:
+        logger.debug(f"Streamable-HTTP test failed for {base_url}: {e}")
+    
+    # Fallback to SSE
+    try:
+        sse_url = base_url.rstrip('/') + "/sse"
+        async with sse_client(sse_url) as connection:
+            logger.debug(f"Server at {base_url} supports SSE transport")
+            return "sse"
+    except Exception as e:
+        logger.debug(f"SSE test failed for {base_url}: {e}")
+    
+    # Default to streamable-http if detection fails
+    logger.warning(f"Could not detect transport for {base_url}, defaulting to streamable-http")
+    return "streamable-http"
+
+
+async def get_tools_from_server_with_transport(base_url: str, transport: str = "auto") -> List[dict] | None:
+    """
+    Connects to an MCP server using the specified transport, lists tools, and returns their details.
+    
     Args:
         base_url: The base URL of the MCP server (e.g., http://localhost:8000).
-
+        transport: Transport type ("streamable-http", "sse", or "auto")
+        
     Returns:
-        A list of tool detail dictionaries (keys: name, description, schema),
-        or None if connection/retrieval fails.
+        A list of tool detail dictionaries, or None if connection/retrieval fails.
     """
-    # Determine scheme and construct the full /sse URL
     if not base_url:
         logger.error("MCP Check Error: Base URL is empty.")
         return None
 
-    sse_url = base_url.rstrip('/') + "/sse"
-    # Simple check for https, might need refinement for edge cases
-    secure_prefix = "s" if sse_url.startswith("https://") else ""
-    mcp_server_url = f"http{secure_prefix}://{sse_url[len(f'http{secure_prefix}://'):]}" # Ensure correct format for sse_client
-
-    logger.info(f"Attempting to connect to MCP server at {mcp_server_url} to get tool list...")
+    # Auto-detect transport if needed
+    if transport == "auto":
+        transport = await detect_server_transport(base_url)
+    
+    logger.info(f"Attempting to connect to MCP server at {base_url} using {transport} transport...")
     
     try:
-        # Monkey patch httpx to fix mount path issues
+        if transport == "streamable-http":
+            return await _get_tools_streamable_http(base_url)
+        elif transport == "sse":
+            return await _get_tools_sse(base_url)
+        else:
+            logger.error(f"Unsupported transport type: {transport}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"MCP Check Error: Failed to get tool list from {base_url} with {transport}: {type(e).__name__} - {e}")
+        return None
+
+
+async def _get_tools_streamable_http(base_url: str) -> List[dict] | None:
+    """Get tools using streamable-http transport"""
+    # If URL already has MCP endpoint, use it directly
+    if base_url.endswith('/mcp') or '/mcp/' in base_url:
+        mcp_url = base_url
+        if not mcp_url.endswith('/'):
+            mcp_url += '/'
+    else:
+        mcp_url = base_url.rstrip('/') + "/mcp/"
+    
+    try:
+        async with streamablehttp_client(url=mcp_url) as (read, write, get_session_id):
+            async with ClientSession(read, write) as session:
+                await asyncio.wait_for(session.initialize(), timeout=10.0)
+                tools_response = await asyncio.wait_for(session.list_tools(), timeout=15.0)
+                
+                return _extract_tool_details(tools_response)
+                
+    except asyncio.TimeoutError:
+        logger.error(f"MCP Check Error: Timeout during streamable-http session with {base_url}.")
+        return None
+    except Exception as e:
+        logger.error(f"MCP Check Error: Streamable-HTTP connection failed to {base_url}: {e}")
+        return None
+
+
+async def _get_tools_sse(base_url: str) -> List[dict] | None:
+    """Get tools using SSE transport (legacy method with patches)"""
+    # If URL already has SSE endpoint, use it directly
+    if base_url.endswith('/sse') or '/sse/' in base_url:
+        sse_url = base_url
+    else:
+        sse_url = base_url.rstrip('/') + "/sse"
+    
+    secure_prefix = "s" if sse_url.startswith("https://") else ""
+    mcp_server_url = f"http{secure_prefix}://{sse_url[len(f'http{secure_prefix}://'):]}"
+
+    try:
+        # Monkey patch httpx to fix mount path issues (legacy SSE support)
         original_request = httpx.AsyncClient.request
         
         async def patched_request(self, method, url, **kwargs):
-            # Fix mount path issues in requests
             if isinstance(url, str) and '/messages/' in url:
                 url = normalize_sse_endpoint_url_for_request(url)
             elif hasattr(url, '__str__') and '/messages/' in str(url):
                 url = normalize_sse_endpoint_url_for_request(str(url))
             return await original_request(self, method, url, **kwargs)
         
-        # Apply the patch
         httpx.AsyncClient.request = patched_request
         
         try:
-            # Connect using the standard SSE client
             async with sse_client(mcp_server_url) as (read, write):
-                # Use the ClientSession context manager directly
                 async with ClientSession(read, write, sampling_callback=None) as session:
-                    # Apply timeout to individual operations within the session
-                    await asyncio.wait_for(session.initialize(), timeout=10.0) # Timeout for initialize
-                    tools_response = await asyncio.wait_for(session.list_tools(), timeout=15.0) # Renamed variable
-
-                    # Extract tool details
-                    tool_details_list = []
-                    if tools_response and hasattr(tools_response, 'tools'):
-                        for tool in tools_response.tools:
-                            # Access attributes directly based on MCP documentation
-                            tool_name = getattr(tool, 'name', 'Unknown Name') # Direct attribute access
-                            tool_desc = getattr(tool, 'description', None) or getattr(tool, '__doc__', None)
-
-                            # --- Parse Docstring into Sections --- START
-                            parsed_desc = {
-                                "main": "No description available.",
-                                "args": None,
-                                "returns": None,
-                                "raises": None,
-                            }
-                            if tool_desc:
-                                tool_desc = tool_desc.strip()
-                                # Simple parsing logic (can be refined)
-                                lines = tool_desc.split('\n')
-                                main_desc_lines = []
-                                current_section = "main"
-                                section_content = []
-
-                                for line in lines:
-                                    stripped_line = line.strip()
-                                    if stripped_line.startswith("Args:"):
-                                        parsed_desc["main"] = "\n".join(main_desc_lines).strip()
-                                        current_section = "args"
-                                        section_content = [stripped_line[len("Args:"):].strip()]
-                                    elif stripped_line.startswith("Returns:"):
-                                        if current_section != "main": 
-                                            parsed_desc[current_section] = "\n".join(section_content).strip()
-                                        else: 
-                                            parsed_desc["main"] = "\n".join(main_desc_lines).strip()
-                                        current_section = "returns"
-                                        section_content = [stripped_line[len("Returns:"):].strip()]
-                                    elif stripped_line.startswith("Raises:"):
-                                        if current_section != "main": 
-                                            parsed_desc[current_section] = "\n".join(section_content).strip()
-                                        else: 
-                                            parsed_desc["main"] = "\n".join(main_desc_lines).strip()
-                                        current_section = "raises"
-                                        section_content = [stripped_line[len("Raises:"):].strip()]
-                                    elif current_section == "main":
-                                        main_desc_lines.append(line.strip()) # Keep leading whitespace for main desc if intended
-                                    else:
-                                        section_content.append(line.strip())
-
-                                # Add the last collected section
-                                if current_section != "main":
-                                    parsed_desc[current_section] = "\n".join(section_content).strip()
-                                elif not parsed_desc["main"] and main_desc_lines: # Handle case where entire docstring was just main description
-                                    parsed_desc["main"] = "\n".join(main_desc_lines).strip()
-
-                                # Ensure main description has content if others were parsed but main was empty
-                                if not parsed_desc["main"] and (parsed_desc["args"] or parsed_desc["returns"] or parsed_desc["raises"]):
-                                    parsed_desc["main"] = "(No primary description provided)"
-
-                            else:
-                                parsed_desc["main"] = "No description available."
-                            # --- Parse Docstring into Sections --- END
-
-                            tool_schema = getattr(tool, 'inputSchema', {}) # Use inputSchema attribute
-
-                            tool_details_list.append({
-                                "name": tool_name,
-                                "parsed_description": parsed_desc, # Store parsed sections
-                                "schema": tool_schema
-                            })
-
-                    logger.info(f"Successfully retrieved details for {len(tool_details_list)} tools from {mcp_server_url}.")
-                    return tool_details_list # Return the list of details
+                    await asyncio.wait_for(session.initialize(), timeout=10.0)
+                    tools_response = await asyncio.wait_for(session.list_tools(), timeout=15.0)
+                    
+                    return _extract_tool_details(tools_response)
         finally:
-            # Restore original httpx behavior
             httpx.AsyncClient.request = original_request
+            
     except asyncio.TimeoutError:
-        logger.error(f"MCP Check Error: Timeout during session operation with {mcp_server_url}.")
+        logger.error(f"MCP Check Error: Timeout during SSE session with {base_url}.")
         return None
-    except ConnectionRefusedError:
-         logger.error(f"MCP Check Error: Connection refused by {mcp_server_url}.")
-         return None
     except Exception as e:
-        logger.error(f"MCP Check Error: Failed to get tool list from {mcp_server_url}: {type(e).__name__} - {e}")
+        logger.error(f"MCP Check Error: SSE connection failed to {base_url}: {e}")
         return None
+
+
+def _extract_tool_details(tools_response) -> List[dict]:
+    """Extract tool details from MCP tools response"""
+    tool_details_list = []
+    
+    if tools_response and hasattr(tools_response, 'tools'):
+        for tool in tools_response.tools:
+            tool_name = getattr(tool, 'name', 'Unknown Name')
+            tool_desc = getattr(tool, 'description', None) or getattr(tool, '__doc__', None)
+
+            # Parse docstring into sections
+            parsed_desc = {
+                "main": "No description available.",
+                "args": None,
+                "returns": None,
+                "raises": None,
+            }
+            if tool_desc:
+                tool_desc = tool_desc.strip()
+                lines = tool_desc.split('\n')
+                main_desc_lines = []
+                current_section = "main"
+                section_content = []
+
+                for line in lines:
+                    stripped_line = line.strip()
+                    if stripped_line.startswith("Args:"):
+                        parsed_desc["main"] = "\n".join(main_desc_lines).strip()
+                        current_section = "args"
+                        section_content = [stripped_line[len("Args:"):].strip()]
+                    elif stripped_line.startswith("Returns:"):
+                        if current_section != "main": 
+                            parsed_desc[current_section] = "\n".join(section_content).strip()
+                        else: 
+                            parsed_desc["main"] = "\n".join(main_desc_lines).strip()
+                        current_section = "returns"
+                        section_content = [stripped_line[len("Returns:"):].strip()]
+                    elif stripped_line.startswith("Raises:"):
+                        if current_section != "main": 
+                            parsed_desc[current_section] = "\n".join(section_content).strip()
+                        else: 
+                            parsed_desc["main"] = "\n".join(main_desc_lines).strip()
+                        current_section = "raises"
+                        section_content = [stripped_line[len("Raises:"):].strip()]
+                    elif current_section == "main":
+                        main_desc_lines.append(line.strip())
+                    else:
+                        section_content.append(line.strip())
+
+                # Add the last collected section
+                if current_section != "main":
+                    parsed_desc[current_section] = "\n".join(section_content).strip()
+                elif not parsed_desc["main"] and main_desc_lines:
+                    parsed_desc["main"] = "\n".join(main_desc_lines).strip()
+
+                # Ensure main description has content
+                if not parsed_desc["main"] and (parsed_desc["args"] or parsed_desc["returns"] or parsed_desc["raises"]):
+                    parsed_desc["main"] = "(No primary description provided)"
+            else:
+                parsed_desc["main"] = "No description available."
+
+            tool_schema = getattr(tool, 'inputSchema', {})
+
+            tool_details_list.append({
+                "name": tool_name,
+                "parsed_description": parsed_desc,
+                "schema": tool_schema
+            })
+
+    logger.info(f"Successfully retrieved details for {len(tool_details_list)} tools.")
+    return tool_details_list
+
+
+async def get_tools_from_server_with_server_info(base_url: str, server_info: dict = None) -> List[dict] | None:
+    """
+    Get tools from server using server configuration to determine optimal transport.
+    
+    Args:
+        base_url: The base URL of the MCP server (e.g., http://localhost:8000).
+        server_info: Optional server configuration dict containing supported_transports
+        
+    Returns:
+        A list of tool detail dictionaries (keys: name, description, schema),
+        or None if connection/retrieval fails.
+    """
+    if not base_url:
+        logger.error("MCP Check Error: Base URL is empty.")
+        return None
+
+    # Use transport-aware detection
+    transport = await detect_server_transport_aware(base_url, server_info)
+    
+    logger.info(f"Attempting to connect to MCP server at {base_url} using {transport} transport (server-info aware)...")
+    
+    try:
+        if transport == "streamable-http":
+            return await _get_tools_streamable_http(base_url)
+        elif transport == "sse":
+            return await _get_tools_sse(base_url)
+        else:
+            logger.error(f"Unsupported transport type: {transport}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"MCP Check Error: Failed to get tool list from {base_url} with {transport}: {type(e).__name__} - {e}")
+        return None
+
+
 
 
 class MCPClientService:
     """Service wrapper for the MCP client function to maintain compatibility."""
     
-    async def get_tools_from_server(self, base_url: str) -> Optional[List[Dict]]:
-        """Wrapper method to maintain compatibility with existing code."""
-        return await get_tools_from_server(base_url)
+    async def get_tools_from_server_with_server_info(self, base_url: str, server_info: dict = None) -> Optional[List[Dict]]:
+        """Wrapper method that uses server configuration for transport selection."""
+        return await get_tools_from_server_with_server_info(base_url, server_info)
 
 
 # Global MCP client service instance  

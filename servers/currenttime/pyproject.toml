@@ -9,4 +9,5 @@ dependencies = [
    "pydantic>=2.11.3",
    "requests>=2.32.3",
    "pytz>=2025.2",
+   "aiohttp>=3.8.0",
 ]

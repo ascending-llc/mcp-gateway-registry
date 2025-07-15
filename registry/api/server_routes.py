@@ -608,8 +608,8 @@ async def get_service_tools(
     logger.info(f"Fetching live tools for {service_path} from {proxy_pass_url}")
     
     try:
-        # Call MCP client to fetch fresh tools
-        tool_list = await mcp_client_service.get_tools_from_server(proxy_pass_url)
+        # Call MCP client to fetch fresh tools using server configuration
+        tool_list = await mcp_client_service.get_tools_from_server_with_server_info(proxy_pass_url, server_info)
         
         if tool_list is None:
             raise HTTPException(status_code=503, detail="Failed to fetch tools from MCP server. Service may be unhealthy.")

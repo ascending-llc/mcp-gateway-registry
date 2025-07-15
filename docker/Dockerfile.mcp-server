@@ -57,7 +57,7 @@ fi\n\
 \n\
 # Activate virtual environment and run the server\n\
 source .venv/bin/activate\n\
-exec python server.py --port $SERVER_PORT --transport sse' > /entrypoint.sh && \
+exec python server.py --port $SERVER_PORT' > /entrypoint.sh && \
     chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"] 

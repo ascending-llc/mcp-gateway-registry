@@ -3,7 +3,7 @@
 LangGraph MCP Client with Cognito Authentication
 
 This script demonstrates using LangGraph with the MultiServerMCPClient adapter to connect to an
-MCP-compatible server with Cognito M2M authentication and query information using a Bedrock-hosted Claude model.
+MCP-compatible server with Cognito M2M authentication and query information using an Anthropic Claude model.
 
 The script accepts command line arguments for:
 - Server host and port
@@ -26,7 +26,7 @@ Usage:
 
 Example with command line arguments:
     python agent.py --mcp-registry-url http://localhost/mcpgw/sse \
-        --model anthropic.claude-3-haiku-20240307-v1:0 --message "current time in new delhi" \
+        --model claude-3-5-haiku-20241022 --message "current time in new delhi" \
         --client-id [REDACTED] --client-secret [REDACTED] \
         --user-pool-id [REDACTED] --region us-east-1
 
@@ -52,21 +52,17 @@ from typing import Dict, List, Any, Optional
 from urllib.parse import urlparse, urljoin
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import create_react_agent
-from langchain_aws import ChatBedrock, ChatBedrockConverse
+from langchain_anthropic import ChatAnthropic
 from langchain_core.tools import tool
 import mcp
 from mcp import ClientSession
 from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamablehttp_client
 import httpx
 import re
 
 # Import dotenv for loading environment variables
-try:
-    from dotenv import load_dotenv
-    DOTENV_AVAILABLE = True
-except ImportError:
-    DOTENV_AVAILABLE = False
-    print("Warning: python-dotenv not installed. Environment file loading disabled.")
+from dotenv import load_dotenv
 
 # Add the auth_server directory to the path to import cognito_utils
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'auth_server'))
@@ -153,56 +149,55 @@ def load_env_config(use_session_cookie: bool, user_env_file: str = '.env.user', 
         'client_secret': None,
         'region': None,
         'user_pool_id': None,
-        'domain': None
+        'domain': None,
+        'anthropic_api_key': None
     }
     
     # Choose .env file based on authentication mode
     env_file_name = user_env_file if use_session_cookie else agent_env_file
     logger.info(f"Using .env file: {env_file_name}")
-    if DOTENV_AVAILABLE:
-        file_found = False
-        file_path = None
-        
-        # Try to load from .env file in the current directory
-        env_file = os.path.join(os.path.dirname(__file__), env_file_name)
+    # Load environment variables using dotenv
+    file_found = False
+    file_path = None
+    
+    # Try to load from .env file in the current directory
+    env_file = os.path.join(os.path.dirname(__file__), env_file_name)
+    if os.path.exists(env_file):
+        logger.info(f"Found .env file: {env_file}")
+        load_dotenv(env_file, override=True)
+        file_found = True
+        file_path = env_file
+        logger.info(f"Loading environment variables from {env_file}")
+        logger.info(f"user pool id {os.environ.get('COGNITO_USER_POOL_ID')}")
+    else:
+        # Try to load from .env file in the parent directory
+        env_file = os.path.join(os.path.dirname(__file__), '..', env_file_name)
         if os.path.exists(env_file):
-            logger.info(f"Found .env file: {env_file}")
+            logger.info(f"Found .env file in parent directory: {env_file}")
             load_dotenv(env_file, override=True)
-            file_found = True
-            file_path = env_file
             logger.info(f"Loading environment variables from {env_file}")
-            logger.info(f"user pool id {os.environ.get('COGNITO_USER_POOL_ID')}")
         else:
-            # Try to load from .env file in the parent directory
-            env_file = os.path.join(os.path.dirname(__file__), '..', env_file_name)
+            # Try to load from current working directory
+            env_file = os.path.join(os.getcwd(), env_file_name)
             if os.path.exists(env_file):
-                logger.info(f"Found .env file in parent directory: {env_file}")
+                logger.info(f"Found .env file in current working directory: {env_file}")
                 load_dotenv(env_file, override=True)
                 logger.info(f"Loading environment variables from {env_file}")
             else:
-                # Try to load from current working directory
-                env_file = os.path.join(os.getcwd(), env_file_name)
-                if os.path.exists(env_file):
-                    logger.info(f"Found .env file in current working directory: {env_file}")
-                    load_dotenv(env_file, override=True)
-                    logger.info(f"Loading environment variables from {env_file}")
-                else:
-                    # Fallback to default .env loading
-                    load_dotenv(override=True)
-                    logger.info("Loading environment variables from default .env file")
-        
-        # Print banner showing which file is being used
-        print_env_file_banner(env_file_name, use_session_cookie, file_found, file_path)
-        
-        # Get values from environment
-        env_config['client_id'] = os.getenv('COGNITO_CLIENT_ID')
-        env_config['client_secret'] = os.getenv('COGNITO_CLIENT_SECRET')
-        env_config['region'] = os.getenv('AWS_REGION')
-        env_config['user_pool_id'] = os.getenv('COGNITO_USER_POOL_ID')
-        env_config['domain'] = os.getenv('COGNITO_DOMAIN')
-    else:
-        # Print banner even when dotenv is not available
-        print_env_file_banner(env_file_name, use_session_cookie, False)
+                # Fallback to default .env loading
+                load_dotenv(override=True)
+                logger.info("Loading environment variables from default .env file")
+    
+    # Print banner showing which file is being used
+    print_env_file_banner(env_file_name, use_session_cookie, file_found, file_path)
+    
+    # Get values from environment
+    env_config['client_id'] = os.getenv('COGNITO_CLIENT_ID')
+    env_config['client_secret'] = os.getenv('COGNITO_CLIENT_SECRET')
+    env_config['region'] = os.getenv('AWS_REGION')
+    env_config['user_pool_id'] = os.getenv('COGNITO_USER_POOL_ID')
+    env_config['domain'] = os.getenv('COGNITO_DOMAIN')
+    env_config['anthropic_api_key'] = os.getenv('ANTHROPIC_API_KEY')
     
     return env_config
 
@@ -229,8 +224,8 @@ def parse_arguments() -> argparse.Namespace:
                         help='Hostname of the MCP Registry')
     
     # Model arguments
-    parser.add_argument('--model', type=str, default='us.anthropic.claude-3-5-haiku-20241022-v1:0',
-                        help='Model ID to use with Bedrock')
+    parser.add_argument('--model', type=str, default='claude-3-5-haiku-20241022',
+                        help='Model ID to use with Anthropic')
     
     # Message arguments
     parser.add_argument('--message', type=str, default='what is the current time in Clarksburg, MD',
@@ -337,31 +332,25 @@ def calculator(expression: str) -> str:
 
 @tool
 async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: str, arguments: Dict[str, Any],
-                         auth_token: str = None, user_pool_id: str = None, client_id: str = None, region: str = None,
-                         auth_method: str = "m2m", session_cookie: str = None) -> str:
+                         supported_transports: List[str] = None) -> str:
     """
     Invoke a tool on an MCP server using the MCP Registry URL and server name with authentication.
     
-    This tool creates an MCP SSE client and calls the specified tool with the provided arguments.
-    Supports both M2M (JWT) and session cookie authentication.
+    This tool creates an MCP client and calls the specified tool with the provided arguments.
+    Authentication details are automatically retrieved from the system configuration.
     
     Args:
         mcp_registry_url (str): The URL of the MCP Registry
         server_name (str): The name of the MCP server to connect to
         tool_name (str): The name of the tool to invoke
         arguments (Dict[str, Any]): Dictionary containing the arguments for the tool
-        auth_token (str): Bearer token for authentication (for M2M)
-        user_pool_id (str): Cognito User Pool ID for X-User-Pool-Id header
-        client_id (str): Cognito Client ID for X-Client-Id header
-        region (str): AWS region for X-Region header
-        auth_method (str): Authentication method ("m2m" or "session_cookie")
-        session_cookie (str): Session cookie value (for session auth)
+        supported_transports (List[str]): Transport protocols supported by the server (["sse"] or ["streamable-http"])
     
     Returns:
         str: The result of the tool invocation as a string
     
     Example:
-        invoke_mcp_tool("registry url", "currenttime", "current_time_by_timezone", {"tz_name": "America/New_York"}, "auth_token", "user_pool_id", "client_id", "region")
+        invoke_mcp_tool("registry url", "currenttime", "current_time_by_timezone", {"tz_name": "America/New_York"}, ["streamable-http"])
     """
     # Construct the MCP server URL from the registry URL and server name using standard URL parsing
     parsed_url = urlparse(mcp_registry_url)
@@ -371,20 +360,31 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
     netloc = parsed_url.netloc
     path = parsed_url.path
     
-    # If the path ends with '/sse', remove it to get the base path
-    if path.endswith('/sse'):
-        base_path = path[:-4]  # Remove '/sse' from the end
-    else:
-        base_path = path
+    # Use only the base URL (scheme + netloc) without any path
+    base_url = f"{scheme}://{netloc}"
     
-    # Construct the base URL with scheme, netloc and base path
-    base_url = f"{scheme}://{netloc}{base_path}"
-    
-    # Create the server URL by joining the base URL with the server name and sse path
-    server_url = urljoin(base_url + '/', f"{server_name}/sse")
-    logger.info(f"invoke_mcp_tool, Server URL: {server_url}")
+    # Create the server URL by joining the base URL with the server name
+    # Remove leading slash from server_name if present to avoid double slashes
+    if server_name.startswith('/'):
+        server_name = server_name[1:]
+    server_url = urljoin(base_url + '/', server_name)
+    logger.info(f"invoke_mcp_tool, Initial Server URL: {server_url}")
     
     # Use context manager to apply httpx monkey patch
+    
+    # Get authentication parameters from global agent_settings object
+    # These will be populated by the main function when it generates the token
+    auth_token = agent_settings.auth_token
+    user_pool_id = agent_settings.user_pool_id
+    client_id = agent_settings.client_id
+    region = agent_settings.region or 'us-east-1'
+    session_cookie = agent_settings.session_cookie
+    
+    # Determine auth method based on what's available
+    if session_cookie:
+        auth_method = 'session_cookie'
+    else:
+        auth_method = 'm2m'
     
     # Prepare headers based on authentication method
     headers = {
@@ -392,6 +392,21 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
         'X-Client-Id': client_id or '',
         'X-Region': region or 'us-east-1'
     }
+    
+    # TRACE: Print all parameters received by invoke_mcp_tool
+    logger.info(f"invoke_mcp_tool TRACE - Parameters received:")
+    logger.info(f"  mcp_registry_url: {mcp_registry_url}")
+    logger.info(f"  server_name: {server_name}")
+    logger.info(f"  tool_name: {tool_name}")
+    logger.info(f"  arguments: {arguments}")
+    logger.info(f"  auth_token: {auth_token[:50] if auth_token else 'None'}...")
+    logger.info(f"  user_pool_id: {user_pool_id}")
+    logger.info(f"  client_id: {client_id}")
+    logger.info(f"  region: {region}")
+    logger.info(f"  auth_method: {auth_method}")
+    logger.info(f"  session_cookie: {session_cookie}")
+    logger.info(f"  supported_transports: {supported_transports}")
+    logger.info(f"invoke_mcp_tool TRACE - Headers built: {headers}")
     
     if auth_method == "session_cookie" and session_cookie:
         headers['Cookie'] = f'mcp_gateway_session={session_cookie}'
@@ -411,29 +426,75 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
         }
     
     try:
+        # Determine transport based on supported_transports
+        use_sse = supported_transports and "sse" in supported_transports
+        transport_name = "SSE" if use_sse else "streamable-http"
+        
+        # For transport through the gateway, we need to append the transport endpoint
+        # The nginx gateway expects the full path including the transport endpoint
+        if use_sse:
+            if not server_url.endswith('/'):
+                server_url += '/'
+            server_url += 'sse'
+            logger.info(f"invoke_mcp_tool, Using SSE transport with gateway URL: {server_url}")
+        else:
+            if not server_url.endswith('/'):
+                server_url += '/'
+            server_url += 'mcp'
+            logger.info(f"invoke_mcp_tool, Using streamable-http transport with gateway URL: {server_url}")
+        
         # Use context manager to apply httpx monkey patch and create MCP client
         async with httpx_mount_path_patch(server_url):
-            # Create an MCP SSE client and call the tool with authentication headers
-            logger.info(f"invoke_mcp_tool, Connecting to MCP server: {server_url}, headers: {redacted_headers}")
-            async with mcp.client.sse.sse_client(server_url, headers=headers) as (read, write):
-                async with mcp.ClientSession(read, write, sampling_callback=None) as session:
-                    # Initialize the connection
-                    await session.initialize()
-                    
-                    # Call the specified tool with the provided arguments
-                    result = await session.call_tool(tool_name, arguments=arguments)
-                    
-                    # Format the result as a string
-                    response = ""
-                    for r in result.content:
-                        response += r.text + "\n"
-                    
-                    return response.strip()
+            logger.info(f"invoke_mcp_tool, Connecting to MCP server using {transport_name}: {server_url}, headers: {redacted_headers}")
+            
+            if use_sse:
+                # Create an MCP SSE client
+                async with sse_client(server_url, headers=headers) as (read, write):
+                    async with mcp.ClientSession(read, write, sampling_callback=None) as session:
+                        # Initialize the connection
+                        await session.initialize()
+                        
+                        # Call the specified tool with the provided arguments
+                        result = await session.call_tool(tool_name, arguments=arguments)
+                        
+                        # Format the result as a string
+                        response = ""
+                        for r in result.content:
+                            response += r.text + "\n"
+                        
+                        return response.strip()
+            else:
+                # Create an MCP streamable-http client
+                async with streamablehttp_client(url=server_url, headers=headers) as (read, write, get_session_id):
+                    async with mcp.ClientSession(read, write, sampling_callback=None) as session:
+                        # Initialize the connection
+                        await session.initialize()
+                        
+                        # Call the specified tool with the provided arguments
+                        result = await session.call_tool(tool_name, arguments=arguments)
+                        
+                        # Format the result as a string
+                        response = ""
+                        for r in result.content:
+                            response += r.text + "\n"
+                        
+                        return response.strip()
     except Exception as e:
         return f"Error invoking MCP tool: {str(e)}"
 
 from datetime import datetime, UTC
 current_utc_time = str(datetime.now(UTC))
+
+# Global agent settings to store authentication details
+class AgentSettings:
+    def __init__(self):
+        self.auth_token = None
+        self.user_pool_id = None
+        self.client_id = None
+        self.region = None
+        self.session_cookie = None
+
+agent_settings = AgentSettings()
 
 def redact_sensitive_value(value: str, show_chars: int = 4) -> str:
     """Redact sensitive values, showing only the first few characters"""
@@ -582,6 +643,12 @@ async def main():
         # Use pre-generated JWT token
         access_token = args.jwt_token
         logger.info("Using pre-generated JWT token")
+        
+        # Set global auth variables for invoke_mcp_tool (JWT token mode)
+        agent_settings.auth_token = access_token
+        agent_settings.user_pool_id = args.user_pool_id
+        agent_settings.client_id = args.client_id
+        agent_settings.region = args.region
     elif args.use_session_cookie:
         # Load session cookie from file
         try:
@@ -592,6 +659,13 @@ async def main():
         except Exception as e:
             logger.error(f"Failed to load session cookie: {e}")
             return
+            
+        # Set global auth variables for invoke_mcp_tool (session cookie mode)
+        agent_settings.auth_token = None
+        agent_settings.user_pool_id = args.user_pool_id
+        agent_settings.client_id = args.client_id
+        agent_settings.region = args.region
+        agent_settings.session_cookie = session_cookie
     else:
         # Generate Cognito M2M authentication token
         logger.info(f"Cognito User Pool ID: {redact_sensitive_value(args.user_pool_id)}")
@@ -613,12 +687,28 @@ async def main():
             if not access_token:
                 raise ValueError("No access token received from Cognito")
             logger.info("Successfully generated authentication token")
+            
+            # Set global auth variables for invoke_mcp_tool
+            agent_settings.auth_token = access_token
+            agent_settings.user_pool_id = args.user_pool_id
+            agent_settings.client_id = args.client_id
+            agent_settings.region = args.region
         except Exception as e:
             logger.error(f"Failed to generate authentication token: {e}")
             return
     
-    # Initialize the model
-    model = ChatBedrockConverse(model_id=args.model, region_name='us-east-1')
+    # Get Anthropic API key from environment variables
+    anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
+    if not anthropic_api_key:
+        logger.error("ANTHROPIC_API_KEY not found in environment variables")
+        return
+    
+    # Initialize the model with Anthropic
+    model = ChatAnthropic(
+        model=args.model,
+        api_key=anthropic_api_key,
+        temperature=0
+    )
     
     try:
         # Prepare headers for MCP client authentication based on method

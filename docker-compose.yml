@@ -62,6 +62,7 @@ services:
         SERVER_PATH: servers/currenttime
     environment:
       - PORT=8000
+      - MCP_TRANSPORT=streamable-http
     ports:
       - "8000:8000"
     restart: unless-stopped
