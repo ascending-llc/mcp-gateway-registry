@@ -16,6 +16,10 @@ class ServerInfo(BaseModel):
     license: str = "N/A"
     tool_list: List[Dict[str, Any]] = Field(default_factory=list)
     is_enabled: bool = False
+    transport: Optional[str] = Field(default="auto", description="Preferred transport: sse, streamable-http, or auto")
+    supported_transports: List[str] = Field(default_factory=lambda: ["streamable-http"], description="List of supported transports")
+    mcp_endpoint: Optional[str] = Field(default=None, description="Custom /mcp endpoint path")
+    sse_endpoint: Optional[str] = Field(default=None, description="Custom /sse endpoint path")
 
 
 class ToolDescription(BaseModel):
@@ -60,6 +64,10 @@ class ServiceRegistrationRequest(BaseModel):
     num_stars: int = Field(0, ge=0)
     is_python: bool = False
     license: str = "N/A"
+    transport: Optional[str] = Field(default="auto", description="Preferred transport: sse, streamable-http, or auto")
+    supported_transports: str = Field(default="streamable-http", description="Comma-separated list of supported transports")
+    mcp_endpoint: Optional[str] = Field(default=None, description="Custom /mcp endpoint path")
+    sse_endpoint: Optional[str] = Field(default=None, description="Custom /sse endpoint path")
 
 
 class OAuth2Provider(BaseModel):

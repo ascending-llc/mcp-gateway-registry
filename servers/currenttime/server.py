@@ -3,13 +3,10 @@ This server provides an interface to get the current time in a specified timezon
 """
 
 import os
-import time
-import random
-import requests
 import argparse
 import logging
 from mcp.server.fastmcp import FastMCP
-from pydantic import BaseModel, Field
+from pydantic import Field
 from typing import Annotated
 
 # Configure logging
@@ -33,8 +30,9 @@ def parse_arguments():
     parser.add_argument(
         "--transport",
         type=str,
-        default=os.environ.get("MCP_TRANSPORT", "sse"),
-        help="Transport type for the MCP server (default: sse)",
+        default=os.environ.get("MCP_TRANSPORT", "streamable-http"),
+        choices=["sse", "streamable-http"],
+        help="Transport type for the MCP server (default: streamable-http)",
     )
 
     return parser.parse_args()
@@ -42,6 +40,10 @@ def parse_arguments():
 
 # Parse arguments at module level to make them available
 args = parse_arguments()
+
+# Log parsed arguments for debugging
+logger.info(f"Parsed arguments - port: {args.port}, transport: {args.transport}")
+logger.info(f"Environment variables - MCP_TRANSPORT: {os.environ.get('MCP_TRANSPORT', 'NOT SET')}, MCP_SERVER_LISTEN_PORT: {os.environ.get('MCP_SERVER_LISTEN_PORT', 'NOT SET')}")
 
 # Initialize FastMCP server
 mcp = FastMCP("CurrentTimeAPI", host="0.0.0.0", port=int(args.port))
@@ -130,9 +132,13 @@ def get_config() -> str:
 
 
 def main():
+    # Log transport and endpoint information
+    endpoint = "/mcp" if args.transport == "streamable-http" else "/sse"
+    logger.info(f"Starting CurrentTime server on port {args.port} with transport {args.transport}")
+    logger.info(f"Server will be available at: http://localhost:{args.port}{endpoint}")
+    
     # Run the server with the specified transport from command line args
     mcp.run(transport=args.transport)
-    logger.info(f"Server is running on port {args.port} with transport {args.transport}")
 
 
 if __name__ == "__main__":

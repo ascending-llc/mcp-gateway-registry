@@ -3,6 +3,7 @@
   "description": "Secure gateway proxy for internal financial information systems.",
   "path": "/fininfo",
   "proxy_pass_url": "http://fininfo-server:8001/",
+  "supported_transports": ["sse"],
   "tags": [],
   "num_tools": 2,
   "num_stars": 0,

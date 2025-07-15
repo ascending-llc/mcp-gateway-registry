@@ -362,19 +362,17 @@ class HealthMonitoringService:
         new_status = previous_status
         
         try:
-            # Try to reach the service SSE endpoint
-            sse_endpoint = f"{proxy_pass_url.rstrip('/')}/sse"
-            response = await client.head(sse_endpoint, follow_redirects=True)
+            # Try to reach the service endpoint using transport-aware checking
+            success = await self._check_server_endpoint_transport_aware(client, proxy_pass_url, server_info)
             
-            if response.status_code == 200:
+            if success:
                 new_status = "healthy"
                 
                 # If service transitioned to healthy, fetch tool list (but don't block)
                 if previous_status != "healthy":
                     asyncio.create_task(self._update_tools_background(service_path, proxy_pass_url))
-                    
             else:
-                new_status = f"unhealthy: HTTP {response.status_code}"
+                new_status = "unhealthy: endpoint check failed"
                 
         except httpx.TimeoutException:
             new_status = "unhealthy: timeout"
@@ -389,6 +387,194 @@ class HealthMonitoringService:
         
         # Return True if status changed
         return previous_status != new_status
+
+
+    async def _check_server_endpoint_transport_aware(self, client: httpx.AsyncClient, proxy_pass_url: str, server_info: Dict) -> bool:
+        """Check server endpoint using transport-aware logic."""
+        if not proxy_pass_url:
+            return False
+            
+        # Get transport information from server_info
+        supported_transports = server_info.get("supported_transports", ["streamable-http"])
+        
+        # If URL already has transport endpoint, use it directly
+        if proxy_pass_url.endswith('/mcp') or proxy_pass_url.endswith('/sse') or '/mcp/' in proxy_pass_url or '/sse/' in proxy_pass_url:
+            logger.info(f"[TRACE] Found transport endpoint in URL: {proxy_pass_url}")
+            logger.info(f"[TRACE] URL contains /mcp: {'/mcp' in proxy_pass_url}, URL contains /sse: {'/sse' in proxy_pass_url}")
+            try:
+                # Use GET with proper headers for MCP endpoints
+                headers = {
+                    'Accept': 'text/event-stream',
+                    'Content-Type': 'application/json'
+                }
+                # For SSE endpoints, use a shorter timeout since they start streaming immediately
+                if proxy_pass_url.endswith('/sse') or '/sse/' in proxy_pass_url:
+                    logger.info(f"[TRACE] Detected SSE endpoint in URL, using SSE-specific handling")
+                    timeout = httpx.Timeout(connect=5.0, read=2.0, write=5.0, pool=5.0)
+                    try:
+                        response = await client.get(proxy_pass_url, headers=headers, follow_redirects=True, timeout=timeout)
+                        return self._is_mcp_endpoint_healthy(response)
+                    except (httpx.TimeoutException, asyncio.TimeoutError) as e:
+                        # For SSE endpoints, timeout while reading streaming response is normal after getting 200 OK
+                        logger.debug(f"SSE endpoint {proxy_pass_url} timed out while streaming (expected): {e}")
+                        # If we can extract status code from response, check if it was 200
+                        if hasattr(e, 'response') and e.response and e.response.status_code == 200:
+                            logger.debug(f"SSE endpoint {proxy_pass_url} returned 200 OK before timeout - considering healthy")
+                            return True
+                        # For SSE, timeout after initial connection usually means server is responding
+                        return True
+                    except Exception as e:
+                        logger.warning(f"SSE endpoint {proxy_pass_url} failed with exception: {type(e).__name__} - {e}")
+                        return False
+                else:
+                    logger.info(f"[TRACE] Detected MCP endpoint in URL, using standard HTTP handling")
+                    response = await client.get(proxy_pass_url, headers=headers, follow_redirects=True)
+                    return self._is_mcp_endpoint_healthy(response)
+            except Exception as e:
+                logger.warning(f"Health check failed for {proxy_pass_url}: {type(e).__name__} - {e}")
+                return False
+        
+        # Try endpoints based on supported transports, prioritizing streamable-http
+        logger.info(f"[TRACE] No transport endpoint in URL: {proxy_pass_url}")
+        logger.info(f"[TRACE] Supported transports: {supported_transports}")
+        base_url = proxy_pass_url.rstrip('/')
+        
+        # Try streamable-http first (default preference)
+        if "streamable-http" in supported_transports:
+            logger.info(f"[TRACE] Trying streamable-http transport")
+            try:
+                mcp_endpoint = f"{base_url}/mcp"
+                # Use GET with proper headers for MCP endpoints
+                headers = {
+                    'Accept': 'text/event-stream',
+                    'Content-Type': 'application/json'
+                }
+                response = await client.get(mcp_endpoint, headers=headers, follow_redirects=True)
+                if self._is_mcp_endpoint_healthy(response):
+                    return True
+            except Exception:
+                pass
+        
+        # Fallback to SSE
+        if "sse" in supported_transports:
+            logger.info(f"[TRACE] Trying SSE transport")
+            try:
+                sse_endpoint = f"{base_url}/sse"
+                # Use GET with proper headers for MCP endpoints
+                headers = {
+                    'Accept': 'text/event-stream',
+                    'Content-Type': 'application/json'
+                }
+                # Use shorter timeout for SSE since it starts streaming immediately
+                timeout = httpx.Timeout(connect=5.0, read=2.0, write=5.0, pool=5.0)
+                response = await client.get(sse_endpoint, headers=headers, follow_redirects=True, timeout=timeout)
+                if self._is_mcp_endpoint_healthy(response):
+                    return True
+            except (httpx.TimeoutException, asyncio.TimeoutError) as e:
+                # For SSE endpoints, timeout while reading streaming response is normal after getting 200 OK
+                logger.info(f"SSE endpoint {sse_endpoint} timed out while streaming (expected): {e}")
+                # If we can extract status code from response, check if it was 200
+                if hasattr(e, 'response') and e.response and e.response.status_code == 200:
+                    logger.info(f"SSE endpoint {sse_endpoint} returned 200 OK before timeout - considering healthy")
+                    return True
+                # For SSE, timeout after initial connection usually means server is responding
+                return True
+            except Exception as e:
+                logger.error(f"SSE endpoint {sse_endpoint} failed with exception: {type(e).__name__} - {e}")
+                pass
+        
+        # If no specific transports, try default streamable-http then sse
+        if not supported_transports or supported_transports == []:
+            logger.info(f"[TRACE] No specific transports defined, trying defaults")
+            try:
+                mcp_endpoint = f"{base_url}/mcp"
+                # Use GET with proper headers for MCP endpoints
+                headers = {
+                    'Accept': 'text/event-stream',
+                    'Content-Type': 'application/json'
+                }
+                response = await client.get(mcp_endpoint, headers=headers, follow_redirects=True)
+                if self._is_mcp_endpoint_healthy(response):
+                    return True
+            except Exception:
+                pass
+                
+            try:
+                sse_endpoint = f"{base_url}/sse"
+                # Use GET with proper headers for MCP endpoints
+                headers = {
+                    'Accept': 'text/event-stream',
+                    'Content-Type': 'application/json'
+                }
+                # Use shorter timeout for SSE since it starts streaming immediately
+                timeout = httpx.Timeout(connect=5.0, read=2.0, write=5.0, pool=5.0)
+                response = await client.get(sse_endpoint, headers=headers, follow_redirects=True, timeout=timeout)
+                if self._is_mcp_endpoint_healthy(response):
+                    return True
+            except (httpx.TimeoutException, asyncio.TimeoutError) as e:
+                # For SSE endpoints, timeout while reading streaming response is normal after getting 200 OK
+                logger.info(f"SSE endpoint {sse_endpoint} timed out while streaming (expected): {e}")
+                # If we can extract status code from response, check if it was 200
+                if hasattr(e, 'response') and e.response and e.response.status_code == 200:
+                    logger.info(f"SSE endpoint {sse_endpoint} returned 200 OK before timeout - considering healthy")
+                    return True
+                # For SSE, timeout after initial connection usually means server is responding
+                return True
+            except Exception as e:
+                logger.error(f"SSE endpoint {sse_endpoint} failed with exception: {type(e).__name__} - {e}")
+                pass
+        
+        return False
+
+
+    def _is_mcp_endpoint_healthy(self, response) -> bool:
+        """
+        Determine if an MCP endpoint is healthy based on HTTP response.
+        
+        For MCP endpoints, we consider them healthy if:
+        1. HTTP 200 OK - Normal successful response
+        2. HTTP 400 Bad Request with specific JSON-RPC error indicating missing session ID
+        
+        The 400 status with "Missing session ID" error is considered healthy because:
+        - It proves the MCP endpoint is reachable and functioning
+        - The server is properly validating requests according to MCP protocol
+        - It's rejecting our basic GET request because we're not providing a session ID
+        - This is expected behavior for a working MCP server when accessed without proper session
+        
+        Args:
+            response: httpx.Response object from the health check request
+            
+        Returns:
+            bool: True if the endpoint is considered healthy, False otherwise
+        """
+        # HTTP 200 is always healthy
+        if response.status_code == 200:
+            return True
+            
+        # HTTP 400 is healthy only if it's the expected MCP session error
+        if response.status_code == 400:
+            try:
+                # Parse the JSON response
+                response_data = response.json()
+                
+                # Check for the specific JSON-RPC error indicating missing session ID
+                # This is the expected response from a healthy MCP endpoint when accessed without session
+                if (response_data.get("jsonrpc") == "2.0" and 
+                    response_data.get("id") == "server-error" and 
+                    isinstance(response_data.get("error"), dict)):
+                    
+                    error = response_data["error"]
+                    if (error.get("code") == -32600 and 
+                        "Missing session ID" in error.get("message", "")):
+                        return True
+                        
+            except (ValueError, KeyError, TypeError):
+                # If we can't parse JSON or the structure is wrong, treat as unhealthy
+                pass
+                
+        # All other status codes (404, 500, etc.) are considered unhealthy
+        return False
+
         
     async def _update_tools_background(self, service_path: str, proxy_pass_url: str):
         """Update tool list in the background without blocking health checks."""
@@ -396,7 +582,9 @@ class HealthMonitoringService:
             from ..core.mcp_client import mcp_client_service
             from ..services.server_service import server_service
             
-            tool_list = await mcp_client_service.get_tools_from_server(proxy_pass_url)
+            # Get server info to pass transport configuration
+            server_info = server_service.get_server_info(service_path)
+            tool_list = await mcp_client_service.get_tools_from_server_with_server_info(proxy_pass_url, server_info)
             
             if tool_list is not None:
                 new_tool_count = len(tool_list)
@@ -457,11 +645,10 @@ class HealthMonitoringService:
 
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(settings.health_check_timeout_seconds)) as client:
-                # Try to reach the service SSE endpoint like in main_old.py
-                sse_endpoint = f"{proxy_pass_url.rstrip('/')}/sse"
-                response = await client.head(sse_endpoint, follow_redirects=True)
+                # Use transport-aware endpoint checking
+                success = await self._check_server_endpoint_transport_aware(client, proxy_pass_url, server_info)
                 
-                if response.status_code == 200:
+                if success:
                     current_status = "healthy"
                     logger.info(f"Health check successful for {service_path} ({proxy_pass_url}).")
                     
@@ -469,8 +656,8 @@ class HealthMonitoringService:
                     asyncio.create_task(self._update_tools_background(service_path, proxy_pass_url))
                         
                 else:
-                    current_status = f"unhealthy: HTTP {response.status_code}"
-                    logger.info(f"Health check unhealthy (HTTP {response.status_code}) for {service_path}")
+                    current_status = "unhealthy: endpoint check failed"
+                    logger.info(f"Health check failed for {service_path} ({proxy_pass_url}).")
                     
         except httpx.TimeoutException:
             current_status = "unhealthy: timeout"

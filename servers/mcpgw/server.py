@@ -1283,7 +1283,8 @@ async def intelligent_tool_finder(
         logger.info(f"MCPGW: Processing service {service_path} with full_server_info: {full_server_info}")
         service_name = full_server_info.get("server_name", "Unknown Service")
         tool_list = full_server_info.get("tool_list", [])
-        logger.info(f"MCPGW: Found {len(tool_list)} tools for service {service_name} at path {service_path}") 
+        supported_transports = full_server_info.get("supported_transports", ["streamable-http"])
+        logger.info(f"MCPGW: Found {len(tool_list)} tools for service {service_name} at path {service_path}, supported_transports: {supported_transports}") 
         for tool_info in tool_list:
             tool_name = tool_info.get("name", "Unknown Tool")
             parsed_desc = tool_info.get("parsed_description", {})
@@ -1309,6 +1310,7 @@ async def intelligent_tool_finder(
                 "tool_schema": tool_info.get("schema", {}),
                 "service_path": service_path,
                 "service_name": service_name,
+                "supported_transports": supported_transports,
             })
 
     logger.info(f"MCPGW: Scope filtering results - {tools_before_scope_filter} tools found, {len(candidate_tools)} accessible after filtering")
@@ -1351,7 +1353,7 @@ async def intelligent_tool_finder(
     # Remove the temporary 'text_for_embedding' field from results
     for res in final_results:
         del res["text_for_embedding"]
-        
+    logger.info(f"intelligent_tool_finder, final_results: {json.dumps(final_results, indent=2, default=str)}")    
     return final_results
 
 
