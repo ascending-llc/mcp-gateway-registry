@@ -56,6 +56,30 @@ def normalize_sse_endpoint_url(endpoint_url: str) -> str:
 import httpx
 
 
+def _build_headers_for_server(server_info: dict = None) -> Dict[str, str]:
+    """
+    Build HTTP headers for server requests by merging server-specific headers.
+    
+    Args:
+        server_info: Server configuration dictionary
+        
+    Returns:
+        Headers dictionary with server-specific headers
+    """
+    headers = {}
+    
+    # Merge server-specific headers if present
+    if server_info:
+        server_headers = server_info.get("headers", [])
+        if server_headers and isinstance(server_headers, list):
+            for header_dict in server_headers:
+                if isinstance(header_dict, dict):
+                    headers.update(header_dict)
+                    logger.debug(f"Added server headers to MCP client: {header_dict}")
+    
+    return headers
+
+
 def normalize_sse_endpoint_url_for_request(url_str: str) -> str:
     """
     Normalize URLs in HTTP requests by removing mount paths.
@@ -196,33 +220,60 @@ async def get_tools_from_server_with_transport(base_url: str, transport: str = "
         return None
 
 
-async def _get_tools_streamable_http(base_url: str) -> List[dict] | None:
+async def _get_tools_streamable_http(base_url: str, server_info: dict = None) -> List[dict] | None:
     """Get tools using streamable-http transport"""
+    # Build headers for the server
+    headers = _build_headers_for_server(server_info)
+    
     # If URL already has MCP endpoint, use it directly
     if base_url.endswith('/mcp') or '/mcp/' in base_url:
         mcp_url = base_url
         if not mcp_url.endswith('/'):
             mcp_url += '/'
+        
+        try:
+            async with streamablehttp_client(url=mcp_url, headers=headers) as (read, write, get_session_id):
+                async with ClientSession(read, write) as session:
+                    await asyncio.wait_for(session.initialize(), timeout=10.0)
+                    tools_response = await asyncio.wait_for(session.list_tools(), timeout=15.0)
+                    
+                    return _extract_tool_details(tools_response)
+        except Exception as e:
+            logger.error(f"MCP Check Error: Streamable-HTTP connection failed to {base_url}: {e}")
+            return None
     else:
-        mcp_url = base_url.rstrip('/') + "/mcp/"
+        # Try with /mcp suffix first, then without if it fails
+        endpoints_to_try = [
+            base_url.rstrip('/') + "/mcp/",
+            base_url.rstrip('/') + "/"
+        ]
+        
+        for mcp_url in endpoints_to_try:
+            try:
+                logger.info(f"MCP Client: Trying streamable-http endpoint: {mcp_url}")
+                async with streamablehttp_client(url=mcp_url, headers=headers) as (read, write, get_session_id):
+                    async with ClientSession(read, write) as session:
+                        await asyncio.wait_for(session.initialize(), timeout=10.0)
+                        tools_response = await asyncio.wait_for(session.list_tools(), timeout=15.0)
+                        
+                        logger.info(f"MCP Client: Successfully connected to {mcp_url}")
+                        return _extract_tool_details(tools_response)
+                        
+            except asyncio.TimeoutError:
+                logger.error(f"MCP Check Error: Timeout during streamable-http session with {mcp_url}.")
+                if mcp_url == endpoints_to_try[0]:
+                    continue
+                return None
+            except Exception as e:
+                logger.error(f"MCP Check Error: Streamable-HTTP connection failed to {mcp_url}: {e}")
+                if mcp_url == endpoints_to_try[0]:
+                    continue
+                return None
     
-    try:
-        async with streamablehttp_client(url=mcp_url) as (read, write, get_session_id):
-            async with ClientSession(read, write) as session:
-                await asyncio.wait_for(session.initialize(), timeout=10.0)
-                tools_response = await asyncio.wait_for(session.list_tools(), timeout=15.0)
-                
-                return _extract_tool_details(tools_response)
-                
-    except asyncio.TimeoutError:
-        logger.error(f"MCP Check Error: Timeout during streamable-http session with {base_url}.")
-        return None
-    except Exception as e:
-        logger.error(f"MCP Check Error: Streamable-HTTP connection failed to {base_url}: {e}")
-        return None
+    return None
 
 
-async def _get_tools_sse(base_url: str) -> List[dict] | None:
+async def _get_tools_sse(base_url: str, server_info: dict = None) -> List[dict] | None:
     """Get tools using SSE transport (legacy method with patches)"""
     # If URL already has SSE endpoint, use it directly
     if base_url.endswith('/sse') or '/sse/' in base_url:
@@ -232,6 +283,9 @@ async def _get_tools_sse(base_url: str) -> List[dict] | None:
     
     secure_prefix = "s" if sse_url.startswith("https://") else ""
     mcp_server_url = f"http{secure_prefix}://{sse_url[len(f'http{secure_prefix}://'):]}"
+    
+    # Build headers for the server
+    headers = _build_headers_for_server(server_info)
 
     try:
         # Monkey patch httpx to fix mount path issues (legacy SSE support)
@@ -247,7 +301,7 @@ async def _get_tools_sse(base_url: str) -> List[dict] | None:
         httpx.AsyncClient.request = patched_request
         
         try:
-            async with sse_client(mcp_server_url) as (read, write):
+            async with sse_client(mcp_server_url, headers=headers) as (read, write):
                 async with ClientSession(read, write, sampling_callback=None) as session:
                     await asyncio.wait_for(session.initialize(), timeout=10.0)
                     tools_response = await asyncio.wait_for(session.list_tools(), timeout=15.0)
@@ -359,9 +413,9 @@ async def get_tools_from_server_with_server_info(base_url: str, server_info: dic
     
     try:
         if transport == "streamable-http":
-            return await _get_tools_streamable_http(base_url)
+            return await _get_tools_streamable_http(base_url, server_info)
         elif transport == "sse":
-            return await _get_tools_sse(base_url)
+            return await _get_tools_sse(base_url, server_info)
         else:
             logger.error(f"Unsupported transport type: {transport}")
             return None

@@ -1,0 +1,628 @@
+{
+  "server_name": "SRE Gateway (Bedrock AgentCore Gateway)",
+  "description": "Tools for an SRE Agent.",
+  "path": "/sre-gateway",
+  "proxy_pass_url": "https://sre-gateway-tetssad921.gateway.bedrock-agentcore.us-east-1.amazonaws.com",
+  "supported_transports": [
+    "streamable-http"
+  ],
+  "tags": [
+    "sre",
+    "gateway",
+    "agentcore"
+  ],
+  "headers": [
+    {
+      "Authorization": "Bearer MCP_SERVER1_AUTH_TOKEN"
+    }
+  ],
+  "num_tools": 21,
+  "num_stars": 1,
+  "is_python": true,
+  "license": "MIT-0",
+  "tool_list": [
+    {
+      "name": "x_amz_bedrock_agentcore_search",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "k8s-api___get_cluster_events",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "severity": {
+            "description": "Filter by event severity",
+            "type": "string",
+            "enum": [
+              "Warning",
+              "Error",
+              "Normal"
+            ]
+          },
+          "since": {
+            "format": "date-time",
+            "description": "Filter events since this timestamp",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "k8s-api___get_deployment_status",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "deployment_name": {
+            "description": "Specific deployment name",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "Kubernetes namespace",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "k8s-api___get_node_status",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "node_name": {
+            "description": "Specific node name",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "k8s-api___get_pod_status",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "description": "Kubernetes namespace to filter pods",
+            "type": "string"
+          },
+          "pod_name": {
+            "description": "Specific pod name to retrieve",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "k8s-api___get_resource_usage",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "description": "Filter by namespace",
+            "type": "string"
+          },
+          "resource_type": {
+            "description": "Type of resource to monitor",
+            "type": "string",
+            "enum": [
+              "cpu",
+              "memory",
+              "pods"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "logs-api___analyze_log_patterns",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "time_window": {
+            "description": "Time window for pattern analysis",
+            "type": "string",
+            "enum": [
+              "1h",
+              "6h",
+              "24h",
+              "7d"
+            ]
+          },
+          "min_occurrences": {
+            "description": "Minimum occurrences to be considered a pattern",
+            "type": "integer"
+          }
+        }
+      }
+    },
+    {
+      "name": "logs-api___count_log_events",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "event_type": {
+            "description": "Type of event to count",
+            "type": "string"
+          },
+          "time_window": {
+            "description": "Time window for counting",
+            "type": "string",
+            "enum": [
+              "1h",
+              "6h",
+              "24h",
+              "7d"
+            ]
+          },
+          "group_by": {
+            "description": "Group results by this field",
+            "type": "string",
+            "enum": [
+              "service",
+              "level",
+              "hour"
+            ]
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      }
+    },
+    {
+      "name": "logs-api___get_error_logs",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "description": "Filter by service name",
+            "type": "string"
+          },
+          "since": {
+            "format": "date-time",
+            "description": "Get errors since this timestamp",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "logs-api___get_recent_logs",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "description": "Filter by service name",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Number of recent logs to return",
+            "type": "integer"
+          }
+        }
+      }
+    },
+    {
+      "name": "logs-api___search_logs",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "start_time": {
+            "format": "date-time",
+            "description": "Start time for log search",
+            "type": "string"
+          },
+          "pattern": {
+            "description": "Search pattern or keyword",
+            "type": "string"
+          },
+          "end_time": {
+            "format": "date-time",
+            "description": "End time for log search",
+            "type": "string"
+          },
+          "log_level": {
+            "description": "Filter by log level",
+            "type": "string",
+            "enum": [
+              "ERROR",
+              "WARN",
+              "INFO",
+              "DEBUG"
+            ]
+          }
+        },
+        "required": [
+          "pattern"
+        ]
+      }
+    },
+    {
+      "name": "metrics-api___analyze_trends",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "anomaly_threshold": {
+            "description": "Percentile threshold for anomaly detection",
+            "type": "number"
+          },
+          "metric_name": {
+            "description": "Name of the metric to analyze",
+            "type": "string"
+          },
+          "time_window": {
+            "description": "Time window for trend analysis",
+            "type": "string",
+            "enum": [
+              "1h",
+              "6h",
+              "24h",
+              "7d"
+            ]
+          },
+          "service": {
+            "description": "Filter by service name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "metric_name"
+        ]
+      }
+    },
+    {
+      "name": "metrics-api___get_availability_metrics",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "time_window": {
+            "description": "Time window for availability calculation",
+            "type": "string",
+            "enum": [
+              "1h",
+              "6h",
+              "24h",
+              "7d",
+              "30d"
+            ]
+          },
+          "service": {
+            "description": "Service name",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "metrics-api___get_error_rates",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "time_window": {
+            "description": "Time window for error rates",
+            "type": "string",
+            "enum": [
+              "1h",
+              "6h",
+              "24h",
+              "7d"
+            ]
+          },
+          "service": {
+            "description": "Filter by service name",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "metrics-api___get_performance_metrics",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "start_time": {
+            "format": "date-time",
+            "description": "Start time for metrics",
+            "type": "string"
+          },
+          "service": {
+            "description": "Filter by service name",
+            "type": "string"
+          },
+          "metric_type": {
+            "description": "Type of performance metric",
+            "type": "string",
+            "enum": [
+              "response_time",
+              "throughput",
+              "cpu_usage",
+              "memory_usage"
+            ]
+          },
+          "end_time": {
+            "format": "date-time",
+            "description": "End time for metrics",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "metrics-api___get_resource_metrics",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "time_window": {
+            "description": "Time window for metrics",
+            "type": "string",
+            "enum": [
+              "1h",
+              "6h",
+              "24h",
+              "7d"
+            ]
+          },
+          "service": {
+            "description": "Filter by service name",
+            "type": "string"
+          },
+          "resource_type": {
+            "description": "Type of resource metric",
+            "type": "string",
+            "enum": [
+              "cpu",
+              "memory",
+              "disk",
+              "network"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "runbooks-api___get_common_resolutions",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "issue": {
+            "description": "Issue or error type",
+            "type": "string"
+          },
+          "service": {
+            "description": "Affected service",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issue"
+        ]
+      }
+    },
+    {
+      "name": "runbooks-api___get_escalation_procedures",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "severity": {
+            "description": "Incident severity",
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          },
+          "incident_type": {
+            "description": "Type of incident",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "runbooks-api___get_incident_playbook",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "playbook_id": {
+            "description": "Unique identifier of the playbook",
+            "type": "string"
+          }
+        },
+        "required": [
+          "playbook_id"
+        ]
+      }
+    },
+    {
+      "name": "runbooks-api___get_troubleshooting_guide",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "issue_type": {
+            "description": "Specific issue type",
+            "type": "string"
+          },
+          "category": {
+            "description": "Troubleshooting category",
+            "type": "string",
+            "enum": [
+              "kubernetes",
+              "performance",
+              "networking",
+              "database"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "runbooks-api___search_runbooks",
+      "parsed_description": {
+        "main": "No description available.",
+        "args": null,
+        "returns": null,
+        "raises": null
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "severity": {
+            "description": "Incident severity level",
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          },
+          "incident_type": {
+            "description": "Type of incident",
+            "type": "string",
+            "enum": [
+              "performance",
+              "availability",
+              "security",
+              "deployment"
+            ]
+          },
+          "keyword": {
+            "description": "Search keyword in runbook content",
+            "type": "string"
+          }
+        }
+      }
+    }
+  ]
+}

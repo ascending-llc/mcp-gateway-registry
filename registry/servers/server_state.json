@@ -2,5 +2,6 @@
   "/currenttime": true,
   "/fininfo": true,
   "/mcpgw": true,
-  "/realserverfaketools": true
+  "/realserverfaketools": true,
+  "/sre-gateway": true
 }
