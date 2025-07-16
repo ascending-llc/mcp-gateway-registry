@@ -23,6 +23,7 @@ The MCP Gateway & Registry solves these challenges by providing a unified platfo
 
 | Resource | Link |
 |----------|------|
+| **Demo Video** | [Amazon Bedrock AgentCore Gateway Integration](https://github.com/user-attachments/assets/6ba9deef-017d-4178-9dd2-257d13fd2c41) |
 | **Demo Video** | [Dynamic Tool Discovery and Invocation](https://github.com/user-attachments/assets/cee1847d-ecc1-406b-a83e-ebc80768430d) |
 | **Blog Post** | [How the MCP Gateway Centralizes Your AI Model's Tools](https://community.aws/content/2xmhMS0eVnA10kZA0eES46KlyMU/how-the-mcp-gateway-centralizes-your-ai-model-s-tools) |
 
@@ -199,6 +200,12 @@ Authentication and authorization are very key aspects of this solution. The MCP 
 
 These authentication patterns are discussed in detail in [`docs/auth.md`](docs/auth.md). An Amazon Cognito-based implementation with step-by-step setup details is provided in [`docs/cognito.md`](docs/cognito.md).
 
+## Amazon Bedrock AgentCore Gateway Integration
+
+Through the MCP Gateway & Registry, you can now connect to an Amazon Bedrock AgentCore Gateway and discover the tools provided by this gateway through the Registry. This integration enables fine-grained access control to the tools and end-to-end authentication overlayed over MCP, providing enterprise-grade security and monitoring capabilities for AI agents accessing AWS services.
+
+![Amazon Bedrock AgentCore Gateway](docs/img/br-agent-core-gw-2.png)
+
 ## Features
 
 *   **MCP Tool Discovery:** Enables automatic tool discovery by AI Agents and Agent developers. Fetches and displays the list of tools (name, description, schema) based on natural language queries (e.g. _do I have tools to get stock information?_).
@@ -353,7 +360,7 @@ The deployment includes these containers:
    - Provides admin access by default
    - **Note:** This approach should only be used for testing and will soon require setting `ENABLE_DEV_MODE=true` in your `.env` file
 
-   ![MCP Registry](docs/img/registry.png)
+   ![MCP Registry](docs/img/br-agent-core-gw-1.png)
 
 #### Post-Installation
 
