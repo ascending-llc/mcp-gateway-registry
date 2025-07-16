@@ -116,6 +116,36 @@ mcp-servers-unrestricted/read:
     tools:
       - get_stock_aggregates
       - print_stock_data
+  - server: sre-gateway
+    methods:
+      - initialize
+      - notifications/initialized
+      - ping
+      - tools/list
+      - tools/call
+    tools:
+      - x_amz_bedrock_agentcore_search
+      - k8s-api___get_cluster_events
+      - k8s-api___get_deployment_status
+      - k8s-api___get_node_status
+      - k8s-api___get_pod_status
+      - k8s-api___get_resource_usage
+      - logs-api___analyze_log_patterns
+      - logs-api___count_log_events
+      - logs-api___get_error_logs
+      - logs-api___get_recent_logs
+      - logs-api___search_logs
+      - metrics-api___analyze_trends
+      - metrics-api___get_availability_metrics
+      - metrics-api___get_error_rates
+      - metrics-api___get_performance_metrics
+      - metrics-api___get_resource_metrics
+      - runbooks-api___get_common_resolutions
+      - runbooks-api___get_escalation_procedures
+      - runbooks-api___get_incident_playbook
+      - runbooks-api___get_troubleshooting_guide
+      - runbooks-api___search_runbooks
+
 
 mcp-servers-unrestricted/execute:
     - server: auth_server
@@ -174,6 +204,35 @@ mcp-servers-unrestricted/execute:
       tools:
         - get_stock_aggregates
         - print_stock_data
+    - server: sre-gateway
+      methods:
+        - initialize
+        - notifications/initialized
+        - ping
+        - tools/list
+        - tools/call
+      tools:
+        - x_amz_bedrock_agentcore_search
+        - k8s-api___get_cluster_events
+        - k8s-api___get_deployment_status
+        - k8s-api___get_node_status
+        - k8s-api___get_pod_status
+        - k8s-api___get_resource_usage
+        - logs-api___analyze_log_patterns
+        - logs-api___count_log_events
+        - logs-api___get_error_logs
+        - logs-api___get_recent_logs
+        - logs-api___search_logs
+        - metrics-api___analyze_trends
+        - metrics-api___get_availability_metrics
+        - metrics-api___get_error_rates
+        - metrics-api___get_performance_metrics
+        - metrics-api___get_resource_metrics
+        - runbooks-api___get_common_resolutions
+        - runbooks-api___get_escalation_procedures
+        - runbooks-api___get_incident_playbook
+        - runbooks-api___get_troubleshooting_guide
+        - runbooks-api___search_runbooks
 
 mcp-servers-restricted/read:
   - server: auth_server

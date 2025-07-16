@@ -3,6 +3,7 @@ import asyncio
 import httpx
 from pathlib import Path
 from typing import Dict, Any, Optional
+from urllib.parse import urlparse
 
 from .config import settings
 
@@ -223,6 +224,22 @@ class NginxConfigService:
     def _create_location_block(self, path: str, proxy_pass_url: str, transport_type: str) -> str:
         """Create a single nginx location block with transport-specific configuration."""
         
+        # Extract hostname from proxy_pass_url for external services
+        parsed_url = urlparse(proxy_pass_url)
+        upstream_host = parsed_url.netloc
+        
+        # Determine whether to use upstream hostname or preserve original host
+        # For external services (https), use the upstream hostname
+        # For internal services (http without dots in hostname), preserve original host
+        if parsed_url.scheme == 'https' or '.' in upstream_host:
+            # External service - use upstream hostname
+            host_header = upstream_host
+            logger.info(f"Using upstream hostname for Host header: {host_header}")
+        else:
+            # Internal service - preserve original host
+            host_header = '$host'
+            logger.info(f"Using original host for Host header: $host")
+        
         # Common proxy settings
         common_settings = f"""
         # Authenticate request - pass entire request to auth server
@@ -240,7 +257,7 @@ class NginxConfigService:
         # Proxy to MCP server
         proxy_pass {proxy_pass_url};
         proxy_http_version 1.1;
-        proxy_set_header Host $host;
+        proxy_set_header Host {host_header};
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -250,6 +267,7 @@ class NginxConfigService:
         
         # Pass through the original authentication headers
         proxy_set_header Authorization $http_authorization;
+        proxy_set_header X-Authorization $http_x_authorization;
         proxy_set_header X-User-Pool-Id $http_x_user_pool_id;
         proxy_set_header X-Client-Id $http_x_client_id;
         proxy_set_header X-Region $http_x_region;

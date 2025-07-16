@@ -743,7 +743,7 @@ async def validate_request(request: Request):
     
     try:
         # Extract headers
-        authorization = request.headers.get("Authorization")
+        authorization = request.headers.get("X-Authorization")
         cookie_header = request.headers.get("Cookie", "")
         user_pool_id = request.headers.get("X-User-Pool-Id")
         client_id = request.headers.get("X-Client-Id")

@@ -112,6 +112,20 @@ else
     echo "Model already exists, skipping download."
 fi
 
+# --- Environment Variable Substitution for MCP Server Auth Tokens ---
+echo "Processing MCP Server configuration files..."
+for i in $(seq 1 99); do
+    env_var_name="MCP_SERVER${i}_AUTH_TOKEN"
+    env_var_value=$(eval echo \$$env_var_name)
+    
+    if [ ! -z "$env_var_value" ]; then
+        echo "Found $env_var_name, substituting in server JSON files..."
+        # Replace the literal environment variable name with its value in all JSON files
+        find /app/registry/servers -name "*.json" -type f -exec sed -i "s|$env_var_name|$env_var_value|g" {} \;
+    fi
+done
+echo "MCP Server configuration processing completed."
+
 # --- Start Background Services ---
 export EMBEDDINGS_MODEL_NAME=$EMBEDDINGS_MODEL_NAME
 export EMBEDDINGS_MODEL_DIMENSIONS=384

@@ -81,6 +81,32 @@ logging.basicConfig(
 # Get logger
 logger = logging.getLogger(__name__)
 
+# Global constant for default MCP tool name to filter and use
+DEFAULT_MCP_TOOL_NAME = "intelligent_tool_finder"
+
+
+def enable_verbose_logging():
+    """Enable verbose debug logging for HTTP libraries and main logger."""
+    # Set main logger to DEBUG level
+    logger.setLevel(logging.DEBUG)
+    
+    # Enable debug logging for httpx to see request/response details
+    httpx_logger = logging.getLogger("httpx")
+    httpx_logger.setLevel(logging.DEBUG)
+    httpx_logger.propagate = True
+
+    # Enable debug logging for httpcore (underlying HTTP library)
+    httpcore_logger = logging.getLogger("httpcore")
+    httpcore_logger.setLevel(logging.DEBUG)
+    httpcore_logger.propagate = True
+
+    # Enable debug logging for mcp client libraries
+    mcp_logger = logging.getLogger("mcp")
+    mcp_logger.setLevel(logging.DEBUG)
+    mcp_logger.propagate = True
+    
+    logger.info("Verbose logging enabled for httpx, httpcore, mcp libraries, and main logger")
+
 def get_auth_mode_from_args() -> tuple[bool, str, str]:
     """
     Parse command line arguments to determine authentication mode and env file names.
@@ -231,6 +257,14 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument('--message', type=str, default='what is the current time in Clarksburg, MD',
                         help='Message to send to the agent')
     
+    # MCP tool filtering arguments
+    parser.add_argument('--mcp-tool-name', type=str, default=DEFAULT_MCP_TOOL_NAME,
+                        help=f'Name of the MCP tool to filter and use (default: {DEFAULT_MCP_TOOL_NAME})')
+    
+    # Verbose logging argument
+    parser.add_argument('--verbose', '-v', action='store_true',
+                        help='Enable verbose HTTP debugging output')
+    
     # Authentication method arguments
     parser.add_argument('--use-session-cookie', action='store_true',
                         help='Use session cookie authentication instead of M2M')
@@ -260,6 +294,10 @@ def parse_arguments() -> argparse.Namespace:
                         help='Optional scopes for the token request')
     
     args = parser.parse_args()
+    
+    # Enable verbose logging if requested
+    if args.verbose:
+        enable_verbose_logging()
     
     # Validate authentication parameters based on method
     if args.use_session_cookie:
@@ -394,19 +432,29 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
     }
     
     # TRACE: Print all parameters received by invoke_mcp_tool
-    logger.info(f"invoke_mcp_tool TRACE - Parameters received:")
-    logger.info(f"  mcp_registry_url: {mcp_registry_url}")
-    logger.info(f"  server_name: {server_name}")
-    logger.info(f"  tool_name: {tool_name}")
-    logger.info(f"  arguments: {arguments}")
-    logger.info(f"  auth_token: {auth_token[:50] if auth_token else 'None'}...")
-    logger.info(f"  user_pool_id: {user_pool_id}")
-    logger.info(f"  client_id: {client_id}")
-    logger.info(f"  region: {region}")
-    logger.info(f"  auth_method: {auth_method}")
-    logger.info(f"  session_cookie: {session_cookie}")
-    logger.info(f"  supported_transports: {supported_transports}")
-    logger.info(f"invoke_mcp_tool TRACE - Headers built: {headers}")
+    logger.debug(f"invoke_mcp_tool TRACE - Parameters received:")
+    logger.debug(f"  mcp_registry_url: {mcp_registry_url}")
+    logger.debug(f"  server_name: {server_name}")
+    logger.debug(f"  tool_name: {tool_name}")
+    logger.debug(f"  arguments: {arguments}")
+    logger.debug(f"  auth_token: {auth_token[:50] if auth_token else 'None'}...")
+    logger.debug(f"  user_pool_id: {user_pool_id}")
+    logger.debug(f"  client_id: {client_id}")
+    logger.debug(f"  region: {region}")
+    logger.debug(f"  auth_method: {auth_method}")
+    logger.debug(f"  session_cookie: {session_cookie}")
+    logger.debug(f"  supported_transports: {supported_transports}")
+    logger.debug(f"invoke_mcp_tool TRACE - Headers built: {headers}")
+    
+    # Check for server-specific AUTH_TOKEN environment variable
+    # Convert server_name to env var format: /sre-gateway -> SRE_GATEWAY_AUTH_TOKEN
+    server_env_name = server_name.strip('/').upper().replace('-', '_') + '_AUTH_TOKEN'
+    server_auth_token = os.environ.get(server_env_name)
+    
+    if server_auth_token:
+        logger.info(f"Found server-specific auth token in environment variable: {server_env_name}")
+        # Use the server-specific token for Authorization header
+        headers['Authorization'] = f'Bearer {server_auth_token}'
     
     if auth_method == "session_cookie" and session_cookie:
         headers['Cookie'] = f'mcp_gateway_session={session_cookie}'
@@ -416,10 +464,16 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
             'X-Client-Id': redact_sensitive_value(client_id) if client_id else '',
             'X-Region': region or 'us-east-1'
         }
+        if server_auth_token:
+            redacted_headers['Authorization'] = f'Bearer {redact_sensitive_value(server_auth_token)}'
     else:
-        headers['Authorization'] = f'Bearer {auth_token}'
+        headers['X-Authorization'] = f'Bearer {auth_token}'
+        # If no server-specific token, use the general auth_token
+        if not server_auth_token:
+            headers['Authorization'] = f'Bearer {auth_token}'
         redacted_headers = {
-            'Authorization': f'Bearer {redact_sensitive_value(auth_token)}',
+            'Authorization': f'Bearer {redact_sensitive_value(server_auth_token or auth_token)}',
+            'X-Authorization': f'Bearer {redact_sensitive_value(auth_token)}',
             'X-User-Pool-Id': redact_sensitive_value(user_pool_id) if user_pool_id else '',
             'X-Client-Id': redact_sensitive_value(client_id) if client_id else '',
             'X-Region': region or 'us-east-1'
@@ -707,7 +761,8 @@ async def main():
     model = ChatAnthropic(
         model=args.model,
         api_key=anthropic_api_key,
-        temperature=0
+        temperature=0,
+        max_tokens=8192,
     )
     
     try:
@@ -722,7 +777,7 @@ async def main():
         else:
             # For both M2M and pre-generated JWT tokens
             auth_headers = {
-                'Authorization': f'Bearer {access_token}',
+                'X-Authorization': f'Bearer {access_token}',
                 'X-User-Pool-Id': args.user_pool_id,
                 'X-Client-Id': args.client_id,
                 'X-Region': args.region
@@ -731,7 +786,7 @@ async def main():
         # Log redacted headers
         redacted_headers = {}
         for k, v in auth_headers.items():
-            if k in ['Authorization', 'Cookie', 'X-User-Pool-Id', 'X-Client-Id']:
+            if k in ['X-Authorization', 'Cookie', 'X-User-Pool-Id', 'X-Client-Id']:
                 redacted_headers[k] = redact_sensitive_value(v) if v else ''
             else:
                 redacted_headers[k] = v
@@ -755,9 +810,12 @@ async def main():
                 mcp_tools = await client.get_tools()
                 logger.info(f"Available MCP tools: {[tool.name for tool in mcp_tools]}")
                 
-                # Add the calculator and invoke_mcp_tool to the tools array
-                # The invoke_mcp_tool function already supports authentication parameters
-                all_tools = [calculator, invoke_mcp_tool] + mcp_tools
+                # Filter MCP tools to only include the specified tool
+                filtered_tools = [tool for tool in mcp_tools if tool.name == args.mcp_tool_name]
+                logger.info(f"Filtered MCP tools ({args.mcp_tool_name} only): {[tool.name for tool in filtered_tools]}")
+                
+                # Add only the calculator, invoke_mcp_tool, and the specified MCP tool to the tools array
+                all_tools = [calculator, invoke_mcp_tool] + filtered_tools
                 logger.info(f"All available tools: {[tool.name if hasattr(tool, 'name') else tool.__name__ for tool in all_tools]}")
                 
                 # Create the agent with the model and all tools

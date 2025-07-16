@@ -389,6 +389,33 @@ class HealthMonitoringService:
         return previous_status != new_status
 
 
+    def _build_headers_for_server(self, server_info: Dict) -> Dict[str, str]:
+        """
+        Build HTTP headers for server requests by merging default headers with server-specific headers.
+        
+        Args:
+            server_info: Server configuration dictionary
+            
+        Returns:
+            Merged headers dictionary
+        """
+        # Start with default headers for MCP endpoints
+        headers = {
+            'Accept': 'application/json, text/event-stream',
+            'Content-Type': 'application/json'
+        }
+        
+        # Merge server-specific headers if present
+        server_headers = server_info.get("headers", [])
+        if server_headers and isinstance(server_headers, list):
+            for header_dict in server_headers:
+                if isinstance(header_dict, dict):
+                    headers.update(header_dict)
+                    logger.debug(f"Added server headers: {header_dict}")
+        
+        return headers
+
+
     async def _check_server_endpoint_transport_aware(self, client: httpx.AsyncClient, proxy_pass_url: str, server_info: Dict) -> bool:
         """Check server endpoint using transport-aware logic."""
         if not proxy_pass_url:
@@ -402,11 +429,8 @@ class HealthMonitoringService:
             logger.info(f"[TRACE] Found transport endpoint in URL: {proxy_pass_url}")
             logger.info(f"[TRACE] URL contains /mcp: {'/mcp' in proxy_pass_url}, URL contains /sse: {'/sse' in proxy_pass_url}")
             try:
-                # Use GET with proper headers for MCP endpoints
-                headers = {
-                    'Accept': 'text/event-stream',
-                    'Content-Type': 'application/json'
-                }
+                # Build headers including server-specific headers
+                headers = self._build_headers_for_server(server_info)
                 # For SSE endpoints, use a shorter timeout since they start streaming immediately
                 if proxy_pass_url.endswith('/sse') or '/sse/' in proxy_pass_url:
                     logger.info(f"[TRACE] Detected SSE endpoint in URL, using SSE-specific handling")
@@ -442,29 +466,32 @@ class HealthMonitoringService:
         # Try streamable-http first (default preference)
         if "streamable-http" in supported_transports:
             logger.info(f"[TRACE] Trying streamable-http transport")
+            headers = self._build_headers_for_server(server_info)
+            
+            # Only try /mcp endpoint for streamable-http transport
+            endpoint = f"{base_url}/mcp"
+            ping_payload = '{ "jsonrpc": "2.0", "id": "0", "method": "ping" }'
+            
             try:
-                mcp_endpoint = f"{base_url}/mcp"
-                # Use GET with proper headers for MCP endpoints
-                headers = {
-                    'Accept': 'text/event-stream',
-                    'Content-Type': 'application/json'
-                }
-                response = await client.get(mcp_endpoint, headers=headers, follow_redirects=True)
-                if self._is_mcp_endpoint_healthy(response):
+                logger.info(f"[TRACE] Trying endpoint: {endpoint}")
+                logger.info(f"[TRACE] Headers being sent: {headers}")
+                response = await client.post(endpoint, headers=headers, content=ping_payload, follow_redirects=True)
+                logger.info(f"[TRACE] Response status: {response.status_code}")
+                if self._is_mcp_endpoint_healthy_streamable(response):
+                    logger.info(f"Health check succeeded at {endpoint}")
                     return True
-            except Exception:
-                pass
+                else:
+                    logger.warning(f"Health check failed for {endpoint}: Status {response.status_code}, Response: {response.text}")
+            except Exception as e:
+                logger.warning(f"Health check failed for {endpoint}: {type(e).__name__} - {e}")
         
         # Fallback to SSE
         if "sse" in supported_transports:
             logger.info(f"[TRACE] Trying SSE transport")
             try:
                 sse_endpoint = f"{base_url}/sse"
-                # Use GET with proper headers for MCP endpoints
-                headers = {
-                    'Accept': 'text/event-stream',
-                    'Content-Type': 'application/json'
-                }
+                # Build headers including server-specific headers
+                headers = self._build_headers_for_server(server_info)
                 # Use shorter timeout for SSE since it starts streaming immediately
                 timeout = httpx.Timeout(connect=5.0, read=2.0, write=5.0, pool=5.0)
                 response = await client.get(sse_endpoint, headers=headers, follow_redirects=True, timeout=timeout)
@@ -486,26 +513,29 @@ class HealthMonitoringService:
         # If no specific transports, try default streamable-http then sse
         if not supported_transports or supported_transports == []:
             logger.info(f"[TRACE] No specific transports defined, trying defaults")
+            headers = self._build_headers_for_server(server_info)
+            
+            # Only try /mcp endpoint for default streamable-http transport
+            endpoint = f"{base_url}/mcp"
+            ping_payload = '{ "jsonrpc": "2.0", "id": "0", "method": "ping" }'
+            
             try:
-                mcp_endpoint = f"{base_url}/mcp"
-                # Use GET with proper headers for MCP endpoints
-                headers = {
-                    'Accept': 'text/event-stream',
-                    'Content-Type': 'application/json'
-                }
-                response = await client.get(mcp_endpoint, headers=headers, follow_redirects=True)
-                if self._is_mcp_endpoint_healthy(response):
+                logger.info(f"[TRACE] Trying default endpoint: {endpoint}")
+                logger.info(f"[TRACE] Headers being sent: {headers}")
+                response = await client.post(endpoint, headers=headers, content=ping_payload, follow_redirects=True)
+                logger.info(f"[TRACE] Response status: {response.status_code}")
+                if self._is_mcp_endpoint_healthy_streamable(response):
+                    logger.info(f"Health check succeeded at {endpoint}")
                     return True
-            except Exception:
-                pass
+                else:
+                    logger.warning(f"Health check failed for {endpoint}: Status {response.status_code}, Response: {response.text}")
+            except Exception as e:
+                logger.warning(f"Health check failed for {endpoint}: {type(e).__name__} - {e}")
                 
             try:
                 sse_endpoint = f"{base_url}/sse"
-                # Use GET with proper headers for MCP endpoints
-                headers = {
-                    'Accept': 'text/event-stream',
-                    'Content-Type': 'application/json'
-                }
+                # Build headers including server-specific headers
+                headers = self._build_headers_for_server(server_info)
                 # Use shorter timeout for SSE since it starts streaming immediately
                 timeout = httpx.Timeout(connect=5.0, read=2.0, write=5.0, pool=5.0)
                 response = await client.get(sse_endpoint, headers=headers, follow_redirects=True, timeout=timeout)
@@ -524,6 +554,44 @@ class HealthMonitoringService:
                 logger.error(f"SSE endpoint {sse_endpoint} failed with exception: {type(e).__name__} - {e}")
                 pass
         
+        return False
+
+
+    def _is_mcp_endpoint_healthy_streamable(self, response) -> bool:
+        """
+        Determine if a streamable-http MCP endpoint is healthy based on HTTP response.
+        
+        For streamable-http MCP endpoints, we consider them healthy if:
+        1. HTTP 200 OK - Normal successful response
+        2. HTTP 400 Bad Request with JSON-RPC error code -32600
+        
+        Args:
+            response: httpx.Response object from the health check request
+            
+        Returns:
+            bool: True if the endpoint is considered healthy, False otherwise
+        """
+        # HTTP 200 is always healthy
+        if response.status_code == 200:
+            return True
+            
+        # HTTP 400 is healthy only if it has JSON-RPC error code -32600
+        if response.status_code == 400:
+            try:
+                # Parse the JSON response
+                response_data = response.json()
+                
+                # Check for error dictionary with code -32600
+                if isinstance(response_data.get("error"), dict):
+                    error = response_data["error"]
+                    if isinstance(error.get("code"), int) and error.get("code") == -32600:
+                        return True
+                        
+            except (ValueError, KeyError, TypeError):
+                # If we can't parse JSON or the structure is wrong, treat as unhealthy
+                pass
+                
+        # All other status codes are considered unhealthy
         return False
 
 

@@ -16,7 +16,7 @@ You have direct access to these built-in tools:
 - And other specialized capabilities that may be available
 
 When using intelligent_tool_finder and invoke_mcp_tool:
-1. Use intelligent_tool_finder to discover tools: `intelligent_tool_finder("description of needed capability")`
+1. Use intelligent_tool_finder to discover tools with maximum scope: `intelligent_tool_finder("description of needed capability", top_k_services=500, top_n_tools=5000)`
 2. Always use the "service_path" field from the finder results as the server_name parameter
 3. Use invoke_mcp_tool with the discovered information:
 
