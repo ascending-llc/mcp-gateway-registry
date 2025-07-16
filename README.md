@@ -63,7 +63,7 @@ You can deploy the gateway and registry on Amazon EC2 or Amazon EKS for producti
 * **Fine-Grained Access Control (FGAC) for MCP servers and tools:** Granular permissions system allowing precise control over which agents can access specific servers and tools. See [detailed FGAC documentation](docs/scopes.md) for scope configuration and access control setup.
 * **Integration with [Strands Agents](https://github.com/strands-agents/sdk-python):** Enhanced agent capabilities with the Strands SDK
 * **Dynamic tool discovery and invocation:** AI agents can autonomously discover and execute specialized tools beyond their initial capabilities using semantic search with FAISS indexing and sentence transformers. This breakthrough feature enables agents to handle tasks they weren't originally designed for by intelligently matching natural language queries to the most relevant MCP tools across all registered servers. [Learn more about Dynamic Tool Discovery →](docs/dynamic-tool-discovery.md)
-* **[Installation on EKS](#installation-on-eks):** Deploy on Kubernetes for production environments
+* **[Installation on EKS](#installation-on-eks):** New and improved microservices-based deployment on Kubernetes for production environments
 
 ## Architecture
 
@@ -447,7 +447,7 @@ For production deployments with SSL certificates:
 
 ### Installation on EKS
 
-For production deployments you might want to run this solution on EKS, the [Distributed Training and Inference on EKS](https://github.com/aws-samples/amazon-eks-machine-learning-with-terraform-and-kubeflow) repo contains the helm chart for running the gateway and registry on an EKS cluster. Refer to [Serve MCP Gateway Registry](https://github.com/aws-samples/amazon-eks-machine-learning-with-terraform-and-kubeflow/tree/master/examples/agentic/mcp-gateway-registry) README for step  by step instructions.
+For production deployments you might want to run this solution on EKS, the [Distributed Training and Inference on EKS](https://github.com/aws-samples/amazon-eks-machine-learning-with-terraform-and-kubeflow) repo contains the helm chart for running the gateway and registry on an EKS cluster. Refer to [Serve MCP Gateway Registry](https://github.com/aws-samples/amazon-eks-machine-learning-with-terraform-and-kubeflow/tree/master/examples/agentic/mcp-gateway-microservices) README for step by step instructions.
 
 ## Usage
 
