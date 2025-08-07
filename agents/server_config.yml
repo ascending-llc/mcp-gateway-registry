@@ -1,0 +1,20 @@
+# Server-specific configuration for MCP agents
+# This file defines custom headers for different MCP servers
+# Environment variable references (${VAR_NAME}) are resolved at runtime
+
+servers:
+  # SRE Gateway server configuration
+  sre-gateway:
+    headers:
+      Authorization: "Bearer ${SRE_GATEWAY_AUTH_TOKEN}"
+  
+  # Atlassian server configuration  
+  atlassian:
+    headers:
+      Authorization: "Bearer ${ATLASSIAN_AUTH_TOKEN}"
+      X-Atlassian-Cloud-Id: "${ATLASSIAN_CLOUD_ID}"
+
+# Add more servers as needed following the same pattern:
+# server-name:
+#   headers:
+#     Header-Name: "value or ${ENV_VAR}"
