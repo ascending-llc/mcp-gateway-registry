@@ -182,6 +182,12 @@ cython_debug/
 .pypirc
 cookies.txt
 
+# Scratchpad for temporary notes and planning
+.scratchpad/
+
+# OAuth tokens and credentials - never commit these!
+.oauth-tokens/
+
 # MCP Gateway specific
 registry/server_state.json
 registry/nginx_mcp_revproxy.conf

@@ -26,7 +26,7 @@ services:
     volumes:
       - /opt/mcp-gateway/servers:/app/registry/servers
       - /opt/mcp-gateway/models:/app/registry/models
-      - /home/ubuntu/ssl_data:/etc/ssl
+      - /opt/ssl:/etc/ssl
       - /var/log/mcp-gateway:/app/logs
       - /opt/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
     depends_on:
@@ -117,6 +117,18 @@ services:
       - PORT=8002
     ports:
       - "8002:8002"
+    restart: unless-stopped
+
+  # Atlassian MCP Server
+  atlassian-server:
+    image: ghcr.io/sooperset/mcp-atlassian:latest
+    environment:
+      - ATLASSIAN_OAUTH_ENABLE=true
+    ports:
+      - "8005:8005"
+    volumes:
+      - /home/ubuntu/.mcp-atlassian:/home/app/.mcp-atlassian
+    command: --transport streamable-http --port 8005
     restart: unless-stopped
 
 volumes:

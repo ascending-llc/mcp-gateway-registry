@@ -3,5 +3,6 @@
   "/fininfo": true,
   "/mcpgw": true,
   "/realserverfaketools": true,
-  "/sre-gateway": true
+  "/sre-gateway": true,
+  "/atlassian": true
 }

@@ -105,15 +105,36 @@ if [ -d "registry/servers" ]; then
     # Create the target directory if it doesn't exist
     sudo mkdir -p "$MCPGATEWAY_SERVERS_DIR"
     
-    # Copy all JSON files
+    # Copy all JSON files including atlassian.json
     if ls registry/servers/*.json 1> /dev/null 2>&1; then
         sudo cp registry/servers/*.json "$MCPGATEWAY_SERVERS_DIR/"
         log "JSON files copied successfully"
+        
+        # Verify atlassian.json was copied
+        if [ -f "$MCPGATEWAY_SERVERS_DIR/atlassian.json" ]; then
+            log "✓ atlassian.json copied successfully"
+        else
+            log "⚠ atlassian.json not found in copied files"
+        fi
     else
         log "No JSON files found in registry/servers"
     fi
 else
     log "WARNING: registry/servers directory not found"
+fi
+
+# Copy scopes.yml to /opt/mcp-gateway/auth_server
+AUTH_SERVER_DIR="/opt/mcp-gateway/auth_server"
+log "Copying scopes.yml to $AUTH_SERVER_DIR..."
+if [ -f "auth_server/scopes.yml" ]; then
+    # Create the target directory if it doesn't exist
+    sudo mkdir -p "$AUTH_SERVER_DIR"
+    
+    # Copy scopes.yml
+    sudo cp auth_server/scopes.yml "$AUTH_SERVER_DIR/"
+    log "✓ scopes.yml copied successfully to $AUTH_SERVER_DIR"
+else
+    log "WARNING: auth_server/scopes.yml not found"
 fi
 
 # Generate a random SECRET_KEY if not already in .env
@@ -182,6 +203,38 @@ else
     log "⚠ Nginx may still be starting up..."
 fi
 
+# Verify FAISS index creation
+log "Verifying FAISS index creation..."
+sleep 5  # Give registry service time to create the index
+
+if [ -f "$MCPGATEWAY_SERVERS_DIR/service_index.faiss" ]; then
+    log "✓ FAISS index created successfully at $MCPGATEWAY_SERVERS_DIR/service_index.faiss"
+    
+    # Check if metadata file also exists
+    if [ -f "$MCPGATEWAY_SERVERS_DIR/service_index_metadata.json" ]; then
+        log "✓ FAISS index metadata created successfully"
+    else
+        log "⚠ FAISS index metadata file not found"
+    fi
+else
+    log "⚠ FAISS index not yet created. The registry service will create it on first access."
+fi
+
+# Verify server list includes Atlassian
+log "Verifying server list..."
+if [ -f "$MCPGATEWAY_SERVERS_DIR/atlassian.json" ]; then
+    log "✓ Atlassian server configuration present"
+fi
+
+# List all available server JSON files
+log "Available server configurations in $MCPGATEWAY_SERVERS_DIR:"
+if ls "$MCPGATEWAY_SERVERS_DIR"/*.json 2>/dev/null | head -n 10; then
+    TOTAL_SERVERS=$(ls "$MCPGATEWAY_SERVERS_DIR"/*.json 2>/dev/null | wc -l)
+    log "Total server configurations: $TOTAL_SERVERS"
+else
+    log "⚠ No server configurations found in $MCPGATEWAY_SERVERS_DIR"
+fi
+
 log "Deployment completed successfully"
 log ""
 log "Services are available at:"
@@ -192,6 +245,7 @@ log "  - Current Time MCP: http://localhost:8000"
 log "  - Financial Info MCP: http://localhost:8001"
 log "  - Real Server Fake Tools MCP: http://localhost:8002"
 log "  - MCP Gateway MCP: http://localhost:8003"
+log "  - Atlassian MCP: http://localhost:8005"
 log ""
 log "To view logs for all services: docker-compose logs -f"
 log "To view logs for a specific service: docker-compose logs -f <service-name>"

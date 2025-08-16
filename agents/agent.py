@@ -426,9 +426,9 @@ def parse_arguments() -> argparse.Namespace:
     elif args.jwt_token:
         # For pre-generated JWT token, we only need the token and basic headers
         if not args.user_pool_id:
-            args.user_pool_id = 'us-east-1_EXAMPLE'  # Default fallback
+            # No default fallback - require environment variable or command line arg
         if not args.client_id:
-            args.client_id = 'user-generated'  # Default for user-generated tokens
+            # No default fallback - require environment variable or command line arg
         if not args.region:
             args.region = 'us-east-1'  # Default region
     else:
