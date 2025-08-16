@@ -1,15 +1,26 @@
 # Authentication and Authorization for MCP Gateway Registry
 
-The MCP Gateway Registry implements a comprehensive two-layer OAuth 2.0 authentication architecture that supports both standard Two-Legged OAuth (2LO) and Three-Legged OAuth (3LO) flows for enterprise-ready access control.
+The MCP Gateway Registry implements a comprehensive OAuth 2.0 authentication and authorization architecture that combines Two-Legged OAuth (2LO) for gateway access, Three-Legged OAuth (3LO) for external service integration, and Fine-Grained Access Control (FGAC) for granular permission management.
 
 ## Architecture Overview
 
-The authentication system consists of two distinct layers:
+The authentication and authorization system consists of three key components:
 
 1. **Ingress Authentication**: Authenticating TO the MCP Gateway and Registry (2LO)
-2. **Egress Authentication**: Authenticating FROM the MCP Gateway to external services (3LO)
+   - Amazon Cognito-based authentication for agents and users
+   - JWT token validation and scope extraction
+   - [Fine-Grained Access Control (FGAC)](#fine-grained-access-control) for method and tool-level permissions
 
-This dual-layer approach separates concerns between gateway access control and external service authorization, providing flexibility and security for enterprise deployments.
+2. **Egress Authentication**: Authenticating FROM the MCP Gateway to external services (3LO)
+   - OAuth integration with external providers (Atlassian, Google, GitHub, etc.)
+   - Pass-through token mechanism for external service authorization
+
+3. **Fine-Grained Access Control**: Granular permission system integrated with ingress authentication
+   - Scope-based authorization for MCP servers, methods, and individual tools
+   - Group mappings from Amazon Cognito to permission scopes
+   - Hierarchical validation with principle of least privilege
+
+This architecture separates concerns between gateway access control, external service authorization, and granular permission management, providing flexibility and security for enterprise deployments.
 
 ```mermaid
 sequenceDiagram
