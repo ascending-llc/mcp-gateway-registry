@@ -369,23 +369,178 @@ After successful authentication, the system generates MCP client configuration f
 
 ## Fine-Grained Access Control
 
-As part of the ingress authentication process, the Auth Server within the MCP Gateway and Registry implements fine-grained access control for MCP server methods and tools. This system validates not only the user's identity but also their specific permissions to access individual MCP tools and operations.
+As part of the ingress authentication process, the Auth Server within the MCP Gateway and Registry implements a sophisticated fine-grained access control system that provides granular permissions for accessing MCP servers, methods, and tools. This system validates not only the user's identity but also their specific permissions to access individual MCP tools and operations.
 
-### Access Control Flow
+### Access Control Architecture
 
-1. **Token Validation**: The Auth Server validates the incoming JWT token with Amazon Cognito
-2. **Scope Extraction**: User scopes and group memberships are extracted from the validated token
-3. **Permission Mapping**: Scopes are mapped to specific MCP server methods and tool access permissions
-4. **Authorization Decision**: Each MCP request is evaluated against the user's permitted scopes
+The access control system is built around a scope-based authorization model that:
 
-### Scope-Based Authorization
+- Maps Amazon Cognito user groups to MCP server scopes
+- Controls access to specific MCP servers, methods, and individual tools
+- Supports both user identity mode (OAuth2 PKCE) and agent identity mode (Machine-to-Machine)
+- Uses hierarchical scope validation for precise permission control
+- Follows the principle of least privilege by default
 
-The system uses OAuth scopes to control access to:
-- Specific MCP servers (e.g., `atlassian:read`, `atlassian:write`)
-- Individual tools within servers (e.g., `jira:issues:read`, `confluence:pages:write`)
-- Administrative functions (e.g., `registry:admin`, `server:manage`)
+The access control system is defined in [`auth_server/scopes.yml`](../auth_server/scopes.yml) and enforced by the validation logic in [`auth_server/server.py`](../auth_server/server.py).
 
-For detailed information about configuring scopes, group mappings, and permission management, see the [Fine-Grained Access Control documentation](scopes.md).
+### Scope Types and Structure
+
+The system defines several types of scopes, each serving different purposes:
+
+#### UI Scopes
+Control access to registry management functions through the web interface:
+
+- **`mcp-registry-admin`**: Full administrative access to all registry functions
+- **`mcp-registry-user`**: Limited user access to specific servers and operations
+- **`mcp-registry-developer`**: Developer access for service registration and management
+- **`mcp-registry-operator`**: Operational access for service control without registration rights
+
+#### Server Scopes
+Control access to MCP servers with read and execute permissions:
+
+- **`mcp-servers-unrestricted/read`**: Read access to all MCP servers and tools
+- **`mcp-servers-unrestricted/execute`**: Execute access to all MCP servers and tools
+- **`mcp-servers-restricted/read`**: Limited read access to specific servers and tools
+- **`mcp-servers-restricted/execute`**: Limited execute access to specific servers and tools
+
+#### Permission Levels
+- **Read Permission**: Allows listing tools and reading server information
+- **Execute Permission**: Allows calling tools and executing server methods
+
+### Group Mappings
+
+Group mappings connect Amazon Cognito groups to both UI and server scopes:
+
+```yaml
+group_mappings:
+  mcp-registry-admin:
+    - mcp-registry-admin                    # UI permissions
+    - mcp-servers-unrestricted/read         # Server read access
+    - mcp-servers-unrestricted/execute      # Server execute access
+  mcp-registry-user:
+    - mcp-registry-user                     # Limited UI permissions
+    - mcp-servers-restricted/read           # Limited server access
+```
+
+> **Important**: All group names (such as `mcp-registry-admin`, `mcp-registry-user`) and scope names (such as `mcp-servers-unrestricted/read`, `mcp-servers-restricted/execute`) are completely customizable by the platform administrator deploying this solution. These names are examples and can be changed to match your organization's naming conventions and security requirements.
+
+### Methods vs Tools Access Control
+
+One of the key features of the access control system is its ability to differentiate between MCP protocol methods and specific tools, providing granular control over what operations users can perform.
+
+#### MCP Protocol Methods
+Methods are standard MCP protocol operations that all servers support:
+
+- **`initialize`**: Initialize connection with the server
+- **`notifications/initialized`**: Handle initialization notifications
+- **`ping`**: Health check operation
+- **`tools/list`**: List available tools on the server
+- **`tools/call`**: Call a specific tool (requires additional tool-level validation)
+
+#### Tool-Specific Access Control
+Tools are server-specific functions that can be called via the `tools/call` method. The system provides two levels of validation:
+
+1. **Method-Level Validation**: Check if the user can call `tools/call`
+2. **Tool-Level Validation**: Check if the user can call the specific tool
+
+Example configuration for restricted tool access:
+
+```yaml
+mcp-servers-restricted/execute:
+  - server: fininfo
+    methods:
+      - initialize
+      - notifications/initialized
+      - ping
+      - tools/list
+      - tools/call                    # Can call tools/call method
+    tools:
+      - get_stock_aggregates          # Can call this specific tool
+      - print_stock_data              # Can call this specific tool
+      # Note: Cannot call other tools like advanced analytics tools
+```
+
+### Validation Logic
+
+The scope validation follows a systematic approach implemented in the `validate_server_tool_access()` function:
+
+1. **Input Validation**: Validate server name, method, tool name, and user scopes
+2. **Scope Iteration**: Check each user scope for matching permissions
+3. **Server Matching**: Find server configurations that match the requested server
+4. **Method Validation**: Check if the requested method is allowed
+5. **Tool Validation**: For `tools/call`, validate specific tool permissions
+6. **Access Decision**: Grant access if any scope allows the operation
+
+### Access Control Scenarios
+
+#### Scenario 1: Method Access Only
+User has permission for `tools/list` but not `tools/call`:
+- ✅ Can list available tools
+- ❌ Cannot execute any tools
+
+#### Scenario 2: Method + Specific Tool Access
+User has permission for `tools/call` and specific tools:
+- ✅ Can call `get_stock_aggregates`
+- ✅ Can call `print_stock_data`
+- ❌ Cannot call `advanced_analytics_tool` (not in allowed tools list)
+
+#### Scenario 3: Unrestricted Access
+User has unrestricted execute permissions:
+- ✅ Can call any method
+- ✅ Can call any tool listed in the scope configuration
+
+### Authentication Mode Integration
+
+The scope system integrates seamlessly with both authentication modes:
+
+- **User Identity Mode**: Users authenticate via OAuth2 PKCE, and their Cognito groups are mapped to scopes
+- **Agent Identity Mode**: Agents authenticate via M2M JWT tokens with custom scopes directly assigned
+
+### Security Considerations
+
+The access control system is designed around the principle of least privilege:
+
+- **Default Deny**: All access is denied by default unless explicitly granted
+- **Explicit Permissions**: Each permission must be explicitly configured
+- **Granular Control**: Permissions can be granted at the method and tool level
+- **Scope Separation**: UI and server permissions are managed separately
+
+### Configuration Example
+
+Here's a complete example showing different access levels:
+
+```yaml
+# Basic user with read-only access
+group_mappings:
+  mcp-registry-basic-user:
+    - mcp-registry-user
+    - mcp-servers-restricted/read
+
+mcp-servers-restricted/read:
+  - server: currenttime
+    methods:
+      - initialize
+      - notifications/initialized
+      - ping
+      - tools/list
+    tools:
+      - current_time_by_timezone
+
+# Developer with service management
+group_mappings:
+  mcp-registry-developer:
+    - mcp-registry-developer
+    - mcp-servers-restricted/read
+    - mcp-servers-restricted/execute
+
+UI-Scopes:
+  mcp-registry-developer:
+    list_service: [all]
+    register_service: [all]
+    health_check_service: [all]
+```
+
+For comprehensive documentation including troubleshooting, security best practices, and advanced configuration examples, see the [complete Fine-Grained Access Control documentation](scopes.md).
 
 ## Security Considerations
 
