@@ -21,18 +21,51 @@ The **MCP Gateway & Registry** is an enterprise-ready platform that centralizes 
 
 **Transform this chaos:**
 ```
+❌ AI agents require separate connections to each MCP server
 ❌ Each developer configures VS Code, Cursor, Claude Code individually
+❌ Developers must install and manage MCP servers locally
+❌ No standard authentication flow for enterprise tools
 ❌ Scattered API keys and credentials across tools  
 ❌ No visibility into what tools teams are using
 ❌ Security risks from unmanaged tool sprawl
+❌ No dynamic tool discovery for autonomous agents
+❌ No curated tool catalog for multi-tenant environments
 ```
 
 **Into this organized approach:**
 ```
-✅ Centralized tool catalog with enterprise governance
-✅ Single sign-on through your identity provider
-✅ Complete audit trail and compliance ready
-✅ Consistent developer experience across all AI assistants
+✅ AI agents connect to one gateway, access multiple MCP servers
+✅ Single configuration point for VS Code, Cursor, Claude Code
+✅ Central IT manages cloud-hosted MCP infrastructure via streamable HTTP
+✅ Developers use standard OAuth 2LO/3LO flows for enterprise MCP servers
+✅ Centralized credential management with secure vault integration
+✅ Complete visibility and audit trail for all tool usage
+✅ Enterprise-grade security with governed tool access
+✅ Dynamic tool discovery and invocation for autonomous workflows
+✅ Registry provides discoverable, curated MCP servers for multi-tenant use
+```
+
+```
+┌─────────────────────────────────────┐     ┌──────────────────────────────────────┐
+│          BEFORE: Chaos              │     │       AFTER: MCP Gateway             │
+├─────────────────────────────────────┤     ├──────────────────────────────────────┤
+│                                     │     │                                      │
+│  Developer 1 ──┬──► MCP Server A    │     │  Developer 1 ──┐                     │
+│                ├──► MCP Server B    │     │                │                     │
+│                └──► MCP Server C    │     │  Developer 2 ──┼──► MCP Gateway      │
+│                                     │     │                │         │           │
+│  Developer 2 ──┬──► MCP Server A    │ ──► │  AI Agent 1 ───┘         ├──► MCP A  │
+│                ├──► MCP Server D    │     │                          ├──► MCP B  │
+│                └──► MCP Server E    │     │  AI Agent 2 ─────────────├──► MCP C  │
+│                                     │     │                          ├──► MCP D  │
+│  AI Agent 1 ───┬──► MCP Server B    │     │  AI Agent 3 ─────────────├──► MCP E  │
+│                ├──► MCP Server C    │     │                          └──► MCP F  │
+│                └──► MCP Server F    │     │                                      │
+│                                     │     │          Single Connection           │
+│  ❌ Multiple connections per user  │      │         ✅ One gateway for all      │
+│  ❌ No centralized control         │     │          ✅ Dynamic discovery        │
+│  ❌ Credential sprawl               │     │         ✅ Unified governance       │
+└─────────────────────────────────────┘     └──────────────────────────────────────┘
 ```
 
 ---
