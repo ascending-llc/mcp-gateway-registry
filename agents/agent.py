@@ -70,12 +70,6 @@ from dotenv import load_dotenv
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'auth_server'))
 from cognito_utils import generate_token
 
-# Import the httpx patch context manager
-from httpx_patch import httpx_mount_path_patch
-
-# Flag to control monkey patching (set to False to disable)
-ENABLE_HTTPX_MONKEY_PATCH = False
-
 # Global config for servers that should not have /mcp suffix added
 SERVERS_NO_MCP_SUFFIX = ['/atlassian']
 
@@ -536,8 +530,6 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
     server_url = urljoin(base_url + '/', server_name)
     logger.info(f"invoke_mcp_tool, Initial Server URL: {server_url}")
     
-    # Use context manager to apply httpx monkey patch
-    
     # Get authentication parameters from global agent_settings object
     # These will be populated by the main function when it generates the token
     auth_token = agent_settings.auth_token
@@ -679,79 +671,41 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
             else:
                 logger.info(f"invoke_mcp_tool, Using streamable_http transport without /mcp suffix for {server_name}: {server_url}")
         
-        # Use context manager to apply httpx monkey patch and create MCP client (if enabled)
-        if ENABLE_HTTPX_MONKEY_PATCH:
-            async with httpx_mount_path_patch(server_url):
-                logger.info(f"invoke_mcp_tool, Connecting to MCP server using {transport_name}: {server_url}, headers: {redacted_headers}")
-                
-                if use_sse:
-                    # Create an MCP SSE client
-                    async with sse_client(server_url, headers=headers) as (read, write):
-                        async with mcp.ClientSession(read, write, sampling_callback=None) as session:
-                            # Initialize the connection
-                            await session.initialize()
-                            
-                            # Call the specified tool with the provided arguments
-                            result = await session.call_tool(tool_name, arguments=arguments)
-                            
-                            # Format the result as a string
-                            response = ""
-                            for r in result.content:
-                                response += r.text + "\n"
-                            
-                            return response.strip()
-                else:
-                    # Create an MCP streamable-http client
-                    async with streamablehttp_client(url=server_url, headers=headers) as (read, write, get_session_id):
-                        async with mcp.ClientSession(read, write, sampling_callback=None) as session:
-                            # Initialize the connection
-                            await session.initialize()
-                            
-                            # Call the specified tool with the provided arguments
-                            result = await session.call_tool(tool_name, arguments=arguments)
-                            
-                            # Format the result as a string
-                            response = ""
-                            for r in result.content:
-                                response += r.text + "\n"
-                            
-                            return response.strip()
+        # Connect to MCP server and execute tool call
+        logger.info(f"invoke_mcp_tool, Connecting to MCP server using {transport_name}: {server_url}, headers: {redacted_headers}")
+        
+        if use_sse:
+            # Create an MCP SSE client
+            async with sse_client(server_url, headers=headers) as (read, write):
+                async with mcp.ClientSession(read, write, sampling_callback=None) as session:
+                    # Initialize the connection
+                    await session.initialize()
+                    
+                    # Call the specified tool with the provided arguments
+                    result = await session.call_tool(tool_name, arguments=arguments)
+                    
+                    # Format the result as a string
+                    response = ""
+                    for r in result.content:
+                        response += r.text + "\n"
+                    
+                    return response.strip()
         else:
-            # No monkey patch - execute directly
-            logger.info(f"invoke_mcp_tool, Connecting to MCP server using {transport_name}: {server_url}, headers: {redacted_headers}")
-            
-            if use_sse:
-                # Create an MCP SSE client
-                async with sse_client(server_url, headers=headers) as (read, write):
-                    async with mcp.ClientSession(read, write, sampling_callback=None) as session:
-                        # Initialize the connection
-                        await session.initialize()
-                        
-                        # Call the specified tool with the provided arguments
-                        result = await session.call_tool(tool_name, arguments=arguments)
-                        
-                        # Format the result as a string
-                        response = ""
-                        for r in result.content:
-                            response += r.text + "\n"
-                        
-                        return response.strip()
-            else:
-                # Create an MCP streamable-http client
-                async with streamablehttp_client(url=server_url, headers=headers) as (read, write, get_session_id):
-                    async with mcp.ClientSession(read, write, sampling_callback=None) as session:
-                        # Initialize the connection
-                        await session.initialize()
-                        
-                        # Call the specified tool with the provided arguments
-                        result = await session.call_tool(tool_name, arguments=arguments)
-                        
-                        # Format the result as a string
-                        response = ""
-                        for r in result.content:
-                            response += r.text + "\n"
-                        
-                        return response.strip()
+            # Create an MCP streamable-http client
+            async with streamablehttp_client(url=server_url, headers=headers) as (read, write, get_session_id):
+                async with mcp.ClientSession(read, write, sampling_callback=None) as session:
+                    # Initialize the connection
+                    await session.initialize()
+                    
+                    # Call the specified tool with the provided arguments
+                    result = await session.call_tool(tool_name, arguments=arguments)
+                    
+                    # Format the result as a string
+                    response = ""
+                    for r in result.content:
+                        response += r.text + "\n"
+                    
+                    return response.strip()
     except Exception as e:
         return f"Error invoking MCP tool: {str(e)}"
 
@@ -1124,35 +1078,46 @@ async def main():
         agent_settings.region = args.region
         agent_settings.session_cookie = session_cookie
     else:
-        # Generate Cognito M2M authentication token
-        logger.info(f"Cognito User Pool ID: {redact_sensitive_value(args.user_pool_id)}")
-        logger.info(f"Cognito User Pool ID: {args.user_pool_id}")
-        logger.info(f"Cognito Client ID: {redact_sensitive_value(args.client_id)}")
-        logger.info(f"AWS Region: {args.region}")
-        
-        try:
-            logger.info("Generating Cognito M2M authentication token...")
-            token_data = generate_token(
-                client_id=args.client_id,
-                client_secret=args.client_secret,
-                user_pool_id=args.user_pool_id,
-                region=args.region,
-                scopes=args.scopes,
-                domain=args.domain
-            )
-            access_token = token_data.get('access_token')
-            if not access_token:
-                raise ValueError("No access token received from Cognito")
-            logger.info("Successfully generated authentication token")
+        # Check if ingress token is available first
+        if hasattr(agent_settings, 'ingress_token') and agent_settings.ingress_token:
+            logger.info("Using ingress token from .oauth-tokens/ingress.json")
+            access_token = agent_settings.ingress_token
             
-            # Set global auth variables for invoke_mcp_tool
+            # Set global auth variables for invoke_mcp_tool (using ingress settings)
             agent_settings.auth_token = access_token
-            agent_settings.user_pool_id = args.user_pool_id
-            agent_settings.client_id = args.client_id
-            agent_settings.region = args.region
-        except Exception as e:
-            logger.error(f"Failed to generate authentication token: {e}")
-            return
+            agent_settings.user_pool_id = agent_settings.ingress_user_pool_id
+            agent_settings.client_id = agent_settings.ingress_client_id
+            agent_settings.region = agent_settings.ingress_region
+        else:
+            # Generate Cognito M2M authentication token
+            logger.info(f"Cognito User Pool ID: {redact_sensitive_value(args.user_pool_id)}")
+            logger.info(f"Cognito User Pool ID: {args.user_pool_id}")
+            logger.info(f"Cognito Client ID: {redact_sensitive_value(args.client_id)}")
+            logger.info(f"AWS Region: {args.region}")
+            
+            try:
+                logger.info("Generating Cognito M2M authentication token...")
+                token_data = generate_token(
+                    client_id=args.client_id,
+                    client_secret=args.client_secret,
+                    user_pool_id=args.user_pool_id,
+                    region=args.region,
+                    scopes=args.scopes,
+                    domain=args.domain
+                )
+                access_token = token_data.get('access_token')
+                if not access_token:
+                    raise ValueError("No access token received from Cognito")
+                logger.info("Successfully generated authentication token")
+                
+                # Set global auth variables for invoke_mcp_tool
+                agent_settings.auth_token = access_token
+                agent_settings.user_pool_id = args.user_pool_id
+                agent_settings.client_id = args.client_id
+                agent_settings.region = args.region
+            except Exception as e:
+                logger.error(f"Failed to generate authentication token: {e}")
+                return
     
     # Get Anthropic API key from environment variables
     anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
@@ -1198,183 +1163,92 @@ async def main():
                 redacted_headers[k] = v
         logger.info(f"Using authentication headers: {redacted_headers}")
         
-        # Use context manager to apply httpx monkey patch (if enabled)
-        if ENABLE_HTTPX_MONKEY_PATCH:
-            async with httpx_mount_path_patch(server_url):
-                # Initialize MCP client with the server configuration and authentication headers
-                client = MultiServerMCPClient(
-                    {
-                        "mcp_registry": {
-                            "url": server_url,
-                            "transport": "streamable_http",
-                            "headers": auth_headers
-                        }
-                    }
-                )
-                logger.info("Connected to MCP server successfully with authentication, server_url: " + server_url)
-
-                # Get available tools from MCP and display them
-                mcp_tools = await client.get_tools()
-                logger.info(f"Available MCP tools: {[tool.name for tool in mcp_tools]}")
-                
-                # Filter MCP tools to only include allowed tools
-                filtered_tools = [tool for tool in mcp_tools if tool.name in ALLOWED_MCP_TOOLS]
-                logger.info(f"Filtered MCP tools (allowed: {ALLOWED_MCP_TOOLS}): {[tool.name for tool in filtered_tools]}")
-                
-                # Add only the calculator, invoke_mcp_tool, and the allowed MCP tools to the tools array
-                all_tools = [calculator, invoke_mcp_tool] + filtered_tools
-                logger.info(f"All available tools: {[tool.name if hasattr(tool, 'name') else tool.__name__ for tool in all_tools]}")
-                
-                # Create the agent with the model and all tools
-                agent = create_react_agent(
-                    model,
-                    all_tools
-                )
-                
-                # Load and format the system prompt with the current time and MCP registry URL
-                system_prompt_template = load_system_prompt()
-                
-                # Prepare authentication parameters for system prompt
-                if args.use_session_cookie:
-                    system_prompt = system_prompt_template.format(
-                        current_utc_time=current_utc_time,
-                        mcp_registry_url=args.mcp_registry_url,
-                        auth_token='',  # Not used for session cookie auth
-                        user_pool_id=args.user_pool_id or '',
-                        client_id=args.client_id or '',
-                        region=args.region or 'us-east-1',
-                        auth_method=auth_method,
-                        session_cookie=session_cookie
-                    )
-                else:
-                    # For both M2M and pre-generated JWT tokens
-                    system_prompt = system_prompt_template.format(
-                        current_utc_time=current_utc_time,
-                        mcp_registry_url=args.mcp_registry_url,
-                        auth_token=access_token,
-                        user_pool_id=args.user_pool_id,
-                        client_id=args.client_id,
-                        region=args.region,
-                        auth_method=auth_method,
-                        session_cookie=''  # Not used for JWT auth
-                    )
-                
-                # Create the interactive agent
-                interactive_agent = InteractiveAgent(agent, system_prompt, args.verbose)
-                
-                # If an initial prompt is provided, process it first
-                if args.prompt:
-                    logger.info("\nProcessing initial prompt...\n" + "-"*40)
-                    response = await interactive_agent.process_message(args.prompt)
-                    
-                    if not args.interactive:
-                        # Single-turn mode - just show the response and exit
-                        logger.info("\nResponse:" + "\n" + "-"*40)
-                        print_agent_response(response, args.verbose)
-                        return
-                    else:
-                        # Interactive mode - show the response and continue
-                        print("\n🤖 Agent:", end="")
-                        print_agent_response(response, args.verbose)
-                
-                # If interactive mode is enabled, start the interactive session
-                if args.interactive:
-                    await interactive_agent.run_interactive_session()
-                elif not args.prompt:
-                    # No prompt and not interactive - show usage
-                    print("\n⚠️  No prompt provided. Use --prompt to send a message or --interactive for chat mode.")
-                    print("\nExamples:")
-                    print('  python agent_interactive.py --prompt "What time is it?"')
-                    print('  python agent_interactive.py --interactive')
-                    print('  python agent_interactive.py --prompt "Hello" --interactive')
-        else:
-            # No monkey patch - execute directly
-            # Initialize MCP client with the server configuration and authentication headers
-            client = MultiServerMCPClient(
-                {
-                    "mcp_registry": {
-                        "url": server_url,
-                        "transport": "streamable_http",
-                        "headers": auth_headers
-                    }
+        # Initialize MCP client with the server configuration and authentication headers
+        client = MultiServerMCPClient(
+            {
+                "mcp_registry": {
+                    "url": server_url,
+                    "transport": "streamable_http",
+                    "headers": auth_headers
                 }
-            )
-            logger.info("Connected to MCP server successfully with authentication, server_url: " + server_url)
+            }
+        )
+        logger.info("Connected to MCP server successfully with authentication, server_url: " + server_url)
 
-            # Get available tools from MCP and display them
-            mcp_tools = await client.get_tools()
-            logger.info(f"Available MCP tools: {[tool.name for tool in mcp_tools]}")
-            
-            # Filter MCP tools to only include allowed tools
-            filtered_tools = [tool for tool in mcp_tools if tool.name in ALLOWED_MCP_TOOLS]
-            logger.info(f"Filtered MCP tools (allowed: {ALLOWED_MCP_TOOLS}): {[tool.name for tool in filtered_tools]}")
-            
-            # Add only the calculator, invoke_mcp_tool, and the allowed MCP tools to the tools array
-            all_tools = [calculator, invoke_mcp_tool] + filtered_tools
-            logger.info(f"All available tools: {[tool.name if hasattr(tool, 'name') else tool.__name__ for tool in all_tools]}")
-            
-            # Create the agent with the model and all tools
-            agent = create_react_agent(
-                model,
-                all_tools
+        # Get available tools from MCP and display them
+        mcp_tools = await client.get_tools()
+        logger.info(f"Available MCP tools: {[tool.name for tool in mcp_tools]}")
+        
+        # Filter MCP tools to only include allowed tools
+        filtered_tools = [tool for tool in mcp_tools if tool.name in ALLOWED_MCP_TOOLS]
+        logger.info(f"Filtered MCP tools (allowed: {ALLOWED_MCP_TOOLS}): {[tool.name for tool in filtered_tools]}")
+        
+        # Add only the calculator, invoke_mcp_tool, and the allowed MCP tools to the tools array
+        all_tools = [calculator, invoke_mcp_tool] + filtered_tools
+        logger.info(f"All available tools: {[tool.name if hasattr(tool, 'name') else tool.__name__ for tool in all_tools]}")
+        
+        # Create the agent with the model and all tools
+        agent = create_react_agent(
+            model,
+            all_tools
+        )
+        
+        # Load and format the system prompt with the current time and MCP registry URL
+        system_prompt_template = load_system_prompt()
+        
+        # Prepare authentication parameters for system prompt
+        if args.use_session_cookie:
+            system_prompt = system_prompt_template.format(
+                current_utc_time=current_utc_time,
+                mcp_registry_url=args.mcp_registry_url,
+                auth_token='',  # Not used for session cookie auth
+                user_pool_id=args.user_pool_id or '',
+                client_id=args.client_id or '',
+                region=args.region or 'us-east-1',
+                auth_method=auth_method,
+                session_cookie=session_cookie
             )
+        else:
+            # For both M2M and pre-generated JWT tokens
+            system_prompt = system_prompt_template.format(
+                current_utc_time=current_utc_time,
+                mcp_registry_url=args.mcp_registry_url,
+                auth_token=access_token,
+                user_pool_id=args.user_pool_id,
+                client_id=args.client_id,
+                region=args.region,
+                auth_method=auth_method,
+                session_cookie=''  # Not used for JWT auth
+            )
+        
+        # Create the interactive agent
+        interactive_agent = InteractiveAgent(agent, system_prompt, args.verbose)
+        
+        # If an initial prompt is provided, process it first
+        if args.prompt:
+            logger.info("\nProcessing initial prompt...\n" + "-"*40)
+            response = await interactive_agent.process_message(args.prompt)
             
-            # Load and format the system prompt with the current time and MCP registry URL
-            system_prompt_template = load_system_prompt()
-            
-            # Prepare authentication parameters for system prompt
-            if args.use_session_cookie:
-                system_prompt = system_prompt_template.format(
-                    current_utc_time=current_utc_time,
-                    mcp_registry_url=args.mcp_registry_url,
-                    auth_token='',  # Not used for session cookie auth
-                    user_pool_id=args.user_pool_id or '',
-                    client_id=args.client_id or '',
-                    region=args.region or 'us-east-1',
-                    auth_method=auth_method,
-                    session_cookie=session_cookie
-                )
+            if not args.interactive:
+                # Single-turn mode - just show the response and exit
+                logger.info("\nResponse:" + "\n" + "-"*40)
+                print_agent_response(response, args.verbose)
+                return
             else:
-                # For both M2M and pre-generated JWT tokens
-                system_prompt = system_prompt_template.format(
-                    current_utc_time=current_utc_time,
-                    mcp_registry_url=args.mcp_registry_url,
-                    auth_token=access_token,
-                    user_pool_id=args.user_pool_id,
-                    client_id=args.client_id,
-                    region=args.region,
-                    auth_method=auth_method,
-                    session_cookie=''  # Not used for JWT auth
-                )
-            
-            # Create the interactive agent
-            interactive_agent = InteractiveAgent(agent, system_prompt, args.verbose)
-            
-            # If an initial prompt is provided, process it first
-            if args.prompt:
-                logger.info("\nProcessing initial prompt...\n" + "-"*40)
-                response = await interactive_agent.process_message(args.prompt)
-                
-                if not args.interactive:
-                    # Single-turn mode - just show the response and exit
-                    logger.info("\nResponse:" + "\n" + "-"*40)
-                    print_agent_response(response, args.verbose)
-                    return
-                else:
-                    # Interactive mode - show the response and continue
-                    print("\n🤖 Agent:", end="")
-                    print_agent_response(response, args.verbose)
-            
-            # If interactive mode is enabled, start the interactive session
-            if args.interactive:
-                await interactive_agent.run_interactive_session()
-            elif not args.prompt:
-                # No prompt and not interactive - show usage
-                print("\n⚠️  No prompt provided. Use --prompt to send a message or --interactive for chat mode.")
-                print("\nExamples:")
-                print('  python agent_interactive.py --prompt "What time is it?"')
-                print('  python agent_interactive.py --interactive')
-                print('  python agent_interactive.py --prompt "Hello" --interactive')
+                # Interactive mode - show the response and continue
+                print("\n🤖 Agent:", end="")
+                print_agent_response(response, args.verbose)
+        
+        # If interactive mode is enabled, start the interactive session
+        if args.interactive:
+            await interactive_agent.run_interactive_session()
+        elif not args.prompt:
+            # No prompt and not interactive - show usage
+            print("\n⚠️  No prompt provided. Use --prompt to send a message or --interactive for chat mode.")
+            print("\nExamples:")
+            print('  python agent_interactive.py --prompt "What time is it?"')
+            print('  python agent_interactive.py --interactive')
+            print('  python agent_interactive.py --prompt "Hello" --interactive')
                 
     except Exception as e:
         print(f"Error: {str(e)}")

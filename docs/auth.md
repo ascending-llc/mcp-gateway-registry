@@ -23,7 +23,7 @@ Get your AI agent authenticated and running in 5 minutes.
 
 ### Step 1: Configure Environment
 
-Create `agents/oauth/.env` with your credentials:
+Create `credentials-provider/oauth/.env` with your credentials:
 
 ```bash
 # Ingress Authentication (Required)
@@ -33,21 +33,42 @@ INGRESS_OAUTH_CLIENT_ID=your_cognito_client_id
 INGRESS_OAUTH_CLIENT_SECRET=your_cognito_client_secret
 
 # Egress Authentication (Optional - for external services)
-EGRESS_OAUTH_CLIENT_ID=your_external_provider_client_id
-EGRESS_OAUTH_CLIENT_SECRET=your_external_provider_client_secret
-EGRESS_OAUTH_REDIRECT_URI=http://localhost:8080/callback
+EGRESS_OAUTH_CLIENT_ID_1=your_external_provider_client_id
+EGRESS_OAUTH_CLIENT_SECRET_1=your_external_provider_client_secret
+EGRESS_OAUTH_REDIRECT_URI_1=http://localhost:8080/callback
+EGRESS_PROVIDER_NAME_1=atlassian
+EGRESS_MCP_SERVER_NAME_1=atlassian
+```
+
+**Pro Tip:** Use the example files as templates:
+```bash
+# Copy and customize the example configurations
+cp credentials-provider/oauth/.env.example credentials-provider/oauth/.env
+cp .env.example .env
+
+# Edit with your actual credentials
 ```
 
 ### Step 2: Run OAuth Setup
 
 ```bash
-cd agents/oauth
-./oauth_creds.sh
+cd credentials-provider
+./generate_creds.sh
+
+# Available options:
+# ./generate_creds.sh --all              # Run all authentication flows (default)
+# ./generate_creds.sh --ingress-only     # Only MCP Gateway authentication
+# ./generate_creds.sh --egress-only      # Only external provider authentication
+# ./generate_creds.sh --agentcore-only   # Only AgentCore token generation
+# ./generate_creds.sh --provider google  # Specify provider for egress auth
+# ./generate_creds.sh --verbose          # Enable debug logging
 
 # This will:
 # 1. Authenticate with Cognito (M2M/2LO)
-# 2. Optionally authenticate with external services (3LO)
-# 3. Generate MCP client configurations
+# 2. Optionally authenticate with external services (3LO)  
+# 3. Generate AgentCore tokens if configured
+# 4. Generate MCP client configurations
+# 5. Add no-auth services to configurations
 ```
 
 ### Step 3: Use Generated Configuration
@@ -431,29 +452,30 @@ Headers are automatically managed by the OAuth scripts, but here's what gets sen
 
 ## Configuration Reference
 
-### Environment Variables
+📋 **For complete configuration documentation, see [Configuration Reference](configuration.md)**
 
-Complete `.env` file structure:
+The Configuration Reference provides comprehensive documentation for all configuration files including:
 
-```bash
-# agents/oauth/.env
+- **Environment Variables**: `.env` files with complete parameter documentation
+- **YAML Configurations**: All `.yml` and `.yaml` files with field descriptions  
+- **Example Files**: `.env.example` and `config.yaml.example` templates
+- **Security Best Practices**: Credential management and file permissions
+- **Troubleshooting**: Common configuration issues and solutions
 
-# AMAZON COGNITO (Ingress - Required)
-AWS_REGION=us-east-1
-INGRESS_OAUTH_USER_POOL_ID=us-east-1_XXXXXXXXX
-INGRESS_OAUTH_CLIENT_ID=your_cognito_client_id
-INGRESS_OAUTH_CLIENT_SECRET=your_cognito_client_secret
+### Quick Reference
 
-# EXTERNAL PROVIDERS (Egress - Optional)
-EGRESS_OAUTH_CLIENT_ID=your_provider_client_id
-EGRESS_OAUTH_CLIENT_SECRET=your_provider_client_secret
-EGRESS_OAUTH_REDIRECT_URI=http://localhost:8080/callback
-# EGRESS_OAUTH_SCOPE=read:jira-work  # Optional, uses provider defaults
-```
+| Configuration | Location | Purpose |
+|---------------|----------|---------|
+| **Main Environment** | `.env` | Core project settings and registry URLs |
+| **OAuth Credentials** | `credentials-provider/oauth/.env` | Ingress/egress OAuth provider credentials |
+| **AgentCore Config** | `credentials-provider/agentcore-auth/` | Amazon Bedrock AgentCore authentication |
+| **OAuth Providers** | `auth_server/oauth2_providers.yml` | Web-based OAuth provider definitions |
 
-### OAuth Provider Configuration
+### Key Configuration Files
 
-Providers are configured in [`agents/oauth/oauth_providers.yaml`](../agents/oauth/oauth_providers.yaml):
+#### OAuth Provider Configuration
+
+Providers are configured in [`credentials-provider/oauth/oauth_providers.yaml`](../credentials-provider/oauth/oauth_providers.yaml):
 
 ```yaml
 providers:
@@ -554,9 +576,74 @@ with open(config_path) as f:
 
 ---
 
+## Testing and Validation
+
+### MCP Gateway Testing Tools
+
+Use the comprehensive testing script to validate your authentication setup:
+
+```bash
+# Test basic connectivity
+./tests/mcp_cmds.sh basic
+
+# Test MCP connectivity with authentication
+./tests/mcp_cmds.sh ping
+
+# List available tools (filtered by your permissions)
+./tests/mcp_cmds.sh list
+
+# Call specific tools
+./tests/mcp_cmds.sh call debug_auth_context '{}'
+./tests/mcp_cmds.sh call intelligent_tool_finder '{"natural_language_query": "quantum"}'
+
+# Test against different gateway URLs
+GATEWAY_URL=https://your-domain.com/mcp ./tests/mcp_cmds.sh ping
+./tests/mcp_cmds.sh --url https://your-domain.com/mcp list
+```
+
+The testing script automatically:
+- Detects localhost vs external URLs
+- Loads appropriate authentication credentials from `.oauth-tokens/ingress.json`
+- Handles MCP session establishment and authentication headers
+- Provides clear error messages for debugging
+
+### Credential Validation
+
+```bash
+# Validate all OAuth configurations
+cd credentials-provider
+./generate_creds.sh --verbose
+
+# Test specific authentication flows
+./generate_creds.sh --ingress-only --verbose    # Test MCP Gateway auth
+./generate_creds.sh --egress-only --verbose     # Test external provider auth
+./generate_creds.sh --agentcore-only --verbose  # Test AgentCore auth
+```
+
+### Authentication Flow Testing
+
+1. **Ingress Authentication** (MCP Gateway access):
+   ```bash
+   python credentials-provider/oauth/ingress_oauth.py --verbose
+   ```
+
+2. **Egress Authentication** (External services):
+   ```bash
+   python credentials-provider/oauth/egress_oauth.py --provider atlassian --verbose
+   ```
+
+3. **AgentCore Token Generation**:
+   ```bash
+   python credentials-provider/agentcore-auth/generate_access_token.py --debug
+   ```
+
+---
+
 ## Additional Resources
 
+- [Complete Configuration Reference](configuration.md)
 - [Amazon Cognito Setup Guide](cognito.md)
 - [Complete Fine-Grained Access Control Documentation](scopes.md)
-- [OAuth Provider Configurations](../agents/oauth/oauth_providers.yaml)
+- [OAuth Provider Configurations](../credentials-provider/oauth/oauth_providers.yaml)
+- [MCP Testing Tools](../tests/mcp_cmds.sh)
 - [Source: Auth Server Implementation](../auth_server/server.py)

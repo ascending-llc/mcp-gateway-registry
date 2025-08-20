@@ -316,7 +316,30 @@ The deployment includes these containers:
       sudo cp servers/fininfo/.keys.yml* /opt/mcp-gateway/secrets/
      ```
 
-4. **Install prerequisites (uv and Docker):**
+4. **Generate authentication credentials:**
+   Configure OAuth credentials for both ingress (client access) and egress (external service integration) authentication:
+   
+   ```bash
+   # Configure ingress OAuth credentials (required)
+   cp credentials-provider/oauth/.env.example credentials-provider/oauth/.env
+   nano credentials-provider/oauth/.env  # Configure INGRESS_OAUTH_* variables
+   
+   # Configure egress OAuth credentials (optional, for external services)
+   # Edit credentials-provider/oauth/.env and add EGRESS_OAUTH_* variables for each provider
+   
+   # Generate credentials from project root
+   ./credentials-provider/generate_creds.sh
+   ```
+   
+   This script will:
+   - Generate OAuth tokens for ingress authentication (required for client access)
+   - Generate provider-specific tokens for egress authentication (optional)
+   - Create JSON configuration files for various MCP clients (VS Code, Roo Code, etc.)
+   - Store tokens in `.oauth-tokens/` directory
+   
+   **Note:** For detailed configuration of all environment variables, see the [Configuration Reference](docs/configuration.md).
+
+5. **Install prerequisites (uv and Docker):**
    ```bash
    # Install uv
    curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -331,7 +354,7 @@ The deployment includes these containers:
    newgrp docker
    ```
 
-5. **Deploy with the build and run script:**
+6. **Deploy with the build and run script:**
    ```bash
    ./build_and_run.sh
    ```
@@ -343,7 +366,7 @@ The deployment includes these containers:
    - Start all services in the correct order
    - Verify service health and display status
 
-6. **Access the Registry:**
+7. **Access the Registry:**
    Navigate to `http://localhost:7860` and you will have two authentication options:
    
    **Option 1 - Amazon Cognito (Recommended for Production):**
@@ -514,6 +537,38 @@ async with sse_client(server_url, headers=headers) as (read, write):
             response += r.text + "\n"
 ```
 
+### Using Generated Credentials with AI Coding Assistants
+
+The `generate_creds.sh` script automatically creates configuration files that can be used with various AI coding assistants and development tools. After running the credential generation script, you'll find ready-to-use configuration files in the `.oauth-tokens/` directory:
+
+#### VS Code MCP Extension
+```bash
+# Copy the generated VS Code configuration
+cp .oauth-tokens/vscode-mcp.json ~/.vscode/settings.json
+```
+
+#### Roo Code Plugin
+```bash  
+# Copy the generated Roo Code configuration
+cp .oauth-tokens/roocode-mcp.json ~/.vscode/mcp-settings.json
+```
+
+#### Other AI Coding Assistants
+The generated JSON configurations are compatible with:
+- **Claude Code**: Uses similar JSON format for MCP server configurations
+- **Cursor**: Supports standard MCP server configuration format  
+- **Cline**: Compatible with VS Code-style MCP settings
+- **Custom MCP Clients**: Use the generated `ingress.json` for authentication headers
+
+**Configuration Format:**
+All generated configurations include the necessary authentication headers and server endpoints. The files contain:
+- Gateway URL endpoints for each registered MCP server
+- Authentication tokens and headers
+- Transport settings (SSE or Streamable HTTP)
+- Timeout and retry configurations
+
+For detailed setup instructions with screenshots and step-by-step guides, see [AI Coding Assistants Setup Guide](docs/ai-coding-assistants-setup.md).
+
 ### Adding New MCP Servers to the Registry
 
 **Option 1 - Via MCP Registry UI:**
@@ -536,12 +591,17 @@ _Coming soon_ - Use MCP Host applications such as VSCode-insiders or Cursor to r
 
 For comprehensive information about using the MCP Gateway & Registry, see our detailed documentation:
 
+- **[Configuration Reference](docs/configuration.md)** - Comprehensive guide to all configuration files, environment variables, and settings
+- **[AI Coding Assistants Setup Guide](docs/ai-coding-assistants-setup.md)** - Step-by-step setup for VS Code, Roo Code, Claude Code, Cursor, and other AI coding assistants
 - **[Frequently Asked Questions (FAQ)](docs/FAQ.md)** - Common questions and answers for developers and platform engineers
 - **[Authentication Guide](docs/auth.md)** - Detailed authentication and authorization patterns
 - **[Cognito Setup Guide](docs/cognito.md)** - Step-by-step Amazon Cognito configuration
 - **[JWT Token Vending Service](docs/jwt-token-vending.md)** - Generate personal access tokens for programmatic access to MCP servers
 - **[Fine-Grained Access Control](docs/scopes.md)** - Scope configuration and access control setup
 - **[Dynamic Tool Discovery](docs/dynamic-tool-discovery.md)** - AI agent autonomous tool discovery capabilities
+- **[Registry API Reference](docs/registry_api.md)** - API documentation for programmatic registry management
+- **[Registry Authentication Architecture](docs/registry-auth-architecture.md)** - Detailed authentication architecture diagrams and flows
+- **[Registry Authentication Details](docs/registry-auth-detailed.md)** - In-depth authentication implementation details
 
 ## Roadmap
 
