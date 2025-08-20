@@ -1,0 +1,10 @@
+# AgentCore Gateway Access Token Configuration
+# Actual values from SRE Agent Gateway setup
+
+# Gateway Configuration
+gateway_arn: "arn:aws:bedrock-agentcore:us-east-1:015469603702:gateway/sre-gateway-i7ge1zayhw"
+server_name: "sre-gateway"
+
+# Cognito Configuration (for token generation)
+user_pool_id: "us-west-2_moykgwumT"
+client_id: "2aushg8dlg6r4hbb7g3huka1j8"

@@ -54,6 +54,8 @@ mcp-servers-unrestricted/read:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - validate_request
 - server: currenttime
@@ -63,6 +65,8 @@ mcp-servers-unrestricted/read:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - current_time_by_timezone
 - server: mcpgw
@@ -72,6 +76,8 @@ mcp-servers-unrestricted/read:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - intelligent_tool_finder
   - toggle_service
@@ -86,6 +92,8 @@ mcp-servers-unrestricted/read:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - quantum_flux_analyzer
   - neural_pattern_synthesizer
@@ -100,6 +108,8 @@ mcp-servers-unrestricted/read:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - get_stock_aggregates
   - print_stock_data
@@ -110,6 +120,8 @@ mcp-servers-unrestricted/read:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - x_amz_bedrock_agentcore_search
   - k8s-api___get_cluster_events
@@ -140,6 +152,8 @@ mcp-servers-unrestricted/read:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - jira_get_user_profile
   - jira_get_issue
@@ -191,6 +205,8 @@ mcp-servers-unrestricted/execute:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - validate_request
 - server: currenttime
@@ -200,6 +216,8 @@ mcp-servers-unrestricted/execute:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - current_time_by_timezone
 - server: mcpgw
@@ -209,6 +227,8 @@ mcp-servers-unrestricted/execute:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - toggle_service
   - register_service
@@ -223,6 +243,8 @@ mcp-servers-unrestricted/execute:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - quantum_flux_analyzer
   - neural_pattern_synthesizer
@@ -237,6 +259,8 @@ mcp-servers-unrestricted/execute:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - get_stock_aggregates
   - print_stock_data
@@ -247,6 +271,8 @@ mcp-servers-unrestricted/execute:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - x_amz_bedrock_agentcore_search
   - k8s-api___get_cluster_events
@@ -278,6 +304,8 @@ mcp-servers-restricted/read:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - validate_request
 - server: currenttime
@@ -287,6 +315,8 @@ mcp-servers-restricted/read:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - current_time_by_timezone
 - server: mcpgw
@@ -296,6 +326,8 @@ mcp-servers-restricted/read:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - intelligent_tool_finder
 - server: realserverfaketools
@@ -305,6 +337,8 @@ mcp-servers-restricted/read:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - quantum_flux_analyzer
   - neural_pattern_synthesizer
@@ -320,6 +354,8 @@ mcp-servers-restricted/execute:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - validate_request
 - server: currenttime
@@ -329,6 +365,8 @@ mcp-servers-restricted/execute:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - current_time_by_timezone
 - server: mcpgw
@@ -338,6 +376,8 @@ mcp-servers-restricted/execute:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - intelligent_tool_finder
 - server: realserverfaketools
@@ -347,6 +387,8 @@ mcp-servers-restricted/execute:
   - ping
   - tools/list
   - tools/call
+  - resources/list
+  - resources/templates/list
   tools:
   - quantum_flux_analyzer
   - neural_pattern_synthesizer

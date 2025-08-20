@@ -2,7 +2,9 @@
     "server_name": "Atlassian",
     "description": "Atlassian",
     "path": "/atlassian",
-    "proxy_pass_url": "http://atlassian-server:8005/",
+    "proxy_pass_url": "http://atlassian-server:8005/mcp/",
+    "auth_provider": "atlassian",
+  "auth_type": "oauth",
     "tags": [
       "Atlassian", "Jira", "Confluence"
     ],

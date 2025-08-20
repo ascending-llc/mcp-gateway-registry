@@ -48,7 +48,7 @@ pip install -e .
 python server.py
 
 # Run the server with custom port and transport
-python server.py --port 8001 --transport sse
+python server.py --port 8001 --transport streamable-http
 ```
 
 ### Using the Client

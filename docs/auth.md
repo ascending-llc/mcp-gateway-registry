@@ -77,16 +77,110 @@ The script generates ready-to-use MCP client configurations:
 
 ```python
 # Example: Using the MCP client with authentication
+import json
+import os
+from pathlib import Path
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
-# Your configuration is already set up with proper headers
-mcp_client = MultiServerMCPClient(config_path="~/.vscode/mcp.json")
+# Method 1: Load configuration from ~/.vscode/mcp.json
+def load_mcp_config_from_file():
+    """Load MCP configuration from VS Code config file."""
+    config_path = Path.home() / ".vscode" / "mcp.json"
+    
+    if not config_path.exists():
+        # Fallback to oauth-tokens directory if VS Code config doesn't exist
+        config_path = Path.cwd() / ".oauth-tokens" / "vscode_mcp.json"
+    
+    if config_path.exists():
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+            # Extract the servers configuration
+            return config.get("mcp", {}).get("servers", {})
+    else:
+        raise FileNotFoundError(f"MCP configuration not found at {config_path}")
 
-# Discover available tools (filtered by your permissions)
-tools = await mcp_client.list_tools()
+# Method 2: Direct configuration (as shown in agent.py)
+def create_mcp_client_direct(auth_token, user_pool_id, client_id, region):
+    """Create MCP client with direct configuration."""
+    auth_headers = {
+        'X-Authorization': f'Bearer {auth_token}',
+        'X-User-Pool-Id': user_pool_id,
+        'X-Client-Id': client_id,
+        'X-Region': region
+    }
+    
+    return MultiServerMCPClient({
+        "mcp_gateway": {
+            "url": "https://mcpgateway.ddns.net/sse",
+            "transport": "sse",
+            "headers": auth_headers
+        }
+    })
+
+# Usage Example - Loading from config file
+async def connect_with_config_file():
+    # Load configuration from file
+    servers_config = load_mcp_config_from_file()
+    
+    # Initialize MCP client with loaded configuration
+    mcp_client = MultiServerMCPClient(servers_config)
+    
+    # Discover available tools (filtered by your permissions)
+    tools = await mcp_client.get_tools()
+    return tools
+
+# Usage Example - Direct configuration (useful for agents)
+async def connect_with_params(token, pool_id, client_id, region="us-east-1"):
+    # Create client with parameters
+    mcp_client = create_mcp_client_direct(token, pool_id, client_id, region)
+    
+    # Discover available tools
+    tools = await mcp_client.get_tools()
+    return tools
 ```
 
 **That's it!** Your agent is now authenticated and can access MCP servers based on your assigned permissions.
+
+### Integration with Agent Applications
+
+The `agents/agent.py` file demonstrates how to integrate authentication in a production agent:
+
+```python
+# Example from agents/agent.py showing MultiServerMCPClient usage
+from langchain_mcp_adapters.client import MultiServerMCPClient
+
+# The agent can read auth parameters from multiple sources:
+# 1. Command-line arguments (--client-id, --client-secret, etc.)
+# 2. Environment variables (COGNITO_CLIENT_ID, etc.)
+# 3. Configuration files (.env.agent, .env.user)
+# 4. VS Code MCP config (~/.vscode/mcp.json)
+
+# Current implementation in agent.py:
+auth_headers = {
+    'X-Authorization': f'Bearer {access_token}',
+    'X-User-Pool-Id': args.user_pool_id,
+    'X-Client-Id': args.client_id,
+    'X-Region': args.region
+}
+
+client = MultiServerMCPClient({
+    "mcp_registry": {
+        "url": server_url,
+        "transport": "sse",
+        "headers": auth_headers
+    }
+})
+
+# To enhance agent.py to read from ~/.vscode/mcp.json:
+# Add a function to load config from file as a fallback
+# when auth parameters are not provided via CLI or env vars
+```
+
+For a complete working example, see [`agents/agent.py`](../agents/agent.py) which implements:
+- Multiple authentication methods (M2M, session cookies, JWT tokens)
+- Dynamic token generation and refresh
+- Comprehensive error handling and logging
+- Integration with LangChain and Anthropic models
 
 ---
 
@@ -396,9 +490,29 @@ mcp-servers-restricted/read:
 
 The OAuth scripts generate:
 
-- **VS Code Config**: `~/.vscode/mcp.json`
-- **Roocode Config**: `~/.roocode/mcp_servers.json`
-- **Token Storage**: `.oauth-tokens/ingress.json`, `.oauth-tokens/egress.json`
+- **VS Code Config**: `~/.vscode/mcp.json` - Primary configuration for VS Code integration
+- **Local VS Code Config**: `.oauth-tokens/vscode_mcp.json` - Local copy of VS Code config
+- **Roocode Config**: `~/.roocode/mcp_servers.json` - Configuration for Roocode
+- **Local Roocode Config**: `.oauth-tokens/mcp.json` - Local copy of Roocode config
+- **Token Storage**: `.oauth-tokens/ingress.json`, `.oauth-tokens/egress.json` - Raw token data
+
+#### Using Configuration Files in Your Code
+
+The generated configuration files can be used directly with `MultiServerMCPClient`:
+
+```python
+# Option 1: Load from VS Code config location
+config_path = Path.home() / ".vscode" / "mcp.json"
+
+# Option 2: Load from local oauth-tokens directory
+config_path = Path.cwd() / ".oauth-tokens" / "vscode_mcp.json"
+
+# Parse and use the configuration
+with open(config_path) as f:
+    config = json.load(f)
+    servers = config.get("mcp", {}).get("servers", {})
+    client = MultiServerMCPClient(servers)
+```
 
 ---
 

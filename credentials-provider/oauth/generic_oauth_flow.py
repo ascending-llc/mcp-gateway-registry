@@ -133,8 +133,7 @@ def _validate_environment_variables() -> None:
     logger.debug("All required INGRESS and EGRESS OAuth environment variables are set")
 
 
-# Validate environment variables at startup
-_validate_environment_variables()
+# Environment variable validation will be done conditionally in main()
 
 # Constants
 TOKEN_EXPIRY_MARGIN = 300  # 5 minutes in seconds
@@ -424,25 +423,6 @@ class OAuthConfig:
             token_path.chmod(0o600)
             logger.info(f"📁 Saved OAuth tokens to: {token_path}")
 
-            # Also save mcp-atlassian compatible format for backwards compatibility (Atlassian only)
-            if self.provider == "atlassian":
-                mcp_token_dir = Path.cwd() / ".mcp-atlassian"
-                mcp_token_dir.mkdir(exist_ok=True, mode=0o700)
-                mcp_token_path = mcp_token_dir / f"oauth-{self.client_id}.json"
-                
-                # MCP-Atlassian expects just these fields
-                mcp_token_data = {
-                    "refresh_token": self.refresh_token,
-                    "access_token": self.access_token,
-                    "expires_at": self.expires_at,
-                    "cloud_id": self.cloud_id,
-                }
-                
-                with open(mcp_token_path, "w") as f:
-                    json.dump(mcp_token_data, f, indent=2)
-                mcp_token_path.chmod(0o600)
-                logger.debug(f"Also saved mcp-atlassian compatible format: {mcp_token_path}")
-
             # Save a readable version with usage examples
             readable_token_path = primary_token_dir / f"oauth-{self.provider}-{self.client_id}-readable.json"
             readable_data = {
@@ -599,30 +579,8 @@ class OAuthConfig:
         if primary_tokens:
             return primary_tokens
         
-        # Try mcp-atlassian compatible format for backwards compatibility (Atlassian only)
-        if provider == "atlassian":
-            mcp_tokens = OAuthConfig._load_tokens_from_mcp_file(client_id)
-            if mcp_tokens:
-                return mcp_tokens
-        
         return {}
 
-    @staticmethod
-    def _load_tokens_from_mcp_file(client_id: str) -> Dict[str, Any]:
-        """Load tokens from mcp-atlassian compatible format file (backwards compatibility)."""
-        token_path = Path.cwd() / ".mcp-atlassian" / f"oauth-{client_id}.json"
-
-        if not token_path.exists():
-            return {}
-
-        try:
-            with open(token_path) as f:
-                token_data = json.load(f)
-                logger.debug(f"Loaded OAuth tokens from mcp-atlassian compatible file {token_path}")
-                return token_data
-        except Exception as e:
-            logger.error(f"Failed to load tokens from mcp-atlassian compatible file: {e}")
-            return {}
 
     @staticmethod
     def _load_tokens_from_file(provider: str, client_id: str) -> Dict[str, Any]:
@@ -1296,13 +1254,6 @@ def _delete_existing_tokens(provider: str, client_id: str) -> None:
         deleted_files.append(str(readable_token_path))
         logger.debug(f"Deleted readable token file: {readable_token_path}")
     
-    # Delete mcp-atlassian compatible file (Atlassian only)
-    if provider == "atlassian":
-        mcp_token_path = Path.cwd() / ".mcp-atlassian" / f"oauth-{client_id}.json"
-        if mcp_token_path.exists():
-            mcp_token_path.unlink()
-            deleted_files.append(str(mcp_token_path))
-            logger.debug(f"Deleted mcp-atlassian compatible file: {mcp_token_path}")
     
     if deleted_files:
         logger.info(f"🗑️  Deleted {len(deleted_files)} existing token file(s)")
@@ -1417,6 +1368,11 @@ Supported providers: """ + ", ".join(OAUTH_PROVIDERS.keys())
             logger.info("💡 Tip: Run without arguments for interactive mode!")
             parser.print_help()
             return 1
+    
+    # Only validate environment variables if we're relying on them 
+    # (i.e., when not using command-line args or config file)
+    if not args.provider and not args.client_id and not args.client_secret and not args.config_file and not use_interactive:
+        _validate_environment_variables()
 
     if provider not in OAUTH_PROVIDERS:
         logger.error(f"Unsupported provider: {provider}")
@@ -1502,6 +1458,19 @@ Supported providers: """ + ", ".join(OAUTH_PROVIDERS.keys())
 
     # Run the OAuth flow
     success = run_oauth_flow(oauth_config, force_new=args.force)
+    
+    # Output token data as JSON if successful (for integration with other scripts)
+    if success and oauth_config.access_token:
+        token_output = {
+            "provider": oauth_config.provider,
+            "access_token": oauth_config.access_token,
+            "refresh_token": oauth_config.refresh_token,
+            "expires_at": oauth_config.expires_at,
+            "cloud_id": oauth_config.cloud_id,
+            "scopes": oauth_config.scopes
+        }
+        print(json.dumps(token_output))
+    
     return 0 if success else 1
 
 

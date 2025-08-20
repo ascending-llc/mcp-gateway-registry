@@ -18,7 +18,8 @@ services:
       - COGNITO_CLIENT_SECRET=${COGNITO_CLIENT_SECRET}
       - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
       - AWS_REGION=${AWS_REGION:-us-east-1}
-      - MCP_SERVER1_AUTH_TOKEN=${MCP_SERVER1_AUTH_TOKEN}
+      - SRE_GATEWAY_AUTH_TOKEN=${SRE_GATEWAY_AUTH_TOKEN}
+      - ATLASSIAN_AUTH_TOKEN=${ATLASSIAN_AUTH_TOKEN}
     ports:
       - "80:80"
       - "443:443"
@@ -124,6 +125,8 @@ services:
     image: ghcr.io/sooperset/mcp-atlassian:latest
     environment:
       - ATLASSIAN_OAUTH_ENABLE=true
+      - MCP_VERY_VERBOSE=true
+      - MCP_LOGGING_STDOUT=true
     ports:
       - "8005:8005"
     volumes:

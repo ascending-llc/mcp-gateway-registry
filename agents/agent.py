@@ -49,6 +49,7 @@ import sys
 import os
 import logging
 import yaml
+import json
 from typing import Dict, List, Any, Optional
 from urllib.parse import urlparse, urljoin
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -72,6 +73,12 @@ from cognito_utils import generate_token
 # Import the httpx patch context manager
 from httpx_patch import httpx_mount_path_patch
 
+# Flag to control monkey patching (set to False to disable)
+ENABLE_HTTPX_MONKEY_PATCH = False
+
+# Global config for servers that should not have /mcp suffix added
+SERVERS_NO_MCP_SUFFIX = ['/atlassian']
+
 # Configure logging with basicConfig
 logging.basicConfig(
     level=logging.INFO,  # Set the log level to INFO
@@ -82,8 +89,9 @@ logging.basicConfig(
 # Get logger
 logger = logging.getLogger(__name__)
 
-# Global constant for default MCP tool name to filter and use
+# Global constants for default MCP tools to filter and use
 DEFAULT_MCP_TOOL_NAME = "intelligent_tool_finder"
+ALLOWED_MCP_TOOLS = ["intelligent_tool_finder", "get_server_details"]
 
 
 def load_server_config(config_file: str = "server_config.yml") -> Dict[str, Any]:
@@ -359,7 +367,7 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Interactive LangGraph MCP Client with Cognito Authentication')
     
     # Server connection arguments
-    parser.add_argument('--mcp-registry-url', type=str, default='https://mcpgateway.ddns.net/mcpgw/sse',
+    parser.add_argument('--mcp-registry-url', type=str, default='https://mcpgateway.ddns.net/mcpgw/mcp',
                         help='Hostname of the MCP Registry')
     
     # Model arguments
@@ -427,8 +435,10 @@ def parse_arguments() -> argparse.Namespace:
         # For pre-generated JWT token, we only need the token and basic headers
         if not args.user_pool_id:
             # No default fallback - require environment variable or command line arg
+            pass
         if not args.client_id:
             # No default fallback - require environment variable or command line arg
+            pass
         if not args.region:
             args.region = 'us-east-1'  # Default region
     else:
@@ -487,7 +497,7 @@ def calculator(expression: str) -> str:
 
 @tool
 async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: str, arguments: Dict[str, Any],
-                         supported_transports: List[str] = None) -> str:
+                         supported_transports: List[str] = None, auth_provider: str = None) -> str:
     """
     Invoke a tool on an MCP server using the MCP Registry URL and server name with authentication.
     
@@ -499,13 +509,14 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
         server_name (str): The name of the MCP server to connect to
         tool_name (str): The name of the tool to invoke
         arguments (Dict[str, Any]): Dictionary containing the arguments for the tool
-        supported_transports (List[str]): Transport protocols supported by the server (["sse"] or ["streamable-http"])
+        supported_transports (List[str]): Transport protocols supported by the server (["streamable_http"] or ["sse"])
+        auth_provider (str): The authentication provider for the server (e.g., "atlassian", "bedrock-agentcore")
     
     Returns:
         str: The result of the tool invocation as a string
     
     Example:
-        invoke_mcp_tool("registry url", "currenttime", "current_time_by_timezone", {"tz_name": "America/New_York"}, ["streamable-http"])
+        invoke_mcp_tool("registry url", "currenttime", "current_time_by_timezone", {"tz_name": "America/New_York"}, ["streamable_http"])
     """
     # Construct the MCP server URL from the registry URL and server name using standard URL parsing
     parsed_url = urlparse(mcp_registry_url)
@@ -541,12 +552,21 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
     else:
         auth_method = 'm2m'
     
-    # Prepare headers based on authentication method
-    headers = {
-        'X-User-Pool-Id': user_pool_id or '',
-        'X-Client-Id': client_id or '',
-        'X-Region': region or 'us-east-1'
-    }
+    # Use ingress headers if available, otherwise fall back to the original auth
+    if agent_settings.ingress_token:
+        headers = {
+            'X-Authorization': f'Bearer {agent_settings.ingress_token}',
+            'X-User-Pool-Id': agent_settings.ingress_user_pool_id or '',
+            'X-Client-Id': agent_settings.ingress_client_id or '',
+            'X-Region': agent_settings.ingress_region or 'us-east-1'
+        }
+    else:
+        # Fallback to original headers
+        headers = {
+            'X-User-Pool-Id': user_pool_id or '',
+            'X-Client-Id': client_id or '',
+            'X-Region': region or 'us-east-1'
+        }
     
     # TRACE: Print all parameters received by invoke_mcp_tool
     logger.debug(f"invoke_mcp_tool TRACE - Parameters received:")
@@ -571,21 +591,49 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
     for header_name, header_value in server_headers.items():
         headers[header_name] = header_value
         
-    # Also check for legacy server-specific AUTH_TOKEN environment variable (for backward compatibility)
-    server_env_name = server_name.strip('/').upper().replace('-', '_') + '_AUTH_TOKEN'
-    server_auth_token = os.environ.get(server_env_name)
-    
-    if server_auth_token and 'Authorization' not in headers:
-        logger.info(f"Found legacy server-specific auth token in environment variable: {server_env_name}")
-        # Use the server-specific token for Authorization header (only if not already set by config)
-        headers['Authorization'] = f'Bearer {server_auth_token}'
+    # Check for egress authentication if auth_provider is specified
+    if auth_provider:
+        # Try to load egress token from {auth_provider}-{server_name}-egress.json
+        oauth_tokens_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.oauth-tokens')
+        # Convert server_name to lowercase and remove leading slash if present
+        server_name_clean = server_name.strip('/').lower()
+        egress_file = os.path.join(oauth_tokens_dir, f"{auth_provider.lower()}-{server_name_clean}-egress.json")
+        
+        # Also try without server name if the first file doesn't exist
+        egress_file_alt = os.path.join(oauth_tokens_dir, f"{auth_provider.lower()}-egress.json")
+        
+        egress_data = None
+        if os.path.exists(egress_file):
+            logger.info(f"Found egress token file: {egress_file}")
+            with open(egress_file, 'r') as f:
+                egress_data = json.load(f)
+        elif os.path.exists(egress_file_alt):
+            logger.info(f"Found alternative egress token file: {egress_file_alt}")
+            with open(egress_file_alt, 'r') as f:
+                egress_data = json.load(f)
+        
+        if egress_data:
+            # Add egress authorization header
+            egress_token = egress_data.get('access_token')
+            if egress_token:
+                headers['Authorization'] = f'Bearer {egress_token}'
+                logger.info(f"Added egress Authorization header for {auth_provider}")
+            
+            # Add provider-specific headers
+            if auth_provider.lower() == 'atlassian':
+                cloud_id = egress_data.get('cloud_id')
+                if cloud_id:
+                    headers['X-Atlassian-Cloud-Id'] = cloud_id
+                    logger.info(f"Added X-Atlassian-Cloud-Id header: {cloud_id}")
+        else:
+            logger.warning(f"No egress token file found for auth_provider: {auth_provider}")
     
     if auth_method == "session_cookie" and session_cookie:
         headers['Cookie'] = f'mcp_gateway_session={session_cookie}'
     else:
         headers['X-Authorization'] = f'Bearer {auth_token}'
-        # If no auth header from config and no legacy token, use the general auth_token
-        if 'Authorization' not in headers and not server_auth_token:
+        # If no auth header from config and no egress token, use the general auth_token
+        if 'Authorization' not in headers:
             headers['Authorization'] = f'Bearer {auth_token}'
     
     # Create redacted headers for logging (redact all sensitive values)
@@ -606,8 +654,11 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
     logger.info(f"headers after redaction: {headers}")
     try:
         # Determine transport based on supported_transports
-        use_sse = supported_transports and "sse" in supported_transports
-        transport_name = "SSE" if use_sse else "streamable-http"
+        # Default to streamable_http, only use SSE if explicitly supported and no streamable_http
+        use_sse = (supported_transports and 
+                   "sse" in supported_transports and 
+                   "streamable_http" not in supported_transports)
+        transport_name = "SSE" if use_sse else "streamable_http"
         
         # For transport through the gateway, we need to append the transport endpoint
         # The nginx gateway expects the full path including the transport endpoint
@@ -619,11 +670,54 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
         else:
             if not server_url.endswith('/'):
                 server_url += '/'
-            server_url += 'mcp'
-            logger.info(f"invoke_mcp_tool, Using streamable-http transport with gateway URL: {server_url}")
+            
+            # Check if this server should skip the /mcp suffix
+            server_path = '/' + server_name.strip('/')
+            if server_path not in SERVERS_NO_MCP_SUFFIX:
+                server_url += 'mcp'
+                logger.info(f"invoke_mcp_tool, Using streamable_http transport with gateway URL: {server_url}")
+            else:
+                logger.info(f"invoke_mcp_tool, Using streamable_http transport without /mcp suffix for {server_name}: {server_url}")
         
-        # Use context manager to apply httpx monkey patch and create MCP client
-        async with httpx_mount_path_patch(server_url):
+        # Use context manager to apply httpx monkey patch and create MCP client (if enabled)
+        if ENABLE_HTTPX_MONKEY_PATCH:
+            async with httpx_mount_path_patch(server_url):
+                logger.info(f"invoke_mcp_tool, Connecting to MCP server using {transport_name}: {server_url}, headers: {redacted_headers}")
+                
+                if use_sse:
+                    # Create an MCP SSE client
+                    async with sse_client(server_url, headers=headers) as (read, write):
+                        async with mcp.ClientSession(read, write, sampling_callback=None) as session:
+                            # Initialize the connection
+                            await session.initialize()
+                            
+                            # Call the specified tool with the provided arguments
+                            result = await session.call_tool(tool_name, arguments=arguments)
+                            
+                            # Format the result as a string
+                            response = ""
+                            for r in result.content:
+                                response += r.text + "\n"
+                            
+                            return response.strip()
+                else:
+                    # Create an MCP streamable-http client
+                    async with streamablehttp_client(url=server_url, headers=headers) as (read, write, get_session_id):
+                        async with mcp.ClientSession(read, write, sampling_callback=None) as session:
+                            # Initialize the connection
+                            await session.initialize()
+                            
+                            # Call the specified tool with the provided arguments
+                            result = await session.call_tool(tool_name, arguments=arguments)
+                            
+                            # Format the result as a string
+                            response = ""
+                            for r in result.content:
+                                response += r.text + "\n"
+                            
+                            return response.strip()
+        else:
+            # No monkey patch - execute directly
             logger.info(f"invoke_mcp_tool, Connecting to MCP server using {transport_name}: {server_url}, headers: {redacted_headers}")
             
             if use_sse:
@@ -672,6 +766,11 @@ class AgentSettings:
         self.client_id = None
         self.region = None
         self.session_cookie = None
+        # Ingress auth fields from .oauth-tokens/ingress.json
+        self.ingress_token = None
+        self.ingress_user_pool_id = None
+        self.ingress_client_id = None
+        self.ingress_region = None
 
 agent_settings = AgentSettings()
 
@@ -934,6 +1033,45 @@ async def main():
     args = parse_arguments()
     logger.info(f"Parsed command line arguments successfully, args={args}")
     
+    # Load ingress authentication from .oauth-tokens/ingress.json
+    oauth_tokens_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.oauth-tokens')
+    ingress_file = os.path.join(oauth_tokens_dir, 'ingress.json')
+    
+    if not os.path.exists(ingress_file):
+        logger.error(f"CRITICAL: Ingress authentication file not found: {ingress_file}")
+        logger.error("Please run the OAuth authentication flow first to generate ingress.json")
+        raise FileNotFoundError(f"Required ingress authentication file not found: {ingress_file}")
+    
+    try:
+        with open(ingress_file, 'r') as f:
+            ingress_data = json.load(f)
+        
+        # Validate required fields
+        required_fields = ['access_token', 'user_pool_id', 'client_id', 'region']
+        missing_fields = [field for field in required_fields if not ingress_data.get(field)]
+        
+        if missing_fields:
+            logger.error(f"CRITICAL: Missing required fields in ingress.json: {missing_fields}")
+            raise ValueError(f"Invalid ingress.json - missing required fields: {missing_fields}")
+        
+        # Set ingress authentication in agent_settings
+        agent_settings.ingress_token = ingress_data['access_token']
+        agent_settings.ingress_user_pool_id = ingress_data['user_pool_id']
+        agent_settings.ingress_client_id = ingress_data['client_id']
+        agent_settings.ingress_region = ingress_data['region']
+        
+        logger.info("Successfully loaded ingress authentication from .oauth-tokens/ingress.json")
+        logger.info(f"Ingress User Pool ID: {agent_settings.ingress_user_pool_id}")
+        logger.info(f"Ingress Client ID: {redact_sensitive_value(agent_settings.ingress_client_id)}")
+        logger.info(f"Ingress Region: {agent_settings.ingress_region}")
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"CRITICAL: Failed to parse ingress.json: {e}")
+        raise ValueError(f"Invalid ingress.json file format: {e}")
+    except Exception as e:
+        logger.error(f"CRITICAL: Failed to load ingress authentication: {e}")
+        raise
+    
     # Load server configuration
     global server_config
     server_config = load_server_config()
@@ -1060,14 +1198,15 @@ async def main():
                 redacted_headers[k] = v
         logger.info(f"Using authentication headers: {redacted_headers}")
         
-        # Use context manager to apply httpx monkey patch
-        async with httpx_mount_path_patch(server_url):
+        # Use context manager to apply httpx monkey patch (if enabled)
+        if ENABLE_HTTPX_MONKEY_PATCH:
+            async with httpx_mount_path_patch(server_url):
                 # Initialize MCP client with the server configuration and authentication headers
                 client = MultiServerMCPClient(
                     {
                         "mcp_registry": {
                             "url": server_url,
-                            "transport": "sse",
+                            "transport": "streamable_http",
                             "headers": auth_headers
                         }
                     }
@@ -1078,11 +1217,11 @@ async def main():
                 mcp_tools = await client.get_tools()
                 logger.info(f"Available MCP tools: {[tool.name for tool in mcp_tools]}")
                 
-                # Filter MCP tools to only include the specified tool
-                filtered_tools = [tool for tool in mcp_tools if tool.name == args.mcp_tool_name]
-                logger.info(f"Filtered MCP tools ({args.mcp_tool_name} only): {[tool.name for tool in filtered_tools]}")
+                # Filter MCP tools to only include allowed tools
+                filtered_tools = [tool for tool in mcp_tools if tool.name in ALLOWED_MCP_TOOLS]
+                logger.info(f"Filtered MCP tools (allowed: {ALLOWED_MCP_TOOLS}): {[tool.name for tool in filtered_tools]}")
                 
-                # Add only the calculator, invoke_mcp_tool, and the specified MCP tool to the tools array
+                # Add only the calculator, invoke_mcp_tool, and the allowed MCP tools to the tools array
                 all_tools = [calculator, invoke_mcp_tool] + filtered_tools
                 logger.info(f"All available tools: {[tool.name if hasattr(tool, 'name') else tool.__name__ for tool in all_tools]}")
                 
@@ -1148,6 +1287,94 @@ async def main():
                     print('  python agent_interactive.py --prompt "What time is it?"')
                     print('  python agent_interactive.py --interactive')
                     print('  python agent_interactive.py --prompt "Hello" --interactive')
+        else:
+            # No monkey patch - execute directly
+            # Initialize MCP client with the server configuration and authentication headers
+            client = MultiServerMCPClient(
+                {
+                    "mcp_registry": {
+                        "url": server_url,
+                        "transport": "streamable_http",
+                        "headers": auth_headers
+                    }
+                }
+            )
+            logger.info("Connected to MCP server successfully with authentication, server_url: " + server_url)
+
+            # Get available tools from MCP and display them
+            mcp_tools = await client.get_tools()
+            logger.info(f"Available MCP tools: {[tool.name for tool in mcp_tools]}")
+            
+            # Filter MCP tools to only include allowed tools
+            filtered_tools = [tool for tool in mcp_tools if tool.name in ALLOWED_MCP_TOOLS]
+            logger.info(f"Filtered MCP tools (allowed: {ALLOWED_MCP_TOOLS}): {[tool.name for tool in filtered_tools]}")
+            
+            # Add only the calculator, invoke_mcp_tool, and the allowed MCP tools to the tools array
+            all_tools = [calculator, invoke_mcp_tool] + filtered_tools
+            logger.info(f"All available tools: {[tool.name if hasattr(tool, 'name') else tool.__name__ for tool in all_tools]}")
+            
+            # Create the agent with the model and all tools
+            agent = create_react_agent(
+                model,
+                all_tools
+            )
+            
+            # Load and format the system prompt with the current time and MCP registry URL
+            system_prompt_template = load_system_prompt()
+            
+            # Prepare authentication parameters for system prompt
+            if args.use_session_cookie:
+                system_prompt = system_prompt_template.format(
+                    current_utc_time=current_utc_time,
+                    mcp_registry_url=args.mcp_registry_url,
+                    auth_token='',  # Not used for session cookie auth
+                    user_pool_id=args.user_pool_id or '',
+                    client_id=args.client_id or '',
+                    region=args.region or 'us-east-1',
+                    auth_method=auth_method,
+                    session_cookie=session_cookie
+                )
+            else:
+                # For both M2M and pre-generated JWT tokens
+                system_prompt = system_prompt_template.format(
+                    current_utc_time=current_utc_time,
+                    mcp_registry_url=args.mcp_registry_url,
+                    auth_token=access_token,
+                    user_pool_id=args.user_pool_id,
+                    client_id=args.client_id,
+                    region=args.region,
+                    auth_method=auth_method,
+                    session_cookie=''  # Not used for JWT auth
+                )
+            
+            # Create the interactive agent
+            interactive_agent = InteractiveAgent(agent, system_prompt, args.verbose)
+            
+            # If an initial prompt is provided, process it first
+            if args.prompt:
+                logger.info("\nProcessing initial prompt...\n" + "-"*40)
+                response = await interactive_agent.process_message(args.prompt)
+                
+                if not args.interactive:
+                    # Single-turn mode - just show the response and exit
+                    logger.info("\nResponse:" + "\n" + "-"*40)
+                    print_agent_response(response, args.verbose)
+                    return
+                else:
+                    # Interactive mode - show the response and continue
+                    print("\n🤖 Agent:", end="")
+                    print_agent_response(response, args.verbose)
+            
+            # If interactive mode is enabled, start the interactive session
+            if args.interactive:
+                await interactive_agent.run_interactive_session()
+            elif not args.prompt:
+                # No prompt and not interactive - show usage
+                print("\n⚠️  No prompt provided. Use --prompt to send a message or --interactive for chat mode.")
+                print("\nExamples:")
+                print('  python agent_interactive.py --prompt "What time is it?"')
+                print('  python agent_interactive.py --interactive')
+                print('  python agent_interactive.py --prompt "Hello" --interactive')
                 
     except Exception as e:
         print(f"Error: {str(e)}")

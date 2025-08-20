@@ -119,25 +119,28 @@ def check_tool_access(server_name: str, tool_name: str, user_scopes: List[str], 
         True if user has access, False otherwise
     """
     if not scopes_config or not user_scopes:
-        logger.debug(f"Access denied: {server_name}.{tool_name} - no scopes config or user scopes")
+        logger.warning(f"Access denied: {server_name}.{tool_name} - no scopes config or user scopes")
         return False
     
-    logger.debug(f"Checking access for {server_name}.{tool_name} with user scopes: {user_scopes}")
-    logger.debug(f"Available scope keys in config: {list(scopes_config.keys())}")
+    logger.info(f"Checking access for {server_name}.{tool_name} with user scopes: {user_scopes}")
+    logger.info(f"Available scope keys in config: {list(scopes_config.keys())}")
     
     # Check direct scope access
     for user_scope in user_scopes:
-        logger.debug(f"Checking user scope: {user_scope}")
+        logger.info(f"Checking user scope: {user_scope}")
         if user_scope in scopes_config:
             scope_data = scopes_config[user_scope]
-            logger.debug(f"Found scope data for {user_scope}: {type(scope_data)}")
+            logger.info(f"Found scope data for {user_scope}: {type(scope_data)}")
             if isinstance(scope_data, list):
                 # This is a server scope (like mcp-servers-unrestricted/read)
                 for server_config in scope_data:
-                    logger.debug(f"Checking server config: {server_config.get('server')} vs {server_name}")
-                    if server_config.get('server') == server_name:
+                    logger.info(f"Checking server config: {server_config.get('server')} vs {server_name}")
+                    # Normalize server names by stripping trailing slashes for comparison
+                    config_server_name = server_config.get('server', '').rstrip('/')
+                    normalized_server_name = server_name.rstrip('/')
+                    if config_server_name == normalized_server_name:
                         tools = server_config.get('tools', [])
-                        logger.debug(f"Available tools for {server_name}: {tools}")
+                        logger.info(f"Available tools for {server_name}: {tools}")
                         if tool_name in tools:
                             logger.info(f"Access granted: {server_name}.{tool_name} via scope {user_scope}")
                             return True
@@ -154,13 +157,16 @@ def check_tool_access(server_name: str, tool_name: str, user_scopes: List[str], 
                     scope_data = scopes_config[mapped_scope]
                     if isinstance(scope_data, list):
                         for server_config in scope_data:
-                            if server_config.get('server') == server_name:
+                            # Normalize server names by stripping trailing slashes for comparison
+                            config_server_name = server_config.get('server', '').rstrip('/')
+                            normalized_server_name = server_name.rstrip('/')
+                            if config_server_name == normalized_server_name:
                                 tools = server_config.get('tools', [])
                                 if tool_name in tools:
                                     logger.info(f"Access granted: {server_name}.{tool_name} via group {group} -> {mapped_scope}")
                                     return True
     
-    logger.debug(f"Access denied: {server_name}.{tool_name} for scopes {user_scopes}")
+    logger.warning(f"Access denied: {server_name}.{tool_name} for scopes {user_scopes}")
     return False
 
 
@@ -615,7 +621,7 @@ async def load_faiss_data_for_mcpgw():
 class Constants(BaseModel):
     # Using ClassVar to define class-level constants
     DESCRIPTION: ClassVar[str] = "MCP Gateway Registry Interaction Server (mcpgw)"
-    DEFAULT_MCP_TRANSPORT: ClassVar[str] = "sse"
+    DEFAULT_MCP_TRANSPORT: ClassVar[str] = "streamable-http"
     DEFAULT_MCP_SEVER_LISTEN_PORT: ClassVar[str] = "8003" # Default to a different port
     REQUEST_TIMEOUT: ClassVar[float] = 15.0 # Timeout for HTTP requests
 
@@ -641,6 +647,7 @@ def parse_arguments():
         "--transport",
         type=str,
         default=os.environ.get("MCP_TRANSPORT", Constants.DEFAULT_MCP_TRANSPORT),
+        choices=["streamable-http"],
         help=f"Transport type for the MCP server (default: {Constants.DEFAULT_MCP_TRANSPORT})",
     )
 
@@ -650,10 +657,12 @@ def parse_arguments():
 # Parse arguments at module level to make them available
 args = parse_arguments()
 
-# Initialize FastMCP 2.0 server
+# Log parsed arguments for debugging
+logger.info(f"Parsed arguments - port: {args.port}, transport: {args.transport}")
+logger.info(f"Environment variables - MCP_TRANSPORT: {os.environ.get('MCP_TRANSPORT', 'NOT SET')}, MCP_SERVER_LISTEN_PORT: {os.environ.get('MCP_SERVER_LISTEN_PORT', 'NOT SET')}")
+
+# Initialize FastMCP server
 mcp = FastMCP("MCPGateway")
-# Note: FastMCP 2.0 handles host/port differently - set in run() method
-# Mount path is now handled directly in the run() method for HTTP transports
 
 
 # --- Helper function for making requests to the registry ---
@@ -1284,6 +1293,7 @@ async def intelligent_tool_finder(
         service_name = full_server_info.get("server_name", "Unknown Service")
         tool_list = full_server_info.get("tool_list", [])
         supported_transports = full_server_info.get("supported_transports", ["streamable-http"])
+        auth_provider = full_server_info.get("auth_provider", None)
         logger.info(f"MCPGW: Found {len(tool_list)} tools for service {service_name} at path {service_path}, supported_transports: {supported_transports}") 
         for tool_info in tool_list:
             tool_name = tool_info.get("name", "Unknown Tool")
@@ -1297,7 +1307,7 @@ async def intelligent_tool_finder(
             server_name = service_path.lstrip('/') if service_path.startswith('/') else service_path
             logger.info(f"MCPGW: Checking access for user to tool {server_name}.{tool_name} with scopes {user_scopes}")
             if not check_tool_access(server_name, tool_name, user_scopes, scopes_config):
-                logger.debug(f"User does not have access to tool {server_name}.{tool_name}, skipping")
+                logger.warning(f"User does not have access to tool {server_name}.{tool_name}, skipping")
                 continue
             
             # Create descriptive text for this specific tool
@@ -1311,6 +1321,7 @@ async def intelligent_tool_finder(
                 "service_path": service_path,
                 "service_name": service_name,
                 "supported_transports": supported_transports,
+                "auth_provider": auth_provider,
             })
 
     logger.info(f"MCPGW: Scope filtering results - {tools_before_scope_filter} tools found, {len(candidate_tools)} accessible after filtering")
@@ -1360,8 +1371,12 @@ async def intelligent_tool_finder(
 # --- Main Execution ---
 
 def main():
+    # Log transport and endpoint information
+    endpoint = "/mcp"  # streamable-http always uses /mcp endpoint
+    logger.info(f"Starting MCPGateway server on port {args.port} with transport {args.transport}")
+    logger.info(f"Server will be available at: http://localhost:{args.port}{endpoint}")
+    
     # Run the server with the specified transport from command line args
-    # FastMCP 2.0 supports different transport types
-    mcp.run(transport="sse", host="0.0.0.0", port=int(args.port), path="/sse")
+    mcp.run(transport=args.transport, host="0.0.0.0", port=int(args.port))
 if __name__ == "__main__":
     main()

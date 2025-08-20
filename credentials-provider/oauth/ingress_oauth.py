@@ -115,6 +115,12 @@ def _perform_m2m_authentication(
             "client_secret": client_secret,
         }
         
+        # Note: For Cognito M2M tokens, the expiry time is controlled by the 
+        # User Pool Resource Server settings, not the client request.
+        # The token validity period should be configured in the AWS Console
+        # under Cognito User Pool > App Integration > Resource Servers
+        # to set the desired 10800 seconds (3 hours) validity.
+        
         headers = {
             "Content-Type": "application/x-www-form-urlencoded",
             "Accept": "application/json"
@@ -144,6 +150,11 @@ def _perform_m2m_authentication(
         expires_at = None
         if "expires_in" in token_data:
             expires_at = time.time() + token_data["expires_in"]
+        else:
+            # Fallback: assume 10800 seconds (3 hours) validity if not specified
+            logger.warning("No expires_in in token response, assuming 10800 seconds validity")
+            expires_at = time.time() + 10800
+            token_data["expires_in"] = 10800
         
         # Prepare result
         result = {
