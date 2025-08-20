@@ -11,6 +11,8 @@
 
 [Quick Start](#quick-start) | [Documentation](docs/) | [Enterprise Features](#enterprise-features) | [Community](#community)
 
+**Demo Videos:** [Amazon Bedrock AgentCore Integration](https://github.com/user-attachments/assets/6ba9deef-017d-4178-9dd2-257d13fd2c41) | [Dynamic Tool Discovery](https://github.com/user-attachments/assets/cee1847d-ecc1-406b-a83e-ebc80768430d)
+
 </div>
 
 ---
