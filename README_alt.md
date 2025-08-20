@@ -298,25 +298,13 @@ Transform how both autonomous AI agents and development teams access enterprise 
 
 ## Documentation
 
-### Getting Started
-- [Installation Guide](docs/installation.md) - Complete setup instructions for EC2 and EKS
-- [Quick Start Tutorial](docs/quick-start.md) - Get running in 5 minutes
-- [Configuration Reference](docs/configuration.md) - Environment variables and settings
-
-### Enterprise Setup  
-- [Authentication Guide](docs/auth.md) - OAuth, SAML, and identity provider integration
-- [Amazon Cognito Setup](docs/cognito.md) - Step-by-step IdP configuration
-- [Fine-Grained Access Control](docs/scopes.md) - Permission management and security
-
-### Developer Resources
-- [AI Coding Assistants Setup](docs/ai-coding-assistants-setup.md) - VS Code, Cursor, Claude Code integration
-- [API Reference](docs/registry_api.md) - Programmatic registry management
-- [Dynamic Tool Discovery](docs/dynamic-tool-discovery.md) - Autonomous agent capabilities
-
-### Operations
-- [Production Deployment](docs/production-deployment.md) - High availability and scaling
-- [Monitoring & Alerting](docs/monitoring.md) - Observability and health checks
-- [Troubleshooting Guide](docs/troubleshooting.md) - Common issues and solutions
+| Getting Started | Enterprise Setup | Developer & Operations |
+|------------------|-------------------|------------------------|
+| [Installation Guide](docs/installation.md)<br/>Complete setup instructions for EC2 and EKS | [Authentication Guide](docs/auth.md)<br/>OAuth and identity provider integration | [AI Coding Assistants Setup](docs/ai-coding-assistants-setup.md)<br/>VS Code, Cursor, Claude Code integration |
+| [Quick Start Tutorial](docs/quick-start.md)<br/>Get running in 5 minutes | [Amazon Cognito Setup](docs/cognito.md)<br/>Step-by-step IdP configuration | [API Reference](docs/registry_api.md)<br/>Programmatic registry management |
+| [Configuration Reference](docs/configuration.md)<br/>Environment variables and settings | [Fine-Grained Access Control](docs/scopes.md)<br/>Permission management and security | [Dynamic Tool Discovery](docs/dynamic-tool-discovery.md)<br/>Autonomous agent capabilities |
+| | | [Production Deployment](docs/production-deployment.md)<br/>High availability and scaling |
+| | | [Troubleshooting Guide](docs/troubleshooting.md)<br/>Common issues and solutions |
 
 ---
 
