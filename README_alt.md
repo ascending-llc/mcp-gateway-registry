@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/github/license/agentic-community/mcp-gateway-registry?style=flat)](https://github.com/agentic-community/mcp-gateway-registry/blob/main/LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/agentic-community/mcp-gateway-registry?style=flat&logo=github)](https://github.com/agentic-community/mcp-gateway-registry/releases)
 
-[🚀 Quick Start](#quick-start) | [📖 Documentation](docs/) | [🏢 Enterprise Features](#enterprise-features) | [🤝 Community](#community)
+[Quick Start](#quick-start) | [Documentation](docs/) | [Enterprise Features](#enterprise-features) | [Community](#community)
 
 </div>
 
@@ -37,43 +37,43 @@ The **MCP Gateway & Registry** is an enterprise-ready platform that centralizes 
 
 ---
 
-## 🎯 Core Use Cases
+## Core Use Cases
 
-### 🤖 AI Development Tool Governance
+### AI Development Tool Governance
 Provide developers with secure access to approved AI development tools while maintaining IT oversight and compliance.
 
-### 🔐 Enterprise Security & Compliance  
+### Enterprise Security & Compliance  
 Centralized authentication, fine-grained permissions, and comprehensive audit trails for SOX/GDPR compliance pathways.
 
-### 🚀 Dynamic Tool Discovery
+### Dynamic Tool Discovery
 AI agents can autonomously discover and execute specialized tools beyond their initial capabilities using intelligent semantic search.
 
-### 🏗️ Microservices Integration
+### Microservices Integration
 Seamlessly integrate with existing enterprise architecture including Amazon Cognito, SAML, and AWS services.
 
 ---
 
-## 🌟 Key Advantages
+## Key Advantages
 
-### **🔒 Enterprise-Grade Security**
+### **Enterprise-Grade Security**
 - OAuth 2.0/3.0 compliance with IdP integration
 - Fine-grained access control at tool and method level  
 - Zero-trust network architecture
 - Complete audit trails for compliance
 
-### **🎯 Developer Experience**
+### **Developer Experience**
 - Single configuration works across VS Code, Cursor, Claude Code, Cline
 - Dynamic tool discovery with natural language queries
 - Instant onboarding for new team members
 - Consistent experience across all AI coding assistants
 
-### **⚡ Production Ready**
+### **Production Ready**
 - High availability with multi-AZ deployment
 - Container-native (Docker/Kubernetes)
 - Real-time health monitoring and alerting
 - Horizontal scaling support
 
-### **🔧 Extensible & Open**
+### **Extensible & Open**
 - Based on open Model Context Protocol standard
 - Custom MCP server integration
 - API-first design for programmatic management
@@ -81,7 +81,7 @@ Seamlessly integrate with existing enterprise architecture including Amazon Cogn
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 Get up and running in 5 minutes with Docker Compose:
 
@@ -104,7 +104,7 @@ cp .env.example .env
 open http://localhost:7860
 ```
 
-**🎉 That's it!** Your enterprise MCP gateway is now running.
+**That's it!** Your enterprise MCP gateway is now running.
 
 ➡️ **Next Steps:** [Complete Installation Guide](docs/installation.md) | [Authentication Setup](docs/auth.md) | [AI Assistant Integration](docs/ai-coding-assistants-setup.md)
 
@@ -137,10 +137,10 @@ Transform how your development teams access AI tools with centralized governance
 - **Cline** - Autonomous coding agent compatible with VS Code
 
 **Enterprise Benefits:**
-- 🎯 **Centralized Control** - IT manages approved tools across all teams
-- 🔐 **Secure Authentication** - Enterprise identity integration (Amazon Cognito)
-- 📊 **Usage Analytics** - Track tool adoption and usage patterns
-- 🚨 **Compliance Ready** - Complete audit trails for enterprise requirements
+- **Centralized Control** - IT manages approved tools across all teams
+- **Secure Authentication** - Enterprise identity integration (Amazon Cognito)
+- **Usage Analytics** - Track tool adoption and usage patterns
+- **Compliance Ready** - Complete audit trails for enterprise requirements
 
 ### Authentication & Authorization
 
@@ -163,9 +163,9 @@ Transform how your development teams access AI tools with centralized governance
 ### Production Deployment
 
 **Cloud Platforms:**
-- ☁️ **Amazon EC2** - Single instance or auto-scaling groups
-- 🚢 **Amazon EKS** - Kubernetes-native microservices deployment
-- 🏢 **On-Premises** - Private cloud and data center deployment
+- **Amazon EC2** - Single instance or auto-scaling groups
+- **Amazon EKS** - Kubernetes-native microservices deployment
+- **On-Premises** - Private cloud and data center deployment
 
 **High Availability:**
 - Multi-AZ deployment with automatic failover
@@ -175,20 +175,20 @@ Transform how your development teams access AI tools with centralized governance
 
 ---
 
-## 📋 What's New
+## What's New
 
-- 🚦 **Amazon Bedrock AgentCore Integration** - Direct access to AWS services through managed MCP endpoints
-- 🔐 **Three-Legged OAuth (3LO) Support** - External service integration (Atlassian, Google, GitHub)
-- 🎫 **JWT Token Vending Service** - Self-service token generation for automation
-- ⚛️ **Modern React Frontend** - Complete UI overhaul with TypeScript and real-time updates
-- 🔍 **Dynamic Tool Discovery** - AI agents autonomously find and execute specialized tools
-- 🎯 **Fine-Grained Access Control** - Granular permissions for servers, methods, and individual tools
+- **Amazon Bedrock AgentCore Integration** - Direct access to AWS services through managed MCP endpoints
+- **Three-Legged OAuth (3LO) Support** - External service integration (Atlassian, Google, GitHub)
+- **JWT Token Vending Service** - Self-service token generation for automation
+- **Modern React Frontend** - Complete UI overhaul with TypeScript and real-time updates
+- **Dynamic Tool Discovery** - AI agents autonomously find and execute specialized tools
+- **Fine-Grained Access Control** - Granular permissions for servers, methods, and individual tools
 
 [📖 Full Release Notes](docs/changelog.md)
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 ### Getting Started
 - [Installation Guide](docs/installation.md) - Complete setup instructions for EC2 and EKS
@@ -212,27 +212,27 @@ Transform how your development teams access AI tools with centralized governance
 
 ---
 
-## 🤝 Community
+## Community
 
 ### Get Involved
 
-**🗨️ Join the Discussion**
+**Join the Discussion**
 - [GitHub Discussions](https://github.com/agentic-community/mcp-gateway-registry/discussions) - Feature requests and general discussion
 - [GitHub Issues](https://github.com/agentic-community/mcp-gateway-registry/issues) - Bug reports and feature requests
 
-**📺 Resources**
+**Resources**
 - [Demo Videos](https://github.com/agentic-community/mcp-gateway-registry#demo-videos) - See the platform in action
 - [Blog Posts](docs/resources.md) - Technical deep-dives and use cases
 - [Case Studies](docs/case-studies.md) - Real-world enterprise deployments
 
-**🚀 Contributing**
+**Contributing**
 - [Contributing Guide](CONTRIBUTING.md) - How to contribute code and documentation
 - [Code of Conduct](CODE_OF_CONDUCT.md) - Community guidelines
 - [Security Policy](SECURITY.md) - Responsible disclosure process
 
 ### Roadmap
 
-**🔮 Upcoming Features**
+**Upcoming Features**
 - **Multi-Level Registry Support** - Federated registries with cross-IdP authentication
 - **Usage Analytics Dashboard** - Comprehensive metrics and insights  
 - **Tool Marketplace** - Community-driven MCP server discovery
@@ -242,7 +242,7 @@ Transform how your development teams access AI tools with centralized governance
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the Apache-2.0 License - see the [LICENSE](LICENSE) file for details.
 
@@ -252,6 +252,6 @@ This project is licensed under the Apache-2.0 License - see the [LICENSE](LICENS
 
 **⭐ Star this repository if it helps your organization!**
 
-[🚀 Get Started](docs/installation.md) | [📖 Documentation](docs/) | [🤝 Contribute](CONTRIBUTING.md)
+[Get Started](docs/installation.md) | [Documentation](docs/) | [Contribute](CONTRIBUTING.md)
 
 </div>
