@@ -189,25 +189,19 @@ flowchart TB
 - OAuth 2.0/3.0 compliance with IdP integration
 - Fine-grained access control at tool and method level  
 - Zero-trust network architecture
-- Complete audit trails for compliance
+- Complete audit trails and comprehensive analytics for compliance
 
 ### **AI Agent & Developer Experience**
 - Single configuration works across autonomous AI agents and AI coding assistants (VS Code, Cursor, Claude Code, Cline)
 - Dynamic tool discovery with natural language queries for both agents and humans
 - Instant onboarding for new team members and AI agent deployments
-- Consistent experience across all AI systems and development environments
+- Unified governance for both AI agents and human developers
 
 ### **Production Ready**
 - High availability with multi-AZ deployment
 - Container-native (Docker/Kubernetes)
 - Real-time health monitoring and alerting
-- Horizontal scaling support
-
-### **Extensible & Open**
-- Based on open Model Context Protocol standard
-- Custom MCP server integration
-- API-first design for programmatic management
-- Plugin architecture for extensions
+- Dual authentication supporting both human and machine authentication
 
 ---
 
@@ -259,25 +253,6 @@ Transform how both autonomous AI agents and development teams access enterprise 
 </tr>
 </table>
 
-**Supported AI Systems:**
-
-**Autonomous AI Agents:**
-- **Custom AI Agents** - Machine-to-machine authentication for autonomous operation
-- **Multi-Agent Systems** - Coordinated agent workflows with shared tool access
-- **CI/CD Agents** - Automated deployment and testing agents with tool integration
-
-**AI Coding Assistants:**
-- **VS Code MCP Extension** - Microsoft's popular editor with MCP support
-- **Roo Code** - AI-powered development assistant with enterprise governance
-- **Claude Code** - Anthropic's coding assistant with standardized configurations  
-- **Cursor** - AI-first code editor with MCP integration
-- **Cline** - Autonomous coding agent compatible with VS Code
-
-**Enterprise Benefits:**
-- **Unified Governance** - IT manages approved tools for both AI agents and human developers
-- **Dual Authentication** - Enterprise identity integration supporting both human and machine authentication
-- **Comprehensive Analytics** - Track tool usage across autonomous agents and coding assistants
-- **Complete Audit Trail** - Full visibility into both AI agent operations and human development activities
 
 ### Authentication & Authorization
 
@@ -288,8 +263,7 @@ Transform how both autonomous AI agents and development teams access enterprise 
 
 **Supported Identity Providers:**
 - Amazon Cognito (Primary)
-- SAML 2.0 
-- LDAP/Active Directory
+- Any OAuth 2.0 compatible provider
 
 **Fine-Grained Permissions:**
 - Tool-level access control
@@ -302,7 +276,6 @@ Transform how both autonomous AI agents and development teams access enterprise 
 **Cloud Platforms:**
 - **Amazon EC2** - Single instance or auto-scaling groups
 - **Amazon EKS** - Kubernetes-native microservices deployment
-- **On-Premises** - Private cloud and data center deployment
 
 **High Availability:**
 - Multi-AZ deployment with automatic failover
@@ -320,8 +293,6 @@ Transform how both autonomous AI agents and development teams access enterprise 
 - **Modern React Frontend** - Complete UI overhaul with TypeScript and real-time updates
 - **Dynamic Tool Discovery** - AI agents autonomously find and execute specialized tools
 - **Fine-Grained Access Control** - Granular permissions for servers, methods, and individual tools
-
-[📖 Full Release Notes](docs/changelog.md)
 
 ---
 
@@ -369,13 +340,28 @@ Transform how both autonomous AI agents and development teams access enterprise 
 
 ### Roadmap
 
-**Upcoming Features**
-- **Multi-Level Registry Support** - Federated registries with cross-IdP authentication
-- **Usage Analytics Dashboard** - Comprehensive metrics and insights  
-- **Tool Marketplace** - Community-driven MCP server discovery
-- **KeyCloak Integration** - Additional enterprise IdP support
+The following GitHub issues represent our current development roadmap and planned features:
 
-[📍 Full Roadmap](https://github.com/agentic-community/mcp-gateway-registry/milestones)
+**Major Features**
+
+- **[#37 - Multi-Level Registry Support](https://github.com/agentic-community/mcp-gateway-registry/issues/37)**
+  Add support for federated registries that can connect to other registries, enabling hierarchical MCP infrastructure with cross-IdP authentication.
+
+- **[#38 - Usage Metrics and Analytics System](https://github.com/agentic-community/mcp-gateway-registry/issues/38)**
+  Implement comprehensive usage tracking across user and agent identities, with metrics emission from auth server, registry, and intelligent tool finder.
+
+- **[#39 - Tool Popularity Scoring and Rating System](https://github.com/agentic-community/mcp-gateway-registry/issues/39)**
+  Enhance tool discovery with popularity scores and star ratings based on usage patterns and agent feedback. *Depends on #38.*
+
+**Authentication & Identity**
+
+- **[#18 - Add Token Vending Capability to Auth Server](https://github.com/agentic-community/mcp-gateway-registry/issues/18)**
+  Extend the auth server to provide token vending capabilities for enhanced authentication workflows.
+
+- **[#5 - Add Support for KeyCloak as IdP Provider](https://github.com/agentic-community/mcp-gateway-registry/issues/5)**
+  Add KeyCloak integration as an alternative Identity Provider alongside Amazon Cognito.
+
+For the complete list of open issues, feature requests, and bug reports, visit our [GitHub Issues page](https://github.com/agentic-community/mcp-gateway-registry/issues).
 
 ---
 
