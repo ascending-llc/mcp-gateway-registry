@@ -59,6 +59,7 @@ You can deploy the gateway and registry on Amazon EC2 or Amazon EKS for producti
 ## What's New
 
 * 🚦 **Amazon Bedrock AgentCore Gateway Integration:** Seamless integration with Amazon Bedrock's AgentCore Gateway for enhanced AI agent capabilities and enterprise-grade AWS service connectivity. This integration enables direct access to AWS services through managed MCP endpoints with built-in security, monitoring, and scalability features. See [agents/agent.py](agents/agent.py) for implementation examples.
+* **Three-Legged OAuth (3LO) Support:** Complete egress authentication enabling the Gateway to access external services like Atlassian, Google, and GitHub on behalf of users. Combines 2LO (machine-to-machine) ingress auth with 3LO (user-delegated) egress auth for comprehensive service integration. [Learn more →](docs/auth.md#external-service-integration)
 * **JWT Token Vending Service:** Generate personal access tokens for programmatic access to MCP servers through a user-friendly web interface. Features include scope validation, rate limiting, and secure HMAC-SHA256 token generation. Perfect for automation, scripting, and agent access. [Learn more →](docs/jwt-token-vending.md)
 * **Modern React Frontend:** Complete UI overhaul with React 18 + TypeScript, featuring responsive design, dark/light themes, real-time updates, and integrated token management interface.
 * **IdP Integration with Amazon Cognito:** Complete identity provider integration supporting both user identity and agent identity modes. See [detailed Cognito setup guide](docs/cognito.md) for configuration instructions.
@@ -547,11 +548,29 @@ The `generate_creds.sh` script automatically creates configuration files that ca
 cp .oauth-tokens/vscode-mcp.json ~/.vscode/settings.json
 ```
 
-#### Roo Code Plugin
+#### Roo Code Plugin - Enterprise Governance Example
+
+Roo Code demonstrates how enterprises can provide developers with governed access to curated MCP servers through the Gateway & Registry:
+
 ```bash  
 # Copy the generated Roo Code configuration
-cp .oauth-tokens/roocode-mcp.json ~/.vscode/mcp-settings.json
+cp .oauth-tokens/mcp.json ~/.vscode/mcp-settings.json
 ```
+
+**Enterprise Use Case:** The screenshots below show how developers can seamlessly access enterprise-approved MCP servers:
+
+![Roo Code MCP Configuration](docs/img/roo.png)
+*Figure 1: Roo Code MCP Servers panel showing enterprise-curated servers (atlassian, sre-gateway, currenttime, mcpgw) accessible through the MCP Gateway with proper authentication and governance.*
+
+![Roo Code Agent in Action](docs/img/roo_agent.png)
+*Figure 2: Roo Code AI assistant executing tools from enterprise MCP servers, demonstrating how developers can leverage approved services while maintaining security and compliance.*
+
+**Key Benefits for Enterprises:**
+- **Centralized Control**: IT teams manage which MCP servers are available to developers
+- **Secure Authentication**: All access goes through enterprise identity systems (Amazon Cognito)
+- **Fine-Grained Permissions**: Control which teams can access specific tools and servers
+- **Audit Trail**: Track which developers use which tools and when
+- **Consistent Experience**: Developers get the same curated tools across all AI coding assistants
 
 #### Other AI Coding Assistants
 The generated JSON configurations are compatible with:
@@ -567,7 +586,6 @@ All generated configurations include the necessary authentication headers and se
 - Transport settings (SSE or Streamable HTTP)
 - Timeout and retry configurations
 
-For detailed setup instructions with screenshots and step-by-step guides, see [AI Coding Assistants Setup Guide](docs/ai-coding-assistants-setup.md).
 
 ### Adding New MCP Servers to the Registry
 
@@ -592,7 +610,6 @@ _Coming soon_ - Use MCP Host applications such as VSCode-insiders or Cursor to r
 For comprehensive information about using the MCP Gateway & Registry, see our detailed documentation:
 
 - **[Configuration Reference](docs/configuration.md)** - Comprehensive guide to all configuration files, environment variables, and settings
-- **[AI Coding Assistants Setup Guide](docs/ai-coding-assistants-setup.md)** - Step-by-step setup for VS Code, Roo Code, Claude Code, Cursor, and other AI coding assistants
 - **[Frequently Asked Questions (FAQ)](docs/FAQ.md)** - Common questions and answers for developers and platform engineers
 - **[Authentication Guide](docs/auth.md)** - Detailed authentication and authorization patterns
 - **[Cognito Setup Guide](docs/cognito.md)** - Step-by-step Amazon Cognito configuration
