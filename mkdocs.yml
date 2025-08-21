@@ -42,7 +42,7 @@ theme:
     - toc.integrate
     - content.code.copy
     - content.code.annotate
-  logo: docs/img/registry.png
+  logo: docs/img/mcp_gateway_horizontal_white_logo.png
   favicon: docs/img/registry.png
 
 # Plugins
