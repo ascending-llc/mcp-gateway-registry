@@ -81,7 +81,7 @@ The script generates ready-to-use MCP client configurations:
   "mcp": {
     "servers": {
       "mcp_gateway": {
-        "url": "https://mcpgateway.ddns.net/sse",
+        "url": "https://mcpgateway.ddns.net/mcpgw/mcp",
         "headers": {
           "X-Authorization": "Bearer {your_jwt_token}",
           "X-User-Pool-Id": "{user_pool_id}",
@@ -132,7 +132,7 @@ def create_mcp_client_direct(auth_token, user_pool_id, client_id, region):
     
     return MultiServerMCPClient({
         "mcp_gateway": {
-            "url": "https://mcpgateway.ddns.net/sse",
+            "url": "https://mcpgateway.ddns.net/mcpgw/mcp",
             "transport": "sse",
             "headers": auth_headers
         }
