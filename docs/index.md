@@ -9,14 +9,14 @@
 
 A comprehensive solution for managing, securing, and accessing Model Context Protocol (MCP) servers at scale. Built for enterprises, development teams, and autonomous AI agents.
 
-### 🎬 Demo Videos
+### Demo Videos
 
 | Feature | Demo |
 |---------|------|
-| **🔐 OAuth Authentication** | [Watch OAuth Setup](https://github.com/agentic-community/mcp-gateway-registry/assets/your-user/demo-oauth.mp4) |
-| **🤖 AI Agent Integration** | [Watch AI Agents](https://github.com/agentic-community/mcp-gateway-registry/assets/your-user/demo-ai-agents.mp4) |
+| **OAuth Authentication** | [Watch OAuth Setup](https://github.com/agentic-community/mcp-gateway-registry/assets/your-user/demo-oauth.mp4) |
+| **AI Agent Integration** | [Watch AI Agents](https://github.com/agentic-community/mcp-gateway-registry/assets/your-user/demo-ai-agents.mp4) |
 
-### 🔧 MCP Tools in Action
+### MCP Tools in Action
 
 <div align="center">
 <img src="img/MCP_tools.gif" alt="MCP Tools Demo" width="800"/>
@@ -28,25 +28,25 @@ A comprehensive solution for managing, securing, and accessing Model Context Pro
 
 ## Key Features
 
-### 🏢 Enterprise-Ready Architecture
+### Enterprise-Ready Architecture
 - **Reverse Proxy**: Centralized access point for all MCP servers
 - **Service Discovery**: Automatic registration and health monitoring
 - **Load Balancing**: Intelligent request distribution across server instances
 - **High Availability**: Production-ready deployment patterns
 
-### 🔐 Advanced Security & Authentication
+### Advanced Security & Authentication
 - **OAuth 2.0 Integration**: Amazon Cognito, Google, GitHub, and custom providers
 - **Fine-Grained Access Control**: Role-based permissions with scope management
 - **JWT Token Vending**: Secure token generation and validation
 - **Audit Logging**: Comprehensive security event tracking
 
-### 🤖 AI Agent Optimization
+### AI Agent Optimization
 - **Dynamic Tool Discovery**: Runtime MCP server and tool enumeration
 - **Intelligent Tool Finder**: AI-powered tool recommendation and selection
 - **Autonomous Access Control**: Context-aware permission management
 - **Multi-Agent Coordination**: Shared resource access with conflict resolution
 
-### 🛠️ Developer Experience
+### Developer Experience
 - **React Web Interface**: Intuitive server management and monitoring
 - **REST API**: Programmatic registry management and integration
 - **AI Coding Assistant Integration**: VS Code, Cursor, Claude Code support
@@ -134,7 +134,7 @@ The MCP Gateway & Registry acts as a centralized hub that:
 
 ## Use Cases
 
-### 🏢 Enterprise Integration
+### Enterprise Integration
 Transform how both autonomous AI agents and development teams access enterprise systems:
 
 - **Unified Access Point**: Single endpoint for all MCP servers across your organization
@@ -142,7 +142,7 @@ Transform how both autonomous AI agents and development teams access enterprise 
 - **Compliance & Governance**: Comprehensive audit trails and access control policies
 - **Scalable Architecture**: Support for hundreds of MCP servers and thousands of concurrent users
 
-### 🤖 AI Agent Workflows
+### AI Agent Workflows
 Enable sophisticated AI agent interactions with enterprise systems:
 
 - **Dynamic Tool Discovery**: Agents discover and utilize tools based on current context
@@ -150,7 +150,7 @@ Enable sophisticated AI agent interactions with enterprise systems:
 - **Multi-Agent Coordination**: Shared access to enterprise resources with conflict resolution
 - **Context-Aware Permissions**: Dynamic access control based on agent capabilities and current task
 
-### 👩‍💻 Development Team Productivity
+### Development Team Productivity
 Accelerate development workflows with integrated tooling:
 
 - **IDE Integration**: Native support for VS Code, Cursor, and Claude Code
