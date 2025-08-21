@@ -137,6 +137,10 @@ celerybeat.pid
 .env.backup
 .env.user
 .env.docker
+
+# Configuration files with sensitive data
+credentials-provider/agentcore-auth/config.yaml
+credentials-provider/oauth/config.yaml
 .venv
 env/
 venv/
