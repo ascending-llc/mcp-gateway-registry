@@ -77,10 +77,10 @@ cp .env.example .env
 docker-compose up -d
 
 # 5. Access the registry
-open http://localhost:3001
+open http://localhost:7860
 ```
 
-The registry will be available at `http://localhost:3001` with example MCP servers pre-configured.
+The registry will be available at `http://localhost:7860` with example MCP servers pre-configured.
 
 ---
 
