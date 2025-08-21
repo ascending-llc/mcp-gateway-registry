@@ -1,8 +1,8 @@
 {
   "server_name": "Current Time API",
   "description": "A simple API that returns the current server time in various formats.",
-  "path": "/currenttime",
-  "proxy_pass_url": "http://currenttime-server:8000/mcp/",
+  "path": "/currenttime/",
+  "proxy_pass_url": "http://currenttime-server:8000/",
   "auth_type": "none",
   "tags": [],
   "num_tools": 1,

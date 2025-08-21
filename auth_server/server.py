@@ -13,6 +13,7 @@ import json
 import yaml
 import time
 import uuid
+import hashlib
 from jwt.api_jwk import PyJWK
 from datetime import datetime
 from typing import Dict, Optional, List, Any
@@ -60,6 +61,64 @@ def load_scopes_config():
 
 # Global scopes configuration
 SCOPES_CONFIG = load_scopes_config()
+
+# Utility functions for GDPR/SOX compliance
+def mask_sensitive_id(value: str) -> str:
+    """Mask sensitive IDs showing only first and last 4 characters."""
+    if not value or len(value) <= 8:
+        return "***MASKED***"
+    return f"{value[:4]}...{value[-4:]}"
+
+def hash_username(username: str) -> str:
+    """Hash username for privacy compliance."""
+    if not username:
+        return "anonymous"
+    return f"user_{hashlib.sha256(username.encode()).hexdigest()[:8]}"
+
+def anonymize_ip(ip_address: str) -> str:
+    """Anonymize IP address by masking last octet for IPv4."""
+    if not ip_address or ip_address == 'unknown':
+        return ip_address
+    if '.' in ip_address:  # IPv4
+        parts = ip_address.split('.')
+        if len(parts) == 4:
+            return f"{'.'.join(parts[:3])}.xxx"
+    elif ':' in ip_address:  # IPv6
+        # Mask last segment
+        parts = ip_address.split(':')
+        if len(parts) > 1:
+            parts[-1] = 'xxxx'
+            return ':'.join(parts)
+    return ip_address
+
+def mask_token(token: str) -> str:
+    """Mask JWT token showing only last 4 characters."""
+    if not token:
+        return "***EMPTY***"
+    if len(token) > 20:
+        return f"...{token[-4:]}"
+    return "***MASKED***"
+
+def mask_headers(headers: dict) -> dict:
+    """Mask sensitive headers for logging compliance."""
+    masked = {}
+    for key, value in headers.items():
+        key_lower = key.lower()
+        if key_lower in ['x-authorization', 'authorization', 'cookie']:
+            if 'bearer' in str(value).lower():
+                # Extract token part and mask it
+                parts = str(value).split(' ', 1)
+                if len(parts) == 2:
+                    masked[key] = f"Bearer {mask_token(parts[1])}"
+                else:
+                    masked[key] = mask_token(value)
+            else:
+                masked[key] = "***MASKED***"
+        elif key_lower in ['x-user-pool-id', 'x-client-id']:
+            masked[key] = mask_sensitive_id(value)
+        else:
+            masked[key] = value
+    return masked
 
 def map_cognito_groups_to_scopes(groups: List[str]) -> List[str]:
     """
@@ -130,7 +189,7 @@ def validate_session_cookie(cookie_value: str) -> Dict[str, any]:
         # Map groups to scopes
         scopes = map_cognito_groups_to_scopes(groups)
         
-        logger.info(f"Session cookie validated for user: {username}")
+        logger.info(f"Session cookie validated for user: {hash_username(username)}")
         
         return {
             'valid': True,
@@ -330,7 +389,7 @@ def check_rate_limit(username: str) -> bool:
     current_count = user_token_generation_counts.get(rate_key, 0)
     
     if current_count >= MAX_TOKENS_PER_USER_PER_HOUR:
-        logger.warning(f"Rate limit exceeded for user {username}: {current_count} tokens this hour")
+        logger.warning(f"Rate limit exceeded for user {hash_username(username)}: {current_count} tokens this hour")
         return False
     
     # Increment counter
@@ -550,7 +609,7 @@ class SimplifiedCognitoValidator:
                 'auth_method': 'boto3'
             }
             
-            logger.info(f"Successfully validated token via boto3 for user {result['username']}")
+            logger.info(f"Successfully validated token via boto3 for user {hash_username(result['username'])}")
             return result
             
         except ClientError as e:
@@ -781,18 +840,21 @@ async def validate_request(request: Request):
         except Exception as e:
             logger.error(f"Error reading request payload: {type(e).__name__}: {e}")
         
-        # Log request for debugging
-        logger.info(f"Validation request from {request.client.host if request.client else 'unknown'}")
+        # Log request for debugging with anonymized IP
+        client_ip = request.client.host if request.client else 'unknown'
+        logger.info(f"Validation request from {anonymize_ip(client_ip)}")
         logger.info(f"Request Method: {request.method}")
         
-        # Log all HTTP headers present
+        # Log masked HTTP headers for GDPR/SOX compliance
         all_headers = dict(request.headers)
-        logger.info(f"All HTTP Headers: {json.dumps(all_headers, indent=2)}")
+        masked_headers = mask_headers(all_headers)
+        logger.debug(f"HTTP Headers (masked): {json.dumps(masked_headers, indent=2)}")
         
-        # Log specific headers for debugging
+        # Log specific headers for debugging with masked sensitive data
         logger.info(f"Key Headers: Authorization={bool(authorization)}, Cookie={bool(cookie_header)}, "
-                    f"User-Pool-Id={user_pool_id}, Client-Id={client_id}, Region={region}, "
-                    f"Original-URL={original_url}")
+                    f"User-Pool-Id={mask_sensitive_id(user_pool_id) if user_pool_id else 'None'}, "
+                    f"Client-Id={mask_sensitive_id(client_id) if client_id else 'None'}, "
+                    f"Region={region}, Original-URL={original_url}")
         logger.info(f"Server Name from URL: {server_name_from_url}")
         
         # Initialize validation result
@@ -811,8 +873,11 @@ async def validate_request(request: Request):
             if cookie_value:
                 try:
                     validation_result = validate_session_cookie(cookie_value)
-                    logger.info(f"Session cookie validation result: {validation_result}")
-                    logger.info(f"Session cookie validation successful for user: {validation_result['username']}")
+                    # Log validation result without exposing username
+                    safe_result = {k: v for k, v in validation_result.items() if k != 'username'}
+                    safe_result['username'] = hash_username(validation_result.get('username', ''))
+                    logger.info(f"Session cookie validation result: {safe_result}")
+                    logger.info(f"Session cookie validation successful for user: {hash_username(validation_result['username'])}")
                 except ValueError as e:
                     logger.warning(f"Session cookie validation failed: {e}")
                     # Fall through to JWT validation
@@ -906,7 +971,7 @@ async def validate_request(request: Request):
             
             # Check if user has any scopes - if not, deny access (fail closed)
             if not user_scopes:
-                logger.warning(f"Access denied for user {validation_result.get('username')} to {server_name}.{method} (tool: {actual_tool_name}) - no scopes configured")
+                logger.warning(f"Access denied for user {hash_username(validation_result.get('username', ''))} to {server_name}.{method} (tool: {actual_tool_name}) - no scopes configured")
                 raise HTTPException(
                     status_code=403,
                     detail=f"Access denied to {server_name}.{method} - user has no scopes configured",
@@ -914,7 +979,7 @@ async def validate_request(request: Request):
                 )
             
             if not validate_server_tool_access(server_name, method, actual_tool_name, user_scopes):
-                logger.warning(f"Access denied for user {validation_result.get('username')} to {server_name}.{method} (tool: {actual_tool_name})")
+                logger.warning(f"Access denied for user {hash_username(validation_result.get('username', ''))} to {server_name}.{method} (tool: {actual_tool_name})")
                 raise HTTPException(
                     status_code=403,
                     detail=f"Access denied to {server_name}.{method}",
@@ -1084,7 +1149,7 @@ async def generate_user_token(
         # Sign the token using HS256 with shared SECRET_KEY
         access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
         
-        logger.info(f"Generated token for user '{username}' with scopes: {requested_scopes}, expires in {expires_in_hours} hours")
+        logger.info(f"Generated token for user '{hash_username(username)}' with scopes: {requested_scopes}, expires in {expires_in_hours} hours")
         
         return GenerateTokenResponse(
             access_token=access_token,
@@ -1447,7 +1512,7 @@ async def oauth2_callback(
         # Clear temporary OAuth2 session
         response.delete_cookie("oauth2_temp_session")
         
-        logger.info(f"Successfully authenticated user {mapped_user['username']} via {provider}")
+        logger.info(f"Successfully authenticated user {hash_username(mapped_user['username'])} via {provider}")
         return response
         
     except HTTPException:

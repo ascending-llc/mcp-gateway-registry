@@ -85,7 +85,7 @@ logger = logging.getLogger(__name__)
 
 # Global constants for default MCP tools to filter and use
 DEFAULT_MCP_TOOL_NAME = "intelligent_tool_finder"
-ALLOWED_MCP_TOOLS = ["intelligent_tool_finder", "get_server_details"]
+ALLOWED_MCP_TOOLS = ["intelligent_tool_finder"]
 
 
 def load_server_config(config_file: str = "server_config.yml") -> Dict[str, Any]:
