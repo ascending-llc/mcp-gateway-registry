@@ -178,8 +178,9 @@ class NginxConfigService:
         proxy_pass_url = server_info.get("proxy_pass_url", "")
         supported_transports = server_info.get("supported_transports", ["streamable-http"])
         
-        # Generate broad location blocks based on supported transports
-        base_url = proxy_pass_url.rstrip('/')
+        # Use the proxy_pass_url exactly as specified in the JSON file
+        # Users are responsible for including /mcp, /sse, or any other path in the URL
+        proxy_url = proxy_pass_url
         
         # Determine transport type based on supported_transports
         if not supported_transports:
@@ -203,17 +204,9 @@ class NginxConfigService:
             transport_type = "streamable-http"
             logger.info(f"Server {path}: Unknown transport types {supported_transports}, defaulting to streamable-http")
         
-        # Create a single broad location block that handles all requests for this server
-        # This allows SSE to work properly (catches both /sse and /messages requests)
-        # Adjust proxy_pass URL based on transport type to handle nginx path stripping correctly
-        if transport_type == "streamable-http":
-            # For streamable-http, we need to handle the /mcp path specifically
-            # The agent sends requests to /currenttime/mcp, we need to forward to /mcp/
-            proxy_url = base_url + "/mcp/"
-        else:
-            # For SSE and other transports with location /path/ (with trailing slash),
-            # we need proxy_pass with trailing slash for proper nginx proxying
-            proxy_url = base_url + "/" if not base_url.endswith("/") else base_url
+        # Create a single location block for this server
+        # The proxy_pass URL is used exactly as provided in the server configuration
+        logger.info(f"Server {path}: Using proxy_pass URL as configured: {proxy_url}")
         
         block = self._create_location_block(path, proxy_url, transport_type)
         blocks.append(block)
@@ -271,6 +264,7 @@ class NginxConfigService:
         proxy_set_header X-User-Pool-Id $http_x_user_pool_id;
         proxy_set_header X-Client-Id $http_x_client_id;
         proxy_set_header X-Region $http_x_region;
+
         
         # Forward auth server response headers to backend
         proxy_set_header X-User $auth_user;
@@ -280,6 +274,9 @@ class NginxConfigService:
         proxy_set_header X-Auth-Method $auth_method;
         proxy_set_header X-Server-Name $auth_server_name;
         proxy_set_header X-Tool-Name $auth_tool_name;
+        
+        # Pass all original client headers
+        proxy_pass_request_headers on;
         
         # Handle auth errors
         error_page 401 = @auth_error;
@@ -319,14 +316,10 @@ class NginxConfigService:
         proxy_set_header Upgrade $http_upgrade;
         chunked_transfer_encoding off;"""
         
-        # For streamable-http, use path with /mcp to match agent requests
-        # For SSE and other transports, use path with trailing slash for consistency
-        if transport_type == "streamable-http":
-            location_path = f"{path}/mcp"
-            logger.info(f"Creating location block for {path}/mcp with streamable-http transport")
-        else:
-            location_path = f"{path}/"
-            logger.info(f"Creating location block for {path}/ with {transport_type} transport (with trailing slash)")
+        # Use the location path exactly as specified in the server configuration
+        # Users have full control over the location path format (with or without trailing slash)
+        location_path = path
+        logger.info(f"Creating location block for {location_path} with {transport_type} transport")
         
         return f"""
     location {location_path} {{{transport_settings}{common_settings}

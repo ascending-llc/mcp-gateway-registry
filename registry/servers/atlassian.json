@@ -1,0 +1,1864 @@
+{
+    "server_name": "Atlassian",
+    "description": "Atlassian",
+    "path": "/atlassian",
+    "proxy_pass_url": "http://atlassian-server:8005/mcp/",
+    "auth_provider": "atlassian",
+  "auth_type": "oauth",
+    "tags": [
+      "Atlassian", "Jira", "Confluence"
+    ],
+    "num_tools": 42,
+    "num_stars": 0,
+    "is_python": true,
+    "license": "MIT",
+    "tool_list": [
+      {
+        "name": "jira_get_user_profile",
+        "parsed_description": {
+          "main": "Retrieve profile information for a specific Jira user.",
+          "args": "ctx: The FastMCP context.\nuser_identifier: User identifier (email, username, key, or account ID).",
+          "returns": "JSON string representing the Jira user profile object, or an error object if not found.",
+          "raises": "ValueError: If the Jira client is not configured or available."
+        },
+        "schema": {
+          "properties": {
+            "user_identifier": {
+              "description": "Identifier for the user (e.g., email address 'user@example.com', username 'johndoe', account ID 'accountid:...', or key for Server/DC).",
+              "title": "User Identifier",
+              "type": "string"
+            }
+          },
+          "required": [
+            "user_identifier"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_get_issue",
+        "parsed_description": {
+          "main": "Get details of a specific Jira issue including its Epic links and relationship information.",
+          "args": "ctx: The FastMCP context.\nissue_key: Jira issue key.\nfields: Comma-separated list of fields to return (e.g., 'summary,status,customfield_10010'), a single field as a string (e.g., 'duedate'), '*all' for all fields, or omitted for essentials.\nexpand: Optional fields to expand.\ncomment_limit: Maximum number of comments.\nproperties: Issue properties to return.\nupdate_history: Whether to update issue view history.",
+          "returns": "JSON string representing the Jira issue object.",
+          "raises": "ValueError: If the Jira client is not configured or available."
+        },
+        "schema": {
+          "properties": {
+            "issue_key": {
+              "description": "Jira issue key (e.g., 'PROJ-123')",
+              "title": "Issue Key",
+              "type": "string"
+            },
+            "fields": {
+              "default": "reporter,labels,description,created,priority,assignee,updated,status,issuetype,summary",
+              "description": "(Optional) Comma-separated list of fields to return (e.g., 'summary,status,customfield_10010'). You may also provide a single field as a string (e.g., 'duedate'). Use '*all' for all fields (including custom fields), or omit for essential fields only.",
+              "title": "Fields",
+              "type": "string"
+            },
+            "expand": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) Fields to expand. Examples: 'renderedFields' (for rendered content), 'transitions' (for available status transitions), 'changelog' (for history)",
+              "title": "Expand"
+            },
+            "comment_limit": {
+              "default": 10,
+              "description": "Maximum number of comments to include (0 or null for no comments)",
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Comment Limit",
+              "type": "integer"
+            },
+            "properties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "(Optional) A comma-separated list of issue properties to return",
+              "default": null,
+              "title": "Properties"
+            },
+            "update_history": {
+              "default": true,
+              "description": "Whether to update the issue view history for the requesting user",
+              "title": "Update History",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "issue_key"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_search",
+        "parsed_description": {
+          "main": "Search Jira issues using JQL (Jira Query Language).",
+          "args": "ctx: The FastMCP context.\njql: JQL query string.\nfields: Comma-separated fields to return.\nlimit: Maximum number of results.\nstart_at: Starting index for pagination.\nprojects_filter: Comma-separated list of project keys to filter by.\nexpand: Optional fields to expand.",
+          "returns": "JSON string representing the search results including pagination info.",
+          "raises": null
+        },
+        "schema": {
+          "properties": {
+            "jql": {
+              "description": "JQL query string (Jira Query Language). Examples:\n- Find Epics: \"issuetype = Epic AND project = PROJ\"\n- Find issues in Epic: \"parent = PROJ-123\"\n- Find by status: \"status = 'In Progress' AND project = PROJ\"\n- Find by assignee: \"assignee = currentUser()\"\n- Find recently updated: \"updated >= -7d AND project = PROJ\"\n- Find by label: \"labels = frontend AND project = PROJ\"\n- Find by priority: \"priority = High AND project = PROJ\"",
+              "title": "Jql",
+              "type": "string"
+            },
+            "fields": {
+              "default": "reporter,labels,description,created,priority,assignee,updated,status,issuetype,summary",
+              "description": "(Optional) Comma-separated fields to return in the results. Use '*all' for all fields, or specify individual fields like 'summary,status,assignee,priority'",
+              "title": "Fields",
+              "type": "string"
+            },
+            "limit": {
+              "default": 10,
+              "description": "Maximum number of results (1-50)",
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            },
+            "start_at": {
+              "default": 0,
+              "description": "Starting index for pagination (0-based)",
+              "minimum": 0,
+              "title": "Start At",
+              "type": "integer"
+            },
+            "projects_filter": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) Comma-separated list of project keys to filter results by. Overrides the environment variable JIRA_PROJECTS_FILTER if provided.",
+              "title": "Projects Filter"
+            },
+            "expand": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) fields to expand. Examples: 'renderedFields', 'transitions', 'changelog'",
+              "title": "Expand"
+            }
+          },
+          "required": [
+            "jql"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_search_fields",
+        "parsed_description": {
+          "main": "Search Jira fields by keyword with fuzzy match.",
+          "args": "ctx: The FastMCP context.\nkeyword: Keyword for fuzzy search.\nlimit: Maximum number of results.\nrefresh: Whether to force refresh the field list.",
+          "returns": "JSON string representing a list of matching field definitions.",
+          "raises": null
+        },
+        "schema": {
+          "properties": {
+            "keyword": {
+              "default": "",
+              "description": "Keyword for fuzzy search. If left empty, lists the first 'limit' available fields in their default order.",
+              "title": "Keyword",
+              "type": "string"
+            },
+            "limit": {
+              "default": 10,
+              "description": "Maximum number of results",
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            },
+            "refresh": {
+              "default": false,
+              "description": "Whether to force refresh the field list",
+              "title": "Refresh",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_get_project_issues",
+        "parsed_description": {
+          "main": "Get all issues for a specific Jira project.",
+          "args": "ctx: The FastMCP context.\nproject_key: The project key.\nlimit: Maximum number of results.\nstart_at: Starting index for pagination.",
+          "returns": "JSON string representing the search results including pagination info.",
+          "raises": null
+        },
+        "schema": {
+          "properties": {
+            "project_key": {
+              "description": "The project key",
+              "title": "Project Key",
+              "type": "string"
+            },
+            "limit": {
+              "default": 10,
+              "description": "Maximum number of results (1-50)",
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            },
+            "start_at": {
+              "default": 0,
+              "description": "Starting index for pagination (0-based)",
+              "minimum": 0,
+              "title": "Start At",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "project_key"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_get_transitions",
+        "parsed_description": {
+          "main": "Get available status transitions for a Jira issue.",
+          "args": "ctx: The FastMCP context.\nissue_key: Jira issue key.",
+          "returns": "JSON string representing a list of available transitions.",
+          "raises": null
+        },
+        "schema": {
+          "properties": {
+            "issue_key": {
+              "description": "Jira issue key (e.g., 'PROJ-123')",
+              "title": "Issue Key",
+              "type": "string"
+            }
+          },
+          "required": [
+            "issue_key"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_get_worklog",
+        "parsed_description": {
+          "main": "Get worklog entries for a Jira issue.",
+          "args": "ctx: The FastMCP context.\nissue_key: Jira issue key.",
+          "returns": "JSON string representing the worklog entries.",
+          "raises": null
+        },
+        "schema": {
+          "properties": {
+            "issue_key": {
+              "description": "Jira issue key (e.g., 'PROJ-123')",
+              "title": "Issue Key",
+              "type": "string"
+            }
+          },
+          "required": [
+            "issue_key"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_download_attachments",
+        "parsed_description": {
+          "main": "Download attachments from a Jira issue.",
+          "args": "ctx: The FastMCP context.\nissue_key: Jira issue key.\ntarget_dir: Directory to save attachments.",
+          "returns": "JSON string indicating the result of the download operation.",
+          "raises": null
+        },
+        "schema": {
+          "properties": {
+            "issue_key": {
+              "description": "Jira issue key (e.g., 'PROJ-123')",
+              "title": "Issue Key",
+              "type": "string"
+            },
+            "target_dir": {
+              "description": "Directory where attachments should be saved",
+              "title": "Target Dir",
+              "type": "string"
+            }
+          },
+          "required": [
+            "issue_key",
+            "target_dir"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_get_agile_boards",
+        "parsed_description": {
+          "main": "Get jira agile boards by name, project key, or type.",
+          "args": "ctx: The FastMCP context.\nboard_name: Name of the board (fuzzy search).\nproject_key: Project key.\nboard_type: Board type ('scrum' or 'kanban').\nstart_at: Starting index.\nlimit: Maximum results.",
+          "returns": "JSON string representing a list of board objects.",
+          "raises": null
+        },
+        "schema": {
+          "properties": {
+            "board_name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) The name of board, support fuzzy search",
+              "title": "Board Name"
+            },
+            "project_key": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) Jira project key (e.g., 'PROJ-123')",
+              "title": "Project Key"
+            },
+            "board_type": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) The type of jira board (e.g., 'scrum', 'kanban')",
+              "title": "Board Type"
+            },
+            "start_at": {
+              "default": 0,
+              "description": "Starting index for pagination (0-based)",
+              "minimum": 0,
+              "title": "Start At",
+              "type": "integer"
+            },
+            "limit": {
+              "default": 10,
+              "description": "Maximum number of results (1-50)",
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_get_board_issues",
+        "parsed_description": {
+          "main": "Get all issues linked to a specific board filtered by JQL.",
+          "args": "ctx: The FastMCP context.\nboard_id: The ID of the board.\njql: JQL query string to filter issues.\nfields: Comma-separated fields to return.\nstart_at: Starting index for pagination.\nlimit: Maximum number of results.\nexpand: Optional fields to expand.",
+          "returns": "JSON string representing the search results including pagination info.",
+          "raises": null
+        },
+        "schema": {
+          "properties": {
+            "board_id": {
+              "description": "The id of the board (e.g., '1001')",
+              "title": "Board Id",
+              "type": "string"
+            },
+            "jql": {
+              "description": "JQL query string (Jira Query Language). Examples:\n- Find Epics: \"issuetype = Epic AND project = PROJ\"\n- Find issues in Epic: \"parent = PROJ-123\"\n- Find by status: \"status = 'In Progress' AND project = PROJ\"\n- Find by assignee: \"assignee = currentUser()\"\n- Find recently updated: \"updated >= -7d AND project = PROJ\"\n- Find by label: \"labels = frontend AND project = PROJ\"\n- Find by priority: \"priority = High AND project = PROJ\"",
+              "title": "Jql",
+              "type": "string"
+            },
+            "fields": {
+              "default": "reporter,labels,description,created,priority,assignee,updated,status,issuetype,summary",
+              "description": "Comma-separated fields to return in the results. Use '*all' for all fields, or specify individual fields like 'summary,status,assignee,priority'",
+              "title": "Fields",
+              "type": "string"
+            },
+            "start_at": {
+              "default": 0,
+              "description": "Starting index for pagination (0-based)",
+              "minimum": 0,
+              "title": "Start At",
+              "type": "integer"
+            },
+            "limit": {
+              "default": 10,
+              "description": "Maximum number of results (1-50)",
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            },
+            "expand": {
+              "default": "version",
+              "description": "Optional fields to expand in the response (e.g., 'changelog').",
+              "title": "Expand",
+              "type": "string"
+            }
+          },
+          "required": [
+            "board_id",
+            "jql"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_get_sprints_from_board",
+        "parsed_description": {
+          "main": "Get jira sprints from board by state.",
+          "args": "ctx: The FastMCP context.\nboard_id: The ID of the board.\nstate: Sprint state ('active', 'future', 'closed'). If None, returns all sprints.\nstart_at: Starting index.\nlimit: Maximum results.",
+          "returns": "JSON string representing a list of sprint objects.",
+          "raises": null
+        },
+        "schema": {
+          "properties": {
+            "board_id": {
+              "description": "The id of board (e.g., '1000')",
+              "title": "Board Id",
+              "type": "string"
+            },
+            "state": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Sprint state (e.g., 'active', 'future', 'closed')",
+              "title": "State"
+            },
+            "start_at": {
+              "default": 0,
+              "description": "Starting index for pagination (0-based)",
+              "minimum": 0,
+              "title": "Start At",
+              "type": "integer"
+            },
+            "limit": {
+              "default": 10,
+              "description": "Maximum number of results (1-50)",
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "board_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_get_sprint_issues",
+        "parsed_description": {
+          "main": "Get jira issues from sprint.",
+          "args": "ctx: The FastMCP context.\nsprint_id: The ID of the sprint.\nfields: Comma-separated fields to return.\nstart_at: Starting index.\nlimit: Maximum results.",
+          "returns": "JSON string representing the search results including pagination info.",
+          "raises": null
+        },
+        "schema": {
+          "properties": {
+            "sprint_id": {
+              "description": "The id of sprint (e.g., '10001')",
+              "title": "Sprint Id",
+              "type": "string"
+            },
+            "fields": {
+              "default": "reporter,labels,description,created,priority,assignee,updated,status,issuetype,summary",
+              "description": "Comma-separated fields to return in the results. Use '*all' for all fields, or specify individual fields like 'summary,status,assignee,priority'",
+              "title": "Fields",
+              "type": "string"
+            },
+            "start_at": {
+              "default": 0,
+              "description": "Starting index for pagination (0-based)",
+              "minimum": 0,
+              "title": "Start At",
+              "type": "integer"
+            },
+            "limit": {
+              "default": 10,
+              "description": "Maximum number of results (1-50)",
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "sprint_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_get_link_types",
+        "parsed_description": {
+          "main": "Get all available issue link types.",
+          "args": "ctx: The FastMCP context.",
+          "returns": "JSON string representing a list of issue link type objects.",
+          "raises": null
+        },
+        "schema": {
+          "properties": {},
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_create_issue",
+        "parsed_description": {
+          "main": "Create a new Jira issue with optional Epic link or parent for subtasks.",
+          "args": "ctx: The FastMCP context.\nproject_key: The JIRA project key.\nsummary: Summary/title of the issue.\nissue_type: Issue type (e.g., 'Task', 'Bug', 'Story', 'Epic', 'Subtask').\nassignee: Assignee's user identifier (string): Email, display name, or account ID (e.g., 'user@example.com', 'John Doe', 'accountid:...').\ndescription: Issue description.\ncomponents: Comma-separated list of component names.\nadditional_fields: Dictionary of additional fields.",
+          "returns": "JSON string representing the created issue object.",
+          "raises": "ValueError: If in read-only mode or Jira client is unavailable."
+        },
+        "schema": {
+          "properties": {
+            "project_key": {
+              "description": "The JIRA project key (e.g. 'PROJ', 'DEV', 'SUPPORT'). This is the prefix of issue keys in your project. Never assume what it might be, always ask the user.",
+              "title": "Project Key",
+              "type": "string"
+            },
+            "summary": {
+              "description": "Summary/title of the issue",
+              "title": "Summary",
+              "type": "string"
+            },
+            "issue_type": {
+              "description": "Issue type (e.g. 'Task', 'Bug', 'Story', 'Epic', 'Subtask'). The available types depend on your project configuration. For subtasks, use 'Subtask' (not 'Sub-task') and include parent in additional_fields.",
+              "title": "Issue Type",
+              "type": "string"
+            },
+            "assignee": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) Assignee's user identifier (string): Email, display name, or account ID (e.g., 'user@example.com', 'John Doe', 'accountid:...')",
+              "title": "Assignee"
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Issue description",
+              "title": "Description"
+            },
+            "components": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) Comma-separated list of component names to assign (e.g., 'Frontend,API')",
+              "title": "Components"
+            },
+            "additional_fields": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) Dictionary of additional fields to set. Examples:\n- Set priority: {'priority': {'name': 'High'}}\n- Add labels: {'labels': ['frontend', 'urgent']}\n- Link to parent (for any issue type): {'parent': 'PROJ-123'}\n- Set Fix Version/s: {'fixVersions': [{'id': '10020'}]}\n- Custom fields: {'customfield_10010': 'value'}",
+              "title": "Additional Fields"
+            }
+          },
+          "required": [
+            "project_key",
+            "summary",
+            "issue_type"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_batch_create_issues",
+        "parsed_description": {
+          "main": "Create multiple Jira issues in a batch.",
+          "args": "ctx: The FastMCP context.\nissues: JSON array string of issue objects.\nvalidate_only: If true, only validates without creating.",
+          "returns": "JSON string indicating success and listing created issues (or validation result).",
+          "raises": "ValueError: If in read-only mode, Jira client unavailable, or invalid JSON."
+        },
+        "schema": {
+          "properties": {
+            "issues": {
+              "description": "JSON array of issue objects. Each object should contain:\n- project_key (required): The project key (e.g., 'PROJ')\n- summary (required): Issue summary/title\n- issue_type (required): Type of issue (e.g., 'Task', 'Bug')\n- description (optional): Issue description\n- assignee (optional): Assignee username or email\n- components (optional): Array of component names\nExample: [\n  {\"project_key\": \"PROJ\", \"summary\": \"Issue 1\", \"issue_type\": \"Task\"},\n  {\"project_key\": \"PROJ\", \"summary\": \"Issue 2\", \"issue_type\": \"Bug\", \"components\": [\"Frontend\"]}\n]",
+              "title": "Issues",
+              "type": "string"
+            },
+            "validate_only": {
+              "default": false,
+              "description": "If true, only validates the issues without creating them",
+              "title": "Validate Only",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "issues"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_batch_get_changelogs",
+        "parsed_description": {
+          "main": "Get changelogs for multiple Jira issues (Cloud only).",
+          "args": "ctx: The FastMCP context.\nissue_ids_or_keys: List of issue IDs or keys.\nfields: List of fields to filter changelogs by. None for all fields.\nlimit: Maximum changelogs per issue (-1 for all).",
+          "returns": "JSON string representing a list of issues with their changelogs.",
+          "raises": "NotImplementedError: If run on Jira Server/Data Center.\nValueError: If Jira client is unavailable."
+        },
+        "schema": {
+          "properties": {
+            "issue_ids_or_keys": {
+              "description": "List of Jira issue IDs or keys, e.g. ['PROJ-123', 'PROJ-124']",
+              "items": {
+                "type": "string"
+              },
+              "title": "Issue Ids Or Keys",
+              "type": "array"
+            },
+            "fields": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) Filter the changelogs by fields, e.g. ['status', 'assignee']. Default to None for all fields.",
+              "title": "Fields"
+            },
+            "limit": {
+              "default": -1,
+              "description": "Maximum number of changelogs to return in result for each issue. Default to -1 for all changelogs. Notice that it only limits the results in the response, the function will still fetch all the data.",
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "issue_ids_or_keys"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_update_issue",
+        "parsed_description": {
+          "main": "Update an existing Jira issue including changing status, adding Epic links, updating fields, etc.",
+          "args": "ctx: The FastMCP context.\nissue_key: Jira issue key.\nfields: Dictionary of fields to update.\nadditional_fields: Optional dictionary of additional fields.\nattachments: Optional JSON array string or comma-separated list of file paths.",
+          "returns": "JSON string representing the updated issue object and attachment results.",
+          "raises": "ValueError: If in read-only mode or Jira client unavailable, or invalid input."
+        },
+        "schema": {
+          "properties": {
+            "issue_key": {
+              "description": "Jira issue key (e.g., 'PROJ-123')",
+              "title": "Issue Key",
+              "type": "string"
+            },
+            "fields": {
+              "additionalProperties": true,
+              "description": "Dictionary of fields to update. For 'assignee', provide a string identifier (email, name, or accountId). Example: `{'assignee': 'user@example.com', 'summary': 'New Summary'}`",
+              "title": "Fields",
+              "type": "object"
+            },
+            "additional_fields": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) Dictionary of additional fields to update. Use this for custom fields or more complex updates.",
+              "title": "Additional Fields"
+            },
+            "attachments": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) JSON string array or comma-separated list of file paths to attach to the issue. Example: '/path/to/file1.txt,/path/to/file2.txt' or ['/path/to/file1.txt','/path/to/file2.txt']",
+              "title": "Attachments"
+            }
+          },
+          "required": [
+            "issue_key",
+            "fields"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_delete_issue",
+        "parsed_description": {
+          "main": "Delete an existing Jira issue.",
+          "args": "ctx: The FastMCP context.\nissue_key: Jira issue key.",
+          "returns": "JSON string indicating success.",
+          "raises": "ValueError: If in read-only mode or Jira client unavailable."
+        },
+        "schema": {
+          "properties": {
+            "issue_key": {
+              "description": "Jira issue key (e.g. PROJ-123)",
+              "title": "Issue Key",
+              "type": "string"
+            }
+          },
+          "required": [
+            "issue_key"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_add_comment",
+        "parsed_description": {
+          "main": "Add a comment to a Jira issue.",
+          "args": "ctx: The FastMCP context.\nissue_key: Jira issue key.\ncomment: Comment text in Markdown.",
+          "returns": "JSON string representing the added comment object.",
+          "raises": "ValueError: If in read-only mode or Jira client unavailable."
+        },
+        "schema": {
+          "properties": {
+            "issue_key": {
+              "description": "Jira issue key (e.g., 'PROJ-123')",
+              "title": "Issue Key",
+              "type": "string"
+            },
+            "comment": {
+              "description": "Comment text in Markdown format",
+              "title": "Comment",
+              "type": "string"
+            }
+          },
+          "required": [
+            "issue_key",
+            "comment"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_add_worklog",
+        "parsed_description": {
+          "main": "Add a worklog entry to a Jira issue.",
+          "args": "ctx: The FastMCP context.\nissue_key: Jira issue key.\ntime_spent: Time spent in Jira format.\ncomment: Optional comment in Markdown.\nstarted: Optional start time in ISO format.\noriginal_estimate: Optional new original estimate.\nremaining_estimate: Optional new remaining estimate.",
+          "returns": "JSON string representing the added worklog object.",
+          "raises": "ValueError: If in read-only mode or Jira client unavailable."
+        },
+        "schema": {
+          "properties": {
+            "issue_key": {
+              "description": "Jira issue key (e.g., 'PROJ-123')",
+              "title": "Issue Key",
+              "type": "string"
+            },
+            "time_spent": {
+              "description": "Time spent in Jira format. Examples: '1h 30m' (1 hour and 30 minutes), '1d' (1 day), '30m' (30 minutes), '4h' (4 hours)",
+              "title": "Time Spent",
+              "type": "string"
+            },
+            "comment": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) Comment for the worklog in Markdown format",
+              "title": "Comment"
+            },
+            "started": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) Start time in ISO format. If not provided, the current time will be used. Example: '2023-08-01T12:00:00.000+0000'",
+              "title": "Started"
+            },
+            "original_estimate": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) New value for the original estimate",
+              "title": "Original Estimate"
+            },
+            "remaining_estimate": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) New value for the remaining estimate",
+              "title": "Remaining Estimate"
+            }
+          },
+          "required": [
+            "issue_key",
+            "time_spent"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_link_to_epic",
+        "parsed_description": {
+          "main": "Link an existing issue to an epic.",
+          "args": "ctx: The FastMCP context.\nissue_key: The key of the issue to link.\nepic_key: The key of the epic to link to.",
+          "returns": "JSON string representing the updated issue object.",
+          "raises": "ValueError: If in read-only mode or Jira client unavailable."
+        },
+        "schema": {
+          "properties": {
+            "issue_key": {
+              "description": "The key of the issue to link (e.g., 'PROJ-123')",
+              "title": "Issue Key",
+              "type": "string"
+            },
+            "epic_key": {
+              "description": "The key of the epic to link to (e.g., 'PROJ-456')",
+              "title": "Epic Key",
+              "type": "string"
+            }
+          },
+          "required": [
+            "issue_key",
+            "epic_key"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_create_issue_link",
+        "parsed_description": {
+          "main": "Create a link between two Jira issues.",
+          "args": "ctx: The FastMCP context.\nlink_type: The type of link (e.g., 'Blocks').\ninward_issue_key: The key of the source issue.\noutward_issue_key: The key of the target issue.\ncomment: Optional comment text.\ncomment_visibility: Optional dictionary for comment visibility.",
+          "returns": "JSON string indicating success or failure.",
+          "raises": "ValueError: If required fields are missing, invalid input, in read-only mode, or Jira client unavailable."
+        },
+        "schema": {
+          "properties": {
+            "link_type": {
+              "description": "The type of link to create (e.g., 'Duplicate', 'Blocks', 'Relates to')",
+              "title": "Link Type",
+              "type": "string"
+            },
+            "inward_issue_key": {
+              "description": "The key of the inward issue (e.g., 'PROJ-123')",
+              "title": "Inward Issue Key",
+              "type": "string"
+            },
+            "outward_issue_key": {
+              "description": "The key of the outward issue (e.g., 'PROJ-456')",
+              "title": "Outward Issue Key",
+              "type": "string"
+            },
+            "comment": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) Comment to add to the link",
+              "title": "Comment"
+            },
+            "comment_visibility": {
+              "anyOf": [
+                {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) Visibility settings for the comment (e.g., {'type': 'group', 'value': 'jira-users'})",
+              "title": "Comment Visibility"
+            }
+          },
+          "required": [
+            "link_type",
+            "inward_issue_key",
+            "outward_issue_key"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_create_remote_issue_link",
+        "parsed_description": {
+          "main": "Create a remote issue link (web link or Confluence link) for a Jira issue.\n\nThis tool allows you to add web links and Confluence links to Jira issues.\nThe links will appear in the issue's \"Links\" section and can be clicked to navigate to external resources.",
+          "args": "ctx: The FastMCP context.\nissue_key: The key of the issue to add the link to.\nurl: The URL to link to (can be any web page or Confluence page).\ntitle: The title/name that will be displayed for the link.\nsummary: Optional description of what the link is for.\nrelationship: Optional relationship description.\nicon_url: Optional URL to a 16x16 icon for the link.",
+          "returns": "JSON string indicating success or failure.",
+          "raises": "ValueError: If required fields are missing, invalid input, in read-only mode, or Jira client unavailable."
+        },
+        "schema": {
+          "properties": {
+            "issue_key": {
+              "description": "The key of the issue to add the link to (e.g., 'PROJ-123')",
+              "title": "Issue Key",
+              "type": "string"
+            },
+            "url": {
+              "description": "The URL to link to (e.g., 'https://example.com/page' or Confluence page URL)",
+              "title": "Url",
+              "type": "string"
+            },
+            "title": {
+              "description": "The title/name of the link (e.g., 'Documentation Page', 'Confluence Page')",
+              "title": "Title",
+              "type": "string"
+            },
+            "summary": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) Description of the link",
+              "title": "Summary"
+            },
+            "relationship": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) Relationship description (e.g., 'causes', 'relates to', 'documentation')",
+              "title": "Relationship"
+            },
+            "icon_url": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) URL to a 16x16 icon for the link",
+              "title": "Icon Url"
+            }
+          },
+          "required": [
+            "issue_key",
+            "url",
+            "title"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_remove_issue_link",
+        "parsed_description": {
+          "main": "Remove a link between two Jira issues.",
+          "args": "ctx: The FastMCP context.\nlink_id: The ID of the link to remove.",
+          "returns": "JSON string indicating success.",
+          "raises": "ValueError: If link_id is missing, in read-only mode, or Jira client unavailable."
+        },
+        "schema": {
+          "properties": {
+            "link_id": {
+              "description": "The ID of the link to remove",
+              "title": "Link Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "link_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_transition_issue",
+        "parsed_description": {
+          "main": "Transition a Jira issue to a new status.",
+          "args": "ctx: The FastMCP context.\nissue_key: Jira issue key.\ntransition_id: ID of the transition.\nfields: Optional dictionary of fields to update during transition.\ncomment: Optional comment for the transition.",
+          "returns": "JSON string representing the updated issue object.",
+          "raises": "ValueError: If required fields missing, invalid input, in read-only mode, or Jira client unavailable."
+        },
+        "schema": {
+          "properties": {
+            "issue_key": {
+              "description": "Jira issue key (e.g., 'PROJ-123')",
+              "title": "Issue Key",
+              "type": "string"
+            },
+            "transition_id": {
+              "description": "ID of the transition to perform. Use the jira_get_transitions tool first to get the available transition IDs for the issue. Example values: '11', '21', '31'",
+              "title": "Transition Id",
+              "type": "string"
+            },
+            "fields": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) Dictionary of fields to update during the transition. Some transitions require specific fields to be set (e.g., resolution). Example: {'resolution': {'name': 'Fixed'}}",
+              "title": "Fields"
+            },
+            "comment": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) Comment to add during the transition. This will be visible in the issue history.",
+              "title": "Comment"
+            }
+          },
+          "required": [
+            "issue_key",
+            "transition_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_create_sprint",
+        "parsed_description": {
+          "main": "Create Jira sprint for a board.",
+          "args": "ctx: The FastMCP context.\nboard_id: Board ID.\nsprint_name: Sprint name.\nstart_date: Start date (ISO format).\nend_date: End date (ISO format).\ngoal: Optional sprint goal.",
+          "returns": "JSON string representing the created sprint object.",
+          "raises": "ValueError: If in read-only mode or Jira client unavailable."
+        },
+        "schema": {
+          "properties": {
+            "board_id": {
+              "description": "The id of board (e.g., '1000')",
+              "title": "Board Id",
+              "type": "string"
+            },
+            "sprint_name": {
+              "description": "Name of the sprint (e.g., 'Sprint 1')",
+              "title": "Sprint Name",
+              "type": "string"
+            },
+            "start_date": {
+              "description": "Start time for sprint (ISO 8601 format)",
+              "title": "Start Date",
+              "type": "string"
+            },
+            "end_date": {
+              "description": "End time for sprint (ISO 8601 format)",
+              "title": "End Date",
+              "type": "string"
+            },
+            "goal": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) Goal of the sprint",
+              "title": "Goal"
+            }
+          },
+          "required": [
+            "board_id",
+            "sprint_name",
+            "start_date",
+            "end_date"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_update_sprint",
+        "parsed_description": {
+          "main": "Update jira sprint.",
+          "args": "ctx: The FastMCP context.\nsprint_id: The ID of the sprint.\nsprint_name: Optional new name.\nstate: Optional new state (future|active|closed).\nstart_date: Optional new start date.\nend_date: Optional new end date.\ngoal: Optional new goal.",
+          "returns": "JSON string representing the updated sprint object or an error message.",
+          "raises": "ValueError: If in read-only mode or Jira client unavailable."
+        },
+        "schema": {
+          "properties": {
+            "sprint_id": {
+              "description": "The id of sprint (e.g., '10001')",
+              "title": "Sprint Id",
+              "type": "string"
+            },
+            "sprint_name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) New name for the sprint",
+              "title": "Sprint Name"
+            },
+            "state": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) New state for the sprint (future|active|closed)",
+              "title": "State"
+            },
+            "start_date": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) New start date for the sprint",
+              "title": "Start Date"
+            },
+            "end_date": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) New end date for the sprint",
+              "title": "End Date"
+            },
+            "goal": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) New goal for the sprint",
+              "title": "Goal"
+            }
+          },
+          "required": [
+            "sprint_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_get_project_versions",
+        "parsed_description": {
+          "main": "No description available.",
+          "args": null,
+          "returns": null,
+          "raises": null
+        },
+        "schema": {
+          "properties": {
+            "project_key": {
+              "description": "Jira project key (e.g., 'PROJ')",
+              "title": "Project Key",
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_key"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_get_all_projects",
+        "parsed_description": {
+          "main": "Get all Jira projects accessible to the current user.",
+          "args": "ctx: The FastMCP context.\ninclude_archived: Whether to include archived projects.",
+          "returns": "JSON string representing a list of project objects accessible to the user.\nProject keys are always returned in uppercase.\nIf JIRA_PROJECTS_FILTER is configured, only returns projects matching those keys.",
+          "raises": "ValueError: If the Jira client is not configured or available."
+        },
+        "schema": {
+          "properties": {
+            "include_archived": {
+              "default": false,
+              "description": "Whether to include archived projects in the results",
+              "title": "Include Archived",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_create_version",
+        "parsed_description": {
+          "main": "Create a new fix version in a Jira project.",
+          "args": "ctx: The FastMCP context.\nproject_key: The project key.\nname: Name of the version.\nstart_date: Start date (optional).\nrelease_date: Release date (optional).\ndescription: Description (optional).",
+          "returns": "JSON string of the created version object.",
+          "raises": null
+        },
+        "schema": {
+          "properties": {
+            "project_key": {
+              "description": "Jira project key (e.g., 'PROJ')",
+              "title": "Project Key",
+              "type": "string"
+            },
+            "name": {
+              "description": "Name of the version",
+              "title": "Name",
+              "type": "string"
+            },
+            "start_date": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Start date (YYYY-MM-DD)",
+              "title": "Start Date"
+            },
+            "release_date": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Release date (YYYY-MM-DD)",
+              "title": "Release Date"
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Description of the version",
+              "title": "Description"
+            }
+          },
+          "required": [
+            "project_key",
+            "name"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "jira_batch_create_versions",
+        "parsed_description": {
+          "main": "Batch create multiple versions in a Jira project.",
+          "args": "ctx: The FastMCP context.\nproject_key: The project key.\nversions: JSON array string of version objects.",
+          "returns": "JSON array of results, each with success flag, version or error.",
+          "raises": null
+        },
+        "schema": {
+          "properties": {
+            "project_key": {
+              "description": "Jira project key (e.g., 'PROJ')",
+              "title": "Project Key",
+              "type": "string"
+            },
+            "versions": {
+              "description": "JSON array of version objects. Each object should contain:\n- name (required): Name of the version\n- startDate (optional): Start date (YYYY-MM-DD)\n- releaseDate (optional): Release date (YYYY-MM-DD)\n- description (optional): Description of the version\nExample: [\n  {\"name\": \"v1.0\", \"startDate\": \"2025-01-01\", \"releaseDate\": \"2025-02-01\", \"description\": \"First release\"},\n  {\"name\": \"v2.0\"}\n]",
+              "title": "Versions",
+              "type": "string"
+            }
+          },
+          "required": [
+            "project_key",
+            "versions"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "confluence_search",
+        "parsed_description": {
+          "main": "Search Confluence content using simple terms or CQL.",
+          "args": "ctx: The FastMCP context.\nquery: Search query - can be simple text or a CQL query string.\nlimit: Maximum number of results (1-50).\nspaces_filter: Comma-separated list of space keys to filter by.",
+          "returns": "JSON string representing a list of simplified Confluence page objects.",
+          "raises": null
+        },
+        "schema": {
+          "properties": {
+            "query": {
+              "description": "Search query - can be either a simple text (e.g. 'project documentation') or a CQL query string. Simple queries use 'siteSearch' by default, to mimic the WebUI search, with an automatic fallback to 'text' search if not supported. Examples of CQL:\n- Basic search: 'type=page AND space=DEV'\n- Personal space search: 'space=\"~username\"' (note: personal space keys starting with ~ must be quoted)\n- Search by title: 'title~\"Meeting Notes\"'\n- Use siteSearch: 'siteSearch ~ \"important concept\"'\n- Use text search: 'text ~ \"important concept\"'\n- Recent content: 'created >= \"2023-01-01\"'\n- Content with specific label: 'label=documentation'\n- Recently modified content: 'lastModified > startOfMonth(\"-1M\")'\n- Content modified this year: 'creator = currentUser() AND lastModified > startOfYear()'\n- Content you contributed to recently: 'contributor = currentUser() AND lastModified > startOfWeek()'\n- Content watched by user: 'watcher = \"user@domain.com\" AND type = page'\n- Exact phrase in content: 'text ~ \"\\\"Urgent Review Required\\\"\" AND label = \"pending-approval\"'\n- Title wildcards: 'title ~ \"Minutes*\" AND (space = \"HR\" OR space = \"Marketing\")'\nNote: Special identifiers need proper quoting in CQL: personal space keys (e.g., \"~username\"), reserved words, numeric IDs, and identifiers with special characters.",
+              "title": "Query",
+              "type": "string"
+            },
+            "limit": {
+              "default": 10,
+              "description": "Maximum number of results (1-50)",
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            },
+            "spaces_filter": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) Comma-separated list of space keys to filter results by. Overrides the environment variable CONFLUENCE_SPACES_FILTER if provided. Use empty string to disable filtering.",
+              "title": "Spaces Filter"
+            }
+          },
+          "required": [
+            "query"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "confluence_get_page",
+        "parsed_description": {
+          "main": "Get content of a specific Confluence page by its ID, or by its title and space key.",
+          "args": "ctx: The FastMCP context.\npage_id: Confluence page ID. If provided, 'title' and 'space_key' are ignored.\ntitle: The exact title of the page. Must be used with 'space_key'.\nspace_key: The key of the space. Must be used with 'title'.\ninclude_metadata: Whether to include page metadata.\nconvert_to_markdown: Convert content to markdown (true) or keep raw HTML (false).",
+          "returns": "JSON string representing the page content and/or metadata, or an error if not found or parameters are invalid.",
+          "raises": null
+        },
+        "schema": {
+          "properties": {
+            "page_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Confluence page ID (numeric ID, can be found in the page URL). For example, in the URL 'https://example.atlassian.net/wiki/spaces/TEAM/pages/123456789/Page+Title', the page ID is '123456789'. Provide this OR both 'title' and 'space_key'. If page_id is provided, title and space_key will be ignored.",
+              "title": "Page Id"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "The exact title of the Confluence page. Use this with 'space_key' if 'page_id' is not known.",
+              "title": "Title"
+            },
+            "space_key": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "The key of the Confluence space where the page resides (e.g., 'DEV', 'TEAM'). Required if using 'title'.",
+              "title": "Space Key"
+            },
+            "include_metadata": {
+              "default": true,
+              "description": "Whether to include page metadata such as creation date, last update, version, and labels.",
+              "title": "Include Metadata",
+              "type": "boolean"
+            },
+            "convert_to_markdown": {
+              "default": true,
+              "description": "Whether to convert page to markdown (true) or keep it in raw HTML format (false). Raw HTML can reveal macros (like dates) not visible in markdown, but CAUTION: using HTML significantly increases token usage in AI responses.",
+              "title": "Convert To Markdown",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
+      {
+        "name": "confluence_get_page_children",
+        "parsed_description": {
+          "main": "Get child pages of a specific Confluence page.",
+          "args": "ctx: The FastMCP context.\nparent_id: The ID of the parent page.\nexpand: Fields to expand.\nlimit: Maximum number of child pages.\ninclude_content: Whether to include page content.\nconvert_to_markdown: Convert content to markdown if include_content is true.\nstart: Starting index for pagination.",
+          "returns": "JSON string representing a list of child page objects.",
+          "raises": null
+        },
+        "schema": {
+          "properties": {
+            "parent_id": {
+              "description": "The ID of the parent page whose children you want to retrieve",
+              "title": "Parent Id",
+              "type": "string"
+            },
+            "expand": {
+              "default": "version",
+              "description": "Fields to expand in the response (e.g., 'version', 'body.storage')",
+              "title": "Expand",
+              "type": "string"
+            },
+            "limit": {
+              "default": 25,
+              "description": "Maximum number of child pages to return (1-50)",
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            },
+            "include_content": {
+              "default": false,
+              "description": "Whether to include the page content in the response",
+              "title": "Include Content",
+              "type": "boolean"
+            },
+            "convert_to_markdown": {
+              "default": true,
+              "description": "Whether to convert page content to markdown (true) or keep it in raw HTML format (false). Only relevant if include_content is true.",
+              "title": "Convert To Markdown",
+              "type": "boolean"
+            },
+            "start": {
+              "default": 0,
+              "description": "Starting index for pagination (0-based)",
+              "minimum": 0,
+              "title": "Start",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "parent_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "confluence_get_comments",
+        "parsed_description": {
+          "main": "Get comments for a specific Confluence page.",
+          "args": "ctx: The FastMCP context.\npage_id: Confluence page ID.",
+          "returns": "JSON string representing a list of comment objects.",
+          "raises": null
+        },
+        "schema": {
+          "properties": {
+            "page_id": {
+              "description": "Confluence page ID (numeric ID, can be parsed from URL, e.g. from 'https://example.atlassian.net/wiki/spaces/TEAM/pages/123456789/Page+Title' -> '123456789')",
+              "title": "Page Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "page_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "confluence_get_labels",
+        "parsed_description": {
+          "main": "Get labels for a specific Confluence page.",
+          "args": "ctx: The FastMCP context.\npage_id: Confluence page ID.",
+          "returns": "JSON string representing a list of label objects.",
+          "raises": null
+        },
+        "schema": {
+          "properties": {
+            "page_id": {
+              "description": "Confluence page ID (numeric ID, can be parsed from URL, e.g. from 'https://example.atlassian.net/wiki/spaces/TEAM/pages/123456789/Page+Title' -> '123456789')",
+              "title": "Page Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "page_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "confluence_add_label",
+        "parsed_description": {
+          "main": "Add label to an existing Confluence page.",
+          "args": "ctx: The FastMCP context.\npage_id: The ID of the page to update.\nname: The name of the label.",
+          "returns": "JSON string representing the updated list of label objects for the page.",
+          "raises": "ValueError: If in read-only mode or Confluence client is unavailable."
+        },
+        "schema": {
+          "properties": {
+            "page_id": {
+              "description": "The ID of the page to update",
+              "title": "Page Id",
+              "type": "string"
+            },
+            "name": {
+              "description": "The name of the label",
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "page_id",
+            "name"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "confluence_create_page",
+        "parsed_description": {
+          "main": "Create a new Confluence page.",
+          "args": "ctx: The FastMCP context.\nspace_key: The key of the space.\ntitle: The title of the page.\ncontent: The content of the page (format depends on content_format).\nparent_id: Optional parent page ID.\ncontent_format: The format of the content ('markdown', 'wiki', or 'storage').\nenable_heading_anchors: Whether to enable heading anchors (markdown only).",
+          "returns": "JSON string representing the created page object.",
+          "raises": "ValueError: If in read-only mode, Confluence client is unavailable, or invalid content_format."
+        },
+        "schema": {
+          "properties": {
+            "space_key": {
+              "description": "The key of the space to create the page in (usually a short uppercase code like 'DEV', 'TEAM', or 'DOC')",
+              "title": "Space Key",
+              "type": "string"
+            },
+            "title": {
+              "description": "The title of the page",
+              "title": "Title",
+              "type": "string"
+            },
+            "content": {
+              "description": "The content of the page. Format depends on content_format parameter. Can be Markdown (default), wiki markup, or storage format",
+              "title": "Content",
+              "type": "string"
+            },
+            "parent_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "(Optional) parent page ID. If provided, this page will be created as a child of the specified page",
+              "title": "Parent Id"
+            },
+            "content_format": {
+              "default": "markdown",
+              "description": "(Optional) The format of the content parameter. Options: 'markdown' (default), 'wiki', or 'storage'. Wiki format uses Confluence wiki markup syntax",
+              "title": "Content Format",
+              "type": "string"
+            },
+            "enable_heading_anchors": {
+              "default": false,
+              "description": "(Optional) Whether to enable automatic heading anchor generation. Only applies when content_format is 'markdown'",
+              "title": "Enable Heading Anchors",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "space_key",
+            "title",
+            "content"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "confluence_update_page",
+        "parsed_description": {
+          "main": "Update an existing Confluence page.",
+          "args": "ctx: The FastMCP context.\npage_id: The ID of the page to update.\ntitle: The new title of the page.\ncontent: The new content of the page (format depends on content_format).\nis_minor_edit: Whether this is a minor edit.\nversion_comment: Optional comment for this version.\nparent_id: Optional new parent page ID.\ncontent_format: The format of the content ('markdown', 'wiki', or 'storage').\nenable_heading_anchors: Whether to enable heading anchors (markdown only).",
+          "returns": "JSON string representing the updated page object.",
+          "raises": "ValueError: If Confluence client is not configured, available, or invalid content_format."
+        },
+        "schema": {
+          "properties": {
+            "page_id": {
+              "description": "The ID of the page to update",
+              "title": "Page Id",
+              "type": "string"
+            },
+            "title": {
+              "description": "The new title of the page",
+              "title": "Title",
+              "type": "string"
+            },
+            "content": {
+              "description": "The new content of the page. Format depends on content_format parameter",
+              "title": "Content",
+              "type": "string"
+            },
+            "is_minor_edit": {
+              "default": false,
+              "description": "Whether this is a minor edit",
+              "title": "Is Minor Edit",
+              "type": "boolean"
+            },
+            "version_comment": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Optional comment for this version",
+              "title": "Version Comment"
+            },
+            "parent_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Optional the new parent page ID",
+              "title": "Parent Id"
+            },
+            "content_format": {
+              "default": "markdown",
+              "description": "(Optional) The format of the content parameter. Options: 'markdown' (default), 'wiki', or 'storage'. Wiki format uses Confluence wiki markup syntax",
+              "title": "Content Format",
+              "type": "string"
+            },
+            "enable_heading_anchors": {
+              "default": false,
+              "description": "(Optional) Whether to enable automatic heading anchor generation. Only applies when content_format is 'markdown'",
+              "title": "Enable Heading Anchors",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "page_id",
+            "title",
+            "content"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "confluence_delete_page",
+        "parsed_description": {
+          "main": "Delete an existing Confluence page.",
+          "args": "ctx: The FastMCP context.\npage_id: The ID of the page to delete.",
+          "returns": "JSON string indicating success or failure.",
+          "raises": "ValueError: If Confluence client is not configured or available."
+        },
+        "schema": {
+          "properties": {
+            "page_id": {
+              "description": "The ID of the page to delete",
+              "title": "Page Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "page_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "confluence_add_comment",
+        "parsed_description": {
+          "main": "Add a comment to a Confluence page.",
+          "args": "ctx: The FastMCP context.\npage_id: The ID of the page to add a comment to.\ncontent: The comment content in Markdown format.",
+          "returns": "JSON string representing the created comment.",
+          "raises": "ValueError: If in read-only mode or Confluence client is unavailable."
+        },
+        "schema": {
+          "properties": {
+            "page_id": {
+              "description": "The ID of the page to add a comment to",
+              "title": "Page Id",
+              "type": "string"
+            },
+            "content": {
+              "description": "The comment content in Markdown format",
+              "title": "Content",
+              "type": "string"
+            }
+          },
+          "required": [
+            "page_id",
+            "content"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "confluence_search_user",
+        "parsed_description": {
+          "main": "Search Confluence users using CQL.",
+          "args": "ctx: The FastMCP context.\nquery: Search query - a CQL query string for user search.\nlimit: Maximum number of results (1-50).",
+          "returns": "JSON string representing a list of simplified Confluence user search result objects.",
+          "raises": null
+        },
+        "schema": {
+          "properties": {
+            "query": {
+              "description": "Search query - a CQL query string for user search. Examples of CQL:\n- Basic user lookup by full name: 'user.fullname ~ \"First Last\"'\nNote: Special identifiers need proper quoting in CQL: personal space keys (e.g., \"~username\"), reserved words, numeric IDs, and identifiers with special characters.",
+              "title": "Query",
+              "type": "string"
+            },
+            "limit": {
+              "default": 10,
+              "description": "Maximum number of results (1-50)",
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "query"
+          ],
+          "type": "object"
+        }
+      }
+    ]
+  }

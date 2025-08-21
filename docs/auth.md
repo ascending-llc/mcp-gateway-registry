@@ -1,221 +1,649 @@
-# Authentication and Authorization Enhancements for MCP
+# Authentication and Authorization Guide
 
-Authorization in context of MCP usually refers to two distinct flows or grant types:
+The MCP Gateway Registry provides enterprise-ready authentication and authorization using industry-standard OAuth 2.0 flows with fine-grained access control.
 
-- Agent acting on-behalf of a user: in this case the Agent takes the identity of the end-user (human). For example, an Agent invoked by an application as a result of a user asking a question in a chatbot will use the user's identity for authentication and authorization.
+## Quick Navigation
 
-- Agent acting on its own behalf: in this case the Agent gets invoked automatically in response to an event and thus the Agent has its own identity. For example a network remediation agent that gets invoked when a network anomaly is detected will have an identity of its own as it is not being invoked by a user.
+**I want to...**
+- [Build an AI agent with authentication](#quick-start-for-ai-agents) → Quick Start
+- [Understand the authentication architecture](#authentication-architecture) → Architecture 
+- [Set up external service integration](#external-service-integration) → Egress Auth
+- [Configure fine-grained permissions](#fine-grained-access-control-fgac) → FGAC
+- [See all configuration options](#configuration-reference) → Reference
 
-The latest MCP authorization spec available [here](https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization) discusses this in context of OAuth Grant types.
+---
 
-## The challenge with MCP auth in an enterprise scenario
+## Quick Start for AI Agents
 
-The current MCP spec puts the onus of authentication on the MCP server i.e. the server is responsible for providing access credentials to the MCP client as well as validating those credentials (see [OAuth for model context protocol](https://aaronparecki.com/2025/04/03/15/oauth-for-model-context-protocol) for an illustrative explanation). This implies that developers now have to add Auth capabilities in their MCP servers and in an enterprise scenario with hundreds of MCP servers and thousands of tools this is a huge challenge. The problem is compounded by the fact that enterprises would want to offer fine-grained access controls to tools (an Agent can access the server but only a subset of the tools provided by the server) for both the types of Agent flows described above.
+Get your AI agent authenticated and running in 5 minutes.
 
-## A Solution with an MCP Gateway and Registry
+### Prerequisites
+- Amazon Cognito credentials (provided by your administrator)
+- Access to external services you want to integrate (optional)
 
-The MCP gateway and Registry provides an enterprise ready solution that integrates with an IdP and provides a separate auth server which handles all authorization and authentication by talking to an IdP and this frees up the MCP servers from having to handle any authentication.
+### Step 1: Configure Environment
 
-Here is an architecture diagram of the system.
+Create `credentials-provider/oauth/.env` with your credentials:
+
+```bash
+# Ingress Authentication (Required)
+AWS_REGION=us-east-1
+INGRESS_OAUTH_USER_POOL_ID=us-east-1_XXXXXXXXX
+INGRESS_OAUTH_CLIENT_ID=your_cognito_client_id
+INGRESS_OAUTH_CLIENT_SECRET=your_cognito_client_secret
+
+# Egress Authentication (Optional - for external services)
+EGRESS_OAUTH_CLIENT_ID_1=your_external_provider_client_id
+EGRESS_OAUTH_CLIENT_SECRET_1=your_external_provider_client_secret
+EGRESS_OAUTH_REDIRECT_URI_1=http://localhost:8080/callback
+EGRESS_PROVIDER_NAME_1=atlassian
+EGRESS_MCP_SERVER_NAME_1=atlassian
+```
+
+**Pro Tip:** Use the example files as templates:
+```bash
+# Copy and customize the example configurations
+cp credentials-provider/oauth/.env.example credentials-provider/oauth/.env
+cp .env.example .env
+
+# Edit with your actual credentials
+```
+
+### Step 2: Run OAuth Setup
+
+```bash
+cd credentials-provider
+./generate_creds.sh
+
+# Available options:
+# ./generate_creds.sh --all              # Run all authentication flows (default)
+# ./generate_creds.sh --ingress-only     # Only MCP Gateway authentication
+# ./generate_creds.sh --egress-only      # Only external provider authentication
+# ./generate_creds.sh --agentcore-only   # Only AgentCore token generation
+# ./generate_creds.sh --provider google  # Specify provider for egress auth
+# ./generate_creds.sh --verbose          # Enable debug logging
+
+# This will:
+# 1. Authenticate with Cognito (M2M/2LO)
+# 2. Optionally authenticate with external services (3LO)  
+# 3. Generate AgentCore tokens if configured
+# 4. Generate MCP client configurations
+# 5. Add no-auth services to configurations
+```
+
+### Step 3: Use Generated Configuration
+
+The script generates ready-to-use MCP client configurations:
+
+**For VS Code** (`~/.vscode/mcp.json`):
+```json
+{
+  "mcp": {
+    "servers": {
+      "mcp_gateway": {
+        "url": "https://mcpgateway.ddns.net/mcpgw/mcp",
+        "headers": {
+          "X-Authorization": "Bearer {your_jwt_token}",
+          "X-User-Pool-Id": "{user_pool_id}",
+          "X-Client-Id": "{client_id}",
+          "X-Region": "{region}"
+        }
+      }
+    }
+  }
+}
+```
+
+### Step 4: Test Your Connection
+
+```python
+# Example: Using the MCP client with authentication
+import json
+import os
+from pathlib import Path
+from langchain_mcp_adapters.client import MultiServerMCPClient
+
+# Method 1: Load configuration from ~/.vscode/mcp.json
+def load_mcp_config_from_file():
+    """Load MCP configuration from VS Code config file."""
+    config_path = Path.home() / ".vscode" / "mcp.json"
+    
+    if not config_path.exists():
+        # Fallback to oauth-tokens directory if VS Code config doesn't exist
+        config_path = Path.cwd() / ".oauth-tokens" / "vscode_mcp.json"
+    
+    if config_path.exists():
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+            # Extract the servers configuration
+            return config.get("mcp", {}).get("servers", {})
+    else:
+        raise FileNotFoundError(f"MCP configuration not found at {config_path}")
+
+# Method 2: Direct configuration (as shown in agent.py)
+def create_mcp_client_direct(auth_token, user_pool_id, client_id, region):
+    """Create MCP client with direct configuration."""
+    auth_headers = {
+        'X-Authorization': f'Bearer {auth_token}',
+        'X-User-Pool-Id': user_pool_id,
+        'X-Client-Id': client_id,
+        'X-Region': region
+    }
+    
+    return MultiServerMCPClient({
+        "mcp_gateway": {
+            "url": "https://mcpgateway.ddns.net/mcpgw/mcp",
+            "transport": "sse",
+            "headers": auth_headers
+        }
+    })
+
+# Usage Example - Loading from config file
+async def connect_with_config_file():
+    # Load configuration from file
+    servers_config = load_mcp_config_from_file()
+    
+    # Initialize MCP client with loaded configuration
+    mcp_client = MultiServerMCPClient(servers_config)
+    
+    # Discover available tools (filtered by your permissions)
+    tools = await mcp_client.get_tools()
+    return tools
+
+# Usage Example - Direct configuration (useful for agents)
+async def connect_with_params(token, pool_id, client_id, region="us-east-1"):
+    # Create client with parameters
+    mcp_client = create_mcp_client_direct(token, pool_id, client_id, region)
+    
+    # Discover available tools
+    tools = await mcp_client.get_tools()
+    return tools
+```
+
+**That's it!** Your agent is now authenticated and can access MCP servers based on your assigned permissions.
+
+### Integration with Agent Applications
+
+The `agents/agent.py` file demonstrates how to integrate authentication in a production agent:
+
+```python
+# Example from agents/agent.py showing MultiServerMCPClient usage
+from langchain_mcp_adapters.client import MultiServerMCPClient
+
+# The agent can read auth parameters from multiple sources:
+# 1. Command-line arguments (--client-id, --client-secret, etc.)
+# 2. Environment variables (COGNITO_CLIENT_ID, etc.)
+# 3. Configuration files (.env.agent, .env.user)
+# 4. VS Code MCP config (~/.vscode/mcp.json)
+
+# Current implementation in agent.py:
+auth_headers = {
+    'X-Authorization': f'Bearer {access_token}',
+    'X-User-Pool-Id': args.user_pool_id,
+    'X-Client-Id': args.client_id,
+    'X-Region': args.region
+}
+
+client = MultiServerMCPClient({
+    "mcp_registry": {
+        "url": server_url,
+        "transport": "sse",
+        "headers": auth_headers
+    }
+})
+
+# To enhance agent.py to read from ~/.vscode/mcp.json:
+# Add a function to load config from file as a fallback
+# when auth parameters are not provided via CLI or env vars
+```
+
+For a complete working example, see [`agents/agent.py`](../agents/agent.py) which implements:
+- Multiple authentication methods (M2M, session cookies, JWT tokens)
+- Dynamic token generation and refresh
+- Comprehensive error handling and logging
+- Integration with LangChain and Anthropic models
+
+---
+
+## Authentication Architecture
+
+### Overview
+
+The MCP Gateway Registry uses a three-component authentication system:
+
+1. **Ingress Authentication (2LO)**: Gateway access using Amazon Cognito
+2. **Egress Authentication (3LO)**: External service integration via OAuth providers
+3. **Fine-Grained Access Control**: Permission management at method and tool level
+
+### Simplified Flow
 
 ```mermaid
-graph TB
-    %% Users and Agents at same level - stacked on top
-    subgraph Clients["Client Layer"]
-        direction TB
-        User[User<br/>Human Administrator]
-        CLIAuth[CLI Auth Tool]
-        Agent[AI Agent]
-        User --- CLIAuth
-    end
+sequenceDiagram
+    participant Agent as AI Agent
+    participant Gateway as MCP Gateway
+    participant External as External Service
     
-    %% MCP Gateway & Registry Components (Separate)
-    subgraph Infrastructure["MCP Gateway & Registry Infrastructure"]
-        direction TB
-        Nginx["Nginx<br/>Reverse Proxy"]
-        AuthServer["Auth Server<br/>(Dual Auth)"]
-        Registry["Registry<br/>Web UI"]
-        RegistryMCP["Registry<br/>MCP Server"]
-    end
+    Note over Agent,External: Setup Phase (One-time)
+    Agent->>Gateway: 1. Authenticate with Cognito (2LO)
+    Agent->>External: 2. OAuth with external provider (3LO)
     
-    %% Identity Provider
-    IdP[Identity Provider<br/>Amazon Cognito]
-    
-    %% MCP Server Farm
-    subgraph MCPFarm["MCP Server Farm"]
-        direction TB
-        MCP1[MCP Server 1<br/>CurrentTime]
-        MCP2[MCP Server 2<br/>FinInfo]
-        MCP3[MCP Server 3<br/>Custom]
-        MCPn[MCP Server n<br/>...]
-    end
-    
-    %% All connections go through gateway/registry only
-    User -->|1. Web UI access<br/>Server management| Nginx
-    User -->|2. Registry access<br/>Tool discovery| Registry
-    
-    Agent -->|1. Discover tools<br/>with auth headers| Nginx
-    Agent -->|2. MCP requests<br/>with auth headers| Nginx
-    
-    %% Internal routing
-    Nginx -->|Route /mcpgw/*<br/>Auth validation| AuthServer
-    Nginx -->|Route /mcpgw/*<br/>Tool discovery| RegistryMCP
-    Nginx -->|Route /registry/*<br/>Web UI| Registry
-    Nginx -->|Route /server1/*<br/>Proxy to MCP servers| MCP1
-    Nginx -->|Route /server2/*<br/>Proxy to MCP servers| MCP2
-    Nginx -->|Route /serverN/*<br/>Proxy to MCP servers| MCP3
-    Nginx -->|Route /serverN/*<br/>Proxy to MCP servers| MCPn
-    
-    %% Auth flows
-    IdP -.->|M2M: JWT tokens<br/>Client Credentials| Agent
-    IdP -.->|User: OAuth PKCE flow<br/>Authorization Code| CLIAuth
-    CLIAuth -.->|Session cookie<br/>Signed with SECRET_KEY| User
-    AuthServer -.->|Validate JWT/cookies<br/>Get user groups/scopes| IdP
-    
-    %% Registry management (User-driven)
-    Registry -->|Server registration<br/>Health monitoring| RegistryMCP
-    RegistryMCP -->|Tool metadata<br/>Health checks| MCP1
-    RegistryMCP -->|Tool metadata<br/>Health checks| MCP2
-    RegistryMCP -->|Tool metadata<br/>Health checks| MCP3
-    RegistryMCP -->|Tool metadata<br/>Health checks| MCPn
-    
-    %% Styling
-    classDef userStyle fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
-    classDef agentStyle fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-    classDef clientStyle fill:#f5f5f5,stroke:#424242,stroke-width:2px
-    classDef idpStyle fill:#fff3e0,stroke:#e65100,stroke-width:2px
-    classDef nginxStyle fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-    classDef authStyle fill:#ffebee,stroke:#c62828,stroke-width:2px
-    classDef registryStyle fill:#fff8e1,stroke:#f57f17,stroke-width:2px
-    classDef mcpStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
-    classDef cliStyle fill:#fce4ec,stroke:#880e4f,stroke-width:2px
-    
-    class Clients clientStyle
-    class User userStyle
-    class Agent agentStyle
-    class IdP idpStyle
-    class Nginx nginxStyle
-    class AuthServer authStyle
-    class Registry,RegistryMCP registryStyle
-    class MCP1,MCP2,MCP3,MCPn mcpStyle
-    class CLIAuth cliStyle
+    Note over Agent,External: Runtime Phase
+    Agent->>Gateway: 3. Request with auth headers
+    Gateway->>Gateway: 4. Validate permissions (FGAC)
+    Gateway->>External: 5. Forward with external token
+    External->>Agent: 6. Response
 ```
-### Architecture Components Explained
 
-The updated architecture diagram above shows the clear separation of components that work together to provide secure, enterprise-ready MCP access:
+### Authentication Types Explained
 
-#### Client Layer
-- **User (Human Administrator)**: Manages the registry through the web UI, registers new MCP servers, and monitors system health
-- **CLI Auth Tool**: Handles OAuth authentication flows for users, creating session cookies for web UI access
-- **AI Agent**: Programmatic clients that discover and invoke MCP tools with proper authentication
+#### Two-Legged OAuth (2LO) - Ingress
+- **Purpose**: Authenticate agents/users TO the MCP Gateway
+- **Provider**: Amazon Cognito
+- **Use Case**: M2M authentication for AI agents
+- **Token Type**: JWT with embedded scopes
 
-#### MCP Gateway & Registry Infrastructure
-- **Nginx Reverse Proxy**: Single entry point that routes all requests and handles SSL termination
-- **Auth Server**: Validates JWT tokens and session cookies against Amazon Cognito, enforces fine-grained access control
-- **Registry Web UI**: Administrative interface for managing MCP servers and viewing system status
-- **Registry MCP Server**: Provides tool discovery capabilities to agents, returns filtered results based on permissions
+#### Three-Legged OAuth (3LO) - Egress  
+- **Purpose**: Authenticate FROM the Gateway to external services
+- **Providers**: Atlassian, Google, GitHub, others
+- **Use Case**: Access external APIs on behalf of users
+- **Token Type**: Provider-specific OAuth tokens
 
-#### External Components
-- **Amazon Cognito**: Identity Provider (IdP) that handles user authentication and group management
-- **MCP Server Farm**: Collection of individual MCP servers providing various tools and capabilities
+---
 
-> **For detailed setup instructions**, see the comprehensive guide in [`docs/cognito.md`](cognito.md) which covers both user identity and agent identity authentication modes.
+## Detailed Authentication Flows
 
-At a high-level the flow works as follows:
+### Ingress Authentication (2LO)
+
+Controls access TO the MCP Gateway using Amazon Cognito.
+
+#### Supported Methods
+
+1. **Machine-to-Machine (M2M)**
+   - OAuth 2.0 Client Credentials Grant
+   - For AI agents and automated systems
+   - JWT tokens with custom scopes
+
+2. **User Authentication to Registry UI**
+   - OAuth 2.0 Authorization Code + PKCE
+   - For human administrators via web interface
+   - Cognito-hosted login page
+
+3. **Legacy Cookie Authentication** ⚠️ DEPRECATED
+
+#### Ingress Flow Diagram
+
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant Cognito as Amazon Cognito
+    participant Gateway as MCP Gateway
+    participant AuthServer as Auth Server
+    
+    Agent->>Cognito: 1. Client Credentials Grant
+    Note right of Agent: client_id + client_secret
+    
+    Cognito->>Agent: 2. JWT Token + Scopes
+    
+    Agent->>Gateway: 3. MCP Request
+    Note right of Agent: Headers:<br/>X-Authorization: Bearer {jwt}<br/>X-User-Pool-Id<br/>X-Client-Id<br/>X-Region
+    
+    Gateway->>AuthServer: 4. Validate JWT
+    AuthServer->>Cognito: 5. Verify signature
+    Cognito->>AuthServer: 6. Valid + Scopes
+    AuthServer->>Gateway: 7. Authorized
+    Gateway->>Agent: 8. Response
+```
+
+### External Service Integration
+
+#### Egress Authentication (3LO)
+
+Enables the Gateway to access external services on your behalf.
+
+#### Supported Providers
+
+- **Atlassian Cloud**: Jira, Confluence integration
+- **Google**: Workspace, Gmail, Drive access
+- **GitHub**: Repository and organization access
+- **Others**: *Coming soon*
+
+See [`agents/oauth/oauth_providers.yaml`](../agents/oauth/oauth_providers.yaml) for complete list.
+
+#### Setting Up External Provider (Atlassian Example)
+
+1. **Create Developer App**
+   - Visit [developer.atlassian.com](https://developer.atlassian.com)
+   - Create OAuth 2.0 (3LO) app
+   - Set redirect URI: `http://localhost:8080/callback`
+
+2. **Configure Credentials**
+   ```bash
+   # In agents/oauth/.env
+   EGRESS_OAUTH_CLIENT_ID=your_atlassian_client_id
+   EGRESS_OAUTH_CLIENT_SECRET=your_atlassian_client_secret
+   ```
+
+3. **Run Authentication**
+   ```bash
+   ./oauth_creds.sh --provider atlassian
+   ```
+
+#### Egress Flow Diagram
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant Agent as Agent<br/>(includes MCP client)
-    participant IdP as Enterprise IdP
+    participant CLI as oauth_creds.sh
+    participant Browser
+    participant Provider as Atlassian
     
-    box rgba(0,0,0,0) MCP Gateway & Registry Solution
-        participant Gateway as Gateway<br/>(Reverse Proxy)
-        participant AuthServer as Auth Server
-        participant Registry as Registry<br/>MCP Server
+    User->>CLI: 1. Run script
+    CLI->>Browser: 2. Open auth URL
+    Browser->>Provider: 3. User login
+    
+    rect rgb(255, 248, 220)
+        Note over User,Provider: 🔑 3LO Authorization
+        User->>Provider: 4. Grant permissions
     end
     
-    participant MCP as External<br/>MCP Server
-
-    %% Step 1: Get credentials
-    Note over User,IdP: Step 1: Credential Acquisition (Choose One)
-    alt M2M Authentication (Agent Identity)
-        Agent->>IdP: Request auth credentials (client_id/secret)
-        IdP->>Agent: Return JWT token + scopes
-    else Session Cookie (On-behalf of User)
-        participant CLIAuth as CLI Auth Tool
-        User->>CLIAuth: Run cli_user_auth.py
-        CLIAuth->>IdP: OAuth PKCE flow
-        IdP->>CLIAuth: Auth code + user info
-        CLIAuth->>CLIAuth: Create session cookie
-        CLIAuth->>User: Save to ~/.mcp/session_cookie
-        User->>Agent: Provide cookie file path
-    end
-
-    %% Step 2: Embed credentials in headers
-    Note over Agent: Step 2: Embed credentials + IdP metadata
-    alt M2M Headers
-        Note over Agent: Authorization: Bearer {JWT}<br/>X-User-Pool-Id: {pool_id}<br/>X-Client-Id: {client_id}<br/>X-Region: {region}
-    else Session Cookie Headers
-        Note over Agent: Cookie: mcp_gateway_session={cookie}<br/>X-User-Pool-Id: {pool_id}<br/>X-Client-Id: {client_id}<br/>X-Region: {region}
-    end
-
-    %% Step 3: Tool Discovery with scoped access
-    Note over Agent,Registry: Step 3: Scoped Tool Discovery
-    Agent->>Gateway: Tool discovery request with auth headers
-    Gateway->>AuthServer: Validate credentials
-    alt JWT Token Validation
-        AuthServer->>IdP: Verify JWT signature + claims
-        IdP->>AuthServer: Token valid + scopes from token
-    else Session Cookie Validation
-        AuthServer->>AuthServer: Decode cookie with SECRET_KEY
-        AuthServer->>AuthServer: Map user groups to scopes
-    end
-    AuthServer->>Gateway: 200 OK + allowed scopes
-    Gateway->>Registry: Tool discovery request + scope headers
-    
-    Note over Registry: Registry filters tools based<br/>on Agent's allowed scopes
-    Registry->>Gateway: Filtered tool list (only accessible tools)
-    Gateway->>Agent: Available tools response
-
-    %% Step 4: MCP Tool Invocation to External Server
-    Note over Agent,MCP: Step 4: MCP Tool Invocation Flow
-    Agent->>Gateway: MCP tool call request with auth headers
-    Gateway->>AuthServer: Validate credentials + scope
-    AuthServer->>IdP: Verify credentials
-    IdP->>AuthServer: Auth response + scope
-    
-    alt Valid credentials + sufficient scope
-        AuthServer->>Gateway: 200 OK + allowed scopes
-        Gateway->>MCP: Forward MCP request
-        MCP->>Gateway: MCP response
-        Gateway->>Agent: MCP response
-    else Invalid or insufficient access
-        AuthServer->>Gateway: 403 Access Denied
-        Gateway->>Agent: 403 Access Denied
-    end
-
-    %% Footnotes
-    Note over Agent,MCP: Notes:<br/>• Agent can skip tool discovery and call MCP methods directly<br/>• Auth validation flow remains the same for all MCP operations<br/>  (initialize, tools/call with tool-specific scope validation)
+    Provider->>CLI: 5. Auth code
+    CLI->>Provider: 6. Exchange for token
+    Provider->>CLI: 7. Access token
+    CLI->>CLI: 8. Save token
 ```
 
-1. An Agent gets auth credentials from an enterprise IdP either by itself (agent identity) or is provided these credentials (on-behalf of user's identity) that have been retrieved by the (human) user through a separate program (such as signing-in via a web browser or a CLI command).
+---
 
-1. The Agent embeds these credentials and other metadata needed to verify these credentials in HTTP headers for the MCP protocol messages exchanged with the MCP servers.
+## Fine-Grained Access Control (FGAC)
 
-1. The MCP servers are only accessible through the Gateway (reverse proxy), upon receiving the messages the Gateway hands them off to an auth server which validates the credentials embedded in the these messages with the enterprise IdP. This validation includes both authentication as well as authorization. The auth server retrieves the access scope for the Agent from the IdP auth validation response and then compares it with the MCP method (`initialize`, `tools/call` etc.) and tool being requested. The auth server responds with a 200 OK if the access should be allowed based on the credentials provided and the scope requested or a an HTTP 403 access denied otherwise. The auth server also includes the list of allowed scopes in its 200 OK response.
+The FGAC system provides granular permissions for MCP servers, methods, and individual tools.
 
-1. The Gateway then proceeds to pass on the request to the MCP server to which the request was addressed to in case the access was allowed (200 OK from the auth server) or sends the 403 access denied to the Agent. 
+### Key Concepts
 
-1. An Agent uses the same mechanism to talk to the Registry's MCP server for tool discovery. The Agent may request access to a special tool discovery tool available via the Registry's MCP server. The tool discovery tool now has access to the Agent's scope (through the auth server including the scope in the response headers for the 200 OK) and applies the scopes while searching for potential tools that the Agent can have access to, thus it only lists the tools that the Agent has access to in its response via the tool discovery tool. Here is a example scenario, a general purpose AI assistant may be able to discover through the tool finder tool that there is a tool to get the current time at a given location but based on its access it may not have access to a tool to determine stock information and hence the Registry never list the stock information tool as an available tool to the Agent (if the Agent knows about this tool through some out of band mechanism and tries to invoke the tool it would get an access denied as explained in the previous steps).
+#### Scope Types
 
-The above implementation provides an OAuth compliant way to MCP security without the MCP servers being involved in enforcing this security greatly simplifying the MCP server implementation (as compared to every MCP server having to implement authentication and authorization).
+- **UI Scopes**: Registry management permissions
+  - `mcp-registry-admin`: Full administrative access
+  - `mcp-registry-user`: Limited user access
+  
+- **Server Scopes**: MCP server access
+  - `mcp-servers-unrestricted/read`: Read all servers
+  - `mcp-servers-unrestricted/execute`: Execute all tools
+  - `mcp-servers-restricted/read`: Limited read access
+  - `mcp-servers-restricted/execute`: Limited execute access
 
+#### Methods vs Tools
 
-## Amazon Cognito based reference implementation
+The system distinguishes between:
 
-For comprehensive setup instructions and detailed configuration of Amazon Cognito as the Identity Provider, see the detailed documentation in [`docs/cognito.md`](cognito.md) which covers both user identity and agent identity authentication modes with step-by-step configuration guides.
+- **MCP Methods**: Protocol operations (`initialize`, `tools/list`, `tools/call`)
+- **Individual Tools**: Specific functions within servers
 
-For information about Fine-Grained Access Control (FGAC) including scope configuration, group mappings, and permission management, see [`docs/scopes.md`](scopes.md).
+### Access Control Example
 
-By implementing these enhancements, we can significantly improve the security, scalability, and flexibility of our MCP authentication and authorization system.
+```yaml
+# User can list tools but only execute specific ones
+mcp-servers-restricted/execute:
+  - server: fininfo
+    methods:
+      - tools/list        # Can list all tools
+      - tools/call        # Can call tools
+    tools:
+      - get_stock_aggregates   # But only these specific tools
+      - print_stock_data       # Not other tools in the server
+```
+
+### Common Scenarios
+
+| Scenario | Can List Tools? | Can Execute? | Which Tools? |
+|----------|----------------|--------------|--------------|
+| Read-only user | ✅ Yes | ❌ No | N/A |
+| Restricted execute | ✅ Yes | ✅ Yes | Only specified tools |
+| Unrestricted admin | ✅ Yes | ✅ Yes | All tools |
+
+For complete FGAC documentation, see [Fine-Grained Access Control](scopes.md).
+
+---
+
+## Implementation Guide
+
+### Running OAuth Authentication
+
+#### Complete Setup (Ingress + Egress)
+```bash
+cd agents/oauth
+./oauth_creds.sh                    # Interactive mode
+./oauth_creds.sh --provider atlassian --force  # Specific provider
+```
+
+#### Ingress Only (Gateway Access)
+```bash
+./oauth_creds.sh --ingress-only
+# Or directly:
+python ingress_oauth.py --verbose
+```
+
+#### Egress Only (External Services)
+```bash
+./oauth_creds.sh --egress-only --provider atlassian
+# Or directly:
+python egress_oauth.py --provider atlassian
+```
+
+### Authentication Headers Reference
+
+Headers are automatically managed by the OAuth scripts, but here's what gets sent:
+
+#### For MCP Gateway (Ingress)
+| Header | Purpose | Example |
+|--------|---------|---------|
+| `X-Authorization` | JWT token for gateway | `Bearer eyJhbG...` |
+| `X-User-Pool-Id` | Cognito pool identifier | `us-east-1_XXXXXXXXX` |
+| `X-Client-Id` | Cognito client ID | `your_client_id` |
+| `X-Region` | AWS region | `us-east-1` |
+
+#### For External Services (Egress)
+| Header | Purpose | Example |
+|--------|---------|---------|
+| `Authorization` | External service token | `Bearer ya29.a0...` |
+| `X-Atlassian-Cloud-Id` | Atlassian instance | `1234-5678-9abc` |
+
+---
+
+## Configuration Reference
+
+📋 **For complete configuration documentation, see [Configuration Reference](configuration.md)**
+
+The Configuration Reference provides comprehensive documentation for all configuration files including:
+
+- **Environment Variables**: `.env` files with complete parameter documentation
+- **YAML Configurations**: All `.yml` and `.yaml` files with field descriptions  
+- **Example Files**: `.env.example` and `config.yaml.example` templates
+- **Security Best Practices**: Credential management and file permissions
+- **Troubleshooting**: Common configuration issues and solutions
+
+### Quick Reference
+
+| Configuration | Location | Purpose |
+|---------------|----------|---------|
+| **Main Environment** | `.env` | Core project settings and registry URLs |
+| **OAuth Credentials** | `credentials-provider/oauth/.env` | Ingress/egress OAuth provider credentials |
+| **AgentCore Config** | `credentials-provider/agentcore-auth/` | Amazon Bedrock AgentCore authentication |
+| **OAuth Providers** | `auth_server/oauth2_providers.yml` | Web-based OAuth provider definitions |
+
+### Key Configuration Files
+
+#### OAuth Provider Configuration
+
+Providers are configured in [`credentials-provider/oauth/oauth_providers.yaml`](../credentials-provider/oauth/oauth_providers.yaml):
+
+```yaml
+providers:
+  atlassian:
+    display_name: "Atlassian Cloud"
+    auth_url: "https://auth.atlassian.com/authorize"
+    token_url: "https://auth.atlassian.com/oauth/token"
+    scopes:
+      - "read:jira-work"
+      - "write:jira-work"
+    requires_cloud_id: true
+```
+
+### Scope Configuration
+
+Access control is defined in [`auth_server/scopes.yml`](../auth_server/scopes.yml):
+
+```yaml
+group_mappings:
+  mcp-registry-admin:
+    - mcp-registry-admin
+    - mcp-servers-unrestricted/read
+    - mcp-servers-unrestricted/execute
+
+mcp-servers-restricted/read:
+  - server: currenttime
+    methods:
+      - tools/list
+    tools:
+      - current_time_by_timezone
+```
+
+### Generated Output Files
+
+The OAuth scripts generate:
+
+- **VS Code Config**: `~/.vscode/mcp.json` - Primary configuration for VS Code integration
+- **Local VS Code Config**: `.oauth-tokens/vscode_mcp.json` - Local copy of VS Code config
+- **Roocode Config**: `~/.roocode/mcp_servers.json` - Configuration for Roocode
+- **Local Roocode Config**: `.oauth-tokens/mcp.json` - Local copy of Roocode config
+- **Token Storage**: `.oauth-tokens/ingress.json`, `.oauth-tokens/egress.json` - Raw token data
+
+#### Using Configuration Files in Your Code
+
+The generated configuration files can be used directly with `MultiServerMCPClient`:
+
+```python
+# Option 1: Load from VS Code config location
+config_path = Path.home() / ".vscode" / "mcp.json"
+
+# Option 2: Load from local oauth-tokens directory
+config_path = Path.cwd() / ".oauth-tokens" / "vscode_mcp.json"
+
+# Parse and use the configuration
+with open(config_path) as f:
+    config = json.load(f)
+    servers = config.get("mcp", {}).get("servers", {})
+    client = MultiServerMCPClient(servers)
+```
+
+---
+
+## Security Considerations
+
+### Best Practices
+
+1. **Token Storage**: Tokens stored with `600` permissions in `.oauth-tokens/`
+2. **Environment Security**: Never commit `.env` files
+3. **Scope Management**: Follow principle of least privilege
+4. **Network Security**: HTTPS-only, PKCE where supported
+
+### Token Lifecycle
+
+- **Ingress tokens**: 1-hour expiry, auto-refresh via client credentials
+- **Egress tokens**: Provider-specific, refresh tokens where available
+- **Session management**: Handled automatically by OAuth scripts
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+**Cannot authenticate with Cognito**
+- Verify credentials in `.env`
+- Check user pool ID format
+- Ensure client has proper Cognito configuration
+
+**External provider authentication fails**
+- Verify redirect URI matches provider configuration
+- Check client ID/secret are correct
+- Ensure required scopes are configured
+
+**Permission denied for specific tools**
+- Check your Cognito group memberships
+- Verify scope mappings in `scopes.yml`
+- Ensure tool names match exactly
+
+---
+
+## Testing and Validation
+
+### MCP Gateway Testing Tools
+
+Use the comprehensive testing script to validate your authentication setup:
+
+```bash
+# Test basic connectivity
+./tests/mcp_cmds.sh basic
+
+# Test MCP connectivity with authentication
+./tests/mcp_cmds.sh ping
+
+# List available tools (filtered by your permissions)
+./tests/mcp_cmds.sh list
+
+# Call specific tools
+./tests/mcp_cmds.sh call debug_auth_context '{}'
+./tests/mcp_cmds.sh call intelligent_tool_finder '{"natural_language_query": "quantum"}'
+
+# Test against different gateway URLs
+GATEWAY_URL=https://your-domain.com/mcp ./tests/mcp_cmds.sh ping
+./tests/mcp_cmds.sh --url https://your-domain.com/mcp list
+```
+
+The testing script automatically:
+- Detects localhost vs external URLs
+- Loads appropriate authentication credentials from `.oauth-tokens/ingress.json`
+- Handles MCP session establishment and authentication headers
+- Provides clear error messages for debugging
+
+### Credential Validation
+
+```bash
+# Validate all OAuth configurations
+cd credentials-provider
+./generate_creds.sh --verbose
+
+# Test specific authentication flows
+./generate_creds.sh --ingress-only --verbose    # Test MCP Gateway auth
+./generate_creds.sh --egress-only --verbose     # Test external provider auth
+./generate_creds.sh --agentcore-only --verbose  # Test AgentCore auth
+```
+
+### Authentication Flow Testing
+
+1. **Ingress Authentication** (MCP Gateway access):
+   ```bash
+   python credentials-provider/oauth/ingress_oauth.py --verbose
+   ```
+
+2. **Egress Authentication** (External services):
+   ```bash
+   python credentials-provider/oauth/egress_oauth.py --provider atlassian --verbose
+   ```
+
+3. **AgentCore Token Generation**:
+   ```bash
+   python credentials-provider/agentcore-auth/generate_access_token.py --debug
+   ```
+
+---
+
+## Additional Resources
+
+- [Complete Configuration Reference](configuration.md)
+- [Amazon Cognito Setup Guide](cognito.md)
+- [Complete Fine-Grained Access Control Documentation](scopes.md)
+- [OAuth Provider Configurations](../credentials-provider/oauth/oauth_providers.yaml)
+- [MCP Testing Tools](../tests/mcp_cmds.sh)
+- [Source: Auth Server Implementation](../auth_server/server.py)

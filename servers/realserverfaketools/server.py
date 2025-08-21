@@ -10,9 +10,9 @@ import argparse
 import logging
 import json
 from datetime import datetime, timedelta
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP, Context
 from pydantic import BaseModel, Field
-from typing import Annotated, List, Dict, Optional, Union, Any
+from typing import Annotated, List, Dict, Optional, Union, Any, ClassVar
 
 # Configure logging
 logging.basicConfig(
@@ -44,22 +44,37 @@ def secure_sample(population, k):
         result.append(population_copy.pop(idx))
     return result
 
+class Constants(BaseModel):
+    # Using ClassVar to define class-level constants
+    DESCRIPTION: ClassVar[str] = "Real Server Fake Tools MCP Server"
+    DEFAULT_MCP_TRANSPORT: ClassVar[str] = "streamable-http"
+    DEFAULT_MCP_SERVER_LISTEN_PORT: ClassVar[str] = "8001"
+    REQUEST_TIMEOUT: ClassVar[float] = 15.0
+
+    # Disable instance creation - optional but recommended for constants
+    class Config:
+        frozen = True  # Make instances immutable
+
+
 def parse_arguments():
     """Parse command line arguments with defaults matching environment variables."""
-    parser = argparse.ArgumentParser(description="Real Server Fake Tools MCP Server")
+    parser = argparse.ArgumentParser(description=Constants.DESCRIPTION)
 
     parser.add_argument(
         "--port",
         type=str,
-        default=os.environ.get("MCP_SERVER_LISTEN_PORT", "8001"),
-        help="Port for the MCP server to listen on (default: 8001)",
+        default=os.environ.get(
+            "MCP_SERVER_LISTEN_PORT", Constants.DEFAULT_MCP_SERVER_LISTEN_PORT
+        ),
+        help=f"Port for the MCP server to listen on (default: {Constants.DEFAULT_MCP_SERVER_LISTEN_PORT})",
     )
 
     parser.add_argument(
         "--transport",
         type=str,
-        default=os.environ.get("MCP_TRANSPORT", "sse"),
-        help="Transport type for the MCP server (default: sse)",
+        default=os.environ.get("MCP_TRANSPORT", Constants.DEFAULT_MCP_TRANSPORT),
+        choices=["streamable-http"],
+        help=f"Transport type for the MCP server (default: {Constants.DEFAULT_MCP_TRANSPORT})",
     )
 
     return parser.parse_args()
@@ -68,9 +83,12 @@ def parse_arguments():
 # Parse arguments at module level to make them available
 args = parse_arguments()
 
-# Initialize FastMCP server with host and port settings
-mcp = FastMCP("RealServerFakeTools", host="0.0.0.0", port=int(args.port))
-mcp.settings.mount_path = "/realserverfaketools"
+# Log parsed arguments for debugging
+logger.info(f"Parsed arguments - port: {args.port}, transport: {args.transport}")
+logger.info(f"Environment variables - MCP_TRANSPORT: {os.environ.get('MCP_TRANSPORT', 'NOT SET')}, MCP_SERVER_LISTEN_PORT: {os.environ.get('MCP_SERVER_LISTEN_PORT', 'NOT SET')}")
+
+# Initialize FastMCP server
+mcp = FastMCP("RealServerFakeTools")
 
 
 # Define some Pydantic models for complex parameter types
@@ -581,9 +599,13 @@ def get_tools_documentation() -> str:
 
 
 def main():
+    # Log transport and endpoint information
+    endpoint = "/mcp"  # streamable-http always uses /mcp endpoint
+    logger.info(f"Starting RealServerFakeTools server on port {args.port} with transport {args.transport}")
+    logger.info(f"Server will be available at: http://localhost:{args.port}{endpoint}")
+    
     # Run the server with the specified transport from command line args
-    mcp.run(transport=args.transport)
-    logger.info(f"Server is running on port {args.port} with transport {args.transport}")
+    mcp.run(transport=args.transport, host="0.0.0.0", port=int(args.port))
 
 
 if __name__ == "__main__":

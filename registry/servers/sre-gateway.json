@@ -1,8 +1,10 @@
 {
   "server_name": "SRE Gateway (Bedrock AgentCore Gateway)",
   "description": "Tools for an SRE Agent.",
-  "path": "/sre-gateway",
-  "proxy_pass_url": "https://sre-gateway-tetssad921.gateway.bedrock-agentcore.us-east-1.amazonaws.com",
+  "path": "/sre-gateway/",
+  "proxy_pass_url": "https://sre-gateway-i7ge1zayhw.gateway.bedrock-agentcore.us-east-1.amazonaws.com/",
+  "auth_provider": "bedrock-agentcore",
+  "auth_type": "oauth",
   "supported_transports": [
     "streamable-http"
   ],
@@ -13,7 +15,7 @@
   ],
   "headers": [
     {
-      "Authorization": "Bearer MCP_SERVER1_AUTH_TOKEN"
+      "Authorization": "Bearer $SRE_GATEWAY_AUTH_TOKEN"
     }
   ],
   "num_tools": 21,

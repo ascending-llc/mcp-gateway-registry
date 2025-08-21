@@ -103,7 +103,16 @@ class ServerService:
         # Initialize service state
         self.service_state = {}
         for path in self.registered_servers.keys():
-            self.service_state[path] = loaded_state.get(path, False)
+            # Try exact match first, then try with/without trailing slash
+            value = loaded_state.get(path, None)
+            if value is None:
+                if path.endswith('/'):
+                    # Try without trailing slash
+                    value = loaded_state.get(path.rstrip('/'), False)
+                else:
+                    # Try with trailing slash
+                    value = loaded_state.get(path + '/', False)
+            self.service_state[path] = value
         
         logger.info(f"Initial service state loaded: {self.service_state}")
         
@@ -311,7 +320,21 @@ class ServerService:
 
     def is_service_enabled(self, path: str) -> bool:
         """Check if a service is enabled."""
-        result = self.service_state.get(path, False)
+        # Try exact match first
+        result = self.service_state.get(path, None)
+        
+        # If no exact match, try with/without trailing slash
+        if result is None:
+            if path.endswith('/'):
+                # Try without trailing slash
+                result = self.service_state.get(path.rstrip('/'), False)
+            else:
+                # Try with trailing slash
+                result = self.service_state.get(path + '/', False)
+        
+        if result is None:
+            result = False
+            
         logger.info(f"[SERVER_DEBUG] is_service_enabled({path}) -> service_state: {self.service_state}, result: {result}")
         return result
         

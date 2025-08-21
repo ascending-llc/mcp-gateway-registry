@@ -18,7 +18,8 @@ services:
       - COGNITO_CLIENT_SECRET=${COGNITO_CLIENT_SECRET}
       - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
       - AWS_REGION=${AWS_REGION:-us-east-1}
-      - MCP_SERVER1_AUTH_TOKEN=${MCP_SERVER1_AUTH_TOKEN}
+      - SRE_GATEWAY_AUTH_TOKEN=${SRE_GATEWAY_AUTH_TOKEN}
+      - ATLASSIAN_AUTH_TOKEN=${ATLASSIAN_AUTH_TOKEN}
     ports:
       - "80:80"
       - "443:443"
@@ -26,7 +27,7 @@ services:
     volumes:
       - /opt/mcp-gateway/servers:/app/registry/servers
       - /opt/mcp-gateway/models:/app/registry/models
-      - /home/ubuntu/ssl_data:/etc/ssl
+      - /opt/ssl:/etc/ssl
       - /var/log/mcp-gateway:/app/logs
       - /opt/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
     depends_on:
@@ -117,6 +118,20 @@ services:
       - PORT=8002
     ports:
       - "8002:8002"
+    restart: unless-stopped
+
+  # Atlassian MCP Server
+  atlassian-server:
+    image: ghcr.io/sooperset/mcp-atlassian:latest
+    environment:
+      - ATLASSIAN_OAUTH_ENABLE=true
+      - MCP_VERY_VERBOSE=true
+      - MCP_LOGGING_STDOUT=true
+    ports:
+      - "8005:8005"
+    volumes:
+      - /home/ubuntu/.mcp-atlassian:/home/app/.mcp-atlassian
+    command: --transport streamable-http --port 8005
     restart: unless-stopped
 
 volumes:
