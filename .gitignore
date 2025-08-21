@@ -131,11 +131,11 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env*
+.env
+.env.*
+!.env.example
 .env.backup
-
 .env.user
-.env*
 .env.docker
 .venv
 env/
