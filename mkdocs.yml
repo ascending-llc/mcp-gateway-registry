@@ -1,0 +1,138 @@
+site_name: MCP Gateway & Registry
+site_description: Enterprise-grade MCP server registry and reverse proxy with OAuth authentication and fine-grained access control
+site_author: Agentic Community
+site_url: https://agentic-community.github.io/mcp-gateway-registry/
+
+# Repository
+repo_name: agentic-community/mcp-gateway-registry
+repo_url: https://github.com/agentic-community/mcp-gateway-registry
+
+# Copyright
+copyright: Copyright &copy; 2025 Agentic Community
+
+# Configuration
+theme:
+  name: material
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.share
+    - toc.follow
+    - toc.integrate
+    - content.code.copy
+    - content.code.annotate
+  logo: docs/img/registry.png
+  favicon: docs/img/registry.png
+
+# Plugins
+plugins:
+  - search:
+      lang: en
+  - git-revision-date-localized:
+      enable_creation_date: true
+  - minify:
+      minify_html: true
+
+# Extensions
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink:
+      repo_url_shorthand: true
+      user: agentic-community
+      repo: mcp-gateway-registry
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+# Page tree
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Quick Start: quick-start.md
+    - Installation: installation.md
+    - Configuration: configuration.md
+    - FAQ: FAQ.md
+  - Authentication & Security:
+    - Authentication Guide: auth.md
+    - Amazon Cognito Setup: cognito.md
+    - Access Control & Scopes: scopes.md
+    - JWT Token Vending: jwt-token-vending.md
+    - Security Policy: SECURITY.md
+  - Architecture & Development:
+    - Registry API: registry_api.md
+    - Dynamic Tool Discovery: dynamic-tool-discovery.md
+    - Architecture Overview: registry-auth-architecture.md
+    - Detailed Architecture: registry-auth-detailed.md
+  - Integration:
+    - AI Coding Assistants: ai-coding-assistants-setup.md
+  - Contributing:
+    - Contributing Guide: CONTRIBUTING.md
+    - Code of Conduct: CODE_OF_CONDUCT.md
+  - Legal:
+    - License: LICENSE
+    - Notice: NOTICE
+
+# Extra
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/agentic-community/mcp-gateway-registry
+    - icon: fontawesome/brands/discord
+      link: https://discord.gg/agentic-community
+  generator: false
+
+# Analytics (optional - add your Google Analytics ID if needed)
+# extra:
+#   analytics:
+#     provider: google
+#     property: G-XXXXXXXXXX
