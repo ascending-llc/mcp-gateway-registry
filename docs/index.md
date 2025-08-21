@@ -1,7 +1,8 @@
-# MCP Gateway & Registry
-
 <div align="center">
-  <img src="img/mcp-gateway-header.svg" alt="MCP Gateway & Registry" width="600"/>
+<img src="img/mcp_gateway_horizontal_white_logo.png" alt="MCP Gateway Logo" width="100%">
+
+**Enterprise-Ready Gateway for AI Development Tools**
+
 </div>
 
 ## Enterprise-Grade MCP Server & Registry
