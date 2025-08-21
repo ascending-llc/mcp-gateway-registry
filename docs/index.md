@@ -88,38 +88,120 @@ The registry will be available at `http://localhost:7860` with example MCP serve
 
 ```mermaid
 flowchart TB
-    subgraph "Client Layer"
-        A1[AI Agents]
-        A2[Development Tools]
-        A3[Web Interface]
+    subgraph Human_Users["Human Users"]
+        User1["Human User 1"]
+        User2["Human User 2"]
+        UserN["Human User N"]
+    end
+
+    subgraph AI_Agents["AI Agents"]
+        Agent1["AI Agent 1"]
+        Agent2["AI Agent 2"]
+        Agent3["AI Agent 3"]
+        AgentN["AI Agent N"]
+    end
+
+    subgraph EC2_Gateway["<b>MCP Gateway & Registry</b> (Amazon EC2 Instance)"]
+        subgraph NGINX["NGINX Reverse Proxy"]
+            RP["Reverse Proxy Router"]
+        end
+        
+        subgraph AuthRegistry["Authentication & Registry Services"]
+            AuthServer["Auth Server<br/>(Dual Auth)"]
+            Registry["Registry<br/>Web UI"]
+            RegistryMCP["Registry<br/>MCP Server"]
+        end
+        
+        subgraph LocalMCPServers["Local MCP Servers"]
+            MCP_Local1["MCP Server 1"]
+            MCP_Local2["MCP Server 2"]
+        end
     end
     
-    subgraph "MCP Gateway & Registry"
-        B1[Nginx Reverse Proxy]
-        B2[OAuth Authentication]
-        B3[Registry Service]
-        B4[Access Control Engine]
+    %% Identity Provider
+    IdP[Identity Provider<br/>Amazon Cognito]
+    
+    subgraph EKS_Cluster["Amazon EKS/EC2 Cluster"]
+        MCP_EKS1["MCP Server 3"]
+        MCP_EKS2["MCP Server 4"]
     end
     
-    subgraph "MCP Server Ecosystem"
-        C1[Atlassian MCP Server]
-        C2[Financial Data Server]
-        C3[Time & Calendar Server]
-        C4[Custom Enterprise Servers]
+    subgraph APIGW_Lambda["Amazon API Gateway + AWS Lambda"]
+        API_GW["Amazon API Gateway"]
+        Lambda1["AWS Lambda Function 1"]
+        Lambda2["AWS Lambda Function 2"]
     end
     
-    A1 --> B1
-    A2 --> B1
-    A3 --> B1
+    subgraph External_Systems["External Data Sources & APIs"]
+        DB1[(Database 1)]
+        DB2[(Database 2)]
+        API1["External API 1"]
+        API2["External API 2"]
+        API3["External API 3"]
+    end
     
-    B1 --> B2
-    B2 --> B4
-    B4 --> B3
+    %% Connections from Human Users
+    User1 -->|Web Browser<br>Authentication| IdP
+    User2 -->|Web Browser<br>Authentication| IdP
+    UserN -->|Web Browser<br>Authentication| IdP
+    User1 -->|Web Browser<br>HTTPS| Registry
+    User2 -->|Web Browser<br>HTTPS| Registry
+    UserN -->|Web Browser<br>HTTPS| Registry
     
-    B1 --> C1
-    B1 --> C2
-    B1 --> C3
-    B1 --> C4
+    %% Connections from Agents to Gateway
+    Agent1 -->|MCP Protocol<br>SSE with Auth| RP
+    Agent2 -->|MCP Protocol<br>SSE with Auth| RP
+    Agent3 -->|MCP Protocol<br>Streamable HTTP with Auth| RP
+    AgentN -->|MCP Protocol<br>Streamable HTTP with Auth| RP
+    
+    %% Auth flow connections
+    RP -->|Auth validation| AuthServer
+    AuthServer -.->|Validate credentials| IdP
+    Registry -.->|User authentication| IdP
+    RP -->|Tool discovery| RegistryMCP
+    RP -->|Web UI access| Registry
+    
+    %% Connections from Gateway to MCP Servers
+    RP -->|SSE| MCP_Local1
+    RP -->|SSE| MCP_Local2
+    RP -->|SSE| MCP_EKS1
+    RP -->|SSE| MCP_EKS2
+    RP -->|Streamable HTTP| API_GW
+    
+    %% Connections within API GW + Lambda
+    API_GW --> Lambda1
+    API_GW --> Lambda2
+    
+    %% Connections to External Systems
+    MCP_Local1 -->|Tool Connection| DB1
+    MCP_Local2 -->|Tool Connection| DB2
+    MCP_EKS1 -->|Tool Connection| API1
+    MCP_EKS2 -->|Tool Connection| API2
+    Lambda1 -->|Tool Connection| API3
+
+    %% Style definitions
+    classDef user fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    classDef agent fill:#e1f5fe,stroke:#29b6f6,stroke-width:2px
+    classDef gateway fill:#e8f5e9,stroke:#66bb6a,stroke-width:2px
+    classDef nginx fill:#f3e5f5,stroke:#ab47bc,stroke-width:2px
+    classDef mcpServer fill:#fff3e0,stroke:#ffa726,stroke-width:2px
+    classDef eks fill:#ede7f6,stroke:#7e57c2,stroke-width:2px
+    classDef apiGw fill:#fce4ec,stroke:#ec407a,stroke-width:2px
+    classDef lambda fill:#ffebee,stroke:#ef5350,stroke-width:2px
+    classDef dataSource fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
+    
+    %% Apply styles
+    class User1,User2,UserN user
+    class Agent1,Agent2,Agent3,AgentN agent
+    class EC2_Gateway,NGINX gateway
+    class RP nginx
+    class AuthServer,Registry,RegistryMCP gateway
+    class IdP apiGw
+    class MCP_Local1,MCP_Local2 mcpServer
+    class EKS_Cluster,MCP_EKS1,MCP_EKS2 eks
+    class API_GW apiGw
+    class Lambda1,Lambda2 lambda
+    class DB1,DB2,API1,API2,API3 dataSource
 ```
 
 The MCP Gateway & Registry acts as a centralized hub that:
