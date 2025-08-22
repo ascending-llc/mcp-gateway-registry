@@ -209,29 +209,117 @@ For a complete working example, see [`agents/agent.py`](../agents/agent.py) whic
 
 ### Overview
 
-The MCP Gateway Registry uses a three-component authentication system:
+The MCP Gateway Registry uses a comprehensive three-layer authentication system:
 
 1. **Ingress Authentication (2LO)**: Gateway access using Amazon Cognito
-2. **Egress Authentication (3LO)**: External service integration via OAuth providers
-3. **Fine-Grained Access Control**: Permission management at method and tool level
+2. **Egress Authentication (3LO)**: External service integration via OAuth providers  
+3. **Fine-Grained Access Control (FGAC)**: Permission management at method and tool level
 
-### Simplified Flow
+### Key Concepts
+
+- **Dual Token System**: AI agents carry BOTH ingress and egress tokens
+- **Token Storage**: After authentication, tokens are stored locally and used by AI agents
+- **Header Passing**: Both token sets are passed as headers from AI agent to gateway
+- **Validation Points**: 
+  - Ingress tokens validated by gateway with Cognito
+  - FGAC enforced at gateway level
+  - Egress tokens passed through to MCP servers for their validation
+
+### High-Level Authentication Flow
 
 ```mermaid
 sequenceDiagram
+    participant User as User/Developer
     participant Agent as AI Agent
+    participant Cognito as Amazon Cognito<br/>(Ingress IdP)
+    participant ExtIdP as External IdP<br/>(e.g., Atlassian)
     participant Gateway as MCP Gateway
-    participant External as External Service
+    participant MCPServer as MCP Server
     
-    Note over Agent,External: Setup Phase (One-time)
-    Agent->>Gateway: 1. Authenticate with Cognito (2LO)
-    Agent->>External: 2. OAuth with external provider (3LO)
+    Note over User,MCPServer: One-Time Setup
     
-    Note over Agent,External: Runtime Phase
-    Agent->>Gateway: 3. Request with auth headers
-    Gateway->>Gateway: 4. Validate permissions (FGAC)
-    Gateway->>External: 5. Forward with external token
-    External->>Agent: 6. Response
+    User->>Cognito: 1. Authenticate (2LO)
+    Cognito->>User: Ingress Token
+    
+    User->>ExtIdP: 2. Authenticate & Approve (3LO)
+    Note right of User: "Allow AI agent to<br/>act on my behalf"
+    ExtIdP->>User: Egress Token
+    
+    User->>Agent: 3. Configure with both tokens
+    
+    Note over Agent,MCPServer: Runtime (Every Request)
+    
+    Agent->>Gateway: 4. Request with dual tokens<br/>(Ingress + Egress headers)
+    Gateway->>Cognito: 5. Validate ingress auth
+    Gateway->>Gateway: 6. Apply FGAC
+    Gateway->>MCPServer: 7. Forward with egress token
+    MCPServer->>ExtIdP: 8. Validate egress auth
+    MCPServer->>Agent: 9. Response (via Gateway)
+```
+
+### Complete End-to-End Flow (Detailed)
+
+```mermaid
+sequenceDiagram
+    participant User as User/Developer
+    participant Agent as AI Agent
+    participant Browser as Browser
+    participant Cognito as Amazon Cognito<br/>(Ingress IdP)
+    participant ExtIdP as External IdP<br/>(e.g., Atlassian)
+    participant Gateway as MCP Gateway
+    participant AuthServer as Auth Server<br/>(in Gateway)
+    participant MCPServer as MCP Server
+    
+    Note over User,MCPServer: PHASE 1: One-Time Setup & Authentication
+    
+    rect rgb(240, 248, 255)
+        Note over User,Cognito: Step 1: Ingress Authentication (2LO/M2M)
+        User->>Cognito: 1. Client Credentials Grant<br/>(client_id + client_secret)
+        Cognito->>User: 2. JWT Token with scopes
+        User->>User: 3. Store ingress token locally
+    end
+    
+    rect rgb(255, 248, 220)
+        Note over User,ExtIdP: Step 2: Egress Authentication (3LO)
+        User->>Browser: 4. Initiate OAuth flow
+        Browser->>ExtIdP: 5. Redirect to provider login
+        User->>ExtIdP: 6. User authenticates
+        User->>ExtIdP: 7. Reviews & approves permissions<br/>"Allow AI agent to act on my behalf"
+        ExtIdP->>Browser: 8. Auth code redirect
+        Browser->>User: 9. Capture auth code
+        User->>ExtIdP: 10. Exchange code for tokens
+        ExtIdP->>User: 11. Access & refresh tokens
+        User->>User: 12. Store egress tokens locally
+    end
+    
+    rect rgb(240, 255, 240)
+        Note over User: Step 3: Configure AI Agent
+        User->>User: 13. Create configuration with:<br/>- Server URLs<br/>- Ingress headers (X-Authorization, etc.)<br/>- Egress headers (Authorization, etc.)
+    end
+    
+    Note over Agent,MCPServer: PHASE 2: Runtime - AI Agent Uses Tokens
+    
+    rect rgb(255, 240, 245)
+        Note over Agent,MCPServer: Every MCP Request
+        Agent->>Gateway: 14. MCP Request with headers:<br/>X-Authorization: Bearer {ingress_jwt}<br/>Authorization: Bearer {egress_jwt}<br/>X-User-Pool-Id, X-Client-Id, X-Region
+        
+        Gateway->>AuthServer: 15. Extract & validate ingress token
+        AuthServer->>Cognito: 16. Verify JWT signature & claims
+        Cognito->>AuthServer: 17. Token valid + user scopes
+        
+        AuthServer->>AuthServer: 18. Apply FGAC rules<br/>(Check tool/method permissions)
+        
+        Gateway->>MCPServer: 19. Forward request with egress headers:<br/>Authorization: Bearer {egress_jwt}
+        
+        MCPServer->>ExtIdP: 20. Validate egress token
+        ExtIdP->>MCPServer: 21. Token valid + permissions
+        
+        MCPServer->>MCPServer: 22. Execute requested action<br/>(within approved scope)
+        
+        MCPServer->>Gateway: 23. Response
+        Gateway->>Agent: 24. Response
+        Agent->>User: 25. Display result
+    end
 ```
 
 ### Authentication Types Explained
@@ -250,66 +338,64 @@ sequenceDiagram
 
 ---
 
-## Detailed Authentication Flows
+## Token Header Mapping
 
-### Ingress Authentication (2LO)
-
-Controls access TO the MCP Gateway using Amazon Cognito.
-
-#### Supported Methods
-
-1. **Machine-to-Machine (M2M)**
-   - OAuth 2.0 Client Credentials Grant
-   - For AI agents and automated systems
-   - JWT tokens with custom scopes
-
-2. **User Authentication to Registry UI**
-   - OAuth 2.0 Authorization Code + PKCE
-   - For human administrators via web interface
-   - Cognito-hosted login page
-
-3. **Legacy Cookie Authentication** ⚠️ DEPRECATED
-
-#### Ingress Flow Diagram
-
-```mermaid
-sequenceDiagram
-    participant Agent
-    participant Cognito as Amazon Cognito
-    participant Gateway as MCP Gateway
-    participant AuthServer as Auth Server
+### Headers sent from AI Agent to Gateway:
+```json
+{
+  "headers": {
+    // Ingress Authentication (for Gateway)
+    "X-Authorization": "Bearer {cognito_jwt_token}",
+    "X-User-Pool-Id": "{cognito_user_pool_id}",
+    "X-Client-Id": "{cognito_client_id}",
+    "X-Region": "{aws_region}",
     
-    Agent->>Cognito: 1. Client Credentials Grant
-    Note right of Agent: client_id + client_secret
-    
-    Cognito->>Agent: 2. JWT Token + Scopes
-    
-    Agent->>Gateway: 3. MCP Request
-    Note right of Agent: Headers:<br/>X-Authorization: Bearer {jwt}<br/>X-User-Pool-Id<br/>X-Client-Id<br/>X-Region
-    
-    Gateway->>AuthServer: 4. Validate JWT
-    AuthServer->>Cognito: 5. Verify signature
-    Cognito->>AuthServer: 6. Valid + Scopes
-    AuthServer->>Gateway: 7. Authorized
-    Gateway->>Agent: 8. Response
+    // Egress Authentication (for MCP Server)
+    "Authorization": "Bearer {external_provider_token}",
+    "X-Provider-Id": "{provider_specific_id}"  // Provider-specific headers
+  }
+}
 ```
 
-### External Service Integration
+### Headers forwarded from Gateway to MCP Server:
+```json
+{
+  "headers": {
+    // Only egress headers are forwarded
+    "Authorization": "Bearer {external_provider_token}",
+    "X-Provider-Id": "{provider_specific_id}"
+  }
+}
+```
 
-#### Egress Authentication (3LO)
+## Key Security Layers
 
-Enables the Gateway to access external services on your behalf.
+### Layer 1: Ingress Authentication (2LO)
+- **Purpose**: Controls who can access the MCP Gateway
+- **Validation**: Gateway validates with Cognito
+- **Headers**: X-Authorization, X-User-Pool-Id, X-Client-Id, X-Region
+- **Methods**: Machine-to-Machine (M2M), User Authentication to Registry UI
 
-#### Supported Providers
+### Layer 2: Fine-Grained Access Control (FGAC)
+- **Purpose**: Controls which tools/methods within MCP servers can be accessed
+- **Validation**: Applied at Gateway level after ingress auth
+- **Based on**: User/agent scopes and permissions
+
+### Layer 3: Egress Authentication (3LO)
+- **Purpose**: Allows MCP servers to act on user's behalf with external services
+- **Validation**: MCP server validates with its IdP (e.g., Atlassian)
+- **Headers**: Authorization, provider-specific headers
+
+## External Service Integration
+
+### Supported Providers
 
 - **Atlassian Cloud**: Jira, Confluence integration
 - **Google**: Workspace, Gmail, Drive access
 - **GitHub**: Repository and organization access
-- **Others**: *Coming soon*
+- **Others**: See [`agents/oauth/oauth_providers.yaml`](../agents/oauth/oauth_providers.yaml) for complete list
 
-See [`agents/oauth/oauth_providers.yaml`](../agents/oauth/oauth_providers.yaml) for complete list.
-
-#### Setting Up External Provider (Atlassian Example)
+### Setting Up External Provider (Atlassian Example)
 
 1. **Create Developer App**
    - Visit [developer.atlassian.com](https://developer.atlassian.com)
@@ -318,39 +404,19 @@ See [`agents/oauth/oauth_providers.yaml`](../agents/oauth/oauth_providers.yaml) 
 
 2. **Configure Credentials**
    ```bash
-   # In agents/oauth/.env
-   EGRESS_OAUTH_CLIENT_ID=your_atlassian_client_id
-   EGRESS_OAUTH_CLIENT_SECRET=your_atlassian_client_secret
+   # In credentials-provider/oauth/.env
+   EGRESS_OAUTH_CLIENT_ID_1=your_atlassian_client_id
+   EGRESS_OAUTH_CLIENT_SECRET_1=your_atlassian_client_secret
+   EGRESS_OAUTH_REDIRECT_URI_1=http://localhost:8080/callback
+   EGRESS_PROVIDER_NAME_1=atlassian
+   EGRESS_MCP_SERVER_NAME_1=atlassian
    ```
 
 3. **Run Authentication**
    ```bash
-   ./oauth_creds.sh --provider atlassian
+   cd credentials-provider
+   ./generate_creds.sh  # This will handle both ingress and egress auth
    ```
-
-#### Egress Flow Diagram
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant CLI as oauth_creds.sh
-    participant Browser
-    participant Provider as Atlassian
-    
-    User->>CLI: 1. Run script
-    CLI->>Browser: 2. Open auth URL
-    Browser->>Provider: 3. User login
-    
-    rect rgb(255, 248, 220)
-        Note over User,Provider: 🔑 3LO Authorization
-        User->>Provider: 4. Grant permissions
-    end
-    
-    Provider->>CLI: 5. Auth code
-    CLI->>Provider: 6. Exchange for token
-    Provider->>CLI: 7. Access token
-    CLI->>CLI: 8. Save token
-```
 
 ---
 
