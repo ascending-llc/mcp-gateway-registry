@@ -100,7 +100,7 @@ def get_user_session_data(
         # Set defaults for traditional auth users
         if data.get('auth_method') != 'oauth2':
             # Traditional users get admin privileges
-            data.setdefault('groups', ['mcp-admin'])
+            data.setdefault('groups', ['mcp-registry-admin'])
             data.setdefault('scopes', ['mcp-servers-unrestricted/read', 'mcp-servers-unrestricted/execute'])
         
         logger.debug(f"Session data extracted for user: {data.get('username')}")
