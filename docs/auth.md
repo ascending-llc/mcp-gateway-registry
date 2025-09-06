@@ -618,6 +618,27 @@ with open(config_path) as f:
 - **Ingress tokens**: 1-hour expiry, auto-refresh via client credentials
 - **Egress tokens**: Provider-specific, refresh tokens where available
 - **Session management**: Handled automatically by OAuth scripts
+- **Automated refresh service**: Background service monitors and refreshes all tokens
+
+#### Token Refresh Service
+
+The MCP Gateway includes an [Automated Token Refresh Service](token-refresh-service.md) that provides:
+
+- **Continuous monitoring** of all OAuth tokens for expiration
+- **Proactive refresh** before tokens expire (configurable 1-hour buffer)
+- **Automatic MCP config generation** for coding assistants
+- **Service discovery** for both OAuth and no-auth services
+- **Background operation** with comprehensive logging
+
+Start the token refresh service:
+```bash
+./start_token_refresher.sh
+```
+
+The service automatically generates MCP configurations for:
+- **VS Code extensions** (`.oauth-tokens/vscode_mcp.json`)
+- **Claude Code/Roocode** (`.oauth-tokens/mcp.json`)
+- **Custom MCP clients** (standard configuration format)
 
 ---
 

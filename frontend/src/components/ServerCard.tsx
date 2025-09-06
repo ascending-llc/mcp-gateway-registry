@@ -22,7 +22,7 @@ interface Server {
   last_checked_time?: string;
   usersCount?: number;
   rating?: number;
-  status?: 'healthy' | 'unhealthy' | 'unknown';
+  status?: 'healthy' | 'healthy-auth-expired' | 'unhealthy' | 'unknown';
   num_tools?: number;
 }
 
@@ -96,6 +96,8 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
     switch (server.status) {
       case 'healthy':
         return <CheckCircleIcon className="h-4 w-4 text-green-500" />;
+      case 'healthy-auth-expired':
+        return <CheckCircleIcon className="h-4 w-4 text-orange-500" />;
       case 'unhealthy':
         return <XCircleIcon className="h-4 w-4 text-red-500" />;
       default:
@@ -107,6 +109,8 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
     switch (server.status) {
       case 'healthy':
         return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+      case 'healthy-auth-expired':
+        return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400';
       case 'unhealthy':
         return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
       default:
@@ -146,6 +150,7 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
       if (onServerUpdate && response.data) {
         const updates: Partial<Server> = {
           status: response.data.status === 'healthy' ? 'healthy' : 
+                  response.data.status === 'healthy-auth-expired' ? 'healthy-auth-expired' :
                   response.data.status === 'unhealthy' ? 'unhealthy' : 'unknown',
           last_checked_time: response.data.last_checked_iso,
           num_tools: response.data.num_tools
@@ -294,12 +299,15 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
                 <div className={`w-3 h-3 rounded-full ${
                   server.status === 'healthy' 
                     ? 'bg-emerald-400 shadow-lg shadow-emerald-400/30'
+                    : server.status === 'healthy-auth-expired'
+                    ? 'bg-orange-400 shadow-lg shadow-orange-400/30'
                     : server.status === 'unhealthy'
                     ? 'bg-red-400 shadow-lg shadow-red-400/30'
                     : 'bg-amber-400 shadow-lg shadow-amber-400/30'
                 }`} />
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   {server.status === 'healthy' ? 'Healthy' : 
+                   server.status === 'healthy-auth-expired' ? 'Healthy (Auth Expired)' :
                    server.status === 'unhealthy' ? 'Unhealthy' : 'Unknown'}
                 </span>
               </div>

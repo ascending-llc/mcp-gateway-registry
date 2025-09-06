@@ -335,6 +335,7 @@ Transform how both autonomous AI agents and development teams access enterprise 
 - **Amazon Bedrock AgentCore Integration** - Direct access to AWS services through managed MCP endpoints
 - **Three-Legged OAuth (3LO) Support** - External service integration (Atlassian, Google, GitHub)
 - **JWT Token Vending Service** - Self-service token generation for automation
+- **Automated Token Refresh Service** - Background token refresh to maintain continuous authentication
 - **Modern React Frontend** - Complete UI overhaul with TypeScript and real-time updates
 - **Dynamic Tool Discovery** - AI agents autonomously find and execute specialized tools
 - **Fine-Grained Access Control** - Granular permissions for servers, methods, and individual tools
@@ -347,7 +348,8 @@ Transform how both autonomous AI agents and development teams access enterprise 
 |------------------|-------------------|------------------------|
 | [Installation Guide](docs/installation.md)<br/>Complete setup instructions for EC2 and EKS | [Authentication Guide](docs/auth.md)<br/>OAuth and identity provider integration | [AI Coding Assistants Setup](docs/ai-coding-assistants-setup.md)<br/>VS Code, Cursor, Claude Code integration |
 | [Quick Start Tutorial](docs/quick-start.md)<br/>Get running in 5 minutes | [Amazon Cognito Setup](docs/cognito.md)<br/>Step-by-step IdP configuration | [API Reference](docs/registry_api.md)<br/>Programmatic registry management |
-| [Configuration Reference](docs/configuration.md)<br/>Environment variables and settings | [Fine-Grained Access Control](docs/scopes.md)<br/>Permission management and security | [Dynamic Tool Discovery](docs/dynamic-tool-discovery.md)<br/>Autonomous agent capabilities |
+| [Configuration Reference](docs/configuration.md)<br/>Environment variables and settings | [Fine-Grained Access Control](docs/scopes.md)<br/>Permission management and security | [Token Refresh Service](docs/token-refresh-service.md)<br/>Automated token refresh and lifecycle management |
+| | | [Dynamic Tool Discovery](docs/dynamic-tool-discovery.md)<br/>Autonomous agent capabilities |
 | | | [Production Deployment](docs/installation.md)<br/>Complete setup for production environments |
 | | | [Troubleshooting Guide](docs/FAQ.md)<br/>Common issues and solutions |
 

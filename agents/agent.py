@@ -771,6 +771,8 @@ def print_agent_response(response_dict: Dict[str, Any], verbose: bool = False) -
         response_dict: Dictionary containing the agent response with 'messages' key
         verbose: Whether to show detailed debug information
     """
+    # Debug: Log entry to function
+    logger.debug(f"print_agent_response called with verbose={verbose}, response_dict keys: {response_dict.keys() if response_dict else 'None'}")
     if verbose:
         # Define ANSI color codes for different message types
         COLORS = {
@@ -844,17 +846,73 @@ def print_agent_response(response_dict: Dict[str, Any], verbose: bool = False) -
             logger.info(f"{'=' * 20} END OF {msg_type} MESSAGE #{i} {'=' * 20}{reset}")
             logger.info("")
     
-    # Always show the final AI response
+    # Always show the final AI response (both in verbose and non-verbose mode)
+    # This section runs regardless of verbose flag
+    if not verbose:
+        logger.info("=== Attempting to print final response (non-verbose mode) ===")
+    
     if response_dict and "messages" in response_dict and response_dict["messages"]:
+        # Debug: Log that we're looking for the final AI message
+        if not verbose:
+            logger.info(f"Found {len(response_dict['messages'])} messages in response")
+        
         # Get the last AI message from the response
         for message in reversed(response_dict["messages"]):
             message_type = type(message).__name__
-            if "AIMessage" in message_type or "ai" in str(message).lower():
-                if isinstance(message, dict) and "content" in message:
-                    print("\n" + message["content"])
+            
+            # Debug logging in non-verbose mode to understand what's happening
+            if not verbose:
+                logger.debug(f"Checking message type: {message_type}")
+            
+            # Check if this is an AI message
+            if "AIMessage" in message_type or "ai" in str(type(message)).lower():
+                # Extract and print the content
+                content = None
+                
+                # Try different ways to extract content
+                if hasattr(message, 'content'):
+                    content = message.content
+                elif isinstance(message, dict) and "content" in message:
+                    content = message["content"]
                 else:
-                    print("\n" + str(message.content))
+                    # Try to extract content from string representation as last resort
+                    try:
+                        content = str(message)
+                    except:
+                        content = None
+                
+                # Print the content if we found any
+                if content:
+                    # Force print the final response regardless of any conditions
+                    print("\n" + str(content), flush=True)
+                    
+                    if not verbose:
+                        logger.info(f"Final AI Response printed (length: {len(str(content))} chars)")
+                else:
+                    if not verbose:
+                        logger.warning(f"AI message found but no content extracted. Message type: {message_type}, Message attrs: {dir(message) if hasattr(message, '__dict__') else 'N/A'}")
+                
+                # We found an AI message, stop looking
                 break
+        else:
+            # No AI message found - try to print the last message regardless
+            if not verbose:
+                logger.warning("No AI message found in response, attempting to print last message")
+                logger.debug(f"Messages in response: {[type(m).__name__ for m in response_dict['messages']]}")
+            
+            # As a fallback, print the last message if it has content
+            if response_dict["messages"]:
+                last_message = response_dict["messages"][-1]
+                content = None
+                
+                if hasattr(last_message, 'content'):
+                    content = last_message.content
+                elif isinstance(last_message, dict) and "content" in last_message:
+                    content = last_message["content"]
+                
+                if content:
+                    print("\n[Response]\n" + str(content), flush=True)
+                    logger.info(f"Printed last message as fallback (type: {type(last_message).__name__})")
 
 
 class InteractiveAgent:
@@ -1232,6 +1290,8 @@ async def main():
             if not args.interactive:
                 # Single-turn mode - just show the response and exit
                 logger.info("\nResponse:" + "\n" + "-"*40)
+                logger.debug(f"Calling print_agent_response with verbose={args.verbose}")
+                logger.debug(f"Response has {len(response.get('messages', []))} messages")
                 print_agent_response(response, args.verbose)
                 return
             else:

@@ -197,6 +197,8 @@ cookies.txt
 registry/server_state.json
 registry/nginx_mcp_revproxy.conf
 logs/
+token_refresher.pid
+token_refresher.log
 
 # Secrets and API keys - never commit these!
 .keys.yml

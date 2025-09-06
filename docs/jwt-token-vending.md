@@ -405,4 +405,43 @@ The token generation interface provides:
 - **Usage Instructions**: Clear examples of how to use the generated token
 - **Security Warnings**: Prominent warnings about token storage and sharing
 
-By implementing the JWT Token Vending Service, organizations can provide their users with a secure, user-friendly way to generate programmatic access tokens while maintaining enterprise-grade security controls and comprehensive audit capabilities. The service seamlessly integrates with existing MCP Gateway infrastructure and provides a foundation for advanced token management features. 
+By implementing the JWT Token Vending Service, organizations can provide their users with a secure, user-friendly way to generate programmatic access tokens while maintaining enterprise-grade security controls and comprehensive audit capabilities. The service seamlessly integrates with existing MCP Gateway infrastructure and provides a foundation for advanced token management features.
+
+## Integration with Token Refresh Service
+
+The JWT Token Vending Service works seamlessly with the [Automated Token Refresh Service](token-refresh-service.md) to provide comprehensive token lifecycle management:
+
+### Automatic Token Monitoring
+
+Once tokens are generated through the vending service, the token refresh service automatically:
+
+- **Monitors expiration times** for all generated tokens
+- **Proactively refreshes** tokens before they expire (configurable buffer time)
+- **Updates MCP client configurations** with fresh tokens
+- **Maintains continuous authentication** without user intervention
+
+### MCP Client Configuration
+
+The token refresh service automatically generates MCP client configurations that include tokens from the vending service:
+
+- **VS Code Extensions** - Automatically configured with refreshed tokens
+- **Claude Code/Roocode** - Real-time token updates for coding assistants
+- **Custom MCP Clients** - Standard configuration format for any MCP client
+
+### Enhanced Security Model
+
+The combination of both services provides:
+
+- **Short-lived primary tokens** from the vending service (1-24 hours)
+- **Automatic refresh capability** using secure refresh tokens
+- **Zero-downtime token rotation** for continuous service availability
+- **Centralized token lifecycle management** with comprehensive audit trails
+
+### Usage Pattern
+
+1. **Generate Initial Token** - Use the JWT Token Vending Service web interface
+2. **Automatic Refresh** - Token refresh service monitors and refreshes tokens
+3. **Client Integration** - MCP clients automatically use refreshed tokens
+4. **Continuous Operation** - No manual intervention required for token management
+
+For detailed setup and configuration of the token refresh service, see the [Token Refresh Service Documentation](token-refresh-service.md). 

@@ -54,7 +54,16 @@ Roo Code demonstrates the power of enterprise governance for AI development tool
 **Setup:**
 ```bash
 # Copy Roo Code configuration
-cp .oauth-tokens/mcp.json ~/.vscode/mcp-settings.json
+cp .oauth-tokens/mcp.json ~/.vscode/mcp_settings.json
+```
+
+**Alternative Setup Options:**
+```bash
+# Option 1: Direct copy (recommended)
+cp .oauth-tokens/mcp.json ~/.vscode/mcp_settings.json
+
+# Option 2: Create symbolic link for automatic updates
+ln -sf "$(pwd)/.oauth-tokens/mcp.json" ~/.vscode/mcp_settings.json
 ```
 
 **Enterprise Use Case:**
@@ -88,22 +97,22 @@ cp .oauth-tokens/mcp.json ~/.vscode/mcp-settings.json
 
 **Key Enterprise Benefits:**
 
-🎯 **Centralized Control**
+**Centralized Control**
 - IT teams manage approved MCP servers across all development environments
 - Consistent tool availability regardless of developer setup
 - Rapid deployment of new tools to entire organization
 
-🔐 **Secure Authentication**  
+**Secure Authentication**  
 - All tool access routes through enterprise identity systems (Amazon Cognito)
 - No individual API key management required
-- Automatic token refresh and rotation
+- Automatic token refresh and rotation via [Token Refresh Service](token-refresh-service.md)
 
-📊 **Usage Analytics & Compliance**
+**Usage Analytics & Compliance**
 - Track which developers use which tools and when
 - Generate compliance reports for audit requirements
 - Monitor tool adoption and usage patterns across teams
 
-⚡ **Developer Productivity**
+**Developer Productivity**
 - Zero configuration required for approved tools
 - Instant access to new enterprise tools as they're approved
 - Same experience across VS Code, Cursor, Claude Code, and other assistants
@@ -189,9 +198,30 @@ async with sse_client('https://gateway.com/mcpgw/sse', headers=headers) as (read
 
 ## Configuration Management
 
-### Automatic Updates
+### Automatic Token Refresh
 
-The credential generation script automatically updates configurations when run:
+The MCP Gateway includes an [Automated Token Refresh Service](token-refresh-service.md) that provides continuous token management:
+
+```bash
+# Start the token refresh service (runs in background)
+./start_token_refresher.sh
+
+# Service automatically:
+# - Monitors token expiration (1-hour buffer by default)
+# - Refreshes tokens before they expire
+# - Updates all MCP client configurations
+# - Generates fresh configs for all AI assistants
+```
+
+**Key Benefits:**
+- **Zero Downtime**: Tokens refresh automatically before expiration
+- **Continuous Operation**: AI assistants never lose access due to expired tokens
+- **Multiple Client Support**: Updates configurations for VS Code, Roo Code, Claude Code, etc.
+- **Background Operation**: Runs as a service with comprehensive logging
+
+### Manual Configuration Updates
+
+If you need to manually regenerate configurations:
 
 ```bash
 # Regenerate all configurations
@@ -200,6 +230,8 @@ The credential generation script automatically updates configurations when run:
 # Copy updated configurations to AI assistants
 ./scripts/update-ai-assistants.sh  # Custom script you can create
 ```
+
+**For AI assistants using symbolic links** (recommended setup), configuration updates are automatic since they point to the live `.oauth-tokens/` files.
 
 ### Environment-Specific Configurations
 
@@ -217,21 +249,25 @@ ENVIRONMENT=prod ./credentials-provider/generate_creds.sh
 cp .oauth-tokens/prod-* ~/.vscode/
 ```
 
-### Multi-Gateway Support
-
-For organizations with multiple MCP Gateway instances:
-
-```bash
-# Configure multiple gateways
-cp .oauth-tokens/gateway-us-east-1.json ~/.vscode/settings-us-east-1.json
-cp .oauth-tokens/gateway-eu-west-1.json ~/.vscode/settings-eu-west-1.json
-```
-
 ## Troubleshooting
 
 ### Authentication Issues
 
 **Token Expired:**
+
+*If using Token Refresh Service (recommended):*
+```bash
+# Check if token refresh service is running
+ps aux | grep token_refresher
+
+# Restart token refresh service if needed
+./start_token_refresher.sh
+
+# Check service logs
+tail -f token_refresher.log
+```
+
+*Manual token refresh:*
 ```bash
 # Regenerate credentials
 ./credentials-provider/generate_creds.sh

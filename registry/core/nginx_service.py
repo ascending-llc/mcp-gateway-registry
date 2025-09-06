@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional
 from urllib.parse import urlparse
 
 from .config import settings
+from registry.constants import HealthStatus
 
 logger = logging.getLogger(__name__)
 
@@ -107,10 +108,11 @@ class NginxConfigService:
             for path, server_info in servers.items():
                 proxy_pass_url = server_info.get("proxy_pass_url")
                 if proxy_pass_url:
-                    # Check if server is healthy
-                    health_status = health_service.server_health_status.get(path, "unknown")
+                    # Check if server is healthy (including auth-expired which is still reachable)
+                    health_status = health_service.server_health_status.get(path, HealthStatus.UNKNOWN)
                     
-                    if health_status == "healthy":
+                    # Include servers that are healthy or just have expired auth (server is up)
+                    if HealthStatus.is_healthy(health_status):
                         # Generate transport-aware location blocks
                         transport_blocks = self._generate_transport_location_blocks(path, server_info)
                         location_blocks.extend(transport_blocks)

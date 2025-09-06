@@ -168,7 +168,7 @@ def _perform_m2m_authentication(
             "region": region
         }
         
-        logger.info("🎉 M2M token obtained successfully!")
+        logger.info("M2M token obtained successfully!")
         
         if expires_at:
             expires_in = int(expires_at - time.time())
@@ -214,7 +214,7 @@ def _save_ingress_tokens(token_data: Dict[str, Any]) -> str:
         
         # Secure the file
         ingress_path.chmod(0o600)
-        logger.info(f"📁 Saved ingress tokens to: {ingress_path}")
+        logger.info(f"Saved ingress tokens to: {ingress_path}")
         
         return str(ingress_path)
         
@@ -290,7 +290,7 @@ Environment Variables Required:
         user_pool_id = os.getenv("INGRESS_OAUTH_USER_POOL_ID")
         region = os.getenv("AWS_REGION", "us-east-1")
         
-        logger.info("🔐 Starting INGRESS OAuth authentication (Cognito M2M)")
+        logger.info("Starting INGRESS OAuth authentication (Cognito M2M)")
         logger.info(f"User Pool ID: {user_pool_id}")
         logger.info(f"Client ID: {client_id[:10]}...") 
         logger.info(f"Region: {region}")
@@ -299,7 +299,7 @@ Environment Variables Required:
         if not args.force:
             existing_tokens = _load_existing_tokens()
             if existing_tokens:
-                logger.info("✅ Using existing valid ingress token")
+                logger.info("Using existing valid ingress token")
                 logger.info(f"Token expires at: {existing_tokens.get('expires_at_human', 'Unknown')}")
                 return 0
         
@@ -314,13 +314,13 @@ Environment Variables Required:
         # Save tokens
         saved_path = _save_ingress_tokens(token_data)
         
-        logger.info("✅ INGRESS OAuth authentication completed successfully!")
+        logger.info("INGRESS OAuth authentication completed successfully!")
         logger.info(f"Tokens saved to: {saved_path}")
         
         return 0
         
     except Exception as e:
-        logger.error(f"❌ INGRESS OAuth authentication failed: {e}")
+        logger.error(f"ERROR: INGRESS OAuth authentication failed: {e}")
         if args.verbose:
             import traceback
             logger.error(traceback.format_exc())

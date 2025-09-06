@@ -11,7 +11,7 @@ interface Server {
   last_checked_time?: string;
   usersCount?: number;
   rating?: number;
-  status?: 'healthy' | 'unhealthy' | 'unknown';
+  status?: 'healthy' | 'healthy-auth-expired' | 'unhealthy' | 'unknown';
   num_tools?: number;
 }
 
