@@ -275,7 +275,16 @@ open http://localhost:7860
 
 **That's it!** Your enterprise MCP gateway is now running.
 
-➡️ **Next Steps:** [Complete Installation Guide](docs/installation.md) | [Authentication Setup](docs/auth.md) | [AI Assistant Integration](docs/ai-coding-assistants-setup.md)
+### Testing & Integration Options
+
+**Shell Scripts (No Python Required):**
+- `./mcp_cmds.sh` - Core MCP operations (ping, list tools, call tools)
+- `./mcp_demo.sh` - Intelligent agent workflows with natural language queries
+
+**Python Agent:**
+- `agents/agent.py` - Full-featured Python agent with advanced AI capabilities
+
+➡️ **Next Steps:** [Testing Guide](docs/testing.md) | [Complete Installation Guide](docs/installation.md) | [Authentication Setup](docs/auth.md) | [AI Assistant Integration](docs/ai-coding-assistants-setup.md)
 
 ---
 
