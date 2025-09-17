@@ -18,7 +18,7 @@ The MCP Gateway Registry provides enterprise-ready authentication and authorizat
 Get your AI agent authenticated and running in 5 minutes.
 
 ### Prerequisites
-- Amazon Cognito credentials (provided by your administrator)
+- Keycloak service account credentials (provided by your administrator)
 - Access to external services you want to integrate (optional)
 
 ### Step 1: Configure Environment
@@ -26,16 +26,25 @@ Get your AI agent authenticated and running in 5 minutes.
 Create `credentials-provider/oauth/.env` with your credentials:
 
 ```bash
-# Ingress Authentication (Required)
-AWS_REGION=us-east-1
-INGRESS_OAUTH_USER_POOL_ID=us-east-1_XXXXXXXXX
-INGRESS_OAUTH_CLIENT_ID=your_cognito_client_id
-INGRESS_OAUTH_CLIENT_SECRET=your_cognito_client_secret
+# Authentication Provider Selection
+AUTH_PROVIDER=keycloak
+
+# Keycloak Ingress Authentication (Required for MCP Gateway access)
+KEYCLOAK_URL=https://mcpgateway.ddns.net
+KEYCLOAK_REALM=mcp-gateway
+KEYCLOAK_M2M_CLIENT_ID=agent-your-agent-name-m2m
+KEYCLOAK_M2M_CLIENT_SECRET=your_keycloak_m2m_client_secret
+
+# Alternative: Cognito (if AUTH_PROVIDER=cognito)
+# AWS_REGION=us-east-1
+# INGRESS_OAUTH_USER_POOL_ID=us-east-1_XXXXXXXXX
+# INGRESS_OAUTH_CLIENT_ID=your_cognito_client_id
+# INGRESS_OAUTH_CLIENT_SECRET=your_cognito_client_secret
 
 # Egress Authentication (Optional - for external services)
 EGRESS_OAUTH_CLIENT_ID_1=your_external_provider_client_id
 EGRESS_OAUTH_CLIENT_SECRET_1=your_external_provider_client_secret
-EGRESS_OAUTH_REDIRECT_URI_1=http://localhost:8080/callback
+EGRESS_OAUTH_REDIRECT_URI_1=http://localhost:9999/callback
 EGRESS_PROVIDER_NAME_1=atlassian
 EGRESS_MCP_SERVER_NAME_1=atlassian
 ```
@@ -64,11 +73,12 @@ cd credentials-provider
 # ./generate_creds.sh --verbose          # Enable debug logging
 
 # This will:
-# 1. Authenticate with Cognito (M2M/2LO)
-# 2. Optionally authenticate with external services (3LO)  
+# 1. Authenticate with Keycloak (M2M) or Cognito (M2M/2LO)
+# 2. Optionally authenticate with external services (3LO)
 # 3. Generate AgentCore tokens if configured
-# 4. Generate MCP client configurations
-# 5. Add no-auth services to configurations
+# 4. Generate Keycloak agent tokens if configured
+# 5. Generate MCP client configurations
+# 6. Add no-auth services to configurations
 ```
 
 ### Step 3: Use Generated Configuration
@@ -80,19 +90,94 @@ The script generates ready-to-use MCP client configurations:
 {
   "mcp": {
     "servers": {
-      "mcp_gateway": {
+      "mcpgw": {
         "url": "https://mcpgateway.ddns.net/mcpgw/mcp",
         "headers": {
-          "X-Authorization": "Bearer {your_jwt_token}",
-          "X-User-Pool-Id": "{user_pool_id}",
-          "X-Client-Id": "{client_id}",
-          "X-Region": "{region}"
+          "X-Authorization": "Bearer {your_keycloak_jwt_token}",
+          "X-Client-Id": "{agent_client_id}",
+          "X-Keycloak-Realm": "mcp-gateway",
+          "X-Keycloak-URL": "http://localhost:8080"
+        }
+      },
+      "atlassian": {
+        "url": "https://mcpgateway.ddns.net/atlassian/mcp",
+        "headers": {
+          "Authorization": "Bearer {atlassian_oauth_token}",
+          "X-Atlassian-Cloud-Id": "{cloud_id}",
+          "X-Authorization": "Bearer {your_keycloak_jwt_token}",
+          "X-Client-Id": "{agent_client_id}",
+          "X-Keycloak-Realm": "mcp-gateway",
+          "X-Keycloak-URL": "http://localhost:8080"
         }
       }
     }
   }
 }
 ```
+
+**For AI Coding Assistants** (Create your token configuration using these actual patterns):
+
+```json
+{
+  "mcpServers": {
+    "mcpgw": {
+      "type": "streamable-http",
+      "url": "https://mcpgateway.ddns.net/mcpgw/mcp",
+      "headers": {
+        "X-Authorization": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+        "X-Client-Id": "agent-ai-coding-assistant-m2m",
+        "X-Keycloak-Realm": "mcp-gateway",
+        "X-Keycloak-URL": "http://localhost:8080"
+      },
+      "disabled": false,
+      "alwaysAllow": []
+    },
+    "atlassian": {
+      "type": "streamable-http",
+      "url": "https://mcpgateway.ddns.net/atlassian/mcp",
+      "headers": {
+        "Authorization": "Bearer eyJraWQiOiJhdXRoLmF0bGFzc2lhbi5jb20tQUNDRVNTLTk0ZTczYTkwLTUxYWQtNGFjMS1hOWFjLWU4NGUwNDVjNDU3ZCIsImFsZyI6IlJTMjU2In0...",
+        "X-Atlassian-Cloud-Id": "923a213e-e930-4359-be44-f4b164d3f269",
+        "X-Authorization": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+        "X-Client-Id": "agent-ai-coding-assistant-m2m",
+        "X-Keycloak-Realm": "mcp-gateway",
+        "X-Keycloak-URL": "http://localhost:8080"
+      },
+      "disabled": false,
+      "alwaysAllow": []
+    }
+  }
+}
+```
+
+**To Generate Your Own Tokens:**
+
+1. **Create Keycloak Service Account** for your AI agent:
+   ```bash
+   # Run from the project root
+   ./keycloak/setup/setup-agent-service-account.sh --agent-id ai-coding-assistant --group mcp-servers-unrestricted
+   ```
+
+2. **Generate Agent Token**:
+   ```bash
+   # Generate M2M token for your agent
+   uv run python credentials-provider/keycloak/generate_tokens.py --agent-id ai-coding-assistant
+
+   # Check generated token file
+   cat .oauth-tokens/agent-ai-coding-assistant-m2m-token.json
+   ```
+
+3. **Create MCP Configuration**:
+   ```bash
+   # Run complete credential generation
+   ./credentials-provider/generate_creds.sh --keycloak-only
+
+   # Your configuration will be in:
+   # - .oauth-tokens/mcp.json (for Claude Code/Roocode)
+   # - .oauth-tokens/vscode_mcp.json (for VS Code)
+   ```
+
+**Important**: Use your actual generated tokens - the examples above are truncated for security.
 
 ### Step 4: Test Your Connection
 
@@ -211,8 +296,8 @@ For a complete working example, see [`agents/agent.py`](../agents/agent.py) whic
 
 The MCP Gateway Registry uses a comprehensive three-layer authentication system:
 
-1. **Ingress Authentication (2LO)**: Gateway access using Amazon Cognito
-2. **Egress Authentication (3LO)**: External service integration via OAuth providers  
+1. **Ingress Authentication (2LO)**: Gateway access using Keycloak or Amazon Cognito
+2. **Egress Authentication (3LO)**: External service integration via OAuth providers
 3. **Fine-Grained Access Control (FGAC)**: Permission management at method and tool level
 
 ### Key Concepts
@@ -220,9 +305,9 @@ The MCP Gateway Registry uses a comprehensive three-layer authentication system:
 - **Dual Token System**: AI agents carry BOTH ingress and egress tokens
 - **Token Storage**: After authentication, tokens are stored locally and used by AI agents
 - **Header Passing**: Both token sets are passed as headers from AI agent to gateway
-- **Validation Points**: 
-  - Ingress tokens validated by gateway with Cognito
-  - FGAC enforced at gateway level
+- **Validation Points**:
+  - Ingress tokens validated by gateway with Keycloak or Cognito
+  - FGAC enforced at gateway level using group-based permissions
   - Egress tokens passed through to MCP servers for their validation
 
 ### High-Level Authentication Flow
@@ -231,7 +316,7 @@ The MCP Gateway Registry uses a comprehensive three-layer authentication system:
 sequenceDiagram
     participant User as User/Developer
     participant Agent as AI Agent
-    participant Cognito as Amazon Cognito<br/>(Ingress IdP)
+    participant Auth as Keycloak/Cognito<br/>(Ingress IdP)
     participant ExtIdP as External IdP<br/>(e.g., Atlassian)
     participant Gateway as MCP Gateway
     participant MCPServer as MCP Server
@@ -344,15 +429,21 @@ sequenceDiagram
 ```json
 {
   "headers": {
-    // Ingress Authentication (for Gateway)
+    // Ingress Authentication (for Gateway) - Keycloak
+    "X-Authorization": "Bearer {keycloak_jwt_token}",
+    "X-Client-Id": "{agent_client_id}",
+    "X-Keycloak-Realm": "mcp-gateway",
+    "X-Keycloak-URL": "http://localhost:8080",
+
+    // OR Ingress Authentication (for Gateway) - Cognito
     "X-Authorization": "Bearer {cognito_jwt_token}",
     "X-User-Pool-Id": "{cognito_user_pool_id}",
     "X-Client-Id": "{cognito_client_id}",
     "X-Region": "{aws_region}",
-    
-    // Egress Authentication (for MCP Server)
-    "Authorization": "Bearer {external_provider_token}",
-    "X-Provider-Id": "{provider_specific_id}"  // Provider-specific headers
+
+    // Egress Authentication (for MCP Server) - Example: Atlassian
+    "Authorization": "Bearer {atlassian_oauth_token}",
+    "X-Atlassian-Cloud-Id": "{atlassian_cloud_id}"
   }
 }
 ```
@@ -361,9 +452,10 @@ sequenceDiagram
 ```json
 {
   "headers": {
-    // Only egress headers are forwarded
+    // Only egress headers are forwarded (provider-specific)
     "Authorization": "Bearer {external_provider_token}",
-    "X-Provider-Id": "{provider_specific_id}"
+    "X-Atlassian-Cloud-Id": "{atlassian_cloud_id}"  // For Atlassian
+    // OR other provider-specific headers as needed
   }
 }
 ```
@@ -723,6 +815,267 @@ cd credentials-provider
    ```bash
    python credentials-provider/agentcore-auth/generate_access_token.py --debug
    ```
+
+---
+
+## Setting Up Groups in Keycloak
+
+This section provides step-by-step instructions for entry-level platform engineers to set up and manage groups in Keycloak for the MCP Gateway.
+
+### Prerequisites Checklist
+
+Before starting group setup:
+- ✅ Keycloak is running (check: `docker-compose ps keycloak`)
+- ✅ You have admin credentials (default: admin / your-configured-password)
+- ✅ You can access the admin console at `https://your-domain/admin` or `http://localhost:8080/admin`
+- ✅ The `mcp-gateway` realm exists (created by init-keycloak.sh)
+
+### Understanding Groups in Keycloak
+
+#### What are Groups?
+Groups in Keycloak are collections of users that share common permissions. Think of them as departments in a company - all members inherit the same access rights.
+
+#### Why Use Groups for MCP Gateway?
+- **Simplified Management**: Assign permissions once to a group, not individually to each agent
+- **Scalability**: Easy to add new agents with same permissions
+- **Audit Trail**: Track which agents belong to which permission sets
+- **Security**: Principle of least privilege - agents only get necessary access
+
+#### MCP Gateway Group Structure
+```
+mcp-gateway (realm)
+├── mcp-servers-unrestricted (group)
+│   └── Full access to all MCP servers and tools
+└── mcp-servers-restricted (group)
+    └── Limited access to specific MCP servers and tools
+```
+
+### Step-by-Step: Creating Groups via Keycloak Admin Console
+
+#### Step 1: Access the Admin Console
+
+1. **Open your browser** and navigate to:
+   - Local: `http://localhost:8080/admin`
+   - Production: `https://mcpgateway.ddns.net/admin`
+
+2. **Login with admin credentials**:
+   ```
+   Username: admin
+   Password: <your-admin-password>
+   ```
+
+   > **Note**: If you don't know the password, check with your team lead or the person who set up Keycloak.
+
+#### Step 2: Navigate to the Correct Realm
+
+1. **Check current realm** - Look at the top-left dropdown
+2. **Switch to `mcp-gateway` realm** if not already selected:
+   - Click the realm dropdown
+   - Select `mcp-gateway`
+
+   > **Important**: Always ensure you're in the `mcp-gateway` realm, not the `master` realm!
+
+#### Step 3: Create the Required Groups
+
+1. **Navigate to Groups**:
+   - In the left sidebar, click **Groups**
+   - You'll see either existing groups or an empty list
+
+2. **Create the first group** (`mcp-servers-unrestricted`):
+   - Click the **Create group** button
+   - Enter exactly: `mcp-servers-unrestricted`
+   - Leave Parent as "none"
+   - Click **Create**
+
+3. **Create the second group** (`mcp-servers-restricted`):
+   - Click **Create group** again
+   - Enter exactly: `mcp-servers-restricted`
+   - Leave Parent as "none"
+   - Click **Create**
+
+   > **Critical**: The group names must match EXACTLY (case-sensitive) for the auth server to recognize them!
+
+#### Step 4: Verify Group Creation
+
+1. **Check the groups list**:
+   - Both groups should appear in the Groups list
+   - They should be at the root level (no parent)
+
+2. **Verify group paths**:
+   - Click on each group
+   - Check the path shows: `/mcp-servers-unrestricted` or `/mcp-servers-restricted`
+
+### Assigning Service Accounts to Groups
+
+Service accounts (used by AI agents) need to be added to groups to get permissions.
+
+#### Method 1: Via User Management (Recommended for Individual Agents)
+
+1. **Navigate to Users**:
+   - Click **Users** in the left sidebar
+   - Search for the service account (e.g., `agent-sre-agent-m2m`)
+
+2. **Add to Group**:
+   - Click on the service account name
+   - Go to the **Groups** tab
+   - Click **Join Group**
+   - Select either:
+     - `mcp-servers-unrestricted` for full access
+     - `mcp-servers-restricted` for limited access
+   - Click **Join**
+
+3. **Verify Membership**:
+   - The group should now appear in the user's group list
+   - Shows the group path and when they joined
+
+#### Method 2: Via Group Management (Good for Bulk Operations)
+
+1. **Navigate to Groups**:
+   - Click **Groups** in the left sidebar
+   - Click on the target group
+
+2. **Add Members**:
+   - Go to the **Members** tab
+   - Click **Add member**
+   - Search for service accounts (type "agent" to see all)
+   - Select the accounts you want to add
+   - Click **Add**
+
+### Group Configuration for Different Agent Types
+
+#### Decision Tree for Group Assignment
+
+```
+Is this agent for...
+│
+├── Production/Critical Operations?
+│   ├── Yes → mcp-servers-unrestricted
+│   │   Examples: SRE agents, monitoring agents
+│   │
+│   └── No → Continue ↓
+│
+├── Customer-Facing or Limited Scope?
+│   ├── Yes → mcp-servers-restricted
+│   │   Examples: Travel assistants, chatbots
+│   │
+│   └── No → mcp-servers-restricted (default to restricted)
+│
+└── Development/Testing?
+    └── Create a custom group or use mcp-servers-restricted
+```
+
+### Validating Your Group Setup
+
+#### Quick Validation Checklist
+
+1. **Groups exist in Keycloak** ✓
+   ```bash
+   # Check via admin console: Groups section should show both groups
+   ```
+
+2. **Service accounts have group membership** ✓
+   ```bash
+   # Check via admin console: Users → [service-account] → Groups tab
+   ```
+
+3. **Test token generation with groups** ✓
+   ```bash
+   # Generate a token for an agent
+   cd credentials-provider
+   python token_refresher.py --agent-id <agent-name>
+
+   # Check the token contains groups
+   cat .oauth-tokens/agent-<agent-name>.json | jq '.access_token' | \
+     cut -d. -f2 | base64 -d | jq '.groups'
+
+   # Should show: ["mcp-servers-unrestricted"] or ["mcp-servers-restricted"]
+   ```
+
+4. **Verify auth server recognizes groups** ✓
+   ```bash
+   # Test authentication with the token
+   ./test-keycloak-mcp.sh --agent-id <agent-name>
+
+   # Check auth server logs for group mapping
+   docker-compose logs auth-server | grep -i "groups.*mapped"
+   # Should see: "Mapped Keycloak groups ['mcp-servers-unrestricted'] to scopes..."
+   ```
+
+### Troubleshooting Group Issues
+
+#### Issue: "Access forbidden" even though user is in group
+
+**Symptoms**:
+- Agent gets 403 Forbidden errors
+- Logs show "Access denied" messages
+
+**Solutions**:
+1. **Verify exact group names**:
+   ```bash
+   # Groups must be named EXACTLY:
+   # ✓ mcp-servers-unrestricted
+   # ✗ mcp-servers-Unrestricted (wrong case)
+   # ✗ mcp_servers_unrestricted (underscores instead of hyphens)
+   ```
+
+2. **Check group mapper configuration**:
+   - Go to Clients → `mcp-gateway-m2m` → Client scopes
+   - Check that "groups" mapper exists and is enabled
+
+3. **Regenerate token** after group changes:
+   ```bash
+   python credentials-provider/token_refresher.py --agent-id <agent-name> --force
+   ```
+
+#### Issue: Groups not appearing in JWT token
+
+**Symptoms**:
+- Token doesn't contain groups claim
+- Auth server can't map groups to scopes
+
+**Solutions**:
+1. **Ensure groups mapper is configured**:
+   - Navigate to: Clients → `mcp-gateway-m2m` → Client scopes → Mappers
+   - Should have a "groups" mapper
+   - If missing, run: `./keycloak/setup/init-keycloak.sh`
+
+2. **Check service account has "view-groups" role**:
+   - Users → [service-account] → Role mappings
+   - Should have "view-groups" client role
+
+#### Issue: Can't create groups - "Forbidden" error
+
+**Symptoms**:
+- Admin console shows permission errors
+- Can't create or modify groups
+
+**Solutions**:
+1. **Verify you're logged in as admin**:
+   - Logout and login with the admin account
+   - Not a regular user account
+
+2. **Check you're in the correct realm**:
+   - Must be in `mcp-gateway` realm to create groups there
+   - Master realm admin can switch to any realm
+
+### Best Practices for Group Management
+
+1. **Naming Conventions**:
+   - Use the exact names: `mcp-servers-unrestricted` and `mcp-servers-restricted`
+   - Don't create variations or abbreviations
+
+2. **Documentation**:
+   - Keep a record of which agents are in which groups
+   - Document why an agent needs unrestricted access
+
+3. **Regular Audits**:
+   - Monthly: Review group memberships
+   - Quarterly: Audit unrestricted access needs
+   - Remove agents that no longer need access
+
+4. **Testing After Changes**:
+   - Always regenerate tokens after group changes
+   - Test agent access to verify permissions work
 
 ---
 

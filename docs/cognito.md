@@ -31,7 +31,7 @@ This setup is for users who will authenticate through the web interface and for 
 #### Step 1: Create User Pool
 
 1. **Navigate to Amazon Cognito Console**
-   - Go to [AWS Cognito Console](https://console.aws.amazon.com/cognito/)
+   - Go to [Amazon Cognito Console](https://console.aws.amazon.com/cognito/)
    - Select your desired AWS region (e.g., `us-east-1`)
    - Click the **"Create User pool"** button
 

@@ -66,7 +66,7 @@ open http://localhost:7860
 
    **Required Configuration:**
    - `ADMIN_PASSWORD`: Secure admin password
-   - `COGNITO_USER_POOL_ID`: AWS Cognito User Pool ID
+   - `COGNITO_USER_POOL_ID`: Amazon Cognito User Pool ID
    - `COGNITO_CLIENT_ID`: Cognito App Client ID
    - `COGNITO_CLIENT_SECRET`: Cognito App Client Secret
    - `AWS_REGION`: AWS region for Cognito

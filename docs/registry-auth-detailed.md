@@ -19,7 +19,7 @@ The MCP Gateway Registry implements a sophisticated dual-authentication system d
 ### Core Authentication Methods
 
 - **Traditional Authentication**: Username/password for local development
-- **OAuth2 Integration**: Enterprise IdP integration (AWS Cognito, SAML, etc.)
+- **OAuth2 Integration**: Enterprise IdP integration (Amazon Cognito, SAML, etc.)
 - **Session Management**: Secure HTTP cookies with digital signatures
 - **Role-Based Access Control**: Dynamic permissions based on user groups
 
@@ -61,7 +61,7 @@ graph TB
     
     subgraph "External Auth Systems"
         AuthServer[Auth Server<br/>localhost:8888]
-        Cognito[AWS Cognito]
+        Cognito[Amazon Cognito]
         LocalAuth[Local Credentials]
     end
     
@@ -249,7 +249,7 @@ graph LR
         
         subgraph "OAuth2 Provider Buttons"
             ProviderButtons[Dynamic Provider Buttons]
-            CognitoBtn[AWS Cognito Button]
+            CognitoBtn[Amazon Cognito Button]
             SAMLBtn[SAML Provider Button]
             CustomBtn[Custom OAuth2 Button]
         end
@@ -1530,7 +1530,7 @@ CONTAINER_LOG_DIR=/app/logs
 #### OAuth2 Provider Configuration
 
 ```bash
-# AWS Cognito Integration (if using Cognito directly)
+# Amazon Cognito Integration (if using Cognito directly)
 COGNITO_DOMAIN=your-cognito-domain
 COGNITO_CLIENT_ID=your-cognito-client-id
 COGNITO_REGION=us-east-1

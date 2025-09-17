@@ -55,6 +55,7 @@ from urllib.parse import urlparse, urljoin
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.prebuilt import create_react_agent
 from langchain_anthropic import ChatAnthropic
+from langchain_aws import ChatBedrock
 from langchain_core.tools import tool
 import mcp
 from mcp import ClientSession
@@ -254,7 +255,7 @@ def print_env_file_banner(env_file_name: str, use_session_cookie: bool, file_fou
         file_path: Full path to the .env file if found
     """
     print("\n" + "="*80)
-    print("🔧 ENVIRONMENT CONFIGURATION")
+    print(" ENVIRONMENT CONFIGURATION")
     print("="*80)
     
     auth_mode = "Session Cookie Authentication" if use_session_cookie else "M2M Authentication"
@@ -342,11 +343,51 @@ def load_env_config(use_session_cookie: bool, user_env_file: str = '.env.user', 
     
     return env_config
 
+def load_agent_credentials(agent_name: str) -> Optional[Dict[str, Any]]:
+    """
+    Load agent credentials from .oauth-tokens directory.
+    Tries {agent-name}.json and {agent-name}-token.json files.
+
+    Args:
+        agent_name: Name of the agent to load credentials for
+
+    Returns:
+        Dict containing agent credentials or None if not found
+    """
+    oauth_tokens_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.oauth-tokens')
+
+    # Try both possible filenames
+    token_files = [
+        os.path.join(oauth_tokens_dir, f"{agent_name}.json"),
+        os.path.join(oauth_tokens_dir, f"{agent_name}-token.json")
+    ]
+
+    for token_file in token_files:
+        if os.path.exists(token_file):
+            try:
+                logger.info(f"Loading agent credentials from: {token_file}")
+                with open(token_file, 'r') as f:
+                    data = json.load(f)
+
+                # Validate that we have an access token
+                if 'access_token' not in data:
+                    logger.warning(f"No access_token found in {token_file}")
+                    continue
+
+                return data
+            except (json.JSONDecodeError, IOError) as e:
+                logger.warning(f"Failed to load {token_file}: {e}")
+                continue
+
+    logger.warning(f"No valid token files found for agent: {agent_name}")
+    return None
+
+
 def parse_arguments() -> argparse.Namespace:
     """
-    Parse command line arguments for the Interactive LangGraph MCP client with Cognito authentication.
-    Command line arguments take precedence over environment variables.
-    
+    Parse command line arguments for the Interactive LangGraph MCP client with flexible authentication.
+    Command line arguments take precedence over environment variables and config files.
+
     Returns:
         argparse.Namespace: The parsed command line arguments
     """
@@ -354,19 +395,21 @@ def parse_arguments() -> argparse.Namespace:
     use_session_cookie, user_env_file, agent_env_file = get_auth_mode_from_args()
     logger.info(f"Using session cookie authentication: {use_session_cookie}")
     logger.info(f"User env file: {user_env_file}, Agent env file: {agent_env_file}")
-    
+
     # Load environment configuration using the appropriate .env file
     env_config = load_env_config(use_session_cookie, user_env_file, agent_env_file)
-    
-    parser = argparse.ArgumentParser(description='Interactive LangGraph MCP Client with Cognito Authentication')
+
+    parser = argparse.ArgumentParser(description='Interactive LangGraph MCP Client with Flexible Authentication')
     
     # Server connection arguments
     parser.add_argument('--mcp-registry-url', type=str, default='https://mcpgateway.ddns.net/mcpgw/mcp',
                         help='Hostname of the MCP Registry')
     
-    # Model arguments
-    parser.add_argument('--model', type=str, default='claude-3-5-haiku-20241022',
-                        help='Model ID to use with Anthropic')
+    # Model and provider arguments
+    parser.add_argument('--provider', type=str, choices=['anthropic', 'bedrock'], default='bedrock',
+                        help='Model provider to use (default: bedrock)')
+    parser.add_argument('--model', type=str, default='us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+                        help='Model ID to use (Bedrock format for bedrock provider, Anthropic format for anthropic provider)')
     
     # Prompt arguments (changed from --message)
     parser.add_argument('--prompt', type=str, default=None,
@@ -391,6 +434,12 @@ def parse_arguments() -> argparse.Namespace:
                         help='Path to session cookie file (default: ~/.mcp/session_cookie)')
     parser.add_argument('--jwt-token', type=str,
                         help='Use a pre-generated JWT token instead of generating M2M token')
+
+    # Agent-based authentication arguments
+    parser.add_argument('--agent-name', type=str,
+                        help='Agent name to load credentials from .oauth-tokens/{agent-name}.json or {agent-name}-token.json')
+    parser.add_argument('--access-token', type=str,
+                        help='Direct access token override (takes precedence over agent credentials)')
     
     # Environment file configuration arguments
     parser.add_argument('--user-env-file', type=str, default=user_env_file,
@@ -975,7 +1024,7 @@ class InteractiveAgent:
     async def run_interactive_session(self):
         """Run an interactive conversation session"""
         print("\n" + "="*60)
-        print("🤖 Interactive Agent Session Started")
+        print("烙 Interactive Agent Session Started")
         print("="*60)
         print("Type 'exit', 'quit', or 'bye' to end the session")
         print("Type 'clear' or 'reset' to clear conversation history")
@@ -985,25 +1034,25 @@ class InteractiveAgent:
         while True:
             try:
                 # Get user input
-                user_input = input("\n💭 You: ").strip()
+                user_input = input("\n You: ").strip()
                 
                 # Check for exit commands
                 if user_input.lower() in ['exit', 'quit', 'bye']:
-                    print("\n👋 Goodbye! Thanks for chatting.")
+                    print("\n Goodbye! Thanks for chatting.")
                     break
                 
                 # Check for clear/reset commands
                 if user_input.lower() in ['clear', 'reset']:
                     self.conversation_history = []
-                    print("\n🔄 Conversation history cleared.")
+                    print("\n Conversation history cleared.")
                     continue
                 
                 # Check for history command
                 if user_input.lower() == 'history':
                     if not self.conversation_history:
-                        print("\n📭 No conversation history yet.")
+                        print("\n No conversation history yet.")
                     else:
-                        print("\n📜 Conversation History:")
+                        print("\n Conversation History:")
                         print("-" * 40)
                         for i, msg in enumerate(self.conversation_history):
                             role = "You" if msg["role"] == "user" else "Agent"
@@ -1015,11 +1064,11 @@ class InteractiveAgent:
                     continue
                 
                 # Process the message
-                print("\n🤔 Thinking...")
+                print("\n樂 Thinking...")
                 response = await self.process_message(user_input)
                 
                 # Print the response
-                print("\n🤖 Agent:", end="")
+                print("\n烙 Agent:", end="")
                 print_agent_response(response, self.verbose)
                 
             except KeyboardInterrupt:
@@ -1045,44 +1094,61 @@ async def main():
     args = parse_arguments()
     logger.info(f"Parsed command line arguments successfully, args={args}")
     
-    # Load ingress authentication from .oauth-tokens/ingress.json
-    oauth_tokens_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.oauth-tokens')
-    ingress_file = os.path.join(oauth_tokens_dir, 'ingress.json')
-    
-    if not os.path.exists(ingress_file):
-        logger.error(f"CRITICAL: Ingress authentication file not found: {ingress_file}")
-        logger.error("Please run the OAuth authentication flow first to generate ingress.json")
-        raise FileNotFoundError(f"Required ingress authentication file not found: {ingress_file}")
-    
-    try:
-        with open(ingress_file, 'r') as f:
-            ingress_data = json.load(f)
-        
-        # Validate required fields
-        required_fields = ['access_token', 'user_pool_id', 'client_id', 'region']
-        missing_fields = [field for field in required_fields if not ingress_data.get(field)]
-        
-        if missing_fields:
-            logger.error(f"CRITICAL: Missing required fields in ingress.json: {missing_fields}")
-            raise ValueError(f"Invalid ingress.json - missing required fields: {missing_fields}")
-        
-        # Set ingress authentication in agent_settings
-        agent_settings.ingress_token = ingress_data['access_token']
-        agent_settings.ingress_user_pool_id = ingress_data['user_pool_id']
-        agent_settings.ingress_client_id = ingress_data['client_id']
-        agent_settings.ingress_region = ingress_data['region']
-        
-        logger.info("Successfully loaded ingress authentication from .oauth-tokens/ingress.json")
-        logger.info(f"Ingress User Pool ID: {agent_settings.ingress_user_pool_id}")
-        logger.info(f"Ingress Client ID: {redact_sensitive_value(agent_settings.ingress_client_id)}")
-        logger.info(f"Ingress Region: {agent_settings.ingress_region}")
-        
-    except json.JSONDecodeError as e:
-        logger.error(f"CRITICAL: Failed to parse ingress.json: {e}")
-        raise ValueError(f"Invalid ingress.json file format: {e}")
-    except Exception as e:
-        logger.error(f"CRITICAL: Failed to load ingress authentication: {e}")
-        raise
+    # Determine authentication method and load credentials
+    access_token = None
+    agent_credentials = None
+
+    # Check for direct access token override first
+    if args.access_token:
+        access_token = args.access_token
+        logger.info("Using direct access token override")
+    # Then check for agent-name based credentials
+    elif args.agent_name:
+        agent_credentials = load_agent_credentials(args.agent_name)
+        if agent_credentials:
+            access_token = agent_credentials['access_token']
+            logger.info(f"Loaded credentials for agent: {args.agent_name}")
+        else:
+            logger.error(f"Failed to load credentials for agent: {args.agent_name}")
+            raise FileNotFoundError(f"No valid credentials found for agent: {args.agent_name}")
+    # Fallback to ingress.json for backward compatibility
+    else:
+        oauth_tokens_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.oauth-tokens')
+        ingress_file = os.path.join(oauth_tokens_dir, 'ingress.json')
+
+        if os.path.exists(ingress_file):
+            try:
+                with open(ingress_file, 'r') as f:
+                    ingress_data = json.load(f)
+
+                # Validate required fields
+                required_fields = ['access_token', 'user_pool_id', 'client_id', 'region']
+                missing_fields = [field for field in required_fields if not ingress_data.get(field)]
+
+                if missing_fields:
+                    logger.warning(f"Missing required fields in ingress.json: {missing_fields}")
+                else:
+                    # Set ingress authentication in agent_settings
+                    agent_settings.ingress_token = ingress_data['access_token']
+                    agent_settings.ingress_user_pool_id = ingress_data['user_pool_id']
+                    agent_settings.ingress_client_id = ingress_data['client_id']
+                    agent_settings.ingress_region = ingress_data['region']
+
+                    access_token = ingress_data['access_token']
+                    logger.info("Successfully loaded ingress authentication from .oauth-tokens/ingress.json")
+                    logger.info(f"Ingress User Pool ID: {agent_settings.ingress_user_pool_id}")
+                    logger.info(f"Ingress Client ID: {redact_sensitive_value(agent_settings.ingress_client_id)}")
+                    logger.info(f"Ingress Region: {agent_settings.ingress_region}")
+
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse ingress.json: {e}")
+            except Exception as e:
+                logger.warning(f"Failed to load ingress authentication: {e}")
+
+    # If we still don't have an access token and we're not using other auth methods,
+    # we'll need to generate one using Cognito
+    if not access_token and not args.use_session_cookie and not args.jwt_token:
+        logger.info("No access token available, will generate using Cognito M2M authentication")
     
     # Load server configuration
     global server_config
@@ -1103,8 +1169,7 @@ async def main():
         auth_display = 'M2M Token'
     logger.info(f"Authentication method: {auth_display}")
     
-    # Initialize authentication variables
-    access_token = None
+    # Initialize authentication variables (access_token may already be set from above)
     session_cookie = None
     auth_method = "session_cookie" if args.use_session_cookie else "m2m"
     
@@ -1136,23 +1201,33 @@ async def main():
         agent_settings.region = args.region
         agent_settings.session_cookie = session_cookie
     else:
-        # Check if ingress token is available first
-        if hasattr(agent_settings, 'ingress_token') and agent_settings.ingress_token:
-            logger.info("Using ingress token from .oauth-tokens/ingress.json")
-            access_token = agent_settings.ingress_token
-            
-            # Set global auth variables for invoke_mcp_tool (using ingress settings)
+        # Check if we already have an access token from agent credentials or ingress
+        if access_token:
+            logger.info("Using previously loaded access token")
+
+            # Set global auth variables for invoke_mcp_tool
             agent_settings.auth_token = access_token
-            agent_settings.user_pool_id = agent_settings.ingress_user_pool_id
-            agent_settings.client_id = agent_settings.ingress_client_id
-            agent_settings.region = agent_settings.ingress_region
+
+            # Use credentials from agent file if available, otherwise fall back to ingress or args
+            if agent_credentials:
+                agent_settings.user_pool_id = agent_credentials.get('user_pool_id') or agent_credentials.get('keycloak_realm')
+                agent_settings.client_id = agent_credentials.get('client_id')
+                agent_settings.region = agent_credentials.get('region') or agent_credentials.get('aws_region')
+            elif hasattr(agent_settings, 'ingress_user_pool_id') and agent_settings.ingress_user_pool_id:
+                agent_settings.user_pool_id = agent_settings.ingress_user_pool_id
+                agent_settings.client_id = agent_settings.ingress_client_id
+                agent_settings.region = agent_settings.ingress_region
+            else:
+                agent_settings.user_pool_id = args.user_pool_id
+                agent_settings.client_id = args.client_id
+                agent_settings.region = args.region
         else:
             # Generate Cognito M2M authentication token
             logger.info(f"Cognito User Pool ID: {redact_sensitive_value(args.user_pool_id)}")
             logger.info(f"Cognito User Pool ID: {args.user_pool_id}")
             logger.info(f"Cognito Client ID: {redact_sensitive_value(args.client_id)}")
             logger.info(f"AWS Region: {args.region}")
-            
+
             try:
                 logger.info("Generating Cognito M2M authentication token...")
                 token_data = generate_token(
@@ -1167,7 +1242,7 @@ async def main():
                 if not access_token:
                     raise ValueError("No access token received from Cognito")
                 logger.info("Successfully generated authentication token")
-                
+
                 # Set global auth variables for invoke_mcp_tool
                 agent_settings.auth_token = access_token
                 agent_settings.user_pool_id = args.user_pool_id
@@ -1177,39 +1252,65 @@ async def main():
                 logger.error(f"Failed to generate authentication token: {e}")
                 return
     
-    # Get Anthropic API key from environment variables
-    anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
-    if not anthropic_api_key:
-        logger.error("ANTHROPIC_API_KEY not found in environment variables")
+    # Validate provider-specific requirements
+    anthropic_api_key = None
+    aws_region = None
+
+    if args.provider == 'anthropic':
+        # Get Anthropic API key from environment variables
+        anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
+        if not anthropic_api_key:
+            logger.error("ANTHROPIC_API_KEY not found in environment variables")
+            return
+    elif args.provider == 'bedrock':
+        # For Bedrock, we'll rely on AWS credentials from environment or IAM role
+        # Check if basic AWS environment is available
+        aws_region = os.getenv('AWS_DEFAULT_REGION', os.getenv('AWS_REGION', 'us-east-1'))
+        logger.info(f"Using Bedrock provider with AWS region: {aws_region}")
+    else:
+        logger.error(f"Unsupported provider: {args.provider}")
         return
     
     # Note: No need to explicitly load server-specific tokens anymore
     # The system now dynamically discovers them from server_config.yml
-    
-    # Initialize the model with Anthropic
-    model = ChatAnthropic(
-        model=args.model,
-        api_key=anthropic_api_key,
-        temperature=0,
-        max_tokens=8192,
-    )
+
+    # Initialize the model based on provider
+    if args.provider == 'anthropic':
+        model = ChatAnthropic(
+            model=args.model,
+            api_key=anthropic_api_key,
+            temperature=0,
+            max_tokens=8192,
+        )
+        logger.info(f"Initialized Anthropic model: {args.model}")
+    elif args.provider == 'bedrock':
+        model = ChatBedrock(
+            model_id=args.model,
+            region_name=aws_region,
+            temperature=0,
+            max_tokens=8192,
+        )
+        logger.info(f"Initialized Bedrock model: {args.model} in region {aws_region}")
+    else:
+        logger.error(f"Unsupported provider: {args.provider}")
+        return
     
     try:
         # Prepare headers for MCP client authentication based on method
         if args.use_session_cookie:
             auth_headers = {
                 'Cookie': f'mcp_gateway_session={session_cookie}',
-                'X-User-Pool-Id': args.user_pool_id or '',
-                'X-Client-Id': args.client_id or '',
-                'X-Region': args.region or 'us-east-1'
+                'X-User-Pool-Id': agent_settings.user_pool_id or '',
+                'X-Client-Id': agent_settings.client_id or '',
+                'X-Region': agent_settings.region or 'us-east-1'
             }
         else:
             # For both M2M and pre-generated JWT tokens
             auth_headers = {
                 'X-Authorization': f'Bearer {access_token}',
-                'X-User-Pool-Id': args.user_pool_id,
-                'X-Client-Id': args.client_id,
-                'X-Region': args.region
+                'X-User-Pool-Id': agent_settings.user_pool_id or '',
+                'X-Client-Id': agent_settings.client_id or '',
+                'X-Region': agent_settings.region or 'us-east-1'
             }
         
         # Log redacted headers
@@ -1260,9 +1361,9 @@ async def main():
                 current_utc_time=current_utc_time,
                 mcp_registry_url=args.mcp_registry_url,
                 auth_token='',  # Not used for session cookie auth
-                user_pool_id=args.user_pool_id or '',
-                client_id=args.client_id or '',
-                region=args.region or 'us-east-1',
+                user_pool_id=agent_settings.user_pool_id or '',
+                client_id=agent_settings.client_id or '',
+                region=agent_settings.region or 'us-east-1',
                 auth_method=auth_method,
                 session_cookie=session_cookie
             )
@@ -1272,9 +1373,9 @@ async def main():
                 current_utc_time=current_utc_time,
                 mcp_registry_url=args.mcp_registry_url,
                 auth_token=access_token,
-                user_pool_id=args.user_pool_id,
-                client_id=args.client_id,
-                region=args.region,
+                user_pool_id=agent_settings.user_pool_id or '',
+                client_id=agent_settings.client_id or '',
+                region=agent_settings.region or 'us-east-1',
                 auth_method=auth_method,
                 session_cookie=''  # Not used for JWT auth
             )
@@ -1296,7 +1397,7 @@ async def main():
                 return
             else:
                 # Interactive mode - show the response and continue
-                print("\n🤖 Agent:", end="")
+                print("\n烙 Agent:", end="")
                 print_agent_response(response, args.verbose)
         
         # If interactive mode is enabled, start the interactive session

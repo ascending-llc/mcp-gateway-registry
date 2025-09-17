@@ -69,7 +69,7 @@ cd mcp-gateway-registry
 
 # 2. Configure environment
 cp .env.example .env
-# Edit .env with your AWS Cognito credentials
+# Edit .env with your Amazon Cognito credentials
 
 # 3. Generate authentication credentials  
 ./credentials-provider/generate_creds.sh

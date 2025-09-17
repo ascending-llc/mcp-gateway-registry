@@ -30,6 +30,9 @@ import urllib.parse
 import httpx
 from string import Template
 
+# Import provider factory
+from providers.factory import get_auth_provider
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,  # Set the log level to INFO
@@ -120,12 +123,12 @@ def mask_headers(headers: dict) -> dict:
             masked[key] = value
     return masked
 
-def map_cognito_groups_to_scopes(groups: List[str]) -> List[str]:
+def map_groups_to_scopes(groups: List[str]) -> List[str]:
     """
-    Map Cognito groups to MCP scopes using the group_mappings from scopes.yml configuration.
+    Map identity provider groups to MCP scopes using the group_mappings from scopes.yml configuration.
     
     Args:
-        groups: List of Cognito group names
+        groups: List of group names from identity provider (Cognito, Keycloak, etc.)
         
     Returns:
         List of MCP scopes
@@ -187,7 +190,7 @@ def validate_session_cookie(cookie_value: str) -> Dict[str, any]:
         groups = data.get('groups', [])
         
         # Map groups to scopes
-        scopes = map_cognito_groups_to_scopes(groups)
+        scopes = map_groups_to_scopes(groups)
         
         logger.info(f"Session cookie validated for user: {hash_username(username)}")
         
@@ -893,32 +896,52 @@ async def validate_request(request: Request):
                     headers={"WWW-Authenticate": "Bearer", "Connection": "close"}
                 )
             
-            if not user_pool_id:
-                logger.warning("Missing X-User-Pool-Id header")
-                raise HTTPException(
-                    status_code=400,
-                    detail="Missing X-User-Pool-Id header",
-                    headers={"Connection": "close"}
-                )
-            
-            if not client_id:
-                logger.warning("Missing X-Client-Id header")
-                raise HTTPException(
-                    status_code=400,
-                    detail="Missing X-Client-Id header",
-                    headers={"Connection": "close"}
-                )
-            
             # Extract token
             access_token = authorization.split(" ")[1]
             
-            # Validate the token
-            validation_result = validator.validate_token(
-                access_token=access_token,
-                user_pool_id=user_pool_id,
-                client_id=client_id,
-                region=region
-            )
+            # Get authentication provider based on AUTH_PROVIDER environment variable
+            try:
+                auth_provider = get_auth_provider()
+                logger.info(f"Using authentication provider: {auth_provider.__class__.__name__}")
+                
+                # Provider-specific validation
+                if hasattr(auth_provider, 'validate_token'):
+                    # For Keycloak, no additional headers needed
+                    validation_result = auth_provider.validate_token(access_token)
+                    logger.info(f"Token validation successful using {auth_provider.__class__.__name__}")
+                else:
+                    # Fallback to old validation for compatibility
+                    if not user_pool_id:
+                        logger.warning("Missing X-User-Pool-Id header for Cognito validation")
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Missing X-User-Pool-Id header",
+                            headers={"Connection": "close"}
+                        )
+                    
+                    if not client_id:
+                        logger.warning("Missing X-Client-Id header for Cognito validation")
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Missing X-Client-Id header",
+                            headers={"Connection": "close"}
+                        )
+                    
+                    # Use old validator for backward compatibility
+                    validation_result = validator.validate_token(
+                        access_token=access_token,
+                        user_pool_id=user_pool_id,
+                        client_id=client_id,
+                        region=region
+                    )
+                    
+            except Exception as e:
+                logger.error(f"Authentication provider error: {e}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Authentication provider configuration error: {str(e)}",
+                    headers={"Connection": "close"}
+                )
         
         logger.info(f"Token validation successful using method: {validation_result['method']}")
         
@@ -956,7 +979,14 @@ async def validate_request(request: Request):
                     logger.error(f"Error processing request payload for tool extraction: {e}")
         
         # Validate scope-based access if we have server/tool information
-        user_scopes = validation_result.get('scopes', [])
+        # For Keycloak, map groups to scopes; otherwise use scopes directly
+        user_groups = validation_result.get('groups', [])
+        if user_groups and validation_result.get('method') == 'keycloak':
+            # Map Keycloak groups to scopes using the group mappings
+            user_scopes = map_groups_to_scopes(user_groups)
+            logger.info(f"Mapped Keycloak groups {user_groups} to scopes: {user_scopes}")
+        else:
+            user_scopes = validation_result.get('scopes', [])
         if request_payload and server_name and tool_name:
             # Extract method and actual tool name
             method = tool_name  # The extracted tool_name is actually the method
@@ -996,13 +1026,14 @@ async def validate_request(request: Request):
             'valid': True,
             'username': validation_result.get('username') or '',
             'client_id': validation_result.get('client_id') or '',
-            'scopes': validation_result.get('scopes', []),
+            'scopes': user_scopes,
             'method': validation_result.get('method') or '',
             'groups': validation_result.get('groups', []),
             'server_name': server_name,
             'tool_name': tool_name
         }
         logger.info(f"Full validation result: {json.dumps(validation_result, indent=2)}")
+        logger.info(f"Response data being sent: {json.dumps(response_data, indent=2)}")
         # Create JSON response with headers that nginx can use
         response = JSONResponse(content=response_data, status_code=200)
         
@@ -1010,7 +1041,7 @@ async def validate_request(request: Request):
         response.headers["X-User"] = validation_result.get('username') or ''
         response.headers["X-Username"] = validation_result.get('username') or ''
         response.headers["X-Client-Id"] = validation_result.get('client_id') or ''
-        response.headers["X-Scopes"] = ' '.join(validation_result.get('scopes', []))
+        response.headers["X-Scopes"] = ' '.join(user_scopes)
         response.headers["X-Auth-Method"] = validation_result.get('method') or ''
         response.headers["X-Server-Name"] = server_name or ''
         response.headers["X-Tool-Name"] = tool_name or ''
@@ -1048,18 +1079,41 @@ async def validate_request(request: Request):
 @app.get("/config")
 async def get_auth_config():
     """Return the authentication configuration info"""
-    return {
-        "auth_type": "cognito",
-        "description": "Header-based Cognito token validation",
-        "required_headers": [
-            "Authorization: Bearer <token>",
-            "X-User-Pool-Id: <pool_id>",
-            "X-Client-Id: <client_id>"
-        ],
-        "optional_headers": [
-            "X-Region: <region> (default: us-east-1)"
-        ]
-    }
+    try:
+        auth_provider = get_auth_provider()
+        provider_info = auth_provider.get_provider_info()
+        
+        if provider_info.get('provider_type') == 'keycloak':
+            return {
+                "auth_type": "keycloak",
+                "description": "Keycloak JWT token validation",
+                "required_headers": [
+                    "Authorization: Bearer <token>"
+                ],
+                "optional_headers": [],
+                "provider_info": provider_info
+            }
+        else:
+            return {
+                "auth_type": "cognito",
+                "description": "Header-based Cognito token validation",
+                "required_headers": [
+                    "Authorization: Bearer <token>",
+                    "X-User-Pool-Id: <pool_id>",
+                    "X-Client-Id: <client_id>"
+                ],
+                "optional_headers": [
+                    "X-Region: <region> (default: us-east-1)"
+                ],
+                "provider_info": provider_info
+            }
+    except Exception as e:
+        logger.error(f"Error getting auth config: {e}")
+        return {
+            "auth_type": "unknown",
+            "description": f"Error getting provider config: {e}",
+            "error": str(e)
+        }
 
 @app.post("/internal/tokens", response_model=GenerateTokenResponse)
 async def generate_user_token(
@@ -1437,48 +1491,68 @@ async def oauth2_callback(
         token_data = await exchange_code_for_token(provider, code, provider_config, auth_server_url)
         logger.info(f"Token data keys: {list(token_data.keys())}")
         
-        # For Cognito, validate the access token to get groups from JWT claims
-        if provider == "cognito":
+        # For Cognito and Keycloak, try to extract user info from JWT tokens
+        if provider in ["cognito", "keycloak"]:
             try:
-                # Extract Cognito configuration from environment
-                user_pool_id = os.environ.get('COGNITO_USER_POOL_ID')
-                client_id = provider_config["client_id"]
-                region = os.environ.get('AWS_REGION', 'us-east-1')
-                
-                if user_pool_id and client_id:
-                    # Use our existing token validation to get groups from JWT
-                    validator = SimplifiedCognitoValidator(region)
-                    token_validation = validator.validate_token(
-                        token_data["access_token"], 
-                        user_pool_id, 
-                        client_id, 
-                        region
-                    )
-                    
-                    logger.info(f"Token validation result: {token_validation}")
-                    
-                    # Extract user info from token validation
-                    mapped_user = {
-                        "username": token_validation.get("username"),
-                        "email": token_validation.get("username"),  # Cognito username is usually email
-                        "name": token_validation.get("username"),
-                        "groups": token_validation.get("groups", [])
-                    }
-                    logger.info(f"User extracted from JWT token: {mapped_user}")
-                else:
-                    logger.warning("Missing Cognito configuration for JWT validation, falling back to userInfo")
-                    raise ValueError("Missing Cognito config")
+                if provider == "cognito":
+                    # Extract Cognito configuration from environment
+                    user_pool_id = os.environ.get('COGNITO_USER_POOL_ID')
+                    client_id = provider_config["client_id"]
+                    region = os.environ.get('AWS_REGION', 'us-east-1')
+
+                    if user_pool_id and client_id:
+                        # Use our existing token validation to get groups from JWT
+                        validator = SimplifiedCognitoValidator(region)
+                        token_validation = validator.validate_token(
+                            token_data["access_token"],
+                            user_pool_id,
+                            client_id,
+                            region
+                        )
+
+                        logger.info(f"Token validation result: {token_validation}")
+
+                        # Extract user info from token validation
+                        mapped_user = {
+                            "username": token_validation.get("username"),
+                            "email": token_validation.get("username"),  # Cognito username is usually email
+                            "name": token_validation.get("username"),
+                            "groups": token_validation.get("groups", [])
+                        }
+                        logger.info(f"User extracted from JWT token: {mapped_user}")
+                    else:
+                        logger.warning("Missing Cognito configuration for JWT validation, falling back to userInfo")
+                        raise ValueError("Missing Cognito config")
+                elif provider == "keycloak":
+                    # For Keycloak, decode the ID token to get user information
+                    if "id_token" in token_data:
+                        import jwt
+                        # Decode without verification for now (we trust the token since we just got it)
+                        id_token_claims = jwt.decode(token_data["id_token"], options={"verify_signature": False})
+                        logger.info(f"ID token claims: {id_token_claims}")
+
+                        # Extract user info from ID token claims
+                        mapped_user = {
+                            "username": id_token_claims.get("preferred_username") or id_token_claims.get("sub"),
+                            "email": id_token_claims.get("email"),
+                            "name": id_token_claims.get("name") or id_token_claims.get("given_name"),
+                            "groups": id_token_claims.get("groups", [])
+                        }
+                        logger.info(f"User extracted from Keycloak ID token: {mapped_user}")
+                    else:
+                        logger.warning("No ID token found in Keycloak response, falling back to userInfo")
+                        raise ValueError("Missing ID token")
                     
             except Exception as e:
                 logger.warning(f"JWT token validation failed: {e}, falling back to userInfo endpoint")
                 # Fallback to userInfo endpoint
-                user_info = await get_user_info(provider, token_data["access_token"], provider_config)
+                user_info = await get_user_info(token_data["access_token"], provider_config)
                 logger.info(f"Raw user info from {provider}: {user_info}")
                 mapped_user = map_user_info(user_info, provider_config)
                 logger.info(f"Mapped user info from userInfo: {mapped_user}")
         else:
             # For other providers, use userInfo endpoint
-            user_info = await get_user_info(provider, token_data["access_token"], provider_config)
+            user_info = await get_user_info(token_data["access_token"], provider_config)
             logger.info(f"Raw user info from {provider}: {user_info}")
             mapped_user = map_user_info(user_info, provider_config)
             logger.info(f"Mapped user info: {mapped_user}")
@@ -1548,7 +1622,7 @@ async def exchange_code_for_token(provider: str, code: str, provider_config: dic
         response.raise_for_status()
         return response.json()
 
-async def get_user_info(provider: str, access_token: str, provider_config: dict) -> dict:
+async def get_user_info(access_token: str, provider_config: dict) -> dict:
     """Get user information from OAuth2 provider"""
     async with httpx.AsyncClient() as client:
         headers = {"Authorization": f"Bearer {access_token}"}

@@ -27,10 +27,9 @@ import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
-import yaml
 from dotenv import load_dotenv
 
 # Configure logging with basicConfig
@@ -42,29 +41,39 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _load_config(config_file: str = "config.yaml") -> Dict[str, Any]:
+def _load_gateway_configs() -> List[Dict[str, Any]]:
     """
-    Load configuration from YAML file.
-
-    Args:
-        config_file: Path to the configuration file
+    Load gateway configurations from environment variables.
+    Supports multiple configurations with _1, _2, _3 suffixes.
 
     Returns:
-        Configuration dictionary
+        List of gateway configuration dictionaries
     """
-    try:
-        config_path = Path(config_file)
-        if not config_path.exists():
-            logger.warning(f"Config file {config_file} not found, using environment variables only")
-            return {}
+    configs = []
 
-        with open(config_path, "r") as f:
-            config = yaml.safe_load(f) or {}
-            logger.info(f"Loaded configuration from {config_file}")
-            return config
-    except Exception as e:
-        logger.error(f"Failed to load config file {config_file}: {e}")
-        return {}
+    # Check for numbered configurations (up to 100)
+    for i in range(1, 101):
+        client_id = os.environ.get(f"AGENTCORE_CLIENT_ID_{i}")
+        client_secret = os.environ.get(f"AGENTCORE_CLIENT_SECRET_{i}")
+        gateway_arn = os.environ.get(f"AGENTCORE_GATEWAY_ARN_{i}")
+        server_name = os.environ.get(f"AGENTCORE_SERVER_NAME_{i}")
+
+        # If we find a configuration set, add it
+        if client_id and client_secret:
+            config = {
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "gateway_arn": gateway_arn,
+                "server_name": server_name,
+                "index": i
+            }
+            configs.append(config)
+            logger.debug(f"Found gateway configuration #{i}: {server_name or 'unnamed'}")
+        elif any([client_id, client_secret, gateway_arn, server_name]):
+            # Partial configuration found - warn user
+            logger.warning(f"Incomplete configuration set #{i} - skipping")
+
+    return configs
 
 
 def _extract_cognito_region_from_pool_id(user_pool_id: str) -> str:
@@ -210,128 +219,122 @@ def _save_egress_token(
     return str(egress_path)
 
 
-def _get_cognito_domain_from_config(
-    user_pool_id: Optional[str] = None,
-    custom_domain: Optional[str] = None
-) -> str:
+def _get_cognito_domain_from_env() -> Tuple[str, Optional[str]]:
     """
-    Construct Cognito domain URL from User Pool ID or use custom domain.
-
-    Args:
-        user_pool_id: Cognito User Pool ID
-        custom_domain: Custom Cognito domain URL
+    Get Cognito domain and user pool ID from environment variables.
 
     Returns:
-        Complete Cognito domain URL
+        Tuple of (cognito_domain, user_pool_id)
     """
-    if custom_domain:
-        return custom_domain
+    cognito_domain = os.environ.get("COGNITO_DOMAIN") or os.environ.get("OAUTH_DOMAIN")
+    user_pool_id = os.environ.get("COGNITO_USER_POOL_ID")
 
-    if user_pool_id:
+    # If no domain provided, try to construct from user_pool_id
+    if not cognito_domain and user_pool_id:
         cognito_region = _extract_cognito_region_from_pool_id(user_pool_id)
-        return f"https://cognito-idp.{cognito_region}.amazonaws.com/{user_pool_id}"
+        cognito_domain = f"https://cognito-idp.{cognito_region}.amazonaws.com/{user_pool_id}"
+        logger.info(f"Constructed Cognito domain from pool ID: {cognito_domain}")
 
-    raise ValueError("Either user_pool_id or custom_domain must be provided")
+    return cognito_domain, user_pool_id
 
 
 def generate_access_token(
-    gateway_arn: Optional[str] = None,
-    config_file: str = "config.yaml",
+    gateway_index: Optional[int] = None,
+    gateway_name: Optional[str] = None,
     oauth_tokens_dir: str = ".oauth-tokens",
-    audience: str = "MCPGateway"
+    audience: str = "MCPGateway",
+    generate_all: bool = False
 ) -> None:
     """
-    Generate access token for AgentCore Gateway using configuration and environment variables.
+    Generate access token for AgentCore Gateway using environment variables.
 
     Args:
-        gateway_arn: Optional gateway ARN (for reference/validation)
-        config_file: Path to configuration file
+        gateway_index: Index of gateway configuration to use (1-100)
+        gateway_name: Name of gateway to generate token for
         oauth_tokens_dir: Path to .oauth-tokens directory
         audience: Token audience for OAuth providers
+        generate_all: Generate tokens for all configured gateways
     """
     # Load environment variables
     load_dotenv()
 
-    # Load configuration - handle relative paths from script directory
-    script_dir = Path(__file__).parent
-    if not Path(config_file).is_absolute():
-        config_file_path = script_dir / config_file
-    else:
-        config_file_path = Path(config_file)
-    
-    config = _load_config(str(config_file_path))
+    # Get singleton Cognito configuration
+    cognito_domain, user_pool_id = _get_cognito_domain_from_env()
 
-    # Get configuration values with environment variable fallbacks
-    cognito_domain = (
-        os.environ.get("COGNITO_DOMAIN") or 
-        config.get("oauth_domain")
-    )
-    
-    client_id = (
-        os.environ.get("COGNITO_CLIENT_ID") or 
-        os.environ.get("OAUTH_CLIENT_ID") or
-        config.get("client_id") or
-        config.get("oauth_client_id")
-    )
-    
-    client_secret = (
-        os.environ.get("COGNITO_CLIENT_SECRET") or 
-        os.environ.get("OAUTH_CLIENT_SECRET")
-    )
-    
-    user_pool_id = config.get("user_pool_id")
-    server_name = config.get("server_name")
-
-    # If no domain provided, try to construct from user_pool_id
-    if not cognito_domain and user_pool_id:
-        cognito_domain = _get_cognito_domain_from_config(user_pool_id=user_pool_id)
-        logger.info(f"Constructed Cognito domain from pool ID: {cognito_domain}")
-
-    # Validate required parameters
-    missing_params = []
     if not cognito_domain:
-        missing_params.append("COGNITO_DOMAIN (or user_pool_id in config)")
-    if not client_id:
-        missing_params.append("COGNITO_CLIENT_ID")
-    if not client_secret:
-        missing_params.append("COGNITO_CLIENT_SECRET")
+        raise ValueError("COGNITO_DOMAIN or COGNITO_USER_POOL_ID must be set in .env file")
 
-    if missing_params:
-        logger.error(f"Missing required parameters: {', '.join(missing_params)}")
-        logger.error("Please set these in your .env file or config.yaml")
-        raise ValueError(f"Missing required parameters: {', '.join(missing_params)}")
+    # Load gateway configurations
+    gateway_configs = _load_gateway_configs()
 
-    # Log gateway ARN if provided
-    if gateway_arn:
-        logger.info(f"Generating token for gateway: {gateway_arn}")
-    elif config.get("gateway_arn"):
-        logger.info(f"Gateway ARN from config: {config['gateway_arn']}")
+    if not gateway_configs:
+        raise ValueError("No gateway configurations found. Please set AGENTCORE_CLIENT_ID_1, AGENTCORE_CLIENT_SECRET_1, etc. in .env file")
 
-    logger.info("Generating OAuth2 access token...")
+    # Determine which configurations to process
+    configs_to_process = []
 
-    # Generate token
-    token_response = _get_cognito_token(
-        cognito_domain_url=cognito_domain,
-        client_id=client_id,
-        client_secret=client_secret,
-        audience=audience,
-    )
+    if generate_all:
+        configs_to_process = gateway_configs
+        logger.info(f"Generating tokens for all {len(gateway_configs)} configured gateways")
+    elif gateway_index:
+        config = next((c for c in gateway_configs if c['index'] == gateway_index), None)
+        if not config:
+            raise ValueError(f"No configuration found for index {gateway_index}")
+        configs_to_process = [config]
+    elif gateway_name:
+        config = next((c for c in gateway_configs if c.get('server_name') == gateway_name), None)
+        if not config:
+            available_names = [c.get('server_name', f"config_{c['index']}") for c in gateway_configs]
+            raise ValueError(f"No configuration found for gateway '{gateway_name}'. Available: {', '.join(available_names)}")
+        configs_to_process = [config]
+    else:
+        # Default to first configuration
+        configs_to_process = [gateway_configs[0]]
+        logger.info(f"Using first gateway configuration: {gateway_configs[0].get('server_name', 'config_1')}")
 
     # Resolve oauth_tokens_dir path relative to current working directory
     if not Path(oauth_tokens_dir).is_absolute():
         oauth_tokens_path = Path.cwd() / oauth_tokens_dir
     else:
         oauth_tokens_path = Path(oauth_tokens_dir)
-    
-    # Save token as egress token file
-    saved_path = _save_egress_token(
-        token_response=token_response,
-        provider="bedrock-agentcore",
-        server_name=server_name,
-        oauth_tokens_dir=str(oauth_tokens_path)
-    )
 
-    logger.info(f"Token generation completed successfully! Egress token saved to {saved_path}")
+    # Process each configuration
+    for config in configs_to_process:
+        client_id = config['client_id']
+        client_secret = config['client_secret']
+        gateway_arn = config.get('gateway_arn')
+        server_name = config.get('server_name')
+
+        logger.info(f"\nProcessing gateway configuration #{config['index']}: {server_name or 'unnamed'}")
+
+        if gateway_arn:
+            logger.info(f"Gateway ARN: {gateway_arn}")
+
+        logger.info("Generating OAuth2 access token...")
+
+        try:
+            # Generate token
+            token_response = _get_cognito_token(
+                cognito_domain_url=cognito_domain,
+                client_id=client_id,
+                client_secret=client_secret,
+                audience=audience,
+            )
+
+            # Save token as egress token file
+            saved_path = _save_egress_token(
+                token_response=token_response,
+                provider="bedrock-agentcore",
+                server_name=server_name,
+                oauth_tokens_dir=str(oauth_tokens_path)
+            )
+
+            logger.info(f"Token generation completed successfully! Egress token saved to {saved_path}")
+
+        except Exception as e:
+            logger.error(f"Failed to generate token for {server_name or f'config_{config['index']}'}: {e}")
+            if not generate_all:
+                raise
 
 
 def _parse_arguments() -> argparse.Namespace:
@@ -346,11 +349,17 @@ def _parse_arguments() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    # Generate egress token using config.yaml and .env
+    # Generate token for first configured gateway
     python generate_access_token.py
 
-    # Specify gateway ARN
-    python generate_access_token.py --gateway-arn arn:aws:bedrock-agentcore:us-east-1:123456789012:gateway/my-gateway
+    # Generate token for specific gateway by index
+    python generate_access_token.py --gateway-index 2
+
+    # Generate token for specific gateway by name
+    python generate_access_token.py --gateway-name sre-gateway
+
+    # Generate tokens for ALL configured gateways
+    python generate_access_token.py --all
 
     # Custom oauth-tokens directory
     python generate_access_token.py --oauth-tokens-dir /path/to/.oauth-tokens
@@ -359,21 +368,33 @@ Examples:
     python generate_access_token.py --audience "https://api.mycompany.com"
 
 Environment Variables:
-    COGNITO_DOMAIN        - Cognito/OAuth domain URL
-    COGNITO_CLIENT_ID     - OAuth client ID  
-    COGNITO_CLIENT_SECRET - OAuth client secret
+    # Singleton configuration (shared across all gateways):
+    COGNITO_DOMAIN          - Cognito/OAuth domain URL
+    COGNITO_USER_POOL_ID    - Cognito User Pool ID
+
+    # Per-gateway configuration (use _1, _2, etc. suffixes):
+    AGENTCORE_CLIENT_ID_1     - OAuth client ID for gateway 1
+    AGENTCORE_CLIENT_SECRET_1 - OAuth client secret for gateway 1
+    AGENTCORE_GATEWAY_ARN_1   - Gateway ARN for gateway 1
+    AGENTCORE_SERVER_NAME_1   - Server name for gateway 1
         """,
     )
 
     parser.add_argument(
-        "--gateway-arn",
-        help="Gateway ARN (optional, for reference)",
+        "--gateway-index",
+        type=int,
+        help="Index of gateway configuration to use (1-100)",
     )
 
     parser.add_argument(
-        "--config-file",
-        default="config.yaml",
-        help="Configuration file path (default: config.yaml)",
+        "--gateway-name",
+        help="Name of gateway to generate token for",
+    )
+
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Generate tokens for all configured gateways",
     )
 
     parser.add_argument(
@@ -406,10 +427,11 @@ def main() -> None:
 
     try:
         generate_access_token(
-            gateway_arn=args.gateway_arn,
-            config_file=args.config_file,
+            gateway_index=args.gateway_index,
+            gateway_name=args.gateway_name,
             oauth_tokens_dir=args.oauth_tokens_dir,
             audience=args.audience,
+            generate_all=args.all,
         )
     except Exception as e:
         logger.error(f"Token generation failed: {e}")

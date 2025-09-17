@@ -57,7 +57,7 @@ graph TB
     
     subgraph "External Systems"
         AuthServer[Auth Server<br/>:8888]
-        Cognito[AWS Cognito]
+        Cognito[Amazon Cognito]
         LocalAuth[Local User DB]
     end
     
@@ -161,7 +161,7 @@ graph LR
         end
         
         subgraph "OAuth2 Providers"
-            CognitoBtn[AWS Cognito Button]
+            CognitoBtn[Amazon Cognito Button]
             SAMLBtn[SAML Provider Button]
             CustomBtn[Custom Provider Button]
         end
@@ -624,7 +624,7 @@ graph LR
     end
     
     subgraph "Identity Providers"
-        Cognito[AWS Cognito]
+        Cognito[Amazon Cognito]
         SAML[SAML Provider]
         Custom[Custom OAuth2]
     end

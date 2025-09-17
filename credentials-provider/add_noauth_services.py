@@ -24,6 +24,30 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _load_env_file() -> None:
+    """Load environment variables from .env file in project root."""
+    # Get the project root directory (parent of credentials-provider)
+    script_dir = Path(__file__).parent
+    project_root = script_dir.parent
+    env_file = project_root / ".env"
+
+    if env_file.exists():
+        try:
+            with open(env_file, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        # Remove quotes if present
+                        value = value.strip('"').strip("'")
+                        os.environ[key] = value
+            logger.debug(f"Loaded environment variables from {env_file}")
+        except Exception as e:
+            logger.warning(f"Failed to load .env file: {e}")
+    else:
+        logger.debug(f"No .env file found at {env_file}")
+
+
 def _load_json_file(file_path: Path) -> Optional[Dict[str, Any]]:
     """Load and parse a JSON file safely."""
     try:
@@ -109,22 +133,43 @@ def _get_ingress_headers() -> Optional[Dict[str, str]]:
     """Get ingress authentication headers from tokens file."""
     tokens_dir = _get_oauth_tokens_dir()
     ingress_file = tokens_dir / "ingress.json"
-    
+
+    # Check AUTH_PROVIDER from environment
+    auth_provider = os.environ.get('AUTH_PROVIDER', '')
+
+    if auth_provider == 'keycloak':
+        # When using Keycloak, get token from agent token file
+        agent_token_file = tokens_dir / "agent-ai-coding-assistant-m2m-token.json"
+        if agent_token_file.exists():
+            agent_data = _load_json_file(agent_token_file)
+            if agent_data and agent_data.get('access_token'):
+                logger.debug("Using Keycloak agent token for ingress authentication")
+                headers = {
+                    "X-Authorization": f"Bearer {agent_data.get('access_token', '')}"
+                }
+                return headers
+
+        # If no Keycloak token found, fall through to check ingress.json
+        logger.warning("No Keycloak agent token found, trying ingress.json")
+
     if not ingress_file.exists():
-        logger.warning("No ingress.json file found - no-auth services will have no headers")
+        if auth_provider == 'keycloak':
+            logger.warning("No ingress.json or Keycloak agent token found - no-auth services will have no headers")
+        else:
+            logger.warning("No ingress.json file found - no-auth services will have no headers")
         return None
-        
+
     ingress_data = _load_json_file(ingress_file)
     if not ingress_data:
         return None
-        
+
     headers = {
         "X-Authorization": f"Bearer {ingress_data.get('access_token', '')}",
         "X-User-Pool-Id": ingress_data.get('user_pool_id', ''),
         "X-Client-Id": ingress_data.get('client_id', ''),
         "X-Region": ingress_data.get('region', 'us-east-1')
     }
-    
+
     return headers
 
 
@@ -252,9 +297,12 @@ def _parse_arguments() -> argparse.Namespace:
 def main() -> None:
     """Main function to add no-auth services to MCP configurations."""
     try:
+        # Load environment variables from .env file
+        _load_env_file()
+
         # Parse command line arguments
         args = _parse_arguments()
-        
+
         # Set logging level based on verbose flag
         if args.verbose:
             logging.getLogger().setLevel(logging.DEBUG)
