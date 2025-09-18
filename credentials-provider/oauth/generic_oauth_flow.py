@@ -1002,18 +1002,23 @@ def interactive_configuration() -> Dict[str, Any]:
             
             additional_config[var_name] = value
     
-    # Summary
+    # Summary (redacted for security)
+    from ..utils import redact_sensitive_value
     print(f"\n📋 Configuration Summary")
     print("=" * 30)
     print(f"Provider: {provider_config['display_name']}")
-    print(f"Client ID: {client_id}")
-    print(f"Client Secret: {'*' * len(client_secret)}")
+    print(f"Client ID: {redact_sensitive_value(client_id, 8)}")
+    print(f"Client Secret: {redact_sensitive_value(client_secret, 8)}")
     print(f"Redirect URI: {redirect_uri}")
     print(f"Scopes: {', '.join(scopes)}")
     
     if additional_config:
         for key, value in additional_config.items():
-            print(f"{key.replace('_', ' ').title()}: {value}")
+            # Redact sensitive values in additional config
+            display_value = value
+            if any(sensitive in key.lower() for sensitive in ['secret', 'password', 'token', 'key']):
+                display_value = redact_sensitive_value(str(value), 8)
+            print(f"{key.replace('_', ' ').title()}: {display_value}")
     
     # Confirmation
     confirm = input(f"\n✅ Proceed with OAuth flow? (y/N): ").strip().lower()

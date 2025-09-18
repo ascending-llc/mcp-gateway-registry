@@ -1,0 +1,200 @@
+version: '3.8'
+
+services:
+  # Registry service (includes nginx, SSL, FAISS, models) - using pre-built image
+  registry:
+    image: ${DOCKERHUB_ORG:-mcpgateway}/registry:${REGISTRY_VERSION:-latest}
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - AUTH_SERVER_URL=${AUTH_SERVER_URL}
+      - AUTH_SERVER_EXTERNAL_URL=${AUTH_SERVER_EXTERNAL_URL}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
+      - COGNITO_CLIENT_SECRET=${COGNITO_CLIENT_SECRET}
+      - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - SRE_GATEWAY_AUTH_TOKEN=${SRE_GATEWAY_AUTH_TOKEN}
+      - ATLASSIAN_AUTH_TOKEN=${ATLASSIAN_AUTH_TOKEN}
+      # Keycloak configuration
+      - AUTH_PROVIDER=${AUTH_PROVIDER:-cognito}
+      - KEYCLOAK_ENABLED=${KEYCLOAK_ENABLED:-false}
+      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080}
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-mcp-gateway}
+      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-mcp-gateway-web}
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "7860:7860"
+    volumes:
+      - /opt/mcp-gateway/servers:/app/registry/servers
+      - /opt/mcp-gateway/models:/app/registry/models
+      - /opt/ssl:/etc/ssl
+      - /var/log/mcp-gateway:/app/logs
+      - /opt/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
+    depends_on:
+      - auth-server
+    restart: unless-stopped
+
+  # Auth service (separate and scalable) - using pre-built image
+  auth-server:
+    image: ${DOCKERHUB_ORG:-mcpgateway}/auth-server:${AUTH_SERVER_VERSION:-latest}
+    environment:
+      - REGISTRY_URL=${REGISTRY_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
+      - COGNITO_CLIENT_SECRET=${COGNITO_CLIENT_SECRET}
+      - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
+      - COGNITO_DOMAIN=${COGNITO_DOMAIN:-auto}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      # Keycloak configuration
+      - AUTH_PROVIDER=${AUTH_PROVIDER:-cognito}  # 'cognito' or 'keycloak'
+      - KEYCLOAK_ENABLED=${KEYCLOAK_ENABLED:-false}
+      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080}
+      - KEYCLOAK_EXTERNAL_URL=${KEYCLOAK_EXTERNAL_URL:-http://localhost:8080}
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-mcp-gateway}
+      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-mcp-gateway-web}
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
+      - KEYCLOAK_M2M_CLIENT_ID=${KEYCLOAK_M2M_CLIENT_ID:-mcp-gateway-m2m}
+      - KEYCLOAK_M2M_CLIENT_SECRET=${KEYCLOAK_M2M_CLIENT_SECRET}
+    ports:
+      - "8888:8888"
+    volumes:
+      - /var/log/mcp-gateway:/app/logs
+      - /opt/mcp-gateway/auth_server/scopes.yml:/app/scopes.yml
+    restart: unless-stopped
+
+  # Current Time MCP Server - using pre-built image
+  currenttime-server:
+    image: ${DOCKERHUB_ORG:-mcpgateway}/currenttime-server:${CURRENTTIME_VERSION:-latest}
+    environment:
+      - PORT=8000
+      - MCP_TRANSPORT=streamable-http
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  # Financial Info MCP Server - using pre-built image
+  fininfo-server:
+    image: ${DOCKERHUB_ORG:-mcpgateway}/fininfo-server:${FININFO_VERSION:-latest}
+    environment:
+      - PORT=8001
+      - SECRET_KEY=${SECRET_KEY}
+    volumes:
+      - /opt/mcp-gateway/secrets/fininfo/:/app/fininfo/
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+
+  # MCP Gateway Server - using pre-built image
+  mcpgw-server:
+    image: ${DOCKERHUB_ORG:-mcpgateway}/mcpgw-server:${MCPGW_VERSION:-latest}
+    environment:
+      - PORT=8003
+      - REGISTRY_BASE_URL=http://registry:7860
+      - REGISTRY_USERNAME=${ADMIN_USER:-admin}
+      - REGISTRY_PASSWORD=${ADMIN_PASSWORD}
+    volumes:
+      - /opt/mcp-gateway/servers:/app/registry/servers
+      - /opt/mcp-gateway/models:/app/registry/models
+      - /opt/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
+    ports:
+      - "8003:8003"
+    depends_on:
+      - registry
+    restart: unless-stopped
+
+  # Real Server Fake Tools MCP Server - using pre-built image
+  realserverfaketools-server:
+    image: ${DOCKERHUB_ORG:-mcpgateway}/realserverfaketools-server:${REALSERVERFAKETOOLS_VERSION:-latest}
+    environment:
+      - PORT=8002
+    ports:
+      - "8002:8002"
+    restart: unless-stopped
+
+  # Atlassian MCP Server - using existing external pre-built image
+  atlassian-server:
+    image: ghcr.io/sooperset/mcp-atlassian:latest
+    environment:
+      - ATLASSIAN_OAUTH_ENABLE=true
+      - MCP_VERY_VERBOSE=true
+      - MCP_LOGGING_STDOUT=true
+    ports:
+      - "8005:8005"
+    volumes:
+      - /home/ubuntu/.mcp-atlassian:/home/app/.mcp-atlassian
+    command: --transport streamable-http --port 8005
+    restart: unless-stopped
+
+  # PostgreSQL database for Keycloak - external service, no change
+  keycloak-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
+    volumes:
+      - keycloak_db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Keycloak Identity Provider - external service, no change
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    command: start-dev  # Use 'start' for production with proper SSL
+    environment:
+      # Database configuration
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
+
+      # Admin credentials
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+
+      # HTTP configuration
+      KC_HTTP_ENABLED: 'true'
+      KC_HTTP_PORT: 8080
+      KC_HOSTNAME_STRICT: 'false'
+      KC_HOSTNAME_STRICT_HTTPS: 'false'
+      KC_PROXY: edge  # Running behind nginx
+
+      # Features
+      KC_FEATURES: token-exchange,admin-api
+
+      # Logging
+      KC_LOG_LEVEL: INFO
+
+    ports:
+      - "8080:8080"
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    volumes:
+      - ./keycloak/themes:/opt/keycloak/themes
+      - ./keycloak/providers:/opt/keycloak/providers
+      - ./keycloak/import:/opt/keycloak/data/import
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  ssl_data:
+  keycloak_db_data:

@@ -485,17 +485,17 @@ curl http://localhost:7860/health
    - Username: `admin`
    - Password: The `KEYCLOAK_ADMIN_PASSWORD` you set
 
-### Test MCP Commands
+### Test with Python MCP Client
 
 ```bash
-# Navigate to tests directory
-cd ~/workspace/mcp-gateway-registry/tests
+# Navigate to project root directory
+cd ~/workspace/mcp-gateway-registry
 
 # Activate the virtual environment if not already active
-source ../.venv/bin/activate
+source .venv/bin/activate
 
 # Source the agent credentials from the saved file
-source ../.oauth-tokens/agent-test-agent-m2m.env
+source .oauth-tokens/agent-test-agent-m2m.env
 
 # Option 2: Or manually set the environment variables
 # export CLIENT_ID="agent-test-agent-m2m"
@@ -504,57 +504,42 @@ source ../.oauth-tokens/agent-test-agent-m2m.env
 # export KEYCLOAK_REALM="mcp-gateway"
 
 # Test basic connectivity
-uv run python ../mcp_client.py ping
-# Expected: "pong"
+uv run python mcp_client.py ping
+
+# Expected output:
+# ✓ M2M authentication successful
+# Session established: 277bf44c7d474d9b9674e7cc8a5122c8
+# {
+#   "jsonrpc": "2.0",
+#   "id": 2,
+#   "result": {}
+# }
 
 # List available tools
-uv run python ../mcp_client.py list
+uv run python mcp_client.py list
 # Expected: List of available MCP tools
 
 # Test calling a simple tool to get current time
-uv run python ../mcp_client.py call --tool current_time_by_timezone --args '{"tz_name":"America/New_York"}'
+# Note: current_time_by_timezone is on the 'currenttime' server, not 'mcpgw'
+uv run python mcp_client.py --url http://localhost/currenttime/mcp call --tool current_time_by_timezone --args '{"tz_name":"America/New_York"}'
 # Expected: Current time in JSON format
+
+# Alternative: Use intelligent_tool_finder on mcpgw to find and call tools dynamically
+uv run python mcp_client.py call --tool intelligent_tool_finder --args '{"natural_language_query":"get current time in New York"}'
+# This will automatically find and route to the correct server
 ```
 
 ### Test Intelligent Agent Demo
 
 ```bash
 # Use the intelligent tool finder to discover tools with natural language
-uv run python ../mcp_client.py call --tool intelligent_tool_finder --args '{"natural_language_query":"What is the current time?"}'
+uv run python mcp_client.py call --tool intelligent_tool_finder --args '{"natural_language_query":"What is the current time?"}'
 # Expected: Tool discovery results with time-related tools
 
 # You can also run a full agent with the comprehensive agent script
-cd ../agents
-uv run python agent.py --prompt "What's the current time in New York?" --interactive
+# Note: Use --mcp-registry-url to point to your local gateway
+uv run python agents/agent.py --agent-name agent-test-agent-m2m --mcp-registry-url http://localhost/mcpgw/mcp --prompt "What's the current time in New York?" 
 # Expected: Natural language response with current time
-```
-
-### Test with Python MCP Client
-
-Test the MCP Gateway directly using the included Python client:
-
-```bash
-# Source M2M credentials
-source .oauth-tokens/agent-test-agent-m2m.env
-
-# Test basic connectivity
-uv run mcp_client.py ping
-# Expected: {"jsonrpc":"2.0","id":2,"result":{}}
-
-# List available tools
-uv run mcp_client.py list
-# Expected: JSON response with available tools from all registered services
-
-# Use intelligent tool finder to discover tools
-uv run mcp_client.py call --tool intelligent_tool_finder --args '{"natural_language_query":"get current time in New York"}'
-# Expected: JSON response with recommended tools
-
-# Call a specific tool directly (using different gateway URL)
-uv run mcp_client.py --url http://localhost/currenttime/mcp call --tool current_time_by_timezone --args '{"tz_name":"America/New_York"}'
-# Expected: Current time in New York timezone
-
-# Get help for more examples
-uv run mcp_client.py --help
 ```
 
 ---
@@ -979,6 +964,98 @@ curl -f https://mcpgateway.mycorp.com/realms/mcp-gateway
 - **GitHub Issues**: https://github.com/agentic-community/mcp-gateway-registry/issues
 - **Discussions**: https://github.com/agentic-community/mcp-gateway-registry/discussions
 - **Documentation**: Check the `/docs` folder for detailed guides
+
+---
+
+## Container Publishing for Production Deployment
+
+For production environments or to contribute pre-built images, you can publish the containers to Docker Hub and GitHub Container Registry.
+
+### Publishing Script Overview
+
+The `scripts/publish_containers.sh` script automates building and publishing all 6 container components:
+
+- `registry` - Main registry service with nginx and web UI
+- `auth-server` - Authentication service
+- `currenttime-server` - Current time MCP server
+- `realserverfaketools-server` - Example tools MCP server
+- `fininfo-server` - Financial information MCP server
+- `mcpgw-server` - MCP Gateway proxy server
+
+### Publishing Commands
+
+**Test build locally (no push):**
+```bash
+./scripts/publish_containers.sh --local
+```
+
+**Publish to Docker Hub:**
+```bash
+./scripts/publish_containers.sh --dockerhub
+```
+
+**Publish to GitHub Container Registry:**
+```bash
+./scripts/publish_containers.sh --ghcr
+```
+
+**Publish to both registries:**
+```bash
+./scripts/publish_containers.sh --dockerhub --ghcr
+```
+
+**Build specific component:**
+```bash
+./scripts/publish_containers.sh --dockerhub --component registry
+```
+
+### Required Environment Variables
+
+Add these to your `.env` file for publishing:
+
+```bash
+# Container Registry Credentials
+DOCKERHUB_USERNAME=aarora79
+DOCKERHUB_TOKEN=your_docker_hub_token
+GITHUB_TOKEN=your_github_token
+
+# Organization names for publishing
+DOCKERHUB_ORG=mcpgateway
+GITHUB_ORG=agentic-community
+```
+
+### Generated Image Names
+
+**Docker Hub (Organization Account):**
+- `mcpgateway/registry:latest`
+- `mcpgateway/auth-server:latest`
+- `mcpgateway/currenttime-server:latest`
+- `mcpgateway/realserverfaketools-server:latest`
+- `mcpgateway/fininfo-server:latest`
+- `mcpgateway/mcpgw-server:latest`
+
+**GitHub Container Registry:**
+- `ghcr.io/agentic-community/mcp-registry:latest`
+- `ghcr.io/agentic-community/mcp-auth-server:latest`
+- `ghcr.io/agentic-community/mcp-currenttime-server:latest`
+- `ghcr.io/agentic-community/mcp-realserverfaketools-server:latest`
+- `ghcr.io/agentic-community/mcp-fininfo-server:latest`
+- `ghcr.io/agentic-community/mcp-mcpgw-server:latest`
+
+### Using Pre-built Images
+
+Once published, anyone can use the pre-built images with:
+
+```bash
+# Use the pre-built deployment option
+./build_and_run.sh --prebuilt
+```
+
+This deployment method:
+- Skips the build process entirely
+- Pulls pre-built images from container registries
+- Starts services in under 2 minutes
+- Requires no Node.js or build dependencies
 
 ---
 

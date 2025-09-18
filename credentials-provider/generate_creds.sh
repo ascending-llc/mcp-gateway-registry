@@ -39,6 +39,14 @@ if [ -f "$(dirname "$SCRIPT_DIR")/.env" ]; then
     source "$(dirname "$SCRIPT_DIR")/.env"
 fi
 
+# Export Keycloak environment variables for child processes
+export KEYCLOAK_ADMIN_URL
+export KEYCLOAK_EXTERNAL_URL
+export KEYCLOAK_URL
+export KEYCLOAK_REALM
+export KEYCLOAK_M2M_CLIENT_ID
+export KEYCLOAK_M2M_CLIENT_SECRET
+
 # Default values
 RUN_INGRESS=true
 RUN_EGRESS=true

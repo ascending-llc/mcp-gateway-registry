@@ -116,6 +116,51 @@ cat keycloak/setup/keycloak-client-secrets.txt
 | `SRE_GATEWAY_AUTH_TOKEN` | SRE Gateway auth token | Auto-populated from credentials | - |
 | `ANTHROPIC_API_KEY` | Anthropic API key for Claude models | `sk-ant-api03-...` | For AI functionality |
 
+### Container Registry Configuration (Optional - for CI/CD and local builds)
+
+| Variable | Description | Example | Required |
+|----------|-------------|---------|----------|
+| `DOCKERHUB_USERNAME` | Docker Hub username for publishing containers | `your_dockerhub_username` | **Optional** |
+| `DOCKERHUB_TOKEN` | Docker Hub access token | `your_dockerhub_access_token` | **Optional** |
+| `GITHUB_USERNAME` | GitHub username for GHCR publishing | `your_github_username` | **Optional** |
+| `GITHUB_TOKEN` | GitHub Personal Access Token with packages:write scope | `ghp_your_token_here` | **Optional** |
+| `DOCKERHUB_ORG` | Docker Hub organization name (leave empty for personal account) | `mcpgateway` or empty | **Optional** |
+| `GITHUB_ORG` | GitHub organization name (leave empty for personal account) | `agentic-community` or empty | **Optional** |
+
+**Note: Container Registry Credentials (Completely Optional)**
+
+These credentials are **entirely optional** and only needed if you want to:
+- **Publish container images**: Automatically via GitHub Actions or manually via scripts
+- **Contribute pre-built containers**: For easier deployment by other users
+
+**What happens if these are not configured:**
+- ✅ **The MCP Gateway Registry will work perfectly** - all core functionality remains intact
+- ✅ **GitHub Actions will succeed** - builds will complete successfully, just without publishing to Docker Hub
+- ✅ **Local development is unaffected** - no scripts will fail or produce errors
+- ✅ **Only container publishing is skipped** - everything else continues normally
+
+**When you might want to configure these:**
+- **Contributing to the project**: Publishing official container images
+- **Custom deployments**: Creating your own container registry for internal use
+- **Development workflow**: Testing container builds locally
+
+**How to obtain credentials (only if needed):**
+- **Docker Hub**: Get access token from [Docker Hub Security Settings](https://hub.docker.com/settings/security)
+- **GitHub Container Registry**: Generate Personal Access Token with `packages:write` scope from [GitHub Token Settings](https://github.com/settings/tokens)
+
+**Setup instructions (only if publishing containers):**
+- **In GitHub Actions**: Add `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` as repository secrets
+- **For local builds**: Add credentials to your `.env` file and use `scripts/publish_containers.sh`
+- **GITHUB_TOKEN**: Automatically provided in GitHub Actions, manually generated for local use
+
+**Organization vs Personal Account Publishing:**
+- **Personal Account** (Free): Leave `DOCKERHUB_ORG` and `GITHUB_ORG` empty
+  - Images published as: `username/image-name`
+  - Example: `aarora79/registry:latest`
+- **Organization Account** (Paid for Docker Hub): Set organization names
+  - Images published as: `organization/image-name`
+  - Example: `mcpgateway/registry:latest`
+
 ---
 
 ## Keycloak Setup and Configuration

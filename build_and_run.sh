@@ -14,49 +14,101 @@ handle_error() {
     exit 1
 }
 
+# Parse command line arguments
+USE_PREBUILT=false
+DOCKER_COMPOSE_FILE="docker-compose.yml"
 
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --prebuilt)
+      USE_PREBUILT=true
+      DOCKER_COMPOSE_FILE="docker-compose.prebuilt.yml"
+      shift
+      ;;
+    --help)
+      echo "Usage: $0 [--prebuilt] [--help]"
+      echo ""
+      echo "Options:"
+      echo "  --prebuilt    Use pre-built container images (faster startup)"
+      echo "  --help        Show this help message"
+      echo ""
+      echo "Examples:"
+      echo "  $0                # Build containers locally (default)"
+      echo "  $0 --prebuilt    # Use pre-built images from registry"
+      echo ""
+      echo "Benefits of --prebuilt:"
+      echo "  - Instant deployment (no build time)"
+      echo "  - Reduced friction (eliminate build environment issues)"
+      echo "  - Consistent experience (all users get the same tested images)"
+      echo "  - Bandwidth efficient (pull optimized, compressed images)"
+      exit 0
+      ;;
+    *)
+      echo "Unknown option $1"
+      echo "Use --help for usage information"
+      exit 1
+      ;;
+  esac
+done
+
+echo "MCP Gateway Registry Deployment"
+echo "==============================="
+
+if [ "$USE_PREBUILT" = true ]; then
+    log "🚀 Using pre-built container images for fast deployment"
+    log "📥 Will pull latest images from container registry during startup..."
+else
+    log "🔨 Building containers locally (this may take several minutes)"
+fi
+
+log "Using Docker Compose file: $DOCKER_COMPOSE_FILE"
 log "Starting MCP Gateway Docker Compose deployment script"
 
-# Check if Node.js and npm are installed
-if ! command -v node &> /dev/null; then
-    log "ERROR: Node.js is not installed"
-    log "Please install Node.js (version 16 or higher): https://nodejs.org/"
-    exit 1
+# Only check Node.js and build frontend when building locally
+if [ "$USE_PREBUILT" = false ]; then
+    # Check if Node.js and npm are installed
+    if ! command -v node &> /dev/null; then
+        log "ERROR: Node.js is not installed"
+        log "Please install Node.js (version 16 or higher): https://nodejs.org/"
+        exit 1
+    fi
+
+    if ! command -v npm &> /dev/null; then
+        log "ERROR: npm is not installed"
+        log "Please install npm (usually comes with Node.js): https://nodejs.org/"
+        exit 1
+    fi
+
+    # Check Node.js version
+    NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+    if [ "$NODE_VERSION" -lt 16 ]; then
+        log "ERROR: Node.js version $NODE_VERSION is too old. Please install Node.js 16 or higher."
+        exit 1
+    fi
+
+    log "Node.js $(node -v) and npm $(npm -v) are available"
+
+    # Build the React frontend
+    log "Building React frontend..."
+    if [ ! -d "frontend" ]; then
+        handle_error "Frontend directory not found"
+    fi
+
+    cd frontend
+
+    # Install frontend dependencies
+    log "Installing frontend dependencies..."
+    npm install || handle_error "Failed to install frontend dependencies"
+
+    # Build the React application
+    log "Building React application for production..."
+    npm run build || handle_error "Failed to build React application"
+
+    log "Frontend build completed successfully"
+    cd ..
+else
+    log "Skipping frontend build (using pre-built images)"
 fi
-
-if ! command -v npm &> /dev/null; then
-    log "ERROR: npm is not installed"
-    log "Please install npm (usually comes with Node.js): https://nodejs.org/"
-    exit 1
-fi
-
-# Check Node.js version
-NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
-if [ "$NODE_VERSION" -lt 16 ]; then
-    log "ERROR: Node.js version $NODE_VERSION is too old. Please install Node.js 16 or higher."
-    exit 1
-fi
-
-log "Node.js $(node -v) and npm $(npm -v) are available"
-
-# Build the React frontend
-log "Building React frontend..."
-if [ ! -d "frontend" ]; then
-    handle_error "Frontend directory not found"
-fi
-
-cd frontend
-
-# Install frontend dependencies
-log "Installing frontend dependencies..."
-npm install || handle_error "Failed to install frontend dependencies"
-
-# Build the React application
-log "Building React application for production..."
-npm run build || handle_error "Failed to build React application"
-
-log "Frontend build completed successfully"
-cd ..
 
 # Check if .env file exists
 if [ ! -f .env ]; then
@@ -81,7 +133,7 @@ fi
 
 # Stop and remove existing services if they exist
 log "Stopping existing services (if any)..."
-docker-compose down --remove-orphans || log "No existing services to stop"
+docker-compose -f "$DOCKER_COMPOSE_FILE" down --remove-orphans || log "No existing services to stop"
 log "Existing services stopped"
 
 # Clean up FAISS index files to force registry to recreate them
@@ -174,14 +226,20 @@ if [ -z "$ADMIN_PASSWORD" ] || [ "$ADMIN_PASSWORD" = "your_secure_password" ]; t
     exit 1
 fi
 
-# Build the Docker images
-log "Building Docker images..."
-docker-compose build || handle_error "Docker Compose build failed"
-log "Docker images built successfully"
+# Build or pull Docker images
+if [ "$USE_PREBUILT" = true ]; then
+    log "Pulling pre-built Docker images..."
+    docker-compose -f "$DOCKER_COMPOSE_FILE" pull || handle_error "Docker Compose pull failed"
+    log "Pre-built Docker images pulled successfully"
+else
+    log "Building Docker images..."
+    docker-compose -f "$DOCKER_COMPOSE_FILE" build || handle_error "Docker Compose build failed"
+    log "Docker images built successfully"
+fi
 
 # Start the services
 log "Starting Docker Compose services..."
-docker-compose up -d || handle_error "Failed to start services"
+docker-compose -f "$DOCKER_COMPOSE_FILE" up -d || handle_error "Failed to start services"
 
 # Wait a moment for services to initialize
 log "Waiting for services to initialize..."
@@ -189,7 +247,7 @@ sleep 10
 
 # Check service status
 log "Checking service status..."
-docker-compose ps
+docker-compose -f "$DOCKER_COMPOSE_FILE" ps
 
 # Verify key services are running
 log "Verifying services are healthy..."
@@ -260,9 +318,9 @@ log "  - Real Server Fake Tools MCP: http://localhost:8002"
 log "  - MCP Gateway MCP: http://localhost:8003"
 log "  - Atlassian MCP: http://localhost:8005"
 log ""
-log "To view logs for all services: docker-compose logs -f"
-log "To view logs for a specific service: docker-compose logs -f <service-name>"
-log "To stop services: docker-compose down"
+log "To view logs for all services: docker-compose -f $DOCKER_COMPOSE_FILE logs -f"
+log "To view logs for a specific service: docker-compose -f $DOCKER_COMPOSE_FILE logs -f <service-name>"
+log "To stop services: docker-compose -f $DOCKER_COMPOSE_FILE down"
 log ""
 
 # Ask if user wants to follow logs
@@ -271,7 +329,7 @@ echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     log "Following container logs (press Ctrl+C to stop following logs without stopping the services):"
     echo "---------- DOCKER COMPOSE LOGS ----------"
-    docker-compose logs -f
+    docker-compose -f "$DOCKER_COMPOSE_FILE" logs -f
 else
-    log "Services are running in the background. Use 'docker-compose logs -f' to view logs."
+    log "Services are running in the background. Use 'docker-compose -f $DOCKER_COMPOSE_FILE logs -f' to view logs."
 fi

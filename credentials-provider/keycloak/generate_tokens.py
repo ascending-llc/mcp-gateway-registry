@@ -190,8 +190,26 @@ class TokenGenerator:
         self.success(f"Token saved to: {env_file}")
         self.success(f"Token metadata saved to: {json_file}")
 
-        # Display token info
-        print(f"\nAccess Token: {access_token}")
+        # Display token info (redacted for security)
+        try:
+            from ..utils import redact_sensitive_value
+        except ImportError:
+            # Fallback for when running as standalone script
+            import sys
+            from pathlib import Path
+            utils_path = Path(__file__).parent.parent / "utils.py"
+            if utils_path.exists():
+                sys.path.insert(0, str(utils_path.parent))
+                from utils import redact_sensitive_value
+            else:
+                # Simple fallback redaction function
+                def redact_sensitive_value(value: str, show_chars: int = 8) -> str:
+                    if not value or len(value) <= show_chars:
+                        return "*" * len(value) if value else ""
+                    return value[:show_chars] + "*" * (len(value) - show_chars)
+
+        redacted_token = redact_sensitive_value(access_token, 8)
+        print(f"\nAccess Token: {redacted_token}")
         if expires_in:
             print(f"Expires in: {expires_in} seconds")
             if expires_at:

@@ -420,7 +420,7 @@ For AUTH_PROVIDER=keycloak:
             # Get Keycloak configuration from environment
             client_id = os.getenv("KEYCLOAK_M2M_CLIENT_ID")
             client_secret = os.getenv("KEYCLOAK_M2M_CLIENT_SECRET")
-            keycloak_url = os.getenv("KEYCLOAK_URL")
+            keycloak_url = os.getenv("KEYCLOAK_ADMIN_URL") or os.getenv("KEYCLOAK_EXTERNAL_URL") or os.getenv("KEYCLOAK_URL")
             realm = os.getenv("KEYCLOAK_REALM")
             
             logger.info(f"Keycloak URL: {keycloak_url}")
