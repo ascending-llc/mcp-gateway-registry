@@ -364,6 +364,7 @@ Transform how both autonomous AI agents and development teams access enterprise 
 
 ## What's New
 
+- **Tag-Based Tool Filtering** - Enhanced intelligent_tool_finder now supports filtering tools by server tags for precise categorical discovery alongside semantic search
 - **🔐 Keycloak Identity Provider Integration** - Enterprise-grade authentication with individual AI agent audit trails, group-based authorization, and production-ready service account management. [Learn more](docs/keycloak-integration.md)
 - **Amazon Bedrock AgentCore Integration** - Direct access to AWS services through managed MCP endpoints
 - **Three-Legged OAuth (3LO) Support** - External service integration (Atlassian, Google, GitHub)

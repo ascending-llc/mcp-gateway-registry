@@ -6,7 +6,7 @@
   "supported_transports": ["streamable-http"],
   "auth_type": "none",
   "tags": ["registry", "management"],
-  "num_tools": 5,
+  "num_tools": 6,
   "num_stars": 0,
   "is_python": true,
   "license": "N/A",
@@ -260,6 +260,76 @@
           "params"
         ],
         "title": "refresh_serviceArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "intelligent_tool_finder",
+      "parsed_description": {
+        "main": "Finds the most relevant MCP tool(s) across all registered and enabled services based on a natural language query and/or tag filtering. IMPORTANT FOR AI AGENTS: Only use the 'tags' parameter if the user explicitly provides specific tags. DO NOT infer or guess tags from the query - incorrect tags will exclude valid results. When tags are provided with a query, results must match BOTH. If unsure about tags, use natural_language_query alone for best results.",
+        "args": "natural_language_query: Optional - Your query in natural language (recommended for AI agents unless user specifies tags). tags: Optional - List of tags to filter by using AND logic (CAUTION: Only use if explicitly provided by user). top_k_services: Number of top services from FAISS search (default: 3, ignored for tags-only). top_n_tools: Number of best tools to return (default: 1).",
+        "returns": "List[Dict[str, Any]]: A list of dictionaries, each describing a recommended tool, its parent service, and similarity score (if semantic search used).",
+        "raises": "Exception: If neither query nor tags is provided, or if FAISS index/model is unavailable."
+      },
+      "schema": {
+        "$defs": {
+          "IntelligentToolFinderParams": {
+            "properties": {
+              "natural_language_query": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Your query in natural language describing the task you want to perform. Optional if tags are provided.",
+                "title": "Natural Language Query"
+              },
+              "tags": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "List of tags to filter tools by using AND logic. IMPORTANT: AI agents should ONLY use this if the user explicitly provides specific tags. DO NOT infer tags - incorrect tags will exclude valid results.",
+                "title": "Tags"
+              },
+              "top_k_services": {
+                "default": 3,
+                "description": "Number of top services to consider from initial FAISS search (ignored if only tags provided).",
+                "title": "Top K Services",
+                "type": "integer"
+              },
+              "top_n_tools": {
+                "default": 1,
+                "description": "Number of best matching tools to return.",
+                "title": "Top N Tools",
+                "type": "integer"
+              }
+            },
+            "title": "IntelligentToolFinderParams",
+            "type": "object"
+          }
+        },
+        "properties": {
+          "params": {
+            "$ref": "#/$defs/IntelligentToolFinderParams"
+          }
+        },
+        "required": [
+          "params"
+        ],
+        "title": "intelligent_tool_finderArguments",
         "type": "object"
       }
     }

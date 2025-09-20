@@ -64,7 +64,7 @@ from mcp.client.streamable_http import streamablehttp_client
 import httpx
 import re
 
-# Import dotenv for loading environment variables
+# Import dotenv for loading basic environment variables
 from dotenv import load_dotenv
 
 # Add the auth_server directory to the path to import cognito_utils
@@ -223,125 +223,18 @@ def enable_verbose_logging():
     
     logger.info("Verbose logging enabled for httpx, httpcore, mcp libraries, and main logger")
 
-def get_auth_mode_from_args() -> tuple[bool, str, str]:
+def get_auth_mode_from_args() -> bool:
     """
-    Parse command line arguments to determine authentication mode and env file names.
-    This is done before loading environment variables to choose the correct .env file.
-    
+    Parse command line arguments to determine authentication mode.
+
     Returns:
-        tuple: (use_session_cookie, user_env_file, agent_env_file)
-            - use_session_cookie: True if using session cookie authentication, False for M2M authentication
-            - user_env_file: Name of the env file for user authentication
-            - agent_env_file: Name of the env file for agent authentication
+        bool: True if using session cookie authentication, False for M2M authentication
     """
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--use-session-cookie', action='store_true',
                         help='Use session cookie authentication instead of M2M')
-    parser.add_argument('--user-env-file', type=str, default='.env.user',
-                        help='Name of the environment file for user authentication (default: .env.user)')
-    parser.add_argument('--agent-env-file', type=str, default='.env.agent',
-                        help='Name of the environment file for agent authentication (default: .env.agent)')
     args, _ = parser.parse_known_args()
-    return args.use_session_cookie, args.user_env_file, args.agent_env_file
-
-def print_env_file_banner(env_file_name: str, use_session_cookie: bool, file_found: bool, file_path: str = None):
-    """
-    Print a prominent banner showing which .env file is being used and why.
-    
-    Args:
-        env_file_name: Name of the .env file being used
-        use_session_cookie: Whether session cookie authentication is being used
-        file_found: Whether the .env file was found
-        file_path: Full path to the .env file if found
-    """
-    print("\n" + "="*80)
-    print(" ENVIRONMENT CONFIGURATION")
-    print("="*80)
-    
-    auth_mode = "Session Cookie Authentication" if use_session_cookie else "M2M Authentication"
-    print(f"Authentication Mode: {auth_mode}")
-    print(f"Expected .env file: {env_file_name}")
-    
-    if use_session_cookie:
-        print(f"Reason: --use-session-cookie flag specified, using {env_file_name} for user credentials")
-    else:
-        print(f"Reason: M2M authentication (default), using {env_file_name} for machine credentials")
-    
-    if file_found and file_path:
-        print(f"✅ Found and loaded: {file_path}")
-    else:
-        print(f"⚠️  File not found: {env_file_name}")
-        print("   Falling back to system environment variables")
-    
-    print("="*80 + "\n")
-
-def load_env_config(use_session_cookie: bool, user_env_file: str = '.env.user', agent_env_file: str = '.env.agent') -> Dict[str, Optional[str]]:
-    """
-    Load configuration from .env file based on authentication mode.
-    Uses .env.user for session cookie auth, .env.agent for M2M auth.
-    
-    Args:
-        use_session_cookie: True for session cookie auth (.env.user), False for M2M auth (.env.agent)
-    
-    Returns:
-        Dict[str, Optional[str]]: Dictionary containing environment variables
-    """
-    env_config = {
-        'client_id': None,
-        'client_secret': None,
-        'region': None,
-        'user_pool_id': None,
-        'domain': None,
-        'anthropic_api_key': None
-    }
-    
-    # Choose .env file based on authentication mode
-    env_file_name = user_env_file if use_session_cookie else agent_env_file
-    logger.info(f"Using .env file: {env_file_name}")
-    # Load environment variables using dotenv
-    file_found = False
-    file_path = None
-    
-    # Try to load from .env file in the current directory
-    env_file = os.path.join(os.path.dirname(__file__), env_file_name)
-    if os.path.exists(env_file):
-        logger.info(f"Found .env file: {env_file}")
-        load_dotenv(env_file, override=True)
-        file_found = True
-        file_path = env_file
-        logger.info(f"Loading environment variables from {env_file}")
-        logger.info(f"user pool id {os.environ.get('COGNITO_USER_POOL_ID')}")
-    else:
-        # Try to load from .env file in the parent directory
-        env_file = os.path.join(os.path.dirname(__file__), '..', env_file_name)
-        if os.path.exists(env_file):
-            logger.info(f"Found .env file in parent directory: {env_file}")
-            load_dotenv(env_file, override=True)
-            logger.info(f"Loading environment variables from {env_file}")
-        else:
-            # Try to load from current working directory
-            env_file = os.path.join(os.getcwd(), env_file_name)
-            if os.path.exists(env_file):
-                logger.info(f"Found .env file in current working directory: {env_file}")
-                load_dotenv(env_file, override=True)
-                logger.info(f"Loading environment variables from {env_file}")
-            else:
-                # Fallback to default .env loading
-                load_dotenv(override=True)
-                logger.info("Loading environment variables from default .env file")
-    
-    # Print banner showing which file is being used
-    print_env_file_banner(env_file_name, use_session_cookie, file_found, file_path)
-    
-    # Get values from environment
-    env_config['client_id'] = os.getenv('COGNITO_CLIENT_ID')
-    env_config['client_secret'] = os.getenv('COGNITO_CLIENT_SECRET')
-    env_config['region'] = os.getenv('AWS_REGION')
-    env_config['user_pool_id'] = os.getenv('COGNITO_USER_POOL_ID')
-    env_config['domain'] = os.getenv('COGNITO_DOMAIN')
-    env_config['anthropic_api_key'] = os.getenv('ANTHROPIC_API_KEY')
-    
-    return env_config
+    return args.use_session_cookie
 
 def load_agent_credentials(agent_name: str) -> Optional[Dict[str, Any]]:
     """
@@ -391,13 +284,18 @@ def parse_arguments() -> argparse.Namespace:
     Returns:
         argparse.Namespace: The parsed command line arguments
     """
-    # First, determine authentication mode and env file names to choose correct .env file
-    use_session_cookie, user_env_file, agent_env_file = get_auth_mode_from_args()
-    logger.info(f"Using session cookie authentication: {use_session_cookie}")
-    logger.info(f"User env file: {user_env_file}, Agent env file: {agent_env_file}")
+    # Load basic environment variables for fallback (system environment only)
+    load_dotenv(override=False)  # Only load if not already set
 
-    # Load environment configuration using the appropriate .env file
-    env_config = load_env_config(use_session_cookie, user_env_file, agent_env_file)
+    # Get environment variables for fallback values
+    env_config = {
+        'client_id': os.getenv('COGNITO_CLIENT_ID'),
+        'client_secret': os.getenv('COGNITO_CLIENT_SECRET'),
+        'region': os.getenv('AWS_REGION'),
+        'user_pool_id': os.getenv('COGNITO_USER_POOL_ID'),
+        'domain': os.getenv('COGNITO_DOMAIN'),
+        'anthropic_api_key': os.getenv('ANTHROPIC_API_KEY')
+    }
 
     parser = argparse.ArgumentParser(description='Interactive LangGraph MCP Client with Flexible Authentication')
     
@@ -441,11 +339,6 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument('--access-token', type=str,
                         help='Direct access token override (takes precedence over agent credentials)')
     
-    # Environment file configuration arguments
-    parser.add_argument('--user-env-file', type=str, default=user_env_file,
-                        help=f'Name of the environment file for user authentication (default: {user_env_file})')
-    parser.add_argument('--agent-env-file', type=str, default=agent_env_file,
-                        help=f'Name of the environment file for agent authentication (default: {agent_env_file})')
     
     # Cognito authentication arguments - now optional if available in environment
     parser.add_argument('--client-id', type=str, default=env_config['client_id'],

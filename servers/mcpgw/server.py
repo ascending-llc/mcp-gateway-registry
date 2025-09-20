@@ -1171,22 +1171,46 @@ async def healthcheck(ctx: Context = None) -> Dict[str, Any]:
 
 @mcp.tool()
 async def intelligent_tool_finder(
-    natural_language_query: str = Field(..., description="Your query in natural language describing the task you want to perform."),
-    top_k_services: int = Field(3, description="Number of top services to consider from initial FAISS search."),
+    natural_language_query: Optional[str] = Field(None, description="Your query in natural language describing the task you want to perform. Optional if tags are provided."),
+    tags: Optional[List[str]] = Field(None, description="List of tags to filter tools by using AND logic. IMPORTANT: AI agents should ONLY use this if the user explicitly provides specific tags. DO NOT infer tags - incorrect tags will exclude valid results."),
+    top_k_services: int = Field(3, description="Number of top services to consider from initial FAISS search (ignored if only tags provided)."),
     top_n_tools: int = Field(1, description="Number of best matching tools to return."),
     ctx: Context = None
 ) -> List[Dict[str, Any]]:
     """
     Finds the most relevant MCP tool(s) across all registered and enabled services
-    based on a natural language query, using semantic search on the registry's FAISS index.
+    based on a natural language query and/or tag filtering, using semantic search on the registry's FAISS index.
+
+    IMPORTANT FOR AI AGENTS:
+    - Only fill in the 'tags' parameter if the user explicitly provides specific tags to filter by
+    - DO NOT infer or guess tags from the natural language query
+    - Tags act as a strict filter - incorrect tags will exclude valid results
+    - When tags are provided with a query, results must match BOTH the semantic search AND all tags
+    - If unsure about tags, use natural_language_query alone for best results
 
     Args:
-        natural_language_query: The user's natural language query.
-        top_k_services: How many top-matching services to analyze for tools.
+        natural_language_query: The user's natural language query. Optional if tags are provided.
+        tags: List of tags to filter by using AND logic. All tags must match a server's tags for its tools to be included.
+              CAUTION: Only use this parameter if explicitly provided by the user. Incorrect tags will filter out valid results.
+        top_k_services: How many top-matching services to analyze for tools from FAISS search (ignored if only tags provided).
         top_n_tools: How many best tools to return from the combined list.
 
     Returns:
-        A list of dictionaries, each describing a recommended tool, its parent service, and similarity.
+        A list of dictionaries, each describing a recommended tool, its parent service, and similarity score (if semantic search used).
+
+    Examples:
+        # Semantic search only (RECOMMENDED for AI agents unless user specifies tags)
+        tools = await intelligent_tool_finder(natural_language_query="find files", top_n_tools=5)
+
+        # Semantic search + tag filtering (ONLY use when user explicitly provides tags)
+        tools = await intelligent_tool_finder(
+            natural_language_query="find files",
+            tags=["file-system", "search"],  # User explicitly said: "use tags file-system and search"
+            top_n_tools=5
+        )
+
+        # Pure tag-based filtering (ONLY when user provides tags without a query)
+        tools = await intelligent_tool_finder(tags=["database", "analytics"], top_n_tools=10)
     """
     # Load scopes configuration and extract user scopes from headers
     scopes_config = await load_scopes_config()
@@ -1208,7 +1232,16 @@ async def intelligent_tool_finder(
     if not user_scopes:
         logger.warning("No user scopes found - user may not have access to any tools")
         return []
-    
+
+    # Input validation - at least one of query or tags must be provided
+    if not natural_language_query and not tags:
+        raise Exception("At least one of 'natural_language_query' or 'tags' must be provided")
+
+    # Normalize tags for case-insensitive matching
+    normalized_tags = [tag.lower().strip() for tag in tags] if tags else []
+    if normalized_tags:
+        logger.info(f"MCPGW: Filtering by tags: {normalized_tags}")
+
     global _embedding_model_mcpgw, _faiss_index_mcpgw, _faiss_metadata_mcpgw, _last_faiss_check_time
     import time
 
@@ -1235,60 +1268,87 @@ async def intelligent_tool_finder(
 
     registry_faiss_metadata = _faiss_metadata_mcpgw["metadata"] # This is {service_path: {id, text, full_server_info}}
 
-    # 1. Embed the natural language query
-    try:
-        query_embedding = await asyncio.to_thread(_embedding_model_mcpgw.encode, [natural_language_query])
-        query_embedding_np = np.array(query_embedding, dtype=np.float32)
-    except Exception as e:
-        logger.error(f"MCPGW: Error encoding natural language query: {e}", exc_info=True)
-        raise Exception(f"MCPGW: Error encoding query: {e}")
+    # Determine which services to process based on whether we're doing semantic search
+    services_to_process = []
+    use_semantic_ranking = False
 
-    # 2. Search FAISS for top_k_services
-    # The FAISS index in registry/main.py stores SERVICE embeddings.
-    try:
-        logger.info(f"MCPGW: Searching FAISS index for top {top_k_services} services matching query.")
-        distances, faiss_ids = await asyncio.to_thread(_faiss_index_mcpgw.search, query_embedding_np, top_k_services)
-    except Exception as e:
-        logger.error(f"MCPGW: Error searching FAISS index: {e}", exc_info=True)
-        raise Exception(f"MCPGW: Error searching FAISS index: {e}")
+    if natural_language_query:
+        use_semantic_ranking = True
+        # 1. Embed the natural language query
+        try:
+            query_embedding = await asyncio.to_thread(_embedding_model_mcpgw.encode, [natural_language_query])
+            query_embedding_np = np.array(query_embedding, dtype=np.float32)
+        except Exception as e:
+            logger.error(f"MCPGW: Error encoding natural language query: {e}", exc_info=True)
+            raise Exception(f"MCPGW: Error encoding query: {e}")
+
+        # 2. Search FAISS for top_k_services
+        # The FAISS index in registry/main.py stores SERVICE embeddings.
+        try:
+            logger.info(f"MCPGW: Searching FAISS index for top {top_k_services} services matching query.")
+            distances, faiss_ids = await asyncio.to_thread(_faiss_index_mcpgw.search, query_embedding_np, top_k_services)
+        except Exception as e:
+            logger.error(f"MCPGW: Error searching FAISS index: {e}", exc_info=True)
+            raise Exception(f"MCPGW: Error searching FAISS index: {e}")
+
+        # Create a reverse map from FAISS internal ID to service_path for quick lookup
+        id_to_service_path_map = {}
+        for Svc_path, meta_item in registry_faiss_metadata.items():
+            if "id" in meta_item:
+                id_to_service_path_map[meta_item["id"]] = Svc_path
+            else:
+                logger.warning(f"MCPGW: Metadata for service {Svc_path} missing 'id' field. Skipping.")
+
+        # Extract service paths from FAISS results
+        for i in range(len(faiss_ids[0])):
+            faiss_id = faiss_ids[0][i]
+            if faiss_id == -1: # FAISS uses -1 for no more results or if k > ntotal
+                continue
+            service_path = id_to_service_path_map.get(faiss_id)
+            if service_path:
+                services_to_process.append(service_path)
+                logger.debug(f"MCPGW: Found service_path {service_path} for FAISS ID {faiss_id}")
+            else:
+                logger.warning(f"MCPGW: Could not find service_path for FAISS ID {faiss_id}. Skipping.")
+
+        logger.info(f"MCPGW: Processing {len(services_to_process)} services from FAISS search results.")
+    else:
+        # Tags-only mode: process all services
+        services_to_process = list(registry_faiss_metadata.keys())
+        logger.info(f"MCPGW: Tags-only mode - processing all {len(services_to_process)} services")
 
     candidate_tools = []
     tools_before_scope_filter = 0
-    
-    # Create a reverse map from FAISS internal ID to service_path for quick lookup
-    id_to_service_path_map = {}
-    for Svc_path, meta_item in registry_faiss_metadata.items():
-        if "id" in meta_item:
-            id_to_service_path_map[meta_item["id"]] = Svc_path
-        else:
-            logger.warning(f"MCPGW: Metadata for service {Svc_path} missing 'id' field. Skipping.")
 
-
-    # 3. Filter and Collect Tools from top services
-    logger.info(f"MCPGW: Processing {len(faiss_ids[0])} services from FAISS search results.")
-    for i in range(len(faiss_ids[0])):
-        faiss_id = faiss_ids[0][i]
-        if faiss_id == -1: # FAISS uses -1 for no more results or if k > ntotal
-            continue
-
-        service_path = id_to_service_path_map.get(faiss_id)
-        if not service_path:
-            logger.warning(f"MCPGW: Could not find service_path for FAISS ID {faiss_id}. Skipping.")
-            continue
-        else:
-            logger.debug(f"MCPGW: Found service_path {service_path} for FAISS ID {faiss_id}")
+    # 3. Filter and Collect Tools from services
+    for service_path in services_to_process:
             
         service_metadata = registry_faiss_metadata.get(service_path)
         if not service_metadata or "full_server_info" not in service_metadata:
             logger.warning(f"MCPGW: Metadata or full_server_info not found for service path {service_path}. Skipping.")
             continue
         else:
-            logger.debug(f"MCPGW: Found metadata for service path {service_path}, service_metadata: {service_metadata}")    
+            logger.debug(f"MCPGW: Found metadata for service path {service_path}, service_metadata: {service_metadata}")
         full_server_info = service_metadata["full_server_info"]
 
         if not full_server_info.get("is_enabled", False):
             logger.info(f"MCPGW: Service {service_path} is disabled. Skipping its tools.")
             continue
+
+        # Apply tag filtering if tags are specified
+        if normalized_tags:
+            server_tags = full_server_info.get("tags", "")
+            if isinstance(server_tags, str):
+                server_tags_list = [tag.strip().lower() for tag in server_tags.split(",") if tag.strip()]
+            else:
+                server_tags_list = [str(tag).lower().strip() for tag in server_tags] if server_tags else []
+
+            # Check if all required tags are present (AND logic)
+            if not all(tag in server_tags_list for tag in normalized_tags):
+                logger.info(f"MCPGW: Service {service_path} does not match required tags {normalized_tags}, has tags {server_tags_list}. Skipping.")
+                continue
+            else:
+                logger.info(f"MCPGW: Service {service_path} matches required tags {normalized_tags}")
         logger.info(f"MCPGW: Processing service {service_path} with full_server_info: {full_server_info}")
         service_name = full_server_info.get("server_name", "Unknown Service")
         tool_list = full_server_info.get("tool_list", [])
@@ -1330,28 +1390,34 @@ async def intelligent_tool_finder(
         logger.info("MCPGW: No accessible tools found in the top services from FAISS search after scope filtering.")
         return []
 
-    # 4. Embed all candidate tool descriptions
-    logger.info(f"MCPGW: Embedding {len(candidate_tools)} candidate tools (after scope filtering) for secondary ranking.")
-    try:
-        tool_texts = [tool["text_for_embedding"] for tool in candidate_tools]
-        tool_embeddings = await asyncio.to_thread(_embedding_model_mcpgw.encode, tool_texts)
-        tool_embeddings_np = np.array(tool_embeddings, dtype=np.float32)
-    except Exception as e:
-        logger.error(f"MCPGW: Error encoding tool descriptions: {e}", exc_info=True)
-        raise Exception(f"MCPGW: Error encoding tool descriptions: {e}")
+    # Apply semantic ranking if we have a natural language query
+    if use_semantic_ranking:
+        # 4. Embed all candidate tool descriptions
+        logger.info(f"MCPGW: Embedding {len(candidate_tools)} candidate tools (after scope filtering) for secondary ranking.")
+        try:
+            tool_texts = [tool["text_for_embedding"] for tool in candidate_tools]
+            tool_embeddings = await asyncio.to_thread(_embedding_model_mcpgw.encode, tool_texts)
+            tool_embeddings_np = np.array(tool_embeddings, dtype=np.float32)
+        except Exception as e:
+            logger.error(f"MCPGW: Error encoding tool descriptions: {e}", exc_info=True)
+            raise Exception(f"MCPGW: Error encoding tool descriptions: {e}")
 
-    # 5. Calculate cosine similarity between query and each tool embedding
-    similarities = cosine_similarity(query_embedding_np, tool_embeddings_np)[0] # Get the first row (query vs all tools)
+        # 5. Calculate cosine similarity between query and each tool embedding
+        similarities = cosine_similarity(query_embedding_np, tool_embeddings_np)[0] # Get the first row (query vs all tools)
 
-    # 6. Add similarity score to each tool and sort
-    ranked_tools = []
-    for i, tool_data in enumerate(candidate_tools):
-        ranked_tools.append({
-            **tool_data,
-            "overall_similarity_score": float(similarities[i])
-        })
-    
-    ranked_tools.sort(key=lambda x: x["overall_similarity_score"], reverse=True)
+        # 6. Add similarity score to each tool and sort
+        ranked_tools = []
+        for i, tool_data in enumerate(candidate_tools):
+            ranked_tools.append({
+                **tool_data,
+                "overall_similarity_score": float(similarities[i])
+            })
+
+        ranked_tools.sort(key=lambda x: x["overall_similarity_score"], reverse=True)
+    else:
+        # Tags-only mode: no semantic ranking, just use the tools as-is
+        ranked_tools = candidate_tools
+        logger.info(f"MCPGW: Tags-only mode - {len(ranked_tools)} tools found without semantic ranking")
 
     # 7. Select top N tools
     final_results = ranked_tools[:top_n_tools]
@@ -1359,7 +1425,10 @@ async def intelligent_tool_finder(
     
     # Log which tools were returned for debugging
     for i, tool in enumerate(final_results):
-        logger.info(f"  {i+1}. {tool['service_name']}.{tool['tool_name']} (similarity: {tool['overall_similarity_score']:.3f})")
+        if 'overall_similarity_score' in tool:
+            logger.info(f"  {i+1}. {tool['service_name']}.{tool['tool_name']} (similarity: {tool['overall_similarity_score']:.3f})")
+        else:
+            logger.info(f"  {i+1}. {tool['service_name']}.{tool['tool_name']} (tags-only mode)")
     
     # Remove the temporary 'text_for_embedding' field from results
     for res in final_results:
