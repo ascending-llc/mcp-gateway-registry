@@ -272,6 +272,8 @@ export DOCKERHUB_ORG=mcpgateway
 ./build_and_run.sh --prebuilt
 ```
 
+For detailed information about all Docker images used with `--prebuilt`, see [Pre-built Images Documentation](docs/prebuilt-images.md).
+
 **Step 4: Initialize Keycloak**
 Complete: **[Initialize Keycloak Configuration](docs/complete-setup-guide.md#initialize-keycloak-configuration)** - Set up identity provider and security policies
 
