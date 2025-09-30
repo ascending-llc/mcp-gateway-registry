@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     websocket_broadcast_interval_ms: int = 10  # Very responsive - 10ms minimum between broadcasts
     websocket_max_batch_size: int = 20  # Smaller batches for faster updates
     websocket_cache_ttl_seconds: int = 1  # 1 second cache for near real-time user feedback
+
+    # Well-known discovery settings
+    enable_wellknown_discovery: bool = True
+    wellknown_cache_ttl: int = 300  # 5 minutes
     
     # Container paths - adjust for local development
     container_app_dir: Path = Path("/app")

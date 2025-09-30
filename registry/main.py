@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # Import domain routers
 from registry.auth.routes import router as auth_router
 from registry.api.server_routes import router as servers_router
+from registry.api.wellknown_routes import router as wellknown_router
 from registry.health.routes import router as health_router
 
 # Import auth dependencies
@@ -158,6 +159,9 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(servers_router, prefix="/api", tags=["Server Management"])
 app.include_router(health_router, prefix="/api/health", tags=["Health Monitoring"])
+
+# Register well-known discovery router
+app.include_router(wellknown_router, prefix="/.well-known", tags=["Discovery"])
 
 # Add user info endpoint for React auth context
 @app.get("/api/auth/me")
