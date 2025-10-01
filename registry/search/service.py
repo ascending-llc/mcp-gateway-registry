@@ -201,5 +201,32 @@ class FaissService:
             logger.debug(f"No changes to FAISS vector or enriched full_server_info for '{service_path}'. Skipping save.")
 
 
+    async def remove_service(self, service_path: str):
+        """Remove a service from the FAISS index and metadata store."""
+        try:
+            # Check if service exists in metadata
+            if service_path not in self.metadata_store:
+                logger.warning(f"Service '{service_path}' not found in FAISS metadata store")
+                return
+
+            # Get the FAISS ID for this service
+            service_id = self.metadata_store[service_path].get("id")
+            if service_id is not None and self.faiss_index:
+                # Remove from FAISS index
+                # Note: FAISS doesn't support direct removal, but we can remove from metadata
+                # The vector will remain in the index but won't be accessible via metadata
+                logger.info(f"Removing service '{service_path}' with FAISS ID {service_id} from index")
+
+            # Remove from metadata store
+            del self.metadata_store[service_path]
+            logger.info(f"Removed service '{service_path}' from FAISS metadata store")
+
+            # Save the updated metadata
+            await self.save_data()
+
+        except Exception as e:
+            logger.error(f"Failed to remove service '{service_path}' from FAISS: {e}", exc_info=True)
+
+
 # Global service instance
 faiss_service = FaissService() 

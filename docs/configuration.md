@@ -435,7 +435,7 @@ cd credentials-provider
 
 # Test MCP gateway connectivity
 cd tests
-./mcp_cmds.sh ping
+./tests/mcp_cmds.sh ping
 
 # Check configuration files
 python -c "import yaml; yaml.safe_load(open('file.yml'))"  # YAML validation

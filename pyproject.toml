@@ -35,6 +35,8 @@ dependencies = [
     "langchain-anthropic>=0.3.17",
     "matplotlib>=3.10.5",
     "psutil>=6.1.0",
+    "aiohttp>=3.8.0",
+    "rich>=13.0.0",
 ]
 
 [project.optional-dependencies]

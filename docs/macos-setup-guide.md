@@ -469,7 +469,7 @@ source .venv/bin/activate
 source .oauth-tokens/agent-test-agent-m2m.env
 
 # Test connectivity
-uv run python mcp_client.py ping
+uv run cli/mcp_client.py ping
 
 # Expected output:
 # ✓ M2M authentication successful
@@ -477,10 +477,10 @@ uv run python mcp_client.py ping
 # {"jsonrpc": "2.0", "id": 2, "result": {}}
 
 # List available tools
-uv run python mcp_client.py list
+uv run cli/mcp_client.py list
 
 # Test a simple tool
-uv run python mcp_client.py --url http://localhost/currenttime/mcp call --tool current_time_by_timezone --args '{"tz_name":"America/New_York"}'
+uv run cli/mcp_client.py --url http://localhost/currenttime/mcp call --tool current_time_by_timezone --args '{"tz_name":"America/New_York"}'
 ```
 
 ### Test Admin Console

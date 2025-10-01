@@ -1,363 +1,436 @@
-# Testing MCP Gateway Registry
+# MCP Gateway Testing Guide
 
-This guide covers different ways to test and interact with the MCP Gateway Registry, including both shell-based testing (no Python required) and Python agent testing.
+This guide provides comprehensive testing instructions for the MCP Gateway using both the CLI client and the Python agent.
 
-## Testing Without Python
+## Table of Contents
+- [Regenerate Credentials](#regenerate-credentials)
+- [Quick Start Testing](#quick-start-testing)
+- [CLI Testing with mcp_client.py](#cli-testing-with-mcp_clientpy)
+- [Python Agent Testing](#python-agent-testing)
+- [Authentication Testing](#authentication-testing)
+- [Service Management Testing](#service-management-testing)
+- [Troubleshooting](#troubleshooting)
 
-For enterprise environments with restricted package installation or when Python MCP packages are not available, use the provided shell scripts.
+## Regenerate Credentials
+
+**⚠️ Important:** Unless changed, Keycloak has an access token lifetime of only 5 minutes. You will most likely need to regenerate credentials before testing.
+
+### Generate Fresh Credentials
+
+Run the credential generation script to create fresh tokens:
+
+```bash
+# Generate new credentials for all agents and services
+./credentials-provider/generate_creds.sh
+```
+
+This script will:
+- Generate fresh access tokens for all configured agents
+- Create M2M (machine-to-machine) tokens for service authentication
+- Update all credential files in `.oauth-tokens/` directory
+- Ensure tokens are valid for the current testing session
+
+**Note:** The script should be run whenever you encounter authentication errors or when tokens have expired (every 5 minutes by default).
+
+## Quick Start Testing
 
 ### Prerequisites
+1. Ensure all containers are running:
+   ```bash
+   docker-compose ps
+   ```
 
-- `curl` - HTTP client (usually pre-installed)
-- `jq` - JSON processor (`sudo apt install jq` or `brew install jq`)
-- Standard Unix tools (`bash`, `sed`, `grep`)
+2. Set up authentication (choose one method):
+   ```bash
+   # Method 1: Source M2M credentials
+   source .oauth-tokens/agent-test-agent-m2m.env
 
-### Shell Script Testing Tools
+   # Method 2: Automatic ingress token
+   # The CLI will automatically use .oauth-tokens/ingress.json if available
+   ```
 
-#### 1. `mcp_cmds.sh` - Core MCP Protocol Operations
-
-Basic MCP server connectivity and tool operations using curl.
-
-**Available Commands:**
+### Basic Connectivity Test
 ```bash
-# Test connectivity
-./mcp_cmds.sh ping
+# Test gateway connectivity
+uv run python cli/mcp_client.py ping
 
 # List available tools
-./mcp_cmds.sh list
-
-# Call a specific tool
-./mcp_cmds.sh call get_current_time
-
-# Get help
-./mcp_cmds.sh help
+uv run python cli/mcp_client.py list
 ```
 
-**With Authentication:**
+## CLI Testing with mcp_client.py
 
-Using environment variable (see [Authentication for Both Methods](#authentication-for-both-methods) section below):
+The `mcp_client.py` tool provides direct access to MCP servers and gateway functionality.
+
+### Core Commands
+
+#### 1. Ping (Connectivity Test)
 ```bash
-USER_ACCESS_TOKEN=your_token ./mcp_cmds.sh list
+# Ping default gateway
+uv run python cli/mcp_client.py ping
+
+# Ping specific server
+uv run python cli/mcp_client.py --url http://localhost/currenttime/mcp ping
 ```
 
-Using JSON token file:
+#### 2. List Tools
 ```bash
-# Place token in .oauth-tokens/user-token.json
-./mcp_cmds.sh list
+# List tools from gateway
+uv run python cli/mcp_client.py list
+
+# List tools from specific server
+uv run python cli/mcp_client.py --url http://localhost/currenttime/mcp list
 ```
 
-**Custom Server Targeting:**
+#### 3. Call Tools
 ```bash
-# Target specific MCP server
-GATEWAY_URL=http://localhost/currenttime/mcp ./mcp_cmds.sh ping
+# Find tools using natural language
+uv run python cli/mcp_client.py call \
+  --tool intelligent_tool_finder \
+  --args '{"natural_language_query": "get current time"}'
 
-# Target remote server
-GATEWAY_URL=https://your-server.com/currenttime/mcp ./mcp_cmds.sh list
+# Call specific tool with arguments
+uv run python cli/mcp_client.py --url http://localhost/currenttime/mcp call \
+  --tool current_time_by_timezone \
+  --args '{"tz_name": "America/New_York"}'
+
+# Health check all services
+uv run python cli/mcp_client.py --url http://localhost/mcpgw/mcp call \
+  --tool healthcheck \
+  --args '{}'
 ```
 
-#### 2. `mcp_demo.sh` - Intelligent Agent Workflows
+### Advanced Examples
 
-Demonstrates multi-step AI agent workflows using natural language queries.
-
-**Available Commands:**
+#### Tool Discovery
 ```bash
-# Run full agent demo (default)
-./mcp_demo.sh demo
+# Find tools by description
+uv run python cli/mcp_client.py call \
+  --tool intelligent_tool_finder \
+  --args '{"natural_language_query": "time zone tools", "top_n_tools": 5}'
 
-# Custom query and timezone
-./mcp_demo.sh demo "What time is it now?" "Europe/London"
-
-# Just test tool discovery
-./mcp_demo.sh finder "time tools"
-
-# Get help
-./mcp_demo.sh help
+# Find tools by tags
+uv run python cli/mcp_client.py call \
+  --tool intelligent_tool_finder \
+  --args '{"tags": ["time", "timezone"], "top_n_tools": 3}'
 ```
 
-**Agent Workflow Process:**
-1. **Query → Discovery**: Uses `intelligent_tool_finder` to find relevant tools
-2. **Tool Selection**: Parses response to identify appropriate server and tool  
-3. **Server Switching**: Automatically switches to specific server context
-4. **Tool Execution**: Calls the identified tool with parameters
-5. **Result Extraction**: Processes and displays final results
-
-**Example Output:**
+#### Service Management
 ```bash
-$ ./mcp_demo.sh demo "What time is it now?" "Asia/Tokyo"
+# List all registered services
+uv run python cli/mcp_client.py --url http://localhost/mcpgw/mcp call \
+  --tool list_services \
+  --args '{}'
 
-🤖 MCP Agent Demo - Mimicking agent.py workflow
-==================================
-Query: What time is it now?
-Timezone: Asia/Tokyo
-Gateway URL: http://localhost/mcpgw/mcp
-==================================
+# Register a new service
+uv run python cli/mcp_client.py --url http://localhost/mcpgw/mcp call \
+  --tool register_service \
+  --args '{"server_name": "Test Server", "path": "/test", "proxy_pass_url": "http://test:8000"}'
 
-🔍 Step 1: Calling intelligent_tool_finder to discover time-related tools...
-🔍 Step 2: Parsing intelligent_tool_finder response...
-🕒 Step 3: Calling the identified tool...
-📋 Step 4: Extracting final result...
-🎉 Final Result: Current time in Asia/Tokyo: 2024-01-15 15:30:45 JST
-```
-
-### Enterprise Use Cases
-
-#### CI/CD Pipeline Integration
-```bash
-# Jenkins/GitLab CI step
-#!/bin/bash
-set -e
-export USER_ACCESS_TOKEN=$MCP_TOKEN
-./mcp_cmds.sh call validate_deployment '{"env":"staging"}'
-```
-
-#### Automated Monitoring
-```bash
-# Cron job for system monitoring
-0 */4 * * * cd /opt/mcp && ./mcp_demo.sh demo "system status check"
-```
-
-#### Quick Prototyping
-```bash
-# Test new MCP servers without Python setup
-./mcp_demo.sh finder "financial data tools"
-./mcp_cmds.sh call get_stock_price '{"symbol":"AAPL"}'
-```
-
-### Troubleshooting Shell Scripts
-
-**Authentication Issues:**
-```bash
-# Check if token is properly loaded
-echo $USER_ACCESS_TOKEN
-
-# Verify token file exists and has correct format
-cat .oauth-tokens/user-token.json | jq .
-```
-
-**Connectivity Issues:**
-```bash
-# Test basic connectivity
-curl -v http://localhost:7860/health
-
-# Check if MCP server is responding
-./mcp_cmds.sh ping
-```
-
-**JSON Parsing Issues:**
-```bash
-# Verify jq is installed
-jq --version
-
-# Debug raw responses
-./mcp_cmds.sh list | grep "^data:" | sed 's/^data: //' | jq .
+# Remove a service
+uv run python cli/mcp_client.py --url http://localhost/mcpgw/mcp call \
+  --tool remove_service \
+  --args '{"service_path": "/test"}'
 ```
 
 ## Python Agent Testing
 
-For environments where Python packages can be installed, use the full-featured Python agent.
+The Python agent (`agents/agent.py`) provides advanced AI capabilities with LangGraph-based multi-turn conversations.
 
 ### Prerequisites
-
 ```bash
-# Install Python dependencies
-pip install -r agents/requirements.txt
-
-# Or if using the project's environment
-cd agents && pip install -e .
-```
-
-### Python Agent Features
-
-The `agents/agent.py` provides advanced AI capabilities with LangGraph-based multi-turn conversations:
-
-**Core Features:**
-- **LangGraph Integration**: Uses LangGraph reactive agents for complex reasoning
-- **Multi-Turn Conversations**: Maintains conversation history across interactions
-- **Anthropic Claude Integration**: Powered by ChatAnthropic for advanced language understanding
-- **MCP Tool Discovery**: Intelligent tool finder for dynamic tool selection
-- **Authentication Support**: Cognito-based authentication with token management
-- **Interactive Mode**: Real-time conversation interface with continuous interaction
-
-**Available Tools:**
-- **`intelligent_tool_finder`**: AI-powered tool discovery using natural language
-- **`invoke_mcp_tool`**: Direct MCP tool invocation with authentication
-- **`calculator`**: Built-in mathematical expression evaluator
-
-**Usage Examples:**
-
-**Interactive Mode (Recommended):**
-```bash
+# Install dependencies
 cd agents
-# Interactive session with conversation history
-python agent.py --interactive
-
-# Interactive with initial prompt
-python agent.py --prompt "Hello, help me find time tools" --interactive
+pip install -r requirements.txt
 ```
 
-**Single-Turn Mode:**
+### Basic Usage
+
+#### Non-Interactive Mode
 ```bash
-# Direct query execution
-python agent.py --prompt "What's the current time in New York?"
+# Simple query with default settings
+uv run python agents/agent.py --prompt "What time is it in Tokyo?"
 
-# Complex multi-step workflow
-python agent.py --prompt "Find financial tools and get Apple's stock price"
+# Use specific model provider
+uv run python agents/agent.py --provider anthropic --prompt "Get the current time"
+
+# Use Amazon Bedrock
+uv run python agents/agent.py --provider bedrock --model anthropic.claude-3-5-sonnet-20240620-v1:0 \
+  --prompt "What tools are available?"
 ```
 
-**Authentication Options:**
+#### Interactive Mode
 ```bash
-# Environment variables (.env file recommended)
-COGNITO_CLIENT_ID=your_client_id
-COGNITO_CLIENT_SECRET=your_client_secret  
-COGNITO_USER_POOL_ID=your_user_pool_id
-AWS_REGION=us-east-1
-ANTHROPIC_API_KEY=your_api_key
+# Start interactive conversation
+uv run python agents/agent.py --interactive
 
-python agent.py --interactive
+# Interactive with specific model
+uv run python agents/agent.py --interactive --provider anthropic
 
-# Command line parameters
-python agent.py \
-  --cognito-client-id your_client_id \
-  --cognito-client-secret your_client_secret \
-  --cognito-user-pool-id your_user_pool_id \
-  --aws-region us-east-1 \
-  --interactive
+# Interactive with verbose output
+uv run python agents/agent.py --interactive --verbose
 ```
 
-**Advanced Configuration:**
+### Authentication Options
+
+#### Using Agent Credentials
 ```bash
-# Custom server and model configuration
-python agent.py \
-  --mcp-host localhost \
-  --mcp-port 8000 \
-  --model-id claude-3-5-sonnet-20241022 \
-  --interactive
-
-# With detailed logging
-python agent.py --prompt "test query" --verbose
+# Load credentials from .oauth-tokens/{agent-name}.json
+uv run python agents/agent.py --agent-name test-agent --prompt "List available tools"
 ```
 
-**Agent Workflow Process:**
-1. **Query Analysis**: Uses Claude to understand natural language intent
-2. **Tool Discovery**: Leverages `intelligent_tool_finder` for relevant tool identification
-3. **Multi-Step Execution**: Chains multiple MCP tool calls as needed
-4. **Context Maintenance**: Preserves conversation state across interactions
-5. **Error Handling**: Automatic retry with fallback strategies
-
-### Python vs Shell Comparison
-
-| Feature | Shell Scripts | Python Agent |
-|---------|--------------|---------------|
-| **Installation** | Zero dependencies | Requires pip packages |
-| **Enterprise Compatibility** | Works in restricted environments | May be blocked by firewalls |
-| **Functionality** | Core MCP operations | Advanced AI capabilities |
-| **Performance** | Fast, lightweight | More processing overhead |
-| **Complexity** | Simple, straightforward | Rich feature set |
-| **Error Handling** | Basic retry logic | Advanced recovery mechanisms |
-| **Use Case** | Testing, automation, CI/CD | Development, complex workflows |
-
-### Authentication for Both Methods
-
-**Environment Variable (Recommended):**
+#### Using JWT Token
 ```bash
-export USER_ACCESS_TOKEN=your_registry_token
+# Use pre-generated JWT token
+uv run python agents/agent.py --jwt-token "your-jwt-token" --prompt "Get current time"
 ```
 
-**Obtaining User Access Token:**
-You can generate a user access token from the MCP Gateway Registry UI by clicking the "Generate Token" dropdown menu item in the top right corner of the screen.
-
-**Note:** If you are using an HTTPS URL for your MCP Gateway Registry, the token will be automatically looked up from the `.oauth-tokens/ingress.json` file.
-
-**JSON Token File:**
-```json
-{
-  "access_token": "your_token_here",
-  "user_pool_id": "us-east-1_example", 
-  "client_id": "client_id_here",
-  "region": "us-east-1"
-}
-```
-
-**Token File Location:**
-- Place in `.oauth-tokens/user-token.json` relative to script location
-- Ensure proper JSON format and required fields
-
-## Testing Scenarios
-
-### Basic Connectivity Test
+#### Using Session Cookie
 ```bash
-# Shell method
-./mcp_cmds.sh ping
-
-# Python method  
-cd agents && python agent.py "ping the system"
+# Use session cookie authentication
+uv run python agents/agent.py --use-session-cookie --prompt "What tools are available?"
 ```
 
-### Tool Discovery Test
+#### Using Direct Access Token
 ```bash
-# Shell method
-./mcp_cmds.sh list
-
-# Python method with intelligent discovery
-./mcp_demo.sh finder "available tools"
+# Override with direct access token
+uv run python agents/agent.py --access-token "your-token" --prompt "List services"
 ```
 
-### Complex Workflow Test
+### Advanced Agent Examples
+
+#### Tool Filtering
 ```bash
-# Shell method - multi-step agent workflow
-./mcp_demo.sh demo "What's the weather like and what time is it?"
-
-# Python method - advanced reasoning
-cd agents && python agent.py "Get current conditions and time for planning"
+# Filter to use specific MCP tool
+uv run python agents/agent.py --mcp-tool-name current_time_by_timezone \
+  --prompt "What time is it in Paris?"
 ```
 
-## Integration Examples
-
-### Docker Integration
-```dockerfile
-# Shell-based testing in container
-FROM ubuntu:22.04
-RUN apt-get update && apt-get install -y curl jq
-COPY mcp_cmds.sh mcp_demo.sh ./
-RUN chmod +x *.sh
-CMD ["./mcp_demo.sh", "demo"]
+#### Custom MCP Registry URL
+```bash
+# Use different registry
+uv run python agents/agent.py --mcp-registry-url https://your-registry.com \
+  --prompt "List available services"
 ```
 
-### GitHub Actions
+#### Verbose Debugging
+```bash
+# Enable HTTP debugging
+uv run python agents/agent.py --verbose --prompt "Test connection"
+```
+
+## Authentication Testing
+
+### M2M Authentication
+```bash
+# Set environment variables
+export CLIENT_ID=your_client_id
+export CLIENT_SECRET=your_client_secret
+export KEYCLOAK_URL=http://localhost:8080
+export KEYCLOAK_REALM=mcp-gateway
+
+# Test with M2M auth
+uv run python cli/mcp_client.py list
+```
+
+### Ingress Token
+```bash
+# CLI automatically uses .oauth-tokens/ingress.json if available
+uv run python cli/mcp_client.py ping
+```
+
+### Testing Different Scopes
+```bash
+# Test with specific scopes (agent.py)
+uv run python agents/agent.py --scopes "read:tools" "execute:tools" \
+  --prompt "List and execute time tools"
+```
+
+## Service Management Testing
+
+Use the `service_mgmt.sh` script for comprehensive server lifecycle management:
+
+### Add a Service
+```bash
+# Add service from config file
+./cli/service_mgmt.sh add cli/examples/example-server-config.json
+```
+
+### Monitor Services
+```bash
+# Monitor all services
+./cli/service_mgmt.sh monitor
+
+# Monitor specific service
+./cli/service_mgmt.sh monitor cli/examples/example-server-config.json
+```
+
+### Test Service Searchability
+```bash
+# Test if service is discoverable
+./cli/service_mgmt.sh test cli/examples/example-server-config.json
+```
+
+### Delete a Service
+```bash
+# Remove service
+./cli/service_mgmt.sh delete cli/examples/example-server-config.json
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### Connection Refused
+```bash
+# Check if services are running
+docker-compose ps
+
+# Test direct registry access
+curl http://localhost:7860/health
+
+# Check if MCP server is responding
+uv run python cli/mcp_client.py ping
+```
+
+#### Authentication Errors
+```bash
+# Verify credentials are loaded
+echo $CLIENT_ID
+echo $CLIENT_SECRET
+
+# Check token file exists
+ls -la .oauth-tokens/ingress.json
+
+# Test with explicit credentials
+CLIENT_ID=test CLIENT_SECRET=secret uv run python cli/mcp_client.py list
+```
+
+#### Tool Not Found
+```bash
+# List all available tools
+uv run python cli/mcp_client.py list
+
+# Search for specific tools
+uv run python cli/mcp_client.py call \
+  --tool intelligent_tool_finder \
+  --args '{"natural_language_query": "your tool description"}'
+```
+
+### Debug Mode
+
+#### CLI Debug Output
+```bash
+# The CLI client shows detailed error messages by default
+uv run python cli/mcp_client.py call --tool nonexistent --args '{}'
+```
+
+#### Agent Verbose Mode
+```bash
+# Enable verbose HTTP debugging
+uv run python agents/agent.py --verbose --prompt "test"
+```
+
+### Health Checks
+
+#### Check All Services
+```bash
+# Full health check
+uv run python cli/mcp_client.py --url http://localhost/mcpgw/mcp call \
+  --tool healthcheck \
+  --args '{}'
+```
+
+#### Check Specific Server
+```bash
+# Direct server ping
+uv run python cli/mcp_client.py --url http://localhost/currenttime/mcp ping
+```
+
+## Integration Testing
+
+### CI/CD Pipeline Example
 ```yaml
-name: MCP Integration Test
+name: MCP Gateway Tests
 on: [push, pull_request]
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Test MCP Gateway
+
+      - name: Start services
+        run: docker-compose up -d
+
+      - name: Wait for services
+        run: sleep 10
+
+      - name: Test connectivity
         run: |
-          export USER_ACCESS_TOKEN=${{ secrets.MCP_TOKEN }}
-          ./mcp_cmds.sh ping
-          ./mcp_demo.sh demo "system health check"
+          uv run python cli/mcp_client.py ping
+
+      - name: Test tool discovery
+        run: |
+          uv run python cli/mcp_client.py list
+
+      - name: Test agent
+        run: |
+          uv run python agents/agent.py --prompt "system health check"
 ```
 
-### Kubernetes Job
-```yaml
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: mcp-test
-spec:
-  template:
-    spec:
-      containers:
-      - name: mcp-test
-        image: ubuntu:22.04
-        command: ["/bin/bash", "-c"]
-        args: 
-        - |
-          apt-get update && apt-get install -y curl jq
-          export USER_ACCESS_TOKEN=$MCP_TOKEN
-          ./mcp_cmds.sh list
-      restartPolicy: Never
+### Docker Container Testing
+```dockerfile
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY cli/ cli/
+COPY agents/ agents/
+CMD ["python", "cli/mcp_client.py", "ping"]
 ```
 
-This testing guide provides comprehensive coverage for both enterprise environments requiring shell-based testing and development environments where Python packages are available.
+## Performance Testing
+
+### Load Testing
+```bash
+# Simple load test with multiple requests
+for i in {1..10}; do
+  uv run python cli/mcp_client.py ping &
+done
+wait
+```
+
+### Response Time Testing
+```bash
+# Measure response time
+time uv run python cli/mcp_client.py list
+```
+
+## Security Testing
+
+### Test Authentication
+```bash
+# Test without credentials (should fail appropriately)
+unset CLIENT_ID CLIENT_SECRET
+uv run python cli/mcp_client.py list
+
+# Test with invalid credentials
+CLIENT_ID=invalid CLIENT_SECRET=invalid uv run python cli/mcp_client.py list
+```
+
+### Test Authorization
+```bash
+# Test tool access with different scopes
+uv run python cli/mcp_client.py call \
+  --tool restricted_tool \
+  --args '{}'
+```
+
+## Notes
+
+- All examples assume you're running from the project root directory
+- The CLI client (`mcp_client.py`) automatically handles authentication via environment variables or ingress tokens
+- The Python agent (`agent.py`) provides more advanced AI capabilities for complex interactions
+- Use `service_mgmt.sh` for comprehensive server lifecycle management
+- For production testing, always use proper authentication and secure connections

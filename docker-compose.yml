@@ -18,6 +18,7 @@ services:
       - COGNITO_CLIENT_SECRET=${COGNITO_CLIENT_SECRET}
       - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
       - AWS_REGION=${AWS_REGION:-us-east-1}
+      - HEALTH_CHECK_INTERVAL_SECONDS=${HEALTH_CHECK_INTERVAL_SECONDS:-30}
       - SRE_GATEWAY_AUTH_TOKEN=${SRE_GATEWAY_AUTH_TOKEN}
       - ATLASSIAN_AUTH_TOKEN=${ATLASSIAN_AUTH_TOKEN}
       # Keycloak configuration
@@ -49,6 +50,8 @@ services:
     environment:
       - REGISTRY_URL=${REGISTRY_URL}
       - SECRET_KEY=${SECRET_KEY}
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
       - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
@@ -139,6 +142,7 @@ services:
     ports:
       - "8002:8002"
     restart: unless-stopped
+
 
   # Atlassian MCP Server
   atlassian-server:

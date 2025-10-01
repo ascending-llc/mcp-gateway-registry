@@ -6,45 +6,54 @@
   "supported_transports": ["streamable-http"],
   "auth_type": "none",
   "tags": ["registry", "management"],
-  "num_tools": 6,
+  "num_tools": 11,
   "num_stars": 0,
   "is_python": true,
   "license": "N/A",
   "tool_list": [
     {
+      "name": "debug_auth_context",
+      "parsed_description": {
+        "main": "Debug tool to explore what authentication context is available.",
+        "args": "None",
+        "returns": "Dict[str, Any]: Detailed debug information about available auth context",
+        "raises": null
+      },
+      "schema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_http_headers",
+      "parsed_description": {
+        "main": "FastMCP 2.0 tool to access HTTP headers directly using the new dependency system.",
+        "args": "None",
+        "returns": "Dict[str, Any]: HTTP request information including headers",
+        "raises": null
+      },
+      "schema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    {
       "name": "toggle_service",
       "parsed_description": {
         "main": "Toggles the enabled/disabled state of a registered MCP server in the gateway.",
-        "args": "params: ServicePathParams containing the service_path.",
+        "args": "service_path: The unique path identifier for the service",
         "returns": "Dict[str, Any]: Response from the registry API indicating success or failure.",
         "raises": "Exception: If the API call fails."
       },
       "schema": {
-        "$defs": {
-          "ServicePathParams": {
-            "properties": {
-              "service_path": {
-                "description": "The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'.",
-                "title": "Service Path",
-                "type": "string"
-              }
-            },
-            "required": [
-              "service_path"
-            ],
-            "title": "ServicePathParams",
-            "type": "object"
-          }
-        },
         "properties": {
-          "params": {
-            "$ref": "#/$defs/ServicePathParams"
+          "service_path": {
+            "description": "The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'.",
+            "title": "Service Path",
+            "type": "string"
           }
         },
-        "required": [
-          "params"
-        ],
-        "title": "toggle_serviceArguments",
+        "required": ["service_path"],
         "type": "object"
       }
     },
@@ -52,214 +61,152 @@
       "name": "register_service",
       "parsed_description": {
         "main": "Registers a new MCP server with the gateway.",
-        "args": "params: RegisterServiceParams containing the details of the server to register.",
+        "args": "server_name, path, proxy_pass_url, and optional: description, tags, num_tools, num_stars, is_python, license",
         "returns": "Dict[str, Any]: Response from the registry API, likely including the registered server details.",
         "raises": "Exception: If the API call fails."
       },
       "schema": {
-        "$defs": {
-          "RegisterServiceParams": {
-            "properties": {
-              "server_name": {
-                "description": "Display name for the server.",
-                "title": "Server Name",
-                "type": "string"
-              },
-              "path": {
-                "description": "Unique URL path prefix for the server (e.g., '/my-service'). Must start with '/'.",
-                "title": "Path",
-                "type": "string"
-              },
-              "proxy_pass_url": {
-                "description": "The internal URL where the actual MCP server is running (e.g., 'http://localhost:8001').",
-                "title": "Proxy Pass Url",
-                "type": "string"
-              },
-              "description": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Optional description of the server.",
-                "title": "Description"
-              },
-              "tags": {
-                "anyOf": [
-                  {
-                    "items": {
-                      "type": "string"
-                    },
-                    "type": "array"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Optional list of tags for categorization.",
-                "title": "Tags"
-              },
-              "is_python": {
-                "anyOf": [
-                  {
-                    "type": "boolean"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": false,
-                "description": "Whether the server is implemented in Python.",
-                "title": "Is Python"
-              },
-              "license": {
-                 "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": "N/A",
-                "description": "License information for the server.",
-                "title": "License"
-              }
-            },
-            "required": [
-              "server_name",
-              "path",
-              "proxy_pass_url"
-            ],
-            "title": "RegisterServiceParams",
-            "type": "object"
-          }
-        },
         "properties": {
-          "params": {
-            "$ref": "#/$defs/RegisterServiceParams"
+          "server_name": {
+            "description": "Display name for the server.",
+            "title": "Server Name",
+            "type": "string"
+          },
+          "path": {
+            "description": "Unique URL path prefix for the server (e.g., '/my-service'). Must start with '/'.",
+            "title": "Path",
+            "type": "string"
+          },
+          "proxy_pass_url": {
+            "description": "The internal URL where the actual MCP server is running (e.g., 'http://localhost:8001').",
+            "title": "Proxy Pass Url",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {"type": "string"},
+              {"type": "null"}
+            ],
+            "default": "",
+            "description": "Description of the server.",
+            "title": "Description"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {"type": "string"},
+                "type": "array"
+              },
+              {"type": "null"}
+            ],
+            "default": null,
+            "description": "Optional list of tags for categorization.",
+            "title": "Tags"
+          },
+          "num_tools": {
+            "anyOf": [
+              {"type": "integer"},
+              {"type": "null"}
+            ],
+            "default": 0,
+            "description": "Number of tools provided by the server.",
+            "title": "Num Tools"
+          },
+          "num_stars": {
+            "anyOf": [
+              {"type": "integer"},
+              {"type": "null"}
+            ],
+            "default": 0,
+            "description": "Number of stars/rating for the server.",
+            "title": "Num Stars"
+          },
+          "is_python": {
+            "anyOf": [
+              {"type": "boolean"},
+              {"type": "null"}
+            ],
+            "default": false,
+            "description": "Whether the server is implemented in Python.",
+            "title": "Is Python"
+          },
+          "license": {
+            "anyOf": [
+              {"type": "string"},
+              {"type": "null"}
+            ],
+            "default": "N/A",
+            "description": "License information for the server.",
+            "title": "License"
           }
         },
-        "required": [
-          "params"
-        ],
-        "title": "register_serviceArguments",
+        "required": ["server_name", "path", "proxy_pass_url"],
         "type": "object"
       }
     },
     {
-      "name": "get_server_details",
+      "name": "list_services",
       "parsed_description": {
-        "main": "Retrieves the configuration details for a specific registered MCP server.",
-        "args": "params: ServicePathParams containing the service_path.",
-        "returns": "Dict[str, Any]: Detailed information about the specified server.",
+        "main": "Lists all registered MCP services in the gateway.",
+        "args": "None",
+        "returns": "A dictionary containing services list and total_count",
+        "raises": null
+      },
+      "schema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    {
+      "name": "remove_service",
+      "parsed_description": {
+        "main": "Removes a registered MCP server from the gateway.",
+        "args": "service_path: The unique path identifier for the service to remove",
+        "returns": "Dict[str, Any]: Response from the registry API indicating success or failure of the removal.",
         "raises": "Exception: If the API call fails or the server is not found."
       },
       "schema": {
-        "$defs": {
-          "ServicePathParams": {
-            "properties": {
-              "service_path": {
-                "description": "The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'.",
-                "title": "Service Path",
-                "type": "string"
-              }
-            },
-            "required": [
-              "service_path"
-            ],
-            "title": "ServicePathParams",
-            "type": "object"
-          }
-        },
         "properties": {
-          "params": {
-            "$ref": "#/$defs/ServicePathParams"
+          "service_path": {
+            "description": "The unique path identifier for the service to remove (e.g., '/fininfo'). Must start with '/'.",
+            "title": "Service Path",
+            "type": "string"
           }
         },
-        "required": [
-          "params"
-        ],
-        "title": "get_server_detailsArguments",
-        "type": "object"
-      }
-    },
-    {
-      "name": "get_service_tools",
-      "parsed_description": {
-        "main": "Lists the tools provided by a specific registered MCP server.",
-        "args": "params: ServicePathParams containing the service_path.",
-        "returns": "Dict[str, Any]: A list of tools exposed by the specified server.",
-        "raises": "Exception: If the API call fails or the server cannot be reached."
-      },
-      "schema": {
-        "$defs": {
-          "ServicePathParams": {
-            "properties": {
-              "service_path": {
-                "description": "The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'.",
-                "title": "Service Path",
-                "type": "string"
-              }
-            },
-            "required": [
-              "service_path"
-            ],
-            "title": "ServicePathParams",
-            "type": "object"
-          }
-        },
-        "properties": {
-          "params": {
-            "$ref": "#/$defs/ServicePathParams"
-          }
-        },
-        "required": [
-          "params"
-        ],
-        "title": "get_service_toolsArguments",
+        "required": ["service_path"],
         "type": "object"
       }
     },
     {
       "name": "refresh_service",
       "parsed_description": {
-        "main": "Triggers a refresh of the tool list for a specific registered MCP server.\nThe registry will re-connect to the target server to get its latest tools.",
-        "args": "params: ServicePathParams containing the service_path.",
+        "main": "Triggers a refresh of the tool list for a specific registered MCP server. The registry will re-connect to the target server to get its latest tools.",
+        "args": "service_path: The unique path identifier for the service",
         "returns": "Dict[str, Any]: Response from the registry API indicating the result of the refresh attempt.",
         "raises": "Exception: If the API call fails."
       },
       "schema": {
-        "$defs": {
-          "ServicePathParams": {
-            "properties": {
-              "service_path": {
-                "description": "The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'.",
-                "title": "Service Path",
-                "type": "string"
-              }
-            },
-            "required": [
-              "service_path"
-            ],
-            "title": "ServicePathParams",
-            "type": "object"
-          }
-        },
         "properties": {
-          "params": {
-            "$ref": "#/$defs/ServicePathParams"
+          "service_path": {
+            "description": "The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'.",
+            "title": "Service Path",
+            "type": "string"
           }
         },
-        "required": [
-          "params"
-        ],
-        "title": "refresh_serviceArguments",
+        "required": ["service_path"],
+        "type": "object"
+      }
+    },
+    {
+      "name": "healthcheck",
+      "parsed_description": {
+        "main": "Retrieves health status information from all registered MCP servers via the registry's WebSocket endpoint.",
+        "args": "None",
+        "returns": "Dict[str, Any]: Health status information for all registered servers",
+        "raises": "Exception: If the WebSocket connection fails or the data cannot be retrieved."
+      },
+      "schema": {
+        "properties": {},
         "type": "object"
       }
     },
@@ -272,64 +219,93 @@
         "raises": "Exception: If neither query nor tags is provided, or if FAISS index/model is unavailable."
       },
       "schema": {
-        "$defs": {
-          "IntelligentToolFinderParams": {
-            "properties": {
-              "natural_language_query": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "Your query in natural language describing the task you want to perform. Optional if tags are provided.",
-                "title": "Natural Language Query"
-              },
-              "tags": {
-                "anyOf": [
-                  {
-                    "items": {
-                      "type": "string"
-                    },
-                    "type": "array"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "description": "List of tags to filter tools by using AND logic. IMPORTANT: AI agents should ONLY use this if the user explicitly provides specific tags. DO NOT infer tags - incorrect tags will exclude valid results.",
-                "title": "Tags"
-              },
-              "top_k_services": {
-                "default": 3,
-                "description": "Number of top services to consider from initial FAISS search (ignored if only tags provided).",
-                "title": "Top K Services",
-                "type": "integer"
-              },
-              "top_n_tools": {
-                "default": 1,
-                "description": "Number of best matching tools to return.",
-                "title": "Top N Tools",
-                "type": "integer"
-              }
-            },
-            "title": "IntelligentToolFinderParams",
-            "type": "object"
-          }
-        },
         "properties": {
-          "params": {
-            "$ref": "#/$defs/IntelligentToolFinderParams"
+          "natural_language_query": {
+            "anyOf": [
+              {"type": "string"},
+              {"type": "null"}
+            ],
+            "default": null,
+            "description": "Your query in natural language describing the task you want to perform. Optional if tags are provided.",
+            "title": "Natural Language Query"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {"type": "string"},
+                "type": "array"
+              },
+              {"type": "null"}
+            ],
+            "default": null,
+            "description": "List of tags to filter tools by using AND logic. IMPORTANT: AI agents should ONLY use this if the user explicitly provides specific tags. DO NOT infer tags - incorrect tags will exclude valid results.",
+            "title": "Tags"
+          },
+          "top_k_services": {
+            "default": 3,
+            "description": "Number of top services to consider from initial FAISS search (ignored if only tags provided).",
+            "title": "Top K Services",
+            "type": "integer"
+          },
+          "top_n_tools": {
+            "default": 1,
+            "description": "Number of best matching tools to return.",
+            "title": "Top N Tools",
+            "type": "integer"
           }
         },
-        "required": [
-          "params"
-        ],
-        "title": "intelligent_tool_finderArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "add_server_to_scopes_groups",
+      "parsed_description": {
+        "main": "Add a server and all its known tools/methods to specific scopes groups.",
+        "args": "server_name: Name of the server (without leading slash), group_names: List of group names to add the server to",
+        "returns": "Dict with success status and details about the operation",
+        "raises": null
+      },
+      "schema": {
+        "properties": {
+          "server_name": {
+            "description": "Name of the server to add to groups (e.g., 'example-server'). Should not include leading slash.",
+            "title": "Server Name",
+            "type": "string"
+          },
+          "group_names": {
+            "description": "List of scopes group names to add the server to (e.g., ['mcp-servers-restricted/read', 'mcp-servers-restricted/execute']).",
+            "items": {"type": "string"},
+            "title": "Group Names",
+            "type": "array"
+          }
+        },
+        "required": ["server_name", "group_names"],
+        "type": "object"
+      }
+    },
+    {
+      "name": "remove_server_from_scopes_groups",
+      "parsed_description": {
+        "main": "Remove a server from specific scopes groups.",
+        "args": "server_name: Name of the server (without leading slash), group_names: List of group names to remove the server from",
+        "returns": "Dict with success status and details about the operation",
+        "raises": null
+      },
+      "schema": {
+        "properties": {
+          "server_name": {
+            "description": "Name of the server to remove from groups (e.g., 'example-server'). Should not include leading slash.",
+            "title": "Server Name",
+            "type": "string"
+          },
+          "group_names": {
+            "description": "List of scopes group names to remove the server from (e.g., ['mcp-servers-restricted/read', 'mcp-servers-restricted/execute']).",
+            "items": {"type": "string"},
+            "title": "Group Names",
+            "type": "array"
+          }
+        },
+        "required": ["server_name", "group_names"],
         "type": "object"
       }
     }

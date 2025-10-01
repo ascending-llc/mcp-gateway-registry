@@ -250,6 +250,8 @@ flowchart TB
 
 ## Quick Start
 
+> **📱 Running on macOS?** See our [macOS Setup Guide](docs/macos-setup-guide.md) for platform-specific instructions and optimizations.
+
 ### Option A: Pre-built Images (Instant Setup)
 
 Get running in under 2 minutes with pre-built containers:
@@ -302,7 +304,7 @@ Complete: **[Testing with mcp_client.py and agent.py](docs/complete-setup-guide.
 ### Testing & Integration Options
 
 **Python Scripts:**
-- `./mcp_client.py` - Core MCP operations (ping, list tools, call tools)
+- `./cli/mcp_client.py` - Core MCP operations (ping, list tools, call tools)
 - `./tests/mcp_cmds.sh` - Shell-based MCP testing operations
 
 **Python Agent:**
@@ -366,6 +368,7 @@ Transform how both autonomous AI agents and development teams access enterprise 
 
 ## What's New
 
+- **Service Management Utility** - New comprehensive script for server lifecycle management with automated verification and testing. [Learn more](docs/service-management.md)
 - **Tag-Based Tool Filtering** - Enhanced intelligent_tool_finder now supports filtering tools by server tags for precise categorical discovery alongside semantic search
 - **🔐 Keycloak Identity Provider Integration** - Enterprise-grade authentication with individual AI agent audit trails, group-based authorization, and production-ready service account management. [Learn more](docs/keycloak-integration.md)
 - **Amazon Bedrock AgentCore Integration** - Direct access to AWS services through managed MCP endpoints
@@ -387,6 +390,7 @@ Transform how both autonomous AI agents and development teams access enterprise 
 | [Quick Start Tutorial](docs/quick-start.md)<br/>Get running in 5 minutes | [Amazon Cognito Setup](docs/cognito.md)<br/>Step-by-step IdP configuration | [Token Refresh Service](docs/token-refresh-service.md)<br/>Automated token refresh and lifecycle management |
 | [Configuration Reference](docs/configuration.md)<br/>Environment variables and settings |  |  |
 | | [Fine-Grained Access Control](docs/scopes.md)<br/>Permission management and security | [Dynamic Tool Discovery](docs/dynamic-tool-discovery.md)<br/>Autonomous agent capabilities |
+| | [Service Management](docs/service-management.md)<br/>Server lifecycle and operations | |
 | | | [Production Deployment](docs/installation.md)<br/>Complete setup for production environments |
 | | | [Troubleshooting Guide](docs/FAQ.md)<br/>Common issues and solutions |
 

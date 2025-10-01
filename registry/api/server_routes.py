@@ -325,8 +325,9 @@ async def register_service(
             content={"error": f"Service with path '{path}' already exists or failed to save"},
         )
 
-    # Add to FAISS index (disabled by default)
-    await faiss_service.add_or_update_service(path, server_entry, False)
+    # Add to FAISS index with current enabled state
+    is_enabled = server_service.is_service_enabled(path)
+    await faiss_service.add_or_update_service(path, server_entry, is_enabled)
     
     # Regenerate Nginx configuration
     enabled_servers = {
@@ -347,6 +348,567 @@ async def register_service(
             "service": server_entry,
         },
     )
+
+
+@router.post("/internal/register")
+async def internal_register_service(
+    request: Request,
+    name: Annotated[str, Form()],
+    description: Annotated[str, Form()],
+    path: Annotated[str, Form()],
+    proxy_pass_url: Annotated[str, Form()],
+    tags: Annotated[str, Form()] = "",
+    num_tools: Annotated[int, Form()] = 0,
+    num_stars: Annotated[int, Form()] = 0,
+    is_python: Annotated[bool, Form()] = False,
+    license_str: Annotated[str, Form(alias="license")] = "N/A",
+    overwrite: Annotated[bool, Form()] = True,
+):
+    """Internal service registration endpoint for mcpgw-server (requires HTTP Basic Authentication with admin credentials)."""
+    logger.warning("INTERNAL REGISTER: Function called - starting execution")  # TODO: replace with debug
+
+    import base64
+    import os
+    from ..search.service import faiss_service
+    from ..health.service import health_service
+    from ..core.nginx_service import nginx_service
+
+    logger.warning(f"INTERNAL REGISTER: Request parameters - name={name}, path={path}, proxy_pass_url={proxy_pass_url}")  # TODO: replace with debug
+
+    # Check for HTTP Basic Authentication
+    auth_header = request.headers.get("Authorization")
+    logger.warning(f"INTERNAL REGISTER: Auth header present: {auth_header is not None}")  # TODO: replace with debug
+
+    if not auth_header or not auth_header.startswith("Basic "):
+        logger.warning("INTERNAL REGISTER: Authentication failed - no valid Basic auth header")  # TODO: replace with debug
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    # Decode Basic Auth credentials
+    try:
+        encoded_credentials = auth_header.split(" ")[1]
+        decoded_credentials = base64.b64decode(encoded_credentials).decode("utf-8")
+        username, password = decoded_credentials.split(":", 1)
+        logger.warning(f"INTERNAL REGISTER: Decoded credentials - username={username}")  # TODO: replace with debug
+    except (IndexError, ValueError, Exception) as e:
+        logger.warning(f"INTERNAL REGISTER: Auth decoding failed: {e}")  # TODO: replace with debug
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication format",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    # Verify admin credentials from environment
+    admin_user = os.environ.get("ADMIN_USER", "admin")
+    admin_password = os.environ.get("ADMIN_PASSWORD")
+
+    logger.warning(f"INTERNAL REGISTER: Checking credentials - expected_user={admin_user}, has_password={admin_password is not None}")  # TODO: replace with debug
+
+    if not admin_password:
+        logger.warning("INTERNAL REGISTER: ADMIN_PASSWORD environment variable not set")  # TODO: replace with debug
+        logger.error("ADMIN_PASSWORD environment variable not set for internal registration")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server configuration error"
+        )
+
+    if username != admin_user or password != admin_password:
+        logger.warning(f"INTERNAL REGISTER: Auth failed - expected {admin_user}, got {username}")  # TODO: replace with debug
+        logger.warning(f"Failed admin authentication attempt for internal registration from {username}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid admin credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    logger.warning(f"INTERNAL REGISTER: Authentication successful for user {username}")  # TODO: replace with debug
+    logger.info(f"Internal service registration request from admin user '{username}'")
+
+    # Validate path format
+    if not path.startswith('/'):
+        path = '/' + path
+    logger.warning(f"INTERNAL REGISTER: Validated path: {path}")  # TODO: replace with debug
+
+    # Process tags
+    tag_list = [tag.strip() for tag in tags.split(',') if tag.strip()] if tags else []
+    logger.warning(f"INTERNAL REGISTER: Processed tags: {tag_list}")  # TODO: replace with debug
+
+    # Create server entry
+    server_entry = {
+        "server_name": name,
+        "description": description,
+        "path": path,
+        "proxy_pass_url": proxy_pass_url,
+        "supported_transports": ["streamable-http"],  # Default transport
+        "auth_type": "none",  # Default auth type
+        "tags": tag_list,
+        "num_tools": num_tools,
+        "num_stars": num_stars,
+        "is_python": is_python,
+        "license": license_str,
+        "tool_list": []  # Will be populated by health checks
+    }
+
+    logger.warning(f"INTERNAL REGISTER: Created server entry: {server_entry}")  # TODO: replace with debug
+    logger.warning(f"INTERNAL REGISTER: Overwrite parameter: {overwrite}")  # TODO: replace with debug
+
+    # Check if server exists and handle overwrite logic
+    existing_server = server_service.get_server_info(path)
+    if existing_server and not overwrite:
+        logger.warning(f"INTERNAL REGISTER: Server exists and overwrite=False for path {path}")  # TODO: replace with debug
+        return JSONResponse(
+            status_code=409,  # Conflict status code for existing resource
+            content={
+                "error": "Service registration failed",
+                "reason": f"A service with path '{path}' already exists",
+                "suggestion": "Set overwrite=true or use the remove command first"
+            },
+        )
+
+    # Register the server (this will overwrite if server exists and overwrite=True)
+    logger.warning("INTERNAL REGISTER: Calling server_service.register_server")  # TODO: replace with debug
+    if existing_server and overwrite:
+        logger.warning(f"INTERNAL REGISTER: Overwriting existing server at path {path}")  # TODO: replace with debug
+        success = server_service.update_server(path, server_entry)
+    else:
+        success = server_service.register_server(server_entry)
+
+    if not success:
+        logger.warning(f"INTERNAL REGISTER: Registration failed for path {path}")  # TODO: replace with debug
+        return JSONResponse(
+            status_code=409,  # Conflict status code for existing resource
+            content={
+                "error": "Service registration failed",
+                "reason": f"Failed to register service at path '{path}'",
+                "suggestion": "Check server logs for detailed error information"
+            },
+        )
+
+    logger.warning("INTERNAL REGISTER: Auto-enabling newly registered server")  # TODO: replace with debug
+
+    # Automatically enable the newly registered server BEFORE FAISS indexing
+    try:
+        toggle_success = server_service.toggle_service(path, True)
+        if toggle_success:
+            logger.info(f"Successfully auto-enabled server {path} after registration")
+        else:
+            logger.warning(f"Failed to auto-enable server {path} after registration")
+    except Exception as e:
+        logger.error(f"Error auto-enabling server {path}: {e}")
+        # Non-fatal error - server is registered but not enabled
+
+    logger.warning(f"INTERNAL REGISTER: Server registered successfully, adding to FAISS index")  # TODO: replace with debug
+
+    # Add to FAISS index with current enabled state (should be True after auto-enable)
+    is_enabled = server_service.is_service_enabled(path)
+    await faiss_service.add_or_update_service(path, server_entry, is_enabled)
+
+    logger.warning("INTERNAL REGISTER: Regenerating Nginx configuration")  # TODO: replace with debug
+
+    # Regenerate Nginx configuration
+    enabled_servers = {
+        server_path: server_service.get_server_info(server_path)
+        for server_path in server_service.get_enabled_services()
+    }
+    await nginx_service.generate_config_async(enabled_servers)
+
+    logger.warning("INTERNAL REGISTER: Broadcasting health status update")  # TODO: replace with debug
+
+    # Broadcast health status update to WebSocket clients
+    await health_service.broadcast_health_update(path)
+
+    logger.warning("INTERNAL REGISTER: Updating scopes.yml for new server")  # TODO: replace with debug
+
+    # Update scopes.yml with the new server's tools
+    from ..utils.scopes_manager import update_server_scopes
+
+    # Get the tool list from the server entry
+    tool_names = []
+    if "tool_list" in server_entry and server_entry["tool_list"]:
+        tool_names = [tool["name"] for tool in server_entry["tool_list"] if "name" in tool]
+
+    # Update scopes and reload auth server
+    try:
+        await update_server_scopes(path, name, tool_names)
+        logger.info(f"Successfully updated scopes for server {path} with {len(tool_names)} tools")
+    except Exception as e:
+        logger.error(f"Failed to update scopes for server {path}: {e}")
+        # Non-fatal error - server is registered but scopes not updated
+
+    logger.warning(f"INTERNAL REGISTER: Registration complete, returning success response")  # TODO: replace with debug
+    logger.info(f"New service registered via internal endpoint: '{name}' at path '{path}' by admin '{username}'")
+
+    return JSONResponse(
+        status_code=201,
+        content={
+            "message": "Service registered successfully",
+            "service": server_entry,
+        },
+    )
+
+
+@router.post("/internal/remove")
+async def internal_remove_service(
+    request: Request,
+    service_path: Annotated[str, Form()],
+):
+    """Internal service removal endpoint for mcpgw-server (requires HTTP Basic Authentication with admin credentials)."""
+    import base64
+    import os
+    from ..search.service import faiss_service
+    from ..health.service import health_service
+    from ..core.nginx_service import nginx_service
+
+    logger.warning("INTERNAL REMOVE: Function called - starting execution")  # TODO: replace with debug
+
+    # Check for HTTP Basic Authentication
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Basic "):
+        logger.warning("INTERNAL REMOVE: No Basic Auth header found")  # TODO: replace with debug
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    logger.warning("INTERNAL REMOVE: Basic Auth header found, decoding credentials")  # TODO: replace with debug
+
+    # Decode Basic Auth credentials
+    try:
+        encoded_credentials = auth_header.split(" ")[1]
+        decoded_credentials = base64.b64decode(encoded_credentials).decode("utf-8")
+        username, password = decoded_credentials.split(":", 1)
+        logger.warning(f"INTERNAL REMOVE: Decoded username: {username}")  # TODO: replace with debug
+    except (IndexError, ValueError, Exception):
+        logger.warning("INTERNAL REMOVE: Failed to decode Basic Auth credentials")  # TODO: replace with debug
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication format",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    # Verify admin credentials from environment
+    admin_user = os.environ.get("ADMIN_USER", "admin")
+    admin_password = os.environ.get("ADMIN_PASSWORD")
+
+    logger.warning(f"INTERNAL REMOVE: Checking credentials against admin_user: {admin_user}")  # TODO: replace with debug
+
+    if not admin_password:
+        logger.error("ADMIN_PASSWORD environment variable not set for internal removal")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server configuration error"
+        )
+
+    if username != admin_user or password != admin_password:
+        logger.warning(f"Failed admin authentication attempt for internal removal from {username}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid admin credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    logger.warning(f"INTERNAL REMOVE: Authentication successful for admin user '{username}'")  # TODO: replace with debug
+    logger.info(f"Internal service removal request from admin user '{username}' for service '{service_path}'")
+
+    # Validate path format
+    if not service_path.startswith('/'):
+        service_path = '/' + service_path
+
+    logger.warning(f"INTERNAL REMOVE: Normalized service path: {service_path}")  # TODO: replace with debug
+
+    # Check if server exists
+    server_info = server_service.get_server_info(service_path)
+    if not server_info:
+        logger.warning(f"INTERNAL REMOVE: Service not found at path '{service_path}'")  # TODO: replace with debug
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": "Service not found",
+                "reason": f"No service registered at path '{service_path}'",
+                "suggestion": "Check the service path and ensure it is registered"
+            },
+        )
+
+    logger.warning(f"INTERNAL REMOVE: Service found, proceeding with removal")  # TODO: replace with debug
+
+    # Remove the server
+    success = server_service.remove_server(service_path)
+
+    if not success:
+        logger.warning(f"INTERNAL REMOVE: Failed to remove service at path '{service_path}'")  # TODO: replace with debug
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Service removal failed",
+                "reason": f"Failed to remove service at path '{service_path}'",
+                "suggestion": "Check server logs for detailed error information"
+            },
+        )
+
+    logger.warning(f"INTERNAL REMOVE: Service removed successfully, updating FAISS index")  # TODO: replace with debug
+
+    # Remove from FAISS index
+    await faiss_service.remove_service(service_path)
+
+    logger.warning("INTERNAL REMOVE: Regenerating Nginx configuration")  # TODO: replace with debug
+
+    # Regenerate Nginx configuration
+    enabled_servers = {
+        server_path: server_service.get_server_info(server_path)
+        for server_path in server_service.get_enabled_services()
+    }
+    await nginx_service.generate_config_async(enabled_servers)
+
+    logger.warning("INTERNAL REMOVE: Broadcasting health status update")  # TODO: replace with debug
+
+    # Broadcast health status update to WebSocket clients
+    await health_service.broadcast_health_update(service_path)
+
+    logger.warning("INTERNAL REMOVE: Removing server from scopes.yml")  # TODO: replace with debug
+
+    # Remove server from scopes.yml and reload auth server
+    from ..utils.scopes_manager import remove_server_scopes
+
+    try:
+        await remove_server_scopes(service_path)
+        logger.info(f"Successfully removed server {service_path} from scopes")
+    except Exception as e:
+        logger.error(f"Failed to remove server {service_path} from scopes: {e}")
+        # Non-fatal error - server is removed but scopes not updated
+
+    logger.warning(f"INTERNAL REMOVE: Removal complete, returning success response")  # TODO: replace with debug
+    logger.info(f"Service removed via internal endpoint: '{service_path}' by admin '{username}'")
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "message": "Service removed successfully",
+            "service_path": service_path,
+        },
+    )
+
+
+@router.post("/internal/toggle")
+async def internal_toggle_service(
+    request: Request,
+    service_path: Annotated[str, Form()],
+):
+    """Internal service toggle endpoint for mcpgw-server (requires HTTP Basic Authentication with admin credentials)."""
+    import base64
+    import os
+    from ..search.service import faiss_service
+    from ..health.service import health_service
+    from ..core.nginx_service import nginx_service
+
+    logger.warning("INTERNAL TOGGLE: Function called - starting execution")  # TODO: replace with debug
+
+    # Check for HTTP Basic Authentication
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Basic "):
+        logger.warning("INTERNAL TOGGLE: No Basic Auth header found")  # TODO: replace with debug
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    logger.warning("INTERNAL TOGGLE: Basic Auth header found, decoding credentials")  # TODO: replace with debug
+
+    # Decode Basic Auth credentials
+    try:
+        encoded_credentials = auth_header.split(" ")[1]
+        decoded_credentials = base64.b64decode(encoded_credentials).decode("utf-8")
+        username, password = decoded_credentials.split(":", 1)
+        logger.warning(f"INTERNAL TOGGLE: Decoded username: {username}")  # TODO: replace with debug
+    except (IndexError, ValueError, Exception):
+        logger.warning("INTERNAL TOGGLE: Failed to decode Basic Auth credentials")  # TODO: replace with debug
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication format",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    # Verify admin credentials from environment
+    admin_user = os.environ.get("ADMIN_USER", "admin")
+    admin_password = os.environ.get("ADMIN_PASSWORD")
+
+    logger.warning(f"INTERNAL TOGGLE: Checking credentials against admin_user: {admin_user}")  # TODO: replace with debug
+
+    if not admin_password:
+        logger.error("ADMIN_PASSWORD environment variable not set for internal toggle")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server configuration error"
+        )
+
+    if username != admin_user or password != admin_password:
+        logger.warning(f"Failed admin authentication attempt for internal toggle from {username}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid admin credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    logger.warning(f"INTERNAL TOGGLE: Admin authentication successful for user '{username}'")  # TODO: replace with debug
+
+    # Ensure service_path starts with /
+    if not service_path.startswith("/"):
+        service_path = "/" + service_path
+
+    # Check if server exists
+    server_info = server_service.get_server_info(service_path)
+    if not server_info:
+        logger.warning(f"INTERNAL TOGGLE: Service not found at path '{service_path}'")  # TODO: replace with debug
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": "Service not found",
+                "reason": f"No service registered at path '{service_path}'",
+                "suggestion": "Check the service path and ensure it is registered"
+            },
+        )
+
+    logger.warning(f"INTERNAL TOGGLE: Service found, proceeding with toggle")  # TODO: replace with debug
+
+    # Get current state and toggle it
+    current_state = server_service.is_service_enabled(service_path)
+    new_state = not current_state
+    success = server_service.toggle_service(service_path, new_state)
+
+    if not success:
+        logger.warning(f"INTERNAL TOGGLE: Failed to toggle service at path '{service_path}'")  # TODO: replace with debug
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Service toggle failed",
+                "reason": f"Failed to toggle service at path '{service_path}'",
+                "suggestion": "Check server logs for detailed error information"
+            },
+        )
+
+    server_name = server_info["server_name"]
+    logger.info(f"Toggled '{server_name}' ({service_path}) to {new_state} by admin '{username}'")
+
+    # If enabling, perform immediate health check
+    status_result = "disabled"
+    last_checked_iso = None
+    if new_state:
+        logger.info(f"Performing immediate health check for {service_path} upon toggle ON...")
+        try:
+            status_result, last_checked_dt = await health_service.perform_immediate_health_check(service_path)
+            last_checked_iso = last_checked_dt.isoformat() if last_checked_dt else None
+            logger.info(f"Immediate health check for {service_path} completed. Status: {status_result}")
+        except Exception as e:
+            logger.error(f"ERROR during immediate health check for {service_path}: {e}")
+            status_result = f"error: immediate check failed ({type(e).__name__})"
+    else:
+        # When disabling, set status to disabled
+        status_result = "disabled"
+        logger.info(f"Service {service_path} toggled OFF. Status set to disabled.")
+
+    # Update FAISS metadata with new enabled state
+    await faiss_service.add_or_update_service(service_path, server_info, new_state)
+
+    # Regenerate Nginx configuration
+    enabled_servers = {
+        path: server_service.get_server_info(path)
+        for path in server_service.get_enabled_services()
+    }
+    await nginx_service.generate_config_async(enabled_servers)
+
+    # Broadcast health status update to WebSocket clients
+    await health_service.broadcast_health_update(service_path)
+
+    logger.warning(f"INTERNAL TOGGLE: Toggle complete, returning success response")  # TODO: replace with debug
+    return JSONResponse(
+        status_code=200,
+        content={
+            "message": f"Service toggled successfully",
+            "service_path": service_path,
+            "new_enabled_state": new_state,
+            "status": status_result,
+            "last_checked_iso": last_checked_iso,
+            "num_tools": server_info.get("num_tools", 0)
+        },
+    )
+
+
+@router.post("/internal/healthcheck")
+async def internal_healthcheck(request: Request):
+    """Internal health check endpoint for mcpgw-server (requires HTTP Basic Authentication with admin credentials)."""
+    import base64
+    import os
+    from ..health.service import health_service
+
+    logger.warning("INTERNAL HEALTHCHECK: Function called - starting execution")  # TODO: replace with debug
+
+    # Check for HTTP Basic Authentication
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Basic "):
+        logger.warning("INTERNAL HEALTHCHECK: No Basic Auth header found")  # TODO: replace with debug
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    logger.warning("INTERNAL HEALTHCHECK: Basic Auth header found, decoding credentials")  # TODO: replace with debug
+
+    # Decode Basic Auth credentials
+    try:
+        encoded_credentials = auth_header.split(" ")[1]
+        decoded_credentials = base64.b64decode(encoded_credentials).decode("utf-8")
+        username, password = decoded_credentials.split(":", 1)
+        logger.warning(f"INTERNAL HEALTHCHECK: Decoded username: {username}")  # TODO: replace with debug
+    except (IndexError, ValueError, Exception):
+        logger.warning("INTERNAL HEALTHCHECK: Failed to decode Basic Auth credentials")  # TODO: replace with debug
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication format",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    # Verify admin credentials from environment
+    admin_user = os.getenv("ADMIN_USER", "admin")
+    admin_password = os.getenv("ADMIN_PASSWORD")
+
+    if not admin_password:
+        logger.error("INTERNAL HEALTHCHECK: ADMIN_PASSWORD not set in environment")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Server configuration error"
+        )
+
+    if username != admin_user or password != admin_password:
+        logger.warning(f"INTERNAL HEALTHCHECK: Invalid credentials for user: {username}")  # TODO: replace with debug
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    logger.warning(f"INTERNAL HEALTHCHECK: Admin authenticated successfully: {username}")  # TODO: replace with debug
+
+    # Get health status for all servers
+    try:
+        health_data = health_service.get_all_health_status()
+        logger.info(f"Retrieved health status for {len(health_data)} servers")
+
+        return JSONResponse(
+            status_code=200,
+            content=health_data
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to retrieve health status: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve health status: {str(e)}"
+        )
 
 
 @router.get("/edit/{service_path:path}", response_class=HTMLResponse)
@@ -730,6 +1292,282 @@ async def refresh_service(
         "last_checked_iso": last_checked_iso,
         "num_tools": server_info.get("num_tools", 0)
     }
+
+@router.post("/internal/add-to-groups")
+async def internal_add_server_to_groups(
+    request: Request,
+    server_name: Annotated[str, Form()],
+    group_names: Annotated[str, Form()],  # Comma-separated list
+):
+    """Internal endpoint to add a server to specific scopes groups (requires HTTP Basic Authentication with admin credentials)."""
+    import base64
+    import os
+    from ..utils.scopes_manager import add_server_to_groups
+
+    # Extract and validate Basic Auth
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Basic "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid authorization header",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    try:
+        credentials = base64.b64decode(auth_header[6:]).decode("utf-8")
+        username, password = credentials.split(":", 1)
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization header format",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    admin_user = os.environ.get("ADMIN_USER", "admin")
+    admin_password = os.environ.get("ADMIN_PASSWORD")
+
+    if not admin_password:
+        logger.error("ADMIN_PASSWORD environment variable not set for internal add-to-groups")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server configuration error"
+        )
+
+    if username != admin_user or password != admin_password:
+        logger.warning(f"Failed admin authentication attempt for internal add-to-groups from {username}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid admin credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    # Parse group names from comma-separated string
+    groups = [group.strip() for group in group_names.split(",") if group.strip()]
+    if not groups:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No valid group names provided"
+        )
+
+    # Convert server name to path format
+    server_path = f"/{server_name}" if not server_name.startswith("/") else server_name
+
+    logger.info(f"Adding server {server_path} to groups {groups} via internal endpoint by admin '{username}'")
+
+    try:
+        success = await add_server_to_groups(server_path, groups)
+
+        if success:
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "message": "Server successfully added to groups",
+                    "server_path": server_path,
+                    "groups": groups
+                }
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to add server to groups"
+            )
+
+    except Exception as e:
+        logger.error(f"Error adding server {server_path} to groups {groups}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal error: {str(e)}"
+        )
+
+
+@router.post("/internal/remove-from-groups")
+async def internal_remove_server_from_groups(
+    request: Request,
+    server_name: Annotated[str, Form()],
+    group_names: Annotated[str, Form()],  # Comma-separated list
+):
+    """Internal endpoint to remove a server from specific scopes groups (requires HTTP Basic Authentication with admin credentials)."""
+    import base64
+    import os
+    from ..utils.scopes_manager import remove_server_from_groups
+
+    # Extract and validate Basic Auth
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Basic "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid authorization header",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    try:
+        credentials = base64.b64decode(auth_header[6:]).decode("utf-8")
+        username, password = credentials.split(":", 1)
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization header format",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    admin_user = os.environ.get("ADMIN_USER", "admin")
+    admin_password = os.environ.get("ADMIN_PASSWORD")
+
+    if not admin_password:
+        logger.error("ADMIN_PASSWORD environment variable not set for internal remove-from-groups")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server configuration error"
+        )
+
+    if username != admin_user or password != admin_password:
+        logger.warning(f"Failed admin authentication attempt for internal remove-from-groups from {username}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid admin credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    # Parse group names from comma-separated string
+    groups = [group.strip() for group in group_names.split(",") if group.strip()]
+    if not groups:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No valid group names provided"
+        )
+
+    # Convert server name to path format
+    server_path = f"/{server_name}" if not server_name.startswith("/") else server_name
+
+    logger.info(f"Removing server {server_path} from groups {groups} via internal endpoint by admin '{username}'")
+
+    try:
+        success = await remove_server_from_groups(server_path, groups)
+
+        if success:
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "message": "Server successfully removed from groups",
+                    "server_path": server_path,
+                    "groups": groups
+                }
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to remove server from groups"
+            )
+
+    except Exception as e:
+        logger.error(f"Error removing server {server_path} from groups {groups}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal error: {str(e)}"
+        )
+
+
+@router.get("/internal/list")
+async def internal_list_services(
+    request: Request,
+):
+    """Internal service listing endpoint for mcpgw-server (requires HTTP Basic Authentication with admin credentials)."""
+    import base64
+    import os
+
+    logger.warning("INTERNAL LIST: Function called - starting execution")  # TODO: replace with debug
+
+    # Check for HTTP Basic Authentication
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Basic "):
+        logger.warning("INTERNAL LIST: No Basic Auth header found")  # TODO: replace with debug
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    logger.warning("INTERNAL LIST: Basic Auth header found, decoding credentials")  # TODO: replace with debug
+
+    # Decode Basic Auth credentials
+    try:
+        encoded_credentials = auth_header.split(" ")[1]
+        decoded_credentials = base64.b64decode(encoded_credentials).decode("utf-8")
+        username, password = decoded_credentials.split(":", 1)
+        logger.warning(f"INTERNAL LIST: Decoded username: {username}")  # TODO: replace with debug
+    except (IndexError, ValueError, Exception):
+        logger.warning("INTERNAL LIST: Failed to decode Basic Auth credentials")  # TODO: replace with debug
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication format",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    # Verify admin credentials from environment
+    admin_user = os.environ.get("ADMIN_USER", "admin")
+    admin_password = os.environ.get("ADMIN_PASSWORD")
+
+    logger.warning(f"INTERNAL LIST: Checking credentials against admin_user: {admin_user}")  # TODO: replace with debug
+
+    if not admin_password:
+        logger.error("ADMIN_PASSWORD environment variable not set for internal list")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server configuration error"
+        )
+
+    if username != admin_user or password != admin_password:
+        logger.warning(f"Failed admin authentication attempt for internal list from {username}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid admin credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    logger.warning(f"INTERNAL LIST: Authentication successful for admin user '{username}'")  # TODO: replace with debug
+    logger.info(f"Internal service list request from admin user '{username}'")
+
+    # Get all servers (admin access - no permission filtering)
+    all_servers = server_service.get_all_servers()
+
+    logger.warning(f"INTERNAL LIST: Found {len(all_servers)} servers")  # TODO: replace with debug
+
+    # Transform the data to include enabled status and health information
+    services = []
+    for service_path, server_info in all_servers.items():
+        from ..health.service import health_service
+
+        # Get real health status from health service
+        health_data = health_service._get_service_health_data(service_path)
+
+        service_data = {
+            "server_name": server_info.get("server_name", "Unknown"),
+            "path": service_path,
+            "description": server_info.get("description", ""),
+            "proxy_pass_url": server_info.get("proxy_pass_url", ""),
+            "is_enabled": server_service.is_service_enabled(service_path),
+            "tags": server_info.get("tags", []),
+            "num_tools": server_info.get("num_tools", 0),
+            "num_stars": server_info.get("num_stars", 0),
+            "is_python": server_info.get("is_python", False),
+            "license": server_info.get("license", "N/A"),
+            "health_status": health_data["status"],
+            "last_checked_iso": health_data["last_checked_iso"],
+            "tool_list": server_info.get("tool_list", [])
+        }
+        services.append(service_data)
+
+    logger.warning(f"INTERNAL LIST: Returning {len(services)} services")  # TODO: replace with debug
+    logger.info(f"Internal service list completed for admin user '{username}' - returned {len(services)} services")
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "services": services,
+            "total_count": len(services)
+        },
+    )
+
 
 @router.post("/tokens/generate")
 async def generate_user_token(

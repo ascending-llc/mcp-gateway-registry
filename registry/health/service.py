@@ -711,12 +711,15 @@ class HealthMonitoringService:
     async def _update_tools_background(self, service_path: str, proxy_pass_url: str):
         """Update tool list in the background without blocking health checks."""
         try:
+            logger.info(f"Starting background tool update for {service_path}")
             from ..core.mcp_client import mcp_client_service
             from ..services.server_service import server_service
-            
+
             # Get server info to pass transport configuration
             server_info = server_service.get_server_info(service_path)
+            logger.info(f"Fetching tools from {proxy_pass_url} for {service_path}")
             tool_list = await mcp_client_service.get_tools_from_server_with_server_info(proxy_pass_url, server_info)
+            logger.info(f"Tool fetch result for {service_path}: {len(tool_list) if tool_list else 'None'} tools")
             
             if tool_list is not None:
                 new_tool_count = len(tool_list)
@@ -724,13 +727,24 @@ class HealthMonitoringService:
                 if current_server_info:
                     current_tool_count = current_server_info.get("num_tools", 0)
                     
-                    if current_tool_count != new_tool_count:
+                    # Update if count changed OR if we have no tool details yet
+                    current_tool_list = current_server_info.get("tool_list", [])
+                    if current_tool_count != new_tool_count or not current_tool_list:
                         updated_server_info = current_server_info.copy()
                         updated_server_info["tool_list"] = tool_list
                         updated_server_info["num_tools"] = new_tool_count
                         
                         server_service.update_server(service_path, updated_server_info)
-                        
+
+                        # Update scopes.yml with newly discovered tools
+                        try:
+                            from ..utils.scopes_manager import update_server_scopes
+                            tool_names = [tool["name"] for tool in tool_list if "name" in tool]
+                            await update_server_scopes(service_path, current_server_info.get("server_name", "Unknown"), tool_names)
+                            logger.info(f"Updated scopes for {service_path} with {len(tool_names)} discovered tools")
+                        except Exception as e:
+                            logger.error(f"Failed to update scopes for {service_path} after tool discovery: {e}")
+
                         # Broadcast only this specific service update
                         await self.broadcast_health_update(service_path)
                         
@@ -785,10 +799,14 @@ class HealthMonitoringService:
                     logger.info(f"Health check successful for {service_path} ({proxy_pass_url}): {status_detail}")
                     
                     # Schedule tool list fetch in background only for fully healthy status
-                    if status_detail == "healthy":
+                    logger.info(f"DEBUG: Health check status for {service_path}: status_detail='{status_detail}' (type: {type(status_detail)}) vs HealthStatus.HEALTHY='{HealthStatus.HEALTHY}' (type: {type(HealthStatus.HEALTHY)})")
+                    if status_detail == HealthStatus.HEALTHY:
+                        logger.info(f"DEBUG: Status detail matches HealthStatus.HEALTHY, triggering background tool update for {service_path}")
                         asyncio.create_task(self._update_tools_background(service_path, proxy_pass_url))
-                    elif status_detail == "healthy-auth-expired":
+                    elif status_detail == HealthStatus.HEALTHY_AUTH_EXPIRED:
                         logger.warning(f"Auth token expired for {service_path} but server is reachable")
+                    else:
+                        logger.info(f"DEBUG: Status detail '{status_detail}' does not match HealthStatus.HEALTHY, NOT triggering background tool update")
                         
                 else:
                     current_status = status_detail  # Detailed error from transport check

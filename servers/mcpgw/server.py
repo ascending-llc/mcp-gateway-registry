@@ -712,7 +712,12 @@ async def _call_registry_api(method: str, endpoint: str, ctx: Context = None, **
         kwargs['headers'] = auth_headers
 
     # Use a single client instance for potential connection pooling benefits
-    async with httpx.AsyncClient(timeout=Constants.REQUEST_TIMEOUT) as client:
+    # Get admin credentials from environment for registry API authentication
+    registry_username = os.environ.get("REGISTRY_USERNAME")
+    registry_password = os.environ.get("REGISTRY_PASSWORD")
+    auth = httpx.BasicAuth(registry_username, registry_password) if registry_username and registry_password else None
+
+    async with httpx.AsyncClient(timeout=Constants.REQUEST_TIMEOUT, auth=auth) as client:
         try:
             logger.info(f"Calling Registry API: {method} {url}") # Log the actual call
             response = await client.request(method, url, **kwargs)
@@ -999,9 +1004,12 @@ async def toggle_service(
     Raises:
         Exception: If the API call fails.
     """
-    endpoint = f"/toggle/{service_path.lstrip('/')}" # Ensure path doesn't have double slash
-        
-    return await _call_registry_api("POST", endpoint, ctx)
+    endpoint = "/api/internal/toggle"
+    form_data = {
+        "service_path": service_path
+    }
+    # Send as form data instead of JSON
+    return await _call_registry_api("POST", endpoint, ctx, data=form_data)
 
 
 @mcp.tool()
@@ -1037,7 +1045,7 @@ async def register_service(
     Raises:
         Exception: If the API call fails.
     """
-    endpoint = "/register"
+    endpoint = "/api/internal/register"
     
     # Convert tags list to comma-separated string if it's a list
     tags_str = ",".join(tags) if isinstance(tags, list) and tags is not None else tags
@@ -1052,7 +1060,7 @@ async def register_service(
         "num_tools": num_tools,
         "num_stars": num_stars,
         "is_python": is_python,
-        "license": license  # The registry API uses alias="license" for license_str
+        "license_str": license  # The registry API uses license_str field name
     }
     # Remove None values
     form_data = {k: v for k, v in form_data.items() if v is not None}
@@ -1060,27 +1068,79 @@ async def register_service(
     # Send as form data instead of JSON
     return await _call_registry_api("POST", endpoint, ctx, data=form_data)
 
+
 @mcp.tool()
-async def get_service_tools(
-    service_path: str = Field(..., description="The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'. Use '/all' to get tools from all registered servers."),
+async def list_services(
     ctx: Context = None
 ) -> Dict[str, Any]:
     """
-    Lists the tools provided by a specific registered MCP server.
-
-    Args:
-        service_path: The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'.
-                      Use '/all' to get tools from all registered servers.
+    Lists all registered MCP services in the gateway.
 
     Returns:
-        Dict[str, Any]: A list of tools exposed by the specified server.
+        A dictionary containing:
+        - services: List of service information with details like name, path, status, etc.
+        - total_count: Total number of services
+
+    Example:
+        services_info = await list_services()
+        for service in services_info["services"]:
+            print(f"Service: {service['server_name']} at {service['path']}")
+    """
+    logger.info("MCPGW: list_services tool called")
+
+    # Call the registry's internal list endpoint
+    endpoint = "/api/internal/list"
+
+    try:
+        result = await _call_registry_api("GET", endpoint, ctx)
+
+        if isinstance(result, dict) and "services" in result:
+            logger.info(f"MCPGW: Successfully retrieved {result.get('total_count', len(result['services']))} services")
+            return result
+        else:
+            logger.warning(f"MCPGW: Unexpected response format from registry list endpoint: {result}")
+            return {
+                "services": [],
+                "total_count": 0,
+                "error": "Unexpected response format from registry"
+            }
+
+    except Exception as e:
+        logger.error(f"MCPGW: Failed to list services: {e}")
+        return {
+            "services": [],
+            "total_count": 0,
+            "error": f"Failed to retrieve services: {str(e)}"
+        }
+
+
+@mcp.tool()
+async def remove_service(
+    service_path: str = Field(..., description="The unique path identifier for the service to remove (e.g., '/fininfo'). Must start with '/'."),
+    ctx: Context = None
+) -> Dict[str, Any]:
+    """
+    Removes a registered MCP server from the gateway.
+
+    Args:
+        service_path: The unique path identifier for the service to remove (e.g., '/fininfo'). Must start with '/'.
+
+    Returns:
+        Dict[str, Any]: Response from the registry API indicating success or failure of the removal.
 
     Raises:
-        Exception: If the API call fails or the server cannot be reached.
+        Exception: If the API call fails or the server is not found.
     """
-    endpoint = f"/api/tools/{service_path.lstrip('/')}"
-        
-    return await _call_registry_api("GET", endpoint, ctx)
+    endpoint = "/api/internal/remove"
+
+    # Create form data to send to the API
+    form_data = {
+        "service_path": service_path
+    }
+
+    # Send as form data instead of JSON
+    return await _call_registry_api("POST", endpoint, ctx, data=form_data)
+
 
 @mcp.tool()
 async def refresh_service(
@@ -1106,67 +1166,59 @@ async def refresh_service(
 
 
 @mcp.tool()
-async def get_server_details(
-    service_path: str = Field(..., description="The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'. Use '/all' to get details for all registered servers."),
-    ctx: Context = None
-) -> Dict[str, Any]:
-    """
-    Retrieves detailed information about a registered MCP server.
-    
-    Args:
-        service_path: The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'.
-                      Use '/all' to get details for all registered servers.
-        
-    Returns:
-        Dict[str, Any]: Detailed information about the specified server or all servers if '/all' is specified.
-        
-    Raises:
-        Exception: If the API call fails or the server is not registered.
-    """
-    endpoint = f"/api/server_details/{service_path.lstrip('/')}"
-        
-    return await _call_registry_api("GET", endpoint, ctx)
-
-
-@mcp.tool()
 async def healthcheck(ctx: Context = None) -> Dict[str, Any]:
     """
-    Retrieves health status information from all registered MCP servers via the registry's WebSocket endpoint.
-    
+    Retrieves health status information from all registered MCP servers via the registry's internal API.
+
     Returns:
         Dict[str, Any]: Health status information for all registered servers, including:
             - status: 'healthy' or 'disabled'
             - last_checked_iso: ISO timestamp of when the server was last checked
             - num_tools: Number of tools provided by the server
-            
+
     Raises:
-        Exception: If the WebSocket connection fails or the data cannot be retrieved.
+        Exception: If the API call fails or data cannot be retrieved
     """
     try:
-        # Connect to the WebSocket endpoint
-        registry_ws_url = f"ws://localhost:7860/ws/health_status"
-        logger.info(f"Connecting to WebSocket endpoint: {registry_ws_url}")
-        
-        async with websockets.connect(registry_ws_url) as websocket:
-            # WebSocket connection established, wait for the health status data
-            logger.info("WebSocket connection established, waiting for health status data...")
-            response = await websocket.recv()
-            
-            # Parse the JSON response
-            health_data = json.loads(response)
-            logger.info(f"Received health status data for {len(health_data)} servers")
-            
-            return health_data
-            
-    except websockets.exceptions.WebSocketException as e:
-        logger.error(f"WebSocket error: {e}")
-        raise Exception(f"Failed to connect to health status WebSocket: {e}")
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON decode error: {e}")
-        raise Exception(f"Failed to parse health status data: {e}")
+        import httpx
+        import base64
+        import os
+
+        # Get admin credentials from environment
+        registry_username = os.getenv("REGISTRY_USERNAME", "admin")
+        registry_password = os.getenv("REGISTRY_PASSWORD")
+
+        if not registry_password:
+            raise Exception("REGISTRY_PASSWORD not configured in environment")
+
+        # Create Basic Auth header
+        credentials = f"{registry_username}:{registry_password}"
+        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+        headers = {
+            "Authorization": f"Basic {encoded_credentials}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+
+        # Call registry's internal health check endpoint
+        registry_base_url = os.getenv("REGISTRY_BASE_URL", "http://registry:7860")
+        healthcheck_url = f"{registry_base_url}/api/internal/healthcheck"
+
+        logger.info(f"Calling internal health check endpoint: {healthcheck_url}")
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(healthcheck_url, headers=headers)
+
+            if response.status_code == 200:
+                health_data = response.json()
+                logger.info(f"Retrieved health status data for {len(health_data)} servers")
+                return health_data
+            else:
+                logger.error(f"Health check API returned status {response.status_code}: {response.text}")
+                raise Exception(f"Health check API call failed with status {response.status_code}")
+
     except Exception as e:
-        logger.error(f"Unexpected error retrieving health status: {e}")
-        raise Exception(f"Unexpected error retrieving health status: {e}")
+        logger.error(f"Error retrieving health status: {e}")
+        raise Exception(f"Failed to retrieve health status: {str(e)}")
 
 
 @mcp.tool()
@@ -1435,6 +1487,172 @@ async def intelligent_tool_finder(
         del res["text_for_embedding"]
     logger.info(f"intelligent_tool_finder, final_results: {json.dumps(final_results, indent=2, default=str)}")    
     return final_results
+
+
+@mcp.tool()
+async def add_server_to_scopes_groups(
+    server_name: str = Field(..., description="Name of the server to add to groups (e.g., 'example-server'). Should not include leading slash."),
+    group_names: List[str] = Field(..., description="List of scopes group names to add the server to (e.g., ['mcp-servers-restricted/read', 'mcp-servers-restricted/execute'])."),
+    ctx: Context = None
+) -> Dict[str, Any]:
+    """
+    Add a server and all its known tools/methods to specific scopes groups.
+
+    This tool retrieves the server's tools from the last health check and adds
+    them to the specified groups in scopes.yml using the same format as other servers.
+
+    Args:
+        server_name: Name of the server (without leading slash)
+        group_names: List of group names to add the server to
+
+    Returns:
+        Dict with success status and details about the operation
+    """
+    logger.info(f"add_server_to_scopes_groups called with server_name={server_name}, group_names={group_names}")
+
+    try:
+        # Get admin credentials
+        registry_admin_user = os.environ.get("REGISTRY_USERNAME", "admin")
+        registry_admin_password = os.environ.get("REGISTRY_PASSWORD")
+
+        if not registry_admin_password:
+            error_msg = "REGISTRY_PASSWORD environment variable not set. Cannot authenticate to internal API."
+            logger.error(error_msg)
+            return {"success": False, "error": error_msg}
+
+        # Prepare the request data
+        form_data = {
+            "server_name": server_name,
+            "group_names": ",".join(group_names)  # Convert list to comma-separated string
+        }
+
+        # Prepare Basic Auth header
+        import base64
+        credentials = f"{registry_admin_user}:{registry_admin_password}"
+        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+        headers = {
+            "Authorization": f"Basic {encoded_credentials}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+
+        # Make request to internal API
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{REGISTRY_BASE_URL}/api/internal/add-to-groups",
+                data=form_data,
+                headers=headers,
+                timeout=30.0
+            )
+
+        if response.status_code == 200:
+            result = response.json()
+            logger.info(f"Successfully added server {server_name} to groups {group_names}")
+            return {
+                "success": True,
+                "message": result.get("message", "Server successfully added to groups"),
+                "server_name": server_name,
+                "groups": group_names,
+                "server_path": result.get("server_path")
+            }
+        else:
+            error_detail = f"HTTP {response.status_code}: {response.text}"
+            logger.error(f"Failed to add server {server_name} to groups: {error_detail}")
+            return {
+                "success": False,
+                "error": error_detail,
+                "status_code": response.status_code
+            }
+
+    except Exception as e:
+        error_msg = f"Error adding server {server_name} to groups {group_names}: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return {
+            "success": False,
+            "error": error_msg
+        }
+
+
+@mcp.tool()
+async def remove_server_from_scopes_groups(
+    server_name: str = Field(..., description="Name of the server to remove from groups (e.g., 'example-server'). Should not include leading slash."),
+    group_names: List[str] = Field(..., description="List of scopes group names to remove the server from (e.g., ['mcp-servers-restricted/read', 'mcp-servers-restricted/execute'])."),
+    ctx: Context = None
+) -> Dict[str, Any]:
+    """
+    Remove a server from specific scopes groups.
+
+    This tool removes the server from the specified groups in scopes.yml.
+    Useful for revoking access or moving servers between access levels.
+
+    Args:
+        server_name: Name of the server (without leading slash)
+        group_names: List of group names to remove the server from
+
+    Returns:
+        Dict with success status and details about the operation
+    """
+    logger.info(f"remove_server_from_scopes_groups called with server_name={server_name}, group_names={group_names}")
+
+    try:
+        # Get admin credentials
+        registry_admin_user = os.environ.get("REGISTRY_USERNAME", "admin")
+        registry_admin_password = os.environ.get("REGISTRY_PASSWORD")
+
+        if not registry_admin_password:
+            error_msg = "REGISTRY_PASSWORD environment variable not set. Cannot authenticate to internal API."
+            logger.error(error_msg)
+            return {"success": False, "error": error_msg}
+
+        # Prepare the request data
+        form_data = {
+            "server_name": server_name,
+            "group_names": ",".join(group_names)  # Convert list to comma-separated string
+        }
+
+        # Prepare Basic Auth header
+        import base64
+        credentials = f"{registry_admin_user}:{registry_admin_password}"
+        encoded_credentials = base64.b64encode(credentials.encode()).decode()
+        headers = {
+            "Authorization": f"Basic {encoded_credentials}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+
+        # Make request to internal API
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{REGISTRY_BASE_URL}/api/internal/remove-from-groups",
+                data=form_data,
+                headers=headers,
+                timeout=30.0
+            )
+
+        if response.status_code == 200:
+            result = response.json()
+            logger.info(f"Successfully removed server {server_name} from groups {group_names}")
+            return {
+                "success": True,
+                "message": result.get("message", "Server successfully removed from groups"),
+                "server_name": server_name,
+                "groups": group_names,
+                "server_path": result.get("server_path")
+            }
+        else:
+            error_detail = f"HTTP {response.status_code}: {response.text}"
+            logger.error(f"Failed to remove server {server_name} from groups: {error_detail}")
+            return {
+                "success": False,
+                "error": error_detail,
+                "status_code": response.status_code
+            }
+
+    except Exception as e:
+        error_msg = f"Error removing server {server_name} from groups {group_names}: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return {
+            "success": False,
+            "error": error_msg
+        }
 
 
 # --- Main Execution ---

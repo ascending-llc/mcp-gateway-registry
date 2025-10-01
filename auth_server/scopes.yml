@@ -82,12 +82,17 @@ mcp-servers-unrestricted/read:
   - resources/list
   - resources/templates/list
   tools:
-  - intelligent_tool_finder
+  - debug_auth_context
+  - get_http_headers
   - toggle_service
   - register_service
-  - get_server_details
-  - get_service_tools
+  - list_services
+  - remove_service
   - refresh_service
+  - healthcheck
+  - intelligent_tool_finder
+  - add_server_to_scopes_groups
+  - remove_server_from_scopes_groups
 - server: realserverfaketools
   methods:
   - initialize
@@ -147,8 +152,7 @@ mcp-servers-unrestricted/read:
   - runbooks-api___get_incident_playbook
   - runbooks-api___get_troubleshooting_guide
   - runbooks-api___search_runbooks
-- &id001
-  server: atlassian
+- server: atlassian
   methods:
   - initialize
   - notifications/initialized
@@ -200,6 +204,19 @@ mcp-servers-unrestricted/read:
   - confluence_delete_page
   - confluence_add_comment
   - confluence_search_user
+- server: example-server
+  methods:
+  - initialize
+  - notifications/initialized
+  - ping
+  - tools/list
+  - tools/call
+  - resources/list
+  - resources/templates/list
+  tools:
+  - example_tool
+  - echo_tool
+  - status_tool
 mcp-servers-unrestricted/execute:
 - server: auth_server
   methods:
@@ -233,12 +250,17 @@ mcp-servers-unrestricted/execute:
   - resources/list
   - resources/templates/list
   tools:
+  - debug_auth_context
+  - get_http_headers
   - toggle_service
   - register_service
-  - get_server_details
-  - get_service_tools
+  - list_services
+  - remove_service
   - refresh_service
+  - healthcheck
   - intelligent_tool_finder
+  - add_server_to_scopes_groups
+  - remove_server_from_scopes_groups
 - server: realserverfaketools
   methods:
   - initialize
@@ -298,7 +320,71 @@ mcp-servers-unrestricted/execute:
   - runbooks-api___get_incident_playbook
   - runbooks-api___get_troubleshooting_guide
   - runbooks-api___search_runbooks
-- *id001
+- server: atlassian
+  methods:
+  - initialize
+  - notifications/initialized
+  - ping
+  - tools/list
+  - tools/call
+  - resources/list
+  - resources/templates/list
+  tools:
+  - jira_get_user_profile
+  - jira_get_issue
+  - jira_search
+  - jira_search_fields
+  - jira_get_project_issues
+  - jira_get_transitions
+  - jira_get_worklog
+  - jira_download_attachments
+  - jira_get_agile_boards
+  - jira_get_board_issues
+  - jira_get_sprints_from_board
+  - jira_get_sprint_issues
+  - jira_get_link_types
+  - jira_create_issue
+  - jira_batch_create_issues
+  - jira_batch_get_changelogs
+  - jira_update_issue
+  - jira_delete_issue
+  - jira_add_comment
+  - jira_add_worklog
+  - jira_link_to_epic
+  - jira_create_issue_link
+  - jira_create_remote_issue_link
+  - jira_remove_issue_link
+  - jira_transition_issue
+  - jira_create_sprint
+  - jira_update_sprint
+  - jira_get_project_versions
+  - jira_get_all_projects
+  - jira_create_version
+  - jira_batch_create_versions
+  - confluence_search
+  - confluence_get_page
+  - confluence_get_page_children
+  - confluence_get_comments
+  - confluence_get_labels
+  - confluence_add_label
+  - confluence_create_page
+  - confluence_update_page
+  - confluence_delete_page
+  - confluence_add_comment
+  - confluence_search_user
+- server: example-server
+  methods:
+  - initialize
+  - notifications/initialized
+  - ping
+  - tools/list
+  - tools/call
+  - resources/list
+  - resources/templates/list
+  tools:
+  - example_tool
+  - echo_tool
+  - status_tool
 mcp-servers-restricted/read:
 - server: auth_server
   methods:
@@ -332,7 +418,17 @@ mcp-servers-restricted/read:
   - resources/list
   - resources/templates/list
   tools:
+  - debug_auth_context
+  - get_http_headers
+  - toggle_service
+  - register_service
+  - list_services
+  - remove_service
+  - refresh_service
+  - healthcheck
   - intelligent_tool_finder
+  - add_server_to_scopes_groups
+  - remove_server_from_scopes_groups
 - server: realserverfaketools
   methods:
   - initialize
@@ -349,6 +445,19 @@ mcp-servers-restricted/read:
   - temporal_anomaly_detector
   - user_profile_analyzer
   - synthetic_data_generator
+- server: example-server
+  methods:
+  - initialize
+  - notifications/initialized
+  - ping
+  - tools/list
+  - tools/call
+  - resources/list
+  - resources/templates/list
+  tools:
+  - example_tool
+  - echo_tool
+  - status_tool
 mcp-servers-restricted/execute:
 - server: auth_server
   methods:
@@ -382,7 +491,17 @@ mcp-servers-restricted/execute:
   - resources/list
   - resources/templates/list
   tools:
+  - debug_auth_context
+  - get_http_headers
+  - toggle_service
+  - register_service
+  - list_services
+  - remove_service
+  - refresh_service
+  - healthcheck
   - intelligent_tool_finder
+  - add_server_to_scopes_groups
+  - remove_server_from_scopes_groups
 - server: realserverfaketools
   methods:
   - initialize

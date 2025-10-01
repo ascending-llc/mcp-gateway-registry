@@ -386,7 +386,8 @@ def _extract_tool_details(tools_response) -> List[dict]:
                 "schema": tool_schema
             })
 
-    logger.info(f"Successfully retrieved details for {len(tool_details_list)} tools.")
+    tool_names = [tool["name"] for tool in tool_details_list]
+    logger.info(f"Successfully retrieved details for {len(tool_details_list)} tools: {', '.join(tool_names)}")
     return tool_details_list
 
 

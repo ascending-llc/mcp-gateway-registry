@@ -27,8 +27,8 @@ class Settings(BaseSettings):
     embeddings_model_name: str = "all-MiniLM-L6-v2"
     embeddings_model_dimensions: int = 384
     
-    # Health check settings  
-    health_check_interval_seconds: int = 300  # 5 minutes for automatic background checks
+    # Health check settings
+    health_check_interval_seconds: int = 300  # 5 minutes for automatic background checks (configurable via env var)
     health_check_timeout_seconds: int = 2  # Very fast timeout for user-driven actions
     
     # WebSocket performance settings

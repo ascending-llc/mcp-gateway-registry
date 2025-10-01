@@ -57,12 +57,14 @@ def load_scopes_config():
     try:
         scopes_file = Path(__file__).parent / "scopes.yml"
         with open(scopes_file, 'r') as f:
-            return yaml.safe_load(f)
+            config = yaml.safe_load(f)
+            logger.info(f"Loaded scopes configuration with {len(config.get('group_mappings', {}))} group mappings")
+            return config
     except Exception as e:
         logger.error(f"Failed to load scopes configuration: {e}")
         return {}
 
-# Global scopes configuration
+# Global scopes configuration (will be reloaded dynamically)
 SCOPES_CONFIG = load_scopes_config()
 
 # Utility functions for GDPR/SOX compliance
@@ -1221,6 +1223,79 @@ async def generate_user_token(
             status_code=500,
             detail="Internal error generating token",
             headers={"Connection": "close"}
+        )
+
+@app.post("/internal/reload-scopes")
+async def reload_scopes(
+    request: Request,
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Reload the scopes.yml configuration file.
+    Requires admin authentication via Basic Auth with ADMIN_USER/ADMIN_PASSWORD.
+    """
+    import base64
+
+    # Check for HTTP Basic Authentication
+    if not authorization or not authorization.startswith("Basic "):
+        logger.warning("No Basic Auth header found for reload-scopes request")
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Basic"}
+        )
+
+    try:
+        # Decode Basic Auth credentials
+        encoded_credentials = authorization.split(" ")[1]
+        decoded_credentials = base64.b64decode(encoded_credentials).decode("utf-8")
+        username, password = decoded_credentials.split(":", 1)
+    except (IndexError, ValueError, Exception) as e:
+        logger.warning(f"Failed to decode Basic Auth credentials: {e}")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authentication format",
+            headers={"WWW-Authenticate": "Basic"}
+        )
+
+    # Verify admin credentials from environment
+    admin_user = os.environ.get("ADMIN_USER", "admin")
+    admin_password = os.environ.get("ADMIN_PASSWORD")
+
+    if not admin_password:
+        logger.error("ADMIN_PASSWORD environment variable not set")
+        raise HTTPException(
+            status_code=500,
+            detail="Server configuration error"
+        )
+
+    if username != admin_user or password != admin_password:
+        logger.warning(f"Failed admin authentication attempt for reload-scopes from {username}")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid admin credentials",
+            headers={"WWW-Authenticate": "Basic"}
+        )
+
+    # Reload the scopes configuration
+    global SCOPES_CONFIG
+    try:
+        SCOPES_CONFIG = load_scopes_config()
+        logger.info(f"Successfully reloaded scopes configuration by admin '{username}'")
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "Scopes configuration reloaded successfully",
+                "timestamp": datetime.utcnow().isoformat(),
+                "group_mappings_count": len(SCOPES_CONFIG.get('group_mappings', {}))
+            }
+        )
+    except Exception as e:
+        logger.error(f"Failed to reload scopes configuration: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to reload scopes: {str(e)}"
         )
 
 def parse_arguments():
