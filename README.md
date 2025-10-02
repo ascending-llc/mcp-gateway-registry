@@ -358,12 +358,6 @@ Comprehensive real-time metrics and monitoring through Grafana dashboards with d
 <p><em>Real-time metrics and observability dashboard tracking server health, tool usage, and authentication events</em></p>
 </td>
 </tr>
-<tr>
-<td colspan="2">
-<img src="docs/img/dashboard.png" alt="Grafana Metrics Dashboard" />
-<p><em>Real-time metrics and observability dashboard tracking server health, tool usage, and authentication events</em></p>
-</td>
-</tr>
 </table>
 
 
