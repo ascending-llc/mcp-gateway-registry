@@ -80,6 +80,22 @@ The **MCP Gateway & Registry** is an enterprise-ready platform that centralizes 
 
 ---
 
+## What's New
+
+- **🔐 Keycloak Identity Provider Integration** - Enterprise-grade authentication with individual AI agent audit trails, group-based authorization, and production-ready service account management. [Learn more](docs/keycloak-integration.md)
+- **Real-Time Metrics & Observability** - Comprehensive monitoring via Grafana dashboards with metrics stored in SQLite and exposed through OpenTelemetry (OTEL). Track server health, tool usage, authentication events, and performance metrics in real-time for complete visibility into your MCP infrastructure. [Observability Guide](docs/OBSERVABILITY.md)
+- **Service Management Utility** - New comprehensive script for server lifecycle management with automated verification and testing. [Learn more](docs/service-management.md)
+- **Tag-Based Tool Filtering** - Enhanced intelligent_tool_finder now supports filtering tools by server tags for precise categorical discovery alongside semantic search
+- **Amazon Bedrock AgentCore Integration** - Direct access to AWS services through managed MCP endpoints
+- **Three-Legged OAuth (3LO) Support** - External service integration (Atlassian, Google, GitHub)
+- **JWT Token Vending Service** - Self-service token generation for automation
+- **Automated Token Refresh Service** - Background token refresh to maintain continuous authentication
+- **Modern React Frontend** - Complete UI overhaul with TypeScript and real-time updates
+- **Dynamic Tool Discovery** - AI agents autonomously find and execute specialized tools
+- **Fine-Grained Access Control** - Granular permissions for servers, methods, and individual tools
+
+---
+
 ## Core Use Cases
 
 ### AI Agent & Coding Assistant Governance
@@ -333,6 +349,17 @@ Transform how both autonomous AI agents and development teams access enterprise 
 </tr>
 <tr>
 <td colspan="2">
+
+### Observability
+
+Comprehensive real-time metrics and monitoring through Grafana dashboards with dual-path storage: SQLite for detailed historical analysis and OpenTelemetry (OTEL) export for integration with Prometheus, CloudWatch, Datadog, and other monitoring platforms. Track authentication events, tool executions, discovery queries, and system performance metrics. [Learn more](docs/OBSERVABILITY.md)
+
+<img src="docs/img/dashboard.png" alt="Grafana Metrics Dashboard" />
+<p><em>Real-time metrics and observability dashboard tracking server health, tool usage, and authentication events</em></p>
+</td>
+</tr>
+<tr>
+<td colspan="2">
 <img src="docs/img/dashboard.png" alt="Grafana Metrics Dashboard" />
 <p><em>Real-time metrics and observability dashboard tracking server health, tool usage, and authentication events</em></p>
 </td>
@@ -369,22 +396,6 @@ Transform how both autonomous AI agents and development teams access enterprise 
 - Health monitoring and alerting
 - Rolling updates with zero downtime
 - Backup and disaster recovery
-
----
-
-## What's New
-
-- **Real-Time Metrics & Observability** - Comprehensive monitoring via Grafana dashboards with metrics stored in SQLite and exposed through OpenTelemetry (OTEL). Track server health, tool usage, authentication events, and performance metrics in real-time for complete visibility into your MCP infrastructure. [Observability Guide](docs/OBSERVABILITY.md)
-- **Service Management Utility** - New comprehensive script for server lifecycle management with automated verification and testing. [Learn more](docs/service-management.md)
-- **Tag-Based Tool Filtering** - Enhanced intelligent_tool_finder now supports filtering tools by server tags for precise categorical discovery alongside semantic search
-- **🔐 Keycloak Identity Provider Integration** - Enterprise-grade authentication with individual AI agent audit trails, group-based authorization, and production-ready service account management. [Learn more](docs/keycloak-integration.md)
-- **Amazon Bedrock AgentCore Integration** - Direct access to AWS services through managed MCP endpoints
-- **Three-Legged OAuth (3LO) Support** - External service integration (Atlassian, Google, GitHub)
-- **JWT Token Vending Service** - Self-service token generation for automation
-- **Automated Token Refresh Service** - Background token refresh to maintain continuous authentication
-- **Modern React Frontend** - Complete UI overhaul with TypeScript and real-time updates
-- **Dynamic Tool Discovery** - AI agents autonomously find and execute specialized tools
-- **Fine-Grained Access Control** - Granular permissions for servers, methods, and individual tools
 
 ---
 
