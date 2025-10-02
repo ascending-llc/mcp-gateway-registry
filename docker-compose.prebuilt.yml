@@ -130,7 +130,7 @@ services:
     ports:
       - "8005:8005"
     volumes:
-      - /home/ubuntu/.mcp-atlassian:/home/app/.mcp-atlassian
+      - $HOME/.mcp-atlassian:/home/app/.mcp-atlassian
     command: --transport streamable-http --port 8005
     restart: unless-stopped
 
