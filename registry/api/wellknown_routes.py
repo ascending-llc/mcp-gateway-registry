@@ -154,9 +154,11 @@ def _get_tools_preview(server_info: dict, max_tools: int = 5) -> list:
     preview_tools = []
     for tool in tools[:max_tools]:
         if isinstance(tool, dict):
+            # Try to get description from parsed_description.main first, then fall back to description field
+            description = tool.get("parsed_description", {}).get("main", tool.get("description", "No description available"))
             preview_tools.append({
                 "name": tool.get("name", "unknown"),
-                "description": tool.get("description", "No description available")
+                "description": description
             })
         elif isinstance(tool, str):
             # Handle case where tools are just strings

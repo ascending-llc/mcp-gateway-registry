@@ -195,10 +195,10 @@ if FRONTEND_BUILD_PATH.exists():
     @app.get("/{full_path:path}")
     async def serve_react_app(full_path: str):
         """Serve React app for all non-API routes"""
-        # Don't serve React for API routes
-        if full_path.startswith("api/") or full_path.startswith("health"):
+        # Don't serve React for API routes and well-known discovery endpoints
+        if full_path.startswith("api/") or full_path.startswith("health") or full_path.startswith(".well-known/"):
             raise HTTPException(status_code=404)
-        
+
         return FileResponse(FRONTEND_BUILD_PATH / "index.html")
 else:
     logger.warning("React build directory not found. Serve React app separately during development.")
