@@ -81,9 +81,17 @@ cd ~/workspace
 ```bash
 # Install Docker
 sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+
+# Add Docker's official GPG key
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# Add Docker repository (for Ubuntu 24.04 Noble and later)
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list
+
+# Update package list
 sudo apt-get update
+
+# Install Docker Engine and CLI
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io
 
 # Add user to docker group
@@ -92,25 +100,23 @@ sudo usermod -aG docker $USER
 # Apply the group change immediately for current shell
 newgrp docker
 
-# Verify Docker works without sudo:
+# Verify Docker works without sudo
 docker --version
-# Expected output: Docker version 24.x.x or higher
+# Expected output: Docker version 27.x.x or higher
 
 # Test Docker permissions (MUST work without sudo)
 docker run hello-world
 # Should show "Hello from Docker!" message
 
-# Install Docker Compose (standalone version)
-sudo apt-get install -y docker-compose
+# Install Docker Compose V2 Plugin (REQUIRED)
+sudo apt-get install -y docker-compose-plugin
 
-# Verify Docker Compose installation
-docker-compose --version
-# Expected output: docker-compose version 1.29.x or higher
+# Verify Docker Compose V2 installation
+docker compose version
+# Expected output: Docker Compose version v2.x.x or higher
 
-# Alternative: If the above doesn't work, install Docker Compose V2 plugin
-# sudo apt-get update
-# sudo apt-get install -y docker-compose-plugin
-# Then use 'docker compose' instead of 'docker-compose' in all commands
+# Note: The build_and_run.sh script requires Docker Compose V2 (docker compose)
+# Do NOT use the old standalone docker-compose v1
 ```
 
 ### Install Node.js and npm

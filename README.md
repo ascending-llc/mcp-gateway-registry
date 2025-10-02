@@ -331,6 +331,12 @@ Transform how both autonomous AI agents and development teams access enterprise 
 <p><em>AI assistants executing approved enterprise tools with governance</em></p>
 </td>
 </tr>
+<tr>
+<td colspan="2">
+<img src="docs/img/dashboard.png" alt="Grafana Metrics Dashboard" />
+<p><em>Real-time metrics and observability dashboard tracking server health, tool usage, and authentication events</em></p>
+</td>
+</tr>
 </table>
 
 
@@ -368,6 +374,7 @@ Transform how both autonomous AI agents and development teams access enterprise 
 
 ## What's New
 
+- **Real-Time Metrics & Observability** - Comprehensive monitoring via Grafana dashboards with metrics stored in SQLite and exposed through OpenTelemetry (OTEL). Track server health, tool usage, authentication events, and performance metrics in real-time for complete visibility into your MCP infrastructure. [Observability Guide](docs/OBSERVABILITY.md)
 - **Service Management Utility** - New comprehensive script for server lifecycle management with automated verification and testing. [Learn more](docs/service-management.md)
 - **Tag-Based Tool Filtering** - Enhanced intelligent_tool_finder now supports filtering tools by server tags for precise categorical discovery alongside semantic search
 - **🔐 Keycloak Identity Provider Integration** - Enterprise-grade authentication with individual AI agent audit trails, group-based authorization, and production-ready service account management. [Learn more](docs/keycloak-integration.md)
@@ -388,7 +395,7 @@ Transform how both autonomous AI agents and development teams access enterprise 
 | [Complete Setup Guide](docs/complete-setup-guide.md)<br/>**NEW!** Step-by-step from scratch on AWS EC2 | [Authentication Guide](docs/auth.md)<br/>OAuth and identity provider integration | [AI Coding Assistants Setup](docs/ai-coding-assistants-setup.md)<br/>VS Code, Cursor, Claude Code integration |
 | [Installation Guide](docs/installation.md)<br/>Complete setup instructions for EC2 and EKS | [Keycloak Integration](docs/keycloak-integration.md)<br/>Enterprise identity with agent audit trails | [API Reference](docs/registry_api.md)<br/>Programmatic registry management |
 | [Quick Start Tutorial](docs/quick-start.md)<br/>Get running in 5 minutes | [Amazon Cognito Setup](docs/cognito.md)<br/>Step-by-step IdP configuration | [Token Refresh Service](docs/token-refresh-service.md)<br/>Automated token refresh and lifecycle management |
-| [Configuration Reference](docs/configuration.md)<br/>Environment variables and settings |  |  |
+| [Configuration Reference](docs/configuration.md)<br/>Environment variables and settings |  | [Observability Guide](docs/OBSERVABILITY.md)<br/>**NEW!** Metrics, monitoring, and OpenTelemetry setup |
 | | [Fine-Grained Access Control](docs/scopes.md)<br/>Permission management and security | [Dynamic Tool Discovery](docs/dynamic-tool-discovery.md)<br/>Autonomous agent capabilities |
 | | [Service Management](docs/service-management.md)<br/>Server lifecycle and operations | |
 | | | [Production Deployment](docs/installation.md)<br/>Complete setup for production environments |

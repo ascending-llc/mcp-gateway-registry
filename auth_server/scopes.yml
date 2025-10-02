@@ -49,6 +49,9 @@ group_mappings:
   mcp-servers-unrestricted:
   - mcp-servers-unrestricted/read
   - mcp-servers-unrestricted/execute
+  mcp-servers-restricted:
+  - mcp-servers-restricted/read
+  - mcp-servers-restricted/execute
 mcp-servers-unrestricted/read:
 - server: auth_server
   methods:

@@ -1,5 +1,69 @@
+# Virtual environments
 **/.venv
 .venv/
 .venv
 registry/.venv/
 servers/*/.venv/
+venv/
+
+# Node.js
+node_modules/
+frontend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python build artifacts  
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+**/*.egg-info/
+dist/
+build/
+
+# Logs
+logs/
+*.log
+oauth_cognito.log
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+docs/
+*.md
+README*
+
+# Tests  
+tests/
+test/
+**/tests/
+**/*test*
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Large binaries
+*.bin
+*.model
+*.pkl
+*.h5
+
+# Specific large directories
+mcp-atlassian/
+# frontend/build/ - KEEP THIS, needed by registry service

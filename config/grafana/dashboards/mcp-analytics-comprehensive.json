@@ -1,0 +1,638 @@
+{
+  "id": null,
+  "title": "MCP Gateway - Analytics Dashboard",
+  "tags": ["mcp", "analytics", "auth", "tools"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Real-time Protocol Activity",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(mcp_tool_executions_total{method=\"initialize\", success=\"True\"}[1m]))",
+          "legendFormat": "Initialize Rate"
+        },
+        {
+          "expr": "sum(rate(mcp_tool_executions_total{method=\"tools/list\", success=\"True\"}[1m]))",
+          "legendFormat": "Tools List Rate"
+        },
+        {
+          "expr": "sum(rate(mcp_tool_executions_total{method=\"tools/call\", success=\"True\"}[1m]))",
+          "legendFormat": "Tool Call Rate"
+        },
+        {
+          "expr": "sum(rate(mcp_auth_requests_total{success=\"True\"}[1m]))",
+          "legendFormat": "Auth Success Rate"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom"}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "Requests per Second",
+            "axisPlacement": "left"
+          },
+          "unit": "reqps"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Authentication Flow Analysis",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(mcp_auth_requests_total{success=\"True\"}[5m]))",
+          "legendFormat": "Successful Auth"
+        },
+        {
+          "expr": "sum(rate(mcp_auth_requests_total{success=\"False\"}[5m]))",
+          "legendFormat": "Failed Auth"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom"}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "Auth Requests per Second",
+            "axisPlacement": "left"
+          },
+          "unit": "reqps"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Authentication Success Rate",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(mcp_auth_requests_total{success=\"True\"}) / sum(mcp_auth_requests_total) * 100",
+          "legendFormat": "Success Rate %"
+        }
+      ],
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 8},
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": 0},
+              {"color": "orange", "value": 85},
+              {"color": "green", "value": 95}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Active MCP Servers",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "count(count by (server_name)(mcp_tool_executions_total))",
+          "legendFormat": "Active Servers"
+        }
+      ],
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 8},
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              {"color": "blue", "value": 0},
+              {"color": "green", "value": 3},
+              {"color": "green", "value": 10}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Tool Executions per Hour",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(increase(mcp_tool_executions_total[1h]))",
+          "legendFormat": "Tools/Hour"
+        }
+      ],
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 8},
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              {"color": "blue", "value": 0},
+              {"color": "blue", "value": 50},
+              {"color": "blue", "value": 100}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Most Popular Tool",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "topk(1, sum(mcp_tool_executions_total{method=\"tools/call\"}) by (tool_name))",
+          "legendFormat": "{{tool_name}}"
+        }
+      ],
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 8},
+      "options": {
+        "colorMode": "background",
+        "textMode": "name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "steps": [
+              {"color": "purple", "value": 0}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Protocol Latency Analysis (P95/P99)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(mcp_auth_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "Auth P95 Latency"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(mcp_auth_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "Auth P99 Latency"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(mcp_tool_execution_duration_seconds_bucket[5m]))",
+          "legendFormat": "Tool Exec P95 Latency"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(mcp_tool_execution_duration_seconds_bucket[5m]))",
+          "legendFormat": "Tool Exec P99 Latency"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom"}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "Latency (seconds)",
+            "axisPlacement": "left"
+          },
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Request Volume Over Time",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(mcp_tool_executions_total[5m])) by (method)",
+          "legendFormat": "{{method}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom"}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "Requests per Second",
+            "axisPlacement": "left"
+          },
+          "unit": "reqps"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Error Rate Analysis",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(mcp_auth_requests_total{success=\"False\"}[5m])) / sum(rate(mcp_auth_requests_total[5m])) * 100",
+          "legendFormat": "Auth Error Rate"
+        },
+        {
+          "expr": "sum(rate(mcp_tool_executions_total{success=\"False\"}[5m])) / sum(rate(mcp_tool_executions_total[5m])) * 100",
+          "legendFormat": "Tool Execution Error Rate"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom"}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "Error Rate (%)",
+            "axisPlacement": "left"
+          },
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": 0},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 5}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Average Response Times",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "avg(rate(mcp_auth_request_duration_seconds_sum[5m])) / avg(rate(mcp_auth_request_duration_seconds_count[5m]))",
+          "legendFormat": "Auth Avg Response Time"
+        },
+        {
+          "expr": "avg(rate(mcp_tool_execution_duration_seconds_sum[5m])) / avg(rate(mcp_tool_execution_duration_seconds_count[5m]))",
+          "legendFormat": "Tool Exec Avg Response Time"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom"}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "Response Time (seconds)",
+            "axisPlacement": "left"
+          },
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "Server Performance Dashboard",
+      "type": "table",
+      "targets": [
+        {
+          "expr": "sum(mcp_tool_executions_total) by (server_name)",
+          "legendFormat": "{{server_name}}_total_calls",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "sum(increase(mcp_tool_executions_total[1h])) by (server_name)",
+          "legendFormat": "{{server_name}}_calls_per_hour",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "count(count by (server_name, tool_name)(mcp_tool_executions_total)) by (server_name)",
+          "legendFormat": "{{server_name}}_unique_tools",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 28},
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {"Time": true},
+            "renameByName": {
+              "server_name": "Server",
+              "Value #A": "Total Calls",
+              "Value #B": "Calls/Hour",
+              "Value #C": "Unique Tools"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Tool Usage Rankings",
+      "type": "table",
+      "targets": [
+        {
+          "expr": "sum(mcp_tool_executions_total{method=\"tools/call\"}) by (tool_name)",
+          "legendFormat": "{{tool_name}}",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "sum(increase(mcp_tool_executions_total{method=\"tools/call\"}[1h])) by (tool_name)",
+          "legendFormat": "{{tool_name}}_rate",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 28},
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {"Time": true},
+            "renameByName": {
+              "tool_name": "Tool Name",
+              "Value #A": "Total Calls",
+              "Value #B": "Calls/Hour"
+            }
+          }
+        }
+      ],
+      "options": {
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Total Calls"
+          }
+        ]
+      }
+    },
+    {
+      "id": 13,
+      "title": "MCP Protocol Methods Distribution",
+      "type": "bargauge",
+      "targets": [
+        {
+          "expr": "topk(10, sum(mcp_tool_executions_total{method!=\"tools/call\"}) by (method))",
+          "legendFormat": "{{method}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 36},
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisLabel": "Request Count"
+          },
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "Tool Usage by Call Count",
+      "type": "barchart",
+      "targets": [
+        {
+          "expr": "topk(10, sum(mcp_tool_executions_total{method=\"tools/call\"}) by (tool_name))",
+          "legendFormat": "{{tool_name}}",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 36},
+      "options": {
+        "orientation": "vertical",
+        "xTickLabelRotation": -45,
+        "legend": {
+          "displayMode": "hidden"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisLabel": "Tool Call Count",
+            "axisPlacement": "left"
+          },
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 15,
+      "title": "Client Applications Distribution",
+      "type": "bargauge",
+      "targets": [
+        {
+          "expr": "topk(10, sum(mcp_tool_executions_total) by (client_name))",
+          "legendFormat": "{{client_name}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 36},
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisLabel": "Total Executions"
+          },
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 16,
+      "title": "MCP Protocol Flow Analysis",
+      "type": "table",
+      "targets": [
+        {
+          "expr": "sum(mcp_tool_executions_total{method=\"initialize\"}) by (client_name)",
+          "legendFormat": "{{client_name}}_init",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "sum(mcp_tool_executions_total{method=\"tools/list\"}) by (client_name)",
+          "legendFormat": "{{client_name}}_list",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "sum(mcp_tool_executions_total{method=\"tools/call\"}) by (client_name)",
+          "legendFormat": "{{client_name}}_call",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 44},
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {"Time": true},
+            "renameByName": {
+              "client_name": "Client",
+              "Value #A": "Initialize",
+              "Value #B": "Tools List",
+              "Value #C": "Tool Calls"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "title": "Authentication Methods Distribution",
+      "type": "bargauge",
+      "targets": [
+        {
+          "expr": "sum(mcp_auth_requests_total) by (method)",
+          "legendFormat": "{{method}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 44},
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisLabel": "Request Count"
+          },
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 18,
+      "title": "Request Size Distribution",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(mcp_tool_executions_total[5m]))",
+          "legendFormat": "P50 Request Size"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(mcp_tool_executions_total[5m]))",
+          "legendFormat": "P95 Request Size"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(mcp_tool_executions_total[5m]))",
+          "legendFormat": "P99 Request Size"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 52},
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom"}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "Request Size (bytes)",
+            "axisPlacement": "left"
+          },
+          "unit": "bytes"
+        }
+      }
+    },
+    {
+      "id": 19,
+      "title": "Session Activity by Client",
+      "type": "bargauge",
+      "targets": [
+        {
+          "expr": "topk(15, sum(rate(mcp_tool_executions_total[5m])) by (client_name))",
+          "legendFormat": "{{client_name}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 52},
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "continuous-GrYlRd"},
+          "custom": {
+            "axisLabel": "Activity Rate (req/s)"
+          },
+          "unit": "reqps"
+        }
+      }
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "server",
+        "type": "query",
+        "query": "label_values(mcp_auth_requests_total, server)",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*"
+      },
+      {
+        "name": "client",
+        "type": "query",
+        "query": "label_values(mcp_tool_executions_total, client_name)",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*"
+      },
+      {
+        "name": "method",
+        "type": "query",
+        "query": "label_values(mcp_tool_executions_total, method)",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*"
+      }
+    ]
+  },
+  "schemaVersion": 16,
+  "version": 1
+}

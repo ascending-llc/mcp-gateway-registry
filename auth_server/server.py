@@ -30,6 +30,9 @@ import urllib.parse
 import httpx
 from string import Template
 
+# Import metrics middleware
+from metrics_middleware import add_auth_metrics_middleware
+
 # Import provider factory
 from providers.factory import get_auth_provider
 
@@ -407,6 +410,9 @@ app = FastAPI(
     description="Authentication server for validating JWT tokens against Amazon Cognito with header-based configuration",
     version="0.1.0"
 )
+
+# Add metrics collection middleware
+add_auth_metrics_middleware(app)
 
 class TokenValidationResponse(BaseModel):
     """Response model for token validation"""
