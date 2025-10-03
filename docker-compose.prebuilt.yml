@@ -18,6 +18,9 @@ services:
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - SRE_GATEWAY_AUTH_TOKEN=${SRE_GATEWAY_AUTH_TOKEN}
       - ATLASSIAN_AUTH_TOKEN=${ATLASSIAN_AUTH_TOKEN}
+      - METRICS_SERVICE_URL=http://metrics-service:8890
+      - METRICS_API_KEY=${METRICS_API_KEY_REGISTRY}
+      - METRICS_API_KEY_NGINX=${METRICS_API_KEY_REGISTRY}
       # Keycloak configuration
       - AUTH_PROVIDER=${AUTH_PROVIDER:-cognito}
       - KEYCLOAK_ENABLED=${KEYCLOAK_ENABLED:-false}
@@ -37,7 +40,38 @@ services:
       - /opt/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
     depends_on:
       - auth-server
+      - metrics-service
     restart: unless-stopped
+
+  # Metrics Collection Service - using pre-built image
+  metrics-service:
+    image: ${DOCKERHUB_ORG:-mcpgateway}/metrics-service:${METRICS_VERSION:-latest}
+    environment:
+      - METRICS_SERVICE_PORT=8890
+      - METRICS_SERVICE_HOST=0.0.0.0
+      - SQLITE_DB_PATH=/var/lib/sqlite/metrics.db
+      - METRICS_RETENTION_DAYS=90
+      - METRICS_API_KEY_AUTH=${METRICS_API_KEY_AUTH_SERVER}
+      - METRICS_API_KEY_REGISTRY=${METRICS_API_KEY_REGISTRY}
+      - METRICS_API_KEY_MCPGW=${METRICS_API_KEY_MCPGW_SERVER}
+      - OTEL_SERVICE_NAME=mcp-metrics-service
+      - OTEL_PROMETHEUS_ENABLED=true
+      - OTEL_PROMETHEUS_PORT=9465
+      - METRICS_RATE_LIMIT=1000
+    ports:
+      - "8890:8890"
+      - "9465:9465"  # Prometheus metrics endpoint
+    volumes:
+      - metrics-db-data:/var/lib/sqlite
+      - /var/log/mcp-gateway:/app/logs
+    depends_on:
+      - metrics-db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8890/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # Auth service (separate and scalable) - using pre-built image
   auth-server:
@@ -54,6 +88,8 @@ services:
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - METRICS_SERVICE_URL=http://metrics-service:8890
+      - METRICS_API_KEY=${METRICS_API_KEY_AUTH_SERVER}
       # Keycloak configuration
       - AUTH_PROVIDER=${AUTH_PROVIDER:-cognito}  # 'cognito' or 'keycloak'
       - KEYCLOAK_ENABLED=${KEYCLOAK_ENABLED:-false}
@@ -120,9 +156,9 @@ services:
       - "8002:8002"
     restart: unless-stopped
 
-  # Atlassian MCP Server - using existing external pre-built image
+  # Atlassian MCP Server - using mirrored pre-built image
   atlassian-server:
-    image: ghcr.io/sooperset/mcp-atlassian:latest
+    image: ${DOCKERHUB_ORG:-mcpgateway}/atlassian:${ATLASSIAN_VERSION:-latest}
     environment:
       - ATLASSIAN_OAUTH_ENABLE=true
       - MCP_VERY_VERBOSE=true
@@ -134,9 +170,55 @@ services:
     command: --transport streamable-http --port 8005
     restart: unless-stopped
 
-  # PostgreSQL database for Keycloak - external service, no change
+  # SQLite container for metrics database - using mirrored pre-built image
+  metrics-db:
+    image: ${DOCKERHUB_ORG:-mcpgateway}/alpine:${ALPINE_VERSION:-latest}
+    volumes:
+      - metrics-db-data:/var/lib/sqlite
+    command: ["sh", "-c", "apk add --no-cache sqlite && mkdir -p /var/lib/sqlite && sqlite3 /var/lib/sqlite/metrics.db 'CREATE TABLE IF NOT EXISTS _health (id INTEGER);' && tail -f /dev/null"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "sqlite3", "/var/lib/sqlite/metrics.db", ".tables"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Prometheus for metrics collection - using mirrored pre-built image
+  prometheus:
+    image: ${DOCKERHUB_ORG:-mcpgateway}/prometheus:${PROMETHEUS_VERSION:-latest}
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+
+  # Grafana for metrics visualization - using mirrored pre-built image
+  grafana:
+    image: ${DOCKERHUB_ORG:-mcpgateway}/grafana:${GRAFANA_VERSION:-latest}
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./config/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  # PostgreSQL database for Keycloak - using mirrored pre-built image
   keycloak-db:
-    image: postgres:16-alpine
+    image: ${DOCKERHUB_ORG:-mcpgateway}/postgres:${POSTGRES_VERSION:-latest}
     environment:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
@@ -150,9 +232,9 @@ services:
       timeout: 5s
       retries: 5
 
-  # Keycloak Identity Provider - external service, no change
+  # Keycloak Identity Provider - using mirrored pre-built image
   keycloak:
-    image: quay.io/keycloak/keycloak:25.0
+    image: ${DOCKERHUB_ORG:-mcpgateway}/keycloak:${KEYCLOAK_VERSION:-latest}
     command: start-dev  # Use 'start' for production with proper SSL
     environment:
       # Database configuration
@@ -198,3 +280,6 @@ services:
 volumes:
   ssl_data:
   keycloak_db_data:
+  metrics-db-data:
+  prometheus-data:
+  grafana-data:

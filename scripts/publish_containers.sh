@@ -43,6 +43,17 @@ declare -a COMPONENTS=(
     "realserverfaketools-server:.:./docker/Dockerfile.mcp-server"
     "fininfo-server:.:./docker/Dockerfile.mcp-server"
     "mcpgw-server:.:./docker/Dockerfile.mcp-server"
+    "metrics-service:.:./metrics-service/Dockerfile"
+)
+
+# External images to mirror (pull from source and push to our registries)
+declare -a EXTERNAL_IMAGES=(
+    "atlassian:ghcr.io/sooperset/mcp-atlassian:latest"
+    "postgres:postgres:16-alpine"
+    "prometheus:prom/prometheus:latest"
+    "grafana:grafana/grafana:latest"
+    "keycloak:quay.io/keycloak/keycloak:25.0"
+    "alpine:alpine:latest"
 )
 
 # Map component names to actual server directory paths
@@ -269,6 +280,84 @@ build_and_push_component() {
     fi
 }
 
+# Function to mirror external images
+mirror_external_image() {
+    local image_info=$1
+    local push_dockerhub=$2
+    local push_ghcr=$3
+
+    IFS=':' read -r name source_image <<< "$image_info"
+
+    print_color "$BLUE" "🔄 Mirroring $name from $source_image..."
+
+    # Pull the source image
+    print_color "$YELLOW" "  Pulling: $source_image"
+    if ! docker pull "$source_image"; then
+        print_color "$RED" "❌ Failed to pull $source_image"
+        return 1
+    fi
+
+    # Tag and push to registries
+    if [ "$push_dockerhub" = true ]; then
+        if [ -n "$DOCKERHUB_ORG" ]; then
+            dockerhub_target="$DOCKERHUB_ORG/$name:latest"
+        else
+            dockerhub_target="$DOCKERHUB_USERNAME/$name:latest"
+        fi
+
+        print_color "$YELLOW" "  Tagging: $dockerhub_target"
+        docker tag "$source_image" "$dockerhub_target"
+
+        print_color "$YELLOW" "  Pushing: $dockerhub_target"
+        if ! docker push "$dockerhub_target"; then
+            print_color "$RED" "❌ Failed to push to Docker Hub"
+            return 1
+        fi
+
+        # Also tag with version if not latest
+        if [ "$VERSION" != "latest" ]; then
+            if [ -n "$DOCKERHUB_ORG" ]; then
+                dockerhub_version_target="$DOCKERHUB_ORG/$name:$VERSION"
+            else
+                dockerhub_version_target="$DOCKERHUB_USERNAME/$name:$VERSION"
+            fi
+            docker tag "$source_image" "$dockerhub_version_target"
+            docker push "$dockerhub_version_target"
+        fi
+    fi
+
+    if [ "$push_ghcr" = true ]; then
+        if [ -n "$GITHUB_ORG" ]; then
+            ghcr_target="$GITHUB_REGISTRY/$GITHUB_ORG/mcp-$name:latest"
+        else
+            ghcr_target="$GITHUB_REGISTRY/$GITHUB_USERNAME/mcp-$name:latest"
+        fi
+
+        print_color "$YELLOW" "  Tagging: $ghcr_target"
+        docker tag "$source_image" "$ghcr_target"
+
+        print_color "$YELLOW" "  Pushing: $ghcr_target"
+        if ! docker push "$ghcr_target"; then
+            print_color "$RED" "❌ Failed to push to GHCR"
+            return 1
+        fi
+
+        # Also tag with version if not latest
+        if [ "$VERSION" != "latest" ]; then
+            if [ -n "$GITHUB_ORG" ]; then
+                ghcr_version_target="$GITHUB_REGISTRY/$GITHUB_ORG/mcp-$name:$VERSION"
+            else
+                ghcr_version_target="$GITHUB_REGISTRY/$GITHUB_USERNAME/mcp-$name:$VERSION"
+            fi
+            docker tag "$source_image" "$ghcr_version_target"
+            docker push "$ghcr_version_target"
+        fi
+    fi
+
+    print_color "$GREEN" "✅ Successfully mirrored $name"
+    return 0
+}
+
 # Function to display usage
 usage() {
     cat << EOF
@@ -281,7 +370,8 @@ OPTIONS:
     -g, --ghcr          Push to GitHub Container Registry (requires GITHUB_TOKEN)
     -v, --version       Version tag (default: latest)
     -p, --platforms     Platforms to build for (note: only current platform supported without buildx)
-    -c, --component     Build specific component only (registry, auth-server, nginx-proxy, currenttime-server, realserverfaketools)
+    -c, --component     Build specific component only (registry, auth-server, nginx-proxy, currenttime-server, realserverfaketools, metrics-service)
+    -s, --skip-mirror   Skip mirroring external images (by default, external images ARE mirrored)
     -l, --local         Build locally without pushing (for testing)
     -h, --help          Display this help message
 
@@ -296,14 +386,17 @@ ENVIRONMENT VARIABLES:
     PLATFORMS           Build platforms (note: only current platform supported without buildx)
 
 EXAMPLES:
-    # Build and push to both registries
+    # Build and push everything to both registries (includes external images by default)
     $0 --dockerhub --ghcr --version v1.0.0
 
-    # Build and push to Docker Hub only
+    # Build and push to Docker Hub only (includes external images)
     $0 --dockerhub
 
-    # Build specific component
+    # Build specific component only (skips external images)
     $0 --dockerhub --component registry
+
+    # Build and push WITHOUT mirroring external images
+    $0 --dockerhub --skip-mirror
 
     # Build locally for testing (no push)
     $0 --local
@@ -318,6 +411,7 @@ EOF
 PUSH_DOCKERHUB=false
 PUSH_GHCR=false
 BUILD_LOCAL=false
+MIRROR_EXTERNAL=true  # Default to TRUE - mirror by default
 SPECIFIC_COMPONENT=""
 
 while [[ $# -gt 0 ]]; do
@@ -341,6 +435,10 @@ while [[ $# -gt 0 ]]; do
         -c|--component)
             SPECIFIC_COMPONENT="$2"
             shift 2
+            ;;
+        -s|--skip-mirror)
+            MIRROR_EXTERNAL=false
+            shift
             ;;
         -l|--local)
             BUILD_LOCAL=true
@@ -436,6 +534,25 @@ for component_info in "${COMPONENTS[@]}"; do
     echo ""
 done
 
+# Mirror external images if requested (skip if building specific component)
+if [ "$MIRROR_EXTERNAL" = true ] && [ -z "$SPECIFIC_COMPONENT" ]; then
+    print_header "Mirroring External Container Images"
+
+    for image_info in "${EXTERNAL_IMAGES[@]}"; do
+        image_name=$(echo "$image_info" | cut -d':' -f1)
+
+        print_color "$BLUE" "Mirroring $image_name..."
+
+        if mirror_external_image "$image_info" "$PUSH_DOCKERHUB" "$PUSH_GHCR"; then
+            successful_components+=("$image_name (mirrored)")
+        else
+            failed_components+=("$image_name (mirrored)")
+        fi
+
+        echo ""
+    done
+fi
+
 # Summary
 print_header "Build Summary"
 
@@ -471,6 +588,20 @@ if [ "$PUSH_DOCKERHUB" = true ]; then
             print_color "$YELLOW" "  docker pull $DOCKERHUB_USERNAME/$component_name:$VERSION"
         fi
     done
+
+    # Show mirrored external images
+    if [ "$MIRROR_EXTERNAL" = true ]; then
+        print_color "$BLUE" ""
+        print_color "$BLUE" "Mirrored External Images:"
+        for image_info in "${EXTERNAL_IMAGES[@]}"; do
+            image_name=$(echo "$image_info" | cut -d':' -f1)
+            if [ -n "$DOCKERHUB_ORG" ]; then
+                print_color "$YELLOW" "  docker pull $DOCKERHUB_ORG/$image_name:latest"
+            else
+                print_color "$YELLOW" "  docker pull $DOCKERHUB_USERNAME/$image_name:latest"
+            fi
+        done
+    fi
 fi
 
 if [ "$PUSH_GHCR" = true ]; then
@@ -487,4 +618,18 @@ if [ "$PUSH_GHCR" = true ]; then
             print_color "$YELLOW" "  docker pull $GITHUB_REGISTRY/$GITHUB_USERNAME/mcp-$component_name:$VERSION"
         fi
     done
+
+    # Show mirrored external images
+    if [ "$MIRROR_EXTERNAL" = true ]; then
+        print_color "$BLUE" ""
+        print_color "$BLUE" "Mirrored External Images:"
+        for image_info in "${EXTERNAL_IMAGES[@]}"; do
+            image_name=$(echo "$image_info" | cut -d':' -f1)
+            if [ -n "$GITHUB_ORG" ]; then
+                print_color "$YELLOW" "  docker pull $GITHUB_REGISTRY/$GITHUB_ORG/mcp-$image_name:latest"
+            else
+                print_color "$YELLOW" "  docker pull $GITHUB_REGISTRY/$GITHUB_USERNAME/mcp-$image_name:latest"
+            fi
+        done
+    fi
 fi
