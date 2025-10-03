@@ -82,6 +82,7 @@ The **MCP Gateway & Registry** is an enterprise-ready platform that centralizes 
 
 ## What's New
 
+- **🚀 Pre-built Images - Get Running in Under 10 Minutes** - Deploy the complete MCP Gateway solution instantly with pre-built Docker images. No compilation required - just download and run! [Get Started Now](#option-a-pre-built-images-instant-setup) | [macOS Setup Guide](docs/macos-setup-guide.md) | [Pre-built Images Documentation](docs/prebuilt-images.md)
 - **🔐 Keycloak Identity Provider Integration** - Enterprise-grade authentication with individual AI agent audit trails, group-based authorization, and production-ready service account management. [Learn more](docs/keycloak-integration.md)
 - **Real-Time Metrics & Observability** - Comprehensive monitoring via Grafana dashboards with metrics stored in SQLite and exposed through OpenTelemetry (OTEL). Track server health, tool usage, authentication events, and performance metrics in real-time for complete visibility into your MCP infrastructure. [Observability Guide](docs/OBSERVABILITY.md)
 - **Service Management Utility** - New comprehensive script for server lifecycle management with automated verification and testing. [Learn more](docs/service-management.md)
