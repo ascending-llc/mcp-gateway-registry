@@ -25,8 +25,9 @@ WORKDIR /app
 # Copy the application code
 COPY . /app/
 
-# Copy nginx configuration
-COPY docker/nginx_rev_proxy.conf /app/docker/nginx_rev_proxy.conf
+# Copy nginx configurations (both HTTP-only and HTTP+HTTPS versions)
+COPY docker/nginx_rev_proxy_http_only.conf /app/docker/nginx_rev_proxy_http_only.conf
+COPY docker/nginx_rev_proxy_http_and_https.conf /app/docker/nginx_rev_proxy_http_and_https.conf
 
 # Build React frontend
 WORKDIR /app/frontend

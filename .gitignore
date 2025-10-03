@@ -210,6 +210,15 @@ token_refresher.log
 *.keys.yml
 *.keys.yml.encrypted
 
+# SSL certificates and keys - never commit these!
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+/etc/ssl/
+
 # Agent testing
 agents/test_results/
 agents/.env.user

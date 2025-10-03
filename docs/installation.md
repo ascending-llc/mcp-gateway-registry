@@ -103,24 +103,87 @@ open http://localhost:7860
 
 ### HTTPS Configuration
 
-For production deployments with SSL:
+By default, MCP Gateway runs on HTTP (port 80). To enable HTTPS for production deployments:
 
-1. **Prepare SSL Certificates**
-   ```bash
-   sudo mkdir -p /home/ubuntu/ssl_data/{certs,private}
-   # Copy certificate files:
-   # - fullchain.pem → /home/ubuntu/ssl_data/certs/
-   # - privkey.pem → /home/ubuntu/ssl_data/private/
-   ```
+#### 1. Obtain SSL Certificates
 
-2. **Configure Security Group**
-   - Enable TCP port 443 for HTTPS access
-   - Restrict access to authorized IP ranges
+**Option A: Let's Encrypt (Recommended)**
+```bash
+# Install certbot
+sudo apt-get update
+sudo apt-get install -y certbot
 
-3. **Deploy with HTTPS**
-   ```bash
-   ./build_and_run.sh  # Automatically detects SSL certificates
-   ```
+# Get certificate (requires domain and port 80 accessible)
+sudo certbot certonly --standalone -d your-domain.com
+```
+
+**Option B: Commercial CA**
+Purchase SSL certificate from a trusted Certificate Authority.
+
+#### 2. Mount Certificates to Container
+
+**For docker-compose deployment**, add volume mounts to `docker-compose.yml`:
+
+```yaml
+services:
+  registry:
+    volumes:
+      # Add these lines:
+      - /etc/letsencrypt/live/your-domain/fullchain.pem:/etc/ssl/certs/fullchain.pem:ro
+      - /etc/letsencrypt/live/your-domain/privkey.pem:/etc/ssl/private/privkey.pem:ro
+```
+
+**For docker run**, add volume flags:
+```bash
+docker run -d \
+  -v /etc/letsencrypt/live/your-domain/fullchain.pem:/etc/ssl/certs/fullchain.pem:ro \
+  -v /etc/letsencrypt/live/your-domain/privkey.pem:/etc/ssl/private/privkey.pem:ro \
+  -p 80:80 -p 443:443 \
+  mcpgateway/registry:latest
+```
+
+#### 3. Configure Security Group
+
+- Enable TCP port 443 for HTTPS access
+- Restrict access to authorized IP ranges
+- Keep port 80 open for HTTP and Let's Encrypt renewals
+
+#### 4. Deploy and Verify
+
+```bash
+# Start/restart the services
+./build_and_run.sh
+
+# Check logs for SSL certificate detection
+docker-compose logs registry | grep -i ssl
+
+# Expected output:
+# "SSL certificates found - HTTPS enabled"
+# "HTTPS server will be available on port 443"
+
+# Test HTTPS access
+curl https://your-domain.com
+```
+
+#### Certificate Renewal (Let's Encrypt)
+
+Let's Encrypt certificates expire after 90 days. Set up automatic renewal:
+
+```bash
+# Add to crontab
+sudo crontab -e
+
+# Add this line (checks twice daily, renews if needed)
+0 0,12 * * * certbot renew --quiet && docker-compose restart registry
+```
+
+#### Troubleshooting
+
+**HTTPS not working?**
+- Check certificate files exist at the mounted paths
+- Check container logs: `docker-compose logs registry | grep -i ssl`
+- Verify port 443 is accessible: `sudo netstat -tlnp | grep 443`
+- Ensure certificates are from a trusted CA
 
 ## Installation on Amazon EKS
 

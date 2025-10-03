@@ -39,18 +39,26 @@ class TransportType(str, Enum):
 
 class RegistryConstants(BaseModel):
     """Registry configuration constants."""
-    
+
     class Config:
         """Pydantic config."""
         frozen = True
-    
+
     # Health check settings
     DEFAULT_HEALTH_CHECK_TIMEOUT: int = 30
     HEALTH_CHECK_INTERVAL: int = 30
-    
+
+    # SSL certificate paths
+    SSL_CERT_PATH: str = "/etc/ssl/certs/fullchain.pem"
+    SSL_KEY_PATH: str = "/etc/ssl/private/privkey.pem"
+
     # Nginx settings
     NGINX_CONFIG_PATH: str = "/etc/nginx/conf.d/nginx_rev_proxy.conf"
-    
+    NGINX_TEMPLATE_HTTP_ONLY: str = "/app/docker/nginx_rev_proxy_http_only.conf"
+    NGINX_TEMPLATE_HTTP_AND_HTTPS: str = "/app/docker/nginx_rev_proxy_http_and_https.conf"
+    NGINX_TEMPLATE_HTTP_ONLY_LOCAL: str = "docker/nginx_rev_proxy_http_only.conf"
+    NGINX_TEMPLATE_HTTP_AND_HTTPS_LOCAL: str = "docker/nginx_rev_proxy_http_and_https.conf"
+
     # Server settings
     DEFAULT_TRANSPORT: str = TransportType.STREAMABLE_HTTP
     SUPPORTED_TRANSPORTS: List[str] = [TransportType.STREAMABLE_HTTP, TransportType.SSE]

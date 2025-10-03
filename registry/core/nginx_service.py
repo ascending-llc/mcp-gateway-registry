@@ -6,22 +6,34 @@ from typing import Dict, Any, Optional
 from urllib.parse import urlparse
 
 from .config import settings
-from registry.constants import HealthStatus
+from registry.constants import HealthStatus, REGISTRY_CONSTANTS
 
 logger = logging.getLogger(__name__)
 
 
 class NginxConfigService:
     """Service for generating Nginx configuration for registered servers."""
-    
+
     def __init__(self):
-        # Use the docker template file as the source template
-        # Handle both container and local development paths
-        if Path("/app/docker/nginx_rev_proxy.conf").exists():
-            self.nginx_template_path = Path("/app/docker/nginx_rev_proxy.conf")
+        # Determine which template to use based on SSL certificate availability
+        ssl_cert_path = Path(REGISTRY_CONSTANTS.SSL_CERT_PATH)
+        ssl_key_path = Path(REGISTRY_CONSTANTS.SSL_KEY_PATH)
+
+        # Check if SSL certificates exist
+        if ssl_cert_path.exists() and ssl_key_path.exists():
+            # Use HTTP + HTTPS template
+            if Path(REGISTRY_CONSTANTS.NGINX_TEMPLATE_HTTP_AND_HTTPS).exists():
+                self.nginx_template_path = Path(REGISTRY_CONSTANTS.NGINX_TEMPLATE_HTTP_AND_HTTPS)
+            else:
+                # Fallback for local development
+                self.nginx_template_path = Path(REGISTRY_CONSTANTS.NGINX_TEMPLATE_HTTP_AND_HTTPS_LOCAL)
         else:
-            # Fallback for local development
-            self.nginx_template_path = Path("docker/nginx_rev_proxy.conf")
+            # Use HTTP-only template
+            if Path(REGISTRY_CONSTANTS.NGINX_TEMPLATE_HTTP_ONLY).exists():
+                self.nginx_template_path = Path(REGISTRY_CONSTANTS.NGINX_TEMPLATE_HTTP_ONLY)
+            else:
+                # Fallback for local development
+                self.nginx_template_path = Path(REGISTRY_CONSTANTS.NGINX_TEMPLATE_HTTP_ONLY_LOCAL)
         
     async def get_ec2_public_dns(self) -> str:
         """Fetch EC2 public DNS from metadata service."""
@@ -159,6 +171,14 @@ class NginxConfigService:
         """Reload Nginx configuration (if running in appropriate environment)."""
         try:
             import subprocess
+
+            # Test the configuration first before reloading
+            test_result = subprocess.run(["nginx", "-t"], capture_output=True, text=True)
+            if test_result.returncode != 0:
+                logger.error(f"Nginx configuration test failed: {test_result.stderr}")
+                logger.info("Skipping Nginx reload due to configuration errors")
+                return False
+
             result = subprocess.run(["nginx", "-s", "reload"], capture_output=True, text=True)
             if result.returncode == 0:
                 logger.info("Nginx configuration reloaded successfully")

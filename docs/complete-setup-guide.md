@@ -535,6 +535,20 @@ uv run python cli/mcp_client.py call --tool intelligent_tool_finder --args '{"na
 # This will automatically find and route to the correct server
 ```
 
+### Refreshing Credentials
+
+If your access tokens have expired or you need to regenerate credentials, you can use the credential generation script:
+
+```bash
+# Navigate to project root directory
+cd ~/workspace/mcp-gateway-registry
+
+# Regenerate all credentials
+./credentials-provider/generate_creds.sh
+```
+
+**Note**: You may see errors related to "egress token" during credential generation. These errors can be safely ignored as they refer to external identity providers (IdPs) that are not yet configured. The local Keycloak credentials will be generated successfully.
+
 ### Test Intelligent Agent Demo
 
 ```bash

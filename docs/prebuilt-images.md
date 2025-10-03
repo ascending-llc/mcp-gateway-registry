@@ -49,3 +49,55 @@ docker pull grafana/grafana:latest
 docker pull postgres:16-alpine
 docker pull quay.io/keycloak/keycloak:25.0
 ```
+
+## HTTPS Configuration
+
+By default, pre-built images run on HTTP (port 80) only. To enable HTTPS (port 443):
+
+### Option 1: Let's Encrypt Certificates
+
+```bash
+# Install certbot
+sudo apt-get update && sudo apt-get install -y certbot
+
+# Obtain certificate (requires domain and port 80)
+sudo certbot certonly --standalone -d your-domain.com
+
+# Certificate files will be at:
+# - /etc/letsencrypt/live/your-domain/fullchain.pem
+# - /etc/letsencrypt/live/your-domain/privkey.pem
+```
+
+### Option 2: Commercial CA Certificates
+
+Purchase SSL certificates from a trusted Certificate Authority and place them at:
+- `/path/to/fullchain.pem` (certificate chain)
+- `/path/to/privkey.pem` (private key)
+
+### Mount Certificates
+
+Add volume mounts to `docker-compose.prebuilt.yml`:
+
+```yaml
+services:
+  registry:
+    image: mcpgateway/registry:latest
+    volumes:
+      # Add SSL certificate mounts:
+      - /etc/letsencrypt/live/your-domain/fullchain.pem:/etc/ssl/certs/fullchain.pem:ro
+      - /etc/letsencrypt/live/your-domain/privkey.pem:/etc/ssl/private/privkey.pem:ro
+      # ... other volumes ...
+```
+
+Then restart:
+
+```bash
+./build_and_run.sh --prebuilt
+```
+
+The registry container will detect the certificates and enable HTTPS automatically. Check logs:
+
+```bash
+docker-compose logs registry | grep -i ssl
+# Expected: "SSL certificates found - HTTPS enabled"
+```

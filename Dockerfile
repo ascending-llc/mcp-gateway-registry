@@ -25,9 +25,9 @@ WORKDIR /app
 # Copy the application code
 COPY . /app/
 
-# Copy the custom Nginx configuration (will be moved by entrypoint)
-# Note: We copy it here so it's part of the image layer
-COPY docker/nginx_rev_proxy.conf /app/docker/nginx_rev_proxy.conf
+# Copy nginx configurations (both HTTP-only and HTTP+HTTPS versions)
+COPY docker/nginx_rev_proxy_http_only.conf /app/docker/nginx_rev_proxy_http_only.conf
+COPY docker/nginx_rev_proxy_http_and_https.conf /app/docker/nginx_rev_proxy_http_and_https.conf
 
 # Make the entrypoint script executable
 COPY docker/entrypoint.sh /app/docker/entrypoint.sh
