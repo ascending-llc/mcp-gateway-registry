@@ -434,16 +434,13 @@ The following GitHub issues represent our current development roadmap and planne
 
 **Major Features**
 
-- **[#38 - Usage Metrics and Analytics System](https://github.com/agentic-community/mcp-gateway-registry/issues/38)** 🚧 **IN PROGRESS**
-  Implement comprehensive usage tracking across user and agent identities, with metrics emission from auth server, registry, and intelligent tool finder.
-
 - **[#37 - Multi-Level Registry Support](https://github.com/agentic-community/mcp-gateway-registry/issues/37)** 🚧 **IN PROGRESS**
   Add support for federated registries that can connect to other registries, enabling hierarchical MCP infrastructure with cross-IdP authentication.
 
-- **[#132 - Registry UI: Add MCP Configuration Generator](https://github.com/agentic-community/mcp-gateway-registry/issues/132)**
+- **[#132 - Registry UI: Add MCP Configuration Generator](https://github.com/agentic-community/mcp-gateway-registry/issues/132)** 🚧 **IN PROGRESS**
   Add copy-paste MCP configuration generator to Registry UI for seamless integration with AI coding assistants (VS Code, Cursor, Claude Code).
 
-- **[#129 - Virtual MCP Server Support - Dynamic Tool Aggregation and Intelligent Routing](https://github.com/agentic-community/mcp-gateway-registry/issues/129)**
+- **[#129 - Virtual MCP Server Support - Dynamic Tool Aggregation and Intelligent Routing](https://github.com/agentic-community/mcp-gateway-registry/issues/129)** 🚧 **IN PROGRESS**
   Enable logical grouping of tools from multiple backend servers with intelligent routing using Lua/JavaScript scripting. Provides purpose-built virtual servers that abstract away backend complexity.
 
 - **[#121 - Migrate to OpenSearch for Server Storage and Vector Search](https://github.com/agentic-community/mcp-gateway-registry/issues/121)**
@@ -452,14 +449,11 @@ The following GitHub issues represent our current development roadmap and planne
 - **[#118 - Agent-as-Tool Integration: Dynamic MCP Server Generation](https://github.com/agentic-community/mcp-gateway-registry/issues/118)**
   Convert existing AI agents into MCP servers dynamically, enabling legacy agent ecosystems to participate in the MCP protocol without code rewrites.
 
-- **[#111 - Standalone Metrics Collection Service](https://github.com/agentic-community/mcp-gateway-registry/issues/111)**
-  Implement dedicated metrics collection service for comprehensive monitoring and analytics across all MCP Gateway components.
-
 - **[#98 - Complete GDPR and SOX Compliance Implementation](https://github.com/agentic-community/mcp-gateway-registry/issues/98)**
   Full compliance implementation for GDPR and SOX requirements, including data retention policies, audit trails, and privacy controls.
 
 - **[#39 - Tool Popularity Scoring and Rating System](https://github.com/agentic-community/mcp-gateway-registry/issues/39)**
-  Enhance tool discovery with popularity scores and star ratings based on usage patterns and agent feedback. *Depends on #38.*
+  Enhance tool discovery with popularity scores and star ratings based on usage patterns and agent feedback.
 
 **Authentication & Identity**
 
@@ -475,6 +469,12 @@ The following GitHub issues represent our current development roadmap and planne
   Optimize Docker build times and runtime performance for faster development and deployment cycles.
 
 **Completed**
+
+- **[#111 - Standalone Metrics Collection Service](https://github.com/agentic-community/mcp-gateway-registry/issues/111)** ✅ **COMPLETED**
+  Dedicated metrics collection service implemented for comprehensive monitoring and analytics across all MCP Gateway components. [Documentation](docs/OBSERVABILITY.md)
+
+- **[#38 - Usage Metrics and Analytics System](https://github.com/agentic-community/mcp-gateway-registry/issues/38)** ✅ **COMPLETED**
+  Comprehensive usage tracking implemented across user and agent identities, with metrics emission from auth server, registry, and intelligent tool finder. [Documentation](docs/OBSERVABILITY.md)
 
 - **[#120 - CLI Tool for MCP Server Registration and Health Validation](https://github.com/agentic-community/mcp-gateway-registry/issues/120)** ✅ **COMPLETED**
   Command-line interface for automated server registration, health checks, and registry management. Streamlines DevOps workflows and CI/CD integration. [Documentation](docs/service-management.md)
