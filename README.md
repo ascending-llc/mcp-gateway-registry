@@ -434,6 +434,15 @@ The following GitHub issues represent our current development roadmap and planne
 
 **Major Features**
 
+- **[#160 - Documentation: Add Amazon Bedrock AgentCore Gateway integration example](https://github.com/agentic-community/mcp-gateway-registry/issues/160)** 🚧 **IN PROGRESS**
+  Create comprehensive documentation and examples for integrating Amazon Bedrock AgentCore Gateway as an MCP server with egress authentication support.
+
+- **[#159 - Add scope management: create/delete Keycloak groups with scope configuration](https://github.com/agentic-community/mcp-gateway-registry/issues/159)** 🚧 **IN PROGRESS**
+  Add dynamic scope management functionality to create/delete Keycloak groups with corresponding scope configurations through the service management CLI.
+
+- **[#158 - Add GitLab OAuth Provider Support](https://github.com/agentic-community/mcp-gateway-registry/issues/158)** 🚧 **IN PROGRESS**
+  Extend OAuth integration to support GitLab as an external service provider for repository and CI/CD operations.
+
 - **[#37 - Multi-Level Registry Support](https://github.com/agentic-community/mcp-gateway-registry/issues/37)** 🚧 **IN PROGRESS**
   Add support for federated registries that can connect to other registries, enabling hierarchical MCP infrastructure with cross-IdP authentication.
 
