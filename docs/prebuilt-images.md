@@ -8,6 +8,7 @@ When using the `--prebuilt` option with `build_and_run.sh`, the following pre-bu
 |---------|-------|-------------|-------------|------|
 | Registry | `mcpgateway/registry:latest` | latest | Main registry service with nginx, SSL, FAISS, and models | 80, 443, 7860 |
 | Auth Server | `mcpgateway/auth-server:latest` | latest | Authentication service supporting Cognito, GitHub, Google, and Keycloak | 8888 |
+| Metrics Service | `mcpgateway/metrics-service:latest` | latest | Metrics collection service with SQLite storage and OTEL support | 8890, 9465 |
 | Current Time Server | `mcpgateway/currenttime-server:latest` | latest | MCP server providing current time functionality | 8000 |
 | Financial Info Server | `mcpgateway/fininfo-server:latest` | latest | MCP server for financial information | 8001 |
 | MCPGW Server | `mcpgateway/mcpgw-server:latest` | latest | MCP Gateway server for service management | 8003 |
@@ -15,9 +16,14 @@ When using the `--prebuilt` option with `build_and_run.sh`, the following pre-bu
 
 ## External Images
 
+The following external images are pulled from their original sources:
+
 | Service | Image | Source | Description | Port |
 |---------|-------|--------|-------------|------|
 | Atlassian Server | `ghcr.io/sooperset/mcp-atlassian:latest` | GitHub Container Registry | Atlassian (Jira/Confluence) integration MCP server | 8005 |
+| Alpine Linux | `alpine:latest` | Docker Hub Official | Lightweight Linux for metrics database initialization | N/A |
+| Prometheus | `prom/prometheus:latest` | Docker Hub Official | Metrics collection and time-series database | 9090 |
+| Grafana | `grafana/grafana:latest` | Docker Hub Official | Metrics visualization and dashboards | 3000 |
 | PostgreSQL | `postgres:16-alpine` | Docker Hub Official | Database for Keycloak | 5432 (internal) |
 | Keycloak | `quay.io/keycloak/keycloak:25.0` | Quay.io | Identity and access management service | 8080 |
 
@@ -29,6 +35,7 @@ To manually pull these images for Kubernetes deployment or offline use:
 # MCP Gateway images from Docker Hub
 docker pull mcpgateway/registry:latest
 docker pull mcpgateway/auth-server:latest
+docker pull mcpgateway/metrics-service:latest
 docker pull mcpgateway/currenttime-server:latest
 docker pull mcpgateway/fininfo-server:latest
 docker pull mcpgateway/mcpgw-server:latest
@@ -36,6 +43,9 @@ docker pull mcpgateway/realserverfaketools-server:latest
 
 # External images
 docker pull ghcr.io/sooperset/mcp-atlassian:latest
+docker pull alpine:latest
+docker pull prom/prometheus:latest
+docker pull grafana/grafana:latest
 docker pull postgres:16-alpine
 docker pull quay.io/keycloak/keycloak:25.0
 ```
