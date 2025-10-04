@@ -19,7 +19,7 @@ The `docker-compose.yml` has been updated to map the secrets file:
 
 ```yaml
 volumes:
-  - /opt/mcp-gateway/secrets/.keys.yml:/app/fininfo/.keys.yml
+  - ${HOME}/mcp-gateway/secrets/.keys.yml:/app/fininfo/.keys.yml
 ```
 
 ### 2. Create Secrets File
@@ -27,9 +27,9 @@ volumes:
 Create the secrets file on your host system:
 
 ```bash
-sudo mkdir -p /opt/mcp-gateway/secrets
-sudo touch /opt/mcp-gateway/secrets/.keys.yml
-sudo chmod 600 /opt/mcp-gateway/secrets/.keys.yml
+mkdir -p ${HOME}/mcp-gateway/secrets
+touch ${HOME}/mcp-gateway/secrets/.keys.yml
+chmod 600 ${HOME}/mcp-gateway/secrets/.keys.yml
 ```
 
 ### 3. Configure Client API Keys

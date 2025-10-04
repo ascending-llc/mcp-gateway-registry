@@ -235,11 +235,9 @@ AWS_REGION=us-east-1
 
 2. **Create required directories**:
    ```bash
-   sudo mkdir -p /opt/mcp-gateway/servers
-   sudo cp -r registry/servers /opt/mcp-gateway/
-   sudo mkdir -p /opt/mcp-gateway/auth_server
-   sudo cp auth_server/scopes.yml /opt/mcp-gateway/auth_server/scopes.yml
-   sudo mkdir /var/log/mcp-gateway
+   mkdir -p ${HOME}/mcp-gateway/{servers,auth_server,logs}
+   cp -r registry/servers ${HOME}/mcp-gateway/
+   cp auth_server/scopes.yml ${HOME}/mcp-gateway/auth_server/scopes.yml
    ```
 
 3. **Deploy**:

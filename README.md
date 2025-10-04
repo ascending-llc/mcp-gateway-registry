@@ -441,7 +441,7 @@ The following GitHub issues represent our current development roadmap and planne
 - **[#159 - Add scope management: create/delete Keycloak groups with scope configuration](https://github.com/agentic-community/mcp-gateway-registry/issues/159)** 🚧 **IN PROGRESS**
   Add dynamic scope management functionality to create/delete Keycloak groups with corresponding scope configurations through the service management CLI.
 
-- **[#158 - Replace /opt/mcp-gateway with ${HOME}/mcp-gateway to eliminate sudo requirements](https://github.com/agentic-community/mcp-gateway-registry/issues/158)** 🚧 **IN PROGRESS**
+- **[#158 - Replace /opt/mcp-gateway with ${HOME}/mcp-gateway to eliminate sudo requirements](https://github.com/agentic-community/mcp-gateway-registry/issues/158)** ✅ **COMPLETED**
   Improve installation experience by using user home directory instead of /opt, removing the need for sudo privileges during setup.
 
 - **[#37 - Multi-Level Registry Support](https://github.com/agentic-community/mcp-gateway-registry/issues/37)** 🚧 **IN PROGRESS**

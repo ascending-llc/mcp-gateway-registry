@@ -138,13 +138,13 @@ log "Existing services stopped"
 
 # Clean up FAISS index files to force registry to recreate them
 log "Cleaning up FAISS index files..."
-MCPGATEWAY_SERVERS_DIR="/opt/mcp-gateway/servers"
+MCPGATEWAY_SERVERS_DIR="${HOME}/mcp-gateway/servers"
 FAISS_FILES=("service_index.faiss" "service_index_metadata.json")
 
 for file in "${FAISS_FILES[@]}"; do
     file_path="$MCPGATEWAY_SERVERS_DIR/$file"
     if [ -f "$file_path" ]; then
-        sudo rm -f "$file_path"
+        rm -f "$file_path"
         log "Deleted $file_path"
     else
         log "$file not found (already clean)"
@@ -152,11 +152,11 @@ for file in "${FAISS_FILES[@]}"; do
 done
 log "FAISS index cleanup completed"
 
-# Copy JSON files from registry/servers to /opt/mcp-gateway/servers with environment variable substitution
+# Copy JSON files from registry/servers to ${HOME}/mcp-gateway/servers with environment variable substitution
 log "Copying JSON files from registry/servers to $MCPGATEWAY_SERVERS_DIR..."
 if [ -d "registry/servers" ]; then
     # Create the target directory if it doesn't exist
-    sudo mkdir -p "$MCPGATEWAY_SERVERS_DIR"
+    mkdir -p "$MCPGATEWAY_SERVERS_DIR"
     
     # Copy all JSON files with environment variable substitution
     if ls registry/servers/*.json 1> /dev/null 2>&1; then
@@ -170,7 +170,7 @@ if [ -d "registry/servers" ]; then
             log "Processing $filename with environment variable substitution..."
             
             # Use envsubst to substitute environment variables, then copy to target
-            envsubst < "$json_file" | sudo tee "$MCPGATEWAY_SERVERS_DIR/$filename" > /dev/null
+            envsubst < "$json_file" > "$MCPGATEWAY_SERVERS_DIR/$filename"
         done
         log "JSON files copied successfully with environment variable substitution"
         
@@ -187,15 +187,15 @@ else
     log "WARNING: registry/servers directory not found"
 fi
 
-# Copy scopes.yml to /opt/mcp-gateway/auth_server
-AUTH_SERVER_DIR="/opt/mcp-gateway/auth_server"
+# Copy scopes.yml to ${HOME}/mcp-gateway/auth_server
+AUTH_SERVER_DIR="${HOME}/mcp-gateway/auth_server"
 log "Copying scopes.yml to $AUTH_SERVER_DIR..."
 if [ -f "auth_server/scopes.yml" ]; then
     # Create the target directory if it doesn't exist
-    sudo mkdir -p "$AUTH_SERVER_DIR"
-    
+    mkdir -p "$AUTH_SERVER_DIR"
+
     # Copy scopes.yml
-    sudo cp auth_server/scopes.yml "$AUTH_SERVER_DIR/"
+    cp auth_server/scopes.yml "$AUTH_SERVER_DIR/"
     log "scopes.yml copied successfully to $AUTH_SERVER_DIR"
 else
     log "WARNING: auth_server/scopes.yml not found"
@@ -232,9 +232,14 @@ if [ "$USE_PREBUILT" = true ]; then
     docker compose -f "$DOCKER_COMPOSE_FILE" pull || handle_error "Docker Compose pull failed"
     log "Pre-built Docker images pulled successfully"
 else
-    log "Building Docker images..."
-    docker compose -f "$DOCKER_COMPOSE_FILE" build || handle_error "Docker Compose build failed"
-    log "Docker images built successfully"
+    log "Building Docker images with optimization..."
+    # Enable BuildKit for better caching and parallel builds
+    export DOCKER_BUILDKIT=1
+    export COMPOSE_DOCKER_CLI_BUILD=1
+
+    # Build with parallel jobs and build cache
+    docker compose -f "$DOCKER_COMPOSE_FILE" build --parallel --progress=auto || handle_error "Docker Compose build failed"
+    log "Docker images built successfully with optimization"
 fi
 
 # Start metrics service first to generate API keys

@@ -125,7 +125,7 @@ verify_scopes_yml() {
 
     # Check host scopes.yml
     local host_count
-    host_count=$(grep -c "$service_name" /opt/mcp-gateway/auth_server/scopes.yml 2>/dev/null || echo "0")
+    host_count=$(grep -c "$service_name" "${HOME}/mcp-gateway/auth_server/scopes.yml" 2>/dev/null || echo "0")
     # Ensure we only get the last line if multiple lines are returned
     host_count=$(echo "$host_count" | tail -1)
 

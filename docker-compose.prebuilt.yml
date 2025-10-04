@@ -33,11 +33,10 @@ services:
       - "443:443"
       - "7860:7860"
     volumes:
-      - /opt/mcp-gateway/servers:/app/registry/servers
-      - /opt/mcp-gateway/models:/app/registry/models
-      - /opt/ssl:/etc/ssl
-      - /var/log/mcp-gateway:/app/logs
-      - /opt/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
+      - ${HOME}/mcp-gateway/servers:/app/registry/servers
+      - ${HOME}/mcp-gateway/models:/app/registry/models
+      - ${HOME}/mcp-gateway/logs:/app/logs
+      - ${HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
     depends_on:
       - auth-server
       - metrics-service
@@ -63,7 +62,7 @@ services:
       - "9465:9465"  # Prometheus metrics endpoint
     volumes:
       - metrics-db-data:/var/lib/sqlite
-      - /var/log/mcp-gateway:/app/logs
+      - ${HOME}/mcp-gateway/logs:/app/logs
     depends_on:
       - metrics-db
     restart: unless-stopped
@@ -103,8 +102,8 @@ services:
     ports:
       - "8888:8888"
     volumes:
-      - /var/log/mcp-gateway:/app/logs
-      - /opt/mcp-gateway/auth_server/scopes.yml:/app/scopes.yml
+      - ${HOME}/mcp-gateway/logs:/app/logs
+      - ${HOME}/mcp-gateway/auth_server/scopes.yml:/app/scopes.yml
     restart: unless-stopped
 
   # Current Time MCP Server - using pre-built image
@@ -124,7 +123,7 @@ services:
       - PORT=8001
       - SECRET_KEY=${SECRET_KEY}
     volumes:
-      - /opt/mcp-gateway/secrets/fininfo/:/app/fininfo/
+      - ${HOME}/mcp-gateway/secrets/fininfo/:/app/fininfo/
     ports:
       - "8001:8001"
     restart: unless-stopped
@@ -138,9 +137,9 @@ services:
       - REGISTRY_USERNAME=${ADMIN_USER:-admin}
       - REGISTRY_PASSWORD=${ADMIN_PASSWORD}
     volumes:
-      - /opt/mcp-gateway/servers:/app/registry/servers
-      - /opt/mcp-gateway/models:/app/registry/models
-      - /opt/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
+      - ${HOME}/mcp-gateway/servers:/app/registry/servers
+      - ${HOME}/mcp-gateway/models:/app/registry/models
+      - ${HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
     ports:
       - "8003:8003"
     depends_on:

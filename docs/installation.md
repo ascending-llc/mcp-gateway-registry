@@ -52,10 +52,9 @@ open http://localhost:7860
 
 1. **Create Local Directories**
    ```bash
-   sudo mkdir -p /opt/mcp-gateway/{servers,auth_server,secrets}
-   sudo cp -r registry/servers /opt/mcp-gateway/
-   sudo cp auth_server/scopes.yml /opt/mcp-gateway/auth_server/
-   sudo mkdir /var/log/mcp-gateway
+   mkdir -p ${HOME}/mcp-gateway/{servers,auth_server,secrets,logs}
+   cp -r registry/servers ${HOME}/mcp-gateway/
+   cp auth_server/scopes.yml ${HOME}/mcp-gateway/auth_server/
    ```
 
 2. **Configure Environment Variables**

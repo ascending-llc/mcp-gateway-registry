@@ -347,10 +347,10 @@ Wants=network.target
 [Service]
 Type=simple
 User=mcp-gateway
-WorkingDirectory=/opt/mcp-gateway-registry
+WorkingDirectory=${HOME}/mcp-gateway-registry
 Environment=TOKEN_REFRESH_INTERVAL=300
 Environment=TOKEN_EXPIRY_BUFFER=3600
-ExecStart=/opt/mcp-gateway-registry/.venv/bin/python credentials-provider/token_refresher.py
+ExecStart=${HOME}/mcp-gateway-registry/.venv/bin/python credentials-provider/token_refresher.py
 Restart=always
 RestartSec=10
 
