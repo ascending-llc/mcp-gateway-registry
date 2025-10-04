@@ -93,7 +93,7 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
   const [loadingTools, setLoadingTools] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
-  const [selectedIDE, setSelectedIDE] = useState<'vscode' | 'cursor' | 'cline' | 'windsurf' | 'agents'>('vscode');
+  const [selectedIDE, setSelectedIDE] = useState<'vscode' | 'cursor' | 'cline' | 'claude-code'>('vscode');
   const [loadingRefresh, setLoadingRefresh] = useState(false);
 
   const getStatusIcon = () => {
@@ -232,42 +232,39 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
         return {
           "mcpServers": {
             [serverName]: {
-              "command": "curl",
-              "args": ["-X", "POST", url, "-H", "Authorization: Bearer [YOUR_AUTH_TOKEN]"],
-              "env": {
-                "AUTH_TOKEN": "[YOUR_AUTH_TOKEN]"
-              },
-              "alwaysAllow": [],
-              "disabled": false
-            }
-          }
-        };
-      
-      // https://docs.windsurf.com/windsurf/cascade/mcp
-      case 'windsurf':
-        return {
-          "mcpServers": {
-            [serverName]: {
-              "serverUrl": url
+              "type": "streamableHttp",
+              "url": url,
+              "disabled": false,
+              "headers": {
+                "Authorization": "Bearer [YOUR_AUTH_TOKEN]"
+              }
             }
           }
         };
 
-      case 'agents':
+      // Claude Code configuration
+      case 'claude-code':
+        return {
+          "mcpServers": {
+            [serverName]: {
+              "type": "http",
+              "url": url,
+              "headers": {
+                "Authorization": "Bearer [YOUR_AUTH_TOKEN]"
+              }
+            }
+          }
+        };
+
       default:
         return {
           "mcpServers": {
             [serverName]: {
-              "type": "streamable-http",
+              "type": "http",
               "url": url,
               "headers": {
-                "X-Authorization": "Bearer [INGRESS_AUTH_TOKEN]",
-                "X-User-Pool-Id": "",
-                "X-Client-Id": "[YOUR_CLIENT_ID]",
-                "X-Region": "us-east-1"
-              },
-              "disabled": false,
-              "alwaysAllow": []
+                "Authorization": "Bearer [YOUR_AUTH_TOKEN]"
+              }
             }
           }
         };
@@ -614,31 +611,18 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
                     Cline
                   </button>
                   <button
-                    onClick={() => setSelectedIDE('windsurf')}
+                    onClick={() => setSelectedIDE('claude-code')}
                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      selectedIDE === 'windsurf'
+                      selectedIDE === 'claude-code'
                         ? 'bg-blue-600 text-white'
                         : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
                     }`}
                   >
-                    Windsurf
-                  </button>
-                  <button
-                    onClick={() => setSelectedIDE('agents')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      selectedIDE === 'agents'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    AI Agents
+                    Claude Code
                   </button>
                 </div>
                 <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
-                  {selectedIDE === 'agents' 
-                    ? 'Uses "streamable-http" transport type for AI agent compatibility'
-                    : 'Uses "sse" (Server-Sent Events) transport type for IDE compatibility'
-                  }
+                  Configuration format optimized for {selectedIDE === 'vscode' ? 'VS Code' : selectedIDE === 'cursor' ? 'Cursor' : selectedIDE === 'cline' ? 'Cline' : 'Claude Code'} integration
                 </p>
               </div>
 
@@ -669,8 +653,7 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
                     selectedIDE === 'vscode' ? 'VS Code' : 
                     selectedIDE === 'cursor' ? 'Cursor' : 
                     selectedIDE === 'cline' ? 'Cline' :
-                    selectedIDE === 'windsurf' ? 'Windsurf' :
-                    'AI Agents'
+                    'Claude Code'
                   }
                 </h4>
                 <div className="flex flex-wrap gap-2">
@@ -696,18 +679,11 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
                     Cline {selectedIDE === 'cline' ? '(Selected)' : ''}
                   </span>
                   <span className={`px-2 py-1 rounded text-sm ${
-                    selectedIDE === 'windsurf' 
+                    selectedIDE === 'claude-code' 
                       ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
                       : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
                   }`}>
-                    Windsurf {selectedIDE === 'windsurf' ? '(Selected)' : ''}
-                  </span>
-                  <span className={`px-2 py-1 rounded text-sm ${
-                    selectedIDE === 'agents' 
-                      ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                      : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
-                  }`}>
-                    AI Agents {selectedIDE === 'agents' ? '(Selected)' : ''}
+                    Claude Code {selectedIDE === 'claude-code' ? '(Selected)' : ''}
                   </span>
                 </div>
               </div>
