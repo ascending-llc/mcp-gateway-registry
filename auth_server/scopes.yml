@@ -96,6 +96,9 @@ mcp-servers-unrestricted/read:
   - intelligent_tool_finder
   - add_server_to_scopes_groups
   - remove_server_from_scopes_groups
+  - create_group
+  - delete_group
+  - list_groups
 - server: realserverfaketools
   methods:
   - initialize
@@ -264,6 +267,9 @@ mcp-servers-unrestricted/execute:
   - intelligent_tool_finder
   - add_server_to_scopes_groups
   - remove_server_from_scopes_groups
+  - create_group
+  - delete_group
+  - list_groups
 - server: realserverfaketools
   methods:
   - initialize
@@ -432,6 +438,9 @@ mcp-servers-restricted/read:
   - intelligent_tool_finder
   - add_server_to_scopes_groups
   - remove_server_from_scopes_groups
+  - create_group
+  - delete_group
+  - list_groups
 - server: realserverfaketools
   methods:
   - initialize
@@ -505,6 +514,9 @@ mcp-servers-restricted/execute:
   - intelligent_tool_finder
   - add_server_to_scopes_groups
   - remove_server_from_scopes_groups
+  - create_group
+  - delete_group
+  - list_groups
 - server: realserverfaketools
   methods:
   - initialize

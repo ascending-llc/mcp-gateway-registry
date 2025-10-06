@@ -32,6 +32,8 @@ services:
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-mcp-gateway}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-mcp-gateway-web}
       - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
+      - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD}
     ports:
       - "80:80"
       - "443:443"
@@ -41,6 +43,7 @@ services:
       - ${HOME}/mcp-gateway/models:/app/registry/models
       - ${HOME}/mcp-gateway/logs:/app/logs
       - ${HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
+      - ${HOME}/mcp-gateway/ssl:/etc/ssl:ro
     depends_on:
       - auth-server
       - metrics-service

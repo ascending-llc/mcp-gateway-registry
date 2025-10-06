@@ -253,20 +253,28 @@ The script handles Docker image building, service orchestration, and health chec
 
 1. **Prepare SSL certificates**:
    ```bash
-   sudo mkdir -p /home/ubuntu/ssl_data/certs
-   sudo mkdir -p /home/ubuntu/ssl_data/private
-   # Copy your certificate files to these directories
-   # Important: Name your files as follows:
-   # - Certificate file: fullchain.pem (goes in /home/ubuntu/ssl_data/certs/)
-   # - Private key file: privkey.pem (goes in /home/ubuntu/ssl_data/private/)
+   # Create the ssl directory structure
+   mkdir -p ${HOME}/mcp-gateway/ssl/certs
+   mkdir -p ${HOME}/mcp-gateway/ssl/private
+
+   # Copy your certificate files
+   # Replace paths below with your actual certificate locations
+   cp /etc/letsencrypt/live/your-domain/fullchain.pem ${HOME}/mcp-gateway/ssl/certs/fullchain.pem
+   cp /etc/letsencrypt/live/your-domain/privkey.pem ${HOME}/mcp-gateway/ssl/private/privkey.pem
+
+   # Set proper permissions
+   chmod 644 ${HOME}/mcp-gateway/ssl/certs/fullchain.pem
+   chmod 600 ${HOME}/mcp-gateway/ssl/private/privkey.pem
    ```
 
 2. **Update security group** to allow port 443
 
-3. **Deploy normally** - the Docker Compose configuration automatically detects and uses SSL certificates:
+3. **Deploy normally** - the `build_and_run.sh` script automatically detects and configures SSL certificates:
    ```bash
    ./build_and_run.sh
    ```
+
+   **Note**: If SSL certificates are not present at `${HOME}/mcp-gateway/ssl/certs/fullchain.pem` and `${HOME}/mcp-gateway/ssl/private/privkey.pem`, the MCP Gateway will automatically run in HTTP-only mode.
 
 4. **Access via HTTPS**:
    - Main interface: `https://your-domain.com`

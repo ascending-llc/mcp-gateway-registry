@@ -1,27 +1,46 @@
 # Service Management Guide
 
-This guide documents how to add, test, and delete MCP servers using the `service_mgmt.sh` script - the recommended tool for server lifecycle management.
+This guide documents how to manage MCP servers, users, and access groups in the MCP Gateway Registry.
 
 ## Table of Contents
 - [Overview](#overview)
 - [Prerequisites](#prerequisites)
 - [Quick Start](#quick-start)
-- [Adding a New Server](#adding-a-new-server)
-- [Testing a Server](#testing-a-server)
-- [Monitoring Services](#monitoring-services)
-- [Deleting a Server](#deleting-a-server)
+- [Service Management](#service-management)
+  - [Add Server](#add-server)
+  - [Delete Server](#delete-server)
+  - [Monitor Services](#monitor-services)
+  - [Test Server](#test-server)
+- [Group Management](#group-management)
+  - [Create Group](#create-group)
+  - [Delete Group](#delete-group)
+  - [List Groups](#list-groups)
+  - [Add Server to Group](#add-server-to-group)
+  - [Remove Server from Group](#remove-server-from-group)
+- [User Management](#user-management)
+  - [Create M2M User](#create-m2m-user)
+  - [Create Human User](#create-human-user)
+  - [Delete User](#delete-user)
+  - [List Users](#list-users)
+- [Complete Workflow Example](#complete-workflow-example)
 - [Configuration Format](#configuration-format)
 - [Troubleshooting](#troubleshooting)
 
 ## Overview
 
-The `service_mgmt.sh` script provides a comprehensive workflow for managing MCP servers in the registry. It handles:
+The MCP Gateway Registry provides three main management scripts:
 
+- **`service_mgmt.sh`**: Manages MCP servers (add, delete, monitor, test)
+- **`user_mgmt.sh`**: Manages users and M2M service accounts (create, delete, list)
+- **Group management** (via `service_mgmt.sh`): Manages access control groups (create, delete, list)
+
+These tools work together to provide:
 - **Server Registration**: Validates config and registers new servers
+- **Access Control**: Fine-grained permissions via groups
+- **User Management**: M2M service accounts and human users
 - **Health Verification**: Confirms servers are working and discoverable
 - **Testing**: Validates server searchability through intelligent tool finder
 - **Monitoring**: Provides health status for all or specific services
-- **Cleanup**: Removes servers and verifies complete deletion
 
 ## Prerequisites
 
@@ -29,7 +48,7 @@ Before using `service_mgmt.sh`, ensure:
 
 1. **MCP Gateway is running**: All containers should be up
    ```bash
-   docker-compose ps
+   docker compose ps
    ```
 
 2. **Authentication is configured**: The script automatically handles credential refresh
@@ -40,7 +59,7 @@ Before using `service_mgmt.sh`, ensure:
 
 ## Quick Start
 
-### Basic Commands
+### Service Commands
 ```bash
 # Add a new server
 ./cli/service_mgmt.sh add cli/examples/example-server-config.json
@@ -48,14 +67,48 @@ Before using `service_mgmt.sh`, ensure:
 # Monitor all services
 ./cli/service_mgmt.sh monitor
 
-# Test server searchability
-./cli/service_mgmt.sh test cli/examples/example-server-config.json
-
 # Delete a server
 ./cli/service_mgmt.sh delete cli/examples/example-server-config.json
 ```
 
-## Adding a New Server
+### Group Commands
+```bash
+# Create a new group
+./cli/service_mgmt.sh create-group mcp-servers-finance/read "Finance services read access"
+
+# List all groups
+./cli/service_mgmt.sh list-groups
+
+# Add server to group
+./cli/service_mgmt.sh add-to-groups mcpgw mcp-servers-finance/read
+
+# Delete a group
+./cli/service_mgmt.sh delete-group mcp-servers-finance/read
+```
+
+### User Commands
+```bash
+# Create M2M service account
+./cli/user_mgmt.sh create-m2m --name my-bot --groups 'mcp-servers-finance/read'
+
+# Create human user
+./cli/user_mgmt.sh create-human --username jdoe --email jdoe@example.com \
+  --firstname John --lastname Doe --groups 'mcp-servers-restricted/read'
+
+# List all users
+./cli/user_mgmt.sh list-users
+
+# Delete a user
+./cli/user_mgmt.sh delete-user --username my-bot
+```
+
+---
+
+## Service Management
+
+This section covers managing MCP servers in the registry using `./cli/service_mgmt.sh`.
+
+### Add Server
 
 ### Step 1: Create Configuration File
 
@@ -273,20 +326,20 @@ ERROR: Config validation failed:
 ```
 **Solution**:
 1. Verify the server is running at the `proxy_pass_url`
-2. Check Docker container logs: `docker-compose logs server-name`
+2. Check Docker container logs: `docker compose logs server-name`
 3. Test direct connectivity to the server
 
 ### Debug Commands
 
 ```bash
 # Check if containers are running
-docker-compose ps
+docker compose ps
 
 # View registry logs
-docker-compose logs registry
+docker compose logs registry
 
 # View auth server logs
-docker-compose logs auth-server
+docker compose logs auth-server
 
 # Test server connectivity directly
 curl http://localhost:port/health
@@ -414,90 +467,457 @@ docker rm example-server-container
 
 This complete example demonstrates the full lifecycle of server management using the `service_mgmt.sh` script.
 
-## Advanced Scopes Management
+---
 
-### Default Server Registration Behavior
+## Group Management
 
-When a new server is registered, it is **automatically added to unrestricted scopes groups only**:
-- `mcp-servers-unrestricted/read`
-- `mcp-servers-unrestricted/execute`
+This section covers managing access control groups using `./cli/service_mgmt.sh`. Groups control which users can access which servers and tools.
 
-This means that by default, newly registered servers are accessible to users with unrestricted permissions. If you need to add a server to restricted groups or change its access level, use the commands below.
+### Create Group
 
-### Adding Servers to Custom Scopes Groups
-
-You can dynamically add servers to specific scopes groups using the service management script. This is useful for fine-grained access control where you want to assign different servers to different user groups.
+Create a new access control group in both Keycloak and scopes.yml:
 
 ```bash
-# Add a server to specific scopes groups using the service management script
-./cli/service_mgmt.sh add-to-groups example-server 'mcp-servers-restricted/read,mcp-servers-restricted/execute'
+./cli/service_mgmt.sh create-group <group-name> [description]
 ```
 
-**Alternative: Direct MCP tool usage**
+**Example:**
 ```bash
-# Add a server to specific scopes groups using the MCP tool directly
-uv run cli/mcp_client.py --url http://localhost/mcpgw/mcp call \
-  --tool add_server_to_scopes_groups \
-  --args '{
-    "server_name": "example-server",
-    "group_names": ["mcp-servers-restricted/read", "mcp-servers-restricted/execute"]
-  }'
+./cli/service_mgmt.sh create-group mcp-servers-finance/read "Finance services with read access"
 ```
 
 **What this does:**
-- ✓ Retrieves all tools discovered during the last health check for the server
-- ✓ Adds the server and all its tools to the specified scopes groups
-- ✓ Uses the same MCP methods format as other servers (initialize, ping, tools/list, etc.)
-- ✓ Automatically triggers auth server reload to apply changes immediately
+- ✓ Creates the group in Keycloak
+- ✓ Adds the group to scopes.yml
+- ✓ Reloads the auth server to apply changes immediately
+- ✓ Validates synchronization between Keycloak and scopes.yml
 
-**Example Response:**
-```json
-{
-  "success": true,
-  "message": "Server successfully added to groups",
-  "server_name": "example-server",
-  "groups": ["mcp-servers-restricted/read", "mcp-servers-restricted/execute"],
-  "server_path": "/example-server"
-}
-```
+### List Groups
 
-**Available Scopes Groups:**
-- `mcp-servers-unrestricted/read` - Full read access to all server methods and tools
-- `mcp-servers-unrestricted/execute` - Full execute access to all server methods and tools
-- `mcp-servers-restricted/read` - Limited read access for standard users
-- `mcp-servers-restricted/execute` - Limited execute access for standard users
-
-### Removing Servers from Scopes Groups
-
-You can also remove servers from specific scopes groups for access revocation or role changes:
+List all groups in the realm with their synchronization status:
 
 ```bash
-# Remove a server from specific scopes groups using the service management script
-./cli/service_mgmt.sh remove-from-groups example-server 'mcp-servers-restricted/read,mcp-servers-restricted/execute'
+./cli/service_mgmt.sh list-groups
 ```
 
-**Alternative: Direct MCP tool usage**
+**Example Output:**
+```
+mcp-servers-unrestricted (✓ Synced)
+mcp-servers-restricted (✓ Synced)
+mcp-servers-finance/read (✓ Synced)
+mcp-servers-finance/execute (✓ Synced)
+```
+
+### Delete Group
+
+Delete a group from both Keycloak and scopes.yml:
+
 ```bash
-# Remove a server from specific scopes groups using the MCP tool directly
-uv run cli/mcp_client.py --url http://localhost/mcpgw/mcp call \
-  --tool remove_server_from_scopes_groups \
-  --args '{
-    "server_name": "example-server",
-    "group_names": ["mcp-servers-restricted/read", "mcp-servers-restricted/execute"]
-  }'
+./cli/service_mgmt.sh delete-group <group-name>
+```
+
+**Example:**
+```bash
+./cli/service_mgmt.sh delete-group mcp-servers-finance/read
+```
+
+**What this does:**
+- ✓ Removes the group from Keycloak
+- ✓ Removes the group from scopes.yml
+- ✓ Reloads the auth server to apply changes
+
+### Add Server to Group
+
+Add an existing server to one or more groups:
+
+```bash
+./cli/service_mgmt.sh add-to-groups <server-name> <groups>
+```
+
+**Parameters:**
+- `<server-name>`: Name of the server (e.g., `mcpgw`, `currenttime`)
+- `<groups>`: Comma-separated list of group names
+
+**Example:**
+```bash
+# Add to single group
+./cli/service_mgmt.sh add-to-groups mcpgw mcp-servers-finance/read
+
+# Add to multiple groups
+./cli/service_mgmt.sh add-to-groups fininfo 'mcp-servers-finance/read,mcp-servers-finance/execute'
+```
+
+**What this does:**
+- ✓ Retrieves all tools from the server's last health check
+- ✓ Adds the server and all its tools to the specified groups
+- ✓ Updates scopes.yml with the server entry
+- ✓ Automatically triggers auth server reload
+
+### Remove Server from Group
+
+Remove a server from one or more groups:
+
+```bash
+./cli/service_mgmt.sh remove-from-groups <server-name> <groups>
+```
+
+**Example:**
+```bash
+./cli/service_mgmt.sh remove-from-groups fininfo 'mcp-servers-finance/read'
 ```
 
 **What this does:**
 - ✓ Removes the server from the specified scopes groups
-- ✓ Automatically triggers auth server reload to apply changes immediately
-- ✓ Useful for access revocation or moving servers between access levels
+- ✓ Updates scopes.yml
+- ✓ Automatically triggers auth server reload
 
-**Use Cases:**
-- Assign development servers to restricted groups for testing
-- Grant production servers unrestricted access for administrators
-- Create custom access patterns for different user roles
-- Dynamically adjust permissions without manual scopes.yml editing
-- Revoke access when servers are decommissioned or compromised
-- Move servers between access levels (restricted ↔ unrestricted)
+---
+
+## User Management
+
+This section covers managing users and M2M service accounts using `./cli/user_mgmt.sh`.
+
+### Create M2M User
+
+Create a machine-to-machine (M2M) service account for programmatic access:
+
+```bash
+./cli/user_mgmt.sh create-m2m \
+  --name <client-name> \
+  --groups '<group1>,<group2>' \
+  --description '<description>'
+```
+
+**Parameters:**
+- `--name`: Client ID for the M2M account (required)
+- `--groups`: Comma-separated list of groups (required)
+- `--description`: Description of the service account (optional)
+
+**Example:**
+```bash
+./cli/user_mgmt.sh create-m2m \
+  --name finance-analyst-bot \
+  --groups 'mcp-servers-finance/read,mcp-servers-finance/execute' \
+  --description 'Finance analyst bot with full access'
+```
+
+**What this does:**
+- ✓ Creates a new Keycloak M2M client with service account
+- ✓ Assigns the service account to the specified groups
+- ✓ Generates client credentials (client_id and client_secret)
+- ✓ Creates four credential files:
+  - `.oauth-tokens/<name>.json` - Client credentials
+  - `.oauth-tokens/<name>-token.json` - Access token
+  - `.oauth-tokens/<name>.env` - Environment variables
+  - `.oauth-tokens/keycloak-client-secrets.txt` - Updated with new entry
+- ✓ Automatically generates an access token
+
+### Create Human User
+
+Create a human user account with Keycloak login capabilities:
+
+```bash
+./cli/user_mgmt.sh create-human \
+  --username <username> \
+  --email <email> \
+  --firstname <firstname> \
+  --lastname <lastname> \
+  --groups '<group1>,<group2>' \
+  --password <password>  # Optional, will prompt if not provided
+```
+
+**Example:**
+```bash
+./cli/user_mgmt.sh create-human \
+  --username jdoe \
+  --email jdoe@example.com \
+  --firstname John \
+  --lastname Doe \
+  --groups 'mcp-servers-restricted/read'
+```
+
+**What this does:**
+- ✓ Creates a new user in Keycloak
+- ✓ Assigns the user to the specified groups
+- ✓ Sets up password (prompts if not provided)
+- ✓ Enables the user account
+
+**User can login at:**
+- Keycloak Account Console: `http://localhost:8080/realms/mcp-gateway/account`
+- API authentication using password grant
+
+### List Users
+
+List all users in the mcp-gateway realm:
+
+```bash
+./cli/user_mgmt.sh list-users
+```
+
+**Example Output:**
+```
+Username: admin, Email: admin@example.com, Enabled: true, ID: b413260d-9ca1-4d4a-a5bb-b3d515780da5
+Username: finance-analyst-bot, Email: N/A, Enabled: true, ID: 356db59e-5377-439f-a57f-b98d1485cee8
+Username: jdoe, Email: jdoe@example.com, Enabled: true, ID: 434829b0-3f4e-4217-ab0e-2496a1804990
+
+Total users: 3
+```
+
+### Delete User
+
+Delete a user (M2M or human) from Keycloak:
+
+```bash
+./cli/user_mgmt.sh delete-user --username <username>
+```
+
+**Example:**
+```bash
+./cli/user_mgmt.sh delete-user --username finance-analyst-bot
+```
+
+**What this does:**
+- ✓ Deletes the user from Keycloak
+- ✓ Refreshes all credential files to remove the user
+- ✓ Updates keycloak-client-secrets.txt
+
+---
+
+## Complete Workflow Example
+
+This section demonstrates the complete workflow for creating a custom access group, adding servers to it, creating users with access to that group, and testing the setup.
+
+### Step 1: Create a New Group
+
+First, create a custom group for your specific use case. For example, let's create a group for time-related services:
+
+```bash
+# Create a new group for time services with read access
+./cli/service_mgmt.sh create-group mcp-servers-time/read "Time-related services with read access"
+```
+
+**What this does:**
+- ✓ Creates the group in Keycloak
+- ✓ Adds the group to scopes.yml
+- ✓ Reloads the auth server to apply changes
+- ✓ Validates synchronization between Keycloak and scopes.yml
+
+**Example Output:**
+```
+Creating group 'mcp-servers-time/read' via internal endpoint by admin 'admin'
+Group 'mcp-servers-time/read' created in Keycloak
+Successfully added group mcp-servers-time/read to scopes.yml
+Successfully triggered auth server scope reload
+✓ Group created and synchronized successfully!
+```
+
+### Step 2: Add Servers to the Group
+
+Now add servers to your newly created group. You can add existing servers without re-registering them.
+
+**Important Note:** If you want to use the `intelligent_tool_finder` functionality to search for tools across servers, you should always add the `mcpgw` server to your group. The `mcpgw` server provides essential MCP protocol methods and the intelligent tool finder capability.
+
+```bash
+# Add the mcpgw server (provides intelligent_tool_finder and core MCP methods)
+./cli/service_mgmt.sh add-to-groups mcpgw mcp-servers-time/read
+
+# Add the currenttime server (provides time-related tools)
+./cli/service_mgmt.sh add-to-groups currenttime mcp-servers-time/read
+```
+
+**What this does:**
+- ✓ Retrieves all tools from the server's last health check
+- ✓ Adds the server and all its tools to the specified group
+- ✓ Updates scopes.yml with the server entry
+- ✓ Automatically triggers auth server reload
+
+**Example Output:**
+```
+Adding server 'mcpgw' to groups: mcp-servers-time/read
+✓ Server successfully added to groups
+Server path: /mcpgw
+Groups: mcp-servers-time/read
+✓ Scopes groups updated and auth server reloaded
+```
+
+**Alternative: Adding Servers During Registration**
+
+If you're adding a new server and want to assign it to a custom group immediately, see the [Adding a New Server](#adding-a-new-server) section and then use the `add-to-groups` command. The server is automatically added to unrestricted groups during registration, and you can add it to additional custom groups afterward.
+
+### Step 3: Create an M2M User with Group Access
+
+Create a machine-to-machine (M2M) service account that has access to your custom group:
+
+```bash
+# Create M2M service account with access to the time services group
+./cli/user_mgmt.sh create-m2m \
+  --name time-service-bot \
+  --groups 'mcp-servers-time/read' \
+  --description 'Bot for accessing time-related services'
+```
+
+**What this does:**
+- ✓ Creates a new Keycloak M2M client with service account
+- ✓ Assigns the service account to the specified group(s)
+- ✓ Generates client credentials (client_id and client_secret)
+- ✓ Creates four credential files:
+  - `.oauth-tokens/time-service-bot.json` - Client credentials
+  - `.oauth-tokens/time-service-bot-token.json` - Access token
+  - `.oauth-tokens/time-service-bot.env` - Environment variables
+  - `.oauth-tokens/keycloak-client-secrets.txt` - Updated with new entry
+- ✓ Automatically generates an access token
+
+**Example Output:**
+```
+Creating M2M Service Account
+==============================================
+Name: time-service-bot
+Groups: mcp-servers-time/read
+Description: Bot for accessing time-related services
+
+✓ M2M client created successfully
+Client UUID: 9c576aad-3056-46c1-8b55-00825b73682c
+✓ Groups mapper configured
+✓ Assigned to group: mcp-servers-time/read
+
+Refreshing all client credentials...
+✓ All credentials refreshed
+
+Generating access token for: time-service-bot
+✓ Access token generated
+
+SUCCESS! M2M service account created
+==============================================
+Client ID: time-service-bot
+Client Secret: abc123...xyz789
+Groups: mcp-servers-time/read
+
+Credentials saved to:
+  .oauth-tokens/time-service-bot.json (client credentials)
+  .oauth-tokens/time-service-bot-token.json (access token)
+  .oauth-tokens/time-service-bot.env (environment variables)
+  .oauth-tokens/keycloak-client-secrets.txt (all client secrets)
+```
+
+### Step 4: Test the Setup with an Agent
+
+Now test that the M2M user can access the servers in the group using the AI agent:
+
+```bash
+# Use the agent to call a tool from the currenttime server
+uv run python agents/agent.py \
+  --agent-name time-service-bot \
+  --prompt "What is the current time in NYC?"
+```
+
+**What happens:**
+1. The agent loads credentials from `.oauth-tokens/time-service-bot-token.json`
+2. Authenticates to the MCP Gateway using the access token
+3. The auth server validates the token and checks group membership
+4. The agent can access tools from `mcpgw` and `currenttime` servers (both in `mcp-servers-time/read` group)
+5. Uses `intelligent_tool_finder` (from mcpgw) to search for time-related tools
+6. Finds and calls `current_time_by_timezone` tool from the currenttime server
+7. Returns the current time in NYC
+
+**Example Output:**
+```
+2025-10-05 19:08:48,778,p2873330,{agent.py:1003},INFO,Loaded credentials for agent: time-service-bot
+2025-10-05 19:08:48,779,p2873330,{agent.py:1052},INFO,Connecting to MCP server: https://mcpgateway.ddns.net/mcpgw/mcp
+2025-10-05 19:08:48,870,p2873330,{agent.py:1228},INFO,Connected to MCP server successfully with authentication
+
+The current time in New York City is 3:08 PM EDT on October 5, 2025.
+```
+
+### Verification and Troubleshooting
+
+**Verify Group Membership:**
+```bash
+# List all groups to confirm your new group exists
+./cli/service_mgmt.sh list-groups
+
+# List all users to verify your M2M account was created
+./cli/user_mgmt.sh list-users
+```
+
+**Check Server Assignment:**
+```bash
+# View the scopes.yml file to verify servers are in the group
+# Note: scopes.yml is in the mcp-gateway directory (mounted volume)
+cat ~/mcp-gateway/auth_server/scopes.yml | grep -A 10 "mcp-servers-time/read"
+```
+
+**Common Issues:**
+
+1. **403 Forbidden Error**: The user doesn't have access to required MCP methods
+   - **Solution**: Ensure `mcpgw` server is added to your group (provides `initialize`, `ping`, `tools/list` methods)
+   - Add with: `./cli/service_mgmt.sh add-to-groups mcpgw mcp-servers-time/read`
+
+2. **Group Not Found**: The group doesn't exist in Keycloak
+   - **Solution**: Create the group first with `./cli/service_mgmt.sh create-group`
+
+3. **Server Not Found**: Server path doesn't exist in registry
+   - **Solution**: Verify server name with `./cli/service_mgmt.sh monitor`
+   - Check that server was successfully registered
+
+4. **Token Expired**: Access token has expired (tokens expire after 5 minutes by default)
+   - **Solution**: Regenerate token with `./keycloak/setup/generate-agent-token.sh time-service-bot`
+
+### Complete Example: LOB1 (Line of Business 1) Services Group
+
+Here's a complete example for creating a LOB1 services group:
+
+```bash
+# 1. Create the group (you can use any name - /read suffix is optional)
+./cli/service_mgmt.sh create-group mcp-servers-lob1 "LOB1 services"
+
+# 2. Add servers to the group
+# Add mcpgw for intelligent_tool_finder and core MCP methods
+./cli/service_mgmt.sh add-to-groups mcpgw mcp-servers-lob1
+
+# Add your LOB1-related servers
+./cli/service_mgmt.sh add-to-groups currenttime mcp-servers-lob1
+
+# 3. Create M2M user with access to the group
+./cli/user_mgmt.sh create-m2m \
+  --name lob1-bot \
+  --groups 'mcp-servers-lob1' \
+  --description 'LOB1 bot with access'
+
+# 4. Create a human user for web interface access
+./cli/user_mgmt.sh create-human \
+  --username lob1-user \
+  --email lob1-user@example.com \
+  --firstname LOB1 \
+  --lastname User \
+  --groups 'mcp-servers-lob1'
+
+# 5. Test the setup with the M2M bot
+uv run python agents/agent.py \
+  --agent-name lob1-bot \
+  --prompt "What is the current time in NYC?"
+```
+
+**Note:** Group names are flexible - you can use patterns like `mcp-servers-lob1/read`, `mcp-servers-lob1`, or any custom name like `finance-team`. The `/read` and `/execute` suffixes are just naming conventions for clarity, not requirements.
+
+**Web Interface Access:**
+When the human user (`lob1-user`) logs into the registry web interface (either at `http://localhost:7860` or through your custom domain if configured), they will only see the servers they have access to based on their group membership (`mcp-servers-lob1`):
+- ✓ **mcpgw** - Core MCP methods and intelligent_tool_finder
+- ✓ **currenttime** - Time-related tools
+
+All other servers in the registry will be hidden from this user, providing secure, role-based access control.
+
+### Best Practices
+
+1. **Always include mcpgw in custom groups**: The `mcpgw` server provides essential functionality including `intelligent_tool_finder` which allows agents to search for tools across all servers they have access to.
+
+2. **Use descriptive group names**: Follow the pattern `mcp-servers-{category}/{permission}` for consistency (e.g., `mcp-servers-finance/read`, `mcp-servers-analytics/execute`).
+
+3. **Separate read and execute permissions**: Create separate groups for read-only and execute access to implement least-privilege access control.
+
+4. **Document group purposes**: Use the description field when creating groups to document their intended use case.
+
+5. **Test after each step**: Verify group creation, server assignment, and user access at each step to catch issues early.
+
+6. **Regenerate tokens when needed**: Access tokens expire periodically. Use `generate-agent-token.sh` to get fresh tokens when needed.
 
 For advanced CLI operations, see the [CLI Guide](cli.md) for direct `mcp_client.py` usage.

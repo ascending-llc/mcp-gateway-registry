@@ -246,6 +246,37 @@ def parse_server_and_tool_from_url(original_url: str) -> tuple[Optional[str], Op
         logger.error(f"Failed to parse server/tool from URL {original_url}: {e}")
         return None, None
 
+
+def _normalize_server_name(name: str) -> str:
+    """
+    Normalize server name by removing trailing slash for comparison.
+
+    This handles cases where a server is registered with a trailing slash
+    but accessed without one (or vice versa).
+
+    Args:
+        name: Server name to normalize
+
+    Returns:
+        Normalized server name (without trailing slash)
+    """
+    return name.rstrip('/') if name else name
+
+
+def _server_names_match(name1: str, name2: str) -> bool:
+    """
+    Compare two server names, normalizing for trailing slashes.
+
+    Args:
+        name1: First server name
+        name2: Second server name
+
+    Returns:
+        True if names match (ignoring trailing slashes), False otherwise
+    """
+    return _normalize_server_name(name1) == _normalize_server_name(name2)
+
+
 def validate_server_tool_access(server_name: str, method: str, tool_name: str, user_scopes: List[str]) -> bool:
     """
     Validate if the user has access to the specified server method/tool based on scopes.
@@ -290,8 +321,8 @@ def validate_server_tool_access(server_name: str, method: str, tool_name: str, u
                 logger.info(f"  Examining server config: {server_config}")
                 server_config_name = server_config.get('server')
                 logger.info(f"  Server name in config: '{server_config_name}' vs requested: '{server_name}'")
-                
-                if server_config_name == server_name:
+
+                if _server_names_match(server_config_name, server_name):
                     logger.info(f"  ✓ Server name matches!")
                     
                     # Check methods first

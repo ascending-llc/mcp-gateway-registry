@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Service Management Script for MCP Gateway Registry
-# Usage: ./cli/service_mgmt.sh {add|delete|monitor} [service_name]
+# Usage: ./cli/service_mgmt.sh {add|delete|monitor|test|add-to-groups|remove-from-groups|create-group|delete-group|list-groups} [args...]
 
 set -e
 
@@ -646,15 +646,22 @@ monitor_services() {
 }
 
 show_usage() {
-    echo "Usage: $0 {add|delete|monitor|test|add-to-groups|remove-from-groups} [config-file] [groups]"
+    echo "Usage: $0 {add|delete|monitor|test|add-to-groups|remove-from-groups|create-group|delete-group|list-groups} [args...]"
     echo ""
-    echo "Commands:"
+    echo "Service Commands:"
     echo "  add <config-file>            - Add a service using JSON config and verify registration"
     echo "  delete <config-file>         - Delete a service using JSON config and verify removal"
     echo "  monitor [config-file]        - Run health check (all services or specific service from config)"
     echo "  test <config-file>           - Test service searchability using intelligent_tool_finder"
+    echo ""
+    echo "Server-to-Group Commands:"
     echo "  add-to-groups <server-name> <groups> - Add server to specific scopes groups (comma-separated)"
     echo "  remove-from-groups <server-name> <groups> - Remove server from specific scopes groups (comma-separated)"
+    echo ""
+    echo "Group Management Commands:"
+    echo "  create-group <group-name> [description] - Create a new group in Keycloak and scopes.yml"
+    echo "  delete-group <group-name>    - Delete a group from Keycloak and scopes.yml"
+    echo "  list-groups                  - List all groups with synchronization status"
     echo ""
     echo "Config File Requirements:"
     echo "  Required fields: server_name, path, proxy_pass_url"
@@ -668,13 +675,21 @@ show_usage() {
     echo "    - is_python must be boolean"
     echo ""
     echo "Examples:"
+    echo "  # Service operations"
     echo "  $0 add cli/examples/example-server-config.json"
     echo "  $0 delete cli/examples/example-server-config.json"
     echo "  $0 monitor                                        # All services"
     echo "  $0 monitor cli/examples/example-server-config.json # Specific service"
     echo "  $0 test cli/examples/example-server-config.json    # Test searchability"
+    echo ""
+    echo "  # Server-to-group operations"
     echo "  $0 add-to-groups example-server 'mcp-servers-restricted/read,mcp-servers-restricted/execute'"
     echo "  $0 remove-from-groups example-server 'mcp-servers-restricted/read,mcp-servers-restricted/execute'"
+    echo ""
+    echo "  # Group management operations"
+    echo "  $0 create-group mcp-servers-finance/read 'Finance team read access'"
+    echo "  $0 delete-group mcp-servers-finance/read"
+    echo "  $0 list-groups"
 }
 
 add_to_groups() {
@@ -795,6 +810,134 @@ remove_from_groups() {
     print_success "Remove from groups operation completed!"
 }
 
+
+create_group() {
+    local group_name="$1"
+    local description="${2:-}"
+
+    if [ -z "$group_name" ]; then
+        print_error "Group name is required"
+        echo "Usage: $0 create-group <group-name> [description]"
+        exit 1
+    fi
+
+    echo "=== Creating Group: $group_name ==="
+
+    # Check prerequisites
+    check_prerequisites
+
+    # Prepare arguments for create_group MCP tool
+    local args="{\"group_name\": \"$group_name\""
+    if [ -n "$description" ]; then
+        # Escape description for JSON
+        local escaped_desc=$(echo "$description" | sed 's/"/\\"/g')
+        args="$args, \"description\": \"$escaped_desc\""
+    fi
+    args="$args}"
+
+    # Call create_group MCP tool
+    if ! run_mcp_command "create_group" "$args" "Creating group '$group_name'"; then
+        print_error "Failed to create group"
+        exit 1
+    fi
+
+    # Verify in scopes.yml (container)
+    print_info "Verifying group in container scopes.yml..."
+    if docker exec mcp-gateway-registry-auth-server-1 cat /app/scopes.yml | grep -q "^$group_name:"; then
+        print_success "Group found in container scopes.yml"
+    else
+        print_error "Group NOT found in container scopes.yml"
+    fi
+
+    # Verify in scopes.yml (host)
+    local host_scopes_file="$HOME/mcp-gateway/auth_server/scopes.yml"
+    if [ -f "$host_scopes_file" ]; then
+        print_info "Verifying group in host scopes.yml..."
+        if grep -q "^$group_name:" "$host_scopes_file"; then
+            print_success "Group found in host scopes.yml"
+        else
+            print_error "Group NOT found in host scopes.yml"
+        fi
+    fi
+
+    echo ""
+    print_success "Create group operation completed!"
+}
+
+
+delete_group() {
+    local group_name="$1"
+
+    if [ -z "$group_name" ]; then
+        print_error "Group name is required"
+        echo "Usage: $0 delete-group <group-name>"
+        exit 1
+    fi
+
+    echo "=== Deleting Group: $group_name ==="
+
+    # Check prerequisites
+    check_prerequisites
+
+    # Prepare arguments for delete_group MCP tool
+    local args="{\"group_name\": \"$group_name\"}"
+
+    # Call delete_group MCP tool
+    if ! run_mcp_command "delete_group" "$args" "Deleting group '$group_name'"; then
+        print_error "Failed to delete group"
+        exit 1
+    fi
+
+    # Verify removal from scopes.yml (container)
+    print_info "Verifying group removal from container scopes.yml..."
+    if docker exec mcp-gateway-registry-auth-server-1 cat /app/scopes.yml | grep -q "^$group_name:"; then
+        print_error "Group still found in container scopes.yml"
+    else
+        print_success "Group removed from container scopes.yml"
+    fi
+
+    # Verify removal from scopes.yml (host)
+    local host_scopes_file="$HOME/mcp-gateway/auth_server/scopes.yml"
+    if [ -f "$host_scopes_file" ]; then
+        print_info "Verifying group removal from host scopes.yml..."
+        if grep -q "^$group_name:" "$host_scopes_file"; then
+            print_error "Group still found in host scopes.yml"
+        else
+            print_success "Group removed from host scopes.yml"
+        fi
+    fi
+
+    echo ""
+    print_success "Delete group operation completed!"
+}
+
+
+list_groups() {
+    echo "=== Listing All Groups ==="
+
+    # Check prerequisites
+    check_prerequisites
+
+    # Call list_groups MCP tool
+    local args="{}"
+
+    print_info "Fetching groups from Keycloak and scopes.yml..."
+
+    if output=$(cd "$PROJECT_ROOT" && uv run cli/mcp_client.py --url http://localhost/mcpgw/mcp call --tool list_groups --args "$args" 2>&1); then
+        print_success "Groups retrieved successfully"
+        echo ""
+        echo "$output"
+    else
+        print_error "Failed to list groups"
+        echo "$output"
+        exit 1
+    fi
+
+    echo ""
+    print_success "List groups operation completed!"
+}
+
+
 # Main script logic
 case "${1:-}" in
     add)
@@ -814,6 +957,15 @@ case "${1:-}" in
         ;;
     remove-from-groups)
         remove_from_groups "$2" "$3"
+        ;;
+    create-group)
+        create_group "$2" "$3"
+        ;;
+    delete-group)
+        delete_group "$2"
+        ;;
+    list-groups)
+        list_groups
         ;;
     *)
         show_usage

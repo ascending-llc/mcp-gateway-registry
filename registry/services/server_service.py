@@ -256,8 +256,30 @@ class ServerService:
         return True
         
     def get_server_info(self, path: str) -> Optional[Dict[str, Any]]:
-        """Get server information by path."""
-        return self.registered_servers.get(path)
+        """
+        Get server information by path.
+
+        Handles path normalization to support lookups with or without trailing slashes.
+        If the exact path is not found, tries the alternate form (with/without trailing slash).
+
+        Args:
+            path: The server path to look up
+
+        Returns:
+            Server info dict if found, None otherwise
+        """
+        # Try exact match first
+        server_info = self.registered_servers.get(path)
+        if server_info:
+            return server_info
+
+        # If not found, try alternate form (add or remove trailing slash)
+        if path.endswith('/'):
+            alternate_path = path.rstrip('/')
+        else:
+            alternate_path = path + '/'
+
+        return self.registered_servers.get(alternate_path)
         
     def get_all_servers(self) -> Dict[str, Dict[str, Any]]:
         """Get all registered servers."""
@@ -283,8 +305,8 @@ class ServerService:
         filtered_servers = {}
         for path, server_info in self.registered_servers.items():
             server_name = server_info.get("server_name", "")
-            # Extract technical name from path (remove leading slash)
-            technical_name = path.lstrip('/')
+            # Extract technical name from path (remove leading and trailing slashes)
+            technical_name = path.strip('/')
             logger.info(f"DEBUG: Checking server path='{path}', server_name='{server_name}', technical_name='{technical_name}' against accessible_servers")
             
             # Check if user has access to this server using technical name
@@ -331,9 +353,9 @@ class ServerService:
         server_info = self.get_server_info(path)
         if not server_info:
             return False
-            
-        # Extract technical name from path (remove leading slash)
-        technical_name = path.lstrip('/')
+
+        # Extract technical name from path (remove leading and trailing slashes)
+        technical_name = path.strip('/')
         return technical_name in accessible_servers
 
     def is_service_enabled(self, path: str) -> bool:

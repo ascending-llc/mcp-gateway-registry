@@ -70,24 +70,26 @@ sudo certbot certonly --standalone -d your-domain.com
 
 ### Option 2: Commercial CA Certificates
 
-Purchase SSL certificates from a trusted Certificate Authority and place them at:
-- `/path/to/fullchain.pem` (certificate chain)
-- `/path/to/privkey.pem` (private key)
+Purchase SSL certificates from a trusted Certificate Authority.
 
-### Mount Certificates
+### Copy Certificates to Expected Location
 
-Add volume mounts to `docker-compose.prebuilt.yml`:
+```bash
+# Create the ssl directory structure
+mkdir -p ${HOME}/mcp-gateway/ssl/certs
+mkdir -p ${HOME}/mcp-gateway/ssl/private
 
-```yaml
-services:
-  registry:
-    image: mcpgateway/registry:latest
-    volumes:
-      # Add SSL certificate mounts:
-      - /etc/letsencrypt/live/your-domain/fullchain.pem:/etc/ssl/certs/fullchain.pem:ro
-      - /etc/letsencrypt/live/your-domain/privkey.pem:/etc/ssl/private/privkey.pem:ro
-      # ... other volumes ...
+# Copy your certificate files
+# Replace paths below with your actual certificate locations
+cp /etc/letsencrypt/live/your-domain/fullchain.pem ${HOME}/mcp-gateway/ssl/certs/fullchain.pem
+cp /etc/letsencrypt/live/your-domain/privkey.pem ${HOME}/mcp-gateway/ssl/private/privkey.pem
+
+# Set proper permissions
+chmod 644 ${HOME}/mcp-gateway/ssl/certs/fullchain.pem
+chmod 600 ${HOME}/mcp-gateway/ssl/private/privkey.pem
 ```
+
+**Note**: If SSL certificates are not present at `${HOME}/mcp-gateway/ssl/certs/fullchain.pem` and `${HOME}/mcp-gateway/ssl/private/privkey.pem`, the MCP Gateway will automatically run in HTTP-only mode.
 
 Then restart:
 
@@ -98,6 +100,6 @@ Then restart:
 The registry container will detect the certificates and enable HTTPS automatically. Check logs:
 
 ```bash
-docker-compose logs registry | grep -i ssl
+docker compose logs registry | grep -i ssl
 # Expected: "SSL certificates found - HTTPS enabled"
 ```

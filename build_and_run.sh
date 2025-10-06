@@ -137,20 +137,43 @@ docker compose -f "$DOCKER_COMPOSE_FILE" down --remove-orphans || log "No existi
 log "Existing services stopped"
 
 # Clean up FAISS index files to force registry to recreate them
-log "Cleaning up FAISS index files..."
+log "Checking FAISS index files..."
 MCPGATEWAY_SERVERS_DIR="${HOME}/mcp-gateway/servers"
 FAISS_FILES=("service_index.faiss" "service_index_metadata.json")
 
+# Check if FAISS index files exist
+FAISS_EXISTS=false
 for file in "${FAISS_FILES[@]}"; do
     file_path="$MCPGATEWAY_SERVERS_DIR/$file"
     if [ -f "$file_path" ]; then
-        rm -f "$file_path"
-        log "Deleted $file_path"
-    else
-        log "$file not found (already clean)"
+        FAISS_EXISTS=true
+        break
     fi
 done
-log "FAISS index cleanup completed"
+
+if [ "$FAISS_EXISTS" = true ]; then
+    echo ""
+    echo "╔════════════════════════════════════════════════════════════════════════════╗"
+    echo "║                       ⚠️  FAISS INDEX FILES EXIST  ⚠️                       ║"
+    echo "╠════════════════════════════════════════════════════════════════════════════╣"
+    echo "║                                                                            ║"
+    echo "║  Existing FAISS index files were found in:                                ║"
+    echo "║  $MCPGATEWAY_SERVERS_DIR/"
+    echo "║                                                                            ║"
+    echo "║  These files contain your server registry and search index.               ║"
+    echo "║  To preserve your registered servers, these files will NOT be deleted.    ║"
+    echo "║                                                                            ║"
+    echo "║  If you need to regenerate the FAISS index (e.g., after corruption):      ║"
+    echo "║  1. Delete the existing files:                                            ║"
+    echo "║     rm $MCPGATEWAY_SERVERS_DIR/service_index*"
+    echo "║  2. The registry will automatically rebuild the index on startup          ║"
+    echo "║                                                                            ║"
+    echo "╚════════════════════════════════════════════════════════════════════════════╝"
+    echo ""
+    log "Keeping existing FAISS index files - NOT deleting"
+else
+    log "No existing FAISS index files found - will be created on first startup"
+fi
 
 # Copy JSON files from registry/servers to ${HOME}/mcp-gateway/servers with environment variable substitution
 log "Copying JSON files from registry/servers to $MCPGATEWAY_SERVERS_DIR..."
@@ -189,16 +212,59 @@ fi
 
 # Copy scopes.yml to ${HOME}/mcp-gateway/auth_server
 AUTH_SERVER_DIR="${HOME}/mcp-gateway/auth_server"
-log "Copying scopes.yml to $AUTH_SERVER_DIR..."
+TARGET_SCOPES_FILE="$AUTH_SERVER_DIR/scopes.yml"
+
+log "Checking scopes.yml configuration..."
 if [ -f "auth_server/scopes.yml" ]; then
     # Create the target directory if it doesn't exist
     mkdir -p "$AUTH_SERVER_DIR"
 
-    # Copy scopes.yml
-    cp auth_server/scopes.yml "$AUTH_SERVER_DIR/"
-    log "scopes.yml copied successfully to $AUTH_SERVER_DIR"
+    # Check if scopes.yml already exists in the target directory
+    if [ -f "$TARGET_SCOPES_FILE" ]; then
+        echo ""
+        echo "╔════════════════════════════════════════════════════════════════════════════╗"
+        echo "║                          ⚠️  SCOPES.YML EXISTS  ⚠️                          ║"
+        echo "╠════════════════════════════════════════════════════════════════════════════╣"
+        echo "║                                                                            ║"
+        echo "║  An existing scopes.yml file was found at:                                ║"
+        echo "║  $TARGET_SCOPES_FILE"
+        echo "║                                                                            ║"
+        echo "║  This file contains your custom groups and server configurations.         ║"
+        echo "║  To preserve your settings, this file will NOT be overwritten.            ║"
+        echo "║                                                                            ║"
+        echo "║  If you need to restore the default scopes.yml from the codebase:         ║"
+        echo "║  1. Delete the existing file:                                             ║"
+        echo "║     rm $TARGET_SCOPES_FILE"
+        echo "║  2. Re-run this script                                                    ║"
+        echo "║                                                                            ║"
+        echo "╚════════════════════════════════════════════════════════════════════════════╝"
+        echo ""
+        log "Keeping existing scopes.yml - NOT overwriting"
+    else
+        # Copy scopes.yml for first-time setup
+        cp auth_server/scopes.yml "$AUTH_SERVER_DIR/"
+        log "scopes.yml copied successfully to $AUTH_SERVER_DIR (initial setup)"
+    fi
 else
-    log "WARNING: auth_server/scopes.yml not found"
+    log "WARNING: auth_server/scopes.yml not found in codebase"
+fi
+
+# Setup SSL certificate directory structure
+SSL_DIR="${HOME}/mcp-gateway/ssl"
+log "Setting up SSL certificate directory structure..."
+mkdir -p "$SSL_DIR/certs"
+mkdir -p "$SSL_DIR/private"
+
+# Check if SSL certificates exist and are properly located
+if [ -f "$SSL_DIR/certs/fullchain.pem" ] && [ -f "$SSL_DIR/private/privkey.pem" ]; then
+    log "SSL certificates found - HTTPS will be enabled"
+    chmod 644 "$SSL_DIR/certs/fullchain.pem"
+    chmod 600 "$SSL_DIR/private/privkey.pem"
+else
+    log "No SSL certificates found - HTTP-only mode will be used"
+    log "To enable HTTPS, place certificates at:"
+    log "  - $SSL_DIR/certs/fullchain.pem"
+    log "  - $SSL_DIR/private/privkey.pem"
 fi
 
 # Generate a random SECRET_KEY if not already in .env

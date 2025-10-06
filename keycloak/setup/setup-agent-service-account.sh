@@ -42,11 +42,17 @@ usage() {
     echo "  $0 --agent-id claude-001"
     echo "  $0 --agent-id bedrock-claude --group mcp-servers-unrestricted"
     echo "  $0 -a gpt4-turbo -g mcp-servers-restricted"
+    echo "  $0 -a finance-agent -g mcp-servers-finance/read"
     echo ""
     echo "Service Account Naming: agent-{agent-id}-m2m"
-    echo "Available Groups:"
-    echo "  - mcp-servers-restricted    (limited access)"
-    echo "  - mcp-servers-unrestricted  (full access)"
+    echo ""
+    echo "Common Groups:"
+    echo "  - mcp-servers-restricted         (limited access)"
+    echo "  - mcp-servers-unrestricted       (full access)"
+    echo "  - mcp-servers-finance/read       (finance read access)"
+    echo "  - mcp-servers-finance/execute    (finance execute access)"
+    echo ""
+    echo "Note: Group must exist in Keycloak. Script will validate and show available groups if invalid."
 }
 
 # Parse command line arguments
@@ -86,12 +92,6 @@ if [ -z "$AGENT_ID" ]; then
     exit 1
 fi
 
-# Validate group
-if [[ "$TARGET_GROUP" != "mcp-servers-restricted" && "$TARGET_GROUP" != "mcp-servers-unrestricted" ]]; then
-    echo -e "${RED}Error: Invalid group. Must be 'mcp-servers-restricted' or 'mcp-servers-unrestricted'${NC}"
-    exit 1
-fi
-
 # Generate service account name and client ID
 SERVICE_ACCOUNT="agent-${AGENT_ID}-m2m"
 AGENT_CLIENT_ID="agent-${AGENT_ID}-m2m"
@@ -113,12 +113,32 @@ get_admin_token() {
         -d "password=$ADMIN_PASS" \
         -d "grant_type=password" \
         -d "client_id=admin-cli" | jq -r '.access_token // empty')
-    
+
     if [ -z "$TOKEN" ]; then
         echo -e "${RED}Failed to get admin token${NC}"
         exit 1
     fi
     echo -e "${GREEN}✓ Admin token obtained${NC}"
+}
+
+# Function to validate group exists
+validate_group_exists() {
+    echo "Validating group exists: $TARGET_GROUP..."
+
+    GROUP_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
+        "$ADMIN_URL/admin/realms/$REALM/groups" | \
+        jq -r ".[] | select(.name==\"$TARGET_GROUP\") | .id")
+
+    if [ -z "$GROUP_ID" ] || [ "$GROUP_ID" = "null" ]; then
+        echo -e "${RED}Error: Group '$TARGET_GROUP' does not exist in Keycloak${NC}"
+        echo -e "${YELLOW}Available groups:${NC}"
+        curl -s -H "Authorization: Bearer $TOKEN" \
+            "$ADMIN_URL/admin/realms/$REALM/groups" | \
+            jq -r '.[].name' | sed 's/^/  - /'
+        exit 1
+    fi
+
+    echo -e "${GREEN}✓ Group '$TARGET_GROUP' exists${NC}"
 }
 
 # Function to create agent-specific M2M client
@@ -437,7 +457,10 @@ EOF
 # Main execution
 main() {
     get_admin_token
-    
+
+    # Step 0: Validate group exists in Keycloak
+    validate_group_exists
+
     # Step 1: Create agent-specific M2M client
     create_agent_m2m_client
     

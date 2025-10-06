@@ -119,27 +119,26 @@ sudo certbot certonly --standalone -d your-domain.com
 **Option B: Commercial CA**
 Purchase SSL certificate from a trusted Certificate Authority.
 
-#### 2. Mount Certificates to Container
+#### 2. Copy Certificates to Expected Location
 
-**For docker-compose deployment**, add volume mounts to `docker-compose.yml`:
+MCP Gateway expects SSL certificates at `${HOME}/mcp-gateway/ssl/`. The `build_and_run.sh` script will automatically set up the proper directory structure.
 
-```yaml
-services:
-  registry:
-    volumes:
-      # Add these lines:
-      - /etc/letsencrypt/live/your-domain/fullchain.pem:/etc/ssl/certs/fullchain.pem:ro
-      - /etc/letsencrypt/live/your-domain/privkey.pem:/etc/ssl/private/privkey.pem:ro
-```
-
-**For docker run**, add volume flags:
 ```bash
-docker run -d \
-  -v /etc/letsencrypt/live/your-domain/fullchain.pem:/etc/ssl/certs/fullchain.pem:ro \
-  -v /etc/letsencrypt/live/your-domain/privkey.pem:/etc/ssl/private/privkey.pem:ro \
-  -p 80:80 -p 443:443 \
-  mcpgateway/registry:latest
+# Create the ssl directory structure
+mkdir -p ${HOME}/mcp-gateway/ssl/certs
+mkdir -p ${HOME}/mcp-gateway/ssl/private
+
+# Copy your certificates to the expected location
+# Replace paths below with your actual certificate locations
+cp /etc/letsencrypt/live/your-domain/fullchain.pem ${HOME}/mcp-gateway/ssl/certs/fullchain.pem
+cp /etc/letsencrypt/live/your-domain/privkey.pem ${HOME}/mcp-gateway/ssl/private/privkey.pem
+
+# Set proper permissions
+chmod 644 ${HOME}/mcp-gateway/ssl/certs/fullchain.pem
+chmod 600 ${HOME}/mcp-gateway/ssl/private/privkey.pem
 ```
+
+**Note**: If SSL certificates are not present at `${HOME}/mcp-gateway/ssl/certs/fullchain.pem` and `${HOME}/mcp-gateway/ssl/private/privkey.pem`, the MCP Gateway will automatically run in HTTP-only mode.
 
 #### 3. Configure Security Group
 
@@ -154,7 +153,7 @@ docker run -d \
 ./build_and_run.sh
 
 # Check logs for SSL certificate detection
-docker-compose logs registry | grep -i ssl
+docker compose logs registry | grep -i ssl
 
 # Expected output:
 # "SSL certificates found - HTTPS enabled"
@@ -173,14 +172,15 @@ Let's Encrypt certificates expire after 90 days. Set up automatic renewal:
 sudo crontab -e
 
 # Add this line (checks twice daily, renews if needed)
-0 0,12 * * * certbot renew --quiet && docker-compose restart registry
+0 0,12 * * * certbot renew --quiet && cp /etc/letsencrypt/live/your-domain/fullchain.pem ${HOME}/mcp-gateway/ssl/certs/fullchain.pem && cp /etc/letsencrypt/live/your-domain/privkey.pem ${HOME}/mcp-gateway/ssl/private/privkey.pem && docker compose restart registry
 ```
 
 #### Troubleshooting
 
 **HTTPS not working?**
-- Check certificate files exist at the mounted paths
-- Check container logs: `docker-compose logs registry | grep -i ssl`
+- Check certificate files exist: `ls -la ${HOME}/mcp-gateway/ssl/certs/ ${HOME}/mcp-gateway/ssl/private/`
+- Verify certificates are present: `${HOME}/mcp-gateway/ssl/certs/fullchain.pem` and `${HOME}/mcp-gateway/ssl/private/privkey.pem`
+- Check container logs: `docker compose logs registry | grep -i ssl`
 - Verify port 443 is accessible: `sudo netstat -tlnp | grep 443`
 - Ensure certificates are from a trusted CA
 
