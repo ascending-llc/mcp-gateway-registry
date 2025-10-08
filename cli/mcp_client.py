@@ -17,6 +17,20 @@ from typing import Optional
 from mcp_utils import create_mcp_session
 
 
+def _load_token_from_file(file_path: str) -> Optional[str]:
+    """Load access token from a file"""
+    try:
+        with open(file_path, 'r') as f:
+            token = f.read().strip()
+            if token:
+                return token
+    except FileNotFoundError:
+        print(f"Warning: Token file not found: {file_path}")
+    except Exception as e:
+        print(f"Warning: Failed to read token file {file_path}: {e}")
+    return None
+
+
 def _load_m2m_credentials() -> Optional[str]:
     """Load M2M credentials and get access token from Keycloak"""
     client_id = os.getenv('CLIENT_ID')
@@ -75,12 +89,18 @@ Examples:
   # Use different gateway URL
   uv run mcp_client.py --url http://localhost/currenttime/mcp ping
 
-Authentication:
-  Set environment variables CLIENT_ID, CLIENT_SECRET, KEYCLOAK_URL, KEYCLOAK_REALM
-  Or source a credentials file: source .oauth-tokens/agent-test-agent-m2m.env
+  # Use token from file (e.g., for Cognito/OAuth servers)
+  uv run mcp_client.py --url http://localhost/customer-support-assistant/mcp --token-file /path/to/.cognito_access_token list
+
+Authentication (priority order):
+  1. --token-file: Path to file containing access token
+  2. Environment variables: CLIENT_ID, CLIENT_SECRET, KEYCLOAK_URL, KEYCLOAK_REALM
+  3. Ingress token: Automatically loaded from ~/.mcp/ingress_token if available
         """)
     parser.add_argument('--url', default='http://localhost/mcpgw/mcp',
                        help='Gateway URL (default: %(default)s)')
+    parser.add_argument('--token-file',
+                       help='Path to file containing access token (e.g., .cognito_access_token)')
     parser.add_argument('command', choices=['ping', 'list', 'call', 'init'],
                        help='Command to execute')
     parser.add_argument('--tool', help='Tool name for call command')
@@ -88,15 +108,25 @@ Authentication:
 
     args = parser.parse_args()
 
-    # Load authentication (try M2M first, then let mcp_utils handle ingress token)
-    access_token = _load_m2m_credentials()
+    # Load authentication (priority: token-file > M2M > ingress token)
+    access_token = None
+
+    # Try loading from file first if specified
+    if args.token_file:
+        access_token = _load_token_from_file(args.token_file)
+
+    # Fall back to M2M credentials if no token file or file loading failed
+    if not access_token:
+        access_token = _load_m2m_credentials()
 
     # Create MCP session using shared utility (it will auto-load ingress token if needed)
     try:
         with create_mcp_session(args.url, access_token) as client:
             # Check what authentication was actually used
             if client.access_token:
-                if access_token:
+                if args.token_file:
+                    print(f"✓ Token file authentication successful ({args.token_file})")
+                elif access_token:
                     print("✓ M2M authentication successful")
                 else:
                     print("✓ Ingress token authentication successful")

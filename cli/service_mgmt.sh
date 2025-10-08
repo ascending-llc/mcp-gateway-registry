@@ -106,7 +106,7 @@ verify_scopes_yml() {
 
     # Check container scopes.yml
     local container_count
-    container_count=$(docker exec mcp-gateway-registry_auth-server_1 grep -c "$service_name" /app/scopes.yml 2>/dev/null || echo "0")
+    container_count=$(docker exec mcp-gateway-registry-auth-server-1 grep -c "$service_name" /app/scopes.yml 2>/dev/null || echo "0")
     # Ensure we only get the last line if multiple lines are returned
     container_count=$(echo "$container_count" | tail -1)
 
@@ -150,7 +150,7 @@ verify_faiss_metadata() {
     print_info "Checking FAISS index metadata..."
 
     local metadata_count
-    metadata_count=$(docker exec mcp-gateway-registry_registry_1 grep -c "$service_name" /app/registry/servers/service_index_metadata.json 2>/dev/null || echo "0")
+    metadata_count=$(docker exec mcp-gateway-registry-registry-1 grep -c "$service_name" /app/registry/servers/service_index_metadata.json 2>/dev/null || echo "0")
     # Ensure we only get the last line if multiple lines are returned
     metadata_count=$(echo "$metadata_count" | tail -1)
 
@@ -320,6 +320,29 @@ try:
         print(f'ERROR: Missing required fields in config: {missing_fields}')
         sys.exit(1)
 
+    # Handle bedrock-agentcore specific URL formatting
+    auth_provider = config.get('auth_provider', '')
+    if auth_provider == 'bedrock-agentcore':
+        # Ensure path begins and ends with '/'
+        path = config['path']
+        if not path.startswith('/'):
+            path = '/' + path
+        if not path.endswith('/'):
+            path = path + '/'
+        config['path'] = path
+
+        # Ensure proxy_pass_url ends with '/' and does not have '/mcp' or '/mcp/' at the end
+        proxy_url = config['proxy_pass_url']
+        # Remove trailing '/mcp/' or '/mcp'
+        if proxy_url.endswith('/mcp/'):
+            proxy_url = proxy_url[:-5]  # Remove '/mcp/'
+        elif proxy_url.endswith('/mcp'):
+            proxy_url = proxy_url[:-4]  # Remove '/mcp'
+        # Ensure it ends with '/'
+        if not proxy_url.endswith('/'):
+            proxy_url = proxy_url + '/'
+        config['proxy_pass_url'] = proxy_url
+
     # Validate field types and constraints
     errors = []
 
@@ -342,7 +365,7 @@ try:
         errors.append('proxy_pass_url must start with http:// or https://')
 
     # Check for unknown fields (not part of tool spec)
-    allowed_fields = {'server_name', 'path', 'proxy_pass_url', 'description', 'tags', 'num_tools', 'num_stars', 'is_python', 'license'}
+    allowed_fields = {'server_name', 'path', 'proxy_pass_url', 'description', 'tags', 'num_tools', 'num_stars', 'is_python', 'license', 'auth_provider', 'auth_type', 'supported_transports', 'headers', 'tool_list'}
     unknown_fields = set(config.keys()) - allowed_fields
     if unknown_fields:
         errors.append(f'Unknown fields not allowed by register_service tool spec: {sorted(unknown_fields)}')
@@ -381,7 +404,12 @@ try:
         sys.exit(1)
 
     # Extract service name from path for validation
-    service_name = config['path'].lstrip('/')
+    service_name = config['path'].lstrip('/').rstrip('/')
+
+    # Output both the modified config and service name
+    # First line: modified config as JSON
+    # Second line: service name
+    print(json.dumps(config))
     print(service_name)
 
 except json.JSONDecodeError as e:
@@ -413,12 +441,19 @@ add_service() {
     config_json="$(cat "$config_file")"
 
     # Validate config and extract service name
-    local service_name
-    if ! service_name=$(validate_config "$config_json"); then
+    local validation_output service_name modified_config
+    if ! validation_output=$(validate_config "$config_json"); then
         print_error "Config validation failed"
-        echo "$service_name"  # This contains error message
+        echo "$validation_output"  # This contains error message
         exit 1
     fi
+
+    # Parse the two-line output: first line is modified config, second is service name
+    modified_config=$(echo "$validation_output" | head -n 1)
+    service_name=$(echo "$validation_output" | tail -n 1)
+
+    # Use the modified config for registration
+    config_json="$modified_config"
 
     echo "=== Adding Service: $service_name ==="
 
@@ -477,12 +512,19 @@ delete_service() {
     config_json="$(cat "$config_file")"
 
     # Validate config and extract service info
-    local service_name
-    if ! service_name=$(validate_config "$config_json"); then
+    local validation_output service_name modified_config
+    if ! validation_output=$(validate_config "$config_json"); then
         print_error "Config validation failed"
-        echo "$service_name"  # This contains error message
+        echo "$validation_output"  # This contains error message
         exit 1
     fi
+
+    # Parse the two-line output: first line is modified config, second is service name
+    modified_config=$(echo "$validation_output" | head -n 1)
+    service_name=$(echo "$validation_output" | tail -n 1)
+
+    # Use the modified config
+    config_json="$modified_config"
 
     # Extract service path from config
     local service_path
@@ -542,12 +584,19 @@ test_service() {
     config_json="$(cat "$config_file")"
 
     # Validate config and extract service info
-    local service_name
-    if ! service_name=$(validate_config "$config_json"); then
+    local validation_output service_name modified_config
+    if ! validation_output=$(validate_config "$config_json"); then
         print_error "Config validation failed"
-        echo "$service_name"  # This contains error message
+        echo "$validation_output"  # This contains error message
         exit 1
     fi
+
+    # Parse the two-line output: first line is modified config, second is service name
+    modified_config=$(echo "$validation_output" | head -n 1)
+    service_name=$(echo "$validation_output" | tail -n 1)
+
+    # Use the modified config
+    config_json="$modified_config"
 
     # Extract description and tags for testing
     local description tags_json
@@ -621,12 +670,16 @@ monitor_services() {
         config_json="$(cat "$config_file")"
 
         # Validate config and extract service name
-        service_name=$(validate_config "$config_json")
-        if [ $? -ne 0 ]; then
+        local validation_output modified_config
+        if ! validation_output=$(validate_config "$config_json"); then
             print_error "Config validation failed"
-            echo "$service_name"  # This contains error message
+            echo "$validation_output"  # This contains error message
             exit 1
         fi
+
+        # Parse the two-line output: first line is modified config, second is service name
+        modified_config=$(echo "$validation_output" | head -n 1)
+        service_name=$(echo "$validation_output" | tail -n 1)
 
         echo "=== Monitoring Service: $service_name ==="
     else
@@ -665,7 +718,8 @@ show_usage() {
     echo ""
     echo "Config File Requirements:"
     echo "  Required fields: server_name, path, proxy_pass_url"
-    echo "  Optional fields: description, tags, num_tools, num_stars, is_python, license"
+    echo "  Optional fields: description, tags, num_tools, num_stars, is_python, license,"
+    echo "                   auth_provider, auth_type, supported_transports, headers, tool_list"
     echo "  Constraints:"
     echo "    - path must start with '/' and be more than just '/'"
     echo "    - proxy_pass_url must start with http:// or https://"
@@ -673,6 +727,9 @@ show_usage() {
     echo "    - tags must be array of strings"
     echo "    - num_tools/num_stars must be non-negative integers"
     echo "    - is_python must be boolean"
+    echo "    - supported_transports must be array of strings"
+    echo "    - headers must be array of objects"
+    echo "    - tool_list must be array of objects"
     echo ""
     echo "Examples:"
     echo "  # Service operations"

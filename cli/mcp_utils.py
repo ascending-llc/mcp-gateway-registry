@@ -109,6 +109,7 @@ class MCPClient:
         self,
         gateway_url: str,
         access_token: Optional[str] = None,
+        backend_token: Optional[str] = None,
         timeout: int = 30
     ):
         """
@@ -116,11 +117,17 @@ class MCPClient:
 
         Args:
             gateway_url: URL of the MCP gateway endpoint
-            access_token: Optional Bearer token for authentication
+            access_token: Optional Bearer token for backend server authentication (Authorization header)
+            backend_token: Optional separate token for backend server (if different from gateway token)
             timeout: Request timeout in seconds
         """
         self.gateway_url = gateway_url.rstrip('/')
-        self.access_token = _get_auth_token(access_token)
+        # Backend token for Authorization header (forwarded to backend servers)
+        self.backend_token = access_token
+        # Gateway token for X-Authorization header (gateway auth) - use ingress token
+        self.gateway_token = _get_auth_token(None)  # Always use ingress token for gateway
+        # Keep access_token for backwards compatibility
+        self.access_token = self.backend_token or self.gateway_token
         self.timeout = timeout
         self.session_id: Optional[str] = None
         self._request_id = 0
@@ -138,8 +145,13 @@ class MCPClient:
             'User-Agent': 'mcp-utils-client/1.0.0'
         }
 
-        if self.access_token:
-            headers['X-Authorization'] = f'Bearer {self.access_token}'
+        # X-Authorization: Gateway authentication (uses ingress token)
+        if self.gateway_token:
+            headers['X-Authorization'] = f'Bearer {self.gateway_token}'
+
+        # Authorization: Backend server authentication (uses token from --token-file)
+        if self.backend_token:
+            headers['Authorization'] = f'Bearer {self.backend_token}'
 
         if self.session_id:
             headers['mcp-session-id'] = self.session_id

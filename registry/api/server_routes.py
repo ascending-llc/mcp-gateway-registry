@@ -363,6 +363,11 @@ async def internal_register_service(
     is_python: Annotated[bool, Form()] = False,
     license_str: Annotated[str, Form(alias="license")] = "N/A",
     overwrite: Annotated[bool, Form()] = True,
+    auth_provider: Annotated[str | None, Form()] = None,
+    auth_type: Annotated[str | None, Form()] = None,
+    supported_transports: Annotated[str | None, Form()] = None,
+    headers: Annotated[str | None, Form()] = None,
+    tool_list_json: Annotated[str | None, Form()] = None,
 ):
     """Internal service registration endpoint for mcpgw-server (requires HTTP Basic Authentication with admin credentials)."""
     logger.warning("INTERNAL REGISTER: Function called - starting execution")  # TODO: replace with debug
@@ -436,21 +441,53 @@ async def internal_register_service(
     tag_list = [tag.strip() for tag in tags.split(',') if tag.strip()] if tags else []
     logger.warning(f"INTERNAL REGISTER: Processed tags: {tag_list}")  # TODO: replace with debug
 
+    # Process supported_transports
+    if supported_transports:
+        try:
+            transports_list = json.loads(supported_transports) if supported_transports.startswith('[') else [t.strip() for t in supported_transports.split(',')]
+        except Exception as e:
+            logger.warning(f"INTERNAL REGISTER: Failed to parse supported_transports, using default: {e}")
+            transports_list = ["streamable-http"]
+    else:
+        transports_list = ["streamable-http"]
+
+    # Process headers
+    headers_list = []
+    if headers:
+        try:
+            headers_list = json.loads(headers) if isinstance(headers, str) else headers
+        except Exception as e:
+            logger.warning(f"INTERNAL REGISTER: Failed to parse headers: {e}")
+
+    # Process tool_list
+    tool_list = []
+    if tool_list_json:
+        try:
+            tool_list = json.loads(tool_list_json) if isinstance(tool_list_json, str) else tool_list_json
+        except Exception as e:
+            logger.warning(f"INTERNAL REGISTER: Failed to parse tool_list_json: {e}")
+
     # Create server entry
     server_entry = {
         "server_name": name,
         "description": description,
         "path": path,
         "proxy_pass_url": proxy_pass_url,
-        "supported_transports": ["streamable-http"],  # Default transport
-        "auth_type": "none",  # Default auth type
+        "supported_transports": transports_list,
+        "auth_type": auth_type if auth_type else "none",
         "tags": tag_list,
         "num_tools": num_tools,
         "num_stars": num_stars,
         "is_python": is_python,
         "license": license_str,
-        "tool_list": []  # Will be populated by health checks
+        "tool_list": tool_list
     }
+
+    # Add optional fields if provided
+    if auth_provider:
+        server_entry["auth_provider"] = auth_provider
+    if headers_list:
+        server_entry["headers"] = headers_list
 
     logger.warning(f"INTERNAL REGISTER: Created server entry: {server_entry}")  # TODO: replace with debug
     logger.warning(f"INTERNAL REGISTER: Overwrite parameter: {overwrite}")  # TODO: replace with debug
@@ -1168,44 +1205,54 @@ async def get_service_tools(
         raise HTTPException(status_code=500, detail="Service has no proxy URL configured")
 
     logger.info(f"Fetching live tools for {service_path} from {proxy_pass_url}")
-    
+
     try:
         # Call MCP client to fetch fresh tools using server configuration
         tool_list = await mcp_client_service.get_tools_from_server_with_server_info(proxy_pass_url, server_info)
-        
+
         if tool_list is None:
+            # If live fetch fails but we have cached tools, use those
+            cached_tools = server_info.get("tool_list")
+            if cached_tools is not None and isinstance(cached_tools, list):
+                logger.warning(f"Failed to fetch live tools for {service_path}, using cached tools")
+                return {"service_path": service_path, "tools": cached_tools, "cached": True}
             raise HTTPException(status_code=503, detail="Failed to fetch tools from MCP server. Service may be unhealthy.")
-        
+
         # Update the server registry with the fresh tools
         new_tool_count = len(tool_list)
         current_tool_count = server_info.get("num_tools", 0)
-        
+
         if current_tool_count != new_tool_count or server_info.get("tool_list") != tool_list:
             logger.info(f"Updating tool list for {service_path}. New count: {new_tool_count}")
-            
+
             # Update server info with fresh tools
             updated_server_info = server_info.copy()
             updated_server_info["tool_list"] = tool_list
             updated_server_info["num_tools"] = new_tool_count
-            
-            # Save updated server info 
+
+            # Save updated server info
             success = server_service.update_server(service_path, updated_server_info)
             if success:
                 logger.info(f"Successfully updated tool list for {service_path}")
-                
+
                 # Update FAISS index with new tool data
                 await faiss_service.add_or_update_service(service_path, updated_server_info, is_enabled)
                 logger.info(f"Updated FAISS index for {service_path}")
             else:
                 logger.error(f"Failed to save updated tool list for {service_path}")
-        
-        return {"service_path": service_path, "tools": tool_list}
-        
+
+        return {"service_path": service_path, "tools": tool_list, "cached": False}
+
     except HTTPException:
         # Re-raise HTTP exceptions as-is
         raise
     except Exception as e:
         logger.error(f"Error fetching tools for {service_path}: {e}")
+        # Try to return cached tools if available
+        cached_tools = server_info.get("tool_list")
+        if cached_tools is not None and isinstance(cached_tools, list):
+            logger.warning(f"Error fetching live tools for {service_path}, falling back to cached tools: {e}")
+            return {"service_path": service_path, "tools": cached_tools, "cached": True}
         raise HTTPException(status_code=500, detail=f"Error fetching tools: {str(e)}")
 
 

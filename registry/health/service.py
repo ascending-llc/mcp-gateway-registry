@@ -532,7 +532,27 @@ class HealthMonitoringService:
                 if response.status_code in [401, 403]:
                     logger.info(f"[TRACE] Auth failure detected ({response.status_code}) for {endpoint}, trying ping without auth")
                     if await self._try_ping_without_auth(client, endpoint):
-                        return True, HealthStatus.HEALTHY_AUTH_EXPIRED
+                        # ============================================================================
+                        # TEMPORARY WORKAROUND - TODO: REVERT AFTER CREDENTIALS MANAGER IS IMPLEMENTED
+                        # ============================================================================
+                        # Issue: https://github.com/agentic-community/mcp-gateway-registry/issues/167
+                        #
+                        # Temporarily marking servers with auth failures as "healthy" instead of
+                        # "healthy-auth-expired" to avoid confusing users when servers are registered
+                        # with auth requirements but no credentials manager is in place yet.
+                        #
+                        # This allows servers like customer-support-assistant (Bedrock AgentCore) to
+                        # show as healthy when they respond to ping, even though live tool fetching
+                        # requires authentication.
+                        #
+                        # BEFORE CREDENTIALS MANAGER: Return healthy (current behavior)
+                        # AFTER CREDENTIALS MANAGER:  Return healthy-auth-expired (proper behavior)
+                        #
+                        # When the credentials manager container is implemented (see design doc at
+                        # .scratchpad/credentials-manager-design.md), this should be changed back to:
+                        #   return True, HealthStatus.HEALTHY_AUTH_EXPIRED
+                        # ============================================================================
+                        return True, HealthStatus.HEALTHY  # TODO: Change back to HEALTHY_AUTH_EXPIRED
                     else:
                         return False, f"unhealthy: auth failed and ping without auth failed"
                 

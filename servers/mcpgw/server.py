@@ -1023,6 +1023,11 @@ async def register_service(
     num_stars: Optional[int] = Field(0, description="Number of stars/rating for the server."),
     is_python: Optional[bool] = Field(False, description="Whether the server is implemented in Python."),
     license: Optional[str] = Field("N/A", description="License information for the server."),
+    auth_provider: Optional[str] = Field(None, description="Authentication provider (e.g., 'bedrock-agentcore', 'oauth')."),
+    auth_type: Optional[str] = Field(None, description="Authentication type (e.g., 'oauth', 'none')."),
+    supported_transports: Optional[List[str]] = Field(None, description="List of supported transports (e.g., ['streamable-http'])."),
+    headers: Optional[List[Dict[str, str]]] = Field(None, description="List of header dictionaries to include in requests."),
+    tool_list: Optional[List[Dict[str, Any]]] = Field(None, description="List of tools with their schemas."),
     ctx: Context = None
 ) -> Dict[str, Any]:
     """
@@ -1046,10 +1051,10 @@ async def register_service(
         Exception: If the API call fails.
     """
     endpoint = "/api/internal/register"
-    
+
     # Convert tags list to comma-separated string if it's a list
     tags_str = ",".join(tags) if isinstance(tags, list) and tags is not None else tags
-    
+
     # Create form data to send to the API
     form_data = {
         "name": server_name,  # Use 'name' as expected by the registry API
@@ -1062,9 +1067,25 @@ async def register_service(
         "is_python": is_python,
         "license_str": license  # The registry API uses license_str field name
     }
+
+    # Add optional fields if provided
+    if auth_provider is not None:
+        form_data["auth_provider"] = auth_provider
+    if auth_type is not None:
+        form_data["auth_type"] = auth_type
+    if supported_transports is not None:
+        # Convert list to JSON string for form data
+        form_data["supported_transports"] = json.dumps(supported_transports) if isinstance(supported_transports, list) else supported_transports
+    if headers is not None:
+        # Convert list to JSON string for form data
+        form_data["headers"] = json.dumps(headers) if isinstance(headers, list) else headers
+    if tool_list is not None:
+        # Convert list to JSON string for form data
+        form_data["tool_list_json"] = json.dumps(tool_list) if isinstance(tool_list, list) else tool_list
+
     # Remove None values
     form_data = {k: v for k, v in form_data.items() if v is not None}
-    
+
     # Send as form data instead of JSON
     return await _call_registry_api("POST", endpoint, ctx, data=form_data)
 

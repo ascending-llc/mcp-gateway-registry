@@ -84,10 +84,10 @@ The **MCP Gateway & Registry** is an enterprise-ready platform that centralizes 
 
 - **🚀 Pre-built Images - Get Running in Under 10 Minutes** - Deploy the complete MCP Gateway solution instantly with pre-built Docker images. No compilation required - just download and run! [Get Started Now](#option-a-pre-built-images-instant-setup) | [macOS Setup Guide](docs/macos-setup-guide.md) | [Pre-built Images Documentation](docs/prebuilt-images.md)
 - **🔐 Keycloak Identity Provider Integration** - Enterprise-grade authentication with individual AI agent audit trails, group-based authorization, and production-ready service account management. [Learn more](docs/keycloak-integration.md)
+- **Amazon Bedrock AgentCore Gateway Integration** - Seamlessly integrate Amazon Bedrock AgentCore Gateways with dual authentication (Keycloak ingress + Cognito egress), passthrough token mode, and complete MCP protocol support. Deploy customer support assistants and other AgentCore services through the registry. [Integration Guide](docs/agentcore.md)
 - **Real-Time Metrics & Observability** - Comprehensive monitoring via Grafana dashboards with metrics stored in SQLite and exposed through OpenTelemetry (OTEL). Track server health, tool usage, authentication events, and performance metrics in real-time for complete visibility into your MCP infrastructure. [Observability Guide](docs/OBSERVABILITY.md)
 - **Service & User Management Utilities** - Comprehensive CLI scripts for complete lifecycle management: server registration, health validation, user provisioning, and group-based access control with automated verification and testing. [Learn more](docs/service-management.md)
 - **Tag-Based Tool Filtering** - Enhanced intelligent_tool_finder now supports filtering tools by server tags for precise categorical discovery alongside semantic search
-- **Amazon Bedrock AgentCore Integration** - Direct access to AWS services through managed MCP endpoints
 - **Three-Legged OAuth (3LO) Support** - External service integration (Atlassian, Google, GitHub)
 - **JWT Token Vending Service** - Self-service token generation for automation
 - **Automated Token Refresh Service** - Background token refresh to maintain continuous authentication
@@ -435,14 +435,8 @@ The following GitHub issues represent our current development roadmap and planne
 
 **Major Features**
 
-- **[#160 - Documentation: Add Amazon Bedrock AgentCore Gateway integration example](https://github.com/agentic-community/mcp-gateway-registry/issues/160)** 🚧 **IN PROGRESS**
-  Create comprehensive documentation and examples for integrating Amazon Bedrock AgentCore Gateway as an MCP server with egress authentication support.
-
 - **[#159 - Add scope management: create/delete Keycloak groups with scope configuration](https://github.com/agentic-community/mcp-gateway-registry/issues/159)** 🚧 **IN PROGRESS**
   Add dynamic scope management functionality to create/delete Keycloak groups with corresponding scope configurations through the service management CLI.
-
-- **[#158 - Replace /opt/mcp-gateway with ${HOME}/mcp-gateway to eliminate sudo requirements](https://github.com/agentic-community/mcp-gateway-registry/issues/158)** ✅ **COMPLETED**
-  Improve installation experience by using user home directory instead of /opt, removing the need for sudo privileges during setup.
 
 - **[#37 - Multi-Level Registry Support](https://github.com/agentic-community/mcp-gateway-registry/issues/37)** 🚧 **IN PROGRESS**
   Add support for federated registries that can connect to other registries, enabling hierarchical MCP infrastructure with cross-IdP authentication.
@@ -479,6 +473,12 @@ The following GitHub issues represent our current development roadmap and planne
   Optimize Docker build times and runtime performance for faster development and deployment cycles.
 
 **Completed**
+
+- **[#160 - Documentation: Add Amazon Bedrock AgentCore Gateway integration example](https://github.com/agentic-community/mcp-gateway-registry/issues/160)** ✅ **COMPLETED**
+  Comprehensive documentation and examples for integrating Amazon Bedrock AgentCore Gateway with dual authentication (Keycloak ingress + Cognito egress), passthrough token mode, and complete MCP protocol flow. [Integration Guide](docs/agentcore.md)
+
+- **[#158 - Replace /opt/mcp-gateway with ${HOME}/mcp-gateway to eliminate sudo requirements](https://github.com/agentic-community/mcp-gateway-registry/issues/158)** ✅ **COMPLETED**
+  Installation experience improved by using user home directory instead of /opt, removing the need for sudo privileges during setup.
 
 - **[#111 - Standalone Metrics Collection Service](https://github.com/agentic-community/mcp-gateway-registry/issues/111)** ✅ **COMPLETED**
   Dedicated metrics collection service implemented for comprehensive monitoring and analytics across all MCP Gateway components. [Documentation](docs/OBSERVABILITY.md)
