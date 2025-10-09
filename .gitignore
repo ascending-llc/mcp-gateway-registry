@@ -273,3 +273,4 @@ lerna-debug.log*
 coverage/
 .cache/
 .parcel-cache/
+.scratchpad/
