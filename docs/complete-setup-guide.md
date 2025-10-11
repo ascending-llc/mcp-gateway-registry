@@ -234,6 +234,21 @@ KEYCLOAK_CLIENT_ID=mcp-gateway-client
 
 **Important**: Remember the passwords you set here - you'll need to use the same ones in Step 5!
 
+### Download Required Embeddings Model
+
+The MCP Gateway requires a sentence-transformers model for intelligent tool discovery. Download it to the shared models directory:
+
+```bash
+# Download the embeddings model (this may take a few minutes)
+hf download sentence-transformers/all-MiniLM-L6-v2 --local-dir ${HOME}/mcp-gateway/models/all-MiniLM-L6-v2
+
+# Verify the model was downloaded
+ls -la ${HOME}/mcp-gateway/models/all-MiniLM-L6-v2/
+# You should see model files like model.safetensors, config.json, etc.
+```
+
+**Note**: This command automatically creates the necessary directory structure and downloads all required model files (~90MB).
+
 ---
 
 ## 5. Setting Up Keycloak Identity Provider

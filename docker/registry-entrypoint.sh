@@ -103,38 +103,26 @@ else
     echo "HTTP + HTTPS Nginx configuration installed."
 fi
 
-# --- Model Download ---
+# --- Model Check ---
 EMBEDDINGS_MODEL_NAME="all-MiniLM-L6-v2"
 EMBEDDINGS_MODEL_DIR="/app/registry/models/$EMBEDDINGS_MODEL_NAME"
 
 echo "Checking for sentence-transformers model..."
 if [ ! -d "$EMBEDDINGS_MODEL_DIR" ] || [ -z "$(ls -A "$EMBEDDINGS_MODEL_DIR")" ]; then
-    echo "Downloading sentence-transformers model..."
-    mkdir -p "$EMBEDDINGS_MODEL_DIR"
-    source "/app/.venv/bin/activate"
-    
-    # Ensure CA certificates are installed for SSL verification
-    echo "Ensuring CA certificates are installed..."
-    apt-get update && apt-get install -y ca-certificates && update-ca-certificates
-    
-    # Try standard download method first
-    echo "Downloading model using standard method..."
-    if huggingface-cli download sentence-transformers/$EMBEDDINGS_MODEL_NAME --local-dir "$EMBEDDINGS_MODEL_DIR" --quiet; then
-        echo "Model downloaded successfully using standard method."
-    else
-        echo "Standard download failed, trying alternative methods..."
-        pip install "huggingface-hub[hf_xet]" "hf_xet>=0.1.0" --quiet
-        
-        if ! huggingface-cli download sentence-transformers/$EMBEDDINGS_MODEL_NAME --local-dir "$EMBEDDINGS_MODEL_DIR" --quiet; then
-            echo "Trying download with SSL verification disabled..."
-            export CURL_CA_BUNDLE=""
-            export SSL_CERT_FILE=""
-            huggingface-cli download sentence-transformers/$EMBEDDINGS_MODEL_NAME --local-dir "$EMBEDDINGS_MODEL_DIR" --quiet
-        fi
-    fi
-    echo "Model downloaded to $EMBEDDINGS_MODEL_DIR"
+    echo "=========================================="
+    echo "WARNING: Embeddings model not found!"
+    echo "=========================================="
+    echo ""
+    echo "The registry requires the sentence-transformers model to function properly."
+    echo "Please download the model to: $EMBEDDINGS_MODEL_DIR"
+    echo ""
+    echo "Run this command to download the model:"
+    echo "  docker run --rm -v \$(pwd)/models:/models huggingface/transformers-pytorch-cpu python -c \"from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/$EMBEDDINGS_MODEL_NAME').save('/models/$EMBEDDINGS_MODEL_NAME')\""
+    echo ""
+    echo "Or see the README for alternative download methods."
+    echo "=========================================="
 else
-    echo "Model already exists, skipping download."
+    echo "Embeddings model found at $EMBEDDINGS_MODEL_DIR"
 fi
 
 # --- Environment Variable Substitution for MCP Server Auth Tokens ---

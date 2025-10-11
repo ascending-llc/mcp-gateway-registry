@@ -104,6 +104,21 @@ KEYCLOAK_CLIENT_ID=mcp-gateway-web
 
 **Important**: Choose strong, unique passwords and remember them - you'll need the admin password for Keycloak login!
 
+### Download Required Embeddings Model
+
+The MCP Gateway requires a sentence-transformers model for intelligent tool discovery. Download it to the shared models directory:
+
+```bash
+# Download the embeddings model (this may take a few minutes)
+hf download sentence-transformers/all-MiniLM-L6-v2 --local-dir ${HOME}/mcp-gateway/models/all-MiniLM-L6-v2
+
+# Verify the model was downloaded
+ls -la ${HOME}/mcp-gateway/models/all-MiniLM-L6-v2/
+# You should see model files like model.safetensors, config.json, etc.
+```
+
+**Note**: This command automatically creates the necessary directory structure and downloads all required model files (~90MB). If you don't have `hf` command installed, install it first with `pip install huggingface_hub[cli]`.
+
 ---
 
 ## 4. Starting Keycloak Services

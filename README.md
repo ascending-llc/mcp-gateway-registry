@@ -280,36 +280,42 @@ cd mcp-gateway-registry
 cp .env.example .env
 ```
 
-**Step 2: Configure environment**
+**Step 2: Download embeddings model**
+Download the required sentence-transformers model to the shared models directory:
+```bash
+hf download sentence-transformers/all-MiniLM-L6-v2 --local-dir ${HOME}/mcp-gateway/models/all-MiniLM-L6-v2
+```
+
+**Step 3: Configure environment**
 Complete: **[Initial Environment Configuration](docs/complete-setup-guide.md#initial-environment-configuration)** - Configure domains, passwords, and authentication
 ```bash
 export DOCKERHUB_ORG=mcpgateway
 ```
 
-**Step 3: Deploy with pre-built images**
+**Step 4: Deploy with pre-built images**
 ```bash
 ./build_and_run.sh --prebuilt
 ```
 
 For detailed information about all Docker images used with `--prebuilt`, see [Pre-built Images Documentation](docs/prebuilt-images.md).
 
-**Step 4: Initialize Keycloak**
+**Step 5: Initialize Keycloak**
 Complete: **[Initialize Keycloak Configuration](docs/complete-setup-guide.md#initialize-keycloak-configuration)** - Set up identity provider and security policies
 
-**Step 5: Access the registry**
+**Step 6: Access the registry**
 ```bash
 open http://localhost:7860
 ```
 
-**Step 6: Create your first agent**
+**Step 7: Create your first agent**
 Complete: **[Create Your First AI Agent Account](docs/complete-setup-guide.md#create-your-first-ai-agent-account)** - Create agent credentials for testing
 
-**Step 7: Restart auth server to apply new credentials**
+**Step 8: Restart auth server to apply new credentials**
 ```bash
 docker-compose down auth-server && docker-compose rm -f auth-server && docker-compose up -d auth-server
 ```
 
-**Step 8: Test the setup**
+**Step 9: Test the setup**
 Complete: **[Testing with mcp_client.py and agent.py](docs/complete-setup-guide.md#test-with-python-mcp-client)** - Validate your setup works correctly
 
 **Benefits:** No build time • No Node.js required • No frontend compilation • Consistent tested images
