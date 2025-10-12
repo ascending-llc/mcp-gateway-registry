@@ -110,7 +110,7 @@ The MCP Gateway requires a sentence-transformers model for intelligent tool disc
 
 ```bash
 # Download the embeddings model (this may take a few minutes)
-hf download sentence-transformers/all-MiniLM-L6-v2 --local-dir ${HOME}/mcp-gateway/models/all-MiniLM-L6-v2
+huggingface-cli download sentence-transformers/all-MiniLM-L6-v2 --local-dir ${HOME}/mcp-gateway/models/all-MiniLM-L6-v2
 
 # Verify the model was downloaded
 ls -la ${HOME}/mcp-gateway/models/all-MiniLM-L6-v2/
