@@ -1,6 +1,7 @@
 import json
 import asyncio
 import logging
+import os
 from typing import Annotated
 
 from fastapi import APIRouter, Request, Form, Depends, HTTPException, status, Cookie
@@ -2035,12 +2036,28 @@ async def generate_user_token(
             if response.status_code == 200:
                 token_data = response.json()
                 logger.info(f"Successfully generated token for user '{user_context['username']}'")
-                return {
+
+                # Format response to match expected structure (including refresh token)
+                formatted_response = {
                     "success": True,
+                    "tokens": {
+                        "access_token": token_data.get("access_token"),
+                        "refresh_token": token_data.get("refresh_token"),
+                        "expires_in": token_data.get("expires_in"),
+                        "refresh_expires_in": token_data.get("refresh_expires_in"),
+                        "token_type": token_data.get("token_type", "Bearer"),
+                        "scope": token_data.get("scope", "")
+                    },
+                    "keycloak_url": settings.keycloak_url or "http://keycloak:8080",
+                    "realm": settings.keycloak_realm or "mcp-gateway",
+                    "client_id": "user-generated",
+                    # Legacy fields for backward compatibility
                     "token_data": token_data,
                     "user_scopes": user_context["scopes"],
                     "requested_scopes": requested_scopes or user_context["scopes"]
                 }
+
+                return formatted_response
             else:
                 error_detail = "Unknown error"
                 try:
@@ -2062,6 +2079,105 @@ async def generate_user_token(
         raise HTTPException(
             status_code=500,
             detail="Internal error generating token"
+        )
+
+
+@router.get("/admin/tokens")
+async def get_admin_tokens(
+    user_context: Annotated[dict, Depends(enhanced_auth)]
+):
+    """
+    Admin-only endpoint to retrieve JWT tokens from Keycloak.
+
+    Returns both access token and refresh token for admin users.
+
+    Returns:
+        JSON object containing access_token, refresh_token, expires_in, etc.
+
+    Raises:
+        HTTPException: If user is not admin or token retrieval fails
+    """
+    # Check if user is admin
+    if not user_context.get("is_admin", False):
+        logger.warning(
+            f"Non-admin user {user_context['username']} attempted to access admin tokens"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This endpoint is only available to admin users"
+        )
+
+    try:
+        from ..utils.keycloak_manager import (
+            KEYCLOAK_ADMIN_URL,
+            KEYCLOAK_REALM
+        )
+
+        # Get M2M client credentials from environment
+        m2m_client_id = os.getenv("KEYCLOAK_M2M_CLIENT_ID", "mcp-gateway-m2m")
+        m2m_client_secret = os.getenv("KEYCLOAK_M2M_CLIENT_SECRET")
+
+        if not m2m_client_secret:
+            raise HTTPException(
+                status_code=500,
+                detail="Keycloak M2M client secret not configured"
+            )
+
+        # Get tokens from Keycloak mcp-gateway realm using M2M client_credentials
+        token_url = f"{KEYCLOAK_ADMIN_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token"
+
+        data = {
+            "grant_type": "client_credentials",
+            "client_id": m2m_client_id,
+            "client_secret": m2m_client_secret
+        }
+
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(token_url, data=data, headers=headers)
+            response.raise_for_status()
+
+            token_data = response.json()
+
+            # No refresh tokens - users should configure longer token lifetimes in Keycloak if needed
+            refresh_token = None
+            refresh_expires_in_seconds = 0
+
+            logger.info(
+                f"Admin user {user_context['username']} retrieved Keycloak M2M tokens (no refresh token - configure token lifetime in Keycloak if needed)"
+            )
+
+            return {
+                "success": True,
+                "tokens": {
+                    "access_token": token_data.get("access_token"),
+                    "refresh_token": refresh_token,  # Custom-generated refresh token
+                    "expires_in": token_data.get("expires_in"),
+                    "refresh_expires_in": refresh_expires_in_seconds,
+                    "token_type": token_data.get("token_type", "Bearer"),
+                    "scope": token_data.get("scope", ""),
+                },
+                "keycloak_url": KEYCLOAK_ADMIN_URL,
+                "realm": KEYCLOAK_REALM,
+                "client_id": m2m_client_id
+            }
+
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            f"Failed to retrieve Keycloak tokens: HTTP {e.response.status_code}"
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to authenticate with Keycloak: HTTP {e.response.status_code}"
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error retrieving Keycloak tokens: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal error retrieving Keycloak tokens"
         )
 
  

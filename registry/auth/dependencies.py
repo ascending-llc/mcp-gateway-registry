@@ -4,7 +4,7 @@ import logging
 import yaml
 from pathlib import Path
 
-from fastapi import Depends, HTTPException, status, Cookie
+from fastapi import Depends, HTTPException, status, Cookie, Header, Request
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 
 from ..core.config import settings
@@ -432,6 +432,79 @@ def enhanced_auth(
     
     logger.debug(f"Enhanced auth context for {username}: {user_context}")
     return user_context
+
+
+def nginx_proxied_auth(
+    request: Request,
+    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
+    x_user: Annotated[str | None, Header(alias="X-User")] = None,
+    x_username: Annotated[str | None, Header(alias="X-Username")] = None,
+    x_scopes: Annotated[str | None, Header(alias="X-Scopes")] = None,
+    x_auth_method: Annotated[str | None, Header(alias="X-Auth-Method")] = None,
+) -> Dict[str, Any]:
+    """
+    Authentication dependency that works with both nginx-proxied requests and direct requests.
+
+    For nginx-proxied requests: Reads user context from headers set by nginx after auth validation
+    For direct requests: Falls back to session cookie authentication
+
+    This allows v0 API endpoints to work both when accessed through nginx (with JWT tokens)
+    and when accessed directly (with session cookies).
+
+    Returns:
+        Dict containing username, groups, scopes, and permission flags
+    """
+    # First, try to get user context from nginx headers (JWT Bearer token flow)
+    if x_user or x_username:
+        username = x_username or x_user
+
+        # Parse scopes from space-separated header
+        scopes = x_scopes.split() if x_scopes else []
+
+        # For Keycloak auth, map scopes to get groups
+        groups = []
+        if x_auth_method == 'keycloak':
+            # User authenticated via Keycloak JWT
+            # Scopes already contain mapped permissions
+            # Check if user has admin scopes
+            if 'mcp-servers-unrestricted/read' in scopes and 'mcp-servers-unrestricted/execute' in scopes:
+                groups = ['mcp-registry-admin']
+            else:
+                groups = ['mcp-registry-user']
+
+        logger.info(f"nginx-proxied auth for user: {username}, method: {x_auth_method}, scopes: {scopes}")
+
+        # Get accessible servers based on scopes
+        accessible_servers = get_user_accessible_servers(scopes)
+
+        # Get UI permissions
+        ui_permissions = get_ui_permissions_for_user(scopes)
+
+        # Get accessible services
+        accessible_services = get_accessible_services_for_user(ui_permissions)
+
+        # Check modification permissions
+        can_modify = user_can_modify_servers(groups, scopes)
+
+        user_context = {
+            'username': username,
+            'groups': groups,
+            'scopes': scopes,
+            'auth_method': x_auth_method or 'keycloak',
+            'provider': 'keycloak',
+            'accessible_servers': accessible_servers,
+            'accessible_services': accessible_services,
+            'ui_permissions': ui_permissions,
+            'can_modify_servers': can_modify,
+            'is_admin': 'mcp-registry-admin' in groups
+        }
+
+        logger.debug(f"nginx-proxied auth context for {username}: {user_context}")
+        return user_context
+
+    # Fallback to session cookie authentication
+    logger.debug("No nginx auth headers found, falling back to session cookie auth")
+    return enhanced_auth(session)
 
 
 def create_session_cookie(username: str, auth_method: str = "traditional", provider: str = "local") -> str:

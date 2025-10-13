@@ -82,6 +82,7 @@ The **MCP Gateway & Registry** is an enterprise-ready platform that centralizes 
 
 ## What's New
 
+- **🔌 Anthropic MCP Registry REST API v0 Compatibility** -  Compatibility with Anthropic's official MCP Registry REST API specification. List servers, get versions, and retrieve server details programmatically with JWT authentication. Includes comprehensive test scripts and curl examples. [API Documentation](docs/anthropic_registry_api.md)
 - **🚀 Pre-built Images - Get Running in Under 10 Minutes** - Deploy the complete MCP Gateway solution instantly with pre-built Docker images. No compilation required - just download and run! [Get Started Now](#option-a-pre-built-images-instant-setup) | [macOS Setup Guide](docs/macos-setup-guide.md) | [Pre-built Images Documentation](docs/prebuilt-images.md)
 - **🔐 Keycloak Identity Provider Integration** - Enterprise-grade authentication with individual AI agent audit trails, group-based authorization, and production-ready service account management. [Learn more](docs/keycloak-integration.md)
 - **Amazon Bedrock AgentCore Gateway Integration** - Seamlessly integrate Amazon Bedrock AgentCore Gateways with dual authentication (Keycloak ingress + Cognito egress), passthrough token mode, and complete MCP protocol support. Deploy customer support assistants and other AgentCore services through the registry. [Integration Guide](docs/agentcore.md)

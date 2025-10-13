@@ -180,23 +180,23 @@ log "Copying JSON files from registry/servers to $MCPGATEWAY_SERVERS_DIR..."
 if [ -d "registry/servers" ]; then
     # Create the target directory if it doesn't exist
     mkdir -p "$MCPGATEWAY_SERVERS_DIR"
-    
+
     # Copy all JSON files with environment variable substitution
     if ls registry/servers/*.json 1> /dev/null 2>&1; then
         # Export all environment variables from .env file for envsubst
         set -a  # Automatically export all variables
         source .env
         set +a  # Turn off automatic export
-        
+
         for json_file in registry/servers/*.json; do
             filename=$(basename "$json_file")
             log "Processing $filename with environment variable substitution..."
-            
+
             # Use envsubst to substitute environment variables, then copy to target
             envsubst < "$json_file" > "$MCPGATEWAY_SERVERS_DIR/$filename"
         done
         log "JSON files copied successfully with environment variable substitution"
-        
+
         # Verify atlassian.json was copied
         if [ -f "$MCPGATEWAY_SERVERS_DIR/atlassian.json" ]; then
             log "atlassian.json copied successfully"

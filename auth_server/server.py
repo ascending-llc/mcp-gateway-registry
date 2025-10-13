@@ -464,8 +464,10 @@ class GenerateTokenRequest(BaseModel):
 class GenerateTokenResponse(BaseModel):
     """Response model for token generation"""
     access_token: str
+    refresh_token: Optional[str] = None
     token_type: str = "Bearer"
     expires_in: int
+    refresh_expires_in: Optional[int] = None
     scope: str
     issued_at: int
     description: Optional[str] = None
@@ -1218,11 +1220,11 @@ async def generate_user_token(
                 headers={"Connection": "close"}
             )
         
-        # Generate JWT token
+        # Generate JWT access token
         current_time = int(time.time())
         expires_at = current_time + (expires_in_hours * 3600)
-        
-        payload = {
+
+        access_payload = {
             "iss": JWT_ISSUER,
             "aud": JWT_AUDIENCE,
             "sub": username,
@@ -1234,19 +1236,25 @@ async def generate_user_token(
             "client_id": "user-generated",
             "token_type": "user_generated"
         }
-        
+
         # Add description if provided
         if request.description:
-            payload["description"] = request.description
-        
-        # Sign the token using HS256 with shared SECRET_KEY
-        access_token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
-        
-        logger.info(f"Generated token for user '{hash_username(username)}' with scopes: {requested_scopes}, expires in {expires_in_hours} hours")
-        
+            access_payload["description"] = request.description
+
+        # Sign the access token using HS256 with shared SECRET_KEY
+        access_token = jwt.encode(access_payload, SECRET_KEY, algorithm='HS256')
+
+        # No refresh tokens - users should configure longer token lifetimes in Keycloak if needed
+        refresh_token = None
+        refresh_expires_in_seconds = 0
+
+        logger.info(f"Generated access token for user '{hash_username(username)}' with scopes: {requested_scopes}, expires in {expires_in_hours} hours (no refresh token - configure longer token lifetime in Keycloak if needed)")
+
         return GenerateTokenResponse(
             access_token=access_token,
+            refresh_token=refresh_token,
             expires_in=expires_in_hours * 3600,
+            refresh_expires_in=refresh_expires_in_seconds,
             scope=" ".join(requested_scopes),
             issued_at=current_time,
             description=request.description
