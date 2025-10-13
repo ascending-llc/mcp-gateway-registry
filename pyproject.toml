@@ -37,6 +37,7 @@ dependencies = [
     "psutil>=6.1.0",
     "aiohttp>=3.8.0",
     "rich>=13.0.0",
+    "requests>=2.31.0",
 ]
 
 [project.optional-dependencies]
