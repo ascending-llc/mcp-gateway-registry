@@ -82,19 +82,12 @@ The **MCP Gateway & Registry** is an enterprise-ready platform that centralizes 
 
 ## What's New
 
-- **🔌 Anthropic MCP Registry REST API v0 Compatibility** -  Compatibility with Anthropic's official MCP Registry REST API specification. List servers, get versions, and retrieve server details programmatically with JWT authentication. Includes comprehensive test scripts and curl examples. [API Documentation](docs/anthropic_registry_api.md)
-- **🚀 Pre-built Images - Get Running in Under 10 Minutes** - Deploy the complete MCP Gateway solution instantly with pre-built Docker images. No compilation required - just download and run! [Get Started Now](#option-a-pre-built-images-instant-setup) | [macOS Setup Guide](docs/macos-setup-guide.md) | [Pre-built Images Documentation](docs/prebuilt-images.md)
-- **🔐 Keycloak Identity Provider Integration** - Enterprise-grade authentication with individual AI agent audit trails, group-based authorization, and production-ready service account management. [Learn more](docs/keycloak-integration.md)
-- **Amazon Bedrock AgentCore Gateway Integration** - Seamlessly integrate Amazon Bedrock AgentCore Gateways with dual authentication (Keycloak ingress + Cognito egress), passthrough token mode, and complete MCP protocol support. Deploy customer support assistants and other AgentCore services through the registry. [Integration Guide](docs/agentcore.md)
-- **Real-Time Metrics & Observability** - Comprehensive monitoring via Grafana dashboards with metrics stored in SQLite and exposed through OpenTelemetry (OTEL). Track server health, tool usage, authentication events, and performance metrics in real-time for complete visibility into your MCP infrastructure. [Observability Guide](docs/OBSERVABILITY.md)
-- **Service & User Management Utilities** - Comprehensive CLI scripts for complete lifecycle management: server registration, health validation, user provisioning, and group-based access control with automated verification and testing. [Learn more](docs/service-management.md)
-- **Tag-Based Tool Filtering** - Enhanced intelligent_tool_finder now supports filtering tools by server tags for precise categorical discovery alongside semantic search
-- **Three-Legged OAuth (3LO) Support** - External service integration (Atlassian, Google, GitHub)
-- **JWT Token Vending Service** - Self-service token generation for automation
-- **Automated Token Refresh Service** - Background token refresh to maintain continuous authentication
-- **Modern React Frontend** - Complete UI overhaul with TypeScript and real-time updates
-- **Dynamic Tool Discovery** - AI agents autonomously find and execute specialized tools
-- **Fine-Grained Access Control** - Granular permissions for servers, methods, and individual tools
+- **📥 Import Servers from Anthropic MCP Registry** - Import curated MCP servers from Anthropic's registry with a single command. [Import Guide](docs/anthropic-registry-import.md)
+- **🔌 Anthropic MCP Registry REST API v0 Compatibility** - Full compatibility with Anthropic's MCP Registry REST API specification. [API Documentation](docs/anthropic_registry_api.md)
+- **🚀 Pre-built Images** - Deploy instantly with pre-built Docker images. [Get Started](#option-a-pre-built-images-instant-setup) | [macOS Guide](docs/macos-setup-guide.md)
+- **🔐 Keycloak Integration** - Enterprise authentication with AI agent audit trails and group-based authorization. [Learn more](docs/keycloak-integration.md)
+- **📊 Real-Time Metrics & Observability** - Grafana dashboards with SQLite and OpenTelemetry integration. [Observability Guide](docs/OBSERVABILITY.md)
+- **Amazon Bedrock AgentCore Integration** - AgentCore Gateway support with dual authentication. [Integration Guide](docs/agentcore.md)
 
 ---
 
@@ -259,7 +252,6 @@ flowchart TB
 - Unified governance for both AI agents and human developers
 
 ### **Production Ready**
-- High availability with multi-AZ deployment
 - Container-native (Docker/Kubernetes)
 - Real-time health monitoring and alerting
 - Dual authentication supporting both human and machine authentication
@@ -368,6 +360,18 @@ Comprehensive real-time metrics and monitoring through Grafana dashboards with d
 </tr>
 </table>
 
+### Anthropic MCP Registry Integration
+
+Seamlessly integrate with Anthropic's official MCP Registry to import and access curated MCP servers through your gateway:
+
+- **Import Servers**: Select and import desired servers from Anthropic's registry with a single command
+- **Unified Access**: Access imported servers through your gateway with centralized authentication and governance
+- **API Compatibility**: Full support for Anthropic's Registry REST API v0 specification - point your Anthropic API clients to this registry to discover available servers
+
+<img src="docs/img/registry_w_a.png" alt="Anthropic Registry Integration" />
+<p><em>Import and access curated MCP servers from Anthropic's official registry</em></p>
+
+[Import Guide](docs/anthropic-registry-import.md) | [Registry API Documentation](docs/anthropic_registry_api.md)
 
 ### Authentication & Authorization
 
@@ -376,28 +380,13 @@ Comprehensive real-time metrics and monitoring through Grafana dashboards with d
 - **Three-Legged OAuth (3LO)** - For external service integration (Atlassian, Google, GitHub)
 - **Session-Based** - For human developers using AI coding assistants and web interface
 
-**Supported Identity Providers:**
-- **[Keycloak](https://www.keycloak.org/)** - Enterprise-grade open-source identity and access management with individual agent audit trails
-- **Amazon Cognito** - Amazon managed identity service
-- Any OAuth 2.0 compatible provider
+**Supported Identity Providers:** Keycloak, Amazon Cognito, and any OAuth 2.0 compatible provider. [Learn more](docs/auth.md)
 
-**Fine-Grained Permissions:**
-- Tool-level access control
-- Method-level restrictions  
-- Team-based permissions
-- Temporary access grants
+**Fine-Grained Permissions:** Tool-level, method-level, team-based, and temporary access controls. [Learn more](docs/scopes.md)
 
 ### Production Deployment
 
-**Cloud Platforms:**
-- **Amazon EC2** - Single instance or auto-scaling groups
-- **Amazon EKS** - Kubernetes-native microservices deployment
-
-**High Availability:**
-- Multi-AZ deployment with automatic failover
-- Health monitoring and alerting
-- Rolling updates with zero downtime
-- Backup and disaster recovery
+**Cloud Platforms:** Amazon EC2, Amazon EKS
 
 ---
 
@@ -408,8 +397,8 @@ Comprehensive real-time metrics and monitoring through Grafana dashboards with d
 | [Complete Setup Guide](docs/complete-setup-guide.md)<br/>**NEW!** Step-by-step from scratch on AWS EC2 | [Authentication Guide](docs/auth.md)<br/>OAuth and identity provider integration | [AI Coding Assistants Setup](docs/ai-coding-assistants-setup.md)<br/>VS Code, Cursor, Claude Code integration |
 | [Installation Guide](docs/installation.md)<br/>Complete setup instructions for EC2 and EKS | [Keycloak Integration](docs/keycloak-integration.md)<br/>Enterprise identity with agent audit trails | [API Reference](docs/registry_api.md)<br/>Programmatic registry management |
 | [Quick Start Tutorial](docs/quick-start.md)<br/>Get running in 5 minutes | [Amazon Cognito Setup](docs/cognito.md)<br/>Step-by-step IdP configuration | [Token Refresh Service](docs/token-refresh-service.md)<br/>Automated token refresh and lifecycle management |
-| [Configuration Reference](docs/configuration.md)<br/>Environment variables and settings |  | [Observability Guide](docs/OBSERVABILITY.md)<br/>**NEW!** Metrics, monitoring, and OpenTelemetry setup |
-| | [Fine-Grained Access Control](docs/scopes.md)<br/>Permission management and security | [Dynamic Tool Discovery](docs/dynamic-tool-discovery.md)<br/>Autonomous agent capabilities |
+| [Configuration Reference](docs/configuration.md)<br/>Environment variables and settings | [Anthropic Registry Import](docs/anthropic-registry-import.md)<br/>**NEW!** Import servers from Anthropic MCP Registry | [Observability Guide](docs/OBSERVABILITY.md)<br/>**NEW!** Metrics, monitoring, and OpenTelemetry setup |
+| [Anthropic Registry API](docs/anthropic_registry_api.md)<br/>**NEW!** REST API v0 compatibility | [Fine-Grained Access Control](docs/scopes.md)<br/>Permission management and security | [Dynamic Tool Discovery](docs/dynamic-tool-discovery.md)<br/>Autonomous agent capabilities |
 | | [Service Management](docs/service-management.md)<br/>Server lifecycle and operations | |
 | | | [Production Deployment](docs/installation.md)<br/>Complete setup for production environments |
 | | | [Troubleshooting Guide](docs/FAQ.md)<br/>Common issues and solutions |
@@ -423,9 +412,6 @@ Comprehensive real-time metrics and monitoring through Grafana dashboards with d
 **Join the Discussion**
 - [GitHub Discussions](https://github.com/agentic-community/mcp-gateway-registry/discussions) - Feature requests and general discussion
 - [GitHub Issues](https://github.com/agentic-community/mcp-gateway-registry/issues) - Bug reports and feature requests
-
-**Resources**
-- [Demo Videos](https://github.com/agentic-community/mcp-gateway-registry#demo-videos) - See the platform in action
 
 **Contributing**
 - [Contributing Guide](CONTRIBUTING.md) - How to contribute code and documentation

@@ -275,3 +275,10 @@ coverage/
 .cache/
 .parcel-cache/
 .scratchpad/
+
+#MCP Json
+.tmp/anthropic-import
+
+# Anthropic registry temporary files
+anthropic_servers_*.json
+curated_import_list.txt

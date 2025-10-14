@@ -289,9 +289,16 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
     }
   }, [generateMCPConfig, onShowToast]);
 
+  // Check if this is an Anthropic registry server
+  const isAnthropicServer = server.tags?.includes('anthropic-registry');
+
   return (
     <>
-      <div className="group bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600 shadow-sm hover:shadow-xl transition-all duration-300 h-full flex flex-col">
+      <div className={`group rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 h-full flex flex-col ${
+        isAnthropicServer 
+          ? 'bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border-2 border-purple-200 dark:border-purple-700 hover:border-purple-300 dark:hover:border-purple-600'
+          : 'bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600'
+      }`}>
         {/* Header */}
         <div className="p-5 pb-4">
           <div className="flex items-start justify-between mb-4">
@@ -303,6 +310,11 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
                 {server.official && (
                   <span className="px-2 py-0.5 text-xs font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded-full flex-shrink-0">
                     OFFICIAL
+                  </span>
+                )}
+                {isAnthropicServer && (
+                  <span className="px-2 py-0.5 text-xs font-semibold bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-700 dark:from-purple-900/30 dark:to-indigo-900/30 dark:text-purple-300 rounded-full flex-shrink-0 border border-purple-200 dark:border-purple-600">
+                    ANTHROPIC
                   </span>
                 )}
               </div>

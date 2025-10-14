@@ -166,7 +166,7 @@ def _make_api_request(
     url = f"{base_url}{endpoint}"
 
     headers = {
-        "Authorization": f"Bearer {access_token}",
+        "X-Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json"
     }
 

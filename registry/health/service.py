@@ -500,6 +500,15 @@ class HealthMonitoringService:
                 else:
                     logger.info(f"[TRACE] Detected MCP endpoint in URL, using standard HTTP handling")
                     response = await client.get(proxy_pass_url, headers=headers, follow_redirects=True)
+
+                    # Check for auth failures first
+                    if response.status_code in [401, 403]:
+                        logger.info(f"[TRACE] Auth failure detected ({response.status_code}) for {proxy_pass_url}, trying ping without auth")
+                        if await self._try_ping_without_auth(client, proxy_pass_url):
+                            return True, HealthStatus.HEALTHY
+                        else:
+                            return False, f"unhealthy: auth failed and ping without auth failed"
+
                     if self._is_mcp_endpoint_healthy(response):
                         return True, HealthStatus.HEALTHY
                     else:
@@ -507,6 +516,11 @@ class HealthMonitoringService:
             except Exception as e:
                 logger.warning(f"Health check failed for {proxy_pass_url}: {type(e).__name__} - {e}")
                 return False, f"unhealthy: {type(e).__name__}"
+
+        # Skip health checks for stdio transport (as requested)
+        if supported_transports == ["stdio"]:
+            logger.info(f"[TRACE] Skipping health check for stdio transport: {proxy_pass_url}")
+            return True, HealthStatus.UNKNOWN
         
         # Try endpoints based on supported transports, prioritizing streamable-http
         logger.info(f"[TRACE] No transport endpoint in URL: {proxy_pass_url}")
@@ -519,7 +533,10 @@ class HealthMonitoringService:
             headers = self._build_headers_for_server(server_info)
             
             # Only try /mcp endpoint for streamable-http transport
-            endpoint = f"{base_url}/mcp"
+            if base_url.endswith('/mcp'):
+                endpoint = f"{base_url}"
+            else:
+                endpoint = f"{base_url}/mcp"
             ping_payload = '{ "jsonrpc": "2.0", "id": "0", "method": "ping" }'
             
             try:
@@ -572,7 +589,10 @@ class HealthMonitoringService:
         if "sse" in supported_transports:
             logger.info(f"[TRACE] Trying SSE transport")
             try:
-                sse_endpoint = f"{base_url}/sse"
+                if base_url.endswith('/sse'):
+                    sse_endpoint = f"{base_url}"
+                else:
+                    sse_endpoint = f"{base_url}/sse"
                 # Build headers including server-specific headers
                 headers = self._build_headers_for_server(server_info)
                 # Use shorter timeout for SSE since it starts streaming immediately
@@ -665,10 +685,16 @@ class HealthMonitoringService:
                 # Parse the JSON response
                 response_data = response.json()
                 
-                # Check for error dictionary with code -32600
+                # Check for error dictionary with code -32600 (standard MCP error)
                 if isinstance(response_data.get("error"), dict):
                     error = response_data["error"]
                     if isinstance(error.get("code"), int) and error.get("code") == -32600:
+                        return True
+                    
+                # Check for streamable-http no auth specific query parameter error
+                if isinstance(response_data.get("error"), str):
+                    error_msg = response_data["error"]
+                    if "Missing required query parameter: strata_id or instance_id" in error_msg:
                         return True
                         
             except (ValueError, KeyError, TypeError):

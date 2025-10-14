@@ -19,6 +19,9 @@ CROSS_MARK="✗"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# Gateway URL (can be overridden with GATEWAY_URL environment variable)
+GATEWAY_URL="${GATEWAY_URL:-http://localhost}"
+
 # Default service name
 DEFAULT_SERVICE="example-server"
 
@@ -53,9 +56,9 @@ run_mcp_command() {
     print_info "$description"
 
     # Print the exact command being executed
-    echo "🔍 Executing: uv run cli/mcp_client.py --url http://localhost/mcpgw/mcp call --tool $tool --args '$args'"
+    echo "🔍 Executing: uv run cli/mcp_client.py --url ${GATEWAY_URL}/mcpgw/mcp call --tool $tool --args '$args'"
 
-    if output=$(cd "$PROJECT_ROOT" && uv run cli/mcp_client.py --url http://localhost/mcpgw/mcp call --tool "$tool" --args "$args" 2>&1); then
+    if output=$(cd "$PROJECT_ROOT" && uv run cli/mcp_client.py --url "${GATEWAY_URL}/mcpgw/mcp" call --tool "$tool" --args "$args" 2>&1); then
         print_success "$description completed"
         echo "$output"
         return 0
@@ -72,7 +75,7 @@ verify_server_in_list() {
 
     print_info "Checking server in service list..."
 
-    if output=$(cd "$PROJECT_ROOT" && uv run cli/mcp_client.py --url http://localhost/mcpgw/mcp call --tool list_services --args '{}' 2>&1); then
+    if output=$(cd "$PROJECT_ROOT" && uv run cli/mcp_client.py --url "${GATEWAY_URL}/mcpgw/mcp" call --tool list_services --args '{}' 2>&1); then
         if echo "$output" | grep -q "$service_name"; then
             if [ "$should_exist" = "true" ]; then
                 print_success "Server found in service list"
@@ -278,7 +281,7 @@ run_health_check() {
 
     print_info "Running health check..."
 
-    if output=$(cd "$PROJECT_ROOT" && uv run cli/mcp_client.py --url http://localhost/mcpgw/mcp call --tool healthcheck --args '{}' 2>&1); then
+    if output=$(cd "$PROJECT_ROOT" && uv run cli/mcp_client.py --url "${GATEWAY_URL}/mcpgw/mcp" call --tool healthcheck --args '{}' 2>&1); then
         print_success "Health check completed"
         echo ""
 
@@ -365,7 +368,7 @@ try:
         errors.append('proxy_pass_url must start with http:// or https://')
 
     # Check for unknown fields (not part of tool spec)
-    allowed_fields = {'server_name', 'path', 'proxy_pass_url', 'description', 'tags', 'num_tools', 'num_stars', 'is_python', 'license', 'auth_provider', 'auth_type', 'supported_transports', 'headers', 'tool_list'}
+    allowed_fields = {'server_name', 'path', 'proxy_pass_url', 'description', 'tags', 'num_tools', 'num_stars', 'is_python', 'license', 'auth_provider', 'auth_type', 'supported_transports', 'headers', 'tool_list', 'repository_url', 'website_url', 'package_npm'}
     unknown_fields = set(config.keys()) - allowed_fields
     if unknown_fields:
         errors.append(f'Unknown fields not allowed by register_service tool spec: {sorted(unknown_fields)}')
@@ -493,46 +496,14 @@ add_service() {
 }
 
 delete_service() {
-    local config_file="${1}"
+    local service_path="${1}"
+    local service_name="${2}"
 
-    if [ -z "$config_file" ]; then
-        print_error "Usage: $0 delete <config-file>"
-        print_error "Example: $0 delete cli/examples/example-server-config.json"
+    if [ -z "$service_path" ] || [ -z "$service_name" ]; then
+        print_error "Usage: $0 delete <service-path> <service-name>"
+        print_error "Example: $0 delete /example-server example-server"
         exit 1
     fi
-
-    if [ ! -f "$config_file" ]; then
-        print_error "Config file not found: $config_file"
-        print_error "Full path searched: $(pwd)/$config_file"
-        exit 1
-    fi
-
-    print_info "Loading config from: $config_file"
-    local config_json
-    config_json="$(cat "$config_file")"
-
-    # Validate config and extract service info
-    local validation_output service_name modified_config
-    if ! validation_output=$(validate_config "$config_json"); then
-        print_error "Config validation failed"
-        echo "$validation_output"  # This contains error message
-        exit 1
-    fi
-
-    # Parse the two-line output: first line is modified config, second is service name
-    modified_config=$(echo "$validation_output" | head -n 1)
-    service_name=$(echo "$validation_output" | tail -n 1)
-
-    # Use the modified config
-    config_json="$modified_config"
-
-    # Extract service path from config
-    local service_path
-    service_path=$(python3 -c "
-import json
-config = json.loads('''$config_json''')
-print(config['path'])
-")
 
     echo "=== Deleting Service: $service_name (path: $service_path) ==="
 
@@ -703,7 +674,7 @@ show_usage() {
     echo ""
     echo "Service Commands:"
     echo "  add <config-file>            - Add a service using JSON config and verify registration"
-    echo "  delete <config-file>         - Delete a service using JSON config and verify removal"
+    echo "  delete <service-path> <service-name> - Delete a service by path and name"
     echo "  monitor [config-file]        - Run health check (all services or specific service from config)"
     echo "  test <config-file>           - Test service searchability using intelligent_tool_finder"
     echo ""
@@ -734,7 +705,7 @@ show_usage() {
     echo "Examples:"
     echo "  # Service operations"
     echo "  $0 add cli/examples/example-server-config.json"
-    echo "  $0 delete cli/examples/example-server-config.json"
+    echo "  $0 delete /example-server example-server"
     echo "  $0 monitor                                        # All services"
     echo "  $0 monitor cli/examples/example-server-config.json # Specific service"
     echo "  $0 test cli/examples/example-server-config.json    # Test searchability"
@@ -980,7 +951,7 @@ list_groups() {
 
     print_info "Fetching groups from Keycloak and scopes.yml..."
 
-    if output=$(cd "$PROJECT_ROOT" && uv run cli/mcp_client.py --url http://localhost/mcpgw/mcp call --tool list_groups --args "$args" 2>&1); then
+    if output=$(cd "$PROJECT_ROOT" && uv run cli/mcp_client.py --url "${GATEWAY_URL}/mcpgw/mcp" call --tool list_groups --args "$args" 2>&1); then
         print_success "Groups retrieved successfully"
         echo ""
         echo "$output"
@@ -1001,7 +972,7 @@ case "${1:-}" in
         add_service "$2"
         ;;
     delete)
-        delete_service "$2"
+        delete_service "$2" "$3"
         ;;
     monitor)
         monitor_services "$2"
