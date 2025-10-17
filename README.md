@@ -83,7 +83,7 @@ The **MCP Gateway & Registry** is an enterprise-ready platform that centralizes 
 ## What's New
 
 - **📥 Import Servers from Anthropic MCP Registry** - Import curated MCP servers from Anthropic's registry with a single command. [Import Guide](docs/anthropic-registry-import.md)
-- **🔌 Anthropic MCP Registry REST API v0 Compatibility** - Full compatibility with Anthropic's MCP Registry REST API specification. [API Documentation](docs/anthropic_registry_api.md)
+- **🔌 Anthropic MCP Registry REST API Compatibility** - Full compatibility with Anthropic's MCP Registry REST API specification. [API Documentation](docs/anthropic_registry_api.md)
 - **🚀 Pre-built Images** - Deploy instantly with pre-built Docker images. [Get Started](#option-a-pre-built-images-instant-setup) | [macOS Guide](docs/macos-setup-guide.md)
 - **🔐 Keycloak Integration** - Enterprise authentication with AI agent audit trails and group-based authorization. [Learn more](docs/keycloak-integration.md)
 - **📊 Real-Time Metrics & Observability** - Grafana dashboards with SQLite and OpenTelemetry integration. [Observability Guide](docs/OBSERVABILITY.md)
@@ -366,7 +366,7 @@ Seamlessly integrate with Anthropic's official MCP Registry to import and access
 
 - **Import Servers**: Select and import desired servers from Anthropic's registry with a single command
 - **Unified Access**: Access imported servers through your gateway with centralized authentication and governance
-- **API Compatibility**: Full support for Anthropic's Registry REST API v0 specification - point your Anthropic API clients to this registry to discover available servers
+- **API Compatibility**: Full support for Anthropic's Registry REST API specification - point your Anthropic API clients to this registry to discover available servers
 
 <img src="docs/img/registry_w_a.png" alt="Anthropic Registry Integration" />
 <p><em>Import and access curated MCP servers from Anthropic's official registry</em></p>
@@ -398,7 +398,7 @@ Seamlessly integrate with Anthropic's official MCP Registry to import and access
 | [Installation Guide](docs/installation.md)<br/>Complete setup instructions for EC2 and EKS | [Keycloak Integration](docs/keycloak-integration.md)<br/>Enterprise identity with agent audit trails | [API Reference](docs/registry_api.md)<br/>Programmatic registry management |
 | [Quick Start Tutorial](docs/quick-start.md)<br/>Get running in 5 minutes | [Amazon Cognito Setup](docs/cognito.md)<br/>Step-by-step IdP configuration | [Token Refresh Service](docs/token-refresh-service.md)<br/>Automated token refresh and lifecycle management |
 | [Configuration Reference](docs/configuration.md)<br/>Environment variables and settings | [Anthropic Registry Import](docs/anthropic-registry-import.md)<br/>**NEW!** Import servers from Anthropic MCP Registry | [Observability Guide](docs/OBSERVABILITY.md)<br/>**NEW!** Metrics, monitoring, and OpenTelemetry setup |
-| [Anthropic Registry API](docs/anthropic_registry_api.md)<br/>**NEW!** REST API v0 compatibility | [Fine-Grained Access Control](docs/scopes.md)<br/>Permission management and security | [Dynamic Tool Discovery](docs/dynamic-tool-discovery.md)<br/>Autonomous agent capabilities |
+| [Anthropic Registry API](docs/anthropic_registry_api.md)<br/>**NEW!** REST API compatibility | [Fine-Grained Access Control](docs/scopes.md)<br/>Permission management and security | [Dynamic Tool Discovery](docs/dynamic-tool-discovery.md)<br/>Autonomous agent capabilities |
 | | [Service Management](docs/service-management.md)<br/>Server lifecycle and operations | |
 | | | [Production Deployment](docs/installation.md)<br/>Complete setup for production environments |
 | | | [Troubleshooting Guide](docs/FAQ.md)<br/>Common issues and solutions |
@@ -465,7 +465,7 @@ The following GitHub issues represent our current development roadmap and planne
 **Completed**
 
 - **[#171 - Feature: Import Servers from Anthropic MCP Registry](https://github.com/agentic-community/mcp-gateway-registry/issues/171)** ✅ **COMPLETED**
-  Anthropic MCP Registry import functionality implemented. Import curated servers with a single command and access through the gateway with full REST API v0 compatibility. [Import Guide](docs/anthropic-registry-import.md) | [API Documentation](docs/anthropic_registry_api.md)
+  Anthropic MCP Registry import functionality implemented. Import curated servers with a single command and access through the gateway with full REST API compatibility. [Import Guide](docs/anthropic-registry-import.md) | [API Documentation](docs/anthropic_registry_api.md)
 
 - **[#37 - Multi-Level Registry Support](https://github.com/agentic-community/mcp-gateway-registry/issues/37)** ✅ **COMPLETED** (Closed via #179, #181)
   Registry-to-registry integration now supported through Anthropic MCP Registry import, enabling federated server discovery and access across different registries.

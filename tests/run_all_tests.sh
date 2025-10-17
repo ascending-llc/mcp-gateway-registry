@@ -220,8 +220,8 @@ else
 fi
 
 
-# Test 5: Anthropic Registry API v0 Tests (Localhost)
-print_header "5. Anthropic Registry API v0 Tests (Localhost)"
+# Test 5: Anthropic Registry API Tests (Localhost)
+print_header "5. Anthropic Registry API Tests (Localhost)"
 
 print_test "List servers"
 if uv run python cli/test_anthropic_api.py --token-file .oauth-tokens/ingress.json --base-url "$LOCALHOST_URL" --test list-servers --limit 5 > /tmp/anthropic_list.log 2>&1; then

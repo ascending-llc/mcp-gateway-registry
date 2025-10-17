@@ -147,10 +147,14 @@ class NginxConfigService:
             
             # Fetch EC2 public DNS
             ec2_public_dns = await self.get_ec2_public_dns()
-            
+
+            # Get API version from constants
+            api_version = REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION
+
             # Replace placeholders in template
             config_content = template_content.replace("{{LOCATION_BLOCKS}}", "\n".join(location_blocks))
             config_content = config_content.replace("{{EC2_PUBLIC_DNS}}", ec2_public_dns)
+            config_content = config_content.replace("{{ANTHROPIC_API_VERSION}}", api_version)
             
             # Write config file
             with open(settings.nginx_config_path, "w") as f:

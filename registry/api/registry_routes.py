@@ -1,5 +1,6 @@
 """
-Anthropic MCP Registry API v0 endpoints.
+
+Anthropic MCP Registry API endpoints.
 
 Implements the standard MCP Registry REST API for compatibility with
 Anthropic's official registry specification.
@@ -31,7 +32,10 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v0", tags=["Anthropic Registry API"])
+router = APIRouter(
+    prefix=f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}",
+    tags=["Anthropic Registry API"],
+)
 
 
 @router.get(
@@ -61,7 +65,7 @@ async def list_servers(
         ServerList with servers and pagination metadata
     """
     logger.info(
-        f"v0 API: Listing servers for user '{user_context['username']}' (cursor={cursor}, limit={limit})"
+        f"{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION} API: Listing servers for user '{user_context['username']}' (cursor={cursor}, limit={limit})"
     )
 
     # Get servers based on user permissions (same logic as existing /servers endpoint)
@@ -76,7 +80,7 @@ async def list_servers(
         )
         logger.debug(f"User accessing {len(all_servers)} accessible servers")
 
-    # For v0 API, we don't need UI service filtering - accessible_servers already handles MCP server permissions
+    # For API, we don't need UI service filtering - accessible_servers already handles MCP server permissions
     # No additional filtering needed here - the get_all_servers_with_permissions already filtered by accessible_servers
     filtered_servers = []
 
@@ -97,7 +101,7 @@ async def list_servers(
     )
 
     logger.info(
-        f"v0 API: Returning {len(server_list.servers)} servers (hasMore={server_list.metadata.nextCursor is not None})"
+        f"{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION} API: Returning {len(server_list.servers)} servers (hasMore={server_list.metadata.nextCursor is not None})"
     )
 
     return server_list
@@ -132,7 +136,7 @@ async def list_server_versions(
     # URL-decode the server name
     decoded_name = unquote(serverName)
     logger.info(
-        f"v0 API: Listing versions for server '{decoded_name}' (user='{user_context['username']}')"
+        f"{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION} API: Listing versions for server '{decoded_name}' (user='{user_context['username']}')"
     )
 
     # Extract path from reverse-DNS name
@@ -189,7 +193,9 @@ async def list_server_versions(
     # Since we only have one version, return a list with one item
     server_list = transform_to_server_list([server_info_with_status])
 
-    logger.info(f"v0 API: Returning version info for {decoded_name}")
+    logger.info(
+        f"{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION} API: Returning version info for {decoded_name}"
+    )
 
     return server_list
 
@@ -227,7 +233,7 @@ async def get_server_version(
     decoded_version = unquote(version)
 
     logger.info(
-        f"v0 API: Getting server '{decoded_name}' version '{decoded_version}' (user='{user_context['username']}')"
+        f"{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION} API: Getting server '{decoded_name}' version '{decoded_version}' (user='{user_context['username']}')"
     )
 
     # Extract path from reverse-DNS name
@@ -292,6 +298,8 @@ async def get_server_version(
         server_info_with_status, include_registry_meta=True
     )
 
-    logger.info(f"v0 API: Returning details for {decoded_name} v{decoded_version}")
+    logger.info(
+        f"{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION} API: Returning details for {decoded_name} v{decoded_version}"
+    )
 
     return server_response

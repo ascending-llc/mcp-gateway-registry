@@ -21,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from registry.auth.routes import router as auth_router
 from registry.api.server_routes import router as servers_router
 from registry.api.wellknown_routes import router as wellknown_router
-from registry.api.v0_routes import router as v0_router
+from registry.api.registry_routes import router as registry_router
 from registry.health.routes import router as health_router
 
 # Import auth dependencies
@@ -161,8 +161,8 @@ app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(servers_router, prefix="/api", tags=["Server Management"])
 app.include_router(health_router, prefix="/api/health", tags=["Health Monitoring"])
 
-# Register Anthropic MCP Registry API v0 (public API)
-app.include_router(v0_router, tags=["Anthropic Registry API"])
+# Register Anthropic MCP Registry API (public API)
+app.include_router(registry_router, tags=["Anthropic Registry API"])
 
 # Register well-known discovery router
 app.include_router(wellknown_router, prefix="/.well-known", tags=["Discovery"])
@@ -199,8 +199,12 @@ if FRONTEND_BUILD_PATH.exists():
     @app.get("/{full_path:path}")
     async def serve_react_app(full_path: str):
         """Serve React app for all non-API routes"""
-        # Don't serve React for API routes, v0 registry API, health checks, and well-known discovery endpoints
-        if full_path.startswith("api/") or full_path.startswith("v0/") or full_path.startswith("health") or full_path.startswith(".well-known/"):
+        # Import here to avoid circular dependency
+        from registry.constants import REGISTRY_CONSTANTS
+
+        # Don't serve React for API routes, Anthropic registry API, health checks, and well-known discovery endpoints
+        anthropic_api_prefix = f"{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/"
+        if full_path.startswith("api/") or full_path.startswith(anthropic_api_prefix) or full_path.startswith("health") or full_path.startswith(".well-known/"):
             raise HTTPException(status_code=404)
 
         return FileResponse(FRONTEND_BUILD_PATH / "index.html")

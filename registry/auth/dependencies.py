@@ -448,7 +448,7 @@ def nginx_proxied_auth(
     For nginx-proxied requests: Reads user context from headers set by nginx after auth validation
     For direct requests: Falls back to session cookie authentication
 
-    This allows v0 API endpoints to work both when accessed through nginx (with JWT tokens)
+    This allows Anthropic Registry API endpoints to work both when accessed through nginx (with JWT tokens)
     and when accessed directly (with session cookies).
 
     Returns:

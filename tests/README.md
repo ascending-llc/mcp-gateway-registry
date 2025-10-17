@@ -23,7 +23,7 @@ The test suite validates **9 categories** with **~30 tests**:
 2. **Credentials** - Generation, validation, expiration
 3. **MCP Client** - Tools, services, health checks
 4. **Agent** - Prompt execution, tool calls
-5. **Anthropic API v0** - REST API endpoints
+5. **Anthropic Registry API** - REST API endpoints (version defined in `registry/constants.py`)
 6. **Service Management** - Import, CRUD operations
 7. **Code Quality** - Syntax, linting
 8. **Production** - All tests against production URL (MANDATORY for PR merge)

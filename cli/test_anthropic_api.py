@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Test Anthropic MCP Registry API v0.
+Test Anthropic MCP Registry API.
 
-This script tests the Anthropic MCP Registry API v0 endpoints using JWT tokens
+This script tests the Anthropic MCP Registry API endpoints using JWT tokens
 generated from the MCP Registry UI.
 
 Usage:
@@ -27,6 +27,13 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 import requests
+
+# Add project root to path to import constants
+SCRIPT_DIR = Path(__file__).parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from registry.constants import REGISTRY_CONSTANTS
 
 
 logging.basicConfig(
@@ -151,10 +158,10 @@ def _make_api_request(
     params: Optional[Dict[str, Any]] = None
 ) -> Optional[Dict[str, Any]]:
     """
-    Make an API request to the Anthropic v0 API.
+    Make an API request to the Anthropic MCP Registry API.
 
     Args:
-        endpoint: API endpoint (e.g., /v0/servers)
+        endpoint: API endpoint (e.g., /{ANTHROPIC_API_VERSION}/servers)
         access_token: JWT access token
         base_url: Base URL for the API
         method: HTTP method
@@ -211,7 +218,7 @@ def _test_list_servers(
     logger.info(f"Testing: List servers (limit={limit})")
 
     result = _make_api_request(
-        endpoint="/v0/servers",
+        endpoint=f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers",
         access_token=access_token,
         base_url=base_url,
         params={"limit": limit}
@@ -246,7 +253,7 @@ def _test_get_server_versions(
     logger.info(f"Testing: Get server versions for {server_name}")
 
     encoded_name = server_name.replace("/", "%2F")
-    endpoint = f"/v0/servers/{encoded_name}/versions"
+    endpoint = f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/{encoded_name}/versions"
 
     result = _make_api_request(
         endpoint=endpoint,
@@ -282,7 +289,7 @@ def _test_get_server_version_details(
     logger.info(f"Testing: Get server version details for {server_name} v{version}")
 
     encoded_name = server_name.replace("/", "%2F")
-    endpoint = f"/v0/servers/{encoded_name}/versions/{version}"
+    endpoint = f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/{encoded_name}/versions/{version}"
 
     result = _make_api_request(
         endpoint=endpoint,
@@ -338,7 +345,7 @@ def _run_all_tests(
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Test Anthropic MCP Registry API v0",
+        description=f"Test Anthropic MCP Registry API {REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -407,7 +414,7 @@ token lifetime in Keycloak: Realm Settings → Tokens → Access Token Lifespan
         logging.getLogger().setLevel(logging.DEBUG)
 
     logger.info("=" * 80)
-    logger.info("Anthropic MCP Registry API v0 Test Tool")
+    logger.info(f"Anthropic MCP Registry API {REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION} Test Tool")
     logger.info("=" * 80)
 
     token_file_path = Path(args.token_file)
