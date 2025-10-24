@@ -191,6 +191,9 @@ cookies.txt
 # Scratchpad for temporary notes and planning
 .scratchpad/
 
+# Roo IDE files
+.roo/
+
 # OAuth tokens and credentials - never commit these!
 .oauth-tokens/
 .agentcore-params
@@ -282,3 +285,6 @@ coverage/
 # Anthropic registry temporary files
 anthropic_servers_*.json
 curated_import_list.txt
+
+#Security scans
+security_scans/

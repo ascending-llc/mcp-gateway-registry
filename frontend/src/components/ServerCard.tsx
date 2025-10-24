@@ -292,6 +292,9 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
   // Check if this is an Anthropic registry server
   const isAnthropicServer = server.tags?.includes('anthropic-registry');
 
+  // Check if this server has security pending
+  const isSecurityPending = server.tags?.includes('security-pending');
+  console.log('isSecurityPending', isSecurityPending)
   return (
     <>
       <div className={`group rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 h-full flex flex-col ${
@@ -315,6 +318,11 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
                 {isAnthropicServer && (
                   <span className="px-2 py-0.5 text-xs font-semibold bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-700 dark:from-purple-900/30 dark:to-indigo-900/30 dark:text-purple-300 rounded-full flex-shrink-0 border border-purple-200 dark:border-purple-600">
                     ANTHROPIC
+                  </span>
+                )}
+                {isSecurityPending && (
+                  <span className="px-2 py-0.5 text-xs font-semibold bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700 dark:from-amber-900/30 dark:to-orange-900/30 dark:text-amber-300 rounded-full flex-shrink-0 border border-amber-200 dark:border-amber-600">
+                    SECURITY PENDING
                   </span>
                 )}
               </div>

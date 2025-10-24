@@ -846,7 +846,11 @@ async def validate_request(request: Request):
     
     try:
         # Extract headers
+        # Check for X-Authorization first (custom header used by this gateway)
+        # Only if X-Authorization is not present, check standard Authorization header
         authorization = request.headers.get("X-Authorization")
+        if not authorization:
+            authorization = request.headers.get("Authorization")
         cookie_header = request.headers.get("Cookie", "")
         user_pool_id = request.headers.get("X-User-Pool-Id")
         client_id = request.headers.get("X-Client-Id")

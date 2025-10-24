@@ -368,10 +368,30 @@ class HealthMonitoringService:
             
             if is_healthy:
                 new_status = status_detail  # Could be "healthy" or "healthy-auth-expired"
-                
-                # If service transitioned to healthy (including auth-expired), fetch tool list (but don't block)
+
+                # Fetch tools in these cases:
+                # 1. First health check (previous_status == UNKNOWN)
+                # 2. Service transitioned to healthy from unhealthy
+                # 3. Service is healthy but has no tools yet (tool_list is empty)
                 # Only do this for fully healthy status, not auth-expired
-                if previous_status != HealthStatus.HEALTHY and status_detail == HealthStatus.HEALTHY:
+                should_fetch_tools = False
+                if status_detail == HealthStatus.HEALTHY:
+                    if previous_status == HealthStatus.UNKNOWN:
+                        # First health check - always fetch tools
+                        should_fetch_tools = True
+                        logger.info(f"First health check for {service_path} - will fetch tools")
+                    elif previous_status != HealthStatus.HEALTHY:
+                        # Transitioned to healthy - fetch tools
+                        should_fetch_tools = True
+                        logger.info(f"Service {service_path} transitioned to healthy - will fetch tools")
+                    else:
+                        # Already healthy - only fetch if we don't have tools
+                        current_tool_list = server_info.get("tool_list", [])
+                        if not current_tool_list:
+                            should_fetch_tools = True
+                            logger.info(f"Service {service_path} is healthy but has no tools - will fetch tools")
+
+                if should_fetch_tools:
                     asyncio.create_task(self._update_tools_background(service_path, proxy_pass_url))
             else:
                 new_status = status_detail  # Detailed error message from transport check
@@ -391,22 +411,35 @@ class HealthMonitoringService:
         return previous_status != new_status
 
 
-    def _build_headers_for_server(self, server_info: Dict) -> Dict[str, str]:
+    def _build_headers_for_server(
+        self,
+        server_info: Dict,
+        include_session_id: bool = False
+    ) -> Dict[str, str]:
         """
         Build HTTP headers for server requests by merging default headers with server-specific headers.
-        
+
         Args:
             server_info: Server configuration dictionary
-            
+            include_session_id: Whether to generate and include Mcp-Session-Id header
+
         Returns:
             Merged headers dictionary
         """
+        import uuid
+
         # Start with default headers for MCP endpoints
         headers = {
             'Accept': 'application/json, text/event-stream',
             'Content-Type': 'application/json'
         }
-        
+
+        # Add session ID if requested (required by some MCP servers like Cloudflare)
+        if include_session_id:
+            session_id = str(uuid.uuid4())
+            headers['Mcp-Session-Id'] = session_id
+            logger.debug(f"Generated Mcp-Session-Id: {session_id}")
+
         # Merge server-specific headers if present
         server_headers = server_info.get("headers", [])
         if server_headers and isinstance(server_headers, list):
@@ -414,33 +447,106 @@ class HealthMonitoringService:
                 if isinstance(header_dict, dict):
                     headers.update(header_dict)
                     logger.debug(f"Added server headers: {header_dict}")
-        
+
         return headers
+
+
+    async def _initialize_mcp_session(
+        self,
+        client: httpx.AsyncClient,
+        endpoint: str,
+        headers: Dict[str, str]
+    ) -> Optional[str]:
+        """
+        Initialize an MCP session and retrieve the session ID from the server.
+
+        Args:
+            client: httpx AsyncClient instance
+            endpoint: The MCP endpoint URL
+            headers: Headers to send with the request
+
+        Returns:
+            Session ID string if successful, None otherwise
+        """
+        import uuid
+
+        try:
+            # Send initialize request without session ID
+            # The server will generate and return a session ID in the response header
+            init_headers = headers.copy()
+
+            initialize_payload = {
+                "jsonrpc": "2.0",
+                "id": "0",
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {
+                        "name": "mcp-gateway-registry",
+                        "version": "1.0.0"
+                    }
+                }
+            }
+
+            response = await client.post(
+                endpoint,
+                headers=init_headers,
+                json=initialize_payload,
+                timeout=httpx.Timeout(5.0),
+                follow_redirects=True
+            )
+
+            # Check if initialize succeeded
+            if response.status_code not in [200, 201]:
+                logger.warning(
+                    f"MCP initialize failed for {endpoint}: "
+                    f"Status {response.status_code}, Response: {response.text[:200]}"
+                )
+                return None
+
+            # Get session ID from response headers (server-generated)
+            server_session_id = response.headers.get('Mcp-Session-Id') or response.headers.get('mcp-session-id')
+            if server_session_id:
+                logger.debug(f"Server returned session ID: {server_session_id}")
+                return server_session_id
+            else:
+                # If server doesn't return a session ID, generate one for stateless servers
+                client_session_id = str(uuid.uuid4())
+                logger.debug(f"Server did not return session ID, using client-generated: {client_session_id}")
+                return client_session_id
+
+        except Exception as e:
+            logger.warning(f"MCP initialize failed for {endpoint}: {e}")
+            return None
 
 
     async def _try_ping_without_auth(self, client: httpx.AsyncClient, endpoint: str) -> bool:
         """
         Try a simple ping without authentication headers.
         Used as fallback when auth fails to determine if server is reachable.
-        
+
         Args:
             client: httpx AsyncClient instance
             endpoint: The MCP endpoint URL to ping
-            
+
         Returns:
             bool: True if server responds (indicating it's reachable but auth expired)
         """
+        import uuid
+
         try:
-            # Minimal headers without auth
+            # Minimal headers without auth but with session ID (required by some servers)
             headers = {
                 'Accept': 'application/json',
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Mcp-Session-Id': str(uuid.uuid4())
             }
             ping_payload = '{ "jsonrpc": "2.0", "id": "0", "method": "ping" }'
-            
+
             response = await client.post(
-                endpoint, 
-                headers=headers, 
+                endpoint,
+                headers=headers,
                 content=ping_payload,
                 timeout=httpx.Timeout(5.0),
                 follow_redirects=True
@@ -470,9 +576,13 @@ class HealthMonitoringService:
             
         # Get transport information from server_info
         supported_transports = server_info.get("supported_transports", ["streamable-http"])
-        
+
         # If URL already has transport endpoint, use it directly
-        if proxy_pass_url.endswith('/mcp') or proxy_pass_url.endswith('/sse') or '/mcp/' in proxy_pass_url or '/sse/' in proxy_pass_url:
+        # BUT skip this shortcut for streamable-http to ensure proper POST ping is used
+        has_transport_in_url = (proxy_pass_url.endswith('/mcp') or proxy_pass_url.endswith('/sse') or
+                                '/mcp/' in proxy_pass_url or '/sse/' in proxy_pass_url)
+
+        if has_transport_in_url and "streamable-http" not in supported_transports:
             logger.info(f"[TRACE] Found transport endpoint in URL: {proxy_pass_url}")
             logger.info(f"[TRACE] URL contains /mcp: {'/mcp' in proxy_pass_url}, URL contains /sse: {'/sse' in proxy_pass_url}")
             try:
@@ -530,21 +640,39 @@ class HealthMonitoringService:
         # Try streamable-http first (default preference)
         if "streamable-http" in supported_transports:
             logger.info(f"[TRACE] Trying streamable-http transport")
-            headers = self._build_headers_for_server(server_info)
-            
+            # Build base headers without session ID
+            headers = self._build_headers_for_server(server_info, include_session_id=False)
+
             # Only try /mcp endpoint for streamable-http transport
-            if base_url.endswith('/mcp'):
+            # Don't append /mcp if URL already has a transport endpoint (/mcp or /sse)
+            if base_url.endswith('/mcp') or base_url.endswith('/sse') or '/mcp/' in base_url or '/sse/' in base_url:
                 endpoint = f"{base_url}"
             else:
                 endpoint = f"{base_url}/mcp"
-            ping_payload = '{ "jsonrpc": "2.0", "id": "0", "method": "ping" }'
-            
+
             try:
-                logger.info(f"[TRACE] Trying endpoint: {endpoint}")
+                # Step 1: Initialize session to get session ID
+                logger.info(f"[TRACE] Initializing MCP session for endpoint: {endpoint}")
+                session_id = await self._initialize_mcp_session(client, endpoint, headers)
+
+                # If initialize failed, check if it was due to auth (401/403)
+                # Try ping without auth before giving up
+                if not session_id:
+                    logger.warning(f"Failed to initialize MCP session for {endpoint}, trying ping without auth")
+                    if await self._try_ping_without_auth(client, endpoint):
+                        return True, HealthStatus.HEALTHY
+                    else:
+                        return False, "unhealthy: session initialization failed and ping without auth failed"
+
+                # Step 2: Add session ID to headers for ping
+                headers['Mcp-Session-Id'] = session_id
+                ping_payload = '{ "jsonrpc": "2.0", "id": "0", "method": "ping" }'
+
+                logger.info(f"[TRACE] Sending ping to endpoint: {endpoint}")
                 logger.info(f"[TRACE] Headers being sent: {headers}")
                 response = await client.post(endpoint, headers=headers, content=ping_payload, follow_redirects=True)
                 logger.info(f"[TRACE] Response status: {response.status_code}")
-                
+
                 # Check for auth failures first
                 if response.status_code in [401, 403]:
                     logger.info(f"[TRACE] Auth failure detected ({response.status_code}) for {endpoint}, trying ping without auth")
