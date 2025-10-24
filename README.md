@@ -82,7 +82,7 @@ The **MCP Gateway & Registry** is an enterprise-ready platform that centralizes 
 
 ## What's New
 
-- **🔒 MCP Server Security Scanning** - Integrated vulnerability scanning with Cisco AI Defence MCP Scanner. Automatic security scans during server registration, periodic registry-wide scans with detailed markdown reports, and automatic disabling of servers with security issues.
+- **🔒 MCP Server Security Scanning** - Integrated vulnerability scanning with [Cisco AI Defence MCP Scanner](https://github.com/cisco-ai-defense/mcp-scanner). Automatic security scans during server registration, periodic registry-wide scans with detailed markdown reports, and automatic disabling of servers with security issues.
 - **📥 Import Servers from Anthropic MCP Registry** - Import curated MCP servers from Anthropic's registry with a single command. [Import Guide](docs/anthropic-registry-import.md)
 - **🔌 Anthropic MCP Registry REST API Compatibility** - Full compatibility with Anthropic's MCP Registry REST API specification. [API Documentation](docs/anthropic_registry_api.md)
 - **🚀 Pre-built Images** - Deploy instantly with pre-built Docker images. [Get Started](#option-a-pre-built-images-instant-setup) | [macOS Guide](docs/macos-setup-guide.md)
@@ -377,7 +377,7 @@ Seamlessly integrate with Anthropic's official MCP Registry to import and access
 ### Security Scanning
 
 **Integrated Vulnerability Detection:**
-- **Automated Security Scanning** - Integrated vulnerability scanning for MCP servers using Cisco AI Defence MCP Scanner, with automatic scans during registration and support for periodic registry-wide scans
+- **Automated Security Scanning** - Integrated vulnerability scanning for MCP servers using [Cisco AI Defence MCP Scanner](https://github.com/cisco-ai-defense/mcp-scanner), with automatic scans during registration and support for periodic registry-wide scans
 - **Detailed Security Reports** - Comprehensive markdown reports with vulnerability details, severity assessments, and remediation recommendations
 - **Automatic Protection** - Servers with security issues are automatically disabled with security-pending status to protect your infrastructure
 - **Compliance Ready** - Security audit trails and vulnerability tracking for enterprise compliance requirements

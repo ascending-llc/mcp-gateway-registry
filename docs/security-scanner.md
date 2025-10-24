@@ -4,7 +4,7 @@
 
 As organizations integrate Model Context Protocol (MCP) servers into their AI workflows, supply chain security becomes critical. MCP servers are third-party components that provide tools and capabilities to AI agents, making them potential vectors for security vulnerabilities, malicious code injection, and data exfiltration.
 
-The MCP Gateway Registry addresses this challenge by integrating automated security scanning powered by the **Cisco AI Defence MCP Scanner**. This open-source security tool performs deep analysis of MCP server tools to identify vulnerabilities before they can be exploited in production environments.
+The MCP Gateway Registry addresses this challenge by integrating automated security scanning powered by the [**Cisco AI Defence MCP Scanner**](https://github.com/cisco-ai-defense/mcp-scanner). This open-source security tool performs deep analysis of MCP server tools to identify vulnerabilities before they can be exploited in production environments.
 
 **GitHub Repository:** https://github.com/cisco-ai-defense/mcp-scanner
 
