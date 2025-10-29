@@ -219,7 +219,13 @@ For now, make these additional essential changes in the `.env` file:
 AUTH_PROVIDER=keycloak
 
 # Set a secure admin password (change this!)
+# This is used for Keycloak API authentication during setup
 KEYCLOAK_ADMIN_PASSWORD=YourSecureAdminPassword123!
+
+# CRITICAL: Set INITIAL_ADMIN_PASSWORD to the SAME VALUE as KEYCLOAK_ADMIN_PASSWORD
+# This is used to set the password for the initial admin user in the realm
+# THESE MUST MATCH - see Step 5 for details
+INITIAL_ADMIN_PASSWORD=YourSecureAdminPassword123!
 
 # Set Keycloak database password (change this!)
 KEYCLOAK_DB_PASSWORD=SecureKeycloakDB123!
@@ -232,7 +238,9 @@ KEYCLOAK_CLIENT_ID=mcp-gateway-client
 # Save and exit (Ctrl+X, then Y, then Enter)
 ```
 
-**Important**: Remember the passwords you set here - you'll need to use the same ones in Step 5!
+**Important**:
+- Remember the passwords you set here - you'll need to use the same ones in Step 5!
+- **CRITICAL**: `KEYCLOAK_ADMIN_PASSWORD` and `INITIAL_ADMIN_PASSWORD` MUST be set to the same value. See Step 5 for details about why this is important.
 
 ### Download Required Embeddings Model
 
@@ -271,6 +279,28 @@ echo "DB Password: $KEYCLOAK_DB_PASSWORD"
 ```
 
 **Critical**: These passwords MUST match what you set in the `.env` file in Step 4. If they don't match, Keycloak initialization will fail!
+
+### Important: Admin Password Configuration
+
+When you set up Keycloak, you need to configure TWO admin password variables in your `.env` file:
+
+1. **`KEYCLOAK_ADMIN_PASSWORD`** - Used to authenticate with the Keycloak admin API during initialization
+2. **`INITIAL_ADMIN_PASSWORD`** - Used to set the password for the initial admin user created in the mcp-gateway realm
+
+**These MUST be set to the SAME VALUE** for proper Keycloak initialization:
+
+```bash
+# In your .env file (Step 4), set these to the SAME password:
+KEYCLOAK_ADMIN_PASSWORD=YourSecureAdminPassword123!
+INITIAL_ADMIN_PASSWORD=YourSecureAdminPassword123!  # MUST match KEYCLOAK_ADMIN_PASSWORD
+```
+
+If these passwords don't match:
+- The Keycloak admin user will be created with `INITIAL_ADMIN_PASSWORD`
+- But API authentication during setup uses `KEYCLOAK_ADMIN_PASSWORD`
+- This mismatch will cause authentication failures during realm initialization
+
+**Best Practice**: Use the same secure password for both variables during setup.
 
 ### Start Keycloak and PostgreSQL
 
@@ -755,6 +785,22 @@ docker-compose restart keycloak
 # Wait 2-3 minutes and retry initialization
 ./keycloak/setup/init-keycloak.sh
 ```
+
+**Password Mismatch Issue**: If you see authentication failures during initialization:
+1. Verify that `KEYCLOAK_ADMIN_PASSWORD` and `INITIAL_ADMIN_PASSWORD` are set to the SAME VALUE in your `.env` file
+2. If they don't match, fix them:
+   ```bash
+   # Edit your .env file and ensure these match:
+   nano .env
+   # KEYCLOAK_ADMIN_PASSWORD=your-password
+   # INITIAL_ADMIN_PASSWORD=your-password  (MUST be identical)
+   ```
+3. Restart Keycloak and try initialization again:
+   ```bash
+   docker-compose restart keycloak
+   # Wait 2-3 minutes, then:
+   ./keycloak/setup/init-keycloak.sh
+   ```
 
 #### Authentication Issues
 ```bash
