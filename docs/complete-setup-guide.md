@@ -201,7 +201,8 @@ cp .env.example .env
 
 # Generate a secure SECRET_KEY and set it in the .env file
 SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(64))")
-sed -i "s/# SECRET_KEY=your_secret_key_here/SECRET_KEY=$SECRET_KEY/" .env
+# Replace SECRET_KEY whether it's commented (#) or not
+sed -i "s/^#*\s*SECRET_KEY=.*/SECRET_KEY=$SECRET_KEY/" .env
 
 # Verify the SECRET_KEY was set correctly
 echo "Generated SECRET_KEY: $SECRET_KEY"
