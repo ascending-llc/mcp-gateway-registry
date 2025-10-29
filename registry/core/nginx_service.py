@@ -35,53 +35,109 @@ class NginxConfigService:
                 # Fallback for local development
                 self.nginx_template_path = Path(REGISTRY_CONSTANTS.NGINX_TEMPLATE_HTTP_ONLY_LOCAL)
         
-    async def get_ec2_public_dns(self) -> str:
-        """Fetch EC2 public DNS from metadata service."""
+    async def get_additional_server_names(self) -> str:
+        """Fetch or determine additional server names for nginx gateway configuration.
+
+        Supports multi-platform detection:
+        1. User-provided GATEWAY_ADDITIONAL_SERVER_NAMES env var
+        2. EC2 private IP detection via metadata service
+        3. ECS metadata service detection
+        4. EKS/Kubernetes pod detection
+        5. Generic hostname command fallback
+        6. Backward compatibility with EC2_PUBLIC_DNS env var
+        """
+        import os
+        import subprocess
+
+        # Priority 1: Check GATEWAY_ADDITIONAL_SERVER_NAMES env var (user-provided)
+        gateway_names = os.environ.get('GATEWAY_ADDITIONAL_SERVER_NAMES', '')
+        if gateway_names:
+            logger.info(f"Using GATEWAY_ADDITIONAL_SERVER_NAMES from environment: {gateway_names}")
+            return gateway_names.strip()
+
+        # Priority 2: Try EC2 metadata service for private IP
         try:
-            # EC2 Instance Metadata Service v2 (IMDSv2) 
-            # First get session token
             async with httpx.AsyncClient() as client:
-                # Get session token
+                # Get session token for IMDSv2
                 token_response = await client.put(
                     "http://169.254.169.254/latest/api/token",
                     headers={"X-aws-ec2-metadata-token-ttl-seconds": "21600"},
                     timeout=2.0
                 )
-                
+
                 if token_response.status_code == 200:
                     token = token_response.text
-                    
-                    # Get public hostname using the token
-                    dns_response = await client.get(
-                        "http://169.254.169.254/latest/meta-data/public-hostname",
+
+                    # Try to get private IP from EC2 metadata
+                    ip_response = await client.get(
+                        "http://169.254.169.254/latest/meta-data/local-ipv4",
                         headers={"X-aws-ec2-metadata-token": token},
                         timeout=2.0
                     )
-                    
-                    if dns_response.status_code == 200:
-                        public_dns = dns_response.text.strip()
-                        logger.info(f"Successfully fetched EC2 public DNS: {public_dns}")
-                        return public_dns
-                    else:
-                        logger.warning(f"Failed to get public hostname: HTTP {dns_response.status_code}")
-                else:
-                    logger.warning(f"Failed to get metadata token: HTTP {token_response.status_code}")
-                    
-        except httpx.TimeoutException:
-            logger.warning("Timeout while fetching EC2 metadata - likely not running on EC2")
-        except httpx.ConnectError:
-            logger.warning("Cannot connect to EC2 metadata service - likely not running on EC2")
+
+                    if ip_response.status_code == 200:
+                        private_ip = ip_response.text.strip()
+                        logger.info(f"Auto-detected EC2 private IP: {private_ip}")
+                        return private_ip
+
+        except (httpx.TimeoutException, httpx.ConnectError):
+            logger.debug("EC2 metadata service not available - not running on EC2")
         except Exception as e:
-            logger.warning(f"Error fetching EC2 public DNS: {e}")
-            
-        # Fallback: try environment variable or return empty string
-        import os
+            logger.debug(f"EC2 metadata detection failed: {e}")
+
+        # Priority 3: Try ECS metadata service
+        ecs_uri = os.environ.get('ECS_CONTAINER_METADATA_URI') or os.environ.get('ECS_CONTAINER_METADATA_URI_V4')
+        if ecs_uri:
+            try:
+                async with httpx.AsyncClient() as client:
+                    metadata_response = await client.get(
+                        f"{ecs_uri}",
+                        timeout=2.0
+                    )
+                    if metadata_response.status_code == 200:
+                        import json
+                        metadata = json.loads(metadata_response.text)
+                        # Try to extract IP from ECS metadata
+                        if 'Networks' in metadata and metadata['Networks']:
+                            private_ip = metadata['Networks'][0].get('IPv4Addresses', [None])[0]
+                            if private_ip:
+                                logger.info(f"Auto-detected ECS container IP: {private_ip}")
+                                return private_ip
+            except Exception as e:
+                logger.debug(f"ECS metadata detection failed: {e}")
+
+        # Priority 4: Try EKS/Kubernetes detection
+        pod_ip = os.environ.get('POD_IP')
+        if pod_ip:
+            logger.info(f"Auto-detected Kubernetes pod IP: {pod_ip}")
+            return pod_ip
+
+        # Priority 5: Try generic hostname command (works on most Linux systems)
+        try:
+            result = subprocess.run(
+                ["hostname", "-I"],
+                capture_output=True,
+                text=True,
+                timeout=2.0
+            )
+            if result.returncode == 0:
+                ips = result.stdout.strip().split()
+                if ips:
+                    # Use first IP (usually the private IP on single-interface systems)
+                    private_ip = ips[0]
+                    logger.info(f"Auto-detected private IP via hostname command: {private_ip}")
+                    return private_ip
+        except Exception as e:
+            logger.debug(f"Generic hostname detection failed: {e}")
+
+        # Priority 6: Backward compatibility with old EC2_PUBLIC_DNS env var
         fallback_dns = os.environ.get('EC2_PUBLIC_DNS', '')
         if fallback_dns:
-            logger.info(f"Using EC2_PUBLIC_DNS environment variable: {fallback_dns}")
+            logger.info(f"Using EC2_PUBLIC_DNS environment variable (deprecated): {fallback_dns}")
             return fallback_dns
-        
-        logger.info("No EC2 public DNS available, using empty string")
+
+        # No additional server names available
+        logger.info("No additional server names available - will use only localhost and mcpgateway.ddns.net")
         return ""
 
     def generate_config(self, servers: Dict[str, Dict[str, Any]]) -> bool:
@@ -102,7 +158,7 @@ class NginxConfigService:
             return False
         
     async def generate_config_async(self, servers: Dict[str, Dict[str, Any]]) -> bool:
-        """Generate Nginx configuration with EC2 DNS and dynamic location blocks."""
+        """Generate Nginx configuration with additional server names and dynamic location blocks."""
         try:
             # Read template
             if not self.nginx_template_path.exists():
@@ -145,22 +201,22 @@ class NginxConfigService:
                         location_blocks.append(commented_block)
                         logger.debug(f"Added commented location block for unhealthy service {path} (status: {health_status})")
             
-            # Fetch EC2 public DNS
-            ec2_public_dns = await self.get_ec2_public_dns()
+            # Fetch additional server names (custom domains/IPs)
+            additional_server_names = await self.get_additional_server_names()
 
             # Get API version from constants
             api_version = REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION
 
             # Replace placeholders in template
             config_content = template_content.replace("{{LOCATION_BLOCKS}}", "\n".join(location_blocks))
-            config_content = config_content.replace("{{EC2_PUBLIC_DNS}}", ec2_public_dns)
+            config_content = config_content.replace("{{ADDITIONAL_SERVER_NAMES}}", additional_server_names)
             config_content = config_content.replace("{{ANTHROPIC_API_VERSION}}", api_version)
-            
+
             # Write config file
             with open(settings.nginx_config_path, "w") as f:
                 f.write(config_content)
-                
-            logger.info(f"Generated Nginx configuration with {len(location_blocks)} location blocks and EC2 DNS: {ec2_public_dns}")
+
+            logger.info(f"Generated Nginx configuration with {len(location_blocks)} location blocks and additional server names: {additional_server_names}")
             
             # Automatically reload nginx after generating config
             self.reload_nginx()
