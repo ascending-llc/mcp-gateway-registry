@@ -36,7 +36,7 @@ A comprehensive solution for managing, securing, and accessing Model Context Pro
 - **High Availability**: Production-ready deployment patterns
 
 ### Advanced Security & Authentication
-- **OAuth 2.0 Integration**: Amazon Cognito, Google, GitHub, and custom providers
+- **OAuth 2.0 Integration**: Keycloak, Amazon Cognito, Microsoft Entra ID, Google, GitHub, and custom providers
 - **Fine-Grained Access Control**: Role-based permissions with scope management
 - **JWT Token Vending**: Secure token generation and validation
 - **Audit Logging**: Comprehensive security event tracking

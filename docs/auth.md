@@ -41,6 +41,11 @@ KEYCLOAK_M2M_CLIENT_SECRET=your_keycloak_m2m_client_secret
 # INGRESS_OAUTH_CLIENT_ID=your_cognito_client_id
 # INGRESS_OAUTH_CLIENT_SECRET=your_cognito_client_secret
 
+# Alternative: Microsoft Entra ID (if AUTH_PROVIDER=entra_id)
+# ENTRA_TENANT_ID=your-tenant-id-or-common
+# ENTRA_CLIENT_ID=your-application-client-id
+# ENTRA_CLIENT_SECRET=your-client-secret-value
+
 # Egress Authentication (Optional - for external services)
 EGRESS_OAUTH_CLIENT_ID_1=your_external_provider_client_id
 EGRESS_OAUTH_CLIENT_SECRET_1=your_external_provider_client_secret
