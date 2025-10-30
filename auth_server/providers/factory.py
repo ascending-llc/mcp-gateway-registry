@@ -7,6 +7,7 @@ from typing import Optional
 from .base import AuthProvider
 from .cognito import CognitoProvider
 from .keycloak import KeycloakProvider
+from .entra import EntraIDProvider
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,7 +23,7 @@ def get_auth_provider(
     """Factory function to get the appropriate auth provider.
     
     Args:
-        provider_type: Type of provider to create ('cognito' or 'keycloak').
+        provider_type: Type of provider to create ('cognito', 'keycloak', or 'entra_id').
                       If None, uses AUTH_PROVIDER environment variable.
                       
     Returns:
@@ -39,6 +40,8 @@ def get_auth_provider(
         return _create_keycloak_provider()
     elif provider_type == 'cognito':
         return _create_cognito_provider()
+    elif provider_type == 'entra_id':
+        return _create_entra_id_provider()
     else:
         raise ValueError(f"Unknown auth provider: {provider_type}")
 
@@ -118,6 +121,41 @@ def _create_cognito_provider() -> CognitoProvider:
         client_secret=client_secret,
         region=region,
         domain=domain
+    )
+
+
+def _create_entra_id_provider() -> EntraIDProvider:
+    """Create and configure Microsoft Entra ID provider."""
+    # Required configuration
+    tenant_id = os.environ.get('ENTRA_TENANT_ID')
+    client_id = os.environ.get('ENTRA_CLIENT_ID')
+    client_secret = os.environ.get('ENTRA_CLIENT_SECRET')
+    
+    # Optional configuration
+    authority = os.environ.get('ENTRA_AUTHORITY')
+    
+    # Validate required configuration
+    missing_vars = []
+    if not tenant_id:
+        missing_vars.append('ENTRA_TENANT_ID')
+    if not client_id:
+        missing_vars.append('ENTRA_CLIENT_ID')
+    if not client_secret:
+        missing_vars.append('ENTRA_CLIENT_SECRET')
+    
+    if missing_vars:
+        raise ValueError(
+            f"Missing required Entra ID configuration: {', '.join(missing_vars)}. "
+            "Please set these environment variables."
+        )
+    
+    logger.info(f"Initializing Entra ID provider for tenant '{tenant_id}'")
+    
+    return EntraIDProvider(
+        tenant_id=tenant_id,
+        client_id=client_id,
+        client_secret=client_secret,
+        authority=authority
     )
 
 

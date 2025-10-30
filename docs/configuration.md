@@ -27,6 +27,7 @@ The MCP Gateway Registry supports multiple authentication providers. Choose one 
 
 - **`keycloak`**: Enterprise-grade open-source identity and access management with individual agent audit trails
 - **`cognito`**: Amazon managed authentication service
+- **`entra_id`**: Microsoft Entra ID (formerly Azure Active Directory) for Microsoft 365 and Azure integration
 
 Based on your selection, configure the corresponding provider-specific variables below.
 
@@ -37,7 +38,7 @@ Based on your selection, configure the corresponding provider-specific variables
 | `REGISTRY_URL` | Public URL of the MCP Gateway Registry | `https://mcpgateway.ddns.net` | ✅ |
 | `ADMIN_USER` | Registry admin username | `admin` | ✅ |
 | `ADMIN_PASSWORD` | Registry admin password | `your-secure-password` | ✅ |
-| `AUTH_PROVIDER` | Authentication provider (`cognito` or `keycloak`) | `keycloak` | ✅ |
+| `AUTH_PROVIDER` | Authentication provider (`keycloak`, `cognito`, or `entra_id`) | `keycloak` | ✅ |
 | `AWS_REGION` | AWS region for services | `us-east-1` | ✅ |
 
 ### Keycloak Configuration (if AUTH_PROVIDER=keycloak)
@@ -104,6 +105,74 @@ cat keycloak/setup/keycloak-client-secrets.txt
 | `COGNITO_CLIENT_ID` | Amazon Cognito App Client ID | `3aju04s66t...` | ✅ |
 | `COGNITO_CLIENT_SECRET` | Amazon Cognito App Client Secret | `85ps32t55df39hm61k966fqjurj...` | ✅ |
 | `COGNITO_DOMAIN` | Cognito domain (optional) | `auto` | Optional |
+
+### Microsoft Entra ID Configuration (if AUTH_PROVIDER=entra_id)
+
+| Variable | Description | Example | Required |
+|----------|-------------|---------|----------|
+| `ENTRA_TENANT_ID` | Azure AD tenant ID (or 'common' for multi-tenant) | `12345678-1234-1234-1234-123456789012` | ✅ |
+| `ENTRA_CLIENT_ID` | Azure AD application (client) ID | `87654321-4321-4321-4321-210987654321` | ✅ |
+| `ENTRA_CLIENT_SECRET` | Azure AD client secret value | `abc123~XYZ...` | ✅ |
+| `ENTRA_AUTHORITY` | Custom authority URL (for sovereign clouds) | `https://login.microsoftonline.com/{tenant_id}` | Optional |
+
+**Note: Getting Entra ID Credentials**
+
+To obtain these credentials from Azure Portal:
+
+1. Navigate to [Azure Portal](https://portal.azure.com) → **Azure Active Directory** (or **Microsoft Entra ID**)
+2. Go to **App registrations** → Click **New registration**
+3. Configure your application:
+   - **Name**: `MCP Gateway Registry`
+   - **Supported account types**: Choose based on your needs
+     - Single tenant: Only accounts in your organization
+     - Multi-tenant: Accounts in any organizational directory
+   - **Redirect URI**: 
+     - Platform: `Web`
+     - URL: `https://your-registry-url/auth/callback`
+4. After registration, copy the **Application (client) ID** → This is your `ENTRA_CLIENT_ID`
+5. Copy the **Directory (tenant) ID** → This is your `ENTRA_TENANT_ID`
+6. Go to **Certificates & secrets** → **Client secrets** → **New client secret**
+   - Add description: `MCP Gateway Secret`
+   - Choose expiration period
+   - Copy the **Value** (not the Secret ID) → This is your `ENTRA_CLIENT_SECRET`
+7. Go to **API permissions**:
+   - Add **Microsoft Graph** permissions:
+     - `User.Read` (Delegated) - Read user profile
+     - `openid` (Delegated) - OpenID Connect sign-in
+     - `profile` (Delegated) - View users' basic profile
+     - `email` (Delegated) - View users' email address
+   - Click **Grant admin consent** if you have admin rights
+8. Go to **Authentication**:
+   - Add redirect URI: `https://your-registry-url/auth/callback`
+   - Under **Implicit grant and hybrid flows**: Enable **ID tokens**
+   - Under **Advanced settings**: Set **Allow public client flows** to `Yes` (required for device code flow)
+
+**Sovereign Cloud Support**
+
+For non-global Azure clouds, set the `ENTRA_AUTHORITY` variable:
+
+```bash
+# US Government Cloud
+ENTRA_AUTHORITY=https://login.microsoftonline.us/{tenant_id}
+
+# China Cloud (operated by 21Vianet)
+ENTRA_AUTHORITY=https://login.chinacloudapi.cn/{tenant_id}
+
+# Germany Cloud
+ENTRA_AUTHORITY=https://login.microsoftonline.de/{tenant_id}
+```
+
+**Multi-Tenant Configuration**
+
+To support any Microsoft organizational account:
+
+```bash
+ENTRA_TENANT_ID=common
+# or for only organizational accounts (exclude personal accounts)
+ENTRA_TENANT_ID=organizations
+# or for only personal Microsoft accounts
+ENTRA_TENANT_ID=consumers
+```
 
 ### Optional Variables
 

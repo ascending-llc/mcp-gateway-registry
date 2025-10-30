@@ -70,6 +70,29 @@ providers:
     name_claim: "name"
     enabled: false  # Disabled by default
 
+  entra_id:
+    display_name: "Microsoft Entra ID"
+    client_id: "${ENTRA_CLIENT_ID}"
+    client_secret: "${ENTRA_CLIENT_SECRET}"
+    # Tenant ID can be specific tenant or 'common' for multi-tenant
+    tenant_id: "${ENTRA_TENANT_ID}"
+    auth_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/authorize"
+    token_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/token"
+    user_info_url: "https://graph.microsoft.com/v1.0/me"
+    logout_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/logout"
+    scopes: ["openid", "profile", "email", "User.Read"]
+    response_type: "code"
+    grant_type: "authorization_code"
+    # Entra ID specific claim mapping
+    username_claim: "preferred_username"
+    groups_claim: "groups"
+    email_claim: "email"
+    name_claim: "name"
+    # Optional: For sovereign clouds (Azure Government, Azure China, etc.)
+    # authority: "https://login.microsoftonline.us/${ENTRA_TENANT_ID}"  # US Government
+    # authority: "https://login.chinacloudapi.cn/${ENTRA_TENANT_ID}"    # China
+    enabled: true  # Disabled by default
+
 # Default session settings
 session:
   max_age_seconds: 28800  # 8 hours
