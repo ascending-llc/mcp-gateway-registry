@@ -1657,7 +1657,7 @@ async def oauth2_callback(
         logger.info(f"Token data keys: {list(token_data.keys())}")
         
         # For Cognito and Keycloak, try to extract user info from JWT tokens
-        if provider in ["cognito", "keycloak"]:
+        if provider in ["cognito", "keycloak", "entra_id"]:
             try:
                 if provider == "cognito":
                     # Extract Cognito configuration from environment
@@ -1707,7 +1707,39 @@ async def oauth2_callback(
                     else:
                         logger.warning("No ID token found in Keycloak response, falling back to userInfo")
                         raise ValueError("Missing ID token")
-                    
+                elif provider == "entra_id":
+                    # For Entra ID, decode the ID token to get user information
+                    if "id_token" in token_data:
+                        import jwt
+                        # Decode without verification (we trust the token since we just got it from token exchange)
+                        id_token_claims = jwt.decode(token_data["id_token"], options={"verify_signature": False})
+                        logger.info(f"Entra ID token claims: {id_token_claims}")
+
+                        # Extract user info from ID token claims
+                        # Entra ID uses different claim names than Keycloak
+                        username = (
+                                id_token_claims.get("preferred_username") or
+                                id_token_claims.get("upn") or
+                                id_token_claims.get("unique_name") or
+                                id_token_claims.get("email") or
+                                id_token_claims.get("sub")
+                        )
+                        # Retrieve the user's group separately, without using the ID group,
+                        # to avoid manually reconfiguring in scopes.yml
+                        user_member_groups = await get_user_member_of(token_data["access_token"])
+                        groups_name = [groups.get("displayName") for groups in user_member_groups.get("value")]
+                        logger.info(f" groups_name: {groups_name}")
+                        mapped_user = {
+                            "username": username,
+                            "email": id_token_claims.get("email") or id_token_claims.get("upn") or username,
+                            "name": id_token_claims.get("name"),
+                            "groups": groups_name
+                        }
+                        logger.info(f"User extracted from Entra ID token: {mapped_user}")
+                    else:
+                        logger.warning("No ID token found in Entra ID response, falling back to userInfo")
+                        raise ValueError("Missing ID token")
+
             except Exception as e:
                 logger.warning(f"JWT token validation failed: {e}, falling back to userInfo endpoint")
                 # Fallback to userInfo endpoint
@@ -1798,6 +1830,21 @@ async def get_user_info(access_token: str, provider_config: dict) -> dict:
         )
         response.raise_for_status()
         return response.json()
+
+
+async def get_user_member_of(access_token: str):
+    """Get user group information from OAuth2 provider"""
+    async with httpx.AsyncClient() as client:
+        headers = {"Authorization": f"Bearer {access_token}"}
+        url = ("https://graph.microsoft.com/v1.0/me/transitiveMemberOf/microsoft.graph.group?"
+               "$count=true&$select=id,displayName")
+        response = await client.get(
+            url,
+            headers=headers
+        )
+        response.raise_for_status()
+        return response.json()
+
 
 def map_user_info(user_info: dict, provider_config: dict) -> dict:
     """Map provider-specific user info to our standard format"""
