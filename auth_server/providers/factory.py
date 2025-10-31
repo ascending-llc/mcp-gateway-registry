@@ -2,7 +2,10 @@
 
 import logging
 import os
-from typing import Optional
+import yaml
+from pathlib import Path
+from string import Template
+from typing import Optional, Dict, Any
 
 from .base import AuthProvider
 from .cognito import CognitoProvider
@@ -15,6 +18,49 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _load_oauth2_config() -> Dict[str, Any]:
+    """Load OAuth2 providers configuration from oauth2_providers.yml.
+    
+    Returns:
+        Dict containing OAuth2 providers configuration
+    """
+    try:
+        oauth2_file = Path(__file__).parent.parent / "oauth2_providers.yml"
+        with open(oauth2_file, 'r') as f:
+            config = yaml.safe_load(f)
+        # Substitute environment variables in configuration
+        processed_config = _substitute_env_vars(config)
+        logger.debug("Successfully loaded OAuth2 configuration")
+        return processed_config
+    except Exception as e:
+        logger.error(f"Failed to load OAuth2 configuration: {e}")
+        return {"providers": {}, "session": {}, "registry": {}}
+
+
+def _substitute_env_vars(config: Any) -> Any:
+    """Recursively substitute environment variables in configuration.
+    
+    Args:
+        config: Configuration value (dict, list, or str)
+        
+    Returns:
+        Configuration with environment variables substituted
+    """
+    if isinstance(config, dict):
+        return {k: _substitute_env_vars(v) for k, v in config.items()}
+    elif isinstance(config, list):
+        return [_substitute_env_vars(item) for item in config]
+    elif isinstance(config, str) and "${" in config:
+        try:
+            template = Template(config)
+            return template.substitute(os.environ)
+        except KeyError as e:
+            logger.warning(f"Environment variable not found for template {config}: {e}")
+            return config
+    else:
+        return config
 
 
 def get_auth_provider(
@@ -126,13 +172,27 @@ def _create_cognito_provider() -> CognitoProvider:
 
 def _create_entra_id_provider() -> EntraIDProvider:
     """Create and configure Microsoft Entra ID provider."""
-    # Required configuration
+    # Load OAuth2 configuration
+    oauth2_config = _load_oauth2_config()
+    entra_config = oauth2_config.get('providers', {}).get('entra_id', {})
+    
+    # Required configuration from environment variables
     tenant_id = os.environ.get('ENTRA_TENANT_ID')
     client_id = os.environ.get('ENTRA_CLIENT_ID')
     client_secret = os.environ.get('ENTRA_CLIENT_SECRET')
     
     # Optional configuration
     authority = os.environ.get('ENTRA_AUTHORITY')
+    
+    # OAuth2 configuration from oauth2_providers.yml with fallbacks
+    scopes = entra_config.get('scopes')
+    grant_type = entra_config.get('grant_type')
+    
+    # Optional claim mappings from oauth2_providers.yml
+    username_claim = entra_config.get('username_claim')
+    groups_claim = entra_config.get('groups_claim')
+    email_claim = entra_config.get('email_claim')
+    name_claim = entra_config.get('name_claim')
     
     # Validate required configuration
     missing_vars = []
@@ -149,13 +209,19 @@ def _create_entra_id_provider() -> EntraIDProvider:
             "Please set these environment variables."
         )
     
-    logger.info(f"Initializing Entra ID provider for tenant '{tenant_id}'")
+    logger.info(f"Initializing Entra ID provider for tenant '{tenant_id}' with scopes={scopes}, grant_type={grant_type}")
     
     return EntraIDProvider(
         tenant_id=tenant_id,
         client_id=client_id,
         client_secret=client_secret,
-        authority=authority
+        authority=authority,
+        scopes=scopes,
+        grant_type=grant_type,
+        username_claim=username_claim,
+        groups_claim=groups_claim,
+        email_claim=email_claim,
+        name_claim=name_claim
     )
 
 

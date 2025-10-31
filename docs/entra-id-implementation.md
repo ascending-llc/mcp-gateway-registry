@@ -33,7 +33,13 @@ def __init__(
     tenant_id: str,
     client_id: str,
     client_secret: str,
-    authority: Optional[str] = None
+    authority: Optional[str] = None,
+    scopes: Optional[list] = None,
+    grant_type: str = "authorization_code",
+    username_claim: str = "preferred_username",
+    groups_claim: str = "groups",
+    email_claim: str = "email",
+    name_claim: str = "name"
 ):
 ```
 
@@ -42,6 +48,12 @@ def __init__(
 - `client_id`: Azure AD application (client) ID
 - `client_secret`: Azure AD client secret
 - `authority`: Optional custom authority URL (defaults to global Azure AD)
+- `scopes`: List of OAuth2 scopes (default: `['openid', 'profile', 'email', 'User.Read']`)
+- `grant_type`: OAuth2 grant type (default: `'authorization_code'`)
+- `username_claim`: Claim to use for username (default: `'preferred_username'`)
+- `groups_claim`: Claim to use for groups (default: `'groups'`)
+- `email_claim`: Claim to use for email (default: `'email'`)
+- `name_claim`: Claim to use for display name (default: `'name'`)
 
 **Endpoints Configured:**
 - `token_url`: `{authority}/oauth2/v2.0/token`
@@ -70,12 +82,13 @@ def validate_token(self, token: str, **kwargs: Any) -> Dict[str, Any]:
 - `api://{client_id}` (e.g., `api://12345678-1234-1234-1234-123456789012`)
 
 **User Claim Resolution:**
-The implementation attempts multiple claim fields for username resolution:
-- `preferred_username`
-- `upn` (User Principal Name)
-- `unique_name`
-- `email`
-- `sub` (Subject) as fallback
+The implementation uses configurable claim mappings for user information extraction:
+- **Username**: Configurable via `username_claim` (default: `preferred_username`)
+- **Email**: Configurable via `email_claim` (default: `email`)
+- **Groups**: Configurable via `groups_claim` (default: `groups`)
+- **Name**: Configurable via `name_claim` (default: `name`)
+
+The implementation handles both string and list claims for groups and falls back to 'sub' claim for username if the configured claim is not found.
 
 ### JWKS Caching
 
@@ -213,9 +226,14 @@ ENTRA_CLIENT_SECRET=your-client-secret-value
 ENTRA_TENANT_ID=your-tenant-id-or-common
 
 # Optional - For sovereign clouds
-ENTRA_AUTHORITY=https://login.microsoftonline.us  # US Government
-# or
-ENTRA_AUTHORITY=https://login.chinacloudapi.cn    # China
+# ENTRA_AUTHORITY=https://login.microsoftonline.us  # US Government
+# ENTRA_AUTHORITY=https://login.chinacloudapi.cn    # China
+
+# Optional - Custom claim mappings (defaults are shown)
+ENTRA_USERNAME_CLAIM=preferred_username
+ENTRA_GROUPS_CLAIM=groups
+ENTRA_EMAIL_CLAIM=email
+ENTRA_NAME_CLAIM=name
 ```
 
 ## Error Handling

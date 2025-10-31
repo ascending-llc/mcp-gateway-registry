@@ -1,0 +1,61 @@
+# docker-compose.override.yml.example
+#
+# This file provides examples for overriding the default docker-compose.yml configuration.
+# Copy this file to docker-compose.override.yml and customize it for your environment.
+#
+# Usage:
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#   # Edit docker-compose.override.yml with your settings
+#   docker-compose up -d
+#
+# Note: docker-compose.override.yml is automatically loaded by docker-compose
+# and will override settings from docker-compose.yml
+
+services:
+  # Example: Override auth-server configuration for Microsoft Entra ID
+  auth-server:
+    environment:
+      # Set the authentication provider
+      - AUTH_PROVIDER=entra_id
+      
+      # Microsoft Entra ID configuration
+      - ENTRA_TENANT_ID=your-tenant-id-here
+      - ENTRA_CLIENT_ID=your-client-id-here
+      - ENTRA_CLIENT_SECRET=your-client-secret-here
+      
+      # Optional: Custom authority for sovereign clouds
+      # - ENTRA_AUTHORITY=https://login.microsoftonline.us/your-tenant-id  # US Government
+      # - ENTRA_AUTHORITY=https://login.chinacloudapi.cn/your-tenant-id    # China
+      
+      # Optional: Custom claim mappings
+      # These determine which claims from the ID token are used for user information
+      # - ENTRA_USERNAME_CLAIM=upn                 # Default: preferred_username
+      # - ENTRA_GROUPS_CLAIM=groups                # Default: groups
+      # - ENTRA_EMAIL_CLAIM=upn                    # Default: email
+      # - ENTRA_NAME_CLAIM=name                    # Default: name
+
+  # Example: Disable Keycloak if using Entra ID
+  # keycloak:
+  #   profiles:
+  #     - disabled
+
+  # Example: Override registry configuration
+  # registry:
+  #   environment:
+  #     - REGISTRY_URL=https://your-custom-domain.com
+
+  # Example: Override metrics service configuration
+  # metrics-service:
+  #   environment:
+  #     - DATABASE_URL=postgresql://user:pass@host:5432/metrics
+
+  # Example: Add custom volumes
+  # auth-server:
+  #   volumes:
+  #     - ./custom-config:/app/custom-config:ro
+
+  # Example: Expose additional ports
+  # auth-server:
+  #   ports:
+  #     - "9888:8888"  # Expose on different host port
+
