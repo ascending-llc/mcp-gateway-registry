@@ -75,6 +75,17 @@ ENTRA_TENANT_ID=your-tenant-id-or-common
 # ENTRA_AUTHORITY=https://login.chinacloudapi.cn    # China
 ```
 
+**Optional Claim Mapping Environment Variables:**
+```bash
+# Optional: Custom claim mappings (defaults are shown)
+ENTRA_USERNAME_CLAIM=preferred_username
+ENTRA_GROUPS_CLAIM=groups
+ENTRA_EMAIL_CLAIM=upn # upn or email
+ENTRA_NAME_CLAIM=name
+```
+
+**Note**: URLs, scopes, and default claim mappings are configured in `auth_server/oauth2_providers.yml`. Environment variables for claim mappings are only needed if you want to override the defaults.
+
 ## Step 5: Enable Entra ID Provider
 
 Ensure the Entra ID provider is enabled in the `auth_server/oauth2_providers.yml` configuration:

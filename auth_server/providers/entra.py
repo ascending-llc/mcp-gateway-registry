@@ -22,7 +22,13 @@ class EntraIDProvider(AuthProvider):
             tenant_id: str,
             client_id: str,
             client_secret: str,
-            authority: Optional[str] = None
+            authority: Optional[str] = None,
+            scopes: Optional[list] = None,
+            grant_type: str = "authorization_code",
+            username_claim: str = "preferred_username",
+            groups_claim: str = "groups",
+            email_claim: str = "email",
+            name_claim: str = "name"
     ):
         """Initialize Entra ID provider.
         
@@ -31,6 +37,12 @@ class EntraIDProvider(AuthProvider):
             client_id: Azure AD application (client) ID
             client_secret: Azure AD client secret
             authority: Optional custom authority URL (defaults to global Azure AD)
+            scopes: List of OAuth2 scopes (default: ['openid', 'profile', 'email', 'User.Read'])
+            grant_type: OAuth2 grant type (default: 'authorization_code')
+            username_claim: Claim to use for username (default: 'preferred_username')
+            groups_claim: Claim to use for groups (default: 'groups')
+            email_claim: Claim to use for email (default: 'email')
+            name_claim: Claim to use for display name (default: 'name')
         """
         self.tenant_id = tenant_id
         self.client_id = client_id
@@ -41,16 +53,28 @@ class EntraIDProvider(AuthProvider):
         self._jwks_cache_time: float = 0
         self._jwks_cache_ttl: int = 3600  # 1 hour
 
-        # Microsoft Entra ID endpoints
+        # Microsoft Entra ID endpoints - construct from authority
         self.authority = authority or f"https://login.microsoftonline.com/{tenant_id}"
-        self.token_url = f"{self.authority}/oauth2/v2.0/token"
         self.auth_url = f"{self.authority}/oauth2/v2.0/authorize"
+        self.token_url = f"{self.authority}/oauth2/v2.0/token"
         self.jwks_url = f"{self.authority}/discovery/v2.0/keys"
         self.logout_url = f"{self.authority}/oauth2/v2.0/logout"
         self.userinfo_url = "https://graph.microsoft.com/v1.0/me"
         self.issuer = f"https://login.microsoftonline.com/{tenant_id}/v2.0"
+        
+        # OAuth2 configuration - injected via constructor
+        self.scopes = scopes or ['openid', 'profile', 'email', 'User.Read']
+        self.grant_type = grant_type
+        
+        # Claim mappings configuration
+        self.username_claim = username_claim
+        self.groups_claim = groups_claim
+        self.email_claim = email_claim
+        self.name_claim = name_claim
 
-        logger.debug(f"Initialized Entra ID provider for tenant '{tenant_id}'")
+        logger.debug(f"Initialized Entra ID provider for tenant '{tenant_id}' with "
+                    f"scopes={self.scopes}, grant_type={self.grant_type}, claims: "
+                    f"username={username_claim}, email={email_claim}, groups={groups_claim}, name={name_claim}")
 
     def validate_token(
             self,
@@ -97,23 +121,21 @@ class EntraIDProvider(AuthProvider):
                 }
             )
 
-            logger.debug(f"Token validation successful for user:"
-                         f" {claims.get('preferred_username', claims.get('upn', 'unknown'))}")
+            # Extract user info from claims using configured claim mappings
+            username = claims.get(self.username_claim) or claims.get('sub')  # Fallback to 'sub' as last resort
+            email = claims.get(self.email_claim)
+            
+            # Extract groups - handle both string and list claims
+            groups_raw = claims.get(self.groups_claim, [])
+            groups = groups_raw if isinstance(groups_raw, list) else []
+            
+            logger.debug(f"Token validation successful for user: {username}")
 
-            # Extract user info from claims
-            # Entra ID tokens can have different claim structures
-            username = (
-                    claims.get('preferred_username') or
-                    claims.get('upn') or
-                    claims.get('unique_name') or
-                    claims.get('email') or
-                    claims.get('sub')
-            )
             return {
                 'valid': True,
                 'username': username,
-                'email': claims.get('email') or claims.get('upn') or claims.get('preferred_username'),
-                'groups': claims.get('groups', []),
+                'email': email,
+                'groups': groups,
                 'scopes': claims.get('scp', '').split() if claims.get('scp') else [],
                 'client_id': claims.get('azp', claims.get('appid', self.client_id)),
                 'method': 'entra_id',
@@ -164,12 +186,12 @@ class EntraIDProvider(AuthProvider):
             logger.debug("Exchanging authorization code for token")
 
             data = {
-                'grant_type': 'authorization_code',
+                'grant_type': self.grant_type,
                 'code': code,
                 'client_id': self.client_id,
                 'client_secret': self.client_secret,
                 'redirect_uri': redirect_uri,
-                'scope': 'openid profile email User.Read'
+                'scope': ' '.join(self.scopes)
             }
 
             headers = {'Content-Type': 'application/x-www-form-urlencoded'}
@@ -204,19 +226,27 @@ class EntraIDProvider(AuthProvider):
             response.raise_for_status()
 
             user_info = response.json()
-            logger.debug(f"User info retrieved for: {user_info.get('userPrincipalName', 'unknown')}")
+            
+            # Map Microsoft Graph response to configured claim names
+            username_value = user_info.get('userPrincipalName')
+            email_value = user_info.get('mail') or user_info.get('userPrincipalName')
+            name_value = user_info.get('displayName')
+            
+            logger.debug(f"User info retrieved for: {username_value}")
 
-            # Transform Microsoft Graph response to standard format
-            return {
-                'username': user_info.get('userPrincipalName'),
-                'email': user_info.get('mail') or user_info.get('userPrincipalName'),
-                'name': user_info.get('displayName'),
+            # Transform Microsoft Graph response to standard format using configured mappings
+            result = {
+                'username': username_value,
+                'email': email_value,
+                'name': name_value,
                 'given_name': user_info.get('givenName'),
                 'family_name': user_info.get('surname'),
                 'id': user_info.get('id'),
                 'job_title': user_info.get('jobTitle'),
                 'office_location': user_info.get('officeLocation')
             }
+            
+            return result
 
         except requests.RequestException as e:
             logger.error(f"Failed to get user info: {e}")
@@ -233,7 +263,7 @@ class EntraIDProvider(AuthProvider):
 
         params = {'client_id': self.client_id,
                   'response_type': 'code',
-                  'scope': scope or 'openid profile email User.Read',
+                  'scope': scope or ' '.join(self.scopes),
                   'redirect_uri': redirect_uri,
                   'state': state,
                   'response_mode': 'query'
@@ -264,12 +294,17 @@ class EntraIDProvider(AuthProvider):
         try:
             logger.debug("Refreshing access token")
 
+            # Include offline_access scope for refresh tokens
+            refresh_scopes = self.scopes.copy()
+            if 'offline_access' not in refresh_scopes:
+                refresh_scopes.append('offline_access')
+
             data = {
                 'grant_type': 'refresh_token',
                 'refresh_token': refresh_token,
                 'client_id': self.client_id,
                 'client_secret': self.client_secret,
-                'scope': 'openid profile email User.Read offline_access'
+                'scope': ' '.join(refresh_scopes)
             }
 
             headers = {'Content-Type': 'application/x-www-form-urlencoded'}
