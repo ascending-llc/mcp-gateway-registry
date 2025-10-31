@@ -38,6 +38,9 @@ services:
   # keycloak:
   #   profiles:
   #     - disabled
+  # keycloak-db:
+  #   profiles:
+  #     - disabled
 
   # Example: Override registry configuration
   # registry:

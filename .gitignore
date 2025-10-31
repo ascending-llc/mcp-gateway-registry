@@ -139,6 +139,9 @@ celerybeat.pid
 .env.user
 .env.docker
 
+# Docker artifacts
+docker-compose.override.yml
+
 # Configuration files with sensitive data
 credentials-provider/agentcore-auth/config.yaml
 credentials-provider/oauth/config.yaml
