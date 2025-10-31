@@ -84,9 +84,12 @@ providers:
     response_type: "code"
     grant_type: "authorization_code"
     # Entra ID specific claim mapping
+    # Set to determine which user info property returned from OpenID Provider to store as the User's username
     username_claim: "preferred_username"
+    # Set to determine which group attribute returned from OpenID Provider to filter for group permission
     groups_claim: "groups"
     email_claim: "email"
+    # Set to determine which user info property returned from OpenID Provider to store as the User's name
     name_claim: "name"
     # Optional: For sovereign clouds (Azure Government, Azure China, etc.)
     # authority: "https://login.microsoftonline.us/${ENTRA_TENANT_ID}"  # US Government
