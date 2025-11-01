@@ -451,6 +451,9 @@ The following GitHub issues represent our current development roadmap and planne
 
 **Major Features**
 
+- **[#203 - Deploy MCP Gateway Registry on AWS ECS Fargate](https://github.com/agentic-community/mcp-gateway-registry/issues/203)** 🚧 **IN PROGRESS**
+  Comprehensive production-ready ECS deployment guide with multi-AZ architecture, auto-scaling, HTTPS/SSL, CloudWatch monitoring, and NAT Gateway HA. Complete Terraform configuration templates for deploying the entire stack on AWS.
+
 - **[#195 - Add A2A (Agent-to-Agent) Protocol Support to Registry](https://github.com/agentic-community/mcp-gateway-registry/issues/195)** 🚧 **IN PROGRESS**
   Enable the registry to serve as a curated discovery service for A2A agents, allowing agents to discover and communicate with other agents. Registry-only design with P2P agent communication and Keycloak-based access control.
 
