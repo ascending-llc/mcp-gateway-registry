@@ -33,7 +33,13 @@ def __init__(
     tenant_id: str,
     client_id: str,
     client_secret: str,
-    authority: Optional[str] = None,
+    auth_url: str,
+    token_url: str,
+    jwks_url: str,
+    logout_url: str,
+    userinfo_url: str,
+    graph_url: str,
+    m2m_scope: str,
     scopes: Optional[list] = None,
     grant_type: str = "authorization_code",
     username_claim: str = "preferred_username",
@@ -47,7 +53,13 @@ def __init__(
 - `tenant_id`: Azure AD tenant ID (use 'common' for multi-tenant)
 - `client_id`: Azure AD application (client) ID
 - `client_secret`: Azure AD client secret
-- `authority`: Optional custom authority URL (defaults to global Azure AD)
+- `auth_url`: OAuth2 authorization endpoint URL
+- `token_url`: OAuth2 token endpoint URL
+- `jwks_url`: JSON Web Key Set endpoint URL
+- `logout_url`: Logout endpoint URL
+- `userinfo_url`: User info endpoint URL (typically Graph API /me endpoint)
+- `graph_url`: Microsoft Graph API base URL (for sovereign clouds)
+- `m2m_scope`: Default scope for machine-to-machine authentication
 - `scopes`: List of OAuth2 scopes (default: `['openid', 'profile', 'email', 'User.Read']`)
 - `grant_type`: OAuth2 grant type (default: `'authorization_code'`)
 - `username_claim`: Claim to use for username (default: `'preferred_username'`)
@@ -56,12 +68,9 @@ def __init__(
 - `name_claim`: Claim to use for display name (default: `'name'`)
 
 **Endpoints Configured:**
-- `token_url`: `{authority}/oauth2/v2.0/token`
-- `auth_url`: `{authority}/oauth2/v2.0/authorize`
-- `jwks_url`: `{authority}/discovery/v2.0/keys`
-- `logout_url`: `{authority}/oauth2/v2.0/logout`
-- `userinfo_url`: `https://graph.microsoft.com/v1.0/me`
-- `issuer`: `https://login.microsoftonline.com/{tenant_id}/v2.0`
+- All endpoint URLs are explicitly provided via constructor parameters
+- This design supports sovereign clouds and custom deployments
+- `issuer`: Automatically derived as `https://login.microsoftonline.com/{tenant_id}/v2.0`
 
 ### Token Validation
 
@@ -141,23 +150,61 @@ def refresh_token(self, refresh_token: str) -> Dict[str, Any]:
 
 ### User Information Retrieval
 
-The implementation integrates with Microsoft Graph API to fetch user profile information:
+The implementation provides flexible user information extraction with automatic fallback mechanisms:
 
 ```python
-def get_user_info(self, access_token: str) -> Dict[str, Any]:
+def get_user_info(
+    self, 
+    access_token: str, 
+    id_token: Optional[str] = None
+) -> Dict[str, Any]:
 ```
 
-**Graph API Endpoint:** `https://graph.microsoft.com/v1.0/me`
+**Token Strategy:**
+
+The method supports three extraction strategies controlled by the `ENTRA_TOKEN_KIND` environment variable:
+
+1. **ID Token Extraction (Recommended)**: `ENTRA_TOKEN_KIND=id`
+   - Extracts user information from the ID token (OpenID Connect standard)
+   - Fast: Local JWT decoding, no network calls
+   - Contains standard user claims: username, email, name, groups
+
+2. **Access Token Extraction**: `ENTRA_TOKEN_KIND=access`
+   - Extracts user information from the access token
+   - Used when ID token is not available
+   - May not contain all user claims
+
+3. **Graph API Fallback** (Automatic):
+   - Falls back to Microsoft Graph API if token extraction fails
+   - Makes HTTP request to `{graph_url}/v1.0/me`
+   - Provides complete user profile information
 
 **Returned Fields:**
-- `username`: User Principal Name (UPN)
+- `username`: User Principal Name (UPN) or preferred_username
 - `email`: Mail address or UPN
 - `name`: Display name
-- `given_name`: First name
-- `family_name`: Last name
+- `given_name`: First name (Graph API only)
+- `family_name`: Last name (Graph API only)
 - `id`: Object ID
-- `job_title`: Job title
-- `office_location`: Office location
+- `job_title`: Job title (Graph API only)
+- `office_location`: Office location (Graph API only)
+- `groups`: List of group display names (from separate Graph API call)
+
+### Group Membership Retrieval
+
+User groups are fetched separately using the Microsoft Graph API:
+
+```python
+def get_user_groups(self, access_token: str) -> list:
+```
+
+**Graph API Endpoint:** `{graph_url}/v1.0/me/transitiveMemberOf/microsoft.graph.group`
+
+**Features:**
+- Fetches transitive group memberships (includes nested groups)
+- Returns group display names as a list
+- Automatically called by `get_user_info()` method
+- Handles errors gracefully (returns empty list on failure)
 
 ### Machine-to-Machine (M2M) Support
 
@@ -174,8 +221,9 @@ def get_m2m_token(
 
 **Client Credentials Flow:**
 - `grant_type`: `client_credentials`
-- Default scope: `https://graph.microsoft.com/.default`
+- Default scope: Configured via `m2m_scope` parameter (typically `https://graph.microsoft.com/.default`)
 - Supports custom client credentials for service accounts
+- Sovereign clouds: Scope is automatically adjusted based on `graph_url` configuration
 
 #### M2M Token Validation
 
@@ -202,38 +250,85 @@ entra_id:
   display_name: "Microsoft Entra ID"
   client_id: "${ENTRA_CLIENT_ID}"
   client_secret: "${ENTRA_CLIENT_SECRET}"
+  # Tenant ID can be specific tenant or 'common' for multi-tenant
   tenant_id: "${ENTRA_TENANT_ID}"
   auth_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/authorize"
   token_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/token"
+  jwks_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/discovery/v2.0/keys"
   user_info_url: "https://graph.microsoft.com/v1.0/me"
   logout_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/logout"
   scopes: ["openid", "profile", "email", "User.Read"]
   response_type: "code"
   grant_type: "authorization_code"
-  username_claim: "preferred_username"
-  groups_claim: "groups"
-  email_claim: "email"
-  name_claim: "name"
+  # Entra ID specific claim mapping
+  username_claim: "${ENTRA_USERNAME_CLAIM}"
+  groups_claim: "${ENTRA_GROUPS_CLAIM}"
+  email_claim: "${ENTRA_EMAIL_CLAIM}"
+  name_claim: "${ENTRA_NAME_CLAIM}"
+  # Microsoft Graph API base URL (for sovereign clouds)
+  graph_url: "${ENTRA_GRAPH_URL:-https://graph.microsoft.com}"
+  # M2M (Machine-to-Machine) default scope
+  m2m_scope: "${ENTRA_M2M_SCOPE:-https://graph.microsoft.com/.default}"
   enabled: true
 ```
 
 ### Environment Variables
 
+#### Required Variables
+
 ```bash
-# Required
+# Microsoft Entra ID Configuration
 ENTRA_CLIENT_ID=your-application-client-id
 ENTRA_CLIENT_SECRET=your-client-secret-value
 ENTRA_TENANT_ID=your-tenant-id-or-common
+```
 
-# Optional - For sovereign clouds
-# ENTRA_AUTHORITY=https://login.microsoftonline.us  # US Government
-# ENTRA_AUTHORITY=https://login.chinacloudapi.cn    # China
+#### Optional Configuration Variables
 
-# Optional - Custom claim mappings (defaults are shown)
+```bash
+# Token Configuration
+# Determines which token to use for extracting user information
+# - 'id': Extract user info from ID token (default, recommended)
+# - 'access': Extract user info from access token
+# If token extraction fails, the system will automatically fallback to Graph API
+ENTRA_TOKEN_KIND=id
+
+# Microsoft Graph API Configuration
+# For sovereign clouds or custom Graph API endpoints
+# Default: https://graph.microsoft.com
+ENTRA_GRAPH_URL=https://graph.microsoft.com
+
+# M2M (Machine-to-Machine) Scope Configuration
+# Default scope for client credentials flow
+# Default: https://graph.microsoft.com/.default
+ENTRA_M2M_SCOPE=https://graph.microsoft.com/.default
+
+# Custom Claim Mappings (defaults are shown)
 ENTRA_USERNAME_CLAIM=preferred_username
 ENTRA_GROUPS_CLAIM=groups
 ENTRA_EMAIL_CLAIM=email
 ENTRA_NAME_CLAIM=name
+```
+
+#### Sovereign Cloud Configuration
+
+For non-global Azure clouds, update `ENTRA_GRAPH_URL` and `ENTRA_M2M_SCOPE`:
+
+```bash
+# US Government Cloud
+ENTRA_TENANT_ID=your-tenant-id
+ENTRA_GRAPH_URL=https://graph.microsoft.us
+ENTRA_M2M_SCOPE=https://graph.microsoft.us/.default
+
+# China Cloud (operated by 21Vianet)
+ENTRA_TENANT_ID=your-tenant-id
+ENTRA_GRAPH_URL=https://microsoftgraph.chinacloudapi.cn
+ENTRA_M2M_SCOPE=https://microsoftgraph.chinacloudapi.cn/.default
+
+# Germany Cloud
+ENTRA_TENANT_ID=your-tenant-id
+ENTRA_GRAPH_URL=https://graph.microsoft.de
+ENTRA_M2M_SCOPE=https://graph.microsoft.de/.default
 ```
 
 ## Error Handling
@@ -301,21 +396,49 @@ logging.basicConfig(
 
 ## Extensibility
 
-### Custom Authority URLs
-Support for sovereign clouds:
-- Azure US Government: `https://login.microsoftonline.us`
-- Azure China: `https://login.chinacloudapi.cn`
+### Sovereign Cloud Support
+
+The implementation is fully compatible with sovereign clouds through configuration:
+
+**Azure US Government:**
+```bash
+ENTRA_TENANT_ID=your-tenant-id
+ENTRA_GRAPH_URL=https://graph.microsoft.us
+ENTRA_M2M_SCOPE=https://graph.microsoft.us/.default
+```
+
+**Azure China (21Vianet):**
+```bash
+ENTRA_TENANT_ID=your-tenant-id
+ENTRA_GRAPH_URL=https://microsoftgraph.chinacloudapi.cn
+ENTRA_M2M_SCOPE=https://microsoftgraph.chinacloudapi.cn/.default
+```
+
+**Azure Germany:**
+```bash
+ENTRA_TENANT_ID=your-tenant-id
+ENTRA_GRAPH_URL=https://graph.microsoft.de
+ENTRA_M2M_SCOPE=https://graph.microsoft.de/.default
+```
 
 ### Custom Scopes
 Easily extendable to support additional Microsoft Graph permissions:
 
 ```yaml
-scopes: ["openid", "profile", "email", "User.Read", "Mail.Read", "Calendars.Read"]
+scopes: ["openid", "profile", "email", "User.Read", "Mail.Read", "Calendars.Read", "Group.Read.All"]
 ```
 
 ### Multi-Tenant Support
 - Use `tenant_id: "common"` for multi-tenant applications
+- Use `tenant_id: "organizations"` for organizational accounts only
+- Use `tenant_id: "consumers"` for personal Microsoft accounts only
 - Automatic tenant discovery and validation
+
+### Token Kind Flexibility
+Configure token extraction strategy based on your needs:
+- `ENTRA_TOKEN_KIND=id` for standard OpenID Connect flow (recommended)
+- `ENTRA_TOKEN_KIND=access` for access token-based extraction
+- Automatic fallback to Graph API ensures reliability
 
 ## Testing
 
@@ -336,12 +459,23 @@ The implementation can be tested with:
 
 ```python
 from auth_server.providers.entra import EntraIDProvider
+import os
 
-# Initialize provider
+# Set environment variables
+os.environ['ENTRA_TOKEN_KIND'] = 'id'  # Use ID token for user info
+
+# Initialize provider with all required parameters
 provider = EntraIDProvider(
     tenant_id="your-tenant-id",
     client_id="your-client-id",
-    client_secret="your-client-secret"
+    client_secret="your-client-secret",
+    auth_url="https://login.microsoftonline.com/your-tenant-id/oauth2/v2.0/authorize",
+    token_url="https://login.microsoftonline.com/your-tenant-id/oauth2/v2.0/token",
+    jwks_url="https://login.microsoftonline.com/your-tenant-id/discovery/v2.0/keys",
+    logout_url="https://login.microsoftonline.com/your-tenant-id/oauth2/v2.0/logout",
+    userinfo_url="https://graph.microsoft.com/v1.0/me",
+    graph_url="https://graph.microsoft.com",
+    m2m_scope="https://graph.microsoft.com/.default"
 )
 
 # Generate authorization URL
@@ -356,23 +490,63 @@ token_data = provider.exchange_code_for_token(
     redirect_uri="https://your-app/callback"
 )
 
-# Validate token
-user_info = provider.validate_token(token_data["access_token"])
+# Get user information (includes groups)
+# Pass both access_token and id_token for best results
+user_info = provider.get_user_info(
+    access_token=token_data["access_token"],
+    id_token=token_data.get("id_token")  # Optional but recommended
+)
 
-# Get user profile
-profile = provider.get_user_info(token_data["access_token"])
+print(f"User: {user_info['username']}")
+print(f"Email: {user_info['email']}")
+print(f"Groups: {user_info['groups']}")
+
+# Get user groups separately (if needed)
+groups = provider.get_user_groups(token_data["access_token"])
 ```
 
 ### Machine-to-Machine Authentication
 
 ```python
-# Get M2M token
+# Get M2M token using client credentials flow
+m2m_token = provider.get_m2m_token()
+
+# Or specify custom scope
 m2m_token = provider.get_m2m_token(
     scope="https://graph.microsoft.com/.default"
 )
 
 # Validate M2M token
 validation_result = provider.validate_m2m_token(m2m_token["access_token"])
+```
+
+### Sovereign Cloud Example
+
+```python
+import os
+
+# Configure for Azure US Government
+os.environ['ENTRA_GRAPH_URL'] = 'https://graph.microsoft.us'
+os.environ['ENTRA_M2M_SCOPE'] = 'https://graph.microsoft.us/.default'
+
+provider = EntraIDProvider(
+    tenant_id="your-tenant-id",
+    client_id="your-client-id",
+    client_secret="your-client-secret",
+    auth_url="https://login.microsoftonline.us/your-tenant-id/oauth2/v2.0/authorize",
+    token_url="https://login.microsoftonline.us/your-tenant-id/oauth2/v2.0/token",
+    jwks_url="https://login.microsoftonline.us/your-tenant-id/discovery/v2.0/keys",
+    logout_url="https://login.microsoftonline.us/your-tenant-id/oauth2/v2.0/logout",
+    userinfo_url="https://graph.microsoft.us/v1.0/me",
+    graph_url="https://graph.microsoft.us",
+    m2m_scope="https://graph.microsoft.us/.default"
+)
+
+# Use provider normally - all Graph API calls will use the sovereign cloud endpoint
+user_info = provider.get_user_info(
+    access_token=token_data["access_token"],
+    id_token=token_data.get("id_token")
+)
 ```
 
 ## Troubleshooting
@@ -383,15 +557,35 @@ validation_result = provider.validate_m2m_token(m2m_token["access_token"])
    - Check audience and issuer configuration
    - Verify JWKS endpoint accessibility
    - Ensure token hasn't expired
+   - Check that `jwks_url` is correctly configured for your tenant
 
 2. **API Permission Errors**
    - Verify delegated permissions are granted
    - Check admin consent for application permissions
    - Validate scope configuration
+   - Ensure `Group.Read.All` permission if fetching groups
 
 3. **Multi-Tenant Issues**
    - Ensure app registration allows multi-tenant access
    - Verify tenant ID is set to "common" for multi-tenant apps
+   - Check that users are from supported tenant types
+
+4. **Token Kind Configuration Issues**
+   - If `ENTRA_TOKEN_KIND=id` but no ID token in response, check OAuth scopes include `openid`
+   - System will automatically fallback to access token or Graph API
+   - Check logs to see which extraction method was used
+
+5. **Sovereign Cloud Issues**
+   - Verify `ENTRA_GRAPH_URL` matches your cloud environment
+   - Ensure `ENTRA_M2M_SCOPE` uses the correct Graph API URL
+   - Check that all OAuth endpoints (auth_url, token_url, jwks_url) match your cloud
+   - Confirm app registration is in the correct cloud tenant
+
+6. **Group Retrieval Failures**
+   - Ensure access token has `Group.Read.All` or `Directory.Read.All` permissions
+   - Check that user is member of groups in Azure AD
+   - Verify Graph API endpoint is accessible
+   - Check logs for specific Graph API error messages
 
 ### Debug Mode
 
