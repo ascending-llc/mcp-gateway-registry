@@ -198,10 +198,12 @@ User groups are fetched separately using the Microsoft Graph API:
 def get_user_groups(self, access_token: str) -> list:
 ```
 
-**Graph API Endpoint:** `{graph_url}/v1.0/me/transitiveMemberOf/microsoft.graph.group`
+**Graph API Endpoint:** `{graph_url}/v1.0/me/transitiveMemberOf/microsoft.graph.group?$count=true&$select=id,displayName`
 
 **Features:**
 - Fetches transitive group memberships (includes nested groups)
+- Uses `$count=true` for accurate count metadata
+- Uses `$select=id,displayName` to optimize the response payload
 - Returns group display names as a list
 - Automatically called by `get_user_info()` method
 - Handles errors gracefully (returns empty list on failure)
