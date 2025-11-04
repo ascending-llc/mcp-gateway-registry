@@ -124,10 +124,9 @@ cat keycloak/setup/keycloak-client-secrets.txt
 | `ENTRA_GRAPH_URL` | Microsoft Graph API base URL (for sovereign clouds) | `https://graph.microsoft.com` | `https://graph.microsoft.com` |
 | `ENTRA_M2M_SCOPE` | Default scope for M2M authentication | `https://graph.microsoft.com/.default` | `https://graph.microsoft.com/.default` |
 | `ENTRA_USERNAME_CLAIM` | JWT claim to use for username | `preferred_username` | `preferred_username` |
-| `ENTRA_GROUPS_CLAIM` | JWT claim to use for groups | `groups` | `groups` |
-| `ENTRA_EMAIL_CLAIM` | JWT claim to use for email | `email` | `email` |
+| `ENTRA_EMAIL_CLAIM` | JWT claim to use for email | `email,upn,preferred_username` | `email` |
 | `ENTRA_NAME_CLAIM` | JWT claim to use for display name | `name` | `name` |
-
+| `ENTRA_GROUPS_CLAIM` | JWT claim to use for groups | `groups` | `groups` |
 **Note: Getting Entra ID Credentials**
 
 To obtain these credentials from Azure Portal:
@@ -185,6 +184,8 @@ ENTRA_M2M_SCOPE=https://graph.microsoft.de/.default
 
 The `ENTRA_TOKEN_KIND` variable determines how user information is extracted:
 
+**Screenshot:**
+![Azure Token Kind](img/entra-token-kind.png)
 ```bash
 # Use ID token for user info (recommended - fast, standard OIDC)
 ENTRA_TOKEN_KIND=id
