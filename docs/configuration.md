@@ -127,88 +127,16 @@ cat keycloak/setup/keycloak-client-secrets.txt
 | `ENTRA_EMAIL_CLAIM` | JWT claim to use for email | `email,upn,preferred_username` | `email` |
 | `ENTRA_NAME_CLAIM` | JWT claim to use for display name | `name` | `name` |
 | `ENTRA_GROUPS_CLAIM` | JWT claim to use for groups | `groups` | `groups` |
-**Note: Getting Entra ID Credentials**
 
-To obtain these credentials from Azure Portal:
+**Setup Instructions**
 
-1. Navigate to [Azure Portal](https://portal.azure.com) → **Azure Active Directory** (or **Microsoft Entra ID**)
-2. Go to **App registrations** → Click **New registration**
-3. Configure your application:
-   - **Name**: `MCP Gateway Registry`
-   - **Supported account types**: Choose based on your needs
-     - Single tenant: Only accounts in your organization
-     - Multi-tenant: Accounts in any organizational directory
-   - **Redirect URI**: 
-     - Platform: `Web`
-     - URL: `https://your-registry-url/auth/callback`
-4. After registration, copy the **Application (client) ID** → This is your `ENTRA_CLIENT_ID`
-5. Copy the **Directory (tenant) ID** → This is your `ENTRA_TENANT_ID`
-6. Go to **Certificates & secrets** → **Client secrets** → **New client secret**
-   - Add description: `MCP Gateway Secret`
-   - Choose expiration period
-   - Copy the **Value** (not the Secret ID) → This is your `ENTRA_CLIENT_SECRET`
-7. Go to **API permissions**:
-   - Add **Microsoft Graph** permissions:
-     - `User.Read` (Delegated) - Read user profile
-     - `openid` (Delegated) - OpenID Connect sign-in
-     - `profile` (Delegated) - View users' basic profile
-     - `email` (Delegated) - View users' email address
-   - Click **Grant admin consent** if you have admin rights
-8. Go to **Authentication**:
-   - Add redirect URI: `https://your-registry-url/auth/callback`
-   - Under **Implicit grant and hybrid flows**: Enable **ID tokens**
-   - Under **Advanced settings**: Set **Allow public client flows** to `Yes` (required for device code flow)
+For detailed instructions on obtaining Entra ID credentials and configuring your Azure AD app registration, see the [Microsoft Entra ID Setup Guide](entra-id-setup.md).
 
-**Sovereign Cloud Support**
-
-For non-global Azure clouds, configure `ENTRA_GRAPH_URL` and `ENTRA_M2M_SCOPE`:
-
-```bash
-# US Government Cloud
-ENTRA_TENANT_ID=your-tenant-id
-ENTRA_GRAPH_URL=https://graph.microsoft.us
-ENTRA_M2M_SCOPE=https://graph.microsoft.us/.default
-
-# China Cloud (operated by 21Vianet)
-ENTRA_TENANT_ID=your-tenant-id
-ENTRA_GRAPH_URL=https://microsoftgraph.chinacloudapi.cn
-ENTRA_M2M_SCOPE=https://microsoftgraph.chinacloudapi.cn/.default
-
-# Germany Cloud
-ENTRA_TENANT_ID=your-tenant-id
-ENTRA_GRAPH_URL=https://graph.microsoft.de
-ENTRA_M2M_SCOPE=https://graph.microsoft.de/.default
-```
-
-**Token Kind Configuration**
-
-The `ENTRA_TOKEN_KIND` variable determines how user information is extracted:
-
-**Screenshot:**
-![Azure Token Kind](img/entra-token-kind.png)
-```bash
-# Use ID token for user info (recommended - fast, standard OIDC)
-ENTRA_TOKEN_KIND=id
-
-# Use access token for user info (alternative)
-ENTRA_TOKEN_KIND=access
-```
-
-- `id` (default): Extracts user info from ID token (OpenID Connect standard, fast)
-- `access`: Extracts user info from access token
-- Automatic fallback to Microsoft Graph API if token extraction fails
-
-**Multi-Tenant Configuration**
-
-To support any Microsoft organizational account:
-
-```bash
-ENTRA_TENANT_ID=common
-# or for only organizational accounts (exclude personal accounts)
-ENTRA_TENANT_ID=organizations
-# or for only personal Microsoft accounts
-ENTRA_TENANT_ID=consumers
-```
+**Quick Reference:**
+- **Azure Portal**: [portal.azure.com](https://portal.azure.com) → Azure Active Directory → App registrations
+- **Required Permissions**: `User.Read`, `openid`, `profile`, `email`
+- **Redirect URI**: `https://your-registry-url/auth/callback`
+- **Sovereign Clouds**: Update both `ENTRA_GRAPH_URL` and `ENTRA_M2M_SCOPE` (see setup guide)
 
 ### Optional Variables
 
