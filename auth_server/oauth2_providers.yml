@@ -78,6 +78,7 @@ providers:
     tenant_id: "${ENTRA_TENANT_ID}"
     auth_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/authorize"
     token_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/token"
+    jwks_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/discovery/v2.0/keys"
     user_info_url: "https://graph.microsoft.com/v1.0/me"
     logout_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/logout"
     scopes: ["openid", "profile", "email", "User.Read"]
@@ -88,10 +89,11 @@ providers:
     groups_claim: "${ENTRA_GROUPS_CLAIM}"
     email_claim:  "${ENTRA_EMAIL_CLAIM}"
     name_claim: "${ENTRA_NAME_CLAIM}"
-    # Optional: For sovereign clouds (Azure Government, Azure China, etc.)
-    # authority: "https://login.microsoftonline.us/${ENTRA_TENANT_ID}"  # US Government
-    # authority: "https://login.chinacloudapi.cn/${ENTRA_TENANT_ID}"    # China
-    enabled: true  # Disabled by default
+    # Microsoft Graph API base URL (for sovereign clouds)
+    graph_url: "${ENTRA_GRAPH_URL:-https://graph.microsoft.com}"
+    # M2M (Machine-to-Machine) default scope
+    m2m_scope: "${ENTRA_M2M_SCOPE:-https://graph.microsoft.com/.default}"
+    enabled: true
 
 # Default session settings
 session:

@@ -108,12 +108,25 @@ cat keycloak/setup/keycloak-client-secrets.txt
 
 ### Microsoft Entra ID Configuration (if AUTH_PROVIDER=entra_id)
 
+#### Required Variables
+
 | Variable | Description | Example | Required |
 |----------|-------------|---------|----------|
 | `ENTRA_TENANT_ID` | Azure AD tenant ID (or 'common' for multi-tenant) | `12345678-1234-1234-1234-123456789012` | ✅ |
 | `ENTRA_CLIENT_ID` | Azure AD application (client) ID | `87654321-4321-4321-4321-210987654321` | ✅ |
 | `ENTRA_CLIENT_SECRET` | Azure AD client secret value | `abc123~XYZ...` | ✅ |
-| `ENTRA_AUTHORITY` | Custom authority URL (for sovereign clouds) | `https://login.microsoftonline.com/{tenant_id}` | Optional |
+
+#### Optional Configuration Variables
+
+| Variable | Description | Example | Default |
+|----------|-------------|---------|---------|
+| `ENTRA_TOKEN_KIND` | Which token to use for user info extraction ('id' or 'access') | `id` | `id` |
+| `ENTRA_GRAPH_URL` | Microsoft Graph API base URL (for sovereign clouds) | `https://graph.microsoft.com` | `https://graph.microsoft.com` |
+| `ENTRA_M2M_SCOPE` | Default scope for M2M authentication | `https://graph.microsoft.com/.default` | `https://graph.microsoft.com/.default` |
+| `ENTRA_USERNAME_CLAIM` | JWT claim to use for username | `preferred_username` | `preferred_username` |
+| `ENTRA_GROUPS_CLAIM` | JWT claim to use for groups | `groups` | `groups` |
+| `ENTRA_EMAIL_CLAIM` | JWT claim to use for email | `email` | `email` |
+| `ENTRA_NAME_CLAIM` | JWT claim to use for display name | `name` | `name` |
 
 **Note: Getting Entra ID Credentials**
 
@@ -149,18 +162,40 @@ To obtain these credentials from Azure Portal:
 
 **Sovereign Cloud Support**
 
-For non-global Azure clouds, set the `ENTRA_AUTHORITY` variable:
+For non-global Azure clouds, configure `ENTRA_GRAPH_URL` and `ENTRA_M2M_SCOPE`:
 
 ```bash
 # US Government Cloud
-ENTRA_AUTHORITY=https://login.microsoftonline.us/{tenant_id}
+ENTRA_TENANT_ID=your-tenant-id
+ENTRA_GRAPH_URL=https://graph.microsoft.us
+ENTRA_M2M_SCOPE=https://graph.microsoft.us/.default
 
 # China Cloud (operated by 21Vianet)
-ENTRA_AUTHORITY=https://login.chinacloudapi.cn/{tenant_id}
+ENTRA_TENANT_ID=your-tenant-id
+ENTRA_GRAPH_URL=https://microsoftgraph.chinacloudapi.cn
+ENTRA_M2M_SCOPE=https://microsoftgraph.chinacloudapi.cn/.default
 
 # Germany Cloud
-ENTRA_AUTHORITY=https://login.microsoftonline.de/{tenant_id}
+ENTRA_TENANT_ID=your-tenant-id
+ENTRA_GRAPH_URL=https://graph.microsoft.de
+ENTRA_M2M_SCOPE=https://graph.microsoft.de/.default
 ```
+
+**Token Kind Configuration**
+
+The `ENTRA_TOKEN_KIND` variable determines how user information is extracted:
+
+```bash
+# Use ID token for user info (recommended - fast, standard OIDC)
+ENTRA_TOKEN_KIND=id
+
+# Use access token for user info (alternative)
+ENTRA_TOKEN_KIND=access
+```
+
+- `id` (default): Extracts user info from ID token (OpenID Connect standard, fast)
+- `access`: Extracts user info from access token
+- Automatic fallback to Microsoft Graph API if token extraction fails
 
 **Multi-Tenant Configuration**
 

@@ -64,24 +64,58 @@ This guide provides step-by-step instructions for setting up Microsoft Entra ID 
 
 Add the following environment variables to your MCP Gateway Registry deployment:
 
+### Required Variables
+
 ```bash
 # Microsoft Entra ID Configuration
 ENTRA_CLIENT_ID=your-application-client-id
 ENTRA_CLIENT_SECRET=your-client-secret-value
 ENTRA_TENANT_ID=your-tenant-id-or-common
-
-# Optional: For sovereign clouds
-# ENTRA_AUTHORITY=https://login.microsoftonline.us  # US Government
-# ENTRA_AUTHORITY=https://login.chinacloudapi.cn    # China
 ```
 
-**Optional Claim Mapping Environment Variables:**
+### Optional Configuration Variables
+
 ```bash
-# Optional: Custom claim mappings (defaults are shown)
+# Token Configuration
+# Determines which token to use for extracting user information
+# - 'id': Extract user info from ID token (default, recommended)
+# - 'access': Extract user info from access token
+# If token extraction fails, the system will automatically fallback to Graph API
+ENTRA_TOKEN_KIND=id
+
+# Microsoft Graph API Configuration
+# For sovereign clouds or custom Graph API endpoints
+# Default: https://graph.microsoft.com
+ENTRA_GRAPH_URL=https://graph.microsoft.com
+
+# M2M (Machine-to-Machine) Scope Configuration
+# Default scope for client credentials flow
+# Default: https://graph.microsoft.com/.default
+ENTRA_M2M_SCOPE=https://graph.microsoft.com/.default
+
+# Custom Claim Mappings (defaults are shown)
 ENTRA_USERNAME_CLAIM=preferred_username
 ENTRA_GROUPS_CLAIM=groups
-ENTRA_EMAIL_CLAIM=upn # upn or email
+ENTRA_EMAIL_CLAIM=email
 ENTRA_NAME_CLAIM=name
+```
+
+### Sovereign Cloud Configuration
+
+For non-global Azure clouds, update **both** `ENTRA_TENANT_ID` and `ENTRA_GRAPH_URL`:
+
+```bash
+# US Government Cloud
+ENTRA_TENANT_ID=your-tenant-id
+ENTRA_GRAPH_URL=https://graph.microsoft.us
+
+# China Cloud (operated by 21Vianet)
+ENTRA_TENANT_ID=your-tenant-id
+ENTRA_GRAPH_URL=https://microsoftgraph.chinacloudapi.cn
+
+# Germany Cloud
+ENTRA_TENANT_ID=your-tenant-id
+ENTRA_GRAPH_URL=https://graph.microsoft.de
 ```
 
 **Note**: URLs, scopes, and default claim mappings are configured in `auth_server/oauth2_providers.yml`. Environment variables for claim mappings are only needed if you want to override the defaults.
@@ -95,18 +129,25 @@ entra_id:
   display_name: "Microsoft Entra ID"
   client_id: "${ENTRA_CLIENT_ID}"
   client_secret: "${ENTRA_CLIENT_SECRET}"
+  # Tenant ID can be specific tenant or 'common' for multi-tenant
   tenant_id: "${ENTRA_TENANT_ID}"
   auth_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/authorize"
   token_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/token"
+  jwks_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/discovery/v2.0/keys"
   user_info_url: "https://graph.microsoft.com/v1.0/me"
   logout_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/logout"
   scopes: ["openid", "profile", "email", "User.Read"]
   response_type: "code"
   grant_type: "authorization_code"
-  username_claim: "preferred_username"
-  groups_claim: "groups"
-  email_claim: "email"
-  name_claim: "name"
+  # Entra ID specific claim mapping
+  username_claim: "${ENTRA_USERNAME_CLAIM}"
+  groups_claim: "${ENTRA_GROUPS_CLAIM}"
+  email_claim: "${ENTRA_EMAIL_CLAIM}"
+  name_claim: "${ENTRA_NAME_CLAIM}"
+  # Microsoft Graph API base URL (for sovereign clouds)
+  graph_url: "${ENTRA_GRAPH_URL:-https://graph.microsoft.com}"
+  # M2M (Machine-to-Machine) default scope
+  m2m_scope: "${ENTRA_M2M_SCOPE:-https://graph.microsoft.com/.default}"
   enabled: true
 ```
 
@@ -125,6 +166,17 @@ entra_id:
 
 ### Multi-Tenant Setup
 For multi-tenant applications, set `ENTRA_TENANT_ID=common` and ensure the app registration is configured for multi-tenant access.
+
+```bash
+# Support any Microsoft organizational account
+ENTRA_TENANT_ID=common
+
+# Support only organizational accounts (exclude personal accounts)
+ENTRA_TENANT_ID=organizations
+
+# Support only personal Microsoft accounts
+ENTRA_TENANT_ID=consumers
+```
 
 ### Machine-to-Machine (M2M) Authentication
 For service accounts and automated processes:
@@ -158,8 +210,14 @@ Modify the `scopes` configuration in `oauth2_providers.yml` to include additiona
    - Check token audience and issuer configuration
 
 4. **Sovereign Cloud Issues**
-   - For Azure Government or China clouds, set the appropriate authority URL
+   - For Azure Government or China clouds, set the appropriate `ENTRA_GRAPH_URL`
    - Ensure app registration is in the correct cloud environment
+   - Verify OAuth endpoints match your cloud environment
+
+5. **Token Kind Configuration**
+   - If using `ENTRA_TOKEN_KIND=id` but ID token is not available, system will fallback to access token
+   - If using `ENTRA_TOKEN_KIND=access`, ensure access token contains user claims
+   - Check logs to see which token extraction method was used
 
 ### Logs and Debugging
 

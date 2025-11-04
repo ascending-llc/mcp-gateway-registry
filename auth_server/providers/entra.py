@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 import jwt
 import requests
@@ -22,7 +23,13 @@ class EntraIDProvider(AuthProvider):
             tenant_id: str,
             client_id: str,
             client_secret: str,
-            authority: Optional[str] = None,
+            auth_url: str,
+            token_url: str,
+            jwks_url: str,
+            logout_url: str,
+            userinfo_url: str,
+            graph_url: Optional[str] = None,
+            m2m_scope: Optional[str] = None,
             scopes: Optional[list] = None,
             grant_type: str = "authorization_code",
             username_claim: str = "preferred_username",
@@ -36,7 +43,13 @@ class EntraIDProvider(AuthProvider):
             tenant_id: Azure AD tenant ID (or 'common' for multi-tenant)
             client_id: Azure AD application (client) ID
             client_secret: Azure AD client secret
-            authority: Optional custom authority URL (defaults to global Azure AD)
+            auth_url: Authorization endpoint URL
+            token_url: Token endpoint URL
+            jwks_url: JWKS endpoint URL
+            logout_url: Logout endpoint URL
+            userinfo_url: User info endpoint URL
+            graph_url: Microsoft Graph API base URL (default: 'https://graph.microsoft.com')
+            m2m_scope: Default scope for M2M authentication (default: 'https://graph.microsoft.com/.default')
             scopes: List of OAuth2 scopes (default: ['openid', 'profile', 'email', 'User.Read'])
             grant_type: OAuth2 grant type (default: 'authorization_code')
             username_claim: Claim to use for username (default: 'preferred_username')
@@ -53,19 +66,20 @@ class EntraIDProvider(AuthProvider):
         self._jwks_cache_time: float = 0
         self._jwks_cache_ttl: int = 3600  # 1 hour
 
-        # Microsoft Entra ID endpoints - construct from authority
-        self.authority = authority or f"https://login.microsoftonline.com/{tenant_id}"
-        self.auth_url = f"{self.authority}/oauth2/v2.0/authorize"
-        self.token_url = f"{self.authority}/oauth2/v2.0/token"
-        self.jwks_url = f"{self.authority}/discovery/v2.0/keys"
-        self.logout_url = f"{self.authority}/oauth2/v2.0/logout"
-        self.userinfo_url = "https://graph.microsoft.com/v1.0/me"
+        # Microsoft Entra ID endpoints - from configuration
+        self.auth_url = auth_url
+        self.token_url = token_url
+        self.jwks_url = jwks_url
+        self.logout_url = logout_url
+        self.userinfo_url = userinfo_url
+        self.graph_url = graph_url or "https://graph.microsoft.com"
+        self.m2m_scope = m2m_scope or f"{self.graph_url}/.default"
         self.issuer = f"https://login.microsoftonline.com/{tenant_id}/v2.0"
-        
+
         # OAuth2 configuration - injected via constructor
         self.scopes = scopes or ['openid', 'profile', 'email', 'User.Read']
         self.grant_type = grant_type
-        
+
         # Claim mappings configuration
         self.username_claim = username_claim
         self.groups_claim = groups_claim
@@ -73,8 +87,8 @@ class EntraIDProvider(AuthProvider):
         self.name_claim = name_claim
 
         logger.debug(f"Initialized Entra ID provider for tenant '{tenant_id}' with "
-                    f"scopes={self.scopes}, grant_type={self.grant_type}, claims: "
-                    f"username={username_claim}, email={email_claim}, groups={groups_claim}, name={name_claim}")
+                     f"scopes={self.scopes}, grant_type={self.grant_type}, graph_url={self.graph_url}, "
+                     f"claims: username={username_claim}, email={email_claim}, groups={groups_claim}, name={name_claim}")
 
     def validate_token(
             self,
@@ -124,11 +138,11 @@ class EntraIDProvider(AuthProvider):
             # Extract user info from claims using configured claim mappings
             username = claims.get(self.username_claim) or claims.get('sub')  # Fallback to 'sub' as last resort
             email = claims.get(self.email_claim)
-            
+
             # Extract groups - handle both string and list claims
             groups_raw = claims.get(self.groups_claim, [])
             groups = groups_raw if isinstance(groups_raw, list) else []
-            
+
             logger.debug(f"Token validation successful for user: {username}")
 
             return {
@@ -213,42 +227,186 @@ class EntraIDProvider(AuthProvider):
                     logger.error(f"Response text: {e.response.text}")
             raise ValueError(f"Token exchange failed: {e}")
 
-    def get_user_info(
+    def _extract_user_info_from_token(
+            self,
+            token: str,
+            token_type: str
+    ) -> Optional[Dict[str, Any]]:
+        """Extract user information from JWT token.
+        
+        Args:
+            token: JWT token string
+            token_type: Type of token ('id' or 'access')
+            
+        Returns:
+            Dict with user info or None if extraction fails
+        """
+        try:
+            logger.debug(f"Extracting user info from {token_type} token")
+            token_claims = jwt.decode(token, options={"verify_signature": False})
+            logger.debug(f"Token claims extracted: {list(token_claims.keys())}")
+
+            # Extract username with fallback chain
+            username = (
+                    token_claims.get(self.username_claim) or
+                    token_claims.get('preferred_username') or
+                    token_claims.get('upn') or
+                    token_claims.get('unique_name')
+            )
+            # Extract email
+            email = (
+                    token_claims.get(self.email_claim) or
+                    token_claims.get('upn')
+            )
+            # Extract name
+            name = (token_claims.get(self.name_claim) or
+                    token_claims.get('displayName') or
+                    token_claims.get('given_name'))
+            user_info = {
+                'username': username,
+                'email': email,
+                'name': name,
+                'id': token_claims.get('oid') or token_claims.get('sub'),
+                'groups': []
+            }
+            logger.info(f"User info extracted from {token_type} token: {username}")
+            return user_info
+
+        except Exception as e:
+            logger.warning(f"Failed to extract user info from {token_type} token: {e}")
+            return None
+
+    def _fetch_user_info_from_graph(
             self,
             access_token: str
     ) -> Dict[str, Any]:
-        """Get user information from Microsoft Graph API."""
+        """Fetch user information from Microsoft Graph API.
+        
+        Args:
+            access_token: OAuth2 access token
+            
+        Returns:
+            Dict containing user information
+            
+        Raises:
+            ValueError: If Graph API request fails
+        """
         try:
-            logger.debug("Fetching user info from Microsoft Graph")
-
+            logger.debug("Fetching user info from Microsoft Graph API")
             headers = {'Authorization': f'Bearer {access_token}'}
             response = requests.get(self.userinfo_url, headers=headers, timeout=10)
             response.raise_for_status()
+            graph_data = response.json()
 
-            user_info = response.json()
-            
-            # Map Microsoft Graph response to configured claim names
-            username_value = user_info.get('userPrincipalName')
-            email_value = user_info.get('mail') or user_info.get('userPrincipalName')
-            name_value = user_info.get('displayName')
-            
-            logger.debug(f"User info retrieved for: {username_value}")
+            # Map Microsoft Graph response to standard format
+            username = graph_data.get('userPrincipalName')
+            email = graph_data.get('mail') or graph_data.get('userPrincipalName')
+            name = graph_data.get('displayName')
 
-            # Transform Microsoft Graph response to standard format using configured mappings
-            result = {
-                'username': username_value,
-                'email': email_value,
-                'name': name_value,
-                'given_name': user_info.get('givenName'),
-                'family_name': user_info.get('surname'),
-                'id': user_info.get('id'),
-                'job_title': user_info.get('jobTitle'),
-                'office_location': user_info.get('officeLocation')
+            user_info = {
+                'username': username,
+                'email': email,
+                'name': name,
+                'given_name': graph_data.get('givenName'),
+                'family_name': graph_data.get('surname'),
+                'id': graph_data.get('id'),
+                'job_title': graph_data.get('jobTitle'),
+                'office_location': graph_data.get('officeLocation'),
+                'groups': []
             }
-            
-            return result
+
+            logger.info(f"User info retrieved from Graph API: {username}")
+            return user_info
 
         except requests.RequestException as e:
+            logger.error(f"Failed to fetch user info from Graph API: {e}")
+            raise ValueError(f"Graph API request failed: {e}")
+
+    def get_user_groups(
+            self,
+            access_token: str
+    ) -> list:
+        """Get user's group memberships from Microsoft Graph API.
+        
+        Args:
+            access_token: OAuth2 access token
+            
+        Returns:
+            List of group display names
+        """
+        try:
+            logger.debug("Fetching user groups from Graph API")
+            headers = {'Authorization': f'Bearer {access_token}'}
+            groups_url = (
+                f"{self.graph_url}/v1.0/me/transitiveMemberOf/microsoft.graph.group?"
+                "$count=true&$select=id,displayName"
+            )
+            response = requests.get(groups_url, headers=headers, timeout=10)
+            response.raise_for_status()
+            groups_data = response.json()
+
+            # Extract group display names
+            groups = [group.get('displayName') for group in groups_data.get('value', [])]
+            logger.info(f"Retrieved {groups} groups for user")
+            return groups
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch user groups: {e}")
+            return []
+
+    def get_user_info(
+            self,
+            access_token: str,
+            id_token: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Get user information from token or Microsoft Graph API.
+        
+        This method supports flexible user info extraction:
+        1. Extract from id_token (preferred) or access_token based on ENTRA_TOKEN_KIND config
+        2. Fallback to Microsoft Graph API if token extraction fails
+        3. Groups are automatically included (fetched from Graph API using access_token)
+        
+        Args:
+            access_token: OAuth2 access token (required for Graph API calls)
+            id_token: Optional ID token (preferred for user identity extraction)
+
+        Returns:
+            Dict containing user information with keys:
+            - username: User's principal name or email
+            - email: User's email address
+            - name: User's display name
+            - id: User's unique identifier
+            - groups: List of group display names (from Graph API)
+            - Additional fields from Graph API (if fallback used)
+        """
+        try:
+            token_kind = os.environ.get('ENTRA_TOKEN_KIND', 'id').lower()
+            user_info = None
+
+            if token_kind == 'id' and id_token:
+                # Use ID token for user identity
+                logger.debug("Extracting user info from ID token")
+                user_info = self._extract_user_info_from_token(id_token, 'id')
+            elif token_kind == 'access' and access_token:
+                #  Use access token
+                logger.debug("Extracting user info from access token")
+                user_info = self._extract_user_info_from_token(access_token, 'access')
+            else:
+                logger.warning(f"Token kind '{token_kind}' not available or token missing, falling back to Graph API")
+
+            # Fallback to Microsoft Graph API if token extraction failed
+            if not user_info:
+                logger.info("Token extraction failed, using Graph API fallback")
+                user_info = self._fetch_user_info_from_graph(access_token)
+
+            # Get user groups separately using access_token (required for Graph API)
+            groups = self.get_user_groups(access_token)
+            user_info["groups"] = groups
+            
+            logger.info(f"User info retrieved: {user_info.get('username')} with {len(groups)} groups")
+            return user_info
+
+        except Exception as e:
             logger.error(f"Failed to get user info: {e}")
             raise ValueError(f"User info retrieval failed: {e}")
 
@@ -342,14 +500,12 @@ class EntraIDProvider(AuthProvider):
         """
         try:
             logger.debug("Requesting M2M token using client credentials")
-            # For Entra ID client credentials, use .default scope or specified scope
-            default_scope = f"https://graph.microsoft.com/.default"
-
+            # Use configured M2M scope from parameters
             data = {
                 'grant_type': 'client_credentials',
                 'client_id': client_id or self.client_id,
                 'client_secret': client_secret or self.client_secret,
-                'scope': scope or default_scope
+                'scope': scope or self.m2m_scope
             }
             headers = {'Content-Type': 'application/x-www-form-urlencoded'}
             response = requests.post(self.token_url, data=data, headers=headers, timeout=10)
