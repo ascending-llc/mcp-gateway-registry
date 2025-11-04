@@ -20,6 +20,7 @@ This guide provides step-by-step instructions for setting up Microsoft Entra ID 
    - **Supported account types**: 
      - For single tenant: *Accounts in this organizational directory only*
      - For multi-tenant: *Accounts in any organizational directory*
+     - (See [Multi-Tenant Configuration](#multi-tenant-setup) for detailed setup)
    - **Redirect URI**: 
      - Type: **Web**
      - URI: `https://your-registry-domain/auth/callback`
@@ -39,13 +40,15 @@ This guide provides step-by-step instructions for setting up Microsoft Entra ID 
 2. **Configure API Permissions**
    - Go to **API permissions**
    - Click **Add a permission** > **Microsoft Graph** > **Delegated permissions**
-   - Add the following permissions:
+   - Add the following **required** permissions:
      - `email` - Read user email address
      - `openid` - Sign users in
      - `profile` - Read user profile
      - `User.Read` - Read user's full profile
+   - **Optional** - For group membership retrieval, add:
+     - `Group.Read.All` - Read all groups (enables user group retrieval)
    - Click **Add permissions**
-   - **Grant admin consent** for the permissions
+   - **Grant admin consent** for the permissions (required for group permissions)
 
 ## Step 3: Create Client Secret
 
@@ -100,23 +103,78 @@ ENTRA_EMAIL_CLAIM=email
 ENTRA_NAME_CLAIM=name
 ```
 
-### Sovereign Cloud Configuration
+### Token Kind Configuration
 
-For non-global Azure clouds, update **both** `ENTRA_TENANT_ID` and `ENTRA_GRAPH_URL`:
+
+The `ENTRA_TOKEN_KIND` variable determines how user information is extracted:
+
+**Screenshot:**
+![Azure Token Kind](img/entra-token-kind.png)
+
+- **`id` (default, recommended)**: Extracts user info from ID token
+  - Fast: Local JWT decoding, no network calls
+  - Standard: OpenID Connect standard approach
+  - Contains standard user claims: username, email, name, groups
+  
+- **`access`**: Extracts user info from access token
+  - Used when ID token is not available
+  - May not contain all user claims
+  
+- **Automatic fallback**: If token extraction fails, the system automatically falls back to Microsoft Graph API
+
+**Example Configuration:**
+```bash
+# Use ID token for user info (recommended - fast, standard OIDC)
+ENTRA_TOKEN_KIND=id
+
+# Use access token for user info (alternative)
+ENTRA_TOKEN_KIND=access
+```
+
+### Multi-Tenant Configuration
+
+To support different types of Microsoft accounts:
 
 ```bash
-# US Government Cloud
+# Support any Microsoft organizational account
+ENTRA_TENANT_ID=common
+
+# Support only organizational accounts (exclude personal accounts)
+ENTRA_TENANT_ID=organizations
+
+# Support only personal Microsoft accounts
+ENTRA_TENANT_ID=consumers
+```
+
+### Sovereign Cloud Configuration
+
+For non-global Azure clouds, update **both** `ENTRA_GRAPH_URL` and `ENTRA_M2M_SCOPE`:
+
+**US Government Cloud:**
+```bash
 ENTRA_TENANT_ID=your-tenant-id
 ENTRA_GRAPH_URL=https://graph.microsoft.us
+ENTRA_M2M_SCOPE=https://graph.microsoft.us/.default
+```
 
-# China Cloud (operated by 21Vianet)
+**China Cloud (operated by 21Vianet):**
+```bash
 ENTRA_TENANT_ID=your-tenant-id
 ENTRA_GRAPH_URL=https://microsoftgraph.chinacloudapi.cn
+ENTRA_M2M_SCOPE=https://microsoftgraph.chinacloudapi.cn/.default
+```
 
-# Germany Cloud
+**Germany Cloud:**
+```bash
 ENTRA_TENANT_ID=your-tenant-id
 ENTRA_GRAPH_URL=https://graph.microsoft.de
+ENTRA_M2M_SCOPE=https://graph.microsoft.de/.default
 ```
+
+**Important Notes:**
+- Ensure your app registration is in the correct cloud tenant
+- Verify all OAuth endpoints (auth_url, token_url, jwks_url) match your cloud
+- Update the login URLs in `auth_server/oauth2_providers.yml` for sovereign clouds
 
 **Note**: URLs, scopes, and default claim mappings are configured in `auth_server/oauth2_providers.yml`. Environment variables for claim mappings are only needed if you want to override the defaults.
 
@@ -164,9 +222,23 @@ entra_id:
 
 ## Step 7: Optional Configurations
 
+### Group Membership Access
+
+To retrieve user group memberships from Azure AD, ensure the following permissions are granted:
+
+1. **In Azure Portal** → Your app registration → **API permissions**
+2. Add **Microsoft Graph** → **Delegated permissions**:
+   - `Group.Read.All` - Read all groups
+   - Or `Directory.Read.All` - Read directory data (includes groups)
+3. Click **Grant admin consent** (requires admin privileges)
+
+**Note**: Without these permissions, the `groups` field in user info will be empty, but authentication will still work.
+
 ### Multi-Tenant Setup
+
 For multi-tenant applications, set `ENTRA_TENANT_ID=common` and ensure the app registration is configured for multi-tenant access.
 
+**Account Type Options:**
 ```bash
 # Support any Microsoft organizational account
 ENTRA_TENANT_ID=common
@@ -177,6 +249,12 @@ ENTRA_TENANT_ID=organizations
 # Support only personal Microsoft accounts
 ENTRA_TENANT_ID=consumers
 ```
+
+**App Registration Configuration:**
+1. Go to your app registration → **Authentication**
+2. Under **Supported account types**, select:
+   - **Accounts in any organizational directory (Any Azure AD directory - Multitenant)** for `common` or `organizations`
+   - **Personal Microsoft accounts only** for `consumers`
 
 ### Machine-to-Machine (M2M) Authentication
 For service accounts and automated processes:
