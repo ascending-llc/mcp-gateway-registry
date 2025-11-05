@@ -2,20 +2,12 @@
 
 import logging
 import os
-import sys
-from pathlib import Path
-from typing import Optional, Dict, Any
-
+from typing import Optional
 from .base import AuthProvider
 from .cognito import CognitoProvider
 from .keycloak import KeycloakProvider
 from .entra import EntraIDProvider
-
-# Add parent directory to path for utils import
-parent_dir = Path(__file__).parent.parent
-if str(parent_dir) not in sys.path:
-    sys.path.insert(0, str(parent_dir))
-from utils.config_loader import get_provider_config
+from ..utils.config_loader import get_provider_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -136,15 +128,13 @@ def _create_cognito_provider() -> CognitoProvider:
 def _create_entra_id_provider() -> EntraIDProvider:
     """Create and configure Microsoft Entra ID provider."""
     # Load OAuth2 configuration using shared loader
-
     entra_config = get_provider_config('entra_id') or {}
 
-    # Required configuration from environment variables
-    tenant_id = os.environ.get('ENTRA_TENANT_ID')
-    client_id = os.environ.get('ENTRA_CLIENT_ID')
-    client_secret = os.environ.get('ENTRA_CLIENT_SECRET')
-
     # Endpoint URLs from oauth2_providers.yml (already have environment variable substitution)
+    tenant_id = entra_config.get("tenant_id")
+    client_id = entra_config.get('client_id')
+    client_secret = entra_config.get('client_secret')
+
     auth_url = entra_config.get('auth_url')
     token_url = entra_config.get('token_url')
     jwks_url = entra_config.get('jwks_url')

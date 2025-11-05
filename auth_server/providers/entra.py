@@ -6,6 +6,7 @@ import requests
 from typing import Any, Dict, Optional
 from urllib.parse import urlencode
 from .base import AuthProvider
+from ..utils.config_loader import get_provider_config
 
 logging.basicConfig(
     level=logging.INFO,
@@ -297,12 +298,19 @@ class EntraIDProvider(AuthProvider):
             response = requests.get(self.userinfo_url, headers=headers, timeout=10)
             response.raise_for_status()
             graph_data = response.json()
+            logger.info(f"User info fetched from Microsoft Graph API: {graph_data}")
+
+            entra_config = get_provider_config('entra_id') or {}
+
+            username_claim = entra_config.get('username_claim')
+            email_claim = entra_config.get('email_claim')
+            name_claim = entra_config.get('name_claim')
 
             # Map Microsoft Graph response to standard format
-            username = graph_data.get('userPrincipalName')
-            email = graph_data.get('mail') or graph_data.get('userPrincipalName')
-            name = graph_data.get('displayName')
+            username = graph_data.get(username_claim)
+            email = graph_data.get(email_claim)
 
+            name = graph_data.get(name_claim) or graph_data.get("DisplayName")
             user_info = {
                 'username': username,
                 'email': email,
@@ -314,8 +322,7 @@ class EntraIDProvider(AuthProvider):
                 'office_location': graph_data.get('officeLocation'),
                 'groups': []
             }
-
-            logger.info(f"User info retrieved from Graph API: {username}")
+            logger.info(f"User info fetched from Microsoft Graph API: {user_info}")
             return user_info
 
         except requests.RequestException as e:
@@ -402,7 +409,7 @@ class EntraIDProvider(AuthProvider):
             # Get user groups separately using access_token (required for Graph API)
             groups = self.get_user_groups(access_token)
             user_info["groups"] = groups
-            
+
             logger.info(f"User info retrieved: {user_info.get('username')} with {len(groups)} groups")
             return user_info
 

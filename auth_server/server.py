@@ -31,13 +31,13 @@ import httpx
 from string import Template
 
 # Import metrics middleware
-from metrics_middleware import add_auth_metrics_middleware
+from .metrics_middleware import add_auth_metrics_middleware
 
 # Import provider factory
-from providers.factory import get_auth_provider
+from .providers.factory import get_auth_provider
 
 # Import shared configuration loader
-from utils.config_loader import get_oauth2_config
+from .utils.config_loader import get_oauth2_config
 
 # Configure logging
 logging.basicConfig(
