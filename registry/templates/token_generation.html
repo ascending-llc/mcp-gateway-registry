@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generate JWT Token - MCP Registry</title>
+    <title>Generate API Token - MCP Registry</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/style.css') }}">
     <style>
         .token-form {
@@ -277,7 +277,7 @@
         </div>
         <nav class="main-nav">
             <a href="/">← Back to Services</a>
-            <a href="/tokens" class="active">Generate Token</a>
+            <a href="/tokens" class="active">Generate API Token</a>
         </nav>
         <div class="header-right">
             <div class="user-display">{{ username }}</div>
@@ -288,10 +288,10 @@
     <div class="container">
         <main class="content">
             <div class="breadcrumbs">
-                <a href="/">Home</a> / <span>Generate Token</span>
+                <a href="/">Home</a> / <span>Generate API Token</span>
             </div>
             <div class="page-header">
-                <h1>Generate JWT Token</h1>
+                <h1>Generate API Token</h1>
                 <p>Generate a personal access token for programmatic access to MCP servers.</p>
             </div>
 
@@ -305,6 +305,17 @@
                         {% endfor %}
                     </div>
                     <p><em>Generated tokens can have the same or fewer permissions than your current scopes.</em></p>
+
+                    <div class="usage-instructions">
+                        <h4>Token Lifetime Configuration</h4>
+                        <p><strong>Note:</strong> Tokens have a default short lifetime (typically 5-15 minutes) for security.</p>
+                        <p>If you need longer-lived tokens for automation or extended use:</p>
+                        <ul>
+                            <li>Ask your administrator to increase the access token timeout in Keycloak</li>
+                            <li>Navigate to: <strong>Keycloak Admin Console → Realm Settings → Tokens → Access Token Lifespan</strong></li>
+                            <li>This approach is more secure than using refresh tokens</li>
+                        </ul>
+                    </div>
                 </div>
 
                 <form id="tokenForm">

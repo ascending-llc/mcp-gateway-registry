@@ -201,7 +201,9 @@ def cleanup_services():
     server_service.service_state.clear()
     health_service.server_health_status.clear()
     health_service.server_last_check_time.clear()
-    health_service.active_connections.clear()
+    # Clear active_connections only if it exists (websocket feature)
+    if hasattr(health_service, 'active_connections'):
+        health_service.active_connections.clear()
 
 
 # Test markers for different test categories

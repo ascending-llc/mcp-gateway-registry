@@ -213,7 +213,7 @@ done
 run_ingress_auth() {
     log_info " Running INGRESS OAuth authentication (Cognito M2M)..."
     
-    local cmd="python '$SCRIPT_DIR/oauth/ingress_oauth.py'"
+    local cmd="python3 '$SCRIPT_DIR/oauth/ingress_oauth.py'"
     
     if [ "$FORCE" = true ]; then
         cmd="$cmd --force"
@@ -238,7 +238,7 @@ run_ingress_auth() {
 run_egress_auth() {
     log_info " Running EGRESS OAuth authentication for: $EGRESS_PROVIDER"
     
-    local cmd="python '$SCRIPT_DIR/oauth/egress_oauth.py' --provider '$EGRESS_PROVIDER'"
+    local cmd="python3 '$SCRIPT_DIR/oauth/egress_oauth.py' --provider '$EGRESS_PROVIDER'"
     
     # Add MCP server name if provided
     if [ -n "$EGRESS_MCP_SERVER_NAME" ]; then
@@ -268,7 +268,7 @@ run_egress_auth() {
 run_agentcore_auth() {
     log_info " Running AgentCore token generation..."
 
-    local cmd="python '$SCRIPT_DIR/agentcore-auth/generate_access_token.py'"
+    local cmd="python3 '$SCRIPT_DIR/agentcore-auth/generate_access_token.py'"
 
     if [ "$FORCE" = true ]; then
         cmd="$cmd --force"
@@ -600,7 +600,7 @@ EOF
 add_noauth_services() {
     log_info " Adding no-auth services to MCP configurations..."
     
-    local cmd="python '$SCRIPT_DIR/add_noauth_services.py'"
+    local cmd="python3 '$SCRIPT_DIR/add_noauth_services.py'"
     
     if [ "$VERBOSE" = true ]; then
         cmd="$cmd --verbose"

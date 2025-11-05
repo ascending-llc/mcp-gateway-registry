@@ -115,6 +115,7 @@ nav:
     - Detailed Architecture: registry-auth-detailed.md
   - Integration:
     - AI Coding Assistants: ai-coding-assistants-setup.md
+    - MCP-Gateway CLI Guide: mcp-registry-cli.md
   - Contributing:
     - Contributing Guide: CONTRIBUTING.md
     - Code of Conduct: CODE_OF_CONDUCT.md
