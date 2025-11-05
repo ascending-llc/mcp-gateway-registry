@@ -92,6 +92,13 @@ class Settings(BaseSettings):
         return self.servers_dir / "server_state.json"
 
     @property
+    def log_dir(self) -> Path:
+        """Get log directory based on environment."""
+        if self.is_local_dev:
+            return Path.cwd() / "logs"
+        return self.container_log_dir
+
+    @property
     def log_file_path(self) -> Path:
         if self.is_local_dev:
             return Path.cwd() / "logs" / "registry.log"

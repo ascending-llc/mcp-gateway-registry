@@ -7,14 +7,87 @@ MCP client implementation using only standard Python libraries. This approach
 avoids dependency issues with the fastmcp library in some environments.
 """
 
+import base64
+import json
 import os
 import sys
-import json
 import argparse
+from datetime import datetime, timezone
 from typing import Optional
 
 # Import shared MCP utility
 from mcp_utils import create_mcp_session
+
+
+def _check_token_expiration(
+    access_token: str
+) -> None:
+    """
+    Check if JWT token is expired and exit with informative message if so.
+
+    Args:
+        access_token: JWT access token to check
+
+    Exits:
+        If token is expired or will expire soon
+    """
+    try:
+        # Decode JWT payload (without verification, just to check expiry)
+        parts = access_token.split('.')
+        if len(parts) != 3:
+            print("Warning: Invalid JWT format, cannot check expiration")
+            return
+
+        # Decode payload
+        payload = parts[1]
+        # Add padding if needed
+        padding = len(payload) % 4
+        if padding:
+            payload += '=' * (4 - padding)
+
+        decoded = base64.urlsafe_b64decode(payload)
+        token_data = json.loads(decoded)
+
+        # Check expiration
+        exp = token_data.get('exp')
+        if not exp:
+            print("Warning: Token does not have expiration field")
+            return
+
+        exp_dt = datetime.fromtimestamp(exp, tz=timezone.utc)
+        now = datetime.now(timezone.utc)
+        time_until_expiry = exp_dt - now
+
+        if time_until_expiry.total_seconds() < 0:
+            # Token is expired
+            print("=" * 80)
+            print("TOKEN EXPIRED")
+            print("=" * 80)
+            print(f"Token expired at: {exp_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+            print(f"Current time is: {now.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+            print(f"Token expired {abs(time_until_expiry.total_seconds()):.0f} seconds ago")
+            print("")
+            print("Please regenerate your token using one of these methods:")
+            print("")
+            print("  1. Generate ingress token (recommended):")
+            print("     ./credentials-provider/generate_creds.sh")
+            print("")
+            print("  2. Use token file (for Cognito/OAuth):")
+            print("     --token-file /path/to/your/.token_file")
+            print("")
+            print("  3. Use M2M authentication:")
+            print("     Set environment variables: CLIENT_ID, CLIENT_SECRET,")
+            print("     KEYCLOAK_URL, KEYCLOAK_REALM")
+            print("=" * 80)
+            sys.exit(1)
+        elif time_until_expiry.total_seconds() < 60:
+            # Token expires soon
+            print(f"Warning: Token will expire in {int(time_until_expiry.total_seconds())} seconds at {exp_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        else:
+            print(f"Token is valid until {exp_dt.strftime('%Y-%m-%d %H:%M:%S UTC')} ({int(time_until_expiry.total_seconds())} seconds remaining)")
+
+    except Exception as e:
+        print(f"Warning: Could not check token expiration: {e}")
 
 
 def _load_token_from_file(file_path: str) -> Optional[str]:
@@ -118,6 +191,10 @@ Authentication (priority order):
     # Fall back to M2M credentials if no token file or file loading failed
     if not access_token:
         access_token = _load_m2m_credentials()
+
+    # Check token expiration before making any API calls
+    if access_token:
+        _check_token_expiration(access_token)
 
     # Create MCP session using shared utility (it will auto-load ingress token if needed)
     try:

@@ -49,8 +49,16 @@ def _load_oauth_token_from_file(token_file_path: Union[str, Path]) -> Optional[s
         with open(token_path, 'r') as f:
             token_data = json.load(f)
 
-        access_token = token_data.get('access_token')
-        expires_at = token_data.get('expires_at', 0)
+        # Support both flat and nested token structures
+        # Nested: {"tokens": {"access_token": "...", "expires_at": ...}}
+        # Flat: {"access_token": "...", "expires_at": ...}
+        if 'tokens' in token_data:
+            tokens = token_data['tokens']
+            access_token = tokens.get('access_token')
+            expires_at = tokens.get('expires_at', 0)
+        else:
+            access_token = token_data.get('access_token')
+            expires_at = token_data.get('expires_at', 0)
 
         # Check if token is expired
         if expires_at and time.time() >= expires_at:
