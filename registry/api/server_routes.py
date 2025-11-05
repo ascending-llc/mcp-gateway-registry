@@ -184,7 +184,8 @@ async def toggle_service_route(
     from ..health.service import health_service
     from ..core.nginx_service import nginx_service
     from ..auth.dependencies import user_has_ui_permission_for_service
-    
+    from starlette import status
+
     if not service_path.startswith("/"):
         service_path = "/" + service_path
         
@@ -198,7 +199,7 @@ async def toggle_service_route(
     if not user_has_ui_permission_for_service('toggle_service', service_name, user_context.get('ui_permissions', {})):
         logger.warning(f"User {user_context['username']} attempted to toggle service {service_name} without toggle_service permission")
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
+            status_code=status.HTTP_403_FORBIDDEN,
             detail=f"You do not have permission to toggle {service_name}"
         )
 
