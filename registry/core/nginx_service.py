@@ -148,15 +148,38 @@ class NginxConfigService:
             # Fetch EC2 public DNS
             ec2_public_dns = await self.get_ec2_public_dns()
             
+            # Get AUTH_PROVIDER from environment
+            import os
+            auth_provider = os.environ.get('AUTH_PROVIDER', '').lower()
+            logger.info(f"AUTH_PROVIDER: {auth_provider if auth_provider else '(not set)'}")
+            
+            # Generate provider-specific proxy blocks
+            keycloak_blocks = self._generate_keycloak_proxy_blocks() if auth_provider == 'keycloak' else ""
+            cognito_blocks = self._generate_cognito_proxy_blocks() if auth_provider == 'cognito' else ""
+            
+            if keycloak_blocks:
+                logger.info("Including Keycloak proxy blocks (5 location blocks)")
+            if cognito_blocks:
+                logger.info("Including Cognito OAuth2 proxy blocks (3 location blocks)")
+            if not keycloak_blocks and not cognito_blocks:
+                logger.info("No provider-specific proxy blocks included (AUTH_PROVIDER is not 'keycloak' or 'cognito')")
+            
             # Replace placeholders in template
             config_content = template_content.replace("{{LOCATION_BLOCKS}}", "\n".join(location_blocks))
+            config_content = config_content.replace("{{KEYCLOAK_PROXY_BLOCKS}}", keycloak_blocks)
+            config_content = config_content.replace("{{COGNITO_PROXY_BLOCKS}}", cognito_blocks)
+            
             # Only include EC2_PUBLIC_DNS in server_name if it exists
             if ec2_public_dns:
                 config_content = config_content.replace("{{EC2_PUBLIC_DNS}}", ec2_public_dns)
+                logger.info(f"Replaced {{{{EC2_PUBLIC_DNS}}}} placeholder with: {ec2_public_dns}")
             else:
-                # Remove the placeholder entirely if EC2_PUBLIC_DNS is empty
+                # Remove the placeholder entirely if EC2_PUBLIC_DNS is empty (local development)
+                # This handles both "server_name localhost mcpgateway.ddns.net {{EC2_PUBLIC_DNS}};" 
+                # and standalone "{{EC2_PUBLIC_DNS}}" occurrences
                 config_content = config_content.replace(" {{EC2_PUBLIC_DNS}}", "")
                 config_content = config_content.replace("{{EC2_PUBLIC_DNS}}", "")
+                logger.info("Removed {{EC2_PUBLIC_DNS}} placeholder (local development - no EC2 DNS available)")
             
             # Write config file
             with open(settings.nginx_config_path, "w") as f:
@@ -199,6 +222,122 @@ class NginxConfigService:
             logger.error(f"Error reloading Nginx: {e}")
             return False
 
+    def _generate_keycloak_proxy_blocks(self) -> str:
+        """Generate Keycloak-specific proxy location blocks."""
+        return """
+    # Keycloak proxy
+    location /keycloak/ {
+        proxy_pass http://keycloak:8080/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Keycloak specific headers
+        proxy_set_header X-Forwarded-Port $server_port;
+        proxy_buffer_size 128k;
+        proxy_buffers 4 256k;
+        proxy_busy_buffers_size 256k;
+    }
+
+    # Keycloak realms proxy (for authentication endpoints)
+    location /realms/ {
+        proxy_pass http://keycloak:8080/realms/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Keycloak specific headers
+        proxy_set_header X-Forwarded-Port $server_port;
+        proxy_buffer_size 128k;
+        proxy_buffers 4 256k;
+        proxy_busy_buffers_size 256k;
+    }
+
+    # Keycloak resources proxy (for CSS, JS, images)
+    location /resources/ {
+        proxy_pass http://keycloak:8080/resources/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Static resource caching
+        expires 1h;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # OAuth2 Keycloak callback endpoint
+    location /oauth2/callback/keycloak {
+        proxy_pass http://auth-server:8888/oauth2/callback/keycloak;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Pass through all headers for OAuth2 flow
+        proxy_pass_request_headers on;
+        proxy_pass_request_body on;
+    }
+
+    # OAuth2 Keycloak login endpoint  
+    location /oauth2/login/keycloak {
+        proxy_pass http://auth-server:8888/oauth2/login/keycloak;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Pass through query parameters and headers
+        proxy_pass_request_headers on;
+    }"""
+
+    def _generate_cognito_proxy_blocks(self) -> str:
+        """Generate Cognito-specific OAuth2 proxy location blocks."""
+        return """
+    # OAuth2 Cognito callback endpoint
+    location /oauth2/callback/cognito {
+        proxy_pass http://auth-server:8888/oauth2/callback/cognito;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Pass through all headers for OAuth2 flow
+        proxy_pass_request_headers on;
+        proxy_pass_request_body on;
+    }
+
+    # OAuth2 Cognito login endpoint  
+    location /oauth2/login/cognito {
+        proxy_pass http://auth-server:8888/oauth2/login/cognito;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Pass through query parameters and headers
+        proxy_pass_request_headers on;
+    }
+
+    # OAuth2 Cognito logout endpoint
+    location /oauth2/logout/ {
+        proxy_pass http://auth-server:8888/oauth2/logout/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_pass_request_headers on;
+    }"""
 
     def _generate_transport_location_blocks(self, path: str, server_info: Dict[str, Any]) -> list:
         """Generate nginx location blocks for different transport types."""
