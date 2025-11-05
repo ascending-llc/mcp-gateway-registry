@@ -209,9 +209,15 @@ class NginxConfigService:
 
             # Replace placeholders in template
             config_content = template_content.replace("{{LOCATION_BLOCKS}}", "\n".join(location_blocks))
+            # Only include EC2_PUBLIC_DNS in server_name if it exists
+            if ec2_public_dns:
+                config_content = config_content.replace("{{EC2_PUBLIC_DNS}}", ec2_public_dns)
+            else:
+                # Remove the placeholder entirely if EC2_PUBLIC_DNS is empty
+                config_content = config_content.replace(" {{EC2_PUBLIC_DNS}}", "")
+                config_content = config_content.replace("{{EC2_PUBLIC_DNS}}", "")
             config_content = config_content.replace("{{ADDITIONAL_SERVER_NAMES}}", additional_server_names)
             config_content = config_content.replace("{{ANTHROPIC_API_VERSION}}", api_version)
-
             # Write config file
             with open(settings.nginx_config_path, "w") as f:
                 f.write(config_content)
