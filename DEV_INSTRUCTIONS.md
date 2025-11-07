@@ -28,7 +28,7 @@ If working on EC2 or a Linux server, complete this guide first:
 Before making any code changes, ask your AI coding assistant to read:
 
 **LLM/AI Documentation (Critical for understanding the project):**
-- [docs/llms.txt](llms.txt)
+- [docs/llms.txt](docs/llms.txt)
 
 **Coding Standards and Guidelines:**
 - [CLAUDE.md](CLAUDE.md) - Project-specific coding standards
