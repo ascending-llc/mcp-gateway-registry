@@ -1,17 +1,40 @@
 import json
 import asyncio
 import logging
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import (
+    Dict,
+    Any,
+    Optional,
+    List,
+)
 
 import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
+from pydantic import HttpUrl
 
 from ..core.config import settings
 from ..core.schemas import ServerInfo
+from ..schemas.agent_models import AgentCard
 
 logger = logging.getLogger(__name__)
+
+
+class _PydanticAwareJSONEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles Pydantic and standard types."""
+
+    def default(
+        self,
+        o: Any,
+    ) -> Any:
+        """Convert non-serializable types to JSON-compatible formats."""
+        if isinstance(o, HttpUrl):
+            return str(o)
+        if isinstance(o, datetime):
+            return o.isoformat()
+        return super().default(o)
 
 
 class FaissService:
@@ -117,7 +140,7 @@ class FaissService:
                 json.dump({
                     "metadata": self.metadata_store,
                     "next_id": self.next_id_counter
-                }, f, indent=2)
+                }, f, indent=2, cls=_PydanticAwareJSONEncoder)
                 
             logger.info("FAISS data saved successfully.")
         except Exception as e:
@@ -130,6 +153,37 @@ class FaissService:
         tags = server_info.get("tags", [])
         tag_string = ", ".join(tags)
         return f"Name: {name}\nDescription: {description}\nTags: {tag_string}"
+
+    def _get_text_for_agent(self, agent_card: AgentCard) -> str:
+        """Prepare text string from agent card for embedding."""
+        name = agent_card.name
+        description = agent_card.description
+
+        skills_text = ""
+        if agent_card.skills:
+            skill_names = [skill.name for skill in agent_card.skills]
+            skill_descriptions = [
+                f"{skill.name}: {skill.description}"
+                for skill in agent_card.skills
+            ]
+            skills_text = "Skills: " + ", ".join(skill_names)
+            skills_text += "\nSkill Details: " + " | ".join(skill_descriptions)
+
+        tags = agent_card.tags
+        tag_string = ", ".join(tags) if tags else ""
+
+        text_parts = [
+            f"Name: {name}",
+            f"Description: {description}",
+        ]
+
+        if skills_text:
+            text_parts.append(skills_text)
+
+        if tag_string:
+            text_parts.append(f"Tags: {tag_string}")
+
+        return "\n".join(text_parts)
         
     async def add_or_update_service(self, service_path: str, server_info: Dict[str, Any], is_enabled: bool = False):
         """Add or update a service in the FAISS index."""
@@ -185,20 +239,25 @@ class FaissService:
         # Update metadata store
         enriched_server_info = server_info.copy()
         enriched_server_info["is_enabled"] = is_enabled
-        
-        if (existing_entry is None or 
-            needs_new_embedding or 
-            existing_entry.get("full_server_info") != enriched_server_info):
-            
+
+        if (
+            existing_entry is None
+            or needs_new_embedding
+            or existing_entry.get("full_server_info") != enriched_server_info
+        ):
+
             self.metadata_store[service_path] = {
                 "id": current_faiss_id,
+                "entity_type": "mcp_server",
                 "text_for_embedding": text_to_embed,
-                "full_server_info": enriched_server_info
+                "full_server_info": enriched_server_info,
             }
             logger.debug(f"Updated faiss_metadata_store for '{service_path}'.")
             await self.save_data()
         else:
-            logger.debug(f"No changes to FAISS vector or enriched full_server_info for '{service_path}'. Skipping save.")
+            logger.debug(
+                f"No changes to FAISS vector or enriched full_server_info for '{service_path}'. Skipping save."
+            )
 
 
     async def remove_service(self, service_path: str):
@@ -215,7 +274,9 @@ class FaissService:
                 # Remove from FAISS index
                 # Note: FAISS doesn't support direct removal, but we can remove from metadata
                 # The vector will remain in the index but won't be accessible via metadata
-                logger.info(f"Removing service '{service_path}' with FAISS ID {service_id} from index")
+                logger.info(
+                    f"Removing service '{service_path}' with FAISS ID {service_id} from index"
+                )
 
             # Remove from metadata store
             del self.metadata_store[service_path]
@@ -225,7 +286,315 @@ class FaissService:
             await self.save_data()
 
         except Exception as e:
-            logger.error(f"Failed to remove service '{service_path}' from FAISS: {e}", exc_info=True)
+            logger.error(
+                f"Failed to remove service '{service_path}' from FAISS: {e}",
+                exc_info=True,
+            )
+
+    async def add_or_update_agent(
+        self,
+        agent_path: str,
+        agent_card: AgentCard,
+        is_enabled: bool = False,
+    ) -> None:
+        """Add or update an agent in the FAISS index."""
+        if self.embedding_model is None or self.faiss_index is None:
+            logger.error(
+                "Embedding model or FAISS index not initialized. Cannot add/update agent in FAISS."
+            )
+            return
+
+        logger.info(f"Attempting to add/update agent '{agent_path}' in FAISS.")
+        text_to_embed = self._get_text_for_agent(agent_card)
+
+        current_faiss_id = -1
+        needs_new_embedding = True
+
+        existing_entry = self.metadata_store.get(agent_path)
+
+        if existing_entry:
+            current_faiss_id = existing_entry["id"]
+            if existing_entry.get("text_for_embedding") == text_to_embed:
+                needs_new_embedding = False
+                logger.info(
+                    f"Text for embedding for '{agent_path}' has not changed. Will update metadata store only if agent_card differs."
+                )
+            else:
+                logger.info(
+                    f"Text for embedding for '{agent_path}' has changed. Re-embedding required."
+                )
+        else:
+            # New agent
+            current_faiss_id = self.next_id_counter
+            self.next_id_counter += 1
+            logger.info(
+                f"New agent '{agent_path}'. Assigning new FAISS ID: {current_faiss_id}."
+            )
+            needs_new_embedding = True
+
+        if needs_new_embedding:
+            try:
+                # Run model encoding in a separate thread
+                embedding = await asyncio.to_thread(
+                    self.embedding_model.encode,
+                    [text_to_embed],
+                )
+                embedding_np = np.array([embedding[0]], dtype=np.float32)
+
+                ids_to_remove = np.array([current_faiss_id])
+                if existing_entry:
+                    try:
+                        num_removed = self.faiss_index.remove_ids(ids_to_remove)
+                        if num_removed > 0:
+                            logger.info(
+                                f"Removed {num_removed} old vector(s) for FAISS ID {current_faiss_id} ({agent_path})."
+                            )
+                        else:
+                            logger.info(
+                                f"No old vector found for FAISS ID {current_faiss_id} ({agent_path}) during update, or ID not in index."
+                            )
+                    except Exception as e_remove:
+                        logger.warning(
+                            f"Issue removing FAISS ID {current_faiss_id} for {agent_path}: {e_remove}. Proceeding to add."
+                        )
+
+                self.faiss_index.add_with_ids(
+                    embedding_np,
+                    np.array([current_faiss_id]),
+                )
+                logger.info(
+                    f"Added/Updated vector for '{agent_path}' with FAISS ID {current_faiss_id}."
+                )
+            except Exception as e:
+                logger.error(
+                    f"Error encoding or adding embedding for '{agent_path}': {e}",
+                    exc_info=True,
+                )
+                return
+
+        # Update metadata store
+        agent_card_dict = agent_card.model_dump()
+
+        if (
+            existing_entry is None
+            or needs_new_embedding
+            or existing_entry.get("full_agent_card") != agent_card_dict
+        ):
+
+            self.metadata_store[agent_path] = {
+                "id": current_faiss_id,
+                "entity_type": "a2a_agent",
+                "text_for_embedding": text_to_embed,
+                "full_agent_card": agent_card_dict,
+            }
+            logger.debug(f"Updated faiss_metadata_store for agent '{agent_path}'.")
+            await self.save_data()
+        else:
+            logger.debug(
+                f"No changes to FAISS vector or agent card for '{agent_path}'. Skipping save."
+            )
+
+    async def remove_agent(self, agent_path: str) -> None:
+        """Remove an agent from the FAISS index and metadata store."""
+        try:
+            # Check if agent exists in metadata
+            if agent_path not in self.metadata_store:
+                logger.warning(
+                    f"Agent '{agent_path}' not found in FAISS metadata store"
+                )
+                return
+
+            # Get the FAISS ID for this agent
+            agent_id = self.metadata_store[agent_path].get("id")
+            if agent_id is not None and self.faiss_index:
+                logger.info(
+                    f"Removing agent '{agent_path}' with FAISS ID {agent_id} from index"
+                )
+
+            # Remove from metadata store
+            del self.metadata_store[agent_path]
+            logger.info(f"Removed agent '{agent_path}' from FAISS metadata store")
+
+            # Save the updated metadata
+            await self.save_data()
+
+        except Exception as e:
+            logger.error(
+                f"Failed to remove agent '{agent_path}' from FAISS: {e}",
+                exc_info=True,
+            )
+
+    def search_agents(
+        self,
+        query: str,
+        max_results: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Search for agents in the FAISS index."""
+        results = self.search_mixed(
+            query=query,
+            entity_types=["a2a_agent"],
+            max_results=max_results,
+        )
+        return results.get("agents", [])
+
+    def search_mixed(
+        self,
+        query: str,
+        entity_types: Optional[List[str]] = None,
+        max_results: int = 10,
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """Search across entity types (agents and servers)."""
+        if self.embedding_model is None or self.faiss_index is None:
+            logger.error(
+                "Embedding model or FAISS index not initialized. Cannot search."
+            )
+            return {}
+
+        if entity_types is None:
+            entity_types = ["mcp_server", "a2a_agent"]
+
+        # Validate entity types
+        valid_types = {"mcp_server", "a2a_agent"}
+        entity_types = [t for t in entity_types if t in valid_types]
+
+        if not entity_types:
+            logger.error(f"No valid entity types provided. Must be one of: {valid_types}")
+            return {}
+
+        try:
+            # Encode query
+            query_embedding = self.embedding_model.encode([query])
+            query_np = np.array([query_embedding[0]], dtype=np.float32)
+            logger.info(f"Encoded query: {query}")
+
+            # Search FAISS
+            distances, ids = self.faiss_index.search(query_np, max_results)
+            logger.info(f"FAISS search returned {len(ids[0])} results for query: {query}")
+
+            # Organize results by entity type
+            results_by_type: Dict[str, List[Dict[str, Any]]] = {
+                "agents": [],
+                "servers": [],
+            }
+
+            for dist, faiss_id in zip(distances[0], ids[0]):
+                if faiss_id < 0:
+                    continue
+
+                # Find metadata entry with this FAISS ID
+                matching_entry = None
+                matching_key = None
+                for key, metadata in self.metadata_store.items():
+                    if metadata.get("id") == faiss_id:
+                        matching_entry = metadata
+                        matching_key = key
+                        break
+
+                if matching_entry is None:
+                    continue
+
+                entity_type = matching_entry.get("entity_type", "mcp_server")
+
+                # Filter by requested entity types
+                if entity_type not in entity_types:
+                    continue
+
+                # Build result entry
+                relevance_score = float(dist)
+                result_entry: Dict[str, Any] = {
+                    "path": matching_key,
+                    "entity_type": entity_type,
+                    "relevance_score": relevance_score,
+                }
+
+                if entity_type == "a2a_agent":
+                    agent_card = matching_entry.get("full_agent_card")
+                    if agent_card:
+                        result_entry["agent_card"] = agent_card
+                    logger.info(f"Agent result: {matching_key} (distance={relevance_score:.4f})")
+                    results_by_type["agents"].append(result_entry)
+
+                elif entity_type == "mcp_server":
+                    server_info = matching_entry.get("full_server_info")
+                    if server_info:
+                        result_entry["server_info"] = server_info
+                    logger.info(f"Server result: {matching_key} (distance={relevance_score:.4f})")
+                    results_by_type["servers"].append(result_entry)
+
+            logger.info(f"Final results - agents: {len(results_by_type['agents'])}, servers: {len(results_by_type['servers'])}")
+            return results_by_type
+
+        except Exception as e:
+            logger.error(f"Error searching FAISS: {e}", exc_info=True)
+            return {}
+
+
+    async def add_or_update_entity(
+        self,
+        entity_path: str,
+        entity_info: Dict[str, Any],
+        entity_type: str,
+        is_enabled: bool = False,
+    ) -> None:
+        """
+        Wrapper method for adding or updating an entity.
+
+        Routes agents to appropriate methods based on entity_type.
+        """
+        if entity_type == "a2a_agent":
+            agent_card = AgentCard(**entity_info)
+            await self.add_or_update_agent(entity_path, agent_card, is_enabled)
+        elif entity_type == "mcp_server":
+            await self.add_or_update_service(entity_path, entity_info, is_enabled)
+
+
+    async def remove_entity(
+        self,
+        entity_path: str,
+    ) -> None:
+        """
+        Wrapper method for removing an entity.
+
+        Attempts to remove as agent first, then server.
+        """
+        try:
+            await self.remove_agent(entity_path)
+        except Exception:
+            try:
+                await self.remove_service(entity_path)
+            except Exception as e:
+                logger.warning(f"Could not remove entity {entity_path}: {e}")
+
+
+    async def search_entities(
+        self,
+        query: str,
+        entity_types: Optional[List[str]] = None,
+        enabled_only: bool = False,
+        max_results: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """
+        Wrapper method for searching entities.
+
+        Searches both agents and servers, returns list of matching entities.
+        """
+        if entity_types is None:
+            entity_types = ["a2a_agent", "mcp_server"]
+
+        results = await asyncio.to_thread(
+            self.search_mixed,
+            query=query,
+            entity_types=entity_types,
+            max_results=max_results,
+        )
+
+        all_results = []
+        if "agents" in results:
+            all_results.extend(results["agents"])
+        if "servers" in results:
+            all_results.extend(results["servers"])
+
+        return all_results[:max_results]
 
 
 # Global service instance

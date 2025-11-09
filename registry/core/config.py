@@ -118,6 +118,18 @@ class Settings(BaseSettings):
             return Path.cwd() / ".env"
         return self.container_registry_dir / ".env"
 
+    @property
+    def agents_dir(self) -> Path:
+        """Directory for agent card storage."""
+        if self.is_local_dev:
+            return Path.cwd() / "registry" / "agents"
+        return self.container_registry_dir / "agents"
+
+    @property
+    def agent_state_file_path(self) -> Path:
+        """Path to agent state file (enabled/disabled tracking)."""
+        return self.agents_dir / "agent_state.json"
+
 
 # Global settings instance
 settings = Settings() 

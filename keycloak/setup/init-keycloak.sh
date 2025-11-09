@@ -174,7 +174,7 @@ create_groups() {
     
     echo "Creating user groups..."
     
-    local groups=("mcp-registry-admin" "mcp-registry-user" "mcp-registry-developer" "mcp-registry-operator" "mcp-servers-unrestricted" "mcp-servers-restricted")
+    local groups=("mcp-registry-admin" "mcp-registry-user" "mcp-registry-developer" "mcp-registry-operator" "mcp-servers-unrestricted" "mcp-servers-restricted" "a2a-agent-admin" "a2a-agent-publisher" "a2a-agent-user")
     
     for group in "${groups[@]}"; do
         local group_json='{
@@ -315,19 +315,38 @@ create_service_account_user() {
         local group_id=$(curl -s -H "Authorization: Bearer ${token}" \
             "${KEYCLOAK_URL}/admin/realms/${REALM}/groups" | \
             jq -r '.[] | select(.name=="mcp-servers-unrestricted") | .id')
-        
+
         if [ ! -z "$group_id" ] && [ "$group_id" != "null" ]; then
             local group_response=$(curl -s -o /dev/null -w "%{http_code}" \
                 -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM}/users/$user_id/groups/$group_id" \
                 -H "Authorization: Bearer ${token}")
-            
+
             if [ "$group_response" = "204" ]; then
                 echo -e "${GREEN}Service account assigned to mcp-servers-unrestricted group!${NC}"
             else
-                echo -e "${YELLOW}Warning: Could not assign service account to group (HTTP $group_response)${NC}"
+                echo -e "${YELLOW}Warning: Could not assign service account to mcp-servers-unrestricted group (HTTP $group_response)${NC}"
             fi
         else
             echo -e "${RED}Error: Could not find mcp-servers-unrestricted group${NC}"
+        fi
+
+        # Assign user to a2a-agent-admin group for A2A agent access
+        local a2a_group_id=$(curl -s -H "Authorization: Bearer ${token}" \
+            "${KEYCLOAK_URL}/admin/realms/${REALM}/groups" | \
+            jq -r '.[] | select(.name=="a2a-agent-admin") | .id')
+
+        if [ ! -z "$a2a_group_id" ] && [ "$a2a_group_id" != "null" ]; then
+            local a2a_response=$(curl -s -o /dev/null -w "%{http_code}" \
+                -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM}/users/$user_id/groups/$a2a_group_id" \
+                -H "Authorization: Bearer ${token}")
+
+            if [ "$a2a_response" = "204" ]; then
+                echo -e "${GREEN}Service account assigned to a2a-agent-admin group!${NC}"
+            else
+                echo -e "${YELLOW}Warning: Could not assign service account to a2a-agent-admin group (HTTP $a2a_response)${NC}"
+            fi
+        else
+            echo -e "${YELLOW}Warning: a2a-agent-admin group not found. Create it manually if A2A agent support is needed.${NC}"
         fi
         
         return 0
@@ -517,22 +536,12 @@ setup_client_secrets() {
     echo "=============================================="
 }
 
-# Function to setup groups mapper for the web client
+# Function to setup groups mapper for OAuth2 clients
 setup_groups_mapper() {
     local token=$1
-    
-    echo "Setting up groups mapper for OAuth2 client..."
-    
-    # Get web client ID
-    local web_client_id=$(curl -s -H "Authorization: Bearer ${token}" \
-        "${KEYCLOAK_URL}/admin/realms/${REALM}/clients?clientId=mcp-gateway-web" | \
-        jq -r '.[0].id')
-    
-    if [ -z "$web_client_id" ] || [ "$web_client_id" = "null" ]; then
-        echo -e "${RED}Error: Could not find mcp-gateway-web client${NC}"
-        return 1
-    fi
-    
+
+    echo "Setting up groups mapper for OAuth2 clients..."
+
     # Create groups mapper JSON
     local groups_mapper_json='{
         "name": "groups",
@@ -547,20 +556,56 @@ setup_groups_mapper() {
             "userinfo.token.claim": "true"
         }
     }'
-    
-    # Add the groups mapper to the client
+
+    # Setup groups mapper for mcp-gateway-web client
+    echo "Setting up groups mapper for mcp-gateway-web client..."
+    local web_client_id=$(curl -s -H "Authorization: Bearer ${token}" \
+        "${KEYCLOAK_URL}/admin/realms/${REALM}/clients?clientId=mcp-gateway-web" | \
+        jq -r '.[0].id')
+
+    if [ -z "$web_client_id" ] || [ "$web_client_id" = "null" ]; then
+        echo -e "${RED}Error: Could not find mcp-gateway-web client${NC}"
+        return 1
+    fi
+
     local response=$(curl -s -o /dev/null -w "%{http_code}" \
         -X POST "${KEYCLOAK_URL}/admin/realms/${REALM}/clients/${web_client_id}/protocol-mappers/models" \
         -H "Authorization: Bearer ${token}" \
         -H "Content-Type: application/json" \
         -d "$groups_mapper_json")
-    
+
     if [ "$response" = "201" ]; then
-        echo -e "${GREEN}Groups mapper created successfully!${NC}"
+        echo -e "${GREEN}Groups mapper created for mcp-gateway-web!${NC}"
     elif [ "$response" = "409" ]; then
-        echo -e "${YELLOW}Groups mapper already exists. Continuing...${NC}"
+        echo -e "${YELLOW}Groups mapper already exists for mcp-gateway-web. Continuing...${NC}"
     else
-        echo -e "${RED}Failed to create groups mapper. HTTP status: ${response}${NC}"
+        echo -e "${RED}Failed to create groups mapper for mcp-gateway-web. HTTP status: ${response}${NC}"
+        return 1
+    fi
+
+    # Setup groups mapper for mcp-gateway-m2m client
+    echo "Setting up groups mapper for mcp-gateway-m2m client..."
+    local m2m_client_id=$(curl -s -H "Authorization: Bearer ${token}" \
+        "${KEYCLOAK_URL}/admin/realms/${REALM}/clients?clientId=mcp-gateway-m2m" | \
+        jq -r '.[0].id')
+
+    if [ -z "$m2m_client_id" ] || [ "$m2m_client_id" = "null" ]; then
+        echo -e "${RED}Error: Could not find mcp-gateway-m2m client${NC}"
+        return 1
+    fi
+
+    local m2m_response=$(curl -s -o /dev/null -w "%{http_code}" \
+        -X POST "${KEYCLOAK_URL}/admin/realms/${REALM}/clients/${m2m_client_id}/protocol-mappers/models" \
+        -H "Authorization: Bearer ${token}" \
+        -H "Content-Type: application/json" \
+        -d "$groups_mapper_json")
+
+    if [ "$m2m_response" = "201" ]; then
+        echo -e "${GREEN}Groups mapper created for mcp-gateway-m2m!${NC}"
+    elif [ "$m2m_response" = "409" ]; then
+        echo -e "${YELLOW}Groups mapper already exists for mcp-gateway-m2m. Continuing...${NC}"
+    else
+        echo -e "${RED}Failed to create groups mapper for mcp-gateway-m2m. HTTP status: ${m2m_response}${NC}"
         return 1
     fi
 }

@@ -36,6 +36,57 @@ Before making any code changes, ask your AI coding assistant to read:
 ### 2. Review the CLAUDE.md File
 This project uses [CLAUDE.md](CLAUDE.md) for coding standards. The file is already included in the repository root - make sure to review it before contributing.
 
+## Testing Your Changes
+
+Before submitting a pull request, you must run and pass the test suite:
+
+### Quick Start Testing
+```bash
+# Generate fresh credentials (tokens expire in 5 minutes)
+./credentials-provider/generate_creds.sh
+
+# Run tests locally (skip production for fast iteration)
+./tests/run_all_tests.sh --skip-production
+```
+
+### For PR Merge (REQUIRED)
+```bash
+# Full test suite including production tests
+./tests/run_all_tests.sh
+
+# All tests must pass (0 failures) before merging
+```
+
+### Understanding the Tests
+See the comprehensive testing documentation:
+
+- **[tests/README.md](tests/README.md)** - Start here! Navigation guide with access control overview
+- **[tests/TEST_QUICK_REFERENCE.md](tests/TEST_QUICK_REFERENCE.md)** - Quick reference for how-to guides
+- **[tests/lob-bot-access-control-testing.md](tests/lob-bot-access-control-testing.md)** - Access control test details
+- **[auth_server/scopes.yml](auth_server/scopes.yml)** - Permission definitions (admin, LOB1, LOB2)
+
+### Common Testing Workflows
+
+**Agent CRUD Testing:**
+```bash
+./credentials-provider/generate_creds.sh
+bash tests/agent_crud_test.sh
+```
+
+**Access Control Testing (LOB Bots):**
+```bash
+./keycloak/setup/generate-agent-token.sh admin-bot
+./keycloak/setup/generate-agent-token.sh lob1-bot
+./keycloak/setup/generate-agent-token.sh lob2-bot
+bash tests/run-lob-bot-tests.sh
+```
+
+**Check Test Logs:**
+```bash
+ls -lh /tmp/*_*.log
+grep -i "error\|fail" /tmp/*.log
+```
+
 ## Fork and Contribute
 
 ### Repository Access
@@ -76,7 +127,10 @@ Before submitting a pull request:
 - [ ] Read docs/llms.txt
 - [ ] Read CLAUDE.md (coding standards)
 - [ ] Code follows project conventions (use ruff, mypy, pytest)
-- [ ] All tests pass locally
+- [ ] Generated fresh credentials: `./credentials-provider/generate_creds.sh`
+- [ ] Local tests pass: `./tests/run_all_tests.sh --skip-production`
+- [ ] PR merge tests pass: `./tests/run_all_tests.sh` (all tests must pass)
+- [ ] Reviewed test documentation: [tests/README.md](tests/README.md)
 - [ ] Changes are pushed to a fork, not directly to this repo
 - [ ] Pull request is created with clear description
 

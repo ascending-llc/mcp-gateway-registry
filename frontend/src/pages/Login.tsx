@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
-import logo from '../assets/logo.png';
 import { EyeIcon, EyeSlashIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
 interface OAuthProvider {
@@ -153,18 +152,8 @@ const Login: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="flex justify-center items-center">
-          <img 
-            src={logo}
-            alt="MCP Gateway Logo" 
-            className="h-12 w-12 dark:brightness-0 dark:invert"
-          />
-          <span className="ml-3 text-2xl font-bold text-gray-900 dark:text-white">
-            MCP Gateway
-          </span>
-        </div>
-        <h2 className="mt-6 text-center text-3xl font-bold text-gray-900 dark:text-white">
-          Sign in to MCP Gateway
+        <h2 className="text-center text-3xl font-bold text-gray-900 dark:text-white">
+          Sign in to MCP Servers & A2A Agents Registry
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
           Access your MCP server management dashboard
@@ -185,7 +174,7 @@ const Login: React.FC = () => {
                   <span>Continue with {provider.display_name}</span>
                 </button>
               ))}
-              
+
               <div className="relative my-6">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gray-300 dark:border-gray-600" />

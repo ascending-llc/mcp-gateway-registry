@@ -12,6 +12,13 @@ from .anthropic_schema import (
     PaginationMetadata,
     ErrorResponse,
 )
+from .agent_models import (
+    SecurityScheme,
+    Skill,
+    AgentCard,
+    AgentInfo,
+    AgentRegistrationRequest,
+)
 
 __all__ = [
     "Repository",
@@ -24,4 +31,9 @@ __all__ = [
     "ServerList",
     "PaginationMetadata",
     "ErrorResponse",
+    "SecurityScheme",
+    "Skill",
+    "AgentCard",
+    "AgentInfo",
+    "AgentRegistrationRequest",
 ]

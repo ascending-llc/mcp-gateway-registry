@@ -367,6 +367,33 @@ chmod +x keycloak/setup/get-all-client-credentials.sh
 # Files created in: .oauth-tokens/
 ```
 
+### Set Up Users and Service Accounts
+
+After initializing Keycloak, run the bootstrap script to create default users and M2M service accounts for testing and management:
+
+```bash
+# Make the bootstrap script executable
+chmod +x ./cli/bootstrap_user_and_m2m_setup.sh
+
+# Run the bootstrap script
+./cli/bootstrap_user_and_m2m_setup.sh
+```
+
+This script creates:
+- **3 Keycloak groups**: `registry-users-lob1`, `registry-users-lob2`, `registry-admins`
+- **6 users for different roles**:
+  - **LOB1 users**: `lob1-bot` (M2M service account) and `lob1-user` (human user)
+  - **LOB2 users**: `lob2-bot` (M2M service account) and `lob2-user` (human user)
+  - **Admin users**: `admin-bot` (M2M service account) and `admin-user` (human user)
+
+All credentials are automatically generated and saved to the `.oauth-tokens/` directory. User passwords default to the `INITIAL_USER_PASSWORD` value from your `.env` file.
+
+**Next steps**:
+- Review the generated credentials in `.oauth-tokens/`
+- Configure appropriate access scopes in your `scopes.yml` file
+- Use these credentials for testing M2M client flows and human user authentication
+- Log in to the dashboard with human user accounts to verify access
+
 ### Create Your First AI Agent Account
 
 ```bash

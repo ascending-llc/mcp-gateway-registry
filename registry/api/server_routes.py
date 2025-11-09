@@ -138,13 +138,15 @@ async def get_servers_json(
     
     # Filter services based on UI permissions (same logic as root route)
     accessible_services = user_context.get('accessible_services', [])
-    
+
     for path in sorted_server_paths:
         server_info = all_servers[path]
         server_name = server_info["server_name"]
-        
-        # Check if user can list this service
-        if 'all' not in accessible_services and server_name not in accessible_services:
+        # Extract technical name from path (remove leading and trailing slashes)
+        technical_name = path.strip('/')
+
+        # Check if user can list this service using technical name
+        if 'all' not in accessible_services and technical_name not in accessible_services:
             continue
         
         # Include description and tags in search
@@ -2050,8 +2052,8 @@ async def generate_user_token(
                         "token_type": token_data.get("token_type", "Bearer"),
                         "scope": token_data.get("scope", "")
                     },
-                    "keycloak_url": settings.keycloak_url or "http://keycloak:8080",
-                    "realm": settings.keycloak_realm or "mcp-gateway",
+                    "keycloak_url": "http://keycloak:8080",
+                    "realm": "mcp-gateway",
                     "client_id": "user-generated",
                     # Legacy fields for backward compatibility
                     "token_data": token_data,

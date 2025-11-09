@@ -376,7 +376,8 @@ def _process_active_user(user):
 ```
 
 ### Code Validation
-- Always run `uv run python -m py_compile <filename>` after making changes
+- Always run `uv run python -m py_compile <filename>` after making changes to Python files
+- Always run `bash -n <filename>` after making changes to bash/shell scripts to check syntax
 
 ## Error Handling and Exceptions
 

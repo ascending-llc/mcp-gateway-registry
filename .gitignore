@@ -206,6 +206,7 @@ keycloak/setup/retrieved-keycloak-secrets.txt
 # MCP Gateway specific
 registry/server_state.json
 registry/nginx_mcp_revproxy.conf
+registry/agents/
 logs/
 token_refresher.pid
 token_refresher.log
