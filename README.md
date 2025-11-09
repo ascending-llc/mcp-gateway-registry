@@ -1,7 +1,7 @@
 <div align="center">
 <img src="registry/static/mcp_gateway_horizontal_white_logo.png" alt="MCP Gateway & Registry Logo" width="100%">
 
-**Enterprise-Ready Gateway & Registry for AI Development Tools**
+**Unified Agent & MCP Server Registry – Enterprise-Ready Gateway for AI Development Tools**
 
 [![GitHub stars](https://img.shields.io/github/stars/agentic-community/mcp-gateway-registry?style=flat&logo=github)](https://github.com/agentic-community/mcp-gateway-registry/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/agentic-community/mcp-gateway-registry?style=flat&logo=github)](https://github.com/agentic-community/mcp-gateway-registry/network)
@@ -19,9 +19,15 @@
 
 ## What is MCP Gateway & Registry?
 
-The **MCP Gateway & Registry** is an enterprise-ready platform that centralizes access to MCP Servers and AI Agents using the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction). It serves as both a unified MCP Server Gateway and an Agent Registry where autonomous AI agents can register, discover, and communicate with other agents through the [A2A (Agent-to-Agent) Protocol](https://a2a-protocol.org/latest/specification/). The platform integrates with external registries such as Anthropic's MCP Registry (and more to come), providing a single control plane for both tool access and agent orchestration.
+The **MCP Gateway & Registry** is a unified, enterprise-ready platform that centralizes access to both MCP Servers and AI Agents using the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction). It serves three core functions:
 
-Instead of managing hundreds of individual MCP server configurations and agent connections across your development teams, provide secure, governed access to curated MCP servers and registered agents through a single platform.
+1. **Unified MCP Server Gateway** – Centralized access point for multiple MCP servers
+2. **Agent Registry** – Agent registration, discovery, and governance for autonomous AI agents
+3. **Agent-to-Agent (A2A) Communication Hub** – Enables AI agents to discover and communicate directly with other agents through the [A2A (Agent-to-Agent) Protocol](https://a2a-protocol.org/latest/specification/)
+
+The platform integrates with external registries such as Anthropic's MCP Registry (and more to come), providing a single control plane for both tool access, agent orchestration, and agent-to-agent communication patterns.
+
+**Why unified?** Instead of managing hundreds of individual MCP server configurations, agent connections, and separate governance systems across your development teams, this platform provides secure, governed access to curated MCP servers and registered agents through a single, unified control plane.
 
 **Transform this chaos:**
 ```
@@ -79,6 +85,21 @@ Instead of managing hundreds of individual MCP server configurations and agent c
 ```
 
 > **Note on Agent-to-Agent Communication:** AI Agents discover other AI Agents through the unified Agent Registry and communicate with them **directly** (peer-to-peer) without routing through the MCP Gateway. The Registry handles discovery, authentication, and access control, while agents maintain direct connections for efficient, low-latency communication.
+
+## Unified Agent & Server Registry
+
+This platform serves as a comprehensive, unified registry supporting:
+
+- ✅ **MCP Server Registration & Discovery** – Register, discover, and manage access to MCP servers
+- ✅ **AI Agent Registration & Discovery** – Register agents and enable them to discover other agents
+- ✅ **Agent-to-Agent (A2A) Communication** – Direct agent-to-agent communication patterns using the A2A protocol
+- ✅ **Multi-Protocol Support** – Support for various agent communication protocols and patterns
+- ✅ **Unified Governance** – Single policy and access control system for both agents and servers
+- ✅ **Cross-Protocol Agent Discovery** – Agents can discover each other regardless of implementation
+- ✅ **Integrated External Registries** – Connect with Anthropic's MCP Registry and other external sources
+- ✅ **Agent Cards & Metadata** – Rich metadata for agent capabilities, skills, and authentication schemes
+
+Key distinction: **Unlike separate point solutions, this unified registry eliminates the need to maintain separate MCP server and agent systems**, providing a single control plane for agent orchestration, MCP server access, and agent-to-agent communication.
 
 ## MCP Servers & Agents Registry
 
