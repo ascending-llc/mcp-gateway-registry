@@ -326,6 +326,21 @@ curl http://localhost:8080/realms/master
 # Should return JSON with realm information
 ```
 
+### Disable SSL Requirement for Master Realm
+```bash
+ADMIN_TOKEN=$(curl -s -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "username=${KEYCLOAK_ADMIN}" \
+    -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
+    -d "grant_type=password" \
+    -d "client_id=admin-cli" | \
+    jq -r '.access_token') && \
+curl -X PUT "http://localhost:8080/admin/realms/master" \
+    -H "Authorization: Bearer $ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"sslRequired": "none"}'
+```
+
 ### Initialize Keycloak Configuration
 
 **Important**: This is a two-step process. The initialization script creates the realm and clients but does NOT save the credentials to files.
@@ -349,7 +364,21 @@ chmod +x keycloak/setup/init-keycloak.sh
 # IMPORTANT: The script will tell you to run get-all-client-credentials.sh
 # to retrieve and save the credentials. This is the next required step!
 
-# Step 2: Retrieve and save all client credentials (REQUIRED)
+#Step 2: Disable SSL for Application Realm
+
+ADMIN_TOKEN=$(curl -s -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "username=${KEYCLOAK_ADMIN}" \
+    -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
+    -d "grant_type=password" \
+    -d "client_id=admin-cli" | \
+    jq -r '.access_token') && \
+curl -X PUT "http://localhost:8080/admin/realms/mcp-gateway" \
+    -H "Authorization: Bearer $ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"sslRequired": "none"}'
+
+# Step 3: Retrieve and save all client credentials (REQUIRED)
 chmod +x keycloak/setup/get-all-client-credentials.sh
 ./keycloak/setup/get-all-client-credentials.sh
 
