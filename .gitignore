@@ -289,3 +289,10 @@ curated_import_list.txt
 
 #Security scans
 security_scans/
+
+#Temporary directories
+.tmp
+
+#AgentCore CLI generated files
+.bedrock_agentcore
+.bedrock_agentcore.yaml
