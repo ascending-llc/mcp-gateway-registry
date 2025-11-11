@@ -18,8 +18,6 @@ services:
       - METRICS_API_KEY=${METRICS_API_KEY_REGISTRY}
       - METRICS_API_KEY_NGINX=${METRICS_API_KEY_REGISTRY}
     ports:
-      - "80:80"
-      - "443:443"
       - "7860:7860"
     volumes:
       - ${APP_HOME}/mcp-gateway/servers:/app/registry/servers
@@ -34,6 +32,16 @@ services:
     env_file:
       - .env
 
+  # Registry Frontend
+  registry-frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.registry-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - registry
+  
   # Metrics Collection Service
   metrics-service:
     build:
