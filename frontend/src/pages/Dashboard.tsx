@@ -4,6 +4,8 @@ import { useServerStats } from '../hooks/useServerStats';
 import { useAuth } from '../contexts/AuthContext';
 import ServerCard from '../components/ServerCard';
 import AgentCard from '../components/AgentCard';
+import SemanticSearchResults from '../components/SemanticSearchResults';
+import { useSemanticSearch } from '../hooks/useSemanticSearch';
 import axios from 'axios';
 
 
@@ -83,6 +85,7 @@ const Dashboard: React.FC = () => {
   const { servers, activeFilter, loading, error, refreshData, setServers } = useServerStats();
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
+  const [committedQuery, setCommittedQuery] = useState('');
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [registerForm, setRegisterForm] = useState({
     name: '',
@@ -227,6 +230,31 @@ const Dashboard: React.FC = () => {
     });
   }, [servers]);
 
+  // Semantic search
+  const semanticEnabled = committedQuery.trim().length >= 2;
+  const {
+    results: semanticResults,
+    loading: semanticLoading,
+    error: semanticError
+  } = useSemanticSearch(committedQuery, {
+    minLength: 2,
+    maxResults: 12,
+    enabled: semanticEnabled
+  });
+
+  const semanticServers = semanticResults?.servers ?? [];
+  const semanticTools = semanticResults?.tools ?? [];
+  const semanticAgents = semanticResults?.agents ?? [];
+  const semanticDisplayQuery = semanticResults?.query || committedQuery || searchTerm;
+  const semanticSectionVisible = semanticEnabled;
+  const shouldShowFallbackGrid =
+    semanticSectionVisible &&
+    (Boolean(semanticError) ||
+      (!semanticLoading &&
+        semanticServers.length === 0 &&
+        semanticTools.length === 0 &&
+        semanticAgents.length === 0));
+
   // Filter servers based on activeFilter and searchTerm
   const filteredServers = useMemo(() => {
     let filtered = internalServers;
@@ -299,6 +327,22 @@ const Dashboard: React.FC = () => {
   console.log(`Search term: "${searchTerm}"`);
   console.log(`Filtered servers: ${filteredServers.length}`);
   console.log(`Filtered agents: ${filteredAgents.length}`);
+
+  useEffect(() => {
+    if (searchTerm.trim().length === 0 && committedQuery.length > 0) {
+      setCommittedQuery('');
+    }
+  }, [searchTerm, committedQuery]);
+
+  const handleSemanticSearch = useCallback(() => {
+    const trimmed = searchTerm.trim();
+    setCommittedQuery(trimmed);
+  }, [searchTerm]);
+
+  const handleClearSearch = useCallback(() => {
+    setSearchTerm('');
+    setCommittedQuery('');
+  }, []);
 
   const handleRefreshHealth = async () => {
     setRefreshing(true);
@@ -603,6 +647,223 @@ const Dashboard: React.FC = () => {
     }
   }, [registerForm, registerLoading, refreshData]);
 
+  const renderServerGrid = (
+    list: Server[],
+    options?: { emptyTitle?: string; emptySubtitle?: string; showRegisterCta?: boolean }
+  ) => {
+    if (list.length === 0) {
+      const title = options?.emptyTitle ?? 'No servers found';
+      const subtitle =
+        options?.emptySubtitle ??
+        (searchTerm || activeFilter !== 'all'
+          ? 'Try adjusting your search or filter criteria'
+          : 'No servers are registered yet');
+      const shouldShowCta =
+        options?.showRegisterCta ?? (!searchTerm && activeFilter === 'all');
+
+      return (
+        <div className="text-center py-16">
+          <div className="text-gray-400 text-xl mb-4">{title}</div>
+          <p className="text-gray-500 dark:text-gray-300 text-base max-w-md mx-auto">{subtitle}</p>
+          {shouldShowCta && (
+            <button
+              onClick={handleRegisterServer}
+              className="mt-6 inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+            >
+              <PlusIcon className="h-5 w-5 mr-2" />
+              Register Server
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className="grid pb-12"
+        style={{
+          gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+          gap: 'clamp(1.5rem, 3vw, 2.5rem)'
+        }}
+      >
+        {list.map((server) => (
+          <ServerCard
+            key={server.path}
+            server={server}
+            onToggle={handleToggleServer}
+            onEdit={handleEditServer}
+            canModify={user?.can_modify_servers || false}
+            onRefreshSuccess={refreshData}
+            onShowToast={showToast}
+            onServerUpdate={handleServerUpdate}
+          />
+        ))}
+      </div>
+    );
+  };
+
+  const renderDashboardCollections = () => (
+    <>
+      {/* MCP Servers Section */}
+      {(viewFilter === 'all' || viewFilter === 'servers') &&
+        (filteredServers.length > 0 || (!searchTerm && activeFilter === 'all')) && (
+          <div className="mb-8">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+              MCP Servers
+            </h2>
+
+            {filteredServers.length === 0 ? (
+              <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <div className="text-gray-400 text-lg mb-2">No servers found</div>
+                <p className="text-gray-500 dark:text-gray-300 text-sm">
+                  {searchTerm || activeFilter !== 'all'
+                    ? 'Try adjusting your search or filter criteria'
+                    : 'No servers are registered yet'}
+                </p>
+                {!searchTerm && activeFilter === 'all' && (
+                  <button
+                    onClick={handleRegisterServer}
+                    className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+                  >
+                    <PlusIcon className="h-4 w-4 mr-2" />
+                    Register Server
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div
+                className="grid"
+                style={{
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+                  gap: 'clamp(1.5rem, 3vw, 2.5rem)'
+                }}
+              >
+                {filteredServers.map((server) => (
+                  <ServerCard
+                    key={server.path}
+                    server={server}
+                    onToggle={handleToggleServer}
+                    onEdit={handleEditServer}
+                    canModify={user?.can_modify_servers || false}
+                    onRefreshSuccess={refreshData}
+                    onShowToast={showToast}
+                    onServerUpdate={handleServerUpdate}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+      {/* A2A Agents Section */}
+      {(viewFilter === 'all' || viewFilter === 'agents') &&
+        (filteredAgents.length > 0 || (!searchTerm && activeFilter === 'all')) && (
+          <div className="mb-8">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+              A2A Agents
+            </h2>
+
+            {agentsError ? (
+              <div className="text-center py-12 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+                <div className="text-red-500 text-lg mb-2">Failed to load agents</div>
+                <p className="text-red-600 dark:text-red-400 text-sm">{agentsError}</p>
+              </div>
+            ) : agentsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600"></div>
+              </div>
+            ) : filteredAgents.length === 0 ? (
+              <div className="text-center py-12 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800">
+                <div className="text-gray-400 text-lg mb-2">No agents found</div>
+                <p className="text-gray-500 dark:text-gray-300 text-sm">
+                  {searchTerm || activeFilter !== 'all'
+                    ? 'Try adjusting your search or filter criteria'
+                    : 'No agents are registered yet'}
+                </p>
+              </div>
+            ) : (
+              <div
+                className="grid"
+                style={{
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+                  gap: 'clamp(1.5rem, 3vw, 2.5rem)'
+                }}
+              >
+                {filteredAgents.map((agent) => (
+                  <AgentCard
+                    key={agent.path}
+                    agent={agent}
+                    onToggle={handleToggleAgent}
+                    onEdit={handleEditAgent}
+                    canModify={user?.can_modify_servers || false}
+                    onRefreshSuccess={fetchAgents}
+                    onShowToast={showToast}
+                    onAgentUpdate={handleAgentUpdate}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+      {/* External Registries Section */}
+      {viewFilter === 'external' && (
+        <div className="mb-8">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+            External Registries
+          </h2>
+
+          {filteredExternalServers.length === 0 ? (
+            <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
+              <div className="text-gray-400 text-lg mb-2">
+                {externalServers.length === 0 ? 'No External Registries Available' : 'No Results Found'}
+              </div>
+              <p className="text-gray-500 dark:text-gray-300 text-sm max-w-md mx-auto">
+                {externalServers.length === 0
+                  ? 'External registry integrations (Anthropic, and more) will be available soon'
+                  : 'Try adjusting your search criteria'}
+              </p>
+            </div>
+          ) : (
+            <div
+              className="grid"
+              style={{
+                gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+                gap: 'clamp(1.5rem, 3vw, 2.5rem)'
+              }}
+            >
+              {filteredExternalServers.map((server) => (
+                <ServerCard
+                  key={server.path}
+                  server={server}
+                  onToggle={handleToggleServer}
+                  onEdit={handleEditServer}
+                  canModify={user?.can_modify_servers || false}
+                  onRefreshSuccess={refreshData}
+                  onShowToast={showToast}
+                  onServerUpdate={handleServerUpdate}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Empty state when both are filtered out */}
+      {((viewFilter === 'all' && filteredServers.length === 0 && filteredAgents.length === 0) ||
+        (viewFilter === 'servers' && filteredServers.length === 0) ||
+        (viewFilter === 'agents' && filteredAgents.length === 0)) &&
+        (searchTerm || activeFilter !== 'all') && (
+          <div className="text-center py-16">
+            <div className="text-gray-400 text-xl mb-4">No items found</div>
+            <p className="text-gray-500 dark:text-gray-300 text-base max-w-md mx-auto">
+              Try adjusting your search or filter criteria
+            </p>
+          </div>
+        )}
+    </>
+  );
+
   // Show error state
   if (error && agentsError) {
     return (
@@ -695,13 +956,37 @@ const Dashboard: React.FC = () => {
               </div>
               <input
                 type="text"
-                placeholder="Search servers, agents, descriptions, or tags..."
+                placeholder="Search servers, agents, descriptions, or tags… (press Enter for semantic search)"
                 className="input pl-10 w-full"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSemanticSearch();
+                  }
+                }}
               />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                >
+                  <XMarkIcon className="h-4 w-4" />
+                </button>
+              )}
             </div>
 
+            <button
+              onClick={handleSemanticSearch}
+              className="btn-secondary flex items-center space-x-2 flex-shrink-0"
+              disabled={searchTerm.trim().length < 2}
+            >
+              <MagnifyingGlassIcon className="h-4 w-4" />
+              <span>Semantic Search</span>
+            </button>
+            
             <button
               onClick={handleRegisterServer}
               className="btn-primary flex items-center space-x-2 flex-shrink-0"
@@ -723,177 +1008,63 @@ const Dashboard: React.FC = () => {
           {/* Results count */}
           <div className="flex items-center justify-between">
             <p className="text-sm text-gray-500 dark:text-gray-300">
-              Showing {filteredServers.length} servers and {filteredAgents.length} agents
+              {semanticSectionVisible ? (
+                <>
+                  Showing {semanticServers.length} servers and {semanticAgents.length} agents
+                </>
+              ) : (
+                <>
+                  Showing {filteredServers.length} servers and {filteredAgents.length} agents
+                </>
+              )}
               {activeFilter !== 'all' && (
                 <span className="ml-2 px-2 py-1 text-xs bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300 rounded-full">
                   {activeFilter} filter active
                 </span>
               )}
             </p>
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              Press Enter or click “Semantic Search” to run vector search; typing alone filters locally.
+            </p>
           </div>
         </div>
 
         {/* Scrollable Content Area */}
-        <div className="flex-1 overflow-y-auto min-h-0">
-          {/* MCP Servers Section */}
-          {(viewFilter === 'all' || viewFilter === 'servers') && (filteredServers.length > 0 || (!searchTerm && activeFilter === 'all')) && (
-            <div className="mb-8">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                MCP Servers
-              </h2>
+        <div className="flex-1 overflow-y-auto min-h-0 space-y-10">
+          {semanticSectionVisible ? (
+            <>
+              <SemanticSearchResults
+                query={semanticDisplayQuery}
+                loading={semanticLoading}
+                error={semanticError}
+                servers={semanticServers}
+                tools={semanticTools}
+                agents={semanticAgents}
+              />
 
-              {filteredServers.length === 0 ? (
-                <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <div className="text-gray-400 text-lg mb-2">No servers found</div>
-                  <p className="text-gray-500 dark:text-gray-300 text-sm">
-                    {searchTerm || activeFilter !== 'all'
-                      ? 'Try adjusting your search or filter criteria'
-                      : 'No servers are registered yet'}
-                  </p>
-                  {!searchTerm && activeFilter === 'all' && (
-                    <button
-                      onClick={handleRegisterServer}
-                      className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-colors"
-                    >
-                      <PlusIcon className="h-4 w-4 mr-2" />
-                      Register Server
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div
-                  className="grid"
-                  style={{
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-                    gap: 'clamp(1.5rem, 3vw, 2.5rem)'
-                  }}
-                >
-                  {filteredServers.map((server) => (
-                    <ServerCard
-                      key={server.path}
-                      server={server}
-                      onToggle={handleToggleServer}
-                      onEdit={handleEditServer}
-                      canModify={user?.can_modify_servers || false}
-                      onRefreshSuccess={refreshData}
-                      onShowToast={showToast}
-                      onServerUpdate={handleServerUpdate}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* A2A Agents Section */}
-          {(viewFilter === 'all' || viewFilter === 'agents') && (filteredAgents.length > 0 || (!searchTerm && activeFilter === 'all')) && (
-            <div className="mb-8">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                A2A Agents
-              </h2>
-
-              {agentsError ? (
-                <div className="text-center py-12 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
-                  <div className="text-red-500 text-lg mb-2">Failed to load agents</div>
-                  <p className="text-red-600 dark:text-red-400 text-sm">{agentsError}</p>
-                </div>
-              ) : agentsLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600"></div>
-                </div>
-              ) : filteredAgents.length === 0 ? (
-                <div className="text-center py-12 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800">
-                  <div className="text-gray-400 text-lg mb-2">No agents found</div>
-                  <p className="text-gray-500 dark:text-gray-300 text-sm">
-                    {searchTerm || activeFilter !== 'all'
-                      ? 'Try adjusting your search or filter criteria'
-                      : 'No agents are registered yet'}
-                  </p>
-                </div>
-              ) : (
-                <div
-                  className="grid"
-                  style={{
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-                    gap: 'clamp(1.5rem, 3vw, 2.5rem)'
-                  }}
-                >
-                  {filteredAgents.map((agent) => (
-                    <AgentCard
-                      key={agent.path}
-                      agent={agent}
-                      onToggle={handleToggleAgent}
-                      onEdit={handleEditAgent}
-                      canModify={user?.can_modify_servers || false}
-                      onRefreshSuccess={fetchAgents}
-                      onShowToast={showToast}
-                      onAgentUpdate={handleAgentUpdate}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* External Registries Section */}
-          {viewFilter === 'external' && (
-            <div className="mb-8">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                External Registries
-              </h2>
-
-              {filteredExternalServers.length === 0 ? (
-                <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
-                  <div className="text-gray-400 text-lg mb-2">
-                    {externalServers.length === 0 ? 'No External Registries Available' : 'No Results Found'}
+              {shouldShowFallbackGrid && (
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-base font-semibold text-gray-900 dark:text-gray-200">
+                      Keyword search fallback
+                    </h4>
+                    {semanticError && (
+                      <span className="text-xs font-medium text-red-500">
+                        Showing local matches because semantic search is unavailable
+                      </span>
+                    )}
                   </div>
-                  <p className="text-gray-500 dark:text-gray-300 text-sm max-w-md mx-auto">
-                    {externalServers.length === 0
-                      ? 'External registry integrations (Anthropic, and more) will be available soon'
-                      : 'Try adjusting your search criteria'}
-                  </p>
-                </div>
-              ) : (
-                <div
-                  className="grid"
-                  style={{
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-                    gap: 'clamp(1.5rem, 3vw, 2.5rem)'
-                  }}
-                >
-                  {filteredExternalServers.map((server) => (
-                    <ServerCard
-                      key={server.path}
-                      server={server}
-                      onToggle={handleToggleServer}
-                      onEdit={handleEditServer}
-                      canModify={user?.can_modify_servers || false}
-                      onRefreshSuccess={refreshData}
-                      onShowToast={showToast}
-                      onServerUpdate={handleServerUpdate}
-                    />
-                  ))}
+                  {renderDashboardCollections()}
                 </div>
               )}
-            </div>
+            </>
+          ) : (
+            renderDashboardCollections()
           )}
-
-          {/* Empty state when both are filtered out */}
-          {((viewFilter === 'all' && filteredServers.length === 0 && filteredAgents.length === 0) ||
-            (viewFilter === 'servers' && filteredServers.length === 0) ||
-            (viewFilter === 'agents' && filteredAgents.length === 0)) &&
-           (searchTerm || activeFilter !== 'all') && (
-            <div className="text-center py-16">
-              <div className="text-gray-400 text-xl mb-4">No items found</div>
-              <p className="text-gray-500 dark:text-gray-300 text-base max-w-md mx-auto">
-                Try adjusting your search or filter criteria
-              </p>
-            </div>
-          )}
-
-          {/* Padding at bottom for scroll */}
-          <div className="pb-12"></div>
         </div>
+
+        {/* Padding at bottom for scroll */}
+        <div className="pb-12"></div>
       </div>
 
       {/* Register Server Modal */}

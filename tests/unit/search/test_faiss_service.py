@@ -340,6 +340,83 @@ class TestFaissService:
             # Should not raise exception
             await faiss_service_instance.add_or_update_service("test_service", server_info)
 
+    @pytest.mark.asyncio
+    async def test_search_mixed_returns_servers_and_tools(self, faiss_service_instance, mock_settings):
+        """Test semantic search happy path for servers and tools."""
+        faiss_service_instance.embedding_model = Mock()
+        faiss_service_instance.embedding_model.encode.return_value = [[0.1] * 384]
+
+        mock_index = Mock()
+        mock_index.ntotal = 2
+        mock_index.search.return_value = (
+            np.array([[0.25, 0.4]], dtype=np.float32),
+            np.array([[0, 1]], dtype=np.int64),
+        )
+        faiss_service_instance.faiss_index = mock_index
+
+        faiss_service_instance.metadata_store = {
+            "/demo": {
+                "id": 0,
+                "entity_type": "mcp_server",
+                "full_server_info": {
+                    "server_name": "Demo Server",
+                    "description": "Handles demo workflows",
+                    "tags": ["demo"],
+                    "num_tools": 1,
+                    "is_enabled": True,
+                    "tool_list": [
+                        {
+                            "name": "alpha_tool",
+                            "parsed_description": {
+                                "main": "Alpha tool handles tokens",
+                                "args": "input: string",
+                            },
+                        }
+                    ],
+                },
+            }
+        }
+        faiss_service_instance.metadata_store["/agents/demo-agent"] = {
+            "id": 1,
+            "entity_type": "a2a_agent",
+            "full_agent_card": {
+                "name": "Demo Agent",
+                "description": "Helps with demo workflows",
+                "tags": ["demo"],
+                "skills": [
+                    {"name": "explain", "description": "Explains demos"},
+                ],
+                "visibility": "public",
+                "trust_level": "verified",
+                "is_enabled": True,
+            },
+        }
+
+        results = await faiss_service_instance.search_mixed(
+            query="alpha tokens",
+            entity_types=["mcp_server", "tool", "a2a_agent"],
+            max_results=5,
+        )
+
+        assert "servers" in results and "tools" in results and "agents" in results
+        assert len(results["servers"]) == 1
+        assert results["servers"][0]["server_name"] == "Demo Server"
+        assert results["servers"][0]["matching_tools"]
+        assert results["tools"][0]["tool_name"] == "alpha_tool"
+        assert results["agents"][0]["agent_name"] == "Demo Agent"
+
+    @pytest.mark.asyncio
+    async def test_search_mixed_rejects_empty_query(self, faiss_service_instance, mock_settings):
+        """Ensure empty queries raise validation errors."""
+        faiss_service_instance.embedding_model = Mock()
+        faiss_service_instance.faiss_index = Mock()
+        faiss_service_instance.faiss_index.ntotal = 0
+
+        with pytest.raises(ValueError):
+            await faiss_service_instance.search_mixed(
+                query="  ", entity_types=None, max_results=5
+            )
+
     def test_global_service_instance(self):
         """Test that the global service instance is accessible."""
         from registry.search.service import faiss_service

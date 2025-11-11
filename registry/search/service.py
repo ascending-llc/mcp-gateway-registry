@@ -2,12 +2,14 @@ import json
 import asyncio
 import logging
 from datetime import datetime
+import re
 from pathlib import Path
 from typing import (
     Dict,
     Any,
     Optional,
     List,
+    Tuple
 )
 
 import faiss
@@ -147,12 +149,28 @@ class FaissService:
             logger.error(f"Error saving FAISS data: {e}", exc_info=True)
             
     def _get_text_for_embedding(self, server_info: Dict[str, Any]) -> str:
-        """Prepare text string from server info for embedding."""
+        """Prepare text string from server info (including tools) for embedding."""
         name = server_info.get("server_name", "")
         description = server_info.get("description", "")
         tags = server_info.get("tags", [])
         tag_string = ", ".join(tags)
-        return f"Name: {name}\nDescription: {description}\nTags: {tag_string}"
+        tool_list = server_info.get("tool_list") or []
+        tool_snippets = []
+        for tool in tool_list:
+            tool_name = tool.get("name", "")
+            parsed_description = tool.get("parsed_description", {}) or {}
+            tool_desc = parsed_description.get("main") or tool.get("description", "")
+            tool_args = parsed_description.get("args", "")
+            snippet = f"Tool: {tool_name}. Description: {tool_desc}. Args: {tool_args}"
+            tool_snippets.append(snippet.strip())
+
+        tools_section = "\n".join(tool_snippets)
+        return (
+            f"Name: {name}\n"
+            f"Description: {description}\n"
+            f"Tags: {tag_string}\n"
+            f"Tools:\n{tools_section}"
+        ).strip()
 
     def _get_text_for_agent(self, agent_card: AgentCard) -> str:
         """Prepare text string from agent card for embedding."""
@@ -184,6 +202,7 @@ class FaissService:
             text_parts.append(f"Tags: {tag_string}")
 
         return "\n".join(text_parts)
+
         
     async def add_or_update_service(self, service_path: str, server_info: Dict[str, Any], is_enabled: bool = False):
         """Add or update a service in the FAISS index."""
@@ -248,9 +267,9 @@ class FaissService:
 
             self.metadata_store[service_path] = {
                 "id": current_faiss_id,
-                "entity_type": "mcp_server",
                 "text_for_embedding": text_to_embed,
                 "full_server_info": enriched_server_info,
+                "entity_type": server_info.get("entity_type", "mcp_server")
             }
             logger.debug(f"Updated faiss_metadata_store for '{service_path}'.")
             await self.save_data()
@@ -424,109 +443,18 @@ class FaissService:
                 exc_info=True,
             )
 
-    def search_agents(
+    async def search_agents(
         self,
         query: str,
         max_results: int = 10,
     ) -> List[Dict[str, Any]]:
         """Search for agents in the FAISS index."""
-        results = self.search_mixed(
+        results = await self.search_mixed(
             query=query,
             entity_types=["a2a_agent"],
             max_results=max_results,
         )
         return results.get("agents", [])
-
-    def search_mixed(
-        self,
-        query: str,
-        entity_types: Optional[List[str]] = None,
-        max_results: int = 10,
-    ) -> Dict[str, List[Dict[str, Any]]]:
-        """Search across entity types (agents and servers)."""
-        if self.embedding_model is None or self.faiss_index is None:
-            logger.error(
-                "Embedding model or FAISS index not initialized. Cannot search."
-            )
-            return {}
-
-        if entity_types is None:
-            entity_types = ["mcp_server", "a2a_agent"]
-
-        # Validate entity types
-        valid_types = {"mcp_server", "a2a_agent"}
-        entity_types = [t for t in entity_types if t in valid_types]
-
-        if not entity_types:
-            logger.error(f"No valid entity types provided. Must be one of: {valid_types}")
-            return {}
-
-        try:
-            # Encode query
-            query_embedding = self.embedding_model.encode([query])
-            query_np = np.array([query_embedding[0]], dtype=np.float32)
-            logger.info(f"Encoded query: {query}")
-
-            # Search FAISS
-            distances, ids = self.faiss_index.search(query_np, max_results)
-            logger.info(f"FAISS search returned {len(ids[0])} results for query: {query}")
-
-            # Organize results by entity type
-            results_by_type: Dict[str, List[Dict[str, Any]]] = {
-                "agents": [],
-                "servers": [],
-            }
-
-            for dist, faiss_id in zip(distances[0], ids[0]):
-                if faiss_id < 0:
-                    continue
-
-                # Find metadata entry with this FAISS ID
-                matching_entry = None
-                matching_key = None
-                for key, metadata in self.metadata_store.items():
-                    if metadata.get("id") == faiss_id:
-                        matching_entry = metadata
-                        matching_key = key
-                        break
-
-                if matching_entry is None:
-                    continue
-
-                entity_type = matching_entry.get("entity_type", "mcp_server")
-
-                # Filter by requested entity types
-                if entity_type not in entity_types:
-                    continue
-
-                # Build result entry
-                relevance_score = float(dist)
-                result_entry: Dict[str, Any] = {
-                    "path": matching_key,
-                    "entity_type": entity_type,
-                    "relevance_score": relevance_score,
-                }
-
-                if entity_type == "a2a_agent":
-                    agent_card = matching_entry.get("full_agent_card")
-                    if agent_card:
-                        result_entry["agent_card"] = agent_card
-                    logger.info(f"Agent result: {matching_key} (distance={relevance_score:.4f})")
-                    results_by_type["agents"].append(result_entry)
-
-                elif entity_type == "mcp_server":
-                    server_info = matching_entry.get("full_server_info")
-                    if server_info:
-                        result_entry["server_info"] = server_info
-                    logger.info(f"Server result: {matching_key} (distance={relevance_score:.4f})")
-                    results_by_type["servers"].append(result_entry)
-
-            logger.info(f"Final results - agents: {len(results_by_type['agents'])}, servers: {len(results_by_type['servers'])}")
-            return results_by_type
-
-        except Exception as e:
-            logger.error(f"Error searching FAISS: {e}", exc_info=True)
-            return {}
 
 
     async def add_or_update_entity(
@@ -579,23 +507,255 @@ class FaissService:
         Searches both agents and servers, returns list of matching entities.
         """
         if entity_types is None:
-            entity_types = ["a2a_agent", "mcp_server"]
+            entity_types = ["a2a_agent", "mcp_server", "tool"]
 
-        results = await asyncio.to_thread(
-            self.search_mixed,
+        results = await self.search_mixed(
             query=query,
             entity_types=entity_types,
             max_results=max_results,
         )
 
-        all_results = []
-        if "agents" in results:
-            all_results.extend(results["agents"])
-        if "servers" in results:
-            all_results.extend(results["servers"])
+        combined: List[Dict[str, Any]] = []
+        requested = set(entity_types)
 
-        return all_results[:max_results]
+        if "agents" in results and "a2a_agent" in requested:
+            for agent in results["agents"]:
+                if enabled_only and not agent.get("is_enabled", False):
+                    continue
+                combined.append(agent)
 
+        if "servers" in results and "mcp_server" in requested:
+            for server in results["servers"]:
+                if enabled_only and not server.get("is_enabled", False):
+                    continue
+                combined.append(server)
+
+        if "tools" in results and "tool" in requested:
+            combined.extend(results["tools"])
+
+        return combined[:max_results]
+
+
+    def _distance_to_relevance(self, distance: float) -> float:
+        """Convert FAISS L2 distance to a normalized relevance score (0-1)."""
+        try:
+            relevance = 1.0 / (1.0 + float(distance))
+            return max(0.0, min(1.0, relevance))
+        except Exception:
+            return 0.0
+
+    def _extract_matching_tools(self, query: str, server_info: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Extract tool matches using simple keyword overlap."""
+        tools = server_info.get("tool_list") or []
+        if not tools:
+            return []
+
+        tokens = [token for token in re.split(r"\W+", query.lower()) if token]
+        if not tokens:
+            return []
+
+        matches: List[Tuple[float, Dict[str, Any]]] = []
+        for tool in tools:
+            tool_name = tool.get("name", "")
+            parsed_description = tool.get("parsed_description", {}) or {}
+            tool_desc = (
+                parsed_description.get("main")
+                or tool.get("description")
+                or parsed_description.get("summary")
+                or ""
+            )
+            tool_args = parsed_description.get("args", "")
+            searchable_text = f"{tool_name} {tool_desc} {tool_args}".lower()
+            if not searchable_text.strip():
+                continue
+
+            matches_found = sum(1 for token in tokens if token in searchable_text)
+            if matches_found == 0:
+                continue
+
+            coverage = matches_found / len(tokens)
+            matches.append(
+                (
+                    coverage,
+                    {
+                        "tool_name": tool_name,
+                        "description": tool_desc,
+                        "match_context": (tool_desc or tool_args or "")[:180],
+                        "schema": tool.get("schema", {}),
+                        "raw_score": coverage,
+                    },
+                )
+            )
+
+        matches.sort(key=lambda item: item[0], reverse=True)
+        return [match for _, match in matches]
+
+    async def search_mixed(
+        self,
+        query: str,
+        entity_types: Optional[List[str]] = None,
+        max_results: int = 20,
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Run a semantic search across MCP servers, their tools, and A2A agents.
+
+        Args:
+            query: Natural language query text
+            entity_types: Optional list of entity filters ("mcp_server", "tool", "a2a_agent")
+            max_results: Maximum results to return per entity collection
+
+        Returns:
+            Dict with "servers", "tools", and "agents" result lists
+        """
+        if not query or not query.strip():
+            raise ValueError("Query text is required for semantic search")
+
+        if self.embedding_model is None or self.faiss_index is None:
+            raise RuntimeError("FAISS search service is not initialized")
+
+        max_results = max(1, min(max_results, 50))
+        requested_entity_types = set(entity_types or ["mcp_server", "tool", "a2a_agent"])
+        allowed_entity_types = {"mcp_server", "tool", "a2a_agent"}
+        entity_filter = requested_entity_types & allowed_entity_types
+        if not entity_filter:
+            entity_filter = allowed_entity_types
+
+        total_vectors = self.faiss_index.ntotal if self.faiss_index else 0
+        if total_vectors == 0:
+            return {"servers": [], "tools": [], "agents": []}
+
+        top_k = min(max_results, total_vectors)
+        query_embedding = await asyncio.to_thread(
+            self.embedding_model.encode, [query.strip()]
+        )
+        query_np = np.array([query_embedding[0]], dtype=np.float32)
+
+        distances, indices = self.faiss_index.search(query_np, top_k)
+        distance_row = distances[0]
+        id_row = indices[0]
+
+        id_to_path = {
+            entry.get("id"): path for path, entry in self.metadata_store.items()
+        }
+
+        server_results: List[Dict[str, Any]] = []
+        tool_results: List[Dict[str, Any]] = []
+        agent_results: List[Dict[str, Any]] = []
+
+        for distance, faiss_id in zip(distance_row, id_row):
+            if faiss_id == -1:
+                continue
+
+            path = id_to_path.get(int(faiss_id))
+            if not path:
+                continue
+
+            metadata_entry = self.metadata_store.get(path, {})
+            entity_type = metadata_entry.get("entity_type", "mcp_server")
+            relevance = self._distance_to_relevance(distance)
+
+            if entity_type == "mcp_server":
+                server_info = metadata_entry.get("full_server_info", {})
+                if not server_info:
+                    continue
+
+                match_context = (
+                    server_info.get("description")
+                    or ", ".join(server_info.get("tags", []))
+                    or server_info.get("path")
+                )
+
+                matching_tools: List[Dict[str, Any]] = []
+                if "tool" in entity_filter:
+                    matching_tools = self._extract_matching_tools(query, server_info)[:5]
+
+                if "mcp_server" in entity_filter:
+                    server_results.append(
+                        {
+                            "entity_type": "mcp_server",
+                            "path": path,
+                            "server_name": server_info.get("server_name", path.strip("/")),
+                            "description": server_info.get("description", ""),
+                            "tags": server_info.get("tags", []),
+                            "num_tools": server_info.get("num_tools", 0),
+                            "is_enabled": server_info.get("is_enabled", False),
+                            "relevance_score": relevance,
+                            "match_context": match_context,
+                            "matching_tools": [
+                                {
+                                    "tool_name": tool.get("tool_name", ""),
+                                    "description": tool.get("description", ""),
+                                    "relevance_score": min(
+                                        1.0, (relevance + tool.get("raw_score", 0)) / 2
+                                    ),
+                                    "match_context": tool.get("match_context", ""),
+                                }
+                                for tool in matching_tools
+                            ],
+                        }
+                    )
+
+                if "tool" in entity_filter and matching_tools:
+                    for tool in matching_tools:
+                        tool_results.append(
+                            {
+                                "entity_type": "tool",
+                                "server_path": path,
+                                "server_name": server_info.get("server_name", path.strip("/")),
+                                "tool_name": tool.get("tool_name", ""),
+                                "description": tool.get("description", ""),
+                                "match_context": tool.get("match_context", ""),
+                                "relevance_score": min(
+                                    1.0, (relevance + tool.get("raw_score", 0)) / 2
+                                ),
+                            }
+                        )
+
+            elif entity_type == "a2a_agent":
+                if "a2a_agent" not in entity_filter:
+                    continue
+
+                agent_card = metadata_entry.get("full_agent_card", {})
+                if not agent_card:
+                    continue
+
+                skills = [
+                    skill.get("name")
+                    for skill in agent_card.get("skills", [])
+                    if isinstance(skill, dict)
+                ]
+                match_context = (
+                    agent_card.get("description")
+                    or ", ".join(skills)
+                    or ", ".join(agent_card.get("tags", []))
+                )
+
+                agent_results.append(
+                    {
+                        "entity_type": "a2a_agent",
+                        "path": path,
+                        "agent_name": agent_card.get("name", path.strip("/")),
+                        "description": agent_card.get("description", ""),
+                        "tags": agent_card.get("tags", []),
+                        "skills": skills,
+                        "visibility": agent_card.get("visibility", "public"),
+                        "trust_level": agent_card.get("trust_level"),
+                        "is_enabled": agent_card.get("is_enabled", False),
+                        "relevance_score": relevance,
+                        "match_context": match_context,
+                        "agent_card": agent_card,
+                    }
+                )
+
+        server_results.sort(key=lambda item: item["relevance_score"], reverse=True)
+        tool_results.sort(key=lambda item: item["relevance_score"], reverse=True)
+        agent_results.sort(key=lambda item: item["relevance_score"], reverse=True)
+
+        return {
+            "servers": server_results[:max_results],
+            "tools": tool_results[:max_results],
+            "agents": agent_results[:max_results],
+        }
 
 # Global service instance
 faiss_service = FaissService() 
