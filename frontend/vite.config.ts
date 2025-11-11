@@ -8,15 +8,15 @@ export default defineConfig({
     host: '0.0.0.0',
     proxy: {
       '/v0': {
-        target: 'http://localhost:7860', // TODO: Update to registry-backend URL
+        target: 'http://localhost:7860', // running outside of docker container; DNS resolution via container name won't work
         changeOrigin: true,
       },
       '/api': {
-        target: 'http://localhost:7860', // TODO: Update to registry-backend URL
+        target: 'http://localhost:7860', // running outside of docker container; DNS resolution via container name won't work
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://localhost:7860', // TODO: Update to registry-backend URL
+        target: 'http://localhost:7860', // running outside of docker container; DNS resolution via container name won't work
         changeOrigin: true,
       },
     },
