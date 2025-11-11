@@ -956,7 +956,7 @@ const Dashboard: React.FC = () => {
               </div>
               <input
                 type="text"
-                placeholder="Search servers, agents, descriptions, or tags… (press Enter for semantic search)"
+                placeholder="Search servers, agents, descriptions, or tags… "
                 className="input pl-10 w-full"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -978,15 +978,6 @@ const Dashboard: React.FC = () => {
               )}
             </div>
 
-            <button
-              onClick={handleSemanticSearch}
-              className="btn-secondary flex items-center space-x-2 flex-shrink-0"
-              disabled={searchTerm.trim().length < 2}
-            >
-              <MagnifyingGlassIcon className="h-4 w-4" />
-              <span>Semantic Search</span>
-            </button>
-            
             <button
               onClick={handleRegisterServer}
               className="btn-primary flex items-center space-x-2 flex-shrink-0"
@@ -1024,7 +1015,7 @@ const Dashboard: React.FC = () => {
               )}
             </p>
             <p className="text-xs text-gray-400 dark:text-gray-500">
-              Press Enter or click “Semantic Search” to run vector search; typing alone filters locally.
+              Press Enter to run semantic search; typing filters locally.
             </p>
           </div>
         </div>
