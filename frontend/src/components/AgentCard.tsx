@@ -9,23 +9,23 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   QuestionMarkCircleIcon,
-  ClipboardDocumentIcon,
   ShieldCheckIcon,
   GlobeAltIcon,
   LockClosedIcon,
-  InformationCircleIcon
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline';
+import AgentDetailsModal from './AgentDetailsModal';
 
 /**
  * Agent interface representing an A2A agent.
  */
-interface Agent {
+export interface Agent {
   name: string;
   path: string;
   description?: string;
   version?: string;
-  visibility?: 'public' | 'private';
-  trust_level?: 'community' | 'verified' | 'trusted';
+  visibility?: 'public' | 'private' | 'group-restricted';
+  trust_level?: 'community' | 'verified' | 'trusted' | 'unverified';
   enabled: boolean;
   tags?: string[];
   last_checked_time?: string;
@@ -107,13 +107,10 @@ const AgentCard: React.FC<AgentCardProps> = ({
   onShowToast,
   onAgentUpdate
 }) => {
-  const [showConfig, setShowConfig] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
-  const [selectedIDE, setSelectedIDE] = useState<'vscode' | 'cursor' | 'cline' | 'claude-code'>('vscode');
   const [loadingRefresh, setLoadingRefresh] = useState(false);
   const [fullAgentDetails, setFullAgentDetails] = useState<any>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
-  const [selectedCliCommand, setSelectedCliCommand] = useState<'register' | 'list' | 'get' | 'test' | 'test-all' | 'search' | 'update' | 'toggle' | 'delete'>('list');
 
   const getStatusIcon = () => {
     switch (agent.status) {
@@ -197,221 +194,22 @@ const AgentCard: React.FC<AgentCardProps> = ({
     }
   }, [agent.path, loadingRefresh, onRefreshSuccess, onShowToast, onAgentUpdate]);
 
-  /**
-   * Generate CLI command for agent management.
-   */
-  const generateCliCommand = useCallback((): string => {
-    const agentPath = agent.path;
-    const agentName = agent.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-
-    switch (selectedCliCommand) {
-      case 'list':
-        return 'uv run python cli/agent_mgmt.py list';
-
-      case 'get':
-        return `uv run python cli/agent_mgmt.py get ${agentPath}`;
-
-      case 'test':
-        return `uv run python cli/agent_mgmt.py test ${agentPath}`;
-
-      case 'test-all':
-        return 'uv run python cli/agent_mgmt.py test-all';
-
-      case 'search':
-        return `uv run python cli/agent_mgmt.py search "${agent.name}"`;
-
-      case 'update':
-        return `uv run python cli/agent_mgmt.py update ${agentPath} cli/examples/${agentName}_agent.json`;
-
-      case 'toggle':
-        return `uv run python cli/agent_mgmt.py toggle ${agentPath} true   # Enable\nuv run python cli/agent_mgmt.py toggle ${agentPath} false  # Disable`;
-
-      case 'delete':
-        return `uv run python cli/agent_mgmt.py delete ${agentPath}`;
-
-      case 'register':
-      default:
-        return `uv run python cli/agent_mgmt.py register cli/examples/${agentName}_agent.json`;
-    }
-  }, [selectedCliCommand, agent.path, agent.name]);
-
-  /**
-   * Get description for the selected CLI command.
-   */
-  const getCliCommandDescription = useCallback((): string => {
-    switch (selectedCliCommand) {
-      case 'list':
-        return 'List all agents (filtered by your permissions). Shows agent summaries with basic metadata.';
-
-      case 'get':
-        return 'Retrieve the complete agent card for a specific agent, including all metadata, skills, and configuration.';
-
-      case 'test':
-        return 'Verify agent registration in registry and test endpoint accessibility. Checks health status.';
-
-      case 'test-all':
-        return 'Test all registered agents to verify they are accessible and healthy.';
-
-      case 'search':
-        return 'Perform semantic search to find agents by capability. Searches by name, description, and tags.';
-
-      case 'update':
-        return 'Update an agent\'s metadata and configuration. Requires the agent JSON file with updated values.';
-
-      case 'toggle':
-        return 'Enable or disable an agent in the registry without deleting it. Useful for maintenance.';
-
-      case 'delete':
-        return 'Remove an agent from the registry. This action is permanent.';
-
-      case 'register':
-      default:
-        return 'Register a new agent with the registry. Requires a properly formatted agent JSON file with metadata, skills, and security schemes.';
-    }
-  }, [selectedCliCommand]);
-
-  /**
-   * Generate agent configuration for discovery/information.
-   */
-  const generateAgentConfig = useCallback(() => {
-    const agentName = agent.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-
-    // Get base URL and strip port for nginx proxy compatibility
-    const currentUrl = new URL(window.location.origin);
-    const baseUrl = `${currentUrl.protocol}//${currentUrl.hostname}`;
-
-    // Clean up agent path - remove trailing slashes and ensure single leading slash
-    const cleanPath = agent.path.replace(/\/+$/, '').replace(/^\/+/, '/');
-    const url = `${baseUrl}${cleanPath}/a2a`;
-
-    // Generate different config formats for different IDEs
-    switch(selectedIDE) {
-      case 'vscode':
-        return {
-          "agents": {
-            [agentName]: {
-              "type": "a2a",
-              "url": url,
-              "version": agent.version || "1.0.0",
-              "trust_level": agent.trust_level || "community",
-              "headers": {
-                "Authorization": "Bearer [YOUR_AUTH_TOKEN]"
-              }
-            }
-          },
-          "inputs": [
-            {
-              "type": "promptString",
-              "id": "auth-token",
-              "description": "Gateway Authentication Token"
-            }
-          ]
-        };
-
-      case 'cursor':
-        return {
-          "a2aAgents": {
-            [agentName]: {
-              "url": url,
-              "version": agent.version || "1.0.0",
-              "trust_level": agent.trust_level || "community",
-              "headers": {
-                "Authorization": "Bearer [YOUR_AUTH_TOKEN]"
-              }
-            }
-          }
-        };
-
-      case 'cline':
-        return {
-          "a2aAgents": {
-            [agentName]: {
-              "type": "a2a",
-              "url": url,
-              "version": agent.version || "1.0.0",
-              "trust_level": agent.trust_level || "community",
-              "disabled": false,
-              "headers": {
-                "Authorization": "Bearer [YOUR_AUTH_TOKEN]"
-              }
-            }
-          }
-        };
-
-      case 'claude-code':
-        return {
-          "a2aAgents": {
-            [agentName]: {
-              "type": "a2a",
-              "url": url,
-              "version": agent.version || "1.0.0",
-              "trust_level": agent.trust_level || "community",
-              "headers": {
-                "Authorization": "Bearer [YOUR_AUTH_TOKEN]"
-              }
-            }
-          }
-        };
-
-      default:
-        return {
-          "a2aAgents": {
-            [agentName]: {
-              "type": "a2a",
-              "url": url,
-              "version": agent.version || "1.0.0",
-              "trust_level": agent.trust_level || "community",
-              "headers": {
-                "Authorization": "Bearer [YOUR_AUTH_TOKEN]"
-              }
-            }
-          }
-        };
-    }
-  }, [agent.name, agent.path, agent.version, agent.trust_level, selectedIDE]);
-
-  /**
-   * Copy configuration to clipboard.
-   */
-  const copyConfigToClipboard = useCallback(async () => {
-    try {
-      const config = generateAgentConfig();
-      const configText = JSON.stringify(config, null, 2);
-      await navigator.clipboard.writeText(configText);
-
-      if (onShowToast) {
-        onShowToast('Agent configuration copied to clipboard!', 'success');
+  const handleCopyDetails = useCallback(
+    async (data: any) => {
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+        onShowToast?.('Full agent JSON copied to clipboard!', 'success');
+      } catch (error) {
+        console.error('Failed to copy JSON:', error);
+        onShowToast?.('Failed to copy JSON', 'error');
       }
-    } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
-      if (onShowToast) {
-        onShowToast('Failed to copy configuration', 'error');
-      }
-    }
-  }, [generateAgentConfig, onShowToast]);
-
-  /**
-   * Copy CLI command to clipboard.
-   */
-  const copyCliCommandToClipboard = useCallback(async () => {
-    try {
-      const command = generateCliCommand();
-      await navigator.clipboard.writeText(command);
-
-      if (onShowToast) {
-        onShowToast('CLI command copied to clipboard!', 'success');
-      }
-    } catch (error) {
-      console.error('Failed to copy CLI command:', error);
-      if (onShowToast) {
-        onShowToast('Failed to copy CLI command', 'error');
-      }
-    }
-  }, [generateCliCommand, onShowToast]);
+    },
+    [onShowToast]
+  );
 
   return (
     <>
-      <div className="group rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 h-full flex flex-col bg-gradient-to-br from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20 border-2 border-cyan-200 dark:border-cyan-700 hover:border-cyan-300 dark:hover:border-cyan-600">
+      <div className="group rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 h-full flex flex-col bg-gradient-to-br from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20 border-2 border-cyan-200 dark:border-cyan-700 hover:border-cyan-300 dark:hover-border-cyan-600">
         {/* Header */}
         <div className="p-5 pb-4">
           <div className="flex items-start justify-between mb-4">
@@ -618,299 +416,15 @@ const AgentCard: React.FC<AgentCardProps> = ({
         </div>
       </div>
 
-      {/* Full Details Modal */}
-      {showDetails && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                {agent.name} - Full Details (JSON)
-              </h3>
-              <button
-                onClick={() => setShowDetails(false)}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-              >
-                ✕
-              </button>
-            </div>
+      <AgentDetailsModal
+        agent={agent}
+        isOpen={showDetails}
+        onClose={() => setShowDetails(false)}
+        loading={loadingDetails}
+        fullDetails={fullAgentDetails}
+        onCopy={handleCopyDetails}
+      />
 
-            <div className="space-y-4">
-              {/* Info Note */}
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
-                  Complete Agent Schema
-                </h4>
-                <p className="text-sm text-blue-800 dark:text-blue-200">
-                  This is the complete A2A agent definition stored in the registry. It includes all metadata, skills, security schemes, and configuration details.
-                </p>
-              </div>
-
-              {/* Full JSON */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium text-gray-900 dark:text-white">
-                    Agent JSON Schema:
-                  </h4>
-                  <button
-                    onClick={() => {
-                      try {
-                        const dataToCopy = fullAgentDetails || agent;
-                        navigator.clipboard.writeText(JSON.stringify(dataToCopy, null, 2));
-                        if (onShowToast) {
-                          onShowToast('Full agent JSON copied to clipboard!', 'success');
-                        }
-                      } catch (error) {
-                        if (onShowToast) {
-                          onShowToast('Failed to copy JSON', 'error');
-                        }
-                      }
-                    }}
-                    className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors duration-200"
-                  >
-                    <ClipboardDocumentIcon className="h-4 w-4" />
-                    Copy JSON
-                  </button>
-                </div>
-
-                {loadingDetails ? (
-                  <div className="p-4 bg-gray-50 dark:bg-gray-900 border dark:border-gray-700 rounded-lg text-center text-gray-600 dark:text-gray-400">
-                    Loading full agent details...
-                  </div>
-                ) : (
-                  <pre className="p-4 bg-gray-50 dark:bg-gray-900 border dark:border-gray-700 rounded-lg overflow-x-auto text-xs text-gray-900 dark:text-gray-100 max-h-[30vh] overflow-y-auto">
-                    {JSON.stringify(fullAgentDetails || agent, null, 2)}
-                  </pre>
-                )}
-              </div>
-
-              {/* Field Legend */}
-              <div className="bg-gray-50 dark:bg-gray-900 border dark:border-gray-700 rounded-lg p-4">
-                <h4 className="font-medium text-gray-900 dark:text-white mb-3">
-                  Field Reference
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-2">Core Fields</h5>
-                    <ul className="space-y-1 text-gray-600 dark:text-gray-400">
-                      <li><code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">protocol_version</code> - A2A protocol version</li>
-                      <li><code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">name</code> - Agent display name</li>
-                      <li><code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">description</code> - Agent purpose</li>
-                      <li><code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">url</code> - Agent endpoint URL</li>
-                      <li><code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">path</code> - Registry path</li>
-                    </ul>
-                  </div>
-                  <div>
-                    <h5 className="font-medium text-gray-700 dark:text-gray-300 mb-2">Metadata Fields</h5>
-                    <ul className="space-y-1 text-gray-600 dark:text-gray-400">
-                      <li><code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">skills</code> - Agent capabilities</li>
-                      <li><code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">security_schemes</code> - Auth methods</li>
-                      <li><code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">tags</code> - Categorization</li>
-                      <li><code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">trust_level</code> - Verification status</li>
-                      <li><code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">metadata</code> - Custom data</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Configuration Modal */}
-      {showConfig && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-3xl w-full mx-4 max-h-[80vh] overflow-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                A2A Agent Configuration for {agent.name}
-              </h3>
-              <button
-                onClick={() => setShowConfig(false)}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {/* Instructions */}
-              <div className="bg-cyan-50 dark:bg-cyan-900/20 border border-cyan-200 dark:border-cyan-800 rounded-lg p-4">
-                <h4 className="font-medium text-cyan-900 dark:text-cyan-100 mb-2">
-                  How to use this configuration:
-                </h4>
-                <ol className="text-sm text-cyan-800 dark:text-cyan-200 space-y-1 list-decimal list-inside">
-                  <li>Copy the configuration below</li>
-                  <li>Paste it into your agent configuration file</li>
-                  <li>Replace <code className="bg-cyan-100 dark:bg-cyan-800 px-1 rounded">[YOUR_AUTH_TOKEN]</code> with your gateway authentication token</li>
-                  <li>Restart your AI coding assistant to load the new agent</li>
-                </ol>
-              </div>
-
-              {/* Authentication Note */}
-              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-                <h4 className="font-medium text-amber-900 dark:text-amber-100 mb-2">
-                  Authentication Required
-                </h4>
-                <p className="text-sm text-amber-800 dark:text-amber-200">
-                  This configuration requires gateway authentication tokens. The tokens authenticate your AI assistant
-                  with the MCP Gateway, not the individual agent. Visit the authentication documentation for setup instructions.
-                </p>
-              </div>
-
-              {/* CLI Commands Section */}
-              <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
-                <h4 className="font-medium text-purple-900 dark:text-purple-100 mb-3">
-                  CLI Agent Management Commands
-                </h4>
-                <p className="text-sm text-purple-800 dark:text-purple-200 mb-4">
-                  Manage agents from the command line using the A2A CLI. Reference the <a href="https://github.com/agentic-community/mcp-gateway-registry/blob/main/docs/a2a-agent-management.md" target="_blank" rel="noopener noreferrer" className="font-semibold hover:underline">A2A Agent Management Guide</a> for complete documentation.
-                </p>
-
-                <div className="mb-3">
-                  <label className="block text-sm font-medium text-purple-900 dark:text-purple-100 mb-2">
-                    Select Command:
-                  </label>
-                  <select
-                    value={selectedCliCommand}
-                    onChange={(e) => setSelectedCliCommand(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-purple-300 dark:border-purple-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                  >
-                    <option value="list">List agents</option>
-                    <option value="get">Get agent details</option>
-                    <option value="test">Test agent (single)</option>
-                    <option value="test-all">Test all agents</option>
-                    <option value="search">Search agents</option>
-                    <option value="register">Register agent</option>
-                    <option value="update">Update agent</option>
-                    <option value="toggle">Toggle agent (enable/disable)</option>
-                    <option value="delete">Delete agent</option>
-                  </select>
-                </div>
-
-                <div className="mb-3">
-                  <p className="text-xs text-purple-700 dark:text-purple-300 mb-2">
-                    <strong>Description:</strong> {getCliCommandDescription()}
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="text-xs font-medium text-purple-900 dark:text-purple-100">Command:</span>
-                  <button
-                    onClick={copyCliCommandToClipboard}
-                    className="flex items-center gap-1 px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded transition-colors duration-200"
-                  >
-                    <ClipboardDocumentIcon className="h-3.5 w-3.5" />
-                    Copy
-                  </button>
-                </div>
-
-                <pre className="p-3 bg-gray-900 text-green-400 border border-purple-300 dark:border-purple-600 rounded text-xs overflow-x-auto font-mono whitespace-pre-wrap break-words">
-                  {generateCliCommand()}
-                </pre>
-
-                <p className="text-xs text-purple-700 dark:text-purple-300 mt-3">
-                  <strong>Note:</strong> Generate fresh credentials before running: <code className="bg-purple-100 dark:bg-purple-900 px-1 rounded">./credentials-provider/generate_creds.sh</code>
-                </p>
-              </div>
-
-              {/* IDE Selection */}
-              <div className="bg-gray-50 dark:bg-gray-900 border dark:border-gray-700 rounded-lg p-4">
-                <h4 className="font-medium text-gray-900 dark:text-white mb-3">
-                  Select your IDE/Tool:
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => setSelectedIDE('vscode')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      selectedIDE === 'vscode'
-                        ? 'bg-cyan-600 text-white'
-                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    VS Code
-                  </button>
-                  <button
-                    onClick={() => setSelectedIDE('cursor')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      selectedIDE === 'cursor'
-                        ? 'bg-cyan-600 text-white'
-                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    Cursor
-                  </button>
-                  <button
-                    onClick={() => setSelectedIDE('cline')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      selectedIDE === 'cline'
-                        ? 'bg-cyan-600 text-white'
-                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    Cline
-                  </button>
-                  <button
-                    onClick={() => setSelectedIDE('claude-code')}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      selectedIDE === 'claude-code'
-                        ? 'bg-cyan-600 text-white'
-                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    Claude Code
-                  </button>
-                </div>
-                <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
-                  Configuration format optimized for {selectedIDE === 'vscode' ? 'VS Code' : selectedIDE === 'cursor' ? 'Cursor' : selectedIDE === 'cline' ? 'Cline' : 'Claude Code'} integration
-                </p>
-              </div>
-
-              {/* Configuration JSON */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium text-gray-900 dark:text-white">
-                    Configuration JSON:
-                  </h4>
-                  <button
-                    onClick={copyConfigToClipboard}
-                    className="flex items-center gap-2 px-3 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors duration-200"
-                  >
-                    <ClipboardDocumentIcon className="h-4 w-4" />
-                    Copy to Clipboard
-                  </button>
-                </div>
-
-                <pre className="p-4 bg-gray-50 dark:bg-gray-900 border dark:border-gray-700 rounded-lg overflow-x-auto text-sm text-gray-900 dark:text-gray-100">
-                  {JSON.stringify(generateAgentConfig(), null, 2)}
-                </pre>
-              </div>
-
-              {/* Agent Information */}
-              <div className="bg-gray-50 dark:bg-gray-900 border dark:border-gray-700 rounded-lg p-4">
-                <h4 className="font-medium text-gray-900 dark:text-white mb-2">
-                  Agent Information
-                </h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-600 dark:text-gray-400">Version:</span>
-                    <span className="text-gray-900 dark:text-white font-medium">{agent.version || 'N/A'}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-600 dark:text-gray-400">Trust Level:</span>
-                    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getTrustLevelColor()}`}>
-                      {agent.trust_level?.toUpperCase() || 'COMMUNITY'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-600 dark:text-gray-400">Visibility:</span>
-                    <span className="text-gray-900 dark:text-white font-medium">{agent.visibility?.toUpperCase() || 'PRIVATE'}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 };

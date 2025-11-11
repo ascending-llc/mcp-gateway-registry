@@ -32,8 +32,8 @@ interface Agent {
   path: string;
   description?: string;
   version?: string;
-  visibility?: 'public' | 'private';
-  trust_level?: 'community' | 'verified' | 'trusted';
+  visibility?: 'public' | 'private' | 'group-restricted';
+  trust_level?: 'community' | 'verified' | 'trusted' | 'unverified';
   enabled: boolean;
   tags?: string[];
   last_checked_time?: string;
@@ -125,8 +125,8 @@ const Dashboard: React.FC = () => {
     path: '',
     description: '',
     version: '',
-    visibility: 'private' as 'public' | 'private',
-    trust_level: 'community' as 'community' | 'verified' | 'trusted',
+    visibility: 'private' as 'public' | 'private' | 'group-restricted',
+    trust_level: 'community' as 'community' | 'verified' | 'trusted' | 'unverified',
     tags: [] as string[]
   });
   const [editAgentLoading, setEditAgentLoading] = useState(false);
@@ -343,6 +343,17 @@ const Dashboard: React.FC = () => {
     setSearchTerm('');
     setCommittedQuery('');
   }, []);
+
+  const handleChangeViewFilter = useCallback(
+    (filter: typeof viewFilter) => {
+      setViewFilter(filter);
+      if (semanticSectionVisible) {
+        setSearchTerm('');
+        setCommittedQuery('');
+      }
+    },
+    [semanticSectionVisible]
+  );
 
   const handleRefreshHealth = async () => {
     setRefreshing(true);
@@ -656,7 +667,7 @@ const Dashboard: React.FC = () => {
       const subtitle =
         options?.emptySubtitle ??
         (searchTerm || activeFilter !== 'all'
-          ? 'Try adjusting your search or filter criteria'
+          ? 'Press Enter in the search bar to search semantically'
           : 'No servers are registered yet');
       const shouldShowCta =
         options?.showRegisterCta ?? (!searchTerm && activeFilter === 'all');
@@ -717,7 +728,7 @@ const Dashboard: React.FC = () => {
                 <div className="text-gray-400 text-lg mb-2">No servers found</div>
                 <p className="text-gray-500 dark:text-gray-300 text-sm">
                   {searchTerm || activeFilter !== 'all'
-                    ? 'Try adjusting your search or filter criteria'
+                    ? 'Press Enter in the search bar to search semantically'
                     : 'No servers are registered yet'}
                 </p>
                 {!searchTerm && activeFilter === 'all' && (
@@ -777,7 +788,7 @@ const Dashboard: React.FC = () => {
                 <div className="text-gray-400 text-lg mb-2">No agents found</div>
                 <p className="text-gray-500 dark:text-gray-300 text-sm">
                   {searchTerm || activeFilter !== 'all'
-                    ? 'Try adjusting your search or filter criteria'
+                    ? 'Press Enter in the search bar to search semantically'
                     : 'No agents are registered yet'}
                 </p>
               </div>
@@ -821,7 +832,7 @@ const Dashboard: React.FC = () => {
               <p className="text-gray-500 dark:text-gray-300 text-sm max-w-md mx-auto">
                 {externalServers.length === 0
                   ? 'External registry integrations (Anthropic, and more) will be available soon'
-                  : 'Try adjusting your search criteria'}
+                  : 'Press Enter in the search bar to search semantically'}
               </p>
             </div>
           ) : (
@@ -857,7 +868,7 @@ const Dashboard: React.FC = () => {
           <div className="text-center py-16">
             <div className="text-gray-400 text-xl mb-4">No items found</div>
             <p className="text-gray-500 dark:text-gray-300 text-base max-w-md mx-auto">
-              Try adjusting your search or filter criteria
+              Press Enter in the search bar to search semantically
             </p>
           </div>
         )}
@@ -907,7 +918,7 @@ const Dashboard: React.FC = () => {
           {/* View Filter Tabs */}
           <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
             <button
-              onClick={() => setViewFilter('all')}
+              onClick={() => handleChangeViewFilter('all')}
               className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
                 viewFilter === 'all'
                   ? 'border-purple-500 text-purple-600 dark:text-purple-400'
@@ -917,7 +928,7 @@ const Dashboard: React.FC = () => {
               All
             </button>
             <button
-              onClick={() => setViewFilter('servers')}
+              onClick={() => handleChangeViewFilter('servers')}
               className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
                 viewFilter === 'servers'
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
@@ -927,7 +938,7 @@ const Dashboard: React.FC = () => {
               MCP Servers Only
             </button>
             <button
-              onClick={() => setViewFilter('agents')}
+              onClick={() => handleChangeViewFilter('agents')}
               className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
                 viewFilter === 'agents'
                   ? 'border-cyan-500 text-cyan-600 dark:text-cyan-400'
@@ -937,7 +948,7 @@ const Dashboard: React.FC = () => {
               A2A Agents Only
             </button>
             <button
-              onClick={() => setViewFilter('external')}
+              onClick={() => handleChangeViewFilter('external')}
               className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
                 viewFilter === 'external'
                   ? 'border-green-500 text-green-600 dark:text-green-400'
@@ -956,7 +967,7 @@ const Dashboard: React.FC = () => {
               </div>
               <input
                 type="text"
-                placeholder="Search servers, agents, descriptions, or tags… "
+                placeholder="Search servers, agents, descriptions, or tags… (Press Enter to run semantic search; typing filters locally.)"
                 className="input pl-10 w-full"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -1382,11 +1393,12 @@ const Dashboard: React.FC = () => {
                 </label>
                 <select
                   value={editAgentForm.visibility}
-                  onChange={(e) => setEditAgentForm(prev => ({ ...prev, visibility: e.target.value as 'public' | 'private' }))}
+                  onChange={(e) => setEditAgentForm(prev => ({ ...prev, visibility: e.target.value as 'public' | 'private' | 'group-restricted' }))}
                   className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-cyan-500 focus:border-cyan-500"
                 >
                   <option value="private">Private</option>
                   <option value="public">Public</option>
+                  <option value="group-restricted">Group Restricted</option>
                 </select>
               </div>
 
@@ -1396,9 +1408,10 @@ const Dashboard: React.FC = () => {
                 </label>
                 <select
                   value={editAgentForm.trust_level}
-                  onChange={(e) => setEditAgentForm(prev => ({ ...prev, trust_level: e.target.value as 'community' | 'verified' | 'trusted' }))}
+                  onChange={(e) => setEditAgentForm(prev => ({ ...prev, trust_level: e.target.value as 'community' | 'verified' | 'trusted' | 'unverified' }))}
                   className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-cyan-500 focus:border-cyan-500"
                 >
+                  <option value="unverified">Unverified</option>
                   <option value="community">Community</option>
                   <option value="verified">Verified</option>
                   <option value="trusted">Trusted</option>

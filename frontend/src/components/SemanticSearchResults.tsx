@@ -1,6 +1,11 @@
-import React from 'react';
-import { ArrowPathIcon } from '@heroicons/react/24/outline';
+import React, { useState } from 'react';
+import { ArrowPathIcon, CogIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
+import axios from 'axios';
 import { SemanticServerHit, SemanticToolHit, SemanticAgentHit } from '../hooks/useSemanticSearch';
+import ServerConfigModal from './ServerConfigModal';
+import AgentDetailsModal from './AgentDetailsModal';
+import type { Server } from './ServerCard';
+import type { Agent as AgentType } from './AgentCard';
 
 interface SemanticSearchResultsProps {
   query: string;
@@ -22,8 +27,39 @@ const SemanticSearchResults: React.FC<SemanticSearchResultsProps> = ({
   agents
 }) => {
   const hasResults = servers.length > 0 || tools.length > 0 || agents.length > 0;
+  const [configServer, setConfigServer] = useState<SemanticServerHit | null>(null);
+  const [detailsAgent, setDetailsAgent] = useState<SemanticAgentHit | null>(null);
+  const [agentDetailsData, setAgentDetailsData] = useState<any>(null);
+  const [agentDetailsLoading, setAgentDetailsLoading] = useState(false);
+
+  const openAgentDetails = async (agentHit: SemanticAgentHit) => {
+    setDetailsAgent(agentHit);
+    setAgentDetailsData(null);
+    setAgentDetailsLoading(true);
+    try {
+      const response = await axios.get(`/api/agents${agentHit.path}`);
+      setAgentDetailsData(response.data);
+    } catch (error) {
+      console.error('Failed to fetch agent details:', error);
+    } finally {
+      setAgentDetailsLoading(false);
+    }
+  };
+
+  const mapHitToAgent = (hit: SemanticAgentHit): AgentType => ({
+    name: hit.agent_name,
+    path: hit.path,
+    description: hit.description,
+    version: (hit as any).version,
+    visibility: (hit.visibility as AgentType['visibility']) ?? 'public',
+    trust_level: (hit.trust_level as AgentType['trust_level']) ?? 'unverified',
+    enabled: hit.is_enabled ?? true,
+    tags: hit.tags,
+    status: 'unknown',
+  });
 
   return (
+    <>
     <div className="space-y-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -84,9 +120,19 @@ const SemanticSearchResults: React.FC<SemanticSearchResultsProps> = ({
                     </p>
                     <p className="text-sm text-gray-500 dark:text-gray-300">{server.path}</p>
                   </div>
-                  <span className="inline-flex items-center rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-200 px-3 py-1 text-xs font-semibold">
-                    {formatPercent(server.relevance_score)} match
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setConfigServer(server)}
+                      className="p-2 text-gray-400 hover:text-green-600 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-700/30 rounded-lg transition-colors"
+                      title="Open MCP configuration"
+                    >
+                      <CogIcon className="h-4 w-4" />
+                    </button>
+                    <span className="inline-flex items-center rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-200 px-3 py-1 text-xs font-semibold">
+                      {formatPercent(server.relevance_score)} match
+                    </span>
+                  </div>
                 </div>
                 <p className="mt-3 text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
                   {server.description || server.match_context || 'No description available.'}
@@ -136,7 +182,10 @@ const SemanticSearchResults: React.FC<SemanticSearchResultsProps> = ({
               Matching Tools <span className="text-sm font-normal text-gray-500">({tools.length})</span>
             </h4>
           </div>
-          <div className="space-y-3">
+          <div
+            className="grid"
+            style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}
+          >
             {tools.map((tool) => (
               <div
                 key={`${tool.server_path}-${tool.tool_name}`}
@@ -187,9 +236,19 @@ const SemanticSearchResults: React.FC<SemanticSearchResultsProps> = ({
                       {agent.visibility || 'public'}
                     </p>
                   </div>
-                  <span className="inline-flex items-center rounded-full bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-200 px-3 py-1 text-xs font-semibold">
-                    {formatPercent(agent.relevance_score)} match
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openAgentDetails(agent)}
+                      className="p-2 text-gray-400 hover:text-cyan-600 dark:hover:text-cyan-300 hover:bg-cyan-50 dark:hover:bg-cyan-700/30 rounded-lg transition-colors"
+                      title="View full agent details"
+                    >
+                      <InformationCircleIcon className="h-4 w-4" />
+                    </button>
+                    <span className="inline-flex items-center rounded-full bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-200 px-3 py-1 text-xs font-semibold">
+                      {formatPercent(agent.relevance_score)} match
+                    </span>
+                  </div>
                 </div>
 
                 <p className="mt-3 text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
@@ -233,6 +292,34 @@ const SemanticSearchResults: React.FC<SemanticSearchResultsProps> = ({
         </section>
       )}
     </div>
+
+    {configServer && (
+      <ServerConfigModal
+        server={
+          {
+            name: configServer.server_name,
+            path: configServer.path,
+            description: configServer.description,
+            enabled: configServer.is_enabled ?? true,
+            tags: configServer.tags,
+            num_tools: configServer.num_tools,
+          } as Server
+        }
+        isOpen
+        onClose={() => setConfigServer(null)}
+      />
+    )}
+
+    {detailsAgent && (
+      <AgentDetailsModal
+        agent={mapHitToAgent(detailsAgent)}
+        isOpen
+        onClose={() => setDetailsAgent(null)}
+        loading={agentDetailsLoading}
+        fullDetails={agentDetailsData}
+      />
+    )}
+    </>
   );
 };
 
