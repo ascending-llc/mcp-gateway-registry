@@ -1,4 +1,4 @@
-ARG TARGETPLATFORM=linux/arm64
+ARG TARGETPLATFORM
 FROM --platform=${TARGETPLATFORM} public.ecr.aws/docker/library/python:3.12-slim
 
 WORKDIR /app

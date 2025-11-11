@@ -274,6 +274,49 @@ _create_admin_users() {
 }
 
 
+_assign_mcp_gateway_to_registry_admins() {
+    _print_section "Assigning MCP Gateway Service Account to registry-admins"
+
+    local service_account_name="service-account-mcp-gateway-m2m"
+
+    echo "Looking up service account: $service_account_name"
+    local service_account_id=$(curl -s -H "Authorization: Bearer $TOKEN" \
+        "$ADMIN_URL/admin/realms/$REALM/users?username=$service_account_name" | \
+        jq -r '.[0].id // empty')
+
+    if [ -z "$service_account_id" ]; then
+        _print_info "Service account '$service_account_name' not found in Keycloak. This may be expected if using external M2M setup."
+        return 0
+    fi
+
+    echo "Found service account with ID: $service_account_id"
+
+    echo "Looking up registry-admins group"
+    local registry_admins_group_id=$(curl -s -H "Authorization: Bearer $TOKEN" \
+        "$ADMIN_URL/admin/realms/$REALM/groups" | \
+        jq -r '.[] | select(.name=="registry-admins") | .id')
+
+    if [ -z "$registry_admins_group_id" ] || [ "$registry_admins_group_id" = "null" ]; then
+        _print_error "Could not find registry-admins group"
+        return 1
+    fi
+
+    echo "Found registry-admins group with ID: $registry_admins_group_id"
+
+    echo "Assigning service account to registry-admins group"
+    local assign_response=$(curl -s -o /dev/null -w "%{http_code}" \
+        -X PUT "$ADMIN_URL/admin/realms/$REALM/users/$service_account_id/groups/$registry_admins_group_id" \
+        -H "Authorization: Bearer $TOKEN")
+
+    if [ "$assign_response" = "204" ]; then
+        _print_success "Service account assigned to registry-admins group"
+    else
+        _print_error "Failed to assign service account to registry-admins group (HTTP $assign_response)"
+        return 1
+    fi
+}
+
+
 _print_summary() {
     _print_section "Bootstrap Setup Complete"
 
@@ -338,6 +381,9 @@ main() {
 
     # Create Admin users
     _create_admin_users
+
+    # Assign MCP Gateway service account to registry-admins group
+    _assign_mcp_gateway_to_registry_admins
 
     # Print summary
     _print_summary

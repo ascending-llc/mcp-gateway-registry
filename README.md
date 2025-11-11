@@ -142,6 +142,47 @@ Interactive terminal interface for chatting with AI models and discovering MCP t
 
 ---
 
+## A2A Agents - Example Implementations
+
+The registry includes two example A2A agents that demonstrate how both human developers and autonomous AI agents can discover, register, and use agents through the unified Agent Registry. Agents can programmatically discover other agents via semantic search and use them through the A2A protocol, enabling dynamic agent composition and autonomous agent orchestration.
+
+### Example Agents
+
+| Agent | Path | Skills |
+|-------|------|--------|
+| **Travel Assistant Agent** | `/travel-assistant-agent` | Flight search, pricing checks, recommendations, trip planning |
+| **Flight Booking Agent** | `/flight-booking-agent` | Availability checks, flight reservations, payments, reservation management |
+
+### Agent Discovery
+
+**View in Registry UI:**
+Open the registry and navigate to the **A2A Agents** tab to browse registered agents with their full metadata, capabilities, and skills.
+
+**Search via Semantic API:**
+Agents and developers can search for agents by natural language description:
+
+```bash
+# Search for agents that can help book a trip
+cli/agent_mgmt.sh search "need an agent to book a trip"
+```
+
+**Example Output:**
+```
+Found 4 agent(s) matching 'need an agent to book a trip':
+--------------------------------------------------------------------------------------------------------------
+Agent Name                               | Path                      | Score
+--------------------------------------------------------------------------------------------------------------
+Travel Assistant Agent                   | /travel-assistant-agent   |  0.8610
+Flight Booking Agent                     | /flight-booking-agent     |  1.2134
+--------------------------------------------------------------------------------------------------------------
+```
+
+**Agent Cards:** View the agent card metadata at [agents/a2a/test/](agents/a2a/test/) to see the complete agent definitions including skills, protocols, and capabilities.
+
+For complete agent deployment and testing documentation, see [agents/a2a/README.md](agents/a2a/README.md).
+
+---
+
 ## Core Use Cases
 
 ### AI Agent & Coding Assistant Governance

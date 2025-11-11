@@ -14,7 +14,6 @@ from typing import Any, Dict, List, Optional
 from pydantic import (
     BaseModel,
     Field,
-    HttpUrl,
     field_validator,
     model_validator,
 )
@@ -113,6 +112,41 @@ def _validate_skill_ids_unique(
     return skills
 
 
+def _validate_url_format(
+    url: str,
+) -> str:
+    """
+    Validate URL format and protocol.
+
+    Allows both HTTP and HTTPS for flexibility in local/development environments,
+    though HTTPS is required for production per A2A specification.
+
+    Args:
+        url: URL string to validate
+
+    Returns:
+        Validated URL string
+
+    Raises:
+        ValueError: If URL format is invalid or protocol is not HTTP/HTTPS
+    """
+    if not url:
+        raise ValueError("URL cannot be empty")
+
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise ValueError("URL must use HTTP or HTTPS protocol")
+
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        if not parsed.netloc:
+            raise ValueError("URL must include a valid hostname")
+    except Exception as e:
+        raise ValueError(f"Invalid URL format: {e}")
+
+    return url
+
+
 def _validate_security_references(
     security: Optional[List[Dict[str, List[str]]]],
     security_schemes: Dict[str, "SecurityScheme"],
@@ -176,7 +210,7 @@ class SecurityScheme(BaseModel):
         None,
         description="OAuth2 flows configuration",
     )
-    openid_connect_url: Optional[HttpUrl] = Field(
+    openid_connect_url: Optional[str] = Field(
         None,
         description="OpenID Connect discovery URL",
     )
@@ -292,9 +326,9 @@ class AgentCard(BaseModel):
         ...,
         description="Agent description",
     )
-    url: HttpUrl = Field(
+    url: str = Field(
         ...,
-        description="Agent endpoint URL",
+        description="Agent endpoint URL (HTTP or HTTPS)",
     )
 
     # Optional A2A fields
@@ -327,10 +361,10 @@ class AgentCard(BaseModel):
         description="Additional metadata",
     )
 
-    # MCP Gateway Registry extensions
-    path: str = Field(
-        ...,
-        description="Registry path (e.g., /agents/my-agent)",
+    # MCP Gateway Registry extensions (optional - not part of A2A spec)
+    path: Optional[str] = Field(
+        None,
+        description="Registry path (e.g., /agents/my-agent). Optional - auto-generated if not provided.",
     )
     tags: List[str] = Field(
         default_factory=list,
@@ -393,13 +427,24 @@ class AgentCard(BaseModel):
         """Validate protocol version format."""
         return _validate_protocol_version(v)
 
+    @field_validator("url")
+    @classmethod
+    def _validate_url_field(
+        cls,
+        v: str,
+    ) -> str:
+        """Validate URL format and protocol."""
+        return _validate_url_format(v)
+
     @field_validator("path")
     @classmethod
     def _validate_path_field(
         cls,
-        v: str,
-    ) -> str:
-        """Validate path format."""
+        v: Optional[str],
+    ) -> Optional[str]:
+        """Validate path format if provided."""
+        if v is None:
+            return None
         return _validate_path_format(v)
 
     @field_validator("visibility")
@@ -560,10 +605,9 @@ class AgentRegistrationRequest(BaseModel):
         min_length=1,
         description="Agent endpoint URL",
     )
-    path: str = Field(
-        ...,
-        min_length=1,
-        description="Registry path",
+    path: Optional[str] = Field(
+        None,
+        description="Registry path (optional - auto-generated if not provided)",
     )
     protocol_version: str = Field(
         default="1.0",
@@ -606,9 +650,11 @@ class AgentRegistrationRequest(BaseModel):
     @classmethod
     def _validate_path_request(
         cls,
-        v: str,
-    ) -> str:
-        """Validate path format."""
+        v: Optional[str],
+    ) -> Optional[str]:
+        """Validate path format if provided."""
+        if v is None:
+            return None
         return _validate_path_format(v)
 
     @field_validator("protocol_version")

@@ -128,246 +128,36 @@ group_mappings:
   - registry-users-lob2
 
 # ==================== MCP SERVER SCOPES ====================
-# Unrestricted read access: Basic methods for all users (initialize, tools/list, GET)
+# Unrestricted read access: Wildcard access to all servers with all methods and tools
 mcp-servers-unrestricted/read:
-- server: api
+- server: '*'
   methods:
   - initialize
+  - notifications/initialized
+  - ping
+  - tools/list
+  - tools/call
+  - resources/list
+  - resources/templates/list
   - GET
-- server: auth_server
-  methods:
-  - initialize
-  - notifications/initialized
-  - ping
-  - tools/list
-  - tools/call
-  - resources/list
-  - resources/templates/list
-  tools:
-  - validate_request
-- server: currenttime
-  methods:
-  - initialize
-  - notifications/initialized
-  - ping
-  - tools/list
-  - tools/call
-  - resources/list
-  - resources/templates/list
-  tools:
-  - current_time_by_timezone
-- server: mcpgw
-  methods:
-  - initialize
-  - notifications/initialized
-  - ping
-  - tools/list
-  - tools/call
-  - resources/list
-  - resources/templates/list
-  tools:
-  - debug_auth_context
-  - get_http_headers
-  - toggle_service
-  - register_service
-  - list_services
-  - remove_service
-  - refresh_service
-  - healthcheck
-  - intelligent_tool_finder
-  - add_server_to_scopes_groups
-  - remove_server_from_scopes_groups
-  - create_group
-  - delete_group
-  - list_groups
-- server: realserverfaketools
-  methods:
-  - initialize
-  - notifications/initialized
-  - ping
-  - tools/list
-  - tools/call
-  - resources/list
-  - resources/templates/list
-  tools:
-  - quantum_flux_analyzer
-  - neural_pattern_synthesizer
-  - hyper_dimensional_mapper
-  - temporal_anomaly_detector
-  - user_profile_analyzer
-  - synthetic_data_generator
-- server: fininfo
-  methods:
-  - initialize
-  - notifications/initialized
-  - ping
-  - tools/list
-  - tools/call
-  - resources/list
-  - resources/templates/list
-  tools:
-  - get_stock_aggregates
-  - print_stock_data
-- server: atlassian
-  methods:
-  - initialize
-  - notifications/initialized
-  - ping
-  - tools/list
-  - tools/call
-  - resources/list
-  - resources/templates/list
-  tools:
-  - jira_get_user_profile
-  - jira_get_issue
-  - jira_search
-  - jira_create_issue
-- server: mcpgw/
-  methods:
-  - initialize
-  - notifications/initialized
-  - ping
-  - tools/list
-  - tools/call
-  - resources/list
-  - resources/templates/list
-  tools:
-  - debug_auth_context
-  - get_http_headers
-  - toggle_service
-  - register_service
-  - list_services
-  - remove_service
-  - refresh_service
-  - healthcheck
-  - intelligent_tool_finder
-  - add_server_to_scopes_groups
-  - remove_server_from_scopes_groups
-  - create_group
-  - delete_group
-  - list_groups
+  tools: '*'
 
 # Unrestricted execute access: Full CRUD operations on all servers (POST, PUT, DELETE in addition to read)
 mcp-servers-unrestricted/execute:
-- server: api
+- server: '*'
   methods:
   - initialize
+  - notifications/initialized
+  - ping
+  - tools/list
+  - tools/call
+  - resources/list
+  - resources/templates/list
   - GET
   - POST
   - PUT
   - DELETE
-- server: auth_server
-  methods:
-  - initialize
-  - notifications/initialized
-  - ping
-  - tools/list
-  - tools/call
-  - resources/list
-  - resources/templates/list
-  tools:
-  - validate_request
-- server: currenttime
-  methods:
-  - initialize
-  - notifications/initialized
-  - ping
-  - tools/list
-  - tools/call
-  - resources/list
-  - resources/templates/list
-  tools:
-  - current_time_by_timezone
-- server: mcpgw
-  methods:
-  - initialize
-  - notifications/initialized
-  - ping
-  - tools/list
-  - tools/call
-  - resources/list
-  - resources/templates/list
-  tools:
-  - debug_auth_context
-  - get_http_headers
-  - toggle_service
-  - register_service
-  - list_services
-  - remove_service
-  - refresh_service
-  - healthcheck
-  - intelligent_tool_finder
-  - add_server_to_scopes_groups
-  - remove_server_from_scopes_groups
-  - create_group
-  - delete_group
-  - list_groups
-- server: realserverfaketools
-  methods:
-  - initialize
-  - notifications/initialized
-  - ping
-  - tools/list
-  - tools/call
-  - resources/list
-  - resources/templates/list
-  tools:
-  - quantum_flux_analyzer
-  - neural_pattern_synthesizer
-  - hyper_dimensional_mapper
-  - temporal_anomaly_detector
-  - user_profile_analyzer
-  - synthetic_data_generator
-- server: fininfo
-  methods:
-  - initialize
-  - notifications/initialized
-  - ping
-  - tools/list
-  - tools/call
-  - resources/list
-  - resources/templates/list
-  tools:
-  - get_stock_aggregates
-  - print_stock_data
-- server: atlassian
-  methods:
-  - initialize
-  - notifications/initialized
-  - ping
-  - tools/list
-  - tools/call
-  - resources/list
-  - resources/templates/list
-  tools:
-  - jira_get_user_profile
-  - jira_get_issue
-  - jira_search
-  - jira_create_issue
-- server: mcpgw/
-  methods:
-  - initialize
-  - notifications/initialized
-  - ping
-  - tools/list
-  - tools/call
-  - resources/list
-  - resources/templates/list
-  tools:
-  - debug_auth_context
-  - get_http_headers
-  - toggle_service
-  - register_service
-  - list_services
-  - remove_service
-  - refresh_service
-  - healthcheck
-  - intelligent_tool_finder
-  - add_server_to_scopes_groups
-  - remove_server_from_scopes_groups
-  - create_group
-  - delete_group
-  - list_groups
+  tools: '*'
 
 # LOB1 Group Scope: Read-only access to API; currenttime and mcpgw servers; code-reviewer and test-automation agents
 registry-users-lob1:

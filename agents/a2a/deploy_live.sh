@@ -5,6 +5,11 @@
 # Deploys A2A agents to AWS using AgentCore CLI with custom Dockerfiles.
 # - Builds locally with Docker, pushes to ECR, deploys to AgentCore Runtime
 # - Uses container mode with custom Dockerfiles for full control
+# - Targets ARM64 platform for AWS AgentCore Runtime (which runs on ARM64)
+#
+# For local testing before live deployment:
+# - Use docker-compose.local.yml for x86_64 testing on local machines
+# - Use docker-compose.arm.yml with docker buildx if testing ARM64 locally
 #
 # File Management:
 # During deployment, the following files are copied from agents-strands root into each agent directory:
@@ -22,26 +27,31 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-echo -e "${BLUE}🚀 AgentCore Live Deployment Script${NC}"
+echo -e "${BLUE}AgentCore Live Deployment Script${NC}"
 echo "======================================"
 
 # Check if AWS credentials are set
-echo -e "\n${BLUE}🔐 Validating AWS credentials...${NC}"
+echo -e "\nValidating AWS credentials..."
 
-if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-    echo -e "${RED}❌ Error: AWS credentials not found in environment variables${NC}"
-    echo "Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
+IDENTITY_OUTPUT=$(aws sts get-caller-identity 2>&1)
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -ne 0 ]; then
+    echo -e "${RED}❌ Error: Unable to retrieve AWS credentials${NC}"
+    echo ""
+    echo "AWS credentials not found. Please provide credentials using one of these methods:"
+    echo ""
+    echo "1. AWS Profile (recommended):"
+    echo "   export AWS_PROFILE=your_profile_name"
+    echo ""
+    echo "2. EC2 IAM Role (automatic when running on EC2 instance)"
+    echo ""
+    echo "Debug info:"
+    echo "$IDENTITY_OUTPUT"
     exit 1
 fi
 
-# Validate credentials are not expired by making a simple AWS call
-if ! aws sts get-caller-identity &> /dev/null; then
-    echo -e "${RED}❌ Error: AWS credentials are invalid or expired${NC}"
-    echo "Please refresh your credentials and try again"
-    exit 1
-fi
-
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+ACCOUNT_ID=$(echo "$IDENTITY_OUTPUT" | grep -o '"Account": "[^"]*"' | cut -d'"' -f4)
 REGION=${AWS_REGION:-us-east-1}
 
 echo -e "${GREEN}✅ AWS credentials validated${NC}"
@@ -49,7 +59,7 @@ echo -e "   Account: ${ACCOUNT_ID}"
 echo -e "   Region: ${REGION}"
 
 # Check if agentcore CLI is installed
-echo -e "\n${BLUE}🔍 Checking AgentCore CLI...${NC}"
+echo -e "\nChecking AgentCore CLI..."
 if ! command -v agentcore &> /dev/null; then
     echo -e "${RED}❌ Error: agentcore CLI not found${NC}"
     echo "Please install it with: pip install bedrock-agentcore-starter-toolkit"
@@ -68,22 +78,22 @@ TRAVEL_AGENT_ENTRYPOINT="src/travel-assistant-agent/agent.py"
 deploy_agent() {
     local agent_name=$1
     local entrypoint=$2
-    
-    echo -e "\n${BLUE}📦 Deploying ${agent_name}...${NC}"
+
+    echo -e "\nDeploying ${agent_name}..."
     echo "   Entrypoint: ${entrypoint}"
     echo "   Protocol: A2A"
     echo "   Deployment: container (custom Dockerfile in agent directory)"
     echo "   Database: /app/data/bookings.db"
     echo "   Build: Local Docker build, then push to ECR"
-    
+
     # Get the entrypoint directory where our Dockerfile lives
     local entrypoint_dir=$(dirname "${entrypoint}")
-    
+
     # Check if agent is already configured
     if agentcore configure list 2>/dev/null | grep -q "${agent_name}"; then
-        echo -e "${YELLOW}⚠️  Agent ${agent_name} already configured, will update${NC}"
+        echo "Agent ${agent_name} already configured, will update"
     else
-        echo -e "${BLUE}🔧 Configuring ${agent_name}...${NC}"
+        echo "Configuring ${agent_name}..."
         agentcore configure \
             --entrypoint "${entrypoint}" \
             --name "${agent_name}" \
@@ -93,56 +103,73 @@ deploy_agent() {
             --non-interactive \
             --disable-memory
     fi
-    
+
     # Copy files from agents-strands root into agent directory for Docker build
     # Files copied:
     #   - pyproject.toml, uv.lock -> ${entrypoint_dir}/.tmp/ (for dependency installation)
     #   - .dockerignore -> ${entrypoint_dir}/ (to optimize Docker build context)
     # These files are cleaned up after deployment completes
-    echo -e "${BLUE}   Copying dependency files to .tmp directory${NC}"
+    echo "   Copying dependency files to .tmp directory"
     mkdir -p "${entrypoint_dir}/.tmp"
     cp pyproject.toml uv.lock "${entrypoint_dir}/.tmp/"
-    
+
     # Copy .dockerignore to agent directory if it doesn't exist
     if [ ! -f "${entrypoint_dir}/.dockerignore" ] && [ -f ".dockerignore" ]; then
-        echo -e "${BLUE}   Copying .dockerignore to agent directory${NC}"
+        echo "   Copying .dockerignore to agent directory"
         cp .dockerignore "${entrypoint_dir}/.dockerignore"
     fi
-    
+
     # Replace AgentCore's generated Dockerfile with our custom one
     local agentcore_dockerfile=".bedrock_agentcore/${agent_name}/Dockerfile"
     if [ -f "${entrypoint_dir}/Dockerfile" ]; then
-        echo -e "${BLUE}   Replacing generated Dockerfile with custom one${NC}"
+        echo "   Replacing generated Dockerfile with custom one"
         cp "${entrypoint_dir}/Dockerfile" "${agentcore_dockerfile}"
     fi
-    
+
+    # Create a docker-compose override for ARM64 build if it exists
+    # This ensures the agentcore CLI builds for ARM64 (the target platform for AgentCore Runtime)
+    local docker_compose_override=".bedrock_agentcore/${agent_name}/docker-compose.override.yml"
+    if [ -f "docker-compose.arm.yml" ]; then
+        echo "   Creating ARM64 docker-compose override for AgentCore Runtime target"
+        mkdir -p ".bedrock_agentcore/${agent_name}"
+        # Extract the service definition for this agent from docker-compose.arm.yml
+        # The agentcore CLI will use this for building
+        cat > "${docker_compose_override}" <<EOF
+services:
+  ${agent_name}:
+    build:
+      args:
+        TARGETPLATFORM: linux/arm64
+EOF
+    fi
+
     # Launch with local build (builds locally with Docker, then pushes to ECR)
-    echo -e "${BLUE}🚀 Launching ${agent_name} (building locally with Docker)...${NC}"
+    echo "Launching ${agent_name} (building locally with Docker for ARM64)..."
     agentcore launch \
         --agent "${agent_name}" \
         --local-build \
         --auto-update-on-conflict
-    
+
     # Clean up files copied from agents-strands root
     # Removes:
     #   - ${entrypoint_dir}/.tmp/ directory (pyproject.toml, uv.lock)
     #   - ${entrypoint_dir}/.dockerignore (if it matches root .dockerignore)
-    echo -e "${BLUE}   Cleaning up temporary files${NC}"
+    echo "   Cleaning up temporary files"
     rm -rf "${entrypoint_dir}/.tmp"
-    
+
     # Remove .dockerignore if we copied it (check if it matches root version)
     if [ -f "${entrypoint_dir}/.dockerignore" ] && [ -f ".dockerignore" ]; then
         if cmp -s "${entrypoint_dir}/.dockerignore" ".dockerignore"; then
             rm "${entrypoint_dir}/.dockerignore"
         fi
     fi
-    
+
     echo -e "${GREEN}✅ ${agent_name} deployed successfully${NC}"
 }
 
 # Deploy both agents
 echo -e "\n${BLUE}=====================================${NC}"
-echo -e "${BLUE}Starting deployment of agents...${NC}"
+echo "Starting deployment of agents..."
 echo -e "${BLUE}=====================================${NC}"
 
 deploy_agent "${FLIGHT_AGENT_NAME}" "${FLIGHT_AGENT_ENTRYPOINT}"
@@ -153,14 +180,16 @@ echo -e "\n${BLUE}=====================================${NC}"
 echo -e "${GREEN}✅ Deployment Complete!${NC}"
 echo -e "${BLUE}=====================================${NC}"
 
-echo -e "\n${BLUE}📊 Agent Status:${NC}"
-echo -e "\n${YELLOW}Flight Booking Agent:${NC}"
+echo -e "\nAgent Status:"
+echo "Flight Booking Agent:"
 agentcore status --agent "${FLIGHT_AGENT_NAME}"
 
-echo -e "\n${YELLOW}Travel Assistant Agent:${NC}"
+echo ""
+echo "Travel Assistant Agent:"
 agentcore status --agent "${TRAVEL_AGENT_NAME}"
 
-echo -e "\n${BLUE}💡 Next Steps:${NC}"
+echo ""
+echo "Next Steps:"
 echo "   • Test agents: agentcore invoke '{\"prompt\": \"Hello\"}' --agent <agent-name>"
 echo "   • View logs: Check CloudWatch logs (shown in status above)"
 echo "   • Update agents: Run this script again to deploy changes"

@@ -50,7 +50,8 @@ def _validate_agent_url(
     """
     Validate agent URL format.
 
-    Ensures URL is HTTPS and properly formatted.
+    Allows both HTTP and HTTPS for flexibility in local/development environments,
+    though HTTPS is required for production per A2A specification.
 
     Args:
         url: Agent endpoint URL to validate
@@ -63,11 +64,11 @@ def _validate_agent_url(
 
     url_str = str(url)
 
-    if not url_str.startswith("https://"):
+    if not (url_str.startswith("http://") or url_str.startswith("https://")):
         return False
 
     url_pattern = (
-        r"^https://([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*"
+        r"^https?://([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*"
         r"[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
         r"(:\d+)?(/[^\s]*)?$"
     )
@@ -264,11 +265,12 @@ def _validate_agent_card(
     if not agent_card.description or not agent_card.description.strip():
         errors.append("Agent description cannot be empty")
 
-    if not agent_card.path or not agent_card.path.strip():
-        errors.append("Agent path cannot be empty")
+    # Path is optional - auto-generated if not provided
+    if agent_card.path and not agent_card.path.strip():
+        errors.append("Agent path cannot be empty if provided")
 
     if not _validate_agent_url(str(agent_card.url)):
-        errors.append("Agent URL must be HTTPS and properly formatted")
+        errors.append("Agent URL must be HTTP or HTTPS and properly formatted")
 
     if agent_card.protocol_version:
         if not re.match(r"^\d+\.\d+(\.\d+)?$", agent_card.protocol_version):

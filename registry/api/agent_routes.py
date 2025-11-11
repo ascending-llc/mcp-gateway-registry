@@ -41,17 +41,32 @@ router = APIRouter()
 
 
 def _normalize_path(
-    path: str,
+    path: Optional[str],
+    agent_name: Optional[str] = None,
 ) -> str:
     """
     Normalize agent path format.
 
+    If path is None, derives it from agent_name by converting to lowercase
+    and replacing spaces with hyphens.
+
     Args:
-        path: Agent path to normalize
+        path: Agent path to normalize, or None to auto-generate
+        agent_name: Agent name used for auto-generating path if needed
 
     Returns:
         Normalized path string
+
+    Raises:
+        ValueError: If path is None and agent_name is not provided
     """
+    if path is None:
+        if not agent_name:
+            raise ValueError(
+                "Path is required or agent_name must be provided for auto-generation"
+            )
+        path = agent_name.lower().replace(" ", "-")
+
     if not path.startswith("/"):
         path = "/" + path
 
@@ -180,7 +195,7 @@ async def register_agent(
     logger.info(f"Agent registration request from user '{user_context['username']}'")
     logger.info(f"Name: {request.name}, Path: {request.path}, URL: {request.url}")
 
-    path = _normalize_path(request.path)
+    path = _normalize_path(request.path, request.name)
 
     if agent_service.get_agent_info(path):
         logger.error(f"Agent registration failed: path '{path}' already exists")
