@@ -505,10 +505,10 @@ def nginx_proxied_auth(
         # Parse scopes from space-separated header
         scopes = x_scopes.split() if x_scopes else []
 
-        # For Keycloak auth, map scopes to get groups
+        # Map scopes to get groups based on auth method
         groups = []
-        if x_auth_method == 'keycloak':
-            # User authenticated via Keycloak JWT
+        if x_auth_method in ['keycloak', 'entra', 'cognito']:
+            # User authenticated via OAuth2 JWT (Keycloak, Entra ID, or Cognito)
             # Scopes already contain mapped permissions
             # Check if user has admin scopes
             if 'mcp-servers-unrestricted/read' in scopes and 'mcp-servers-unrestricted/execute' in scopes:
@@ -538,7 +538,7 @@ def nginx_proxied_auth(
             'groups': groups,
             'scopes': scopes,
             'auth_method': x_auth_method or 'keycloak',
-            'provider': 'keycloak',
+            'provider': x_auth_method or 'keycloak',  # Use actual auth method as provider
             'accessible_servers': accessible_servers,
             'accessible_services': accessible_services,
             'accessible_agents': accessible_agents,

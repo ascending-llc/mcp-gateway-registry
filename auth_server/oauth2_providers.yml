@@ -36,6 +36,25 @@ providers:
     name_claim: "name"
     enabled: true
 
+  entra:
+    display_name: "Microsoft Entra ID"
+    client_id: "${ENTRA_CLIENT_ID}"
+    client_secret: "${ENTRA_CLIENT_SECRET}"
+    auth_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/authorize"
+    token_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/token"
+    user_info_url: "https://graph.microsoft.com/oidc/userinfo"
+    logout_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/logout"
+    # Request basic OIDC scopes - email and groups require optional claims configuration in Azure Portal
+    scopes: ["openid", "email", "profile"]
+    response_type: "code"
+    grant_type: "authorization_code"
+    # Claims mapping for user info
+    username_claim: "preferred_username"
+    groups_claim: "groups"
+    email_claim: "email"
+    name_claim: "name"
+    enabled: true
+
   github:
     display_name: "GitHub"
     client_id: "${GITHUB_CLIENT_ID}"

@@ -1034,12 +1034,13 @@ async def validate_request(request: Request):
                     logger.error(f"Error processing request payload for tool extraction: {e}")
         
         # Validate scope-based access if we have server/tool information
-        # For Keycloak, map groups to scopes; otherwise use scopes directly
+        # For providers that use groups (Keycloak, Entra ID, Cognito), map groups to scopes
         user_groups = validation_result.get('groups', [])
-        if user_groups and validation_result.get('method') == 'keycloak':
-            # Map Keycloak groups to scopes using the group mappings
+        auth_method = validation_result.get('method', '')
+        if user_groups and auth_method in ['keycloak', 'entra', 'cognito']:
+            # Map IdP groups to scopes using the group mappings
             user_scopes = map_groups_to_scopes(user_groups)
-            logger.info(f"Mapped Keycloak groups {user_groups} to scopes: {user_scopes}")
+            logger.info(f"Mapped {auth_method} groups {user_groups} to scopes: {user_scopes}")
         else:
             user_scopes = validation_result.get('scopes', [])
         if server_name:
@@ -1724,6 +1725,39 @@ async def oauth2_callback(
                     
             except Exception as e:
                 logger.warning(f"JWT token validation failed: {e}, falling back to userInfo endpoint")
+                # Fallback to userInfo endpoint
+                user_info = await get_user_info(token_data["access_token"], provider_config)
+                logger.info(f"Raw user info from {provider}: {user_info}")
+                mapped_user = map_user_info(user_info, provider_config)
+                logger.info(f"Mapped user info from userInfo: {mapped_user}")
+        elif provider == "entra":
+            # For Entra ID, prioritize ID token claims over userinfo endpoint
+            try:
+                if "id_token" in token_data:
+                    import jwt
+                    # Decode without verification (we trust the token since we just got it from Microsoft)
+                    id_token_claims = jwt.decode(token_data["id_token"], options={"verify_signature": False})
+                    logger.info(f"Entra ID token claims: {id_token_claims}")
+
+                    # Extract user info from ID token claims
+                    # Entra ID can return groups as either 'groups' or 'roles' depending on configuration
+                    groups = id_token_claims.get("groups", [])
+                    if not groups:
+                        groups = id_token_claims.get("roles", [])
+
+                    mapped_user = {
+                        "username": id_token_claims.get("preferred_username") or id_token_claims.get("email") or id_token_claims.get("upn") or id_token_claims.get("sub"),
+                        "email": id_token_claims.get("email") or id_token_claims.get("preferred_username"),
+                        "name": id_token_claims.get("name") or id_token_claims.get("given_name"),
+                        "groups": groups
+                    }
+                    logger.info(f"User extracted from Entra ID token: {mapped_user}")
+                else:
+                    logger.warning("No ID token found in Entra response, falling back to userInfo")
+                    raise ValueError("Missing ID token")
+
+            except Exception as e:
+                logger.warning(f"Entra ID token parsing failed: {e}, falling back to userInfo endpoint")
                 # Fallback to userInfo endpoint
                 user_info = await get_user_info(token_data["access_token"], provider_config)
                 logger.info(f"Raw user info from {provider}: {user_info}")

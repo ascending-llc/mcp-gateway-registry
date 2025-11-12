@@ -3,11 +3,11 @@
 Ingress OAuth Authentication Script
 
 This script handles OAuth authentication for ingress (inbound) connections to the MCP Gateway.
-It supports both Cognito and Keycloak M2M (Machine-to-Machine) authentication based on AUTH_PROVIDER.
+It supports Cognito, Keycloak, and Entra ID M2M (Machine-to-Machine) authentication based on AUTH_PROVIDER.
 
 The script:
 1. Validates required INGRESS OAuth environment variables
-2. Performs M2M authentication using client_credentials grant (Cognito or Keycloak)
+2. Performs M2M authentication using client_credentials grant
 3. Saves tokens to ingress.json in the OAuth tokens directory
 4. Does not generate MCP configuration files (handled by oauth_creds.sh)
 
@@ -23,6 +23,11 @@ For AUTH_PROVIDER=keycloak:
 - KEYCLOAK_REALM: Keycloak realm name
 - KEYCLOAK_M2M_CLIENT_ID: Keycloak M2M client ID
 - KEYCLOAK_M2M_CLIENT_SECRET: Keycloak M2M client secret
+
+For AUTH_PROVIDER=entra:
+- ENTRA_TENANT_ID: Azure AD Tenant ID (GUID)
+- ENTRA_CLIENT_ID: App Registration Client ID (GUID)
+- ENTRA_CLIENT_SECRET: App Registration Client Secret
 
 Usage:
     python ingress_oauth.py
@@ -80,6 +85,12 @@ def _validate_environment_variables() -> None:
             "KEYCLOAK_REALM", 
             "KEYCLOAK_M2M_CLIENT_ID",
             "KEYCLOAK_M2M_CLIENT_SECRET"
+        ]
+    elif auth_provider == "entra":
+        required_vars = [
+            "ENTRA_TENANT_ID",
+            "ENTRA_CLIENT_ID",
+            "ENTRA_CLIENT_SECRET"
         ]
     else:  # cognito (default)
         required_vars = [
@@ -186,6 +197,86 @@ def _perform_keycloak_m2m_authentication(
         
         return result
         
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Network error during M2M token request: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Failed to obtain M2M token: {e}")
+        raise
+
+
+def _perform_entra_m2m_authentication(
+    tenant_id: str,
+    client_id: str,
+    client_secret: str
+) -> Dict[str, Any]:
+    """Perform M2M (client credentials) OAuth 2.0 authentication with Microsoft Entra ID."""
+    try:
+        # Generate token URL for Entra ID
+        token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+
+        # Prepare the token request
+        payload = {
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "scope": f"api://{client_id}/.default"
+        }
+
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json"
+        }
+
+        logger.info(f"Requesting M2M token from {token_url}")
+        logger.debug(f"Using client_id: {client_id[:10]}..." if client_id else "No client_id")
+
+        response = requests.post(
+            token_url,
+            data=payload,
+            headers=headers,
+            timeout=30
+        )
+
+        if not response.ok:
+            logger.error(f"M2M token request failed with status {response.status_code}. Response: {response.text}")
+            raise ValueError(f"Token request failed: {response.text}")
+
+        token_data = response.json()
+
+        if "access_token" not in token_data:
+            logger.error(f"Access token not found in M2M response. Keys found: {list(token_data.keys())}")
+            raise ValueError("No access token in response")
+
+        # Calculate expiry time
+        expires_at = None
+        if "expires_in" in token_data:
+            expires_at = time.time() + token_data["expires_in"]
+        else:
+            # Fallback: assume 3599 seconds (1 hour) validity if not specified
+            logger.warning("No expires_in in token response, assuming 3599 seconds validity")
+            expires_at = time.time() + 3599
+            token_data["expires_in"] = 3599
+
+        # Prepare result
+        result = {
+            "access_token": token_data["access_token"],
+            "refresh_token": token_data.get("refresh_token"),  # M2M typically doesn't have refresh tokens
+            "expires_at": expires_at,
+            "token_type": token_data.get("token_type", "Bearer"),
+            "provider": "entra_m2m",
+            "client_id": client_id,
+            "tenant_id": tenant_id
+        }
+
+        logger.info("M2M token obtained successfully!")
+
+        if expires_at:
+            expires_in = int(expires_at - time.time())
+            logger.info(f"Token expires in: {expires_in} seconds")
+
+        return result
+
     except requests.exceptions.RequestException as e:
         logger.error(f"Network error during M2M token request: {e}")
         raise
@@ -313,6 +404,11 @@ def _save_ingress_tokens(token_data: Dict[str, Any]) -> str:
                 "realm": token_data["realm"],
                 "usage_notes": "This token is for INGRESS authentication to the MCP Gateway (Keycloak M2M)"
             })
+        elif provider == "entra_m2m":
+            save_data.update({
+                "tenant_id": token_data["tenant_id"],
+                "usage_notes": "This token is for INGRESS authentication to the MCP Gateway (Entra ID M2M)"
+            })
         else:  # cognito_m2m
             save_data.update({
                 "user_pool_id": token_data["user_pool_id"],
@@ -364,7 +460,7 @@ def _load_existing_tokens() -> Optional[Dict[str, Any]]:
 def main() -> int:
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Ingress OAuth Authentication for MCP Gateway (Cognito or Keycloak M2M)",
+        description="Ingress OAuth Authentication for MCP Gateway (Cognito, Keycloak, or Entra ID M2M)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -384,6 +480,11 @@ For AUTH_PROVIDER=keycloak:
   KEYCLOAK_REALM                # Keycloak realm name
   KEYCLOAK_M2M_CLIENT_ID        # Keycloak M2M client ID
   KEYCLOAK_M2M_CLIENT_SECRET    # Keycloak M2M client secret
+
+For AUTH_PROVIDER=entra:
+  ENTRA_TENANT_ID               # Azure AD Tenant ID (GUID)
+  ENTRA_CLIENT_ID               # App Registration Client ID (GUID)
+  ENTRA_CLIENT_SECRET           # App Registration Client Secret
 """
     )
     
@@ -422,28 +523,42 @@ For AUTH_PROVIDER=keycloak:
             client_secret = os.getenv("KEYCLOAK_M2M_CLIENT_SECRET")
             keycloak_url = os.getenv("KEYCLOAK_ADMIN_URL") or os.getenv("KEYCLOAK_EXTERNAL_URL") or os.getenv("KEYCLOAK_URL")
             realm = os.getenv("KEYCLOAK_REALM")
-            
+
             logger.info(f"Keycloak URL: {keycloak_url}")
             logger.info(f"Realm: {realm}")
             logger.info(f"Client ID: {client_id[:10]}...")
-            
+
             token_data = _perform_keycloak_m2m_authentication(
                 client_id=client_id,
                 client_secret=client_secret,
                 keycloak_url=keycloak_url,
                 realm=realm
             )
+        elif auth_provider == "entra":
+            # Get Entra ID configuration from environment
+            tenant_id = os.getenv("ENTRA_TENANT_ID")
+            client_id = os.getenv("ENTRA_CLIENT_ID")
+            client_secret = os.getenv("ENTRA_CLIENT_SECRET")
+
+            logger.info(f"Tenant ID: {tenant_id}")
+            logger.info(f"Client ID: {client_id[:10]}...")
+
+            token_data = _perform_entra_m2m_authentication(
+                tenant_id=tenant_id,
+                client_id=client_id,
+                client_secret=client_secret
+            )
         else:  # cognito (default)
             # Get Cognito configuration from environment
             client_id = os.getenv("INGRESS_OAUTH_CLIENT_ID")
-            client_secret = os.getenv("INGRESS_OAUTH_CLIENT_SECRET") 
+            client_secret = os.getenv("INGRESS_OAUTH_CLIENT_SECRET")
             user_pool_id = os.getenv("INGRESS_OAUTH_USER_POOL_ID")
             region = os.getenv("AWS_REGION", "us-east-1")
-            
+
             logger.info(f"User Pool ID: {user_pool_id}")
             logger.info(f"Client ID: {client_id[:10]}...")
             logger.info(f"Region: {region}")
-            
+
             token_data = _perform_m2m_authentication(
                 client_id=client_id,
                 client_secret=client_secret,

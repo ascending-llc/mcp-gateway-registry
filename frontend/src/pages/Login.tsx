@@ -24,14 +24,15 @@ const Login: React.FC = () => {
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
+    console.log('[Login] Component mounted, fetching OAuth providers...');
     fetchOAuthProviders();
-    
+
     // Check for error parameter from URL (e.g., from OAuth callback)
     const urlError = searchParams.get('error');
     if (urlError) {
       setError(decodeURIComponent(urlError));
     }
-    
+
     // Check if user preferences exist
     const savedRememberMe = localStorage.getItem('rememberMe') === 'true';
     const savedUsername = localStorage.getItem('savedUsername');
@@ -41,13 +42,22 @@ const Login: React.FC = () => {
     }
   }, [searchParams]);
 
+  // Log when oauthProviders state changes
+  useEffect(() => {
+    console.log('[Login] oauthProviders state changed:', oauthProviders);
+  }, [oauthProviders]);
+
   const fetchOAuthProviders = async () => {
     try {
+      console.log('[Login] Fetching OAuth providers from /api/auth/providers');
       // Call the registry auth providers endpoint
       const response = await axios.get('/api/auth/providers');
+      console.log('[Login] Response received:', response.data);
+      console.log('[Login] Providers:', response.data.providers);
       setOauthProviders(response.data.providers || []);
+      console.log('[Login] State updated with', response.data.providers?.length || 0, 'providers');
     } catch (error) {
-      console.error('Failed to fetch OAuth providers:', error);
+      console.error('[Login] Failed to fetch OAuth providers:', error);
       // Don't show error for missing OAuth providers, just continue with basic auth
     }
   };
@@ -141,7 +151,7 @@ const Login: React.FC = () => {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const currentOrigin = window.location.origin;
     const redirectUri = encodeURIComponent(currentOrigin + '/');
-    
+
     if (isLocalhost) {
       window.location.href = `http://localhost:8888/oauth2/login/${provider}?redirect_uri=${redirectUri}`;
     } else {

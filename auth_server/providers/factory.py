@@ -7,6 +7,7 @@ from typing import Optional
 from .base import AuthProvider
 from .cognito import CognitoProvider
 from .keycloak import KeycloakProvider
+from .entra import EntraIdProvider
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,25 +21,27 @@ def get_auth_provider(
     provider_type: Optional[str] = None
 ) -> AuthProvider:
     """Factory function to get the appropriate auth provider.
-    
+
     Args:
-        provider_type: Type of provider to create ('cognito' or 'keycloak').
+        provider_type: Type of provider to create ('cognito', 'keycloak', or 'entra').
                       If None, uses AUTH_PROVIDER environment variable.
-                      
+
     Returns:
         AuthProvider instance configured for the specified provider
-        
+
     Raises:
         ValueError: If provider type is unknown or required config is missing
     """
     provider_type = provider_type or os.environ.get('AUTH_PROVIDER', 'cognito')
-    
+
     logger.info(f"Creating authentication provider: {provider_type}")
-    
+
     if provider_type == 'keycloak':
         return _create_keycloak_provider()
     elif provider_type == 'cognito':
         return _create_cognito_provider()
+    elif provider_type == 'entra':
+        return _create_entra_provider()
     else:
         raise ValueError(f"Unknown auth provider: {provider_type}")
 
@@ -118,6 +121,37 @@ def _create_cognito_provider() -> CognitoProvider:
         client_secret=client_secret,
         region=region,
         domain=domain
+    )
+
+
+def _create_entra_provider() -> EntraIdProvider:
+    """Create and configure Entra ID provider."""
+    # Required configuration
+    tenant_id = os.environ.get('ENTRA_TENANT_ID')
+    client_id = os.environ.get('ENTRA_CLIENT_ID')
+    client_secret = os.environ.get('ENTRA_CLIENT_SECRET')
+
+    # Validate required configuration
+    missing_vars = []
+    if not tenant_id:
+        missing_vars.append('ENTRA_TENANT_ID')
+    if not client_id:
+        missing_vars.append('ENTRA_CLIENT_ID')
+    if not client_secret:
+        missing_vars.append('ENTRA_CLIENT_SECRET')
+
+    if missing_vars:
+        raise ValueError(
+            f"Missing required Entra ID configuration: {', '.join(missing_vars)}. "
+            "Please set these environment variables."
+        )
+
+    logger.info(f"Initializing Entra ID provider for tenant '{tenant_id}'")
+
+    return EntraIdProvider(
+        tenant_id=tenant_id,
+        client_id=client_id,
+        client_secret=client_secret
     )
 
 
