@@ -9,10 +9,15 @@ COPY frontend/ ./
 RUN npm run build
 
 # Create production image
-FROM nginx:1.27-alpine AS production
+FROM nginx:1.27-bookworm AS production
 COPY --from=builder /app/frontend/build/ /usr/share/nginx/html
-COPY --from=builder /app/frontend/nginx.conf /etc/nginx/conf.d/default.conf
 
-# Start the nginx server
+# Copy Nginx configuration files
+COPY /frontend/nginx_http_only.conf /nginx_http_only.conf
+COPY /frontend/nginx_http_and_https.conf /nginx_http_and_https.conf
+
+# Entrypoint script to configure Nginx 
+COPY /docker/registry-frontend-entrypoint.sh /registry-frontend-entrypoint.sh
+RUN chmod +x registry-frontend-entrypoint.sh
 EXPOSE 80 443
-CMD ["nginx", "-g", "daemon off;"]
+ENTRYPOINT ["/registry-frontend-entrypoint.sh"] 
