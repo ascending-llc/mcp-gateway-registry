@@ -47,3 +47,8 @@ services:
   #   profiles:
   #     - disabled
 
+  # Example: Disable Frontend container if running Vite Server
+  # registry-frontend:
+  #   profiles:
+  #     - disabled 
+
