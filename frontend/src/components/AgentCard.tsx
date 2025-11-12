@@ -394,11 +394,14 @@ const AgentCard: React.FC<AgentCardProps> = ({
               </button>
 
               {/* Toggle Switch */}
-              <label className="relative inline-flex items-center cursor-pointer">
+              <label className="relative inline-flex items-center cursor-pointer" onClick={(e) => e.stopPropagation()}>
                 <input
                   type="checkbox"
                   checked={agent.enabled}
-                  onChange={(e) => onToggle(agent.path, e.target.checked)}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    onToggle(agent.path, e.target.checked);
+                  }}
                   className="sr-only peer"
                 />
                 <div className={`relative w-12 h-6 rounded-full transition-colors duration-200 ease-in-out ${

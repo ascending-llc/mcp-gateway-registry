@@ -550,30 +550,9 @@ const Dashboard: React.FC = () => {
     );
 
     try {
-      // TODO: Implement agent toggle endpoint when backend is ready
-      // For now, just show a message and revert
-      showToast('Agent toggling is not yet implemented', 'error');
+      await axios.post(`/api/agents${path}/toggle?enabled=${enabled}`);
 
-      // Revert the optimistic update
-      setAgents(prevAgents =>
-        prevAgents.map(agent =>
-          agent.path === path
-            ? { ...agent, enabled: !enabled }
-            : agent
-        )
-      );
-
-      // When backend is ready, uncomment and implement:
-      // const formData = new FormData();
-      // formData.append('enabled', enabled ? 'on' : 'off');
-      //
-      // await axios.post(`/api/agents${path}/toggle`, formData, {
-      //   headers: {
-      //     'Content-Type': 'application/x-www-form-urlencoded',
-      //   },
-      // });
-      //
-      // showToast(`Agent ${enabled ? 'enabled' : 'disabled'} successfully!`, 'success');
+      showToast(`Agent ${enabled ? 'enabled' : 'disabled'} successfully!`, 'success');
     } catch (error: any) {
       console.error('Failed to toggle agent:', error);
 
