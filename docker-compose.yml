@@ -42,6 +42,9 @@ services:
       - "443:443"
     depends_on:
       - registry
+    restart: unless-stopped
+    env_file:
+      - .env
   
   # Metrics Collection Service
   metrics-service:
