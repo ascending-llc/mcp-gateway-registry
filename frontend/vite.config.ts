@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+const backendPort = process.env.REGISTRY_PORT && Number(process.env.REGISTRY_PORT) || 7860;
+const backendURL = process.env.REGISTRY_URL ? `http://${process.env.REGISTRY_URL}:${backendPort}` : `http://localhost:${backendPort}`;
+
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -8,15 +11,15 @@ export default defineConfig({
     host: '0.0.0.0',
     proxy: {
       '/v0': {
-        target: 'http://localhost:7860', // running outside of docker container; DNS resolution via container name won't work
+        target: backendURL,
         changeOrigin: true,
       },
       '/api': {
-        target: 'http://localhost:7860', // running outside of docker container; DNS resolution via container name won't work
+        target: backendURL, 
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://localhost:7860', // running outside of docker container; DNS resolution via container name won't work
+        target: backendURL, 
         changeOrigin: true,
       },
     },
