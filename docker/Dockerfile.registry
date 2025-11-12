@@ -61,7 +61,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:7860/health || exit 1
 
 # Entrypoint script that sets up everything from original entrypoint.sh
-COPY docker/registry-entrypoint.sh /app/registry-entrypoint.sh
-RUN chmod +x /app/registry-entrypoint.sh
+COPY docker/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
-ENTRYPOINT ["/app/registry-entrypoint.sh"] 
+ENTRYPOINT ["/app/entrypoint.sh", "backend"] 
