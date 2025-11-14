@@ -7,16 +7,8 @@ services:
       context: .
       dockerfile: docker/Dockerfile.registry
     environment:
-      - SECRET_KEY=${SECRET_KEY}
-      - ADMIN_USER=${ADMIN_USER:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      - AUTH_SERVER_URL=${AUTH_SERVER_URL}
-      - AUTH_SERVER_EXTERNAL_URL=${AUTH_SERVER_EXTERNAL_URL}
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
-      - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
-      - COGNITO_CLIENT_SECRET=${COGNITO_CLIENT_SECRET}
-      - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - HEALTH_CHECK_INTERVAL_SECONDS=${HEALTH_CHECK_INTERVAL_SECONDS:-30}
       - SRE_GATEWAY_AUTH_TOKEN=${SRE_GATEWAY_AUTH_TOKEN}
@@ -25,20 +17,7 @@ services:
       - METRICS_SERVICE_URL=http://metrics-service:8890
       - METRICS_API_KEY=${METRICS_API_KEY_REGISTRY}
       - METRICS_API_KEY_NGINX=${METRICS_API_KEY_REGISTRY}
-      # Keycloak configuration
-      - AUTH_PROVIDER=${AUTH_PROVIDER:-cognito}
-      - KEYCLOAK_ENABLED=${KEYCLOAK_ENABLED:-false}
-      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080}
-      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-mcp-gateway}
-      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-mcp-gateway-web}
-      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
-      - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
-      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD}
-      - KEYCLOAK_M2M_CLIENT_ID=${KEYCLOAK_M2M_CLIENT_ID}
-      - KEYCLOAK_M2M_CLIENT_SECRET=${KEYCLOAK_M2M_CLIENT_SECRET}
     ports:
-      - "80:80"
-      - "443:443"
       - "7860:7860"
     volumes:
       - ${APP_HOME}/mcp-gateway/servers:/app/registry/servers
@@ -50,7 +29,23 @@ services:
       - auth-server
       - metrics-service
     restart: unless-stopped
+    env_file:
+      - .env
 
+  # Registry Frontend
+  registry-frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.registry-frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - registry
+    restart: unless-stopped
+    env_file:
+      - .env
+  
   # Metrics Collection Service
   metrics-service:
     build:
@@ -89,48 +84,18 @@ services:
       context: .
       dockerfile: docker/Dockerfile.auth
     environment:
-      - REGISTRY_URL=${REGISTRY_URL}
-      - SECRET_KEY=${SECRET_KEY}
-      - ADMIN_USER=${ADMIN_USER:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
-      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
-      - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
-      - COGNITO_CLIENT_SECRET=${COGNITO_CLIENT_SECRET}
-      - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
-      - COGNITO_DOMAIN=${COGNITO_DOMAIN:-auto}
       - AWS_REGION=${AWS_REGION:-us-east-1}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       # Metrics configuration
       - METRICS_SERVICE_URL=http://metrics-service:8890
       - METRICS_API_KEY=${METRICS_API_KEY_AUTH_SERVER}
-      # Keycloak configuration
-      - AUTH_PROVIDER=${AUTH_PROVIDER:-cognito}  # 'cognito' or 'keycloak' or 'entra_id'
-      - KEYCLOAK_ENABLED=${KEYCLOAK_ENABLED:-false}
-      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080}
-      - KEYCLOAK_EXTERNAL_URL=${KEYCLOAK_EXTERNAL_URL:-http://localhost:8080}
-      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-mcp-gateway}
-      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-mcp-gateway-web}
-      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
-      - KEYCLOAK_M2M_CLIENT_ID=${KEYCLOAK_M2M_CLIENT_ID:-mcp-gateway-m2m}
-      - KEYCLOAK_M2M_CLIENT_SECRET=${KEYCLOAK_M2M_CLIENT_SECRET}
-      # Microsoft Entra ID (Azure AD) configuration
-      - ENTRA_TENANT_ID=${ENTRA_TENANT_ID}
-      - ENTRA_CLIENT_ID=${ENTRA_CLIENT_ID}
-      - ENTRA_CLIENT_SECRET=${ENTRA_CLIENT_SECRET}
-      # Optional: Claim mappings - customize based on your Entra ID setup
-      - ENTRA_USERNAME_CLAIM=${ENTRA_USERNAME_CLAIM:-preferred_username}
-      - ENTRA_GROUPS_CLAIM=${ENTRA_GROUPS_CLAIM:-groups}
-      - ENTRA_EMAIL_CLAIM=${ENTRA_EMAIL_CLAIM:-upn}
-      - ENTRA_NAME_CLAIM=${ENTRA_NAME_CLAIM:-name}
-      - ENTRA_ROLE_TOKEN_KIND=${ENTRA_ROLE_TOKEN_KIND:-id}
     ports:
       - "8888:8888"
     volumes:
       - ${APP_HOME}/mcp-gateway/logs:/app/logs
       - ${APP_HOME}/mcp-gateway/auth_server/scopes.yml:/app/scopes.yml
     restart: unless-stopped
+    env_file:
+      - .env
 
   # Current Time MCP Server
   currenttime-server:
