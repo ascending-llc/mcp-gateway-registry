@@ -106,7 +106,7 @@ services:
       - METRICS_SERVICE_URL=http://metrics-service:8890
       - METRICS_API_KEY=${METRICS_API_KEY_AUTH_SERVER}
       # Keycloak configuration
-      - AUTH_PROVIDER=${AUTH_PROVIDER:-cognito}  # 'cognito' or 'keycloak'
+      - AUTH_PROVIDER=${AUTH_PROVIDER:-cognito}  # 'cognito' or 'keycloak' or 'entra_id'
       - KEYCLOAK_ENABLED=${KEYCLOAK_ENABLED:-false}
       - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080}
       - KEYCLOAK_EXTERNAL_URL=${KEYCLOAK_EXTERNAL_URL:-http://localhost:8080}
@@ -115,6 +115,16 @@ services:
       - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
       - KEYCLOAK_M2M_CLIENT_ID=${KEYCLOAK_M2M_CLIENT_ID:-mcp-gateway-m2m}
       - KEYCLOAK_M2M_CLIENT_SECRET=${KEYCLOAK_M2M_CLIENT_SECRET}
+      # Microsoft Entra ID (Azure AD) configuration
+      - ENTRA_TENANT_ID=${ENTRA_TENANT_ID}
+      - ENTRA_CLIENT_ID=${ENTRA_CLIENT_ID}
+      - ENTRA_CLIENT_SECRET=${ENTRA_CLIENT_SECRET}
+      # Optional: Claim mappings - customize based on your Entra ID setup
+      - ENTRA_USERNAME_CLAIM=${ENTRA_USERNAME_CLAIM:-preferred_username}
+      - ENTRA_GROUPS_CLAIM=${ENTRA_GROUPS_CLAIM:-groups}
+      - ENTRA_EMAIL_CLAIM=${ENTRA_EMAIL_CLAIM:-upn}
+      - ENTRA_NAME_CLAIM=${ENTRA_NAME_CLAIM:-name}
+      - ENTRA_ROLE_TOKEN_KIND=${ENTRA_ROLE_TOKEN_KIND:-id}
     ports:
       - "8888:8888"
     volumes:
@@ -170,8 +180,8 @@ services:
       - ${APP_HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
     ports:
       - "8003:8003"
-    depends_on:
-      - registry
+#    depends_on:
+#      - registry
     restart: unless-stopped
 
   # Real Server Fake Tools MCP Server

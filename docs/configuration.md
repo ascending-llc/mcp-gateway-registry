@@ -27,6 +27,7 @@ The MCP Gateway Registry supports multiple authentication providers. Choose one 
 
 - **`keycloak`**: Enterprise-grade open-source identity and access management with individual agent audit trails
 - **`cognito`**: Amazon managed authentication service
+- **`entra_id`**: Microsoft Entra ID (formerly Azure Active Directory) for Microsoft 365 and Azure integration
 
 Based on your selection, configure the corresponding provider-specific variables below.
 
@@ -37,7 +38,7 @@ Based on your selection, configure the corresponding provider-specific variables
 | `REGISTRY_URL` | Public URL of the MCP Gateway Registry | `https://mcpgateway.ddns.net` | ✅ |
 | `ADMIN_USER` | Registry admin username | `admin` | ✅ |
 | `ADMIN_PASSWORD` | Registry admin password | `your-secure-password` | ✅ |
-| `AUTH_PROVIDER` | Authentication provider (`cognito` or `keycloak`) | `keycloak` | ✅ |
+| `AUTH_PROVIDER` | Authentication provider (`keycloak`, `cognito`, or `entra_id`) | `keycloak` | ✅ |
 | `AWS_REGION` | AWS region for services | `us-east-1` | ✅ |
 
 ### Keycloak Configuration (if AUTH_PROVIDER=keycloak)
@@ -104,6 +105,38 @@ cat keycloak/setup/keycloak-client-secrets.txt
 | `COGNITO_CLIENT_ID` | Amazon Cognito App Client ID | `3aju04s66t...` | ✅ |
 | `COGNITO_CLIENT_SECRET` | Amazon Cognito App Client Secret | `85ps32t55df39hm61k966fqjurj...` | ✅ |
 | `COGNITO_DOMAIN` | Cognito domain (optional) | `auto` | Optional |
+
+### Microsoft Entra ID Configuration (if AUTH_PROVIDER=entra_id)
+
+#### Required Variables
+
+| Variable | Description | Example | Required |
+|----------|-------------|---------|----------|
+| `ENTRA_TENANT_ID` | Azure AD tenant ID (or 'common' for multi-tenant) | `12345678-1234-1234-1234-123456789012` | ✅ |
+| `ENTRA_CLIENT_ID` | Azure AD application (client) ID | `87654321-4321-4321-4321-210987654321` | ✅ |
+| `ENTRA_CLIENT_SECRET` | Azure AD client secret value | `abc123~XYZ...` | ✅ |
+
+#### Optional Configuration Variables
+
+| Variable | Description | Example | Default |
+|----------|-------------|---------|---------|
+| `ENTRA_TOKEN_KIND` | Which token to use for user info extraction ('id' or 'access') | `id` | `id` |
+| `ENTRA_GRAPH_URL` | Microsoft Graph API base URL (for sovereign clouds) | `https://graph.microsoft.com` | `https://graph.microsoft.com` |
+| `ENTRA_M2M_SCOPE` | Default scope for M2M authentication | `https://graph.microsoft.com/.default` | `https://graph.microsoft.com/.default` |
+| `ENTRA_USERNAME_CLAIM` | JWT claim to use for username | `preferred_username` | `preferred_username` |
+| `ENTRA_EMAIL_CLAIM` | JWT claim to use for email | `email,upn,preferred_username` | `email` |
+| `ENTRA_NAME_CLAIM` | JWT claim to use for display name | `name` | `name` |
+| `ENTRA_GROUPS_CLAIM` | JWT claim to use for groups | `groups` | `groups` |
+
+**Setup Instructions**
+
+For detailed instructions on obtaining Entra ID credentials and configuring your Azure AD app registration, see the [Microsoft Entra ID Setup Guide](entra-id-setup.md).
+
+**Quick Reference:**
+- **Azure Portal**: [portal.azure.com](https://portal.azure.com) → Azure Active Directory → App registrations
+- **Required Permissions**: `User.Read`, `openid`, `profile`, `email`
+- **Redirect URI**: `https://your-registry-url/auth/callback`
+- **Sovereign Clouds**: Update both `ENTRA_GRAPH_URL` and `ENTRA_M2M_SCOPE` (see setup guide)
 
 ### Optional Variables
 
