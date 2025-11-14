@@ -6,7 +6,10 @@ Complete installation instructions for the MCP Gateway & Registry on various pla
 
 - **Node.js 16+**: Required for building the React frontend
 - **Docker & Docker Compose**: Container runtime and orchestration
-- **Amazon Cognito**: Identity provider for authentication (see [Cognito Setup Guide](cognito.md))
+- **Authentication Provider**: Choose one of the following:
+  - **Keycloak**: Open-source identity management (see [Keycloak Integration](keycloak-integration.md))
+  - **Amazon Cognito**: AWS managed authentication (see [Cognito Setup Guide](cognito.md))
+  - **Microsoft Entra ID**: Azure Active Directory (see [Entra ID Setup Guide](entra-id-setup.md))
 - **SSL Certificate**: Optional for HTTPS deployment in production
 
 ## Quick Start (5 Minutes)

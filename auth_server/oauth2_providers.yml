@@ -70,6 +70,31 @@ providers:
     name_claim: "name"
     enabled: false  # Disabled by default
 
+  entra_id:
+    display_name: "Microsoft Entra ID"
+    client_id: "${ENTRA_CLIENT_ID}"
+    client_secret: "${ENTRA_CLIENT_SECRET}"
+    # Tenant ID can be specific tenant or 'common' for multi-tenant
+    tenant_id: "${ENTRA_TENANT_ID}"
+    auth_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/authorize"
+    token_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/token"
+    jwks_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/discovery/v2.0/keys"
+    user_info_url: "https://graph.microsoft.com/v1.0/me"
+    logout_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/logout"
+    scopes: ["openid", "profile", "email", "User.Read"]
+    response_type: "code"
+    grant_type: "authorization_code"
+    # Entra ID specific claim mapping
+    username_claim: "${ENTRA_USERNAME_CLAIM}"
+    groups_claim: "${ENTRA_GROUPS_CLAIM}"
+    email_claim:  "${ENTRA_EMAIL_CLAIM}"
+    name_claim: "${ENTRA_NAME_CLAIM}"
+    # Microsoft Graph API base URL (for sovereign clouds)
+    graph_url: "${ENTRA_GRAPH_URL:-https://graph.microsoft.com}"
+    # M2M (Machine-to-Machine) default scope
+    m2m_scope: "${ENTRA_M2M_SCOPE:-https://graph.microsoft.com/.default}"
+    enabled: true
+
 # Default session settings
 session:
   max_age_seconds: 28800  # 8 hours

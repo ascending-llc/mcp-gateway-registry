@@ -39,6 +39,9 @@ dependencies = [
     "rich>=13.0.0",
     "requests>=2.31.0",
     "cisco-ai-mcp-scanner>=3.0.1",
+    "pytest>=8.4.2",
+    "faker>=37.11.0",
+    "factory-boy>=3.3.3",
 ]
 
 [project.optional-dependencies]
