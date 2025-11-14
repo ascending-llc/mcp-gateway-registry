@@ -47,23 +47,8 @@ services:
   #   profiles:
   #     - disabled
 
-  # Example: Override registry configuration
-  # registry:
-  #   environment:
-  #     - REGISTRY_URL=https://your-custom-domain.com
-
-  # Example: Override metrics service configuration
-  # metrics-service:
-  #   environment:
-  #     - DATABASE_URL=postgresql://user:pass@host:5432/metrics
-
-  # Example: Add custom volumes
-  # auth-server:
-  #   volumes:
-  #     - ./custom-config:/app/custom-config:ro
-
-  # Example: Expose additional ports
-  # auth-server:
-  #   ports:
-  #     - "9888:8888"  # Expose on different host port
+  # Example: Disable Frontend container if running Vite Server
+  # registry-frontend:
+  #   profiles:
+  #     - disabled 
 
