@@ -188,31 +188,6 @@ async def health_check():
     """Simple health check for load balancers and monitoring."""
     return {"status": "healthy", "service": "mcp-gateway-registry"}
 
-# Serve React static files
-FRONTEND_BUILD_PATH = Path(__file__).parent.parent / "frontend" / "build"
-
-if FRONTEND_BUILD_PATH.exists():
-    # Serve static assets
-    app.mount("/static", StaticFiles(directory=FRONTEND_BUILD_PATH / "static"), name="static")
-    
-    # Serve React app for all other routes (SPA)
-    @app.get("/{full_path:path}")
-    async def serve_react_app(full_path: str):
-        """Serve React app for all non-API routes"""
-        # Don't serve React for API routes, v0 registry API, health checks, and well-known discovery endpoints
-        if full_path.startswith("api/") or full_path.startswith("v0/") or full_path.startswith("health") or full_path.startswith(".well-known/"):
-            raise HTTPException(status_code=404)
-
-        return FileResponse(FRONTEND_BUILD_PATH / "index.html")
-else:
-    logger.warning("React build directory not found. Serve React app separately during development.")
-    
-    # Serve legacy templates and static files during development
-    from fastapi.templating import Jinja2Templates
-    app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
-    templates = Jinja2Templates(directory=settings.templates_dir)
-
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
