@@ -17,7 +17,7 @@ COPY /frontend/nginx_http_only.conf /nginx_http_only.conf
 COPY /frontend/nginx_http_and_https.conf /nginx_http_and_https.conf
 
 # Entrypoint script to configure Nginx 
-COPY /docker/entrypoint.sh /entrypoint.sh
+COPY /docker/registry-entrypoint.sh /entrypoint.sh
 RUN chmod +x entrypoint.sh
 EXPOSE 80 443
 ENTRYPOINT ["/entrypoint.sh", "frontend"] 
