@@ -230,17 +230,6 @@ class NginxConfigService:
             config_content = config_content.replace("{{COGNITO_PROXY_BLOCKS}}", cognito_blocks)
             config_content = config_content.replace("{{ADDITIONAL_SERVER_NAMES}}", additional_server_names)
             config_content = config_content.replace("{{ANTHROPIC_API_VERSION}}", api_version)
-            # Only include EC2_PUBLIC_DNS in server_name if it exists
-            if ec2_public_dns:
-                config_content = config_content.replace("{{EC2_PUBLIC_DNS}}", ec2_public_dns)
-                logger.info(f"Replaced {{{{EC2_PUBLIC_DNS}}}} placeholder with: {ec2_public_dns}")
-            else:
-                # Remove the placeholder entirely if EC2_PUBLIC_DNS is empty (local development)
-                # This handles both "server_name localhost mcpgateway.ddns.net {{EC2_PUBLIC_DNS}};" 
-                # and standalone "{{EC2_PUBLIC_DNS}}" occurrences
-                config_content = config_content.replace(" {{EC2_PUBLIC_DNS}}", "")
-                config_content = config_content.replace("{{EC2_PUBLIC_DNS}}", "")
-                logger.info("Removed {{EC2_PUBLIC_DNS}} placeholder (local development - no EC2 DNS available)")
             
             # Write config file
             with open(settings.nginx_config_path, "w") as f:
