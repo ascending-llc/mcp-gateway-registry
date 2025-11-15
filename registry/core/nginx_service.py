@@ -1,6 +1,7 @@
 import logging
 import asyncio
 import httpx
+import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 from urllib.parse import urlparse
@@ -75,7 +76,6 @@ class NginxConfigService:
             logger.warning(f"Error fetching EC2 public DNS: {e}")
             
         # Fallback: try environment variable or return empty string
-        import os
         fallback_dns = os.environ.get('EC2_PUBLIC_DNS', '')
         if fallback_dns:
             logger.info(f"Using EC2_PUBLIC_DNS environment variable: {fallback_dns}")
@@ -149,7 +149,6 @@ class NginxConfigService:
             ec2_public_dns = await self.get_ec2_public_dns()
             
             # Get AUTH_PROVIDER from environment
-            import os
             auth_provider = os.environ.get('AUTH_PROVIDER', '').lower()
             logger.info(f"AUTH_PROVIDER: {auth_provider if auth_provider else '(not set)'}")
             
