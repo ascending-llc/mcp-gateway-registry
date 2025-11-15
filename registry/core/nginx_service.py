@@ -207,9 +207,6 @@ class NginxConfigService:
 
             # Get API version from constants
             api_version = REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION
-
-            # Fetch EC2 public DNS
-            ec2_public_dns = await self.get_ec2_public_dns()
             
             # Get AUTH_PROVIDER from environment
             import os
