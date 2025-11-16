@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     enable_wellknown_discovery: bool = True
     wellknown_cache_ttl: int = 300  # 5 minutes
     
+    # Vector search / tool discovery settings
+    tool_discovery_mode: str = "embedded"  # "embedded" (FAISS+transformers) or "external" (MCP service)
+    external_vector_search_url: str = "http://localhost:8000/mcp"  # Used when tool_discovery_mode=external
+    
     # Container paths - adjust for local development
     container_app_dir: Path = Path("/app")
     container_registry_dir: Path = Path("/app/registry")
@@ -58,6 +62,15 @@ class Settings(BaseSettings):
         # Generate secret key if not provided
         if not self.secret_key:
             self.secret_key = secrets.token_hex(32)
+        
+        # Validate tool_discovery_mode
+        if self.tool_discovery_mode not in ["embedded", "external"]:
+            raise ValueError(f"Invalid tool_discovery_mode: {self.tool_discovery_mode}. Must be 'embedded' or 'external'")
+    
+    @property
+    def use_external_discovery(self) -> bool:
+        """Check if using external vector search service."""
+        return self.tool_discovery_mode == "external"
 
     @property
     def embeddings_model_dir(self) -> Path:
