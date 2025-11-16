@@ -15,12 +15,7 @@ dependencies = [
     "python-dotenv>=1.1.0",
     "python-multipart>=0.0.20",
     "uvicorn[standard]>=0.34.2",
-    "faiss-cpu>=1.7.4",
-    "sentence-transformers>=2.2.2",
     "websockets>=15.0.1",
-    "scikit-learn>=1.3.0",
-    "torch>=1.6.0",
-    "huggingface-hub[cli]>=0.31.1",
     "bandit>=1.8.3",
     "langchain-mcp-adapters>=0.0.11",
     "langgraph>=0.4.3",
@@ -45,6 +40,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Vector search with embedded FAISS (default, adds ~2-3GB)
+# Install by default or with: pip install -e ".[embedded-search]"
+# Skip for external mode: set TOOL_DISCOVERY_MODE=external before install
+embedded-search = [
+    "faiss-cpu>=1.7.4",
+    "sentence-transformers>=2.2.2",
+    "torch>=1.6.0",
+    "scikit-learn>=1.3.0",
+    "huggingface-hub[cli]>=0.31.1",  # For downloading models
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
