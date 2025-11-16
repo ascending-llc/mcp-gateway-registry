@@ -57,6 +57,8 @@ ls -la
 ```bash
 # Create and activate Python virtual environment
 uv sync
+# Create extra embedded-search dependency
+uv sync --extra embedded-search
 source .venv/bin/activate
 
 # Verify virtual environment is active
@@ -117,7 +119,7 @@ ls -la ${HOME}/mcp-gateway/models/all-MiniLM-L6-v2/
 # You should see model files like model.safetensors, config.json, etc.
 ```
 
-**Note**: This command automatically creates the necessary directory structure and downloads all required model files (~90MB). If you don't have `hf` command installed, install it first with `pip install huggingface_hub[cli]`.
+**Note**: This command automatically creates the necessary directory structure and downloads all required model files (~90MB). If you don't have `huggingface-cli` command installed, install it first with `uv pip install huggingface_hub[cli]` or `uv tool install huggingface-cli`.
 
 ---
 
