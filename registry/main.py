@@ -29,7 +29,7 @@ from registry.auth.dependencies import enhanced_auth
 
 # Import services for initialization
 from registry.services.server_service import server_service
-from registry.search.service import faiss_service
+from registry.search.service import vector_service
 from registry.health.service import health_service
 from registry.core.nginx_service import nginx_service
 
@@ -95,20 +95,25 @@ async def lifespan(app: FastAPI):
         logger.info("📚 Loading server definitions and state...")
         server_service.load_servers_and_state()
         
-        logger.info("🔍 Initializing FAISS search service...")
-        await faiss_service.initialize()
+        logger.info("🔍 Initializing vector search service...")
+        await vector_service.initialize()
         
-        logger.info("📊 Updating FAISS index with all registered services...")
-        all_servers = server_service.get_all_servers()
-        for service_path, server_info in all_servers.items():
-            is_enabled = server_service.is_service_enabled(service_path)
-            try:
-                await faiss_service.add_or_update_service(service_path, server_info, is_enabled)
-                logger.debug(f"Updated FAISS index for service: {service_path}")
-            except Exception as e:
-                logger.error(f"Failed to update FAISS index for service {service_path}: {e}", exc_info=True)
-        
-        logger.info(f"✅ FAISS index updated with {len(all_servers)} services")
+        # Only update index if service initialized successfully
+        if hasattr(vector_service, '_initialized') and vector_service._initialized:
+            logger.info("📊 Updating vector search index with all registered services...")
+            all_servers = server_service.get_all_servers()
+            for service_path, server_info in all_servers.items():
+                is_enabled = server_service.is_service_enabled(service_path)
+                try:
+                    await vector_service.add_or_update_service(service_path, server_info, is_enabled)
+                    logger.debug(f"Updated vector search index for service: {service_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to update index for service {service_path}: {e}")
+            
+            logger.info(f"✅ Vector search index updated with {len(all_servers)} services")
+        else:
+            logger.warning("⚠️  Vector search service not initialized - index update skipped")
+            logger.info("💡 App will continue without vector search features")
         
         logger.info("🏥 Initializing health monitoring service...")
         await health_service.initialize()

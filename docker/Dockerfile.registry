@@ -1,10 +1,15 @@
 # Registry Dockerfile - includes nginx, SSL, FAISS, models, and registry service
 FROM python:3.12-slim
 
+# Build argument to control whether to install discovery dependencies
+ARG TOOL_DISCOVERY_MODE=embedded
+
 ENV PYTHONUNBUFFERED=1 \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    TOOL_DISCOVERY_MODE=${TOOL_DISCOVERY_MODE}
 
 # Install system dependencies including nginx with lua module
+# For embedded mode, we need build-essential for compiling dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nginx \
     nginx-extras \
@@ -13,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     openssl \
     git \
-    build-essential \
+    $([ "$TOOL_DISCOVERY_MODE" = "embedded" ] && echo "build-essential" || echo "") \
     ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -27,28 +32,17 @@ COPY . /app/
 COPY docker/nginx_rev_proxy_http_only.conf /app/docker/nginx_rev_proxy_http_only.conf
 COPY docker/nginx_rev_proxy_http_and_https.conf /app/docker/nginx_rev_proxy_http_and_https.conf
 
-# Install uv and setup Python environment
-RUN pip install uv && \
-    uv venv .venv --python 3.12 && \
-    . .venv/bin/activate && \
-    uv pip install \
-    "fastapi>=0.115.12" \
-    "itsdangerous>=2.2.0" \
-    "jinja2>=3.1.6" \
-    "mcp>=1.6.0" \
-    "pydantic>=2.11.3" \
-    "httpx>=0.27.0" \
-    "python-dotenv>=1.1.0" \
-    "python-multipart>=0.0.20" \
-    "uvicorn[standard]>=0.34.2" \
-    "faiss-cpu>=1.7.4" \
-    "sentence-transformers>=2.2.2" \
-    "websockets>=15.0.1" \
-    "scikit-learn>=1.3.0" \
-    "torch>=1.6.0" \
-    "huggingface-hub[cli,hf_xet]>=0.31.1" \
-    "hf_xet>=0.1.0" && \
-    uv pip install -e .
+# Install Python dependencies based on TOOL_DISCOVERY_MODE
+# Default (embedded): installs with ML dependencies (FAISS, torch, sentence-transformers)
+# External: installs only base dependencies
+RUN pip install --no-cache-dir uv && \
+    if [ "$TOOL_DISCOVERY_MODE" = "external" ]; then \
+        echo "Building LIGHTWEIGHT image (external mode) - skipping ML dependencies"; \
+        uv pip install --system -e .; \
+    else \
+        echo "Building FULL image (embedded mode) - installing with ML dependencies"; \
+        uv pip install --system -e ".[embedded-search]"; \
+    fi
 
 # Create logs directory
 RUN mkdir -p /app/logs
