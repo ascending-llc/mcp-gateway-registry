@@ -153,7 +153,16 @@ start_backend_services() {
 
     echo "Starting MCP Registry in the background..."
     cd /app
-    source /app/.venv/bin/activate
+    
+    # Check if venv exists (old installation method) and activate it
+    # With uv pip install --system, no venv is created
+    if [ -f /app/.venv/bin/activate ]; then
+        echo "Activating virtual environment..."
+        source /app/.venv/bin/activate
+    else
+        echo "Using system Python (no venv needed)..."
+    fi
+    
     uvicorn registry.main:app --host 0.0.0.0 --port 7860 &
     echo "MCP Registry started."
 
