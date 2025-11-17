@@ -145,6 +145,26 @@ Execute administrative tasks via slash commands:
 CRITICAL: When providing server configuration examples, the field name MUST be \`proxy_pass_url\` (with underscores).
 </tool>
 
+<tool name="shell_command">
+Execute shell commands for system diagnostics, debugging, and operations:
+- Run service management scripts: \`./cli/service_mgmt.sh list-groups\`
+- Read files and tokens: \`cat /path/to/file.json\`
+- Debug credentials and authentication: Decode JWT tokens, check group membership
+- Execute any bash command with full output capture
+
+CRITICAL USAGE NOTES:
+- Use this to run CLI scripts like \`./cli/service_mgmt.sh\`, \`./cli/agent_mgmt.sh\`, etc.
+- Use this to read and inspect token files, JSON configs, and logs
+- Decode JWT tokens by extracting the payload (middle section) and base64 decoding
+- Parse JSON using \`jq\` for filtering and analysis
+- This is essential for diagnosing authentication, authorization, and group membership issues
+
+EXAMPLES:
+- \`./cli/service_mgmt.sh list-groups\` - List all groups and synchronization status
+- \`cat .oauth-tokens/ingress.json | jq '.access_token'\` - Extract JWT token
+- \`cat .oauth-tokens/ingress.json | jq -r '.access_token' | cut -d'.' -f2 | base64 -d | jq\` - Decode JWT payload to see claims and groups
+</tool>
+
 <tool name="read_docs">
 Search and read project documentation:
 - Search by keywords: Use search_query parameter

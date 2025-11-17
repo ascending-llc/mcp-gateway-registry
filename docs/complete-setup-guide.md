@@ -326,6 +326,21 @@ curl http://localhost:8080/realms/master
 # Should return JSON with realm information
 ```
 
+### Disable SSL Requirement for Master Realm
+```bash
+ADMIN_TOKEN=$(curl -s -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "username=${KEYCLOAK_ADMIN}" \
+    -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
+    -d "grant_type=password" \
+    -d "client_id=admin-cli" | \
+    jq -r '.access_token') && \
+curl -X PUT "http://localhost:8080/admin/realms/master" \
+    -H "Authorization: Bearer $ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"sslRequired": "none"}'
+```
+
 ### Initialize Keycloak Configuration
 
 **Important**: This is a two-step process. The initialization script creates the realm and clients but does NOT save the credentials to files.
@@ -349,7 +364,21 @@ chmod +x keycloak/setup/init-keycloak.sh
 # IMPORTANT: The script will tell you to run get-all-client-credentials.sh
 # to retrieve and save the credentials. This is the next required step!
 
-# Step 2: Retrieve and save all client credentials (REQUIRED)
+#Step 2: Disable SSL for Application Realm
+
+ADMIN_TOKEN=$(curl -s -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "username=${KEYCLOAK_ADMIN}" \
+    -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
+    -d "grant_type=password" \
+    -d "client_id=admin-cli" | \
+    jq -r '.access_token') && \
+curl -X PUT "http://localhost:8080/admin/realms/mcp-gateway" \
+    -H "Authorization: Bearer $ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"sslRequired": "none"}'
+
+# Step 3: Retrieve and save all client credentials (REQUIRED)
 chmod +x keycloak/setup/get-all-client-credentials.sh
 ./keycloak/setup/get-all-client-credentials.sh
 
@@ -366,6 +395,33 @@ chmod +x keycloak/setup/get-all-client-credentials.sh
 # ✓ Found and saved: mcp-gateway-m2m
 # Files created in: .oauth-tokens/
 ```
+
+### Set Up Users and Service Accounts
+
+After initializing Keycloak, run the bootstrap script to create default users and M2M service accounts for testing and management:
+
+```bash
+# Make the bootstrap script executable
+chmod +x ./cli/bootstrap_user_and_m2m_setup.sh
+
+# Run the bootstrap script
+./cli/bootstrap_user_and_m2m_setup.sh
+```
+
+This script creates:
+- **3 Keycloak groups**: `registry-users-lob1`, `registry-users-lob2`, `registry-admins`
+- **6 users for different roles**:
+  - **LOB1 users**: `lob1-bot` (M2M service account) and `lob1-user` (human user)
+  - **LOB2 users**: `lob2-bot` (M2M service account) and `lob2-user` (human user)
+  - **Admin users**: `admin-bot` (M2M service account) and `admin-user` (human user)
+
+All credentials are automatically generated and saved to the `.oauth-tokens/` directory. User passwords default to the `INITIAL_USER_PASSWORD` value from your `.env` file.
+
+**Next steps**:
+- Review the generated credentials in `.oauth-tokens/`
+- Configure appropriate access scopes in your `scopes.yml` file
+- Use these credentials for testing M2M client flows and human user authentication
+- Log in to the dashboard with human user accounts to verify access
 
 ### Create Your First AI Agent Account
 

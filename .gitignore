@@ -183,6 +183,9 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 .idea/
 
+# VS Code
+.vscode/
+
 # Ruff stuff:
 .ruff_cache/
 .cache/
@@ -209,6 +212,7 @@ keycloak/setup/retrieved-keycloak-secrets.txt
 # MCP Gateway specific
 registry/server_state.json
 registry/nginx_mcp_revproxy.conf
+registry/agents/
 logs/
 token_refresher.pid
 token_refresher.log
@@ -291,3 +295,10 @@ curated_import_list.txt
 
 #Security scans
 security_scans/
+
+#Temporary directories
+.tmp
+
+#AgentCore CLI generated files
+.bedrock_agentcore
+.bedrock_agentcore.yaml

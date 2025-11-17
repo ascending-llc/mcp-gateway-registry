@@ -27,7 +27,7 @@ The MCP Gateway Registry supports multiple authentication providers. Choose one 
 
 - **`keycloak`**: Enterprise-grade open-source identity and access management with individual agent audit trails
 - **`cognito`**: Amazon managed authentication service
-- **`entra_id`**: Microsoft Entra ID (formerly Azure Active Directory) for Microsoft 365 and Azure integration
+- **`entra`**: Microsoft Entra ID (formerly Azure Active Directory) for Microsoft 365 and Azure integration
 
 Based on your selection, configure the corresponding provider-specific variables below.
 
@@ -38,7 +38,7 @@ Based on your selection, configure the corresponding provider-specific variables
 | `REGISTRY_URL` | Public URL of the MCP Gateway Registry | `https://mcpgateway.ddns.net` | ✅ |
 | `ADMIN_USER` | Registry admin username | `admin` | ✅ |
 | `ADMIN_PASSWORD` | Registry admin password | `your-secure-password` | ✅ |
-| `AUTH_PROVIDER` | Authentication provider (`keycloak`, `cognito`, or `entra_id`) | `keycloak` | ✅ |
+| `AUTH_PROVIDER` | Authentication provider (`keycloak`, `cognito`, or `entra`) | `keycloak` | ✅ |
 | `AWS_REGION` | AWS region for services | `us-east-1` | ✅ |
 
 ### Keycloak Configuration (if AUTH_PROVIDER=keycloak)
@@ -106,7 +106,7 @@ cat keycloak/setup/keycloak-client-secrets.txt
 | `COGNITO_CLIENT_SECRET` | Amazon Cognito App Client Secret | `85ps32t55df39hm61k966fqjurj...` | ✅ |
 | `COGNITO_DOMAIN` | Cognito domain (optional) | `auto` | Optional |
 
-### Microsoft Entra ID Configuration (if AUTH_PROVIDER=entra_id)
+### Microsoft Entra ID Configuration (if AUTH_PROVIDER=entra)
 
 #### Required Variables
 

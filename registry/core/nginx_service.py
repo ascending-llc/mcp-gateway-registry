@@ -222,15 +222,13 @@ class NginxConfigService:
             if cognito_blocks:
                 logger.info("Including Cognito OAuth2 proxy blocks (3 location blocks)")
             if not keycloak_blocks and not cognito_blocks:
-                logger.info("No provider-specific proxy blocks included (AUTH_PROVIDER is not 'keycloak' or 'cognito')")
+                logger.info(f"No provider-specific proxy blocks included (AUTH_PROVIDER is {auth_provider} and is not 'keycloak' or 'cognito')")
             
             # Replace placeholders in template
             config_content = template_content.replace("{{LOCATION_BLOCKS}}", "\n".join(location_blocks))
-            config_content = config_content.replace("{{KEYCLOAK_PROXY_BLOCKS}}", keycloak_blocks)
-            config_content = config_content.replace("{{COGNITO_PROXY_BLOCKS}}", cognito_blocks)
             config_content = config_content.replace("{{ADDITIONAL_SERVER_NAMES}}", additional_server_names)
             config_content = config_content.replace("{{ANTHROPIC_API_VERSION}}", api_version)
-            
+
             # Write config file
             with open(settings.nginx_config_path, "w") as f:
                 f.write(config_content)

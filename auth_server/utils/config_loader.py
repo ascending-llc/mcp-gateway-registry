@@ -169,7 +169,7 @@ class OAuth2ConfigLoader:
         """Get configuration for a specific provider.
         
         Args:
-            provider_name: Name of the provider (e.g., 'keycloak', 'cognito', 'entra_id')
+            provider_name: Name of the provider (e.g., 'keycloak', 'cognito', 'entra')
             
         Returns:
             Provider configuration dictionary or None if not found
@@ -224,13 +224,13 @@ def get_provider_config(provider_name: str) -> Optional[Dict[str, Any]]:
     """Get configuration for a specific provider.
     
     Args:
-        provider_name: Name of the provider (e.g., 'keycloak', 'cognito', 'entra_id')
+        provider_name: Name of the provider (e.g., 'keycloak', 'cognito', 'entra')
         
     Returns:
         Provider configuration dictionary or None if not found
         
     Example:
-        >>> entra_config = get_provider_config('entra_id')
+        >>> entra_config = get_provider_config('entra')
         >>> if entra_config:
         ...     tenant_id = entra_config.get('tenant_id')
     """

@@ -20,8 +20,10 @@ from fastapi.middleware.cors import CORSMiddleware
 # Import domain routers
 from registry.auth.routes import router as auth_router
 from registry.api.server_routes import router as servers_router
+from registry.api.search_routes import router as search_router
 from registry.api.wellknown_routes import router as wellknown_router
 from registry.api.registry_routes import router as registry_router
+from registry.api.agent_routes import router as agent_router
 from registry.health.routes import router as health_router
 
 # Import auth dependencies
@@ -29,6 +31,7 @@ from registry.auth.dependencies import enhanced_auth
 
 # Import services for initialization
 from registry.services.server_service import server_service
+from registry.services.agent_service import agent_service
 from registry.search.service import vector_service
 from registry.health.service import health_service
 from registry.core.nginx_service import nginx_service
@@ -109,8 +112,22 @@ async def lifespan(app: FastAPI):
                     logger.debug(f"Updated vector search index for service: {service_path}")
                 except Exception as e:
                     logger.warning(f"Failed to update index for service {service_path}: {e}")
-            
-            logger.info(f"✅ Vector search index updated with {len(all_servers)} services")
+
+            logger.info(f"✅ Vector index updated with {len(all_servers)} services")
+
+            logger.info("📋 Loading agent cards and state...")
+            agent_service.load_agents_and_state()
+            logger.info("📊 Updating vector index with all registered agents...")
+            all_agents = agent_service.list_agents()
+            for agent_card in all_agents:
+                is_enabled = agent_service.is_agent_enabled(agent_card.path)
+                try:
+                    await vector_service.add_or_update_agent(agent_card.path, agent_card)
+                    logger.debug(f"Updated vector index for agent: {agent_card.path}")
+                except Exception as e:
+                    logger.error(f"Failed to update vector index for agent {agent_card.path}: {e}", exc_info=True)
+
+            logger.info(f"✅ Vector search index updated with {len(all_agents)} services")
         else:
             logger.warning("⚠️  Vector search service not initialized - index update skipped")
             logger.info("💡 App will continue without vector search features")
@@ -164,9 +181,11 @@ app.add_middleware(
 # Register API routers with /api prefix
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(servers_router, prefix="/api", tags=["Server Management"])
+app.include_router(agent_router, prefix="/api", tags=["Agent Management"])
+app.include_router(search_router, prefix="/api/search", tags=["Semantic Search"])
 app.include_router(health_router, prefix="/api/health", tags=["Health Monitoring"])
 
-# Register Anthropic MCP Registry API (public API)
+# Register Anthropic MCP Registry API (public API for MCP servers only)
 app.include_router(registry_router, tags=["Anthropic Registry API"])
 
 # Register well-known discovery router

@@ -56,13 +56,13 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               {/* Logo */}
               <div className="flex items-center ml-2 md:ml-0">
                 <Link to="/" className="flex items-center hover:opacity-80 transition-opacity">
-                  <img 
+                  <img
                     src={logo}
-                    alt="MCP Gateway Logo" 
+                    alt="MCP Servers & A2A Agents Registry Logo"
                     className="h-8 w-8 dark:brightness-0 dark:invert"
                   />
                   <span className="ml-2 text-xl font-bold text-gray-900 dark:text-white">
-                    MCP Gateway
+                    MCP Servers & A2A Agents Registry
                   </span>
                 </Link>
               </div>
