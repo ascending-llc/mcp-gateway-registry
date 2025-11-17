@@ -210,6 +210,30 @@ else
     log "WARNING: registry/servers directory not found"
 fi
 
+# Copy seed agent JSON files from cli/examples to ${HOME}/mcp-gateway/agents
+AGENTS_DIR="${HOME}/mcp-gateway/agents"
+log "Copying seed agent files from cli/examples to $AGENTS_DIR..."
+if [ -d "cli/examples" ]; then
+    # Create the target directory if it doesn't exist
+    mkdir -p "$AGENTS_DIR"
+
+    # Copy all agent JSON files from cli/examples
+    if ls cli/examples/*agent*.json 1> /dev/null 2>&1; then
+        for json_file in cli/examples/*agent*.json; do
+            filename=$(basename "$json_file")
+            log "Copying seed agent $filename..."
+
+            # Copy agent file to target directory
+            cp "$json_file" "$AGENTS_DIR/$filename"
+        done
+        log "Seed agent files copied successfully"
+    else
+        log "No seed agent files found in cli/examples"
+    fi
+else
+    log "WARNING: cli/examples directory not found - seed agents will not be copied"
+fi
+
 # Copy scopes.yml to ${HOME}/mcp-gateway/auth_server
 AUTH_SERVER_DIR="${HOME}/mcp-gateway/auth_server"
 TARGET_SCOPES_FILE="$AUTH_SERVER_DIR/scopes.yml"

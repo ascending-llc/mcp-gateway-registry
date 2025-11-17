@@ -1,5 +1,5 @@
 """
-Pydantic models for Anthropic MCP Registry API v0 schema.
+Pydantic models for Anthropic MCP Registry API schema.
 
 Based on: https://raw.githubusercontent.com/modelcontextprotocol/registry/refs/heads/main/docs/reference/api/openapi.yaml
 """

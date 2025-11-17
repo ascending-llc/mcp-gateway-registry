@@ -16,7 +16,7 @@ services:
   auth-server:
     environment:
       # Set the authentication provider
-      - AUTH_PROVIDER=entra_id
+      - AUTH_PROVIDER=entra
       
       # Microsoft Entra ID configuration
       - ENTRA_TENANT_ID=your-tenant-id-here

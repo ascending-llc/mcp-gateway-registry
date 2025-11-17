@@ -1,0 +1,49 @@
+{
+  "capabilities": {
+    "streaming": true
+  },
+  "defaultInputModes": [
+    "text"
+  ],
+  "defaultOutputModes": [
+    "text"
+  ],
+  "description": "Flight booking and reservation management agent",
+  "name": "Flight Booking Agent",
+  "preferredTransport": "JSONRPC",
+  "protocolVersion": "0.3.0",
+  "skills": [
+    {
+      "description": "Check seat availability for a specific flight.",
+      "id": "check_availability",
+      "name": "check_availability",
+      "tags": []
+    },
+    {
+      "description": "Reserve seats on a flight for passengers.",
+      "id": "reserve_flight",
+      "name": "reserve_flight",
+      "tags": []
+    },
+    {
+      "description": "Confirm and finalize a flight booking.",
+      "id": "confirm_booking",
+      "name": "confirm_booking",
+      "tags": []
+    },
+    {
+      "description": "Process payment for a booking (simulated).",
+      "id": "process_payment",
+      "name": "process_payment",
+      "tags": []
+    },
+    {
+      "description": "Update, view, or cancel existing reservations.",
+      "id": "manage_reservation",
+      "name": "manage_reservation",
+      "tags": []
+    }
+  ],
+  "url": "http://flight-booking-agent:9000/",
+  "version": "0.0.1"
+}

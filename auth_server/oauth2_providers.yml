@@ -70,7 +70,7 @@ providers:
     name_claim: "name"
     enabled: false  # Disabled by default
 
-  entra_id:
+  entra:
     display_name: "Microsoft Entra ID"
     client_id: "${ENTRA_CLIENT_ID}"
     client_secret: "${ENTRA_CLIENT_SECRET}"
@@ -84,11 +84,11 @@ providers:
     scopes: ["openid", "profile", "email", "User.Read"]
     response_type: "code"
     grant_type: "authorization_code"
-    # Entra ID specific claim mapping
-    username_claim: "${ENTRA_USERNAME_CLAIM}"
-    groups_claim: "${ENTRA_GROUPS_CLAIM}"
-    email_claim:  "${ENTRA_EMAIL_CLAIM}"
-    name_claim: "${ENTRA_NAME_CLAIM}"
+    # Entra ID specific claim mapping (with sensible defaults)
+    username_claim: "${ENTRA_USERNAME_CLAIM:-preferred_username}"
+    groups_claim: "${ENTRA_GROUPS_CLAIM:-groups}"
+    email_claim: "${ENTRA_EMAIL_CLAIM:-email}"
+    name_claim: "${ENTRA_NAME_CLAIM:-name}"
     # Microsoft Graph API base URL (for sovereign clouds)
     graph_url: "${ENTRA_GRAPH_URL:-https://graph.microsoft.com}"
     # M2M (Machine-to-Machine) default scope

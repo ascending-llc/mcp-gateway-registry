@@ -2,6 +2,7 @@
 Constants and enums for the MCP Gateway Registry.
 """
 
+import os
 from enum import Enum
 from typing import List
 from pydantic import BaseModel
@@ -63,10 +64,19 @@ class RegistryConstants(BaseModel):
     DEFAULT_TRANSPORT: str = TransportType.STREAMABLE_HTTP
     SUPPORTED_TRANSPORTS: List[str] = [TransportType.STREAMABLE_HTTP, TransportType.SSE]
 
-    # Anthropic Registry API v0 constants
+    # Anthropic Registry API constants
+    ANTHROPIC_API_VERSION: str = "v0.1"
     ANTHROPIC_SERVER_NAMESPACE: str = "io.mcpgateway"
     ANTHROPIC_API_DEFAULT_LIMIT: int = 100
     ANTHROPIC_API_MAX_LIMIT: int = 1000
+
+    # External Registry Tags
+    # Comma-separated list of tags that identify external registry servers
+    # Example: "anthropic-registry,workday-asor,custom-registry"
+    EXTERNAL_REGISTRY_TAGS: str = os.getenv(
+        "EXTERNAL_REGISTRY_TAGS",
+        "anthropic-registry,workday-asor"
+    )
 
 
 # Global instance

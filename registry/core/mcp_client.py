@@ -59,15 +59,19 @@ import httpx
 def _build_headers_for_server(server_info: dict = None) -> Dict[str, str]:
     """
     Build HTTP headers for server requests by merging server-specific headers.
-    
+
     Args:
         server_info: Server configuration dictionary
-        
+
     Returns:
         Headers dictionary with server-specific headers
     """
-    headers = {}
-    
+    # Start with default MCP headers (required by some servers like Cloudflare)
+    headers = {
+        'Accept': 'application/json, text/event-stream',
+        'Content-Type': 'application/json'
+    }
+
     # Merge server-specific headers if present
     if server_info:
         server_headers = server_info.get("headers", [])
@@ -76,7 +80,7 @@ def _build_headers_for_server(server_info: dict = None) -> Dict[str, str]:
                 if isinstance(header_dict, dict):
                     headers.update(header_dict)
                     logger.debug(f"Added server headers to MCP client: {header_dict}")
-    
+
     return headers
 
 
@@ -228,18 +232,29 @@ async def _get_tools_streamable_http(base_url: str, server_info: dict = None) ->
     # If URL already has MCP endpoint, use it directly
     if base_url.endswith('/mcp') or '/mcp/' in base_url:
         mcp_url = base_url
-        if not mcp_url.endswith('/'):
-            mcp_url += '/'
+        # Don't add trailing slash - some servers like Cloudflare reject it
+
+        # Handle streamable-http and sse servers imported from anthropinc by adding required query parameter
+        if server_info and 'tags' in server_info and 'anthropic-registry' in server_info.get('tags', []):
+            if '?' not in mcp_url:
+                mcp_url += '?instance_id=default'
+            elif 'instance_id=' not in mcp_url:
+                mcp_url += '&instance_id=default'
+        else:
+            logger.info(f"DEBUG: Not a Strata server, URL unchanged: {mcp_url}")
         
+        logger.info(f"DEBUG: About to connect to: {mcp_url}")
         try:
             async with streamablehttp_client(url=mcp_url, headers=headers) as (read, write, get_session_id):
                 async with ClientSession(read, write) as session:
                     await asyncio.wait_for(session.initialize(), timeout=10.0)
                     tools_response = await asyncio.wait_for(session.list_tools(), timeout=15.0)
                     
-                    return _extract_tool_details(tools_response)
+                    result = _extract_tool_details(tools_response)
+                    return result
         except Exception as e:
             logger.error(f"MCP Check Error: Streamable-HTTP connection failed to {base_url}: {e}")
+            import traceback
             return None
     else:
         # Try with /mcp suffix first, then without if it fails
@@ -403,6 +418,7 @@ async def get_tools_from_server_with_server_info(base_url: str, server_info: dic
         A list of tool detail dictionaries (keys: name, description, schema),
         or None if connection/retrieval fails.
     """
+    
     if not base_url:
         logger.error("MCP Check Error: Base URL is empty.")
         return None
