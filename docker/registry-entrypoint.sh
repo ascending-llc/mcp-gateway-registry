@@ -149,8 +149,26 @@ source /app/.venv/bin/activate
 uvicorn registry.main:app --host 0.0.0.0 --port 7860 &
 echo "MCP Registry started."
 
-# Give registry a moment to initialize
-sleep 10
+# Wait for nginx config to be generated (check that placeholders are replaced)
+echo "Waiting for nginx configuration to be generated..."
+WAIT_TIME=0
+MAX_WAIT=120
+while [ $WAIT_TIME -lt $MAX_WAIT ]; do
+    if [ -f "/etc/nginx/conf.d/nginx_rev_proxy.conf" ]; then
+        # Check if placeholders have been replaced
+        if ! grep -q "{{EC2_PUBLIC_DNS}}" "/etc/nginx/conf.d/nginx_rev_proxy.conf" && \
+           ! grep -q "{{LOCATION_BLOCKS}}" "/etc/nginx/conf.d/nginx_rev_proxy.conf"; then
+            echo "Nginx configuration generated successfully"
+            break
+        fi
+    fi
+    sleep 2
+    WAIT_TIME=$((WAIT_TIME + 2))
+done
+
+if [ $WAIT_TIME -ge $MAX_WAIT ]; then
+    echo "WARNING: Timeout waiting for nginx configuration. Starting nginx anyway..."
+fi
 
 echo "Starting Nginx..."
 nginx

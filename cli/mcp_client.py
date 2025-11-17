@@ -69,8 +69,9 @@ def _check_token_expiration(
             print("")
             print("Please regenerate your token using one of these methods:")
             print("")
-            print("  1. Generate ingress token (recommended):")
-            print("     ./credentials-provider/generate_creds.sh")
+            print("  1. For LOB bot agents (recommended):")
+            print("     ./keycloak/setup/generate-agent-token.sh lob1-bot")
+            print("     ./keycloak/setup/generate-agent-token.sh lob2-bot")
             print("")
             print("  2. Use token file (for Cognito/OAuth):")
             print("     --token-file /path/to/your/.token_file")
@@ -91,12 +92,29 @@ def _check_token_expiration(
 
 
 def _load_token_from_file(file_path: str) -> Optional[str]:
-    """Load access token from a file"""
+    """Load access token from a file
+
+    Supports two formats:
+    1. Plain JWT token (single line)
+    2. JSON object with 'access_token' field (from agent token generation)
+    """
     try:
         with open(file_path, 'r') as f:
-            token = f.read().strip()
-            if token:
-                return token
+            content = f.read().strip()
+            if not content:
+                return None
+
+            # Try to parse as JSON first (for agent token files)
+            try:
+                token_data = json.loads(content)
+                if isinstance(token_data, dict) and 'access_token' in token_data:
+                    return token_data['access_token']
+            except json.JSONDecodeError:
+                # Not JSON, treat as plain token string
+                pass
+
+            # Return as-is (plain JWT token)
+            return content if content else None
     except FileNotFoundError:
         print(f"Warning: Token file not found: {file_path}")
     except Exception as e:

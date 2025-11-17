@@ -1,10 +1,11 @@
 # MCP Client CLI Guide
 
-This guide documents how to interact with MCP servers using the `mcp_client.py` command-line interface.
+This guide documents how to interact with MCP servers and manage A2A agents using the command-line interface.
 
 ## Table of Contents
 - [Overview](#overview)
-- [Authentication](#authentication)
+- [A2A Agent Management](#a2a-agent-management)
+- [MCP Client Authentication](#mcp-client-authentication)
 - [Basic Commands](#basic-commands)
 - [Server Management Commands](#server-management-commands)
 - [Tool Discovery](#tool-discovery)
@@ -12,28 +13,46 @@ This guide documents how to interact with MCP servers using the `mcp_client.py` 
 
 ## Overview
 
-The `mcp_client.py` tool is a command-line interface for interacting with MCP servers through the gateway. It supports various operations including server registration, listing, removal, and tool invocation.
+Two CLI tools are available:
+1. **`agent_mgmt.py`** - A2A agent management (register, modify, delete, list)
+2. **`mcp_client.py`** - MCP server interaction (list tools, call tools, etc.)
 
-## Authentication
+## A2A Agent Management
+
+For complete A2A agent management documentation, see: [A2A Agent Management Guide](a2a-agent-management.md)
+
+Quick start with the `mcp-gateway-m2m` service account:
+```bash
+# Register an agent
+uv run python cli/agent_mgmt.py register cli/examples/code_reviewer_agent.json
+
+# List all agents
+uv run python cli/agent_mgmt.py list
+
+# Test agent
+uv run python cli/agent_mgmt.py test /code-reviewer
+```
+
+## MCP Client Authentication
 
 The client supports two authentication methods:
 
-### 1. M2M (Machine-to-Machine) Authentication
-Set environment variables for M2M authentication:
+### 1. M2M (Machine-to-Machine) Authentication with `mcp-gateway-m2m`
+The primary M2M account `mcp-gateway-m2m` is auto-configured. Set environment variables:
 ```bash
-export CLIENT_ID=your_client_id
-export CLIENT_SECRET=your_client_secret
+export CLIENT_ID=mcp-gateway-m2m
+export CLIENT_SECRET=<generated-during-init>
 export KEYCLOAK_URL=http://localhost:8080
 export KEYCLOAK_REALM=mcp-gateway
 ```
 
-Or source a credentials file:
+Or use the auto-generated token from `mcp-gateway-m2m`:
 ```bash
-source .oauth-tokens/agent-test-agent-m2m.env
+source <(python3 -c "import json; d=json.load(open('.oauth-tokens/ingress.json')); print('TOKEN=' + d['access_token'])")
 ```
 
 ### 2. Ingress Token Authentication
-The client will automatically load ingress tokens from `.oauth-tokens/ingress.json` if M2M credentials are not available.
+The client will automatically load ingress tokens from `.oauth-tokens/ingress.json` if M2M credentials are not available. This token comes from the `mcp-gateway-m2m` service account.
 
 ## Basic Commands
 

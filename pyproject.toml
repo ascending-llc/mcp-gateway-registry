@@ -41,6 +41,7 @@ dependencies = [
     "pytest>=8.4.2",
     "faker>=37.11.0",
     "factory-boy>=3.3.3",
+    "cisco-ai-mcp-scanner>=3.0.1",
 ]
 
 [project.optional-dependencies]

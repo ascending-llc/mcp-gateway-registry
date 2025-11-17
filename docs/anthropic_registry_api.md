@@ -1,6 +1,8 @@
-# Anthropic MCP Registry API v0 Documentation
+# Anthropic MCP Registry API Documentation
 
-The MCP Gateway Registry implements the server listing and related APIs from the [Anthropic MCP Registry REST API v0](https://raw.githubusercontent.com/modelcontextprotocol/registry/refs/heads/main/docs/reference/api/openapi.yaml) specification. Additional API endpoints will be added in future releases.
+The MCP Gateway Registry implements the server listing and related APIs from the [Anthropic MCP Registry REST API](https://raw.githubusercontent.com/modelcontextprotocol/registry/refs/heads/main/docs/reference/api/openapi.yaml) specification (currently v0.1). Additional API endpoints will be added in future releases.
+
+> **Note**: The Anthropic API version is defined in `registry/constants.py` as `ANTHROPIC_API_VERSION` for easy version management.
 
 ## Overview
 
@@ -47,11 +49,11 @@ The token file typically contains:
 
 ## API Endpoints
 
-All endpoints are prefixed with `/v0` and require authentication via Bearer token.
+All endpoints are prefixed with the API version (currently `/v0.1`, defined in `registry/constants.py`) and require authentication via Bearer token.
 
 ### 1. List Servers
 
-**Endpoint:** `GET /v0/servers`
+**Endpoint:** `GET /v0.1/servers`
 
 Lists all MCP servers that the authenticated user has access to.
 
@@ -76,7 +78,7 @@ Lists all MCP servers that the authenticated user has access to.
 
 ### 2. Get Server Versions
 
-**Endpoint:** `GET /v0/servers/{server_name}/versions`
+**Endpoint:** `GET /v0.1/servers/{server_name}/versions`
 
 Lists all available versions for a specific server.
 
@@ -98,7 +100,7 @@ Lists all available versions for a specific server.
 
 ### 3. Get Server Version Details
 
-**Endpoint:** `GET /v0/servers/{server_name}/versions/{version}`
+**Endpoint:** `GET /v0.1/servers/{server_name}/versions/{version}`
 
 Gets detailed information about a specific server version.
 
@@ -133,17 +135,17 @@ You can test the API directly using curl:
 ACCESS_TOKEN=$(cat /path/to/your/token-file.json | jq -r '.tokens.access_token')
 
 # List all servers you have access to
-curl -X GET "http://localhost/v0/servers?limit=10" \
+curl -X GET "http://localhost/v0.1/servers?limit=10" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json"
 
 # Get versions for a specific server
-curl -X GET "http://localhost/v0/servers/io.mcpgateway%2Fatlassian/versions" \
+curl -X GET "http://localhost/v0.1/servers/io.mcpgateway%2Fatlassian/versions" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json"
 
 # Get details for a specific server version
-curl -X GET "http://localhost/v0/servers/io.mcpgateway%2Fatlassian/versions/latest" \
+curl -X GET "http://localhost/v0.1/servers/io.mcpgateway%2Fatlassian/versions/latest" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json"
 ```
@@ -224,7 +226,7 @@ class MCPRegistryClient:
             params["cursor"] = cursor
 
         response = requests.get(
-            f"{self.base_url}/v0/servers",
+            f"{self.base_url}/v0.1/servers",
             headers=self.headers,
             params=params
         )
@@ -235,7 +237,7 @@ class MCPRegistryClient:
         """Get all versions for a specific server."""
         encoded_name = server_name.replace("/", "%2F")
         response = requests.get(
-            f"{self.base_url}/v0/servers/{encoded_name}/versions",
+            f"{self.base_url}/v0.1/servers/{encoded_name}/versions",
             headers=self.headers
         )
         response.raise_for_status()
@@ -245,7 +247,7 @@ class MCPRegistryClient:
         """Get detailed information about a server version."""
         encoded_name = server_name.replace("/", "%2F")
         response = requests.get(
-            f"{self.base_url}/v0/servers/{encoded_name}/versions/{version}",
+            f"{self.base_url}/v0.1/servers/{encoded_name}/versions/{version}",
             headers=self.headers
         )
         response.raise_for_status()
@@ -323,9 +325,9 @@ The API may implement rate limiting. Check response headers for rate limit infor
 
 ## Support
 
-For issues with the Anthropic Registry API v0 implementation:
+For issues with the Anthropic Registry API implementation:
 
-1. **Official Anthropic Registry API Specification**: [View the interactive API documentation](https://elements-demo.stoplight.io/?spec=https://raw.githubusercontent.com/modelcontextprotocol/registry/refs/heads/main/docs/reference/api/openapi.yaml) - This is the official Anthropic MCP Registry REST API v0 specification that this implementation follows
+1. **Official Anthropic Registry API Specification**: [View the interactive API documentation](https://elements-demo.stoplight.io/?spec=https://raw.githubusercontent.com/modelcontextprotocol/registry/refs/heads/main/docs/reference/api/openapi.yaml) - This is the official Anthropic MCP Registry REST API specification that this implementation follows
 2. Review the [authentication guide](./auth.md) for authentication setup
 3. Examine the test script at `cli/test_anthropic_api.py` for working examples
 4. Check server logs for detailed error information

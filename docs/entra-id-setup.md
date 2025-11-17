@@ -183,7 +183,7 @@ ENTRA_M2M_SCOPE=https://graph.microsoft.de/.default
 Ensure the Entra ID provider is enabled in the `auth_server/oauth2_providers.yml` configuration:
 
 ```yaml
-entra_id:
+entra:
   display_name: "Microsoft Entra ID"
   client_id: "${ENTRA_CLIENT_ID}"
   client_secret: "${ENTRA_CLIENT_SECRET}"

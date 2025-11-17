@@ -184,27 +184,27 @@ def map_cognito_groups_to_scopes(groups: List[str]) -> List[str]:
 def get_ui_permissions_for_user(user_scopes: List[str]) -> Dict[str, List[str]]:
     """
     Get UI permissions for a user based on their scopes.
-    
+
     Args:
         user_scopes: List of user's scopes (includes UI scope names like 'mcp-registry-admin')
-        
+
     Returns:
         Dict mapping UI actions to lists of services they can perform the action on
         Example: {'list_service': ['mcpgw', 'auth_server'], 'toggle_service': ['mcpgw']}
     """
     ui_permissions = {}
     ui_scopes = SCOPES_CONFIG.get('UI-Scopes', {})
-    
+
     for scope in user_scopes:
         if scope in ui_scopes:
             scope_config = ui_scopes[scope]
             logger.debug(f"Processing UI scope '{scope}' with config: {scope_config}")
-            
+
             # Process each permission in the scope
             for permission, services in scope_config.items():
                 if permission not in ui_permissions:
                     ui_permissions[permission] = set()
-                
+
                 # Handle "all" case
                 if services == ['all'] or (isinstance(services, list) and 'all' in services):
                     ui_permissions[permission].add('all')
@@ -214,7 +214,7 @@ def get_ui_permissions_for_user(user_scopes: List[str]) -> Dict[str, List[str]]:
                     if isinstance(services, list):
                         ui_permissions[permission].update(services)
                         logger.debug(f"UI permission '{permission}' granted for services: {services}")
-    
+
     # Convert sets back to lists
     result = {k: list(v) for k, v in ui_permissions.items()}
     logger.info(f"Final UI permissions for user: {result}")
@@ -248,39 +248,79 @@ def user_has_ui_permission_for_service(permission: str, service_name: str, user_
 def get_accessible_services_for_user(user_ui_permissions: Dict[str, List[str]]) -> List[str]:
     """
     Get list of services the user can see based on their list_service permission.
-    
+
     Args:
         user_ui_permissions: User's UI permissions dict from get_ui_permissions_for_user()
-        
+
     Returns:
         List of service names the user can see, or ['all'] if they can see all services
     """
     list_permissions = user_ui_permissions.get('list_service', [])
-    
+
     if 'all' in list_permissions:
         return ['all']
-    
+
+    return list_permissions
+
+
+def get_accessible_agents_for_user(user_ui_permissions: Dict[str, List[str]]) -> List[str]:
+    """
+    Get list of agents the user can see based on their list_agents permission.
+
+    Args:
+        user_ui_permissions: User's UI permissions dict from get_ui_permissions_for_user()
+
+    Returns:
+        List of agent paths the user can see, or ['all'] if they can see all agents
+    """
+    list_permissions = user_ui_permissions.get('list_agents', [])
+
+    if 'all' in list_permissions:
+        return ['all']
+
     return list_permissions
 
 
 def get_servers_for_scope(scope: str) -> List[str]:
     """
     Get list of server names that a scope provides access to.
-    
+
     Args:
         scope: The scope to check (e.g., 'mcp-servers-restricted/read')
-        
+
     Returns:
         List of server names the scope grants access to
     """
     scope_config = SCOPES_CONFIG.get(scope, [])
     server_names = []
-    
+
     for server_config in scope_config:
         if isinstance(server_config, dict) and 'server' in server_config:
             server_names.append(server_config['server'])
-    
+
     return list(set(server_names))  # Remove duplicates
+
+
+def user_has_wildcard_access(user_scopes: List[str]) -> bool:
+    """
+    Check if user has wildcard access to all servers via their scopes.
+
+    A user has wildcard access if any of their scopes includes server: '*'.
+    This is determined dynamically from the scopes configuration, not hardcoded group names.
+
+    Args:
+        user_scopes: List of user's scopes
+
+    Returns:
+        True if user has wildcard access to all servers, False otherwise
+    """
+    for scope in user_scopes:
+        servers = get_servers_for_scope(scope)
+        if '*' in servers:
+            logger.debug(f"User scope '{scope}' grants wildcard access to all servers")
+            return True
+
+    return False
 
 
 def get_user_accessible_servers(user_scopes: List[str]) -> List[str]:
@@ -407,16 +447,19 @@ def enhanced_auth(
     
     # Get UI permissions
     ui_permissions = get_ui_permissions_for_user(scopes)
-    
+
     # Get accessible servers (from server scopes)
     accessible_servers = get_user_accessible_servers(scopes)
-    
+
     # Get accessible services (from UI permissions)
     accessible_services = get_accessible_services_for_user(ui_permissions)
-    
+
+    # Get accessible agents (from UI permissions)
+    accessible_agents = get_accessible_agents_for_user(ui_permissions)
+
     # Check modification permissions
     can_modify = user_can_modify_servers(groups, scopes)
-    
+
     user_context = {
         'username': username,
         'groups': groups,
@@ -425,11 +468,12 @@ def enhanced_auth(
         'provider': session_data.get('provider', 'local'),
         'accessible_servers': accessible_servers,
         'accessible_services': accessible_services,
+        'accessible_agents': accessible_agents,
         'ui_permissions': ui_permissions,
         'can_modify_servers': can_modify,
-        'is_admin': 'mcp-registry-admin' in groups
+        'is_admin': user_has_wildcard_access(scopes)
     }
-    
+
     logger.debug(f"Enhanced auth context for {username}: {user_context}")
     return user_context
 
@@ -448,7 +492,7 @@ def nginx_proxied_auth(
     For nginx-proxied requests: Reads user context from headers set by nginx after auth validation
     For direct requests: Falls back to session cookie authentication
 
-    This allows v0 API endpoints to work both when accessed through nginx (with JWT tokens)
+    This allows Anthropic Registry API endpoints to work both when accessed through nginx (with JWT tokens)
     and when accessed directly (with session cookies).
 
     Returns:
@@ -461,10 +505,10 @@ def nginx_proxied_auth(
         # Parse scopes from space-separated header
         scopes = x_scopes.split() if x_scopes else []
 
-        # For Keycloak auth, map scopes to get groups
+        # Map scopes to get groups based on auth method
         groups = []
-        if x_auth_method == 'keycloak':
-            # User authenticated via Keycloak JWT
+        if x_auth_method in ['keycloak', 'entra', 'cognito']:
+            # User authenticated via OAuth2 JWT (Keycloak, Entra ID, or Cognito)
             # Scopes already contain mapped permissions
             # Check if user has admin scopes
             if 'mcp-servers-unrestricted/read' in scopes and 'mcp-servers-unrestricted/execute' in scopes:
@@ -483,6 +527,9 @@ def nginx_proxied_auth(
         # Get accessible services
         accessible_services = get_accessible_services_for_user(ui_permissions)
 
+        # Get accessible agents
+        accessible_agents = get_accessible_agents_for_user(ui_permissions)
+
         # Check modification permissions
         can_modify = user_can_modify_servers(groups, scopes)
 
@@ -491,12 +538,13 @@ def nginx_proxied_auth(
             'groups': groups,
             'scopes': scopes,
             'auth_method': x_auth_method or 'keycloak',
-            'provider': 'keycloak',
+            'provider': x_auth_method or 'keycloak',  # Use actual auth method as provider
             'accessible_servers': accessible_servers,
             'accessible_services': accessible_services,
+            'accessible_agents': accessible_agents,
             'ui_permissions': ui_permissions,
             'can_modify_servers': can_modify,
-            'is_admin': 'mcp-registry-admin' in groups
+            'is_admin': user_has_wildcard_access(scopes)
         }
 
         logger.debug(f"nginx-proxied auth context for {username}: {user_context}")
@@ -507,12 +555,39 @@ def nginx_proxied_auth(
     return enhanced_auth(session)
 
 
-def create_session_cookie(username: str, auth_method: str = "traditional", provider: str = "local") -> str:
-    """Create a session cookie for a user."""
+def create_session_cookie(username: str, auth_method: str = "traditional", provider: str = "local", groups: List[str] = None) -> str:
+    """
+    Create a session cookie for a user.
+    
+    Security Note: For traditional auth, this function grants admin privileges.
+    Only call this function AFTER validating credentials with validate_login_credentials().
+    
+    Args:
+        username: The authenticated username
+        auth_method: Authentication method ('traditional' or 'oauth2')
+        provider: Authentication provider
+        groups: User groups (for OAuth2). If None and auth_method is 'traditional', 
+                defaults to admin group.
+    
+    Returns:
+        Signed session cookie string
+        
+    Raises:
+        ValueError: If attempting to create traditional session for non-admin user
+    """
+    # For traditional auth users, validate and default to admin group
+    if groups is None and auth_method == "traditional":
+        # Security check: Traditional auth only supports the configured admin user
+        if username != settings.admin_user:
+            logger.error(f"Security violation: Attempted to create traditional session for non-admin user: {username}")
+            raise ValueError(f"Traditional authentication only supports the configured admin user")
+        groups = ['mcp-registry-admin']
+    
     session_data = {
         "username": username,
         "auth_method": auth_method,
-        "provider": provider
+        "provider": provider,
+        "groups": groups or []
     }
     return signer.dumps(session_data)
 

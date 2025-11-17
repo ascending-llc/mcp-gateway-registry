@@ -92,6 +92,7 @@ async def read_root(
                     "display_name": server_name,
                     "path": path,
                     "description": server_info.get("description", ""),
+                    "proxy_pass_url": server_info.get("proxy_pass_url", ""),
                     "is_enabled": server_service.is_service_enabled(path),
                     "tags": server_info.get("tags", []),
                     "num_tools": server_info.get("num_tools", 0),
@@ -137,13 +138,15 @@ async def get_servers_json(
     
     # Filter services based on UI permissions (same logic as root route)
     accessible_services = user_context.get('accessible_services', [])
-    
+
     for path in sorted_server_paths:
         server_info = all_servers[path]
         server_name = server_info["server_name"]
-        
-        # Check if user can list this service
-        if 'all' not in accessible_services and server_name not in accessible_services:
+        # Extract technical name from path (remove leading and trailing slashes)
+        technical_name = path.strip('/')
+
+        # Check if user can list this service using technical name
+        if 'all' not in accessible_services and technical_name not in accessible_services:
             continue
         
         # Include description and tags in search
@@ -158,6 +161,7 @@ async def get_servers_json(
                     "display_name": server_name,
                     "path": path,
                     "description": server_info.get("description", ""),
+                    "proxy_pass_url": server_info.get("proxy_pass_url", ""),
                     "is_enabled": server_service.is_service_enabled(path),
                     "tags": server_info.get("tags", []),
                     "num_tools": server_info.get("num_tools", 0),
@@ -2049,8 +2053,8 @@ async def generate_user_token(
                         "token_type": token_data.get("token_type", "Bearer"),
                         "scope": token_data.get("scope", "")
                     },
-                    "keycloak_url": settings.keycloak_url or "http://keycloak:8080",
-                    "realm": settings.keycloak_realm or "mcp-gateway",
+                    "keycloak_url": getattr(settings, 'keycloak_url', None) or "http://keycloak:8080",
+                    "realm": getattr(settings, 'keycloak_realm', None) or "mcp-gateway",
                     "client_id": "user-generated",
                     # Legacy fields for backward compatibility
                     "token_data": token_data,

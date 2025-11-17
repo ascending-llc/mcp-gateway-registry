@@ -194,6 +194,9 @@ cookies.txt
 # Scratchpad for temporary notes and planning
 .scratchpad/
 
+# Roo IDE files
+.roo/
+
 # OAuth tokens and credentials - never commit these!
 .oauth-tokens/
 .agentcore-params
@@ -206,6 +209,7 @@ keycloak/setup/retrieved-keycloak-secrets.txt
 # MCP Gateway specific
 registry/server_state.json
 registry/nginx_mcp_revproxy.conf
+registry/agents/
 logs/
 token_refresher.pid
 token_refresher.log
@@ -278,3 +282,20 @@ coverage/
 .cache/
 .parcel-cache/
 .scratchpad/
+
+#MCP Json
+.tmp/anthropic-import
+
+# Anthropic registry temporary files
+anthropic_servers_*.json
+curated_import_list.txt
+
+#Security scans
+security_scans/
+
+#Temporary directories
+.tmp
+
+#AgentCore CLI generated files
+.bedrock_agentcore
+.bedrock_agentcore.yaml

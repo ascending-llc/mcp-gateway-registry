@@ -6,7 +6,7 @@ from typing import Optional
 from .base import AuthProvider
 from .cognito import CognitoProvider
 from .keycloak import KeycloakProvider
-from .entra import EntraIDProvider
+from .entra import EntraIdProvider
 from ..utils.config_loader import get_provider_config
 
 logging.basicConfig(
@@ -23,7 +23,7 @@ def get_auth_provider(
     """Factory function to get the appropriate auth provider.
     
     Args:
-        provider_type: Type of provider to create ('cognito', 'keycloak', or 'entra_id').
+        provider_type: Type of provider to create ('cognito', 'keycloak', or 'entra').
                       If None, uses AUTH_PROVIDER environment variable.
                       
     Returns:
@@ -40,8 +40,8 @@ def get_auth_provider(
         return _create_keycloak_provider()
     elif provider_type == 'cognito':
         return _create_cognito_provider()
-    elif provider_type == 'entra_id':
-        return _create_entra_id_provider()
+    elif provider_type == 'entra':
+        return _create_entra_provider()
     else:
         raise ValueError(f"Unknown auth provider: {provider_type}")
 
@@ -125,10 +125,10 @@ def _create_cognito_provider() -> CognitoProvider:
     )
 
 
-def _create_entra_id_provider() -> EntraIDProvider:
+def _create_entra_provider() -> EntraIdProvider:
     """Create and configure Microsoft Entra ID provider."""
     # Load OAuth2 configuration using shared loader
-    entra_config = get_provider_config('entra_id') or {}
+    entra_config = get_provider_config('entra') or {}
 
     # Endpoint URLs from oauth2_providers.yml (already have environment variable substitution)
     tenant_id = entra_config.get("tenant_id")
@@ -183,7 +183,7 @@ def _create_entra_id_provider() -> EntraIDProvider:
     logger.info(
         f"Initializing Entra ID provider for tenant '{tenant_id}' with scopes={scopes}, grant_type={grant_type}")
 
-    return EntraIDProvider(
+    return EntraIdProvider(
         tenant_id=tenant_id,
         client_id=client_id,
         client_secret=client_secret,

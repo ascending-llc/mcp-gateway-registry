@@ -1,7 +1,7 @@
 <div align="center">
-<img src="registry/static/mcp_gateway_horizontal_white_logo.png" alt="MCP Gateway Logo" width="100%">
+<img src="registry/static/mcp_gateway_horizontal_white_logo.png" alt="MCP Gateway & Registry Logo" width="100%">
 
-**Enterprise-Ready Gateway for AI Development Tools**
+**Unified Agent & MCP Server Registry – Enterprise-Ready Gateway for AI Development Tools**
 
 [![GitHub stars](https://img.shields.io/github/stars/agentic-community/mcp-gateway-registry?style=flat&logo=github)](https://github.com/agentic-community/mcp-gateway-registry/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/agentic-community/mcp-gateway-registry?style=flat&logo=github)](https://github.com/agentic-community/mcp-gateway-registry/network)
@@ -11,7 +11,7 @@
 
 [🚀 Get Running Now](#option-a-pre-built-images-instant-setup) | [Quick Start](#quick-start) | [Documentation](docs/) | [Enterprise Features](#enterprise-features) | [Community](#community)
 
-**Demo Videos:** [Full End-to-End Functionality](https://github.com/user-attachments/assets/5ffd8e81-8885-4412-a4d4-3339bbdba4fb) | [OAuth 3-Legged Authentication](https://github.com/user-attachments/assets/3c3a570b-29e6-4dd3-b213-4175884396cc) | [Dynamic Tool Discovery](https://github.com/user-attachments/assets/cee25b31-61e4-4089-918c-c3757f84518c)
+**Demo Videos:** ⭐ [MCP Registry CLI Demo](https://github.com/user-attachments/assets/98200866-e8bd-4ac3-bad6-c6d42b261dbe) | [Full End-to-End Functionality](https://github.com/user-attachments/assets/5ffd8e81-8885-4412-a4d4-3339bbdba4fb) | [OAuth 3-Legged Authentication](https://github.com/user-attachments/assets/3c3a570b-29e6-4dd3-b213-4175884396cc) | [Dynamic Tool Discovery](https://github.com/user-attachments/assets/cee25b31-61e4-4089-918c-c3757f84518c)
 
 </div>
 
@@ -19,7 +19,15 @@
 
 ## What is MCP Gateway & Registry?
 
-The **MCP Gateway & Registry** is an enterprise-ready platform that centralizes access to AI development tools using the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction). Instead of managing hundreds of individual tool configurations across your development teams, provide secure, governed access to curated AI tools through a single platform.
+The **MCP Gateway & Registry** is a unified, enterprise-ready platform that centralizes access to both MCP Servers and AI Agents using the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction). It serves three core functions:
+
+1. **Unified MCP Server Gateway** – Centralized access point for multiple MCP servers
+2. **MCP Servers Registry** – Register, discover, and manage access to MCP servers with unified governance
+3. **Agent Registry & A2A Communication Hub** – Agent registration, discovery, governance, and direct agent-to-agent communication through the [A2A (Agent-to-Agent) Protocol](https://a2a-protocol.org/latest/specification/)
+
+The platform integrates with external registries such as Anthropic's MCP Registry (and more to come), providing a single control plane for both tool access, agent orchestration, and agent-to-agent communication patterns.
+
+**Why unified?** Instead of managing hundreds of individual MCP server configurations, agent connections, and separate governance systems across your development teams, this platform provides secure, governed access to curated MCP servers and registered agents through a single, unified control plane.
 
 **Transform this chaos:**
 ```
@@ -27,11 +35,14 @@ The **MCP Gateway & Registry** is an enterprise-ready platform that centralizes 
 ❌ Each developer configures VS Code, Cursor, Claude Code individually
 ❌ Developers must install and manage MCP servers locally
 ❌ No standard authentication flow for enterprise tools
-❌ Scattered API keys and credentials across tools  
+❌ Scattered API keys and credentials across tools
 ❌ No visibility into what tools teams are using
 ❌ Security risks from unmanaged tool sprawl
 ❌ No dynamic tool discovery for autonomous agents
 ❌ No curated tool catalog for multi-tenant environments
+❌ A2A provides agent cards but no way for agents to discover other agents
+❌ Maintaining separate MCP server and agent registries is a non-starter for governance
+❌ Impossible to maintain unified policies across server and agent access
 ```
 
 **Into this organized approach:**
@@ -45,56 +56,132 @@ The **MCP Gateway & Registry** is an enterprise-ready platform that centralizes 
 ✅ Enterprise-grade security with governed tool access
 ✅ Dynamic tool discovery and invocation for autonomous workflows
 ✅ Registry provides discoverable, curated MCP servers for multi-tenant use
+✅ Agents can discover and communicate with other agents through unified Agent Registry
+✅ Single control plane for both MCP servers and agent governance
+✅ Unified policies and audit trails for both server and agent access
 ```
 
 ```
-┌─────────────────────────────────────┐     ┌──────────────────────────────────────┐
-│          BEFORE: Chaos              │     │       AFTER: MCP Gateway             │
-├─────────────────────────────────────┤     ├──────────────────────────────────────┤
-│                                     │     │                                      │
-│  Developer 1 ──┬──► MCP Server A    │     │  Developer 1 ──┐                     │
-│                ├──► MCP Server B    │     │                │                     │
-│                └──► MCP Server C    │     │  Developer 2 ──┼──► MCP Gateway      │
-│                                     │     │                │         │           │
-│  Developer 2 ──┬──► MCP Server A    │ ──► │  AI Agent 1 ───┘         ├──► MCP A  │
-│                ├──► MCP Server D    │     │                          ├──► MCP B  │
-│                └──► MCP Server E    │     │  AI Agent 2 ─────────────├──► MCP C  │
-│                                     │     │                          ├──► MCP D  │
-│  AI Agent 1 ───┬──► MCP Server B    │     │  AI Agent 3 ─────────────├──► MCP E  │
-│                ├──► MCP Server C    │     │                          └──► MCP F  │
-│                └──► MCP Server F    │     │                                      │
-│                                     │     │          Single Connection           │
-│  ❌ Multiple connections per user  │      │         ✅ One gateway for all      │
-│  ❌ No centralized control         │     │          ✅ Dynamic discovery        │
-│  ❌ Credential sprawl               │     │         ✅ Unified governance       │
-└─────────────────────────────────────┘     └──────────────────────────────────────┘
+┌─────────────────────────────────────┐     ┌──────────────────────────────────────────────────────┐
+│          BEFORE: Chaos              │     │    AFTER: MCP Gateway & Registry                     │
+├─────────────────────────────────────┤     ├──────────────────────────────────────────────────────┤
+│                                     │     │                                                      │
+│  Developer 1 ──┬──► MCP Server A    │     │  Developer 1 ──┐                  ┌─ MCP Server A    │
+│                ├──► MCP Server B    │     │                │                  ├─ MCP Server B    │
+│                └──► MCP Server C    │     │  Developer 2 ──┼──► MCP Gateway   │                  │
+│                                     │     │                │    & Registry ───┼─ MCP Server C    │
+│  Developer 2 ──┬──► MCP Server A    │ ──► │  AI Agent 1 ───┘         │        │                  │
+│                ├──► MCP Server D    │     │                          │        ├─ AI Agent 1      │
+│                └──► MCP Server E    │     │  AI Agent 2 ──────────────┤        ├─ AI Agent 2     │
+│                                     │     │                          │        │                  │
+│  AI Agent 1 ───┬──► MCP Server B    │     │  AI Agent 3 ──────────────┘        └─ AI Agent 3     │
+│                ├──► MCP Server C    │     │                                                      │
+│                └──► MCP Server F    │     │              Single Connection Point                 │
+│                                     │     │                                                      │
+│  ❌ Multiple connections per user  │     │         ✅ One gateway for all                      │
+│  ❌ No centralized control         │     │         ✅ Unified server & agent access            │
+│  ❌ Credential sprawl              │     │         ✅ Unified governance & audit trails        │
+└─────────────────────────────────────┘     └──────────────────────────────────────────────────────┘
 ```
+
+> **Note on Agent-to-Agent Communication:** AI Agents discover other AI Agents through the unified Agent Registry and communicate with them **directly** (peer-to-peer) without routing through the MCP Gateway. The Registry handles discovery, authentication, and access control, while agents maintain direct connections for efficient, low-latency communication.
+
+## Unified Agent & Server Registry
+
+This platform serves as a comprehensive, unified registry supporting:
+
+- ✅ **MCP Server Registration & Discovery** – Register, discover, and manage access to MCP servers
+- ✅ **AI Agent Registration & Discovery** – Register agents and enable them to discover other agents
+- ✅ **Agent-to-Agent (A2A) Communication** – Direct agent-to-agent communication patterns using the A2A protocol
+- ✅ **Multi-Protocol Support** – Support for various agent communication protocols and patterns
+- ✅ **Unified Governance** – Single policy and access control system for both agents and servers
+- ✅ **Cross-Protocol Agent Discovery** – Agents can discover each other regardless of implementation
+- ✅ **Integrated External Registries** – Connect with Anthropic's MCP Registry and other external sources
+- ✅ **Agent Cards & Metadata** – Rich metadata for agent capabilities, skills, and authentication schemes
+
+Key distinction: **Unlike separate point solutions, this unified registry eliminates the need to maintain separate MCP server and agent systems**, providing a single control plane for agent orchestration, MCP server access, and agent-to-agent communication.
+
+## MCP Servers & Agents Registry
+
+Watch how MCP Servers, A2A Agents, and External Registries work together for dynamic tool discovery:
+
+https://github.com/user-attachments/assets/f539f784-17f5-4658-99b3-d664bd5cecaa
+
+---
 
 ## MCP Tools in Action
 
+[View MCP Tools Demo](docs/img/MCP_tools.gif)
+
+---
+
+## MCP Registry CLI
+
+Interactive terminal interface for chatting with AI models and discovering MCP tools in natural language. Talk to the registry using a Claude Code-like conversational interface with real-time token status, cost tracking, and AI model selection.
+
 <div align="center">
-<img src="docs/img/MCP_tools.gif" alt="MCP Tools Demo" width="800"/>
+<img src="docs/img/mcp-registry-cli.png" alt="MCP Registry CLI Screenshot" width="800"/>
 </div>
 
-*Experience dynamic tool discovery and intelligent MCP server integration in real-time*
+**Quick Start:** `registry --url https://mcpgateway.ddns.net` | [Full Guide](docs/mcp-registry-cli.md)
 
 ---
 
 ## What's New
 
-- **🔌 Anthropic MCP Registry REST API v0 Compatibility** -  Compatibility with Anthropic's official MCP Registry REST API specification. List servers, get versions, and retrieve server details programmatically with JWT authentication. Includes comprehensive test scripts and curl examples. [API Documentation](docs/anthropic_registry_api.md)
-- **🚀 Pre-built Images - Get Running in Under 10 Minutes** - Deploy the complete MCP Gateway solution instantly with pre-built Docker images. No compilation required - just download and run! [Get Started Now](#option-a-pre-built-images-instant-setup) | [macOS Setup Guide](docs/macos-setup-guide.md) | [Pre-built Images Documentation](docs/prebuilt-images.md)
-- **🔐 Keycloak Identity Provider Integration** - Enterprise-grade authentication with individual AI agent audit trails, group-based authorization, and production-ready service account management. [Learn more](docs/keycloak-integration.md)
-- **Amazon Bedrock AgentCore Gateway Integration** - Seamlessly integrate Amazon Bedrock AgentCore Gateways with dual authentication (Keycloak ingress + Cognito egress), passthrough token mode, and complete MCP protocol support. Deploy customer support assistants and other AgentCore services through the registry. [Integration Guide](docs/agentcore.md)
-- **Real-Time Metrics & Observability** - Comprehensive monitoring via Grafana dashboards with metrics stored in SQLite and exposed through OpenTelemetry (OTEL). Track server health, tool usage, authentication events, and performance metrics in real-time for complete visibility into your MCP infrastructure. [Observability Guide](docs/OBSERVABILITY.md)
-- **Service & User Management Utilities** - Comprehensive CLI scripts for complete lifecycle management: server registration, health validation, user provisioning, and group-based access control with automated verification and testing. [Learn more](docs/service-management.md)
-- **Tag-Based Tool Filtering** - Enhanced intelligent_tool_finder now supports filtering tools by server tags for precise categorical discovery alongside semantic search
-- **Three-Legged OAuth (3LO) Support** - External service integration (Atlassian, Google, GitHub)
-- **JWT Token Vending Service** - Self-service token generation for automation
-- **Automated Token Refresh Service** - Background token refresh to maintain continuous authentication
-- **Modern React Frontend** - Complete UI overhaul with TypeScript and real-time updates
-- **Dynamic Tool Discovery** - AI agents autonomously find and execute specialized tools
-- **Fine-Grained Access Control** - Granular permissions for servers, methods, and individual tools
+- **🔗 Agent-to-Agent (A2A) Protocol Support** - Agents can now register, discover, and communicate with other agents through a secure, centralized registry. Enable autonomous agent ecosystems with Keycloak-based access control and fine-grained permissions. [A2A Guide](docs/a2a.md)
+- **🏢 Microsoft Entra ID Integration** - Enterprise SSO with Microsoft Entra ID (Azure AD) authentication. Group-based access control, conditional access policies, and seamless integration with existing Microsoft 365 environments. [Entra ID Setup Guide](docs/entra-id-setup.md)
+- **🤖 Agentic CLI for MCP Registry** - Talk to the Registry in natural language using a Claude Code-like interface. Discover tools, ask questions, and execute MCP commands conversationally. [Learn more](docs/mcp-registry-cli.md)
+- **💬 Interactive MCP-Registry CLI** - Terminal-based chat interface with AI-powered MCP tool discovery. Supports Amazon Bedrock and Anthropic API. [MCP-Registry CLI](docs/mcp-registry-cli.md)
+- **🔒 MCP Server Security Scanning** - Integrated vulnerability scanning with [Cisco AI Defence MCP Scanner](https://github.com/cisco-ai-defense/mcp-scanner). Automatic security scans during server registration, periodic registry-wide scans with detailed markdown reports, and automatic disabling of servers with security issues.
+- **📥 Import Servers from Anthropic MCP Registry** - Import curated MCP servers from Anthropic's registry with a single command. [Import Guide](docs/anthropic-registry-import.md)
+- **🔌 Anthropic MCP Registry REST API Compatibility** - Full compatibility with Anthropic's MCP Registry REST API specification. [API Documentation](docs/anthropic_registry_api.md)
+- **🔎 Unified Semantic Search for Servers, Tools & Agents** - Natural-language search across every MCP server, its tools, and registered A2A agents using `POST /api/search/semantic`. Works from the dashboard UI (session cookie auth) or programmatically with JWT Bearer tokens, returning relevance-scored matches per entity type in a single response.
+- **🚀 Pre-built Images** - Deploy instantly with pre-built Docker images. [Get Started](#option-a-pre-built-images-instant-setup) | [macOS Guide](docs/macos-setup-guide.md)
+- **🔐 Keycloak Integration** - Enterprise authentication with AI agent audit trails and group-based authorization. [Learn more](docs/keycloak-integration.md)
+- **📊 Real-Time Metrics & Observability** - Grafana dashboards with SQLite and OpenTelemetry integration. [Observability Guide](docs/OBSERVABILITY.md)
+- **Amazon Bedrock AgentCore Integration** - AgentCore Gateway support with dual authentication. [Integration Guide](docs/agentcore.md)
+
+---
+
+## A2A Agents - Example Implementations
+
+The registry includes two example A2A agents that demonstrate how both human developers and autonomous AI agents can discover, register, and use agents through the unified Agent Registry. Agents can programmatically discover other agents via semantic search and use them through the A2A protocol, enabling dynamic agent composition and autonomous agent orchestration.
+
+### Example Agents
+
+| Agent | Path | Skills |
+|-------|------|--------|
+| **Travel Assistant Agent** | `/travel-assistant-agent` | Flight search, pricing checks, recommendations, trip planning |
+| **Flight Booking Agent** | `/flight-booking-agent` | Availability checks, flight reservations, payments, reservation management |
+
+### Agent Discovery
+
+**View in Registry UI:**
+Open the registry and navigate to the **A2A Agents** tab to browse registered agents with their full metadata, capabilities, and skills.
+
+**Search via Semantic API:**
+Agents and developers can search for agents by natural language description:
+
+```bash
+# Search for agents that can help book a trip
+cli/agent_mgmt.sh search "need an agent to book a trip"
+```
+
+**Example Output:**
+```
+Found 4 agent(s) matching 'need an agent to book a trip':
+--------------------------------------------------------------------------------------------------------------
+Agent Name                               | Path                      | Score
+--------------------------------------------------------------------------------------------------------------
+Travel Assistant Agent                   | /travel-assistant-agent   |  0.8610
+Flight Booking Agent                     | /flight-booking-agent     |  1.2134
+--------------------------------------------------------------------------------------------------------------
+```
+
+**Agent Cards:** View the agent card metadata at [agents/a2a/test/](agents/a2a/test/) to see the complete agent definitions including skills, protocols, and capabilities.
+
+For complete agent deployment and testing documentation, see [agents/a2a/README.md](agents/a2a/README.md).
 
 ---
 
@@ -259,7 +346,6 @@ flowchart TB
 - Unified governance for both AI agents and human developers
 
 ### **Production Ready**
-- High availability with multi-AZ deployment
 - Container-native (Docker/Kubernetes)
 - Real-time health monitoring and alerting
 - Dual authentication supporting both human and machine authentication
@@ -302,6 +388,22 @@ For detailed information about all Docker images used with `--prebuilt`, see [Pr
 
 **Step 5: Initialize Keycloak**
 Complete: **[Initialize Keycloak Configuration](docs/complete-setup-guide.md#initialize-keycloak-configuration)** - Set up identity provider and security policies
+
+**Step 5.5: Set up users and service accounts**
+Run the bootstrap script to create default users and M2M service accounts:
+```bash
+./cli/bootstrap_user_and_m2m_setup.sh
+```
+
+This script:
+- Creates 3 Keycloak groups: `registry-users-lob1`, `registry-users-lob2`, `registry-admins`
+- Creates 6 users for testing and management:
+  - **LOB1**: `lob1-bot` (M2M service account) and `lob1-user` (human user)
+  - **LOB2**: `lob2-bot` (M2M service account) and `lob2-user` (human user)
+  - **Admin**: `admin-bot` (M2M service account) and `admin-user` (human user)
+- Generates and saves OAuth credentials to `.oauth-tokens/` directory
+
+All user passwords default to the value set in your `.env` file (`INITIAL_USER_PASSWORD`).
 
 **Step 6: Access the registry**
 ```bash
@@ -368,6 +470,26 @@ Comprehensive real-time metrics and monitoring through Grafana dashboards with d
 </tr>
 </table>
 
+### Anthropic MCP Registry Integration
+
+Seamlessly integrate with Anthropic's official MCP Registry to import and access curated MCP servers through your gateway:
+
+- **Import Servers**: Select and import desired servers from Anthropic's registry with a single command
+- **Unified Access**: Access imported servers through your gateway with centralized authentication and governance
+- **API Compatibility**: Full support for Anthropic's Registry REST API specification - point your Anthropic API clients to this registry to discover available servers
+
+<img src="docs/img/registry_w_a.png" alt="Anthropic Registry Integration" />
+<p><em>Import and access curated MCP servers from Anthropic's official registry</em></p>
+
+[Import Guide](docs/anthropic-registry-import.md) | [Registry API Documentation](docs/anthropic_registry_api.md)
+
+### Security Scanning
+
+**Integrated Vulnerability Detection:**
+- **Automated Security Scanning** - Integrated vulnerability scanning for MCP servers using [Cisco AI Defence MCP Scanner](https://github.com/cisco-ai-defense/mcp-scanner), with automatic scans during registration and support for periodic registry-wide scans
+- **Detailed Security Reports** - Comprehensive markdown reports with vulnerability details, severity assessments, and remediation recommendations
+- **Automatic Protection** - Servers with security issues are automatically disabled with security-pending status to protect your infrastructure
+- **Compliance Ready** - Security audit trails and vulnerability tracking for enterprise compliance requirements
 
 ### Authentication & Authorization
 
@@ -376,28 +498,13 @@ Comprehensive real-time metrics and monitoring through Grafana dashboards with d
 - **Three-Legged OAuth (3LO)** - For external service integration (Atlassian, Google, GitHub)
 - **Session-Based** - For human developers using AI coding assistants and web interface
 
-**Supported Identity Providers:**
-- **[Keycloak](https://www.keycloak.org/)** - Enterprise-grade open-source identity and access management with individual agent audit trails
-- **Amazon Cognito** - Amazon managed identity service
-- Any OAuth 2.0 compatible provider
+**Supported Identity Providers:** Keycloak, Amazon Cognito, and any OAuth 2.0 compatible provider. [Learn more](docs/auth.md)
 
-**Fine-Grained Permissions:**
-- Tool-level access control
-- Method-level restrictions  
-- Team-based permissions
-- Temporary access grants
+**Fine-Grained Permissions:** Tool-level, method-level, team-based, and temporary access controls. [Learn more](docs/scopes.md)
 
 ### Production Deployment
 
-**Cloud Platforms:**
-- **Amazon EC2** - Single instance or auto-scaling groups
-- **Amazon EKS** - Kubernetes-native microservices deployment
-
-**High Availability:**
-- Multi-AZ deployment with automatic failover
-- Health monitoring and alerting
-- Rolling updates with zero downtime
-- Backup and disaster recovery
+**Cloud Platforms:** Amazon EC2, Amazon EKS
 
 ---
 
@@ -408,8 +515,8 @@ Comprehensive real-time metrics and monitoring through Grafana dashboards with d
 | [Complete Setup Guide](docs/complete-setup-guide.md)<br/>**NEW!** Step-by-step from scratch on AWS EC2 | [Authentication Guide](docs/auth.md)<br/>OAuth and identity provider integration | [AI Coding Assistants Setup](docs/ai-coding-assistants-setup.md)<br/>VS Code, Cursor, Claude Code integration |
 | [Installation Guide](docs/installation.md)<br/>Complete setup instructions for EC2 and EKS | [Keycloak Integration](docs/keycloak-integration.md)<br/>Enterprise identity with agent audit trails | [API Reference](docs/registry_api.md)<br/>Programmatic registry management |
 | [Quick Start Tutorial](docs/quick-start.md)<br/>Get running in 5 minutes | [Amazon Cognito Setup](docs/cognito.md)<br/>Step-by-step IdP configuration | [Token Refresh Service](docs/token-refresh-service.md)<br/>Automated token refresh and lifecycle management |
-| [Configuration Reference](docs/configuration.md)<br/>Environment variables and settings |  | [Observability Guide](docs/OBSERVABILITY.md)<br/>**NEW!** Metrics, monitoring, and OpenTelemetry setup |
-| | [Fine-Grained Access Control](docs/scopes.md)<br/>Permission management and security | [Dynamic Tool Discovery](docs/dynamic-tool-discovery.md)<br/>Autonomous agent capabilities |
+| [Configuration Reference](docs/configuration.md)<br/>Environment variables and settings | [Anthropic Registry Import](docs/anthropic-registry-import.md)<br/>**NEW!** Import servers from Anthropic MCP Registry | [Observability Guide](docs/OBSERVABILITY.md)<br/>**NEW!** Metrics, monitoring, and OpenTelemetry setup |
+| [Anthropic Registry API](docs/anthropic_registry_api.md)<br/>**NEW!** REST API compatibility | [Fine-Grained Access Control](docs/scopes.md)<br/>Permission management and security | [Dynamic Tool Discovery](docs/dynamic-tool-discovery.md)<br/>Autonomous agent capabilities |
 | | [Service Management](docs/service-management.md)<br/>Server lifecycle and operations | |
 | | | [Production Deployment](docs/installation.md)<br/>Complete setup for production environments |
 | | | [Troubleshooting Guide](docs/FAQ.md)<br/>Common issues and solutions |
@@ -423,9 +530,6 @@ Comprehensive real-time metrics and monitoring through Grafana dashboards with d
 **Join the Discussion**
 - [GitHub Discussions](https://github.com/agentic-community/mcp-gateway-registry/discussions) - Feature requests and general discussion
 - [GitHub Issues](https://github.com/agentic-community/mcp-gateway-registry/issues) - Bug reports and feature requests
-
-**Resources**
-- [Demo Videos](https://github.com/agentic-community/mcp-gateway-registry#demo-videos) - See the platform in action
 
 **Contributing**
 - [Contributing Guide](CONTRIBUTING.md) - How to contribute code and documentation
@@ -442,37 +546,32 @@ The following GitHub issues represent our current development roadmap and planne
 
 **Major Features**
 
-- **[#171 - Feature: Import Servers from Anthropic MCP Registry](https://github.com/agentic-community/mcp-gateway-registry/issues/171)** 🚧 **IN PROGRESS**
-  Add functionality to import and synchronize MCP servers from the Anthropic MCP Registry, enabling seamless integration with the broader MCP ecosystem.
+- **[#203 - Deploy MCP Gateway Registry on AWS ECS Fargate](https://github.com/agentic-community/mcp-gateway-registry/issues/203)** 🚧 **IN PROGRESS**
+  Comprehensive production-ready ECS deployment guide with multi-AZ architecture, auto-scaling, HTTPS/SSL, CloudWatch monitoring, and NAT Gateway HA. Complete Terraform configuration templates for deploying the entire stack on AWS.
+
+- **[#195 - Add A2A (Agent-to-Agent) Protocol Support to Registry](https://github.com/agentic-community/mcp-gateway-registry/issues/195)** ✅ **COMPLETE**
+  Agents can now register, discover, and communicate with other agents through the secure registry. Full implementation includes agent lifecycle management, Keycloak-based access control, fine-grained permissions, comprehensive testing, and documentation. [A2A Guide](docs/a2a.md)
+
+- **[#128 - Add Microsoft Entra ID (Azure AD) Authentication Provider](https://github.com/agentic-community/mcp-gateway-registry/issues/128)** ✅ **COMPLETE**
+  Extend authentication support beyond Keycloak to include Microsoft Entra ID integration. Enables enterprise SSO for organizations using Azure Active Directory.
 
 - **[#170 - Architectural Proposal: Separate Gateway and Registry Containers](https://github.com/agentic-community/mcp-gateway-registry/issues/170)** 🚧 **IN PROGRESS**
   Architectural enhancement to separate gateway and registry functionality into independent containers for improved scalability, maintainability, and deployment flexibility.
 
-- **[#37 - Multi-Level Registry Support](https://github.com/agentic-community/mcp-gateway-registry/issues/37)** 🚧 **IN PROGRESS**
-  Add support for federated registries that can connect to other registries, enabling hierarchical MCP infrastructure with cross-IdP authentication.
-
-- **[#132 - Registry UI: Add MCP Configuration Generator](https://github.com/agentic-community/mcp-gateway-registry/issues/132)** 🚧 **IN PROGRESS**
-  Add copy-paste MCP configuration generator to Registry UI for seamless integration with AI coding assistants (VS Code, Cursor, Claude Code).
-
 - **[#129 - Virtual MCP Server Support - Dynamic Tool Aggregation and Intelligent Routing](https://github.com/agentic-community/mcp-gateway-registry/issues/129)** 🚧 **IN PROGRESS**
   Enable logical grouping of tools from multiple backend servers with intelligent routing using Lua/JavaScript scripting. Provides purpose-built virtual servers that abstract away backend complexity.
 
-- **[#121 - Migrate to OpenSearch for Server Storage and Vector Search](https://github.com/agentic-community/mcp-gateway-registry/issues/121)**
-  Replace current storage with OpenSearch to provide advanced vector search capabilities and improved scalability for large server registries.
-
 - **[#118 - Agent-as-Tool Integration: Dynamic MCP Server Generation](https://github.com/agentic-community/mcp-gateway-registry/issues/118)**
   Convert existing AI agents into MCP servers dynamically, enabling legacy agent ecosystems to participate in the MCP protocol without code rewrites.
+
+- **[#121 - Migrate to OpenSearch for Server Storage and Vector Search](https://github.com/agentic-community/mcp-gateway-registry/issues/121)**
+  Replace current storage with OpenSearch to provide advanced vector search capabilities and improved scalability for large server registries.
 
 - **[#98 - Complete GDPR and SOX Compliance Implementation](https://github.com/agentic-community/mcp-gateway-registry/issues/98)**
   Full compliance implementation for GDPR and SOX requirements, including data retention policies, audit trails, and privacy controls.
 
 - **[#39 - Tool Popularity Scoring and Rating System](https://github.com/agentic-community/mcp-gateway-registry/issues/39)**
   Enhance tool discovery with popularity scores and star ratings based on usage patterns and agent feedback.
-
-**Authentication & Identity**
-
-- **[#128 - Add Microsoft Entra ID (Azure AD) Authentication Provider](https://github.com/agentic-community/mcp-gateway-registry/issues/128)** 🚧 **IN PROGRESS**
-  Extend authentication support beyond Keycloak to include Microsoft Entra ID integration. Enables enterprise SSO for organizations using Azure Active Directory.
 
 **DevOps & Operations**
 
@@ -483,6 +582,15 @@ The following GitHub issues represent our current development roadmap and planne
   Optimize Docker build times and runtime performance for faster development and deployment cycles.
 
 **Completed**
+
+- **[#132 - Registry UI: Add MCP Configuration Generator](https://github.com/agentic-community/mcp-gateway-registry/issues/132)** ✅ **COMPLETED**
+  Copy-paste MCP configuration generator added to Registry UI for seamless integration with AI coding assistants (VS Code, Cursor, Claude Code).
+
+- **[#171 - Feature: Import Servers from Anthropic MCP Registry](https://github.com/agentic-community/mcp-gateway-registry/issues/171)** ✅ **COMPLETED**
+  Anthropic MCP Registry import functionality implemented. Import curated servers with a single command and access through the gateway with full REST API compatibility. [Import Guide](docs/anthropic-registry-import.md) | [API Documentation](docs/anthropic_registry_api.md)
+
+- **[#37 - Multi-Level Registry Support](https://github.com/agentic-community/mcp-gateway-registry/issues/37)** ✅ **COMPLETED** (Closed via #179, #181)
+  Registry-to-registry integration now supported through Anthropic MCP Registry import, enabling federated server discovery and access across different registries.
 
 - **[#159 - Add scope management: create/delete Keycloak groups with scope configuration](https://github.com/agentic-community/mcp-gateway-registry/issues/159)** ✅ **COMPLETED**
   Dynamic scope management functionality implemented with create-group, delete-group, list-groups, and server-to-group assignment commands through service management CLI. Includes comprehensive user management with group-based access control. [Service Management Guide](docs/service-management.md)
