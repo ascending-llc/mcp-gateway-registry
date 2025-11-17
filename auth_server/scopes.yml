@@ -126,6 +126,11 @@ group_mappings:
   - registry-users-lob1
   registry-users-lob2:
   - registry-users-lob2
+  # Entra groups mapping
+  mcp-registry-developer:
+  - mcp-registry-admin
+  - mcp-servers-unrestricted/read
+  - mcp-servers-unrestricted/execute
 
 # ==================== MCP SERVER SCOPES ====================
 # Unrestricted read access: Wildcard access to all servers with all methods and tools

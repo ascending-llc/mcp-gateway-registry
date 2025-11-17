@@ -1679,7 +1679,7 @@ async def oauth2_callback(
             # For Entra ID, prioritize ID token claims over userinfo endpoint
             try:
                 # For Entra ID, use provider's get_user_info method
-                auth_provider = get_auth_provider('entra_id')
+                auth_provider = get_auth_provider('entra')
 
                 user_info = auth_provider.get_user_info(
                     access_token=token_data.get("access_token"),  # Required for Graph API calls
