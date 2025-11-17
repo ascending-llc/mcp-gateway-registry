@@ -4,7 +4,7 @@ import {taskCatalog} from "../tasks/index.js";
 import {executeSlashCommand} from "../commands/executor.js";
 
 export interface AgentToolInvocation {
-  type: "mcp" | "task" | "docs" | "unknown";
+  type: "mcp" | "task" | "shell" | "docs" | "unknown";
   name: string;
   input: Record<string, unknown>;
 }
@@ -48,6 +48,20 @@ export const anthropicTools: any[] = [
     }
   },
   {
+    name: "shell_command",
+    description: "Execute shell commands for system diagnostics, file operations, and debugging. Safe for read-only operations and credential inspection.",
+    input_schema: {
+      type: "object",
+      properties: {
+        command: {
+          type: "string",
+          description: "Bash command to execute (e.g., './cli/service_mgmt.sh list-groups', 'cat /path/to/file.json')"
+        }
+      },
+      required: ["command"]
+    }
+  },
+  {
     name: "read_docs",
     description: "Search and read documentation files from the docs folder. Use this when users ask questions about the project, features, setup, configuration, or troubleshooting.",
     input_schema: {
@@ -74,6 +88,10 @@ export function mapToolCall(tool: any): AgentToolInvocation {
   if (tool.name === "registry_task") {
     const input = tool.input as Record<string, unknown>;
     return {type: "task", name: tool.name, input};
+  }
+  if (tool.name === "shell_command") {
+    const input = tool.input as Record<string, unknown>;
+    return {type: "shell", name: tool.name, input};
   }
   if (tool.name === "read_docs") {
     const input = tool.input as Record<string, unknown>;
@@ -109,6 +127,21 @@ export async function executeMappedTool(
     }
     const result = await executeSlashCommand(commandText, context);
     return {output: result.lines.join("\n"), isError: result.isError};
+  }
+
+  if (invocation.type === "shell") {
+    const { execSync } = await import("child_process");
+    const command = String(invocation.input.command || "").trim();
+    if (!command) {
+      return {output: "Missing command field", isError: true};
+    }
+    try {
+      const output = execSync(command, {encoding: "utf-8", maxBuffer: 10 * 1024 * 1024});
+      return {output};
+    } catch (error) {
+      const errorMessage = (error as Error).message || String(error);
+      return {output: errorMessage, isError: true};
+    }
   }
 
   if (invocation.type === "docs") {

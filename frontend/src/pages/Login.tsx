@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
-import logo from '../assets/logo.png';
 import { EyeIcon, EyeSlashIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
 interface OAuthProvider {
@@ -25,14 +24,15 @@ const Login: React.FC = () => {
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
+    console.log('[Login] Component mounted, fetching OAuth providers...');
     fetchOAuthProviders();
-    
+
     // Check for error parameter from URL (e.g., from OAuth callback)
     const urlError = searchParams.get('error');
     if (urlError) {
       setError(decodeURIComponent(urlError));
     }
-    
+
     // Check if user preferences exist
     const savedRememberMe = localStorage.getItem('rememberMe') === 'true';
     const savedUsername = localStorage.getItem('savedUsername');
@@ -42,13 +42,22 @@ const Login: React.FC = () => {
     }
   }, [searchParams]);
 
+  // Log when oauthProviders state changes
+  useEffect(() => {
+    console.log('[Login] oauthProviders state changed:', oauthProviders);
+  }, [oauthProviders]);
+
   const fetchOAuthProviders = async () => {
     try {
+      console.log('[Login] Fetching OAuth providers from /api/auth/providers');
       // Call the registry auth providers endpoint
       const response = await axios.get('/api/auth/providers');
+      console.log('[Login] Response received:', response.data);
+      console.log('[Login] Providers:', response.data.providers);
       setOauthProviders(response.data.providers || []);
+      console.log('[Login] State updated with', response.data.providers?.length || 0, 'providers');
     } catch (error) {
-      console.error('Failed to fetch OAuth providers:', error);
+      console.error('[Login] Failed to fetch OAuth providers:', error);
       // Don't show error for missing OAuth providers, just continue with basic auth
     }
   };
@@ -142,7 +151,7 @@ const Login: React.FC = () => {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const currentOrigin = window.location.origin;
     const redirectUri = encodeURIComponent(currentOrigin + '/');
-    
+
     if (isLocalhost) {
       window.location.href = `http://localhost:8888/oauth2/login/${provider}?redirect_uri=${redirectUri}`;
     } else {
@@ -153,18 +162,8 @@ const Login: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="flex justify-center items-center">
-          <img 
-            src={logo}
-            alt="MCP Gateway Logo" 
-            className="h-12 w-12 dark:brightness-0 dark:invert"
-          />
-          <span className="ml-3 text-2xl font-bold text-gray-900 dark:text-white">
-            MCP Gateway
-          </span>
-        </div>
-        <h2 className="mt-6 text-center text-3xl font-bold text-gray-900 dark:text-white">
-          Sign in to MCP Gateway
+        <h2 className="text-center text-3xl font-bold text-gray-900 dark:text-white">
+          Sign in to MCP Servers & A2A Agents Registry
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
           Access your MCP server management dashboard
@@ -185,7 +184,7 @@ const Login: React.FC = () => {
                   <span>Continue with {provider.display_name}</span>
                 </button>
               ))}
-              
+
               <div className="relative my-6">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-gray-300 dark:border-gray-600" />

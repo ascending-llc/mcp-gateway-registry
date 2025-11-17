@@ -1,6 +1,6 @@
 import type {TaskCategory} from "../tasks/types.js";
 
-export type CommandKind = "help" | "ping" | "list" | "servers" | "init" | "call" | "task" | "exit" | "unknown";
+export type CommandKind = "help" | "ping" | "list" | "servers" | "init" | "call" | "task" | "agents" | "exit" | "unknown";
 
 export interface BaseParsedCommand {
   kind: CommandKind;
@@ -32,12 +32,18 @@ export interface TaskCommand extends BaseParsedCommand {
   tokens: string[];
 }
 
+export interface AgentsCommand extends BaseParsedCommand {
+  kind: "agents";
+  subcommand: string;
+  tokens: string[];
+}
+
 export interface UnknownCommand extends BaseParsedCommand {
   kind: "unknown";
   message: string;
 }
 
-export type ParsedCommand = HelpCommand | ExitCommand | PingCommand | CallCommand | TaskCommand | UnknownCommand;
+export type ParsedCommand = HelpCommand | ExitCommand | PingCommand | CallCommand | TaskCommand | AgentsCommand | UnknownCommand;
 
 const TASK_PREFIXES: Record<string, TaskCategory> = {
   service: "service",
@@ -86,6 +92,31 @@ export function parseCommand(input: string): ParsedCommand {
 
   if (keyword === "call") {
     return parseCall(tokens);
+  }
+
+  if (keyword === "agents" || keyword === "agent") {
+    if (tokens.length === 0) {
+      return {
+        kind: "unknown",
+        message: `I need a subcommand for agents. Try "/agents help" or "/help".`
+      };
+    }
+
+    const subcommand = tokens.shift()!.toLowerCase();
+
+    if (subcommand === "help") {
+      return {
+        kind: "agents",
+        subcommand: "help",
+        tokens: []
+      };
+    }
+
+    return {
+      kind: "agents",
+      subcommand,
+      tokens
+    };
   }
 
   const simpleKind = SIMPLE_COMMANDS[keyword];

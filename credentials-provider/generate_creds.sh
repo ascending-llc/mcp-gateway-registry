@@ -2,32 +2,25 @@
 #
 # OAuth Credentials Orchestrator Script
 #
-# This script orchestrates OAuth authentication for multiple flows and generates
-# MCP configuration files for VS Code and Roocode.
+# This script orchestrates OAuth authentication for both ingress and egress flows,
+# and generates MCP configuration files for VS Code and Roocode.
 #
-# Supported authentication types:
-# - ingress: Cognito/Entra M2M authentication for MCP Gateway
-# - egress: External provider authentication (Atlassian, Google, GitHub, etc.)
-# - agentcore: AWS Bedrock AgentCore gateway authentication
-# - keycloak: Keycloak agent token generation (batch mode)
-# - entra: Microsoft Entra ID agent token generation (batch mode)
+# Default behavior: Run both ingress and egress authentication flows
+# - ingress: Cognito M2M authentication for MCP Gateway
+# - egress: External provider authentication (default: Atlassian)
 #
-# Default behavior: Run all authentication types
-# If ingress fails when multiple types are requested, the script stops.
-# If other types fail, the script continues and generates configs with available tokens.
+# If both are requested and ingress fails, the script stops (egress won't run).
+# If only egress is requested and it fails, the script continues to generate configs.
 #
 # Usage:
-#   ./generate_creds.sh                    # Run all authentication types (default)
-#   ./generate_creds.sh --ingress-only     # Run only ingress authentication
-#   ./generate_creds.sh --egress-only      # Run only egress authentication
-#   ./generate_creds.sh --agentcore-only   # Run only AgentCore token generation
-#   ./generate_creds.sh --keycloak-only    # Run only Keycloak agent tokens
-#   ./generate_creds.sh --entra-only       # Run only Entra ID agent tokens
-#   ./generate_creds.sh --both             # Run only ingress and egress
-#   ./generate_creds.sh --all              # Explicitly run all (same as default)
-#   ./generate_creds.sh --provider google  # Run all with Google as egress provider
-#   ./generate_creds.sh --verbose          # Enable verbose logging
-#   ./generate_creds.sh --help             # Show this help
+#   ./oauth_creds.sh                    # Run both ingress and egress (default)
+#   ./oauth_creds.sh --ingress-only     # Run only ingress authentication
+#   ./oauth_creds.sh --egress-only      # Run only egress authentication  
+#   ./oauth_creds.sh --both             # Explicitly run both (same as default)
+#   ./oauth_creds.sh --provider google  # Run both with Google as egress provider
+#   ./oauth_creds.sh --verbose          # Enable verbose logging
+#   ./oauth_creds.sh --force            # Force new token generation
+#   ./oauth_creds.sh --help             # Show this help
 
 set -e  # Exit on error
 
@@ -59,7 +52,6 @@ RUN_INGRESS=true
 RUN_EGRESS=true
 RUN_AGENTCORE=true
 RUN_KEYCLOAK=true
-RUN_ENTRA=true
 # Read provider and server name from environment variables with defaults
 EGRESS_PROVIDER="${EGRESS_PROVIDER_NAME:-atlassian}"
 EGRESS_MCP_SERVER_NAME="${EGRESS_MCP_SERVER_NAME:-}"
@@ -107,9 +99,8 @@ OPTIONS:
     --egress-only           Run only egress authentication (external providers)
     --agentcore-only        Run only AgentCore token generation
     --keycloak-only         Run only Keycloak agent token generation
-    --entra-only            Run only Entra ID agent token generation
-    --both                  Run only ingress and egress (excludes agentcore, keycloak, and entra)
-    --all                   Run all authentication types (ingress, egress, agentcore, keycloak, and entra)
+    --both                  Run only ingress and egress (excludes agentcore and keycloak)
+    --all                   Run ingress, egress, agentcore, and keycloak authentication
     --provider PROVIDER     Specify egress provider (default: atlassian)
                            Supported: atlassian, google, github, microsoft, etc.
     --force, -f             Force new token generation, ignore existing tokens
@@ -122,15 +113,14 @@ EXAMPLES:
     ./generate_creds.sh --egress-only          # Only external provider authentication
     ./generate_creds.sh --agentcore-only       # Only AgentCore token generation
     ./generate_creds.sh --keycloak-only        # Only Keycloak agent token generation
-    ./generate_creds.sh --entra-only           # Only Entra ID agent token generation
-    ./generate_creds.sh --both                 # Run only ingress and egress (no agentcore/keycloak/entra)
+    ./generate_creds.sh --both                 # Run only ingress and egress (no agentcore/keycloak)
     ./generate_creds.sh --provider google      # All flows with Google as egress
     ./generate_creds.sh --force --verbose      # Force new tokens with debug output
 
 BEHAVIOR:
-    - Default: Runs all authentication types (ingress, egress, agentcore, keycloak, and entra)
+    - Default: Runs all four authentication types (ingress, egress, agentcore, and keycloak)
     - If multiple are requested and ingress fails → script stops
-    - If egress, agentcore, keycloak, or entra fails → continues with remaining tasks and config generation
+    - If egress, agentcore, or keycloak fails → continues with remaining tasks and config generation
     - Always attempts to generate MCP configuration files with available tokens
     - Summary shows clear pass/fail status for each authentication type
 
@@ -158,7 +148,6 @@ while [[ $# -gt 0 ]]; do
             RUN_EGRESS=false
             RUN_AGENTCORE=false
             RUN_KEYCLOAK=false
-            RUN_ENTRA=false
             shift
             ;;
         --egress-only)
@@ -166,7 +155,6 @@ while [[ $# -gt 0 ]]; do
             RUN_EGRESS=true
             RUN_AGENTCORE=false
             RUN_KEYCLOAK=false
-            RUN_ENTRA=false
             shift
             ;;
         --agentcore-only)
@@ -174,7 +162,6 @@ while [[ $# -gt 0 ]]; do
             RUN_EGRESS=false
             RUN_AGENTCORE=true
             RUN_KEYCLOAK=false
-            RUN_ENTRA=false
             shift
             ;;
         --keycloak-only)
@@ -182,15 +169,6 @@ while [[ $# -gt 0 ]]; do
             RUN_EGRESS=false
             RUN_AGENTCORE=false
             RUN_KEYCLOAK=true
-            RUN_ENTRA=false
-            shift
-            ;;
-        --entra-only)
-            RUN_INGRESS=false
-            RUN_EGRESS=false
-            RUN_AGENTCORE=false
-            RUN_KEYCLOAK=false
-            RUN_ENTRA=true
             shift
             ;;
         --both)
@@ -198,7 +176,6 @@ while [[ $# -gt 0 ]]; do
             RUN_EGRESS=true
             RUN_AGENTCORE=false
             RUN_KEYCLOAK=false
-            RUN_ENTRA=false
             shift
             ;;
         --all)
@@ -206,7 +183,6 @@ while [[ $# -gt 0 ]]; do
             RUN_EGRESS=true
             RUN_AGENTCORE=true
             RUN_KEYCLOAK=true
-            RUN_ENTRA=true
             shift
             ;;
         --provider)
@@ -239,6 +215,9 @@ run_ingress_auth() {
     
     local cmd="python3 '$SCRIPT_DIR/oauth/ingress_oauth.py'"
     
+    if [ "$FORCE" = true ]; then
+        cmd="$cmd --force"
+    fi
     
     if [ "$VERBOSE" = true ]; then
         cmd="$cmd --verbose"
@@ -266,6 +245,9 @@ run_egress_auth() {
         cmd="$cmd --mcp-server-name '$EGRESS_MCP_SERVER_NAME'"
     fi
     
+    if [ "$FORCE" = true ]; then
+        cmd="$cmd --force"
+    fi
     
     if [ "$VERBOSE" = true ]; then
         cmd="$cmd --verbose"
@@ -287,6 +269,10 @@ run_agentcore_auth() {
     log_info " Running AgentCore token generation..."
 
     local cmd="python3 '$SCRIPT_DIR/agentcore-auth/generate_access_token.py'"
+
+    if [ "$FORCE" = true ]; then
+        cmd="$cmd --force"
+    fi
 
     if [ "$VERBOSE" = true ]; then
         cmd="$cmd --debug"
@@ -320,27 +306,6 @@ run_keycloak_auth() {
         return 0
     else
         log_error "❌ Keycloak agent token generation failed"
-        return 1
-    fi
-}
-
-# Function to run Entra ID agent token generation
-run_entra_auth() {
-    log_info " Running Entra ID agent token generation..."
-
-    local cmd="python '$SCRIPT_DIR/entra/generate_tokens.py' --all-agents"
-
-    if [ "$VERBOSE" = true ]; then
-        cmd="$cmd --verbose"
-    fi
-
-    log_debug "Executing: $cmd"
-
-    if eval "$cmd"; then
-        log_info "✅ Entra ID agent token generation completed successfully"
-        return 0
-    else
-        log_error "❌ Entra ID agent token generation failed"
         return 1
     fi
 }
@@ -655,13 +620,12 @@ add_noauth_services() {
 # Main execution
 main() {
     log_info " Starting OAuth Credentials Orchestrator"
-    log_info "Configuration: ingress=$RUN_INGRESS, egress=$RUN_EGRESS (provider=$EGRESS_PROVIDER), agentcore=$RUN_AGENTCORE, keycloak=$RUN_KEYCLOAK, entra=$RUN_ENTRA"
+    log_info "Configuration: ingress=$RUN_INGRESS, egress=$RUN_EGRESS (provider=$EGRESS_PROVIDER), agentcore=$RUN_AGENTCORE, keycloak=$RUN_KEYCLOAK"
     
     local ingress_success=false
     local egress_success=false
     local agentcore_success=false
     local keycloak_success=false
-    local entra_success=false
     
     # Run ingress authentication if requested
     if [ "$RUN_INGRESS" = true ]; then
@@ -669,7 +633,7 @@ main() {
             ingress_success=true
         else
             # If multiple are requested and ingress fails, stop here
-            if [ "$RUN_EGRESS" = true ] || [ "$RUN_AGENTCORE" = true ] || [ "$RUN_KEYCLOAK" = true ] || [ "$RUN_ENTRA" = true ]; then
+            if [ "$RUN_EGRESS" = true ] || [ "$RUN_AGENTCORE" = true ] || [ "$RUN_KEYCLOAK" = true ]; then
                 log_error "Ingress authentication failed. Stopping before other authentication types (as multiple were requested)."
                 exit 1
             fi
@@ -700,15 +664,6 @@ main() {
             keycloak_success=true
         else
             log_warn "Keycloak authentication failed, but continuing to generate configs"
-        fi
-    fi
-
-    # Run Entra ID authentication if requested
-    if [ "$RUN_ENTRA" = true ]; then
-        if run_entra_auth; then
-            entra_success=true
-        else
-            log_warn "Entra ID authentication failed, but continuing to generate configs"
         fi
     fi
     
@@ -746,14 +701,6 @@ main() {
             log_info "  ✅ Keycloak authentication: SUCCESS"
         else
             log_info "  ❌ Keycloak authentication: FAILED"
-        fi
-    fi
-
-    if [ "$RUN_ENTRA" = true ]; then
-        if [ "$entra_success" = true ]; then
-            log_info "  ✅ Entra ID authentication: SUCCESS"
-        else
-            log_info "  ❌ Entra ID authentication: FAILED"
         fi
     fi
     

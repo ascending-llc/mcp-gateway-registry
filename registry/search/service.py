@@ -43,4 +43,4 @@ faiss_service = create_vector_search_service()
 vector_service = faiss_service
 
 # Backward compatibility: expose the service with its original name
-__all__ = ['faiss_service', 'create_vector_search_service'] 
+__all__ = ['faiss_service', 'create_vector_search_service']

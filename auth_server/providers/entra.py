@@ -16,7 +16,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class EntraIDProvider(AuthProvider):
+class EntraIdProvider(AuthProvider):
     """Microsoft Entra ID authentication provider implementation."""
 
     def __init__(
@@ -68,6 +68,7 @@ class EntraIDProvider(AuthProvider):
         self._jwks_cache_ttl: int = 3600  # 1 hour
 
         # Microsoft Entra ID endpoints - from configuration
+        base_url = f"https://login.microsoftonline.com/{tenant_id}"
         self.auth_url = auth_url
         self.token_url = token_url
         self.jwks_url = jwks_url
@@ -87,16 +88,42 @@ class EntraIDProvider(AuthProvider):
         self.email_claim = email_claim
         self.name_claim = name_claim
 
+        # Entra ID supports two issuer formats:
+        # v2.0 endpoint: https://login.microsoftonline.com/{tenant}/v2.0
+        # v1.0/M2M endpoint: https://sts.windows.net/{tenant}/
+        self.issuer_v2 = f"{base_url}/v2.0"
+        self.issuer_v1 = f"https://sts.windows.net/{tenant_id}/"
+        self.valid_issuers = [self.issuer_v2, self.issuer_v1]
+
         logger.debug(f"Initialized Entra ID provider for tenant '{tenant_id}' with "
                      f"scopes={self.scopes}, grant_type={self.grant_type}, graph_url={self.graph_url}, "
                      f"claims: username={username_claim}, email={email_claim}, groups={groups_claim}, name={name_claim}")
 
     def validate_token(
-            self,
-            token: str,
-            **kwargs: Any
+        self,
+        token: str,
+        **kwargs: Any
     ) -> Dict[str, Any]:
-        """Validate Entra ID JWT token."""
+        """Validate Entra ID JWT token.
+
+        Args:
+            token: The JWT access token to validate
+            **kwargs: Additional provider-specific arguments
+
+        Returns:
+            Dictionary containing:
+                - valid: True if token is valid
+                - username: User's preferred_username or sub claim
+                - email: User's email address
+                - groups: List of Azure AD group Object IDs
+                - scopes: List of token scopes
+                - client_id: Client ID that issued the token
+                - method: 'entra'
+                - data: Raw token claims
+
+        Raises:
+            ValueError: If token validation fails
+        """
         try:
             logger.debug("Validating Entra ID JWT token")
 
@@ -121,8 +148,15 @@ class EntraIDProvider(AuthProvider):
             if not signing_key:
                 raise ValueError(f"No matching key found for kid: {kid}")
 
-            # Validate and decode token
-            # Note: Entra ID tokens may have audience as the client_id or api://{client_id}
+            # First, decode without validation to check issuer
+            unverified_claims = jwt.decode(token, options={"verify_signature": False})
+            token_issuer = unverified_claims.get('iss')
+
+            # Check if issuer is valid (v1.0 or v2.0)
+            if token_issuer not in self.valid_issuers:
+                raise ValueError(f"Invalid issuer: {token_issuer}. Expected one of: {self.valid_issuers}")
+
+            # Validate and decode token with the correct issuer
             claims = jwt.decode(
                 token,
                 signing_key,
@@ -153,7 +187,7 @@ class EntraIDProvider(AuthProvider):
                 'groups': groups,
                 'scopes': claims.get('scp', '').split() if claims.get('scp') else [],
                 'client_id': claims.get('azp', claims.get('appid', self.client_id)),
-                'method': 'entra_id',
+                'method': 'entra',
                 'data': claims
             }
 
@@ -192,9 +226,9 @@ class EntraIDProvider(AuthProvider):
             raise ValueError(f"Cannot retrieve JWKS: {e}")
 
     def exchange_code_for_token(
-            self,
-            code: str,
-            redirect_uri: str
+        self,
+        code: str,
+        redirect_uri: str
     ) -> Dict[str, Any]:
         """Exchange authorization code for access token."""
         try:
@@ -216,16 +250,11 @@ class EntraIDProvider(AuthProvider):
 
             token_data = response.json()
             logger.debug("Token exchange successful")
+
             return token_data
 
         except requests.RequestException as e:
             logger.error(f"Failed to exchange code for token: {e}")
-            if hasattr(e, 'response') and e.response is not None:
-                try:
-                    error_detail = e.response.json()
-                    logger.error(f"Error details: {error_detail}")
-                except Exception:
-                    logger.error(f"Response text: {e.response.text}")
             raise ValueError(f"Token exchange failed: {e}")
 
     def _extract_user_info_from_token(
@@ -300,7 +329,7 @@ class EntraIDProvider(AuthProvider):
             graph_data = response.json()
             logger.info(f"User info fetched from Microsoft Graph API: {graph_data}")
 
-            entra_config = get_provider_config('entra_id') or {}
+            entra_config = get_provider_config('entra') or {}
 
             username_claim = entra_config.get('username_claim')
             email_claim = entra_config.get('email_claim')
@@ -418,12 +447,21 @@ class EntraIDProvider(AuthProvider):
             raise ValueError(f"User info retrieval failed: {e}")
 
     def get_auth_url(
-            self,
-            redirect_uri: str,
-            state: str,
-            scope: Optional[str] = None
+        self,
+        redirect_uri: str,
+        state: str,
+        scope: Optional[str] = None
     ) -> str:
-        """Get Entra ID authorization URL."""
+        """Get Entra ID authorization URL.
+
+        Args:
+            redirect_uri: URI to redirect to after authorization
+            state: State parameter for CSRF protection
+            scope: Optional scope parameter (defaults to openid email profile)
+
+        Returns:
+            Full authorization URL
+        """
         logger.debug(f"Generating auth URL with redirect_uri: {redirect_uri}")
 
         params = {'client_id': self.client_id,
@@ -431,38 +469,54 @@ class EntraIDProvider(AuthProvider):
                   'scope': scope or ' '.join(self.scopes),
                   'redirect_uri': redirect_uri,
                   'state': state,
-                  'response_mode': 'query'
                   }
 
         auth_url = f"{self.auth_url}?{urlencode(params)}"
         logger.debug(f"Generated auth URL: {auth_url}")
+
         return auth_url
 
     def get_logout_url(
-            self,
-            redirect_uri: str
+        self,
+        redirect_uri: str
     ) -> str:
-        """Get Entra ID logout URL."""
+        """Get Entra ID logout URL.
+
+        Args:
+            redirect_uri: URI to redirect to after logout
+
+        Returns:
+            Full logout URL
+        """
         logger.debug(f"Generating logout URL with redirect_uri: {redirect_uri}")
 
-        params = {'post_logout_redirect_uri': redirect_uri}
+        params = {
+            'client_id': self.client_id,
+            'post_logout_redirect_uri': redirect_uri
+        }
+
         logout_url = f"{self.logout_url}?{urlencode(params)}"
         logger.debug(f"Generated logout URL: {logout_url}")
 
         return logout_url
 
     def refresh_token(
-            self,
-            refresh_token: str
+        self,
+        refresh_token: str
     ) -> Dict[str, Any]:
-        """Refresh an access token using a refresh token."""
+        """Refresh an access token using a refresh token.
+
+        Args:
+            refresh_token: The refresh token
+
+        Returns:
+            Dictionary containing new token response
+
+        Raises:
+            ValueError: If token refresh fails
+        """
         try:
             logger.debug("Refreshing access token")
-
-            # Include offline_access scope for refresh tokens
-            refresh_scopes = self.scopes.copy()
-            if 'offline_access' not in refresh_scopes:
-                refresh_scopes.append('offline_access')
 
             data = {
                 'grant_type': 'refresh_token',
@@ -472,7 +526,9 @@ class EntraIDProvider(AuthProvider):
                 'scope': ' '.join(refresh_scopes)
             }
 
-            headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+            headers = {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
 
             response = requests.post(self.token_url, data=data, headers=headers, timeout=10)
             response.raise_for_status()
@@ -487,27 +543,54 @@ class EntraIDProvider(AuthProvider):
             raise ValueError(f"Token refresh failed: {e}")
 
     def validate_m2m_token(
-            self,
-            token: str
+        self,
+        token: str
     ) -> Dict[str, Any]:
-        """Validate a machine-to-machine token."""
-        # M2M tokens use the same validation as regular tokens in Entra ID
+        """Validate a machine-to-machine token.
+
+        Args:
+            token: The M2M access token to validate
+
+        Returns:
+            Dictionary containing validation result
+
+        Raises:
+            ValueError: If token validation fails
+        """
         return self.validate_token(token)
 
     def get_m2m_token(
-            self,
-            client_id: Optional[str] = None,
-            client_secret: Optional[str] = None,
-            scope: Optional[str] = None
+        self,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+        scope: Optional[str] = None
     ) -> Dict[str, Any]:
         """Get machine-to-machine token using client credentials.
-        
-        For Entra ID, the default scope for client credentials is '.default'
-        which requests all permissions configured for the app registration.
+
+        This method is used for AI agent authentication using Azure AD service principals.
+        Each AI agent should have its own service principal (app registration) in Azure AD.
+
+        Args:
+            client_id: Optional client ID (uses default if not provided)
+            client_secret: Optional client secret (uses default if not provided)
+            scope: Optional scope for the token (defaults to .default)
+
+        Returns:
+            Dictionary containing token response:
+                - access_token: The M2M access token
+                - token_type: "Bearer"
+                - expires_in: Token expiration time in seconds
+
+        Raises:
+            ValueError: If token generation fails
         """
         try:
             logger.debug("Requesting M2M token using client credentials")
-            # Use configured M2M scope from parameters
+
+            # Default scope for Entra ID M2M tokens
+            if not scope:
+                scope = f'api://{client_id or self.client_id}/.default'
+
             data = {
                 'grant_type': 'client_credentials',
                 'client_id': client_id or self.client_id,
@@ -523,18 +606,16 @@ class EntraIDProvider(AuthProvider):
 
         except requests.RequestException as e:
             logger.error(f"Failed to get M2M token: {e}")
-            if hasattr(e, 'response') and e.response is not None:
-                try:
-                    error_detail = e.response.json()
-                    logger.error(f"Error details: {error_detail}")
-                except Exception as e:
-                    logger.error(f"Response text: {e.response.text}")
             raise ValueError(f"M2M token generation failed: {e}")
 
     def get_provider_info(self) -> Dict[str, Any]:
-        """Get provider-specific information."""
+        """Get provider-specific information.
+
+        Returns:
+            Dictionary containing provider configuration and endpoints
+        """
         return {
-            'provider_type': 'entra_id',
+            'provider_type': 'entra',
             'tenant_id': self.tenant_id,
             'client_id': self.client_id,
             'endpoints': {
@@ -544,5 +625,8 @@ class EntraIDProvider(AuthProvider):
                 'jwks': self.jwks_url,
                 'logout': self.logout_url
             },
-            'issuer': self.issuer
+            'issuers': {
+                'v2': self.issuer_v2,
+                'v1': self.issuer_v1
+            }
         }

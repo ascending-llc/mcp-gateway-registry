@@ -11,7 +11,11 @@ CLIENT_ID=""
 CLIENT_SECRET=""
 KEYCLOAK_URL=""
 KEYCLOAK_REALM="mcp-gateway"
-OAUTH_TOKENS_DIR="../../.oauth-tokens"
+
+# Determine the project root directory (parent of keycloak/setup directory)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+OAUTH_TOKENS_DIR="${PROJECT_ROOT}/.oauth-tokens"
 VERBOSE=false
 
 # Colors for output
@@ -229,7 +233,10 @@ if command -v jq &> /dev/null; then
 
     success "Access token generated successfully!"
     echo ""
-    echo "Access Token: $access_token"
+
+    # Mask token for security - show only first and last portions
+    token_preview="${access_token:0:20}....[MASKED FOR SECURITY]....${access_token: -20}"
+    echo "Access Token: $token_preview"
     echo ""
 
     if [ -n "$expires_in" ]; then
@@ -241,12 +248,8 @@ if command -v jq &> /dev/null; then
 
     # Offer to save as environment file
     env_file="$OAUTH_TOKENS_DIR/${AGENT_NAME}.env"
-    echo "Environment variables:"
-    echo "export ACCESS_TOKEN=\"$access_token\""
-    echo "export CLIENT_ID=\"$CLIENT_ID\""
-    echo "export CLIENT_SECRET=\"$CLIENT_SECRET\""
-    echo "export KEYCLOAK_URL=\"$KEYCLOAK_URL\""
-    echo "export KEYCLOAK_REALM=\"$KEYCLOAK_REALM\""
+    echo "Environment variables saved to: $env_file"
+    echo "(Full token and credentials have been saved securely - not displayed in terminal)"
     echo ""
 
     # Save to .env file
@@ -293,12 +296,16 @@ EOF
 EOF
 
     success "Token saved to: $env_file"
-    success "Token metadata saved to: $json_file"
+    success "Token JSON saved to: $json_file"
     echo ""
-    echo "To use this token, run:"
-    echo "source $env_file"
+    echo "Token has been saved securely to files (not displayed in terminal for security)."
     echo ""
-    echo "Token JSON contains full metadata including expiration times."
+    echo "To use the token, reference the saved files:"
+    echo "  - Token file: $json_file"
+    echo "  - Env file: $env_file"
+    echo ""
+    echo "Use with mcp_client.py:"
+    echo "  uv run python cli/mcp_client.py --token-file $json_file ..."
 
 else
     warning "jq not available, showing raw response:"

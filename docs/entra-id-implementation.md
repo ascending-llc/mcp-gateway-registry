@@ -248,7 +248,7 @@ Generates Microsoft Entra ID logout URL with post-logout redirect.
 ### Provider Configuration (oauth2_providers.yml)
 
 ```yaml
-entra_id:
+entra:
   display_name: "Microsoft Entra ID"
   client_id: "${ENTRA_CLIENT_ID}"
   client_secret: "${ENTRA_CLIENT_SECRET}"
@@ -460,14 +460,14 @@ The implementation can be tested with:
 ### Basic Authentication Flow
 
 ```python
-from auth_server.providers.entra import EntraIDProvider
+from auth_server.providers.entra import EntraIdProvider
 import os
 
 # Set environment variables
 os.environ['ENTRA_TOKEN_KIND'] = 'id'  # Use ID token for user info
 
 # Initialize provider with all required parameters
-provider = EntraIDProvider(
+provider = EntraIdProvider(
     tenant_id="your-tenant-id",
     client_id="your-client-id",
     client_secret="your-client-secret",
