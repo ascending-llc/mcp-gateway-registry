@@ -60,7 +60,7 @@ jobs:
         DRY_RUN: ${{ inputs.dry_run }}
         DEFAULT_BUMP: ${{inputs.version_type}}
 
-  build-and-push:
+  build-and-push-registry:
     runs-on: ubuntu-latest
     needs: bump-version-and-tag
 
@@ -98,6 +98,32 @@ jobs:
             ${{ steps.login-ecr.outputs.registry }}/jarvis/registry:${{ github.sha }}
           provenance: false
 
+  build-and-push-registry-frontend:
+    runs-on: ubuntu-latest
+    needs: bump-version-and-tag
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump-version-and-tag.outputs.new_tag }}
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+          
+      - name: Assume IAM role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.SAAS_AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: deployment-role-session
+          aws-region: ${{ inputs.region }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
       - name: Build and push mcp-gateway frontend image
         uses: docker/build-push-action@v6
         with:
@@ -109,7 +135,32 @@ jobs:
             ${{ steps.login-ecr.outputs.registry }}/jarvis/registry-frontend:${{ needs.bump-version-and-tag.outputs.new_tag }}
             ${{ steps.login-ecr.outputs.registry }}/jarvis/registry-frontend:${{ github.sha }}
           provenance: false
-      
+
+  build-and-push-auth-server:
+    runs-on: ubuntu-latest
+    needs: bump-version-and-tag
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump-version-and-tag.outputs.new_tag }}
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+          
+      - name: Assume IAM role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.SAAS_AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: deployment-role-session
+          aws-region: ${{ inputs.region }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
       - name: Build and push mcp-gateway auth-server image
         uses: docker/build-push-action@v6
         with:
@@ -121,6 +172,31 @@ jobs:
             ${{ steps.login-ecr.outputs.registry }}/jarvis/auth-server:${{ needs.bump-version-and-tag.outputs.new_tag }}
             ${{ steps.login-ecr.outputs.registry }}/jarvis/auth-server:${{ github.sha }}
           provenance: false
+    
+  build-and-push-mcpgateway:
+    runs-on: ubuntu-latest
+    needs: bump-version-and-tag
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump-version-and-tag.outputs.new_tag }}
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Assume IAM role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.SAAS_AWS_DEPLOY_ROLE_ARN }}
+          role-session-name: deployment-role-session
+          aws-region: ${{ inputs.region }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push mcp-gateway server image
         uses: docker/build-push-action@v6
