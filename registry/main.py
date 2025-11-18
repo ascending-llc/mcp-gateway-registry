@@ -206,7 +206,7 @@ async def health_check():
     """Simple health check for load balancers and monitoring."""
     return {"status": "healthy", "service": "mcp-gateway-registry"}
 
-app.include_router(proxy_router)
+app.include_router(proxy_router, prefix="/proxy", tags=["MCP Proxy"])
 
 
 if __name__ == "__main__":
