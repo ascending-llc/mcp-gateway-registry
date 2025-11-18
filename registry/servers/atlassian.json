@@ -2,7 +2,7 @@
     "server_name": "Atlassian",
     "description": "Atlassian",
     "path": "/atlassian",
-    "proxy_pass_url": "http://atlassian-server:8005/mcp/",
+    "proxy_pass_url": "http://atlassian-server:8005/",
     "auth_provider": "atlassian",
   "auth_type": "oauth",
     "tags": [

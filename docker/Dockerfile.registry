@@ -1,4 +1,4 @@
-# Registry Dockerfile - includes nginx, SSL, FAISS, models, and registry service
+# Registry Dockerfile - includes FAISS, models, and registry service
 FROM python:3.12-slim
 
 # Build argument to control whether to install discovery dependencies
@@ -8,15 +8,11 @@ ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
     TOOL_DISCOVERY_MODE=${TOOL_DISCOVERY_MODE}
 
-# Install system dependencies including nginx with lua module
+# Install system dependencies
 # For embedded mode, we need build-essential for compiling dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    nginx \
-    nginx-extras \
-    lua-cjson \
     curl \
     procps \
-    openssl \
     git \
     $([ "$TOOL_DISCOVERY_MODE" = "embedded" ] && echo "build-essential" || echo "") \
     ca-certificates \
@@ -27,10 +23,6 @@ WORKDIR /app
 
 # Copy the application code
 COPY . /app/
-
-# Copy nginx configurations (both HTTP-only and HTTP+HTTPS versions)
-COPY docker/nginx_rev_proxy_http_only.conf /app/docker/nginx_rev_proxy_http_only.conf
-COPY docker/nginx_rev_proxy_http_and_https.conf /app/docker/nginx_rev_proxy_http_and_https.conf
 
 # Install Python dependencies based on TOOL_DISCOVERY_MODE
 # Default (embedded): installs with ML dependencies (FAISS, torch, sentence-transformers)
@@ -47,14 +39,18 @@ RUN pip install --no-cache-dir uv && \
 # Create logs directory
 RUN mkdir -p /app/logs
 
-# Expose ports for nginx (HTTP/HTTPS) and registry
+# Set default environment variables
+ENV EMBEDDINGS_MODEL_NAME=all-MiniLM-L6-v2 \
+    EMBEDDINGS_MODEL_DIMENSIONS=384
+
+# Expose port for registry
 EXPOSE 7860
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:7860/health || exit 1
 
-# Entrypoint script that sets up everything from original entrypoint.sh
+# Copy and set up entrypoint script
 COPY docker/registry-entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 

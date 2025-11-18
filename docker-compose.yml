@@ -19,6 +19,7 @@ services:
       - METRICS_SERVICE_URL=http://metrics-service:8890
       - METRICS_API_KEY=${METRICS_API_KEY_REGISTRY}
       - METRICS_API_KEY_NGINX=${METRICS_API_KEY_REGISTRY}
+      - AUTH_SERVER_URL=http://auth-server:8888
     ports:
       - "7860:7860"
     volumes:
