@@ -63,13 +63,13 @@ jobs:
         fail_ci_if_error: false
 
     - name: 📄 Upload coverage reports
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: coverage-report-${{ matrix.python-version }}
         path: htmlcov/
 
     - name: 📋 Upload test reports
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: test-reports-${{ matrix.python-version }}
@@ -98,7 +98,7 @@ jobs:
         bandit -r registry/ -f json -o bandit-report.json || true
 
     - name: 📋 Upload security report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: security-report
