@@ -25,6 +25,7 @@ from registry.api.wellknown_routes import router as wellknown_router
 from registry.api.registry_routes import router as registry_router
 from registry.api.agent_routes import router as agent_router
 from registry.health.routes import router as health_router
+from registry.proxy.routes import router as proxy_router, shutdown_proxy_client
 
 # Import auth dependencies
 from registry.auth.dependencies import enhanced_auth
@@ -34,7 +35,6 @@ from registry.services.server_service import server_service
 from registry.services.agent_service import agent_service
 from registry.search.service import vector_service
 from registry.health.service import health_service
-from registry.core.nginx_service import nginx_service
 
 # Import core configuration
 from registry.core.config import settings
@@ -135,13 +135,6 @@ async def lifespan(app: FastAPI):
         logger.info("🏥 Initializing health monitoring service...")
         await health_service.initialize()
         
-        logger.info("🌐 Generating initial Nginx configuration...")
-        enabled_servers = {
-            path: server_service.get_server_info(path) 
-            for path in server_service.get_enabled_services()
-        }
-        await nginx_service.generate_config_async(enabled_servers)
-        
         logger.info("✅ All services initialized successfully!")
         
     except Exception as e:
@@ -156,6 +149,7 @@ async def lifespan(app: FastAPI):
     try:
         # Shutdown services gracefully
         await health_service.shutdown()
+        await shutdown_proxy_client()
         logger.info("✅ Shutdown completed successfully!")
     except Exception as e:
         logger.error(f"❌ Error during shutdown: {e}", exc_info=True)
@@ -211,6 +205,9 @@ async def get_current_user(user_context: Dict[str, Any] = Depends(enhanced_auth)
 async def health_check():
     """Simple health check for load balancers and monitoring."""
     return {"status": "healthy", "service": "mcp-gateway-registry"}
+
+app.include_router(proxy_router, prefix="/proxy", tags=["MCP Proxy"])
+
 
 if __name__ == "__main__":
     import uvicorn

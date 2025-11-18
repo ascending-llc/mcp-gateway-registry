@@ -49,6 +49,7 @@ logger = logging.getLogger(__name__)
 # Configuration for token generation
 JWT_ISSUER = "mcp-auth-server"
 JWT_AUDIENCE = "mcp-registry"
+JWT_SELF_SIGNED_KID = "self-signed-key-v1"
 MAX_TOKEN_LIFETIME_HOURS = 24
 DEFAULT_TOKEN_LIFETIME_HOURS = 8
 
@@ -955,49 +956,69 @@ async def validate_request(request: Request):
             # Extract token
             access_token = authorization.split(" ")[1]
             
-            # Get authentication provider based on AUTH_PROVIDER environment variable
+            # FIRST: Check if this is a self-signed token (fast path detection by kid header)
+            # This must happen BEFORE provider-specific validation to avoid sending HS256 tokens to RS256 providers
             try:
-                auth_provider = get_auth_provider()
-                logger.info(f"Using authentication provider: {auth_provider.__class__.__name__}")
+                unverified_header = jwt.get_unverified_header(access_token)
+                header_kid = unverified_header.get('kid')
                 
-                # Provider-specific validation
-                if hasattr(auth_provider, 'validate_token'):
-                    # For Keycloak, no additional headers needed
-                    validation_result = auth_provider.validate_token(access_token)
-                    logger.info(f"Token validation successful using {auth_provider.__class__.__name__}")
+                # If kid is our self-signed token identifier, validate as self-signed immediately
+                if header_kid == JWT_SELF_SIGNED_KID:
+                    logger.info("Detected self-signed token by kid header, validating...")
+                    validation_result = validator.validate_self_signed_token(access_token)
+                    logger.info(f"Self-signed token validation successful for user: {hash_username(validation_result.get('username', ''))}")
                 else:
-                    # Fallback to old validation for compatibility
-                    if not user_pool_id:
-                        logger.warning("Missing X-User-Pool-Id header for Cognito validation")
-                        raise HTTPException(
-                            status_code=400,
-                            detail="Missing X-User-Pool-Id header",
-                            headers={"Connection": "close"}
-                        )
-                    
-                    if not client_id:
-                        logger.warning("Missing X-Client-Id header for Cognito validation")
-                        raise HTTPException(
-                            status_code=400,
-                            detail="Missing X-Client-Id header",
-                            headers={"Connection": "close"}
-                        )
-                    
-                    # Use old validator for backward compatibility
-                    validation_result = validator.validate_token(
-                        access_token=access_token,
-                        user_pool_id=user_pool_id,
-                        client_id=client_id,
-                        region=region
-                    )
-                    
+                    # Not a self-signed token, continue to provider validation
+                    validation_result = None
             except Exception as e:
-                logger.error(f"Authentication provider error: {e}")
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Authentication provider configuration error: {str(e)}",
-                    headers={"Connection": "close"}
-                )
+                logger.debug(f"Could not check JWT header for self-signed detection: {e}")
+                validation_result = None
+            
+            # If not a self-signed token, use provider-specific validation
+            if not validation_result:
+                # Get authentication provider based on AUTH_PROVIDER environment variable
+                try:
+                    auth_provider = get_auth_provider()
+                    logger.info(f"Using authentication provider: {auth_provider.__class__.__name__}")
+                    
+                    # Provider-specific validation
+                    if hasattr(auth_provider, 'validate_token'):
+                        # For Keycloak, Entra ID, etc. - no additional headers needed
+                        validation_result = auth_provider.validate_token(access_token)
+                        logger.info(f"Token validation successful using {auth_provider.__class__.__name__}")
+                    else:
+                        # Fallback to old validation for compatibility
+                        if not user_pool_id:
+                            logger.warning("Missing X-User-Pool-Id header for Cognito validation")
+                            raise HTTPException(
+                                status_code=400,
+                                detail="Missing X-User-Pool-Id header",
+                                headers={"Connection": "close"}
+                            )
+                        
+                        if not client_id:
+                            logger.warning("Missing X-Client-Id header for Cognito validation")
+                            raise HTTPException(
+                                status_code=400,
+                                detail="Missing X-Client-Id header",
+                                headers={"Connection": "close"}
+                            )
+                        
+                        # Use old validator for backward compatibility
+                        validation_result = validator.validate_token(
+                            access_token=access_token,
+                            user_pool_id=user_pool_id,
+                            client_id=client_id,
+                            region=region
+                        )
+                        
+                except Exception as e:
+                    logger.error(f"Authentication provider error: {e}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Authentication provider configuration error: {str(e)}",
+                        headers={"Connection": "close"}
+                    )
         
         logger.info(f"Token validation successful using method: {validation_result['method']}")
         
@@ -1258,7 +1279,14 @@ async def generate_user_token(
             access_payload["description"] = request.description
 
         # Sign the access token using HS256 with shared SECRET_KEY
-        access_token = jwt.encode(access_payload, SECRET_KEY, algorithm='HS256')
+        # Add kid (Key ID) to JWT header for consistency with RS256 tokens
+        headers = {
+            "kid": JWT_SELF_SIGNED_KID,  # Static key ID for self-signed tokens
+            "typ": "JWT",
+            "alg": "HS256"
+        }
+        # Sign the access token using HS256 with shared SECRET_KEY
+        access_token = jwt.encode(access_payload, SECRET_KEY, algorithm='HS256' , headers=headers)
 
         # No refresh tokens - users should configure longer token lifetimes in Keycloak if needed
         refresh_token = None

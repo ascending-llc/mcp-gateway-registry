@@ -186,7 +186,6 @@ async def toggle_service_route(
     """Toggle a service on/off (requires toggle_service UI permission)."""
     from ..search.service import faiss_service
     from ..health.service import health_service
-    from ..core.nginx_service import nginx_service
     from ..auth.dependencies import user_has_ui_permission_for_service
     from starlette import status
 
@@ -245,13 +244,6 @@ async def toggle_service_route(
     # Update FAISS metadata with new enabled state
     await faiss_service.add_or_update_service(service_path, server_info, new_state)
     
-    # Regenerate Nginx configuration
-    enabled_servers = {
-        path: server_service.get_server_info(path) 
-        for path in server_service.get_enabled_services()
-    }
-    await nginx_service.generate_config_async(enabled_servers)
-    
     # Broadcast health status update to WebSocket clients
     await health_service.broadcast_health_update(service_path)
     
@@ -284,7 +276,6 @@ async def register_service(
     """Register a new service (requires register_service UI permission)."""
     from ..search.service import faiss_service
     from ..health.service import health_service
-    from ..core.nginx_service import nginx_service
     from ..auth.dependencies import user_has_ui_permission_for_service
     
     # Check if user has register_service permission for any service
@@ -334,14 +325,7 @@ async def register_service(
     # Add to FAISS index with current enabled state
     is_enabled = server_service.is_service_enabled(path)
     await faiss_service.add_or_update_service(path, server_entry, is_enabled)
-    
-    # Regenerate Nginx configuration
-    enabled_servers = {
-        server_path: server_service.get_server_info(server_path) 
-        for server_path in server_service.get_enabled_services()
-    }
-    await nginx_service.generate_config_async(enabled_servers)
-    
+        
     # Broadcast health status update to WebSocket clients
     await health_service.broadcast_health_update(path)
     
@@ -382,7 +366,6 @@ async def internal_register_service(
     import os
     from ..search.service import faiss_service
     from ..health.service import health_service
-    from ..core.nginx_service import nginx_service
 
     logger.warning(f"INTERNAL REGISTER: Request parameters - name={name}, path={path}, proxy_pass_url={proxy_pass_url}")  # TODO: replace with debug
 
@@ -549,15 +532,6 @@ async def internal_register_service(
     is_enabled = server_service.is_service_enabled(path)
     await faiss_service.add_or_update_service(path, server_entry, is_enabled)
 
-    logger.warning("INTERNAL REGISTER: Regenerating Nginx configuration")  # TODO: replace with debug
-
-    # Regenerate Nginx configuration
-    enabled_servers = {
-        server_path: server_service.get_server_info(server_path)
-        for server_path in server_service.get_enabled_services()
-    }
-    await nginx_service.generate_config_async(enabled_servers)
-
     logger.warning("INTERNAL REGISTER: Broadcasting health status update")  # TODO: replace with debug
 
     # Broadcast health status update to WebSocket clients
@@ -603,7 +577,6 @@ async def internal_remove_service(
     import os
     from ..search.service import faiss_service
     from ..health.service import health_service
-    from ..core.nginx_service import nginx_service
 
     logger.warning("INTERNAL REMOVE: Function called - starting execution")  # TODO: replace with debug
 
@@ -697,15 +670,6 @@ async def internal_remove_service(
     # Remove from FAISS index
     await faiss_service.remove_service(service_path)
 
-    logger.warning("INTERNAL REMOVE: Regenerating Nginx configuration")  # TODO: replace with debug
-
-    # Regenerate Nginx configuration
-    enabled_servers = {
-        server_path: server_service.get_server_info(server_path)
-        for server_path in server_service.get_enabled_services()
-    }
-    await nginx_service.generate_config_async(enabled_servers)
-
     logger.warning("INTERNAL REMOVE: Broadcasting health status update")  # TODO: replace with debug
 
     # Broadcast health status update to WebSocket clients
@@ -745,7 +709,6 @@ async def internal_toggle_service(
     import os
     from ..search.service import faiss_service
     from ..health.service import health_service
-    from ..core.nginx_service import nginx_service
 
     logger.warning("INTERNAL TOGGLE: Function called - starting execution")  # TODO: replace with debug
 
@@ -855,13 +818,6 @@ async def internal_toggle_service(
 
     # Update FAISS metadata with new enabled state
     await faiss_service.add_or_update_service(service_path, server_info, new_state)
-
-    # Regenerate Nginx configuration
-    enabled_servers = {
-        path: server_service.get_server_info(path)
-        for path in server_service.get_enabled_services()
-    }
-    await nginx_service.generate_config_async(enabled_servers)
 
     # Broadcast health status update to WebSocket clients
     await health_service.broadcast_health_update(service_path)
@@ -1015,7 +971,6 @@ async def edit_server_submit(
 ):
     """Handle server edit form submission (requires modify_service UI permission)."""
     from ..search.service import faiss_service
-    from ..core.nginx_service import nginx_service
     from ..auth.dependencies import user_has_ui_permission_for_service
     
     if not service_path.startswith('/'):
@@ -1072,13 +1027,8 @@ async def edit_server_submit(
     # Update FAISS metadata (keep current enabled state)
     is_enabled = server_service.is_service_enabled(service_path)
     await faiss_service.add_or_update_service(service_path, updated_server_entry, is_enabled)
-    
-    # Regenerate Nginx configuration
-    enabled_servers = {
-        path: server_service.get_server_info(path) 
-        for path in server_service.get_enabled_services()
-    }
-    await nginx_service.generate_config_async(enabled_servers)
+
+    # Changes take effect immediately without config reload
     
     logger.info(f"Server '{name}' ({service_path}) updated by user '{user_context['username']}'")
 
@@ -1271,7 +1221,6 @@ async def refresh_service(
     from ..search.service import faiss_service
     from ..health.service import health_service
     from ..core.mcp_client import mcp_client_service
-    from ..core.nginx_service import nginx_service
     from ..auth.dependencies import user_has_ui_permission_for_service
     
     if not service_path.startswith('/'):
@@ -1316,15 +1265,7 @@ async def refresh_service(
         status, last_checked_dt = await health_service.perform_immediate_health_check(service_path)
         last_checked_iso = last_checked_dt.isoformat() if last_checked_dt else None
         logger.info(f"Manual refresh health check for {service_path} completed. Status: {status}")
-        
-        # Regenerate Nginx config after manual refresh
-        logger.info(f"Regenerating Nginx config after manual refresh for {service_path}...")
-        enabled_servers = {
-            path: server_service.get_server_info(path) 
-            for path in server_service.get_enabled_services()
-        }
-        await nginx_service.generate_config_async(enabled_servers)
-        
+                
     except Exception as e:
         logger.error(f"ERROR during manual refresh check for {service_path}: {e}")
         # Still broadcast the error state

@@ -523,7 +523,7 @@ class EntraIdProvider(AuthProvider):
                 'refresh_token': refresh_token,
                 'client_id': self.client_id,
                 'client_secret': self.client_secret,
-                'scope': ' '.join(refresh_scopes)
+                'scope': ' '.join(self.scopes)
             }
 
             headers = {
