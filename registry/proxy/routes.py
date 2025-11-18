@@ -230,15 +230,24 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
         logger.error(f"No proxy_pass_url configured for {service_path}")
         raise HTTPException(status_code=500, detail="Server misconfigured")
     
+    # Ensure proxy_pass_url has trailing slash
+    if not proxy_pass_url.endswith('/'):
+        proxy_pass_url += '/'
+    
+    remaining_path = path[len(service_path):].lstrip('/')
+    
+    # Build full target URL
+    target_url = proxy_pass_url + remaining_path
+    
     # Determine transport type
     supported_transports = server_info.get("supported_transports", ["streamable-http"])
     transport_type = "sse" if "sse" in supported_transports else "streamable-http"
     
     # Proxy the request
-    logger.info(f"Proxying {request.method} {path} → {proxy_pass_url} (transport: {transport_type})")
+    logger.info(f"Proxying {request.method} {path} → {target_url} (transport: {transport_type})")
     return await proxy_to_mcp_server(
         request=request,
-        target_url=proxy_pass_url,
+        target_url=target_url,
         auth_context=auth_context,
         transport_type=transport_type
     )
