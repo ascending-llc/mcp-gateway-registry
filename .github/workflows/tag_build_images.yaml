@@ -91,6 +91,8 @@ jobs:
         with:
           platforms: linux/amd64
           context: .
+          build-args: |
+            TOOL_DISCOVERY_MODE=external
           file: docker/Dockerfile.registry
           push: true
           tags: |
