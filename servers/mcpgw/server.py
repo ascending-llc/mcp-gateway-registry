@@ -16,10 +16,6 @@ from fastmcp.server.dependencies import get_http_request  # New dependency funct
 from typing import Dict, Any, Optional, ClassVar, List
 from dotenv import load_dotenv
 import os
-from sentence_transformers import SentenceTransformer # Added
-import numpy as np # Added
-from sklearn.metrics.pairwise import cosine_similarity # Added
-import faiss # Added
 import yaml # Added for scopes.yml parsing
 
 # Configure logging
@@ -500,122 +496,21 @@ async def check_user_permission_for_tool(auth_context: Dict[str, Any], tool_name
     return False
 
 
-# --- FAISS and Sentence Transformer Integration for mcpgw --- START
-_faiss_data_lock = asyncio.Lock()
-_embedding_model_mcpgw: Optional[SentenceTransformer] = None
-_faiss_index_mcpgw: Optional[faiss.Index] = None
-_faiss_metadata_mcpgw: Optional[Dict[str, Any]] = None # This will store the content of service_index_metadata.json
-_last_faiss_index_mtime: Optional[float] = None
-_last_faiss_metadata_mtime: Optional[float] = None
-_last_faiss_check_time: Optional[float] = None  # Track when we last checked for file updates
-_faiss_check_interval: float = 5.0  # Only check for file updates every 5 seconds
+# --- Vector Search Service Integration --- START
+# Import the vector search service (will be embedded or external based on config)
+from search import vector_search_service
 
-# Determine base path for mcpgw server to find registry's server data
-# When running in Docker, server.py is at /app/server.py and registry files are at /app/registry/servers/
-_registry_server_data_path = Path(__file__).resolve().parent / "registry" / "servers"
-FAISS_INDEX_PATH_MCPGW = _registry_server_data_path / "service_index.faiss"
-FAISS_METADATA_PATH_MCPGW = _registry_server_data_path / "service_index_metadata.json"
-EMBEDDING_DIMENSION_MCPGW = 384 # Should match the one used in main registry
+# Initialize the service on startup
+async def initialize_vector_search():
+    """Initialize the vector search service."""
+    try:
+        await vector_search_service.initialize()
+        logger.info("Vector search service initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize vector search service: {e}", exc_info=True)
+        logger.warning("Server will continue but intelligent_tool_finder may not work")
 
-# Get configuration from environment variables
-EMBEDDINGS_MODEL_NAME = os.environ.get('EMBEDDINGS_MODEL_NAME', 'all-MiniLM-L6-v2')
-EMBEDDINGS_MODEL_DIR = _registry_server_data_path.parent / "models" / EMBEDDINGS_MODEL_NAME
-
-async def load_faiss_data_for_mcpgw():
-    """Loads the FAISS index, metadata, and embedding model for the mcpgw server.
-       Reloads data if underlying files have changed since last load.
-    """
-    global _embedding_model_mcpgw, _faiss_index_mcpgw, _faiss_metadata_mcpgw
-    global _last_faiss_index_mtime, _last_faiss_metadata_mtime
-    
-    async with _faiss_data_lock:
-        # Load embedding model if not already loaded (model doesn't change on disk typically)
-        if _embedding_model_mcpgw is None:
-            try:
-                model_cache_path = _registry_server_data_path.parent / ".cache"
-                model_cache_path.mkdir(parents=True, exist_ok=True)
-                
-                # Set SENTENCE_TRANSFORMERS_HOME to use the defined cache path
-                original_st_home = os.environ.get('SENTENCE_TRANSFORMERS_HOME')
-                os.environ['SENTENCE_TRANSFORMERS_HOME'] = str(model_cache_path)
-                
-                # Check if the model path exists and is not empty
-                model_path = Path(EMBEDDINGS_MODEL_DIR)
-                model_exists = model_path.exists() and any(model_path.iterdir()) if model_path.exists() else False
-                
-                if model_exists:
-                    logger.info(f"MCPGW: Loading SentenceTransformer model from local path: {EMBEDDINGS_MODEL_DIR}")
-                    _embedding_model_mcpgw = await asyncio.to_thread(SentenceTransformer, str(EMBEDDINGS_MODEL_DIR))
-                else:
-                    logger.info(f"MCPGW: Local model not found at {EMBEDDINGS_MODEL_DIR}, downloading from Hugging Face")
-                    _embedding_model_mcpgw = await asyncio.to_thread(SentenceTransformer, str(EMBEDDINGS_MODEL_NAME))
-                
-                # Restore original environment variable if it was set
-                if original_st_home:
-                    os.environ['SENTENCE_TRANSFORMERS_HOME'] = original_st_home
-                else:
-                    del os.environ['SENTENCE_TRANSFORMERS_HOME'] # Remove if not originally set
-                    
-                logger.info("MCPGW: SentenceTransformer model loaded successfully.")
-            except Exception as e:
-                logger.error(f"MCPGW: Failed to load SentenceTransformer model: {e}", exc_info=True)
-                return # Cannot proceed without the model for subsequent logic
-
-        # Check FAISS index file
-        index_file_changed = False
-        if FAISS_INDEX_PATH_MCPGW.exists():
-            try:
-                current_index_mtime = await asyncio.to_thread(os.path.getmtime, FAISS_INDEX_PATH_MCPGW)
-                if _faiss_index_mcpgw is None or _last_faiss_index_mtime is None or current_index_mtime > _last_faiss_index_mtime:
-                    logger.info(f"MCPGW: FAISS index file {FAISS_INDEX_PATH_MCPGW} has changed or not loaded. Reloading...")
-                    _faiss_index_mcpgw = await asyncio.to_thread(faiss.read_index, str(FAISS_INDEX_PATH_MCPGW))
-                    _last_faiss_index_mtime = current_index_mtime
-                    index_file_changed = True # Mark that it was reloaded
-                    logger.info(f"MCPGW: FAISS index loaded. Total vectors: {_faiss_index_mcpgw.ntotal}")
-                    if _faiss_index_mcpgw.d != EMBEDDING_DIMENSION_MCPGW:
-                        logger.warning(f"MCPGW: Loaded FAISS index dimension ({_faiss_index_mcpgw.d}) differs from expected ({EMBEDDING_DIMENSION_MCPGW}). Search might be compromised.")
-                else:
-                    logger.debug("MCPGW: FAISS index file unchanged since last load.")
-            except Exception as e:
-                logger.error(f"MCPGW: Failed to load or check FAISS index: {e}", exc_info=True)
-                _faiss_index_mcpgw = None # Ensure it's None on error
-        else:
-            logger.warning(f"MCPGW: FAISS index file {FAISS_INDEX_PATH_MCPGW} does not exist.")
-            _faiss_index_mcpgw = None
-            _last_faiss_index_mtime = None
-
-        # Check FAISS metadata file
-        metadata_file_changed = False
-        if FAISS_METADATA_PATH_MCPGW.exists():
-            try:
-                logger.info(f"MCPGW: Checking FAISS metadata file {FAISS_METADATA_PATH_MCPGW} for changes...")
-                current_metadata_mtime = await asyncio.to_thread(os.path.getmtime, FAISS_METADATA_PATH_MCPGW)
-                if _faiss_metadata_mcpgw is None or _last_faiss_metadata_mtime is None or current_metadata_mtime > _last_faiss_metadata_mtime or index_file_changed:
-                    logger.info(f"MCPGW: FAISS metadata file {FAISS_METADATA_PATH_MCPGW} has changed, not loaded, or index changed. Reloading...")
-                    with open(FAISS_METADATA_PATH_MCPGW, "r") as f:
-                        content = await asyncio.to_thread(f.read)
-                        _faiss_metadata_mcpgw = await asyncio.to_thread(json.loads, content)
-                    _last_faiss_metadata_mtime = current_metadata_mtime
-                    metadata_file_changed = True
-                    logger.info(f"MCPGW: FAISS metadata loaded. Paths: {len(_faiss_metadata_mcpgw.get('metadata', {})) if _faiss_metadata_mcpgw else 'N/A'}")
-                    logger.info(f"MCPGW: FAISS metadata _faiss_metadata_mcpgw {_faiss_metadata_mcpgw.get('metadata')}")
-                else:
-                    logger.debug("MCPGW: FAISS metadata file unchanged since last load.")
-            except Exception as e:
-                logger.error(f"MCPGW: Failed to load or check FAISS metadata: {e}", exc_info=True)
-                _faiss_metadata_mcpgw = None # Ensure it's None on error
-        else:
-            logger.warning(f"MCPGW: FAISS metadata file {FAISS_METADATA_PATH_MCPGW} does not exist.")
-            _faiss_metadata_mcpgw = None
-            _last_faiss_metadata_mtime = None
-
-# Call it once at startup, but allow lazy loading if it fails initially
-# This direct call might be problematic if server.py is imported elsewhere before app runs.
-# A better approach would be a startup event if FastMCP supports it.
-# For now, it will attempt to load on first tool call if still None.
-# asyncio.create_task(load_faiss_data_for_mcpgw()) # Consider FastMCP startup hook
-
-# --- FAISS and Sentence Transformer Integration for mcpgw --- END
+# --- Vector Search Service Integration --- END
 
 
 class Constants(BaseModel):
@@ -1252,7 +1147,7 @@ async def intelligent_tool_finder(
 ) -> List[Dict[str, Any]]:
     """
     Finds the most relevant MCP tool(s) across all registered and enabled services
-    based on a natural language query and/or tag filtering, using semantic search on the registry's FAISS index.
+    based on a natural language query and/or tag filtering, using semantic search.
 
     IMPORTANT FOR AI AGENTS:
     - Only fill in the 'tags' parameter if the user explicitly provides specific tags to filter by
@@ -1265,7 +1160,7 @@ async def intelligent_tool_finder(
         natural_language_query: The user's natural language query. Optional if tags are provided.
         tags: List of tags to filter by using AND logic. All tags must match a server's tags for its tools to be included.
               CAUTION: Only use this parameter if explicitly provided by the user. Incorrect tags will filter out valid results.
-        top_k_services: How many top-matching services to analyze for tools from FAISS search (ignored if only tags provided).
+        top_k_services: How many top-matching services to analyze for tools from search (ignored if only tags provided).
         top_n_tools: How many best tools to return from the combined list.
 
     Returns:
@@ -1285,8 +1180,7 @@ async def intelligent_tool_finder(
         # Pure tag-based filtering (ONLY when user provides tags without a query)
         tools = await intelligent_tool_finder(tags=["database", "analytics"], top_n_tools=10)
     """
-    # Load scopes configuration and extract user scopes from headers
-    scopes_config = await load_scopes_config()
+    # Extract user scopes from headers
     user_scopes = []
     
     if ctx:
@@ -1304,40 +1198,23 @@ async def intelligent_tool_finder(
     
     if not user_scopes:
         logger.warning("No user scopes found - user may not have access to any tools")
-        return []
-
-    # Input validation - at least one of query or tags must be provided
-    if not natural_language_query and not tags:
-        raise Exception("At least one of 'natural_language_query' or 'tags' must be provided")
-
-    # Normalize tags for case-insensitive matching
-    normalized_tags = [tag.lower().strip() for tag in tags] if tags else []
-    if normalized_tags:
-        logger.info(f"MCPGW: Filtering by tags: {normalized_tags}")
-
-    global _embedding_model_mcpgw, _faiss_index_mcpgw, _faiss_metadata_mcpgw, _last_faiss_check_time
-    import time
-
-    # Check for FAISS data updates, but only if enough time has passed since last check
-    current_time = time.time()
-    should_check_for_updates = (
-        _embedding_model_mcpgw is None or 
-        _faiss_index_mcpgw is None or 
-        _faiss_metadata_mcpgw is None or
-        _last_faiss_check_time is None or
-        (current_time - _last_faiss_check_time) >= _faiss_check_interval
-    )
     
-    if should_check_for_updates:
-        await load_faiss_data_for_mcpgw()
-        _last_faiss_check_time = current_time
-
-    if _embedding_model_mcpgw is None:
-        raise Exception("MCPGW: Sentence embedding model is not available. Cannot perform intelligent search.")
-    if _faiss_index_mcpgw is None:
-        raise Exception("MCPGW: FAISS index is not available. Cannot perform intelligent search.")
-    if _faiss_metadata_mcpgw is None or "metadata" not in _faiss_metadata_mcpgw:
-        raise Exception("MCPGW: FAISS metadata is not available or in unexpected format. Cannot perform intelligent search.")
+    # Use the vector search service
+    try:
+        results = await vector_search_service.search_tools(
+            query=natural_language_query,
+            tags=tags,
+            user_scopes=user_scopes,
+            top_k_services=top_k_services,
+            top_n_tools=top_n_tools
+        )
+        
+        logger.info(f"intelligent_tool_finder returned {len(results)} tools")
+        return results
+        
+    except Exception as e:
+        logger.error(f"Error in intelligent_tool_finder: {e}", exc_info=True)
+        raise Exception(f"Tool search failed: {str(e)}")
 
     registry_faiss_metadata = _faiss_metadata_mcpgw["metadata"] # This is {service_path: {id, text, full_server_info}}
 
@@ -1942,7 +1819,16 @@ def main():
     logger.info(f"Starting MCPGateway server on port {args.port} with transport {args.transport}")
     logger.info(f"Server will be available at: http://localhost:{args.port}{endpoint}")
     
+    # Initialize vector search service
+    import asyncio
+    try:
+        asyncio.get_event_loop().run_until_complete(initialize_vector_search())
+    except Exception as e:
+        logger.warning(f"Failed to initialize vector search on startup: {e}")
+        logger.warning("Server will start but intelligent_tool_finder may not work until initialized")
+    
     # Run the server with the specified transport from command line args
     mcp.run(transport=args.transport, host="0.0.0.0", port=int(args.port))
+
 if __name__ == "__main__":
     main()

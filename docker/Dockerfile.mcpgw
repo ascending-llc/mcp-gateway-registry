@@ -1,0 +1,96 @@
+# MCPGW Server Dockerfile - Supports both embedded and external vector search modes
+FROM python:3.12-slim
+
+# Build argument to control whether to install vector search dependencies
+ARG TOOL_DISCOVERY_MODE=embedded
+
+ENV PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    TOOL_DISCOVERY_MODE=${TOOL_DISCOVERY_MODE}
+
+# Install system dependencies
+# For embedded mode, we need build-essential for compiling dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    git \
+    $([ "$TOOL_DISCOVERY_MODE" = "embedded" ] && echo "build-essential" || echo "") \
+    netcat-openbsd \
+    ca-certificates \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy MCPGW server files
+COPY servers/mcpgw/ /app/
+
+# Install Python dependencies based on TOOL_DISCOVERY_MODE
+# Default (embedded): installs with ML dependencies (FAISS, torch, sentence-transformers)
+# External: installs only base dependencies
+RUN pip install --no-cache-dir uv && \
+    if [ "$TOOL_DISCOVERY_MODE" = "external" ]; then \
+        echo "Building LIGHTWEIGHT image (external mode) - skipping ML dependencies"; \
+        uv pip install --system -e .; \
+    else \
+        echo "Building FULL image (embedded mode) - installing with ML dependencies"; \
+        uv pip install --system -e ".[embedded-search]"; \
+    fi
+
+# Create logs directory
+RUN mkdir -p /app/logs
+
+# Set default environment variables
+ENV EMBEDDINGS_MODEL_NAME=all-MiniLM-L6-v2 \
+    EMBEDDINGS_MODEL_DIMENSION=384
+
+# Expose default port
+EXPOSE 8003
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD nc -z localhost ${PORT:-8003} || exit 1
+
+# Create entrypoint script that validates environment and runs server.py
+RUN echo '#!/bin/bash\n\
+set -e\n\
+\n\
+echo "================================="\n\
+echo "MCPGW Server Configuration"\n\
+echo "================================="\n\
+echo "Port: ${PORT:-8003}"\n\
+echo "Tool Discovery Mode: ${TOOL_DISCOVERY_MODE:-embedded}"\n\
+echo "Registry URL: ${REGISTRY_BASE_URL:-not set}"\n\
+echo "================================="\n\
+\n\
+# Validate required environment variables\n\
+if [ -z "${REGISTRY_BASE_URL:-}" ]; then\n\
+    echo "WARNING: REGISTRY_BASE_URL environment variable is not set."\n\
+    echo "The MCPGW server may not function properly without registry access."\n\
+fi\n\
+\n\
+# Display mode-specific information\n\
+if [ "${TOOL_DISCOVERY_MODE:-embedded}" = "embedded" ]; then\n\
+    echo "Running in EMBEDDED mode - using local FAISS"\n\
+    echo "Requires: FAISS index files mounted at /app/registry/servers/"\n\
+    echo "Requires: Embedding models at /app/registry/models/"\n\
+    \n\
+    EMBEDDINGS_MODEL_NAME="${EMBEDDINGS_MODEL_NAME:-all-MiniLM-L6-v2}"\n\
+    EMBEDDINGS_MODEL_DIR="/app/registry/models/$EMBEDDINGS_MODEL_NAME"\n\
+    \n\
+    if [ ! -d "$EMBEDDINGS_MODEL_DIR" ] || [ -z "$(ls -A "$EMBEDDINGS_MODEL_DIR" 2>/dev/null)" ]; then\n\
+        echo "WARNING: Embeddings model not found at $EMBEDDINGS_MODEL_DIR"\n\
+        echo "Please mount the model directory for embedded mode to work."\n\
+    fi\n\
+else\n\
+    echo "Running in EXTERNAL mode - using registry API"\n\
+    echo "Registry endpoint: ${REGISTRY_BASE_URL}/api/search/semantic"\n\
+fi\n\
+\n\
+echo "================================="\n\
+\n\
+# Run the server (environment variables are automatically available to Python)\n\
+cd /app\n\
+exec python server.py --port ${PORT:-8003}' > /entrypoint.sh && \
+    chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
