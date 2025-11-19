@@ -154,9 +154,7 @@ services:
   mcpgw-server:
     build:
       context: .
-      dockerfile: docker/Dockerfile.mcp-server
-      args:
-        SERVER_PATH: servers/mcpgw
+      dockerfile: docker/Dockerfile.mcpgw
     environment:
       - PORT=8003
       - REGISTRY_BASE_URL=http://registry:7860
