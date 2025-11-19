@@ -205,9 +205,9 @@ jobs:
         with:
           platforms: linux/amd64
           context: .
-          file: docker/Dockerfile.mcp-server
+          file: docker/Dockerfile.mcpgw
           build-args: |
-            SERVER_PATH=servers/mcpgw
+            TOOL_DISCOVERY_MODE=external
           push: true
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/jarvis/mcpgateway:${{ needs.bump-version-and-tag.outputs.new_tag }}
