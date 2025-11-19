@@ -23,6 +23,7 @@ WORKDIR /app
 
 # Copy MCPGW server files
 COPY servers/mcpgw/ /app/
+COPY auth_server/scopes.yml /app/auth_server/scopes.yml
 
 # Install Python dependencies based on TOOL_DISCOVERY_MODE
 # Default (embedded): installs with ML dependencies (FAISS, torch, sentence-transformers)
