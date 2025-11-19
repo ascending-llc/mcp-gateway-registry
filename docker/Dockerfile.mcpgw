@@ -23,7 +23,6 @@ WORKDIR /app
 
 # Copy MCPGW server files
 COPY servers/mcpgw/ /app/
-COPY auth_server/scopes.yml /app/auth_server/scopes.yml
 
 # Install Python dependencies based on TOOL_DISCOVERY_MODE
 # Default (embedded): installs with ML dependencies (FAISS, torch, sentence-transformers)
@@ -39,6 +38,7 @@ RUN pip install --no-cache-dir uv && \
 
 # Create logs directory
 RUN mkdir -p /app/logs
+COPY auth_server/scopes.yml /app/auth_server/scopes.yml
 
 # Set default environment variables
 ENV EMBEDDINGS_MODEL_NAME=all-MiniLM-L6-v2 \
