@@ -234,6 +234,12 @@ const AgentCard: React.FC<AgentCardProps> = ({
                 <span className="px-2 py-0.5 text-xs font-semibold bg-gradient-to-r from-cyan-100 to-blue-100 text-cyan-700 dark:from-cyan-900/30 dark:to-blue-900/30 dark:text-cyan-300 rounded-full flex-shrink-0 border border-cyan-200 dark:border-cyan-600">
                   AGENT
                 </span>
+                {/* Check if this is an ASOR agent */}
+                {(agent.tags?.includes('asor') || (agent as any).provider === 'ASOR') && (
+                  <span className="px-2 py-0.5 text-xs font-semibold bg-gradient-to-r from-orange-100 to-red-100 text-orange-700 dark:from-orange-900/30 dark:to-red-900/30 dark:text-orange-300 rounded-full flex-shrink-0 border border-orange-200 dark:border-orange-600">
+                    ASOR
+                  </span>
+                )}
                 {agent.trust_level && (
                   <span className={`px-2 py-0.5 text-xs font-semibold rounded-full flex-shrink-0 flex items-center gap-1 ${getTrustLevelColor()}`}>
                     {getTrustLevelIcon()}

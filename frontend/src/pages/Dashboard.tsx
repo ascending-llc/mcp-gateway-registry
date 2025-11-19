@@ -277,7 +277,7 @@ const Dashboard: React.FC = () => {
 
   // External registry tags - can be configured via environment or constants
   // Default tags that identify servers from external registries
-  const EXTERNAL_REGISTRY_TAGS = ['anthropic-registry', 'workday-asor'];
+  const EXTERNAL_REGISTRY_TAGS = ['anthropic-registry', 'workday-asor', 'asor', 'federated'];
 
   // Separate internal and external registry servers
   const internalServers = useMemo(() => {
@@ -293,6 +293,21 @@ const Dashboard: React.FC = () => {
       return EXTERNAL_REGISTRY_TAGS.some(tag => serverTags.includes(tag));
     });
   }, [servers]);
+
+  // Separate internal and external registry agents
+  const internalAgents = useMemo(() => {
+    return agents.filter(a => {
+      const agentTags = a.tags || [];
+      return !EXTERNAL_REGISTRY_TAGS.some(tag => agentTags.includes(tag));
+    });
+  }, [agents]);
+
+  const externalAgents = useMemo(() => {
+    return agents.filter(a => {
+      const agentTags = a.tags || [];
+      return EXTERNAL_REGISTRY_TAGS.some(tag => agentTags.includes(tag));
+    });
+  }, [agents]);
 
   // Semantic search
   const semanticEnabled = committedQuery.trim().length >= 2;
@@ -359,9 +374,26 @@ const Dashboard: React.FC = () => {
     return filtered;
   }, [externalServers, searchTerm]);
 
+  // Filter external agents based on searchTerm
+  const filteredExternalAgents = useMemo(() => {
+    let filtered = externalAgents;
+
+    if (searchTerm) {
+      const query = searchTerm.toLowerCase();
+      filtered = filtered.filter(agent =>
+        agent.name.toLowerCase().includes(query) ||
+        (agent.description || '').toLowerCase().includes(query) ||
+        agent.path.toLowerCase().includes(query) ||
+        (agent.tags || []).some(tag => tag.toLowerCase().includes(query))
+      );
+    }
+
+    return filtered;
+  }, [externalAgents, searchTerm]);
+
   // Filter agents based on activeFilter and searchTerm
   const filteredAgents = useMemo(() => {
-    let filtered = agents;
+    let filtered = internalAgents;
 
     // Apply filter first
     if (activeFilter === 'enabled') filtered = filtered.filter(a => a.enabled);
@@ -858,37 +890,76 @@ const Dashboard: React.FC = () => {
             External Registries
           </h2>
 
-          {filteredExternalServers.length === 0 ? (
+          {filteredExternalServers.length === 0 && filteredExternalAgents.length === 0 ? (
             <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
               <div className="text-gray-400 text-lg mb-2">
-                {externalServers.length === 0 ? 'No External Registries Available' : 'No Results Found'}
+                {externalServers.length === 0 && externalAgents.length === 0 ? 'No External Registries Available' : 'No Results Found'}
               </div>
               <p className="text-gray-500 dark:text-gray-300 text-sm max-w-md mx-auto">
-                {externalServers.length === 0
-                  ? 'External registry integrations (Anthropic, and more) will be available soon'
+                {externalServers.length === 0 && externalAgents.length === 0
+                  ? 'External registry integrations (Anthropic, ASOR, and more) will be available soon'
                   : 'Press Enter in the search bar to search semantically'}
               </p>
             </div>
           ) : (
-            <div
-              className="grid"
-              style={{
-                gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-                gap: 'clamp(1.5rem, 3vw, 2.5rem)'
-              }}
-            >
-              {filteredExternalServers.map((server) => (
-                <ServerCard
-                  key={server.path}
-                  server={server}
-                  onToggle={handleToggleServer}
-                  onEdit={handleEditServer}
-                  canModify={user?.can_modify_servers || false}
-                  onRefreshSuccess={refreshData}
-                  onShowToast={showToast}
-                  onServerUpdate={handleServerUpdate}
-                />
-              ))}
+            <div>
+              {/* External Servers */}
+              {filteredExternalServers.length > 0 && (
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">
+                    Servers
+                  </h3>
+                  <div
+                    className="grid"
+                    style={{
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+                      gap: 'clamp(1.5rem, 3vw, 2.5rem)'
+                    }}
+                  >
+                    {filteredExternalServers.map((server) => (
+                      <ServerCard
+                        key={server.path}
+                        server={server}
+                        onToggle={handleToggleServer}
+                        onEdit={handleEditServer}
+                        canModify={user?.can_modify_servers || false}
+                        onRefreshSuccess={refreshData}
+                        onShowToast={showToast}
+                        onServerUpdate={handleServerUpdate}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* External Agents */}
+              {filteredExternalAgents.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">
+                    Agents
+                  </h3>
+                  <div
+                    className="grid"
+                    style={{
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+                      gap: 'clamp(1.5rem, 3vw, 2.5rem)'
+                    }}
+                  >
+                    {filteredExternalAgents.map((agent) => (
+                      <AgentCard
+                        key={agent.path}
+                        agent={agent}
+                        onToggle={handleToggleAgent}
+                        onEdit={handleEditAgent}
+                        canModify={user?.can_modify_servers || false}
+                        onRefreshSuccess={fetchAgents}
+                        onShowToast={showToast}
+                        onAgentUpdate={handleAgentUpdate}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

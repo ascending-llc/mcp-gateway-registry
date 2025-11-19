@@ -38,6 +38,8 @@ services:
       - KEYCLOAK_M2M_CLIENT_SECRET=${KEYCLOAK_M2M_CLIENT_SECRET}
       # External Registry Configuration
       - EXTERNAL_REGISTRY_TAGS=${EXTERNAL_REGISTRY_TAGS:-anthropic-registry,workday-asor}
+      - ASOR_ACCESS_TOKEN=${ASOR_ACCESS_TOKEN}
+      - ASOR_CLIENT_CREDENTIALS=${ASOR_CLIENT_CREDENTIALS}
     ports:
       - "80:80"
       - "443:443"
@@ -48,6 +50,7 @@ services:
       - ${HOME}/mcp-gateway/models:/app/registry/models
       - ${HOME}/mcp-gateway/logs:/app/logs
       - ${HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
+      - ${HOME}/mcp-gateway/federation.json:/app/config/federation.json
       - ${HOME}/mcp-gateway/ssl:/etc/ssl:ro
     depends_on:
       - auth-server
