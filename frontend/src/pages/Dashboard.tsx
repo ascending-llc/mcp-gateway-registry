@@ -30,6 +30,7 @@ interface Server {
 interface Agent {
   name: string;
   path: string;
+  url?: string;
   description?: string;
   version?: string;
   visibility?: 'public' | 'private' | 'group-restricted';
@@ -81,6 +82,19 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
   );
 };
 
+const normalizeAgentStatus = (status?: string | null): Agent['status'] => {
+  if (status === 'healthy' || status === 'healthy-auth-expired') {
+    return status;
+  }
+  if (status === 'unhealthy') {
+    return 'unhealthy';
+  }
+  return 'unknown';
+};
+
+const buildAgentAuthHeaders = (token?: string | null) =>
+  token ? { Authorization: `Bearer ${token}` } : undefined;
+
 const Dashboard: React.FC = () => {
   const { servers, activeFilter, loading, error, refreshData, setServers } = useServerStats();
   const { user } = useAuth();
@@ -117,6 +131,7 @@ const Dashboard: React.FC = () => {
   const [agentsLoading, setAgentsLoading] = useState(true);
   const [agentsError, setAgentsError] = useState<string | null>(null);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
+  const [agentApiToken, setAgentApiToken] = useState<string | null>(null);
 
   // View filter state
   const [viewFilter, setViewFilter] = useState<'all' | 'servers' | 'agents' | 'external'>('all');
@@ -130,6 +145,49 @@ const Dashboard: React.FC = () => {
     tags: [] as string[]
   });
   const [editAgentLoading, setEditAgentLoading] = useState(false);
+
+  const handleAgentUpdate = useCallback((path: string, updates: Partial<Agent>) => {
+    setAgents(prevAgents =>
+      prevAgents.map(agent =>
+        agent.path === path
+          ? { ...agent, ...updates }
+          : agent
+      )
+    );
+  }, []);
+
+  const performAgentHealthCheck = useCallback(async (agent: Agent, token?: string | null) => {
+    if (!agent?.path) return;
+
+    const headers = buildAgentAuthHeaders(token);
+    try {
+      const response = await axios.post(
+        `/api/agents${agent.path}/health`,
+        undefined,
+        headers ? { headers } : undefined
+      );
+
+      handleAgentUpdate(agent.path, {
+        status: normalizeAgentStatus(response.data?.status),
+        last_checked_time: response.data?.last_checked_iso || null
+      });
+    } catch (error) {
+      console.error(`Failed to check health for agent ${agent.name}:`, error);
+      handleAgentUpdate(agent.path, {
+        status: 'unhealthy',
+        last_checked_time: new Date().toISOString()
+      });
+    }
+  }, [handleAgentUpdate]);
+
+  const runInitialAgentHealthChecks = useCallback((agentsList: Agent[], token?: string | null) => {
+    const candidates = agentsList.filter(agent => agent.enabled);
+    if (!candidates.length) return;
+
+    Promise.allSettled(candidates.map(agent => performAgentHealthCheck(agent, token))).catch((error) => {
+      console.error('Failed to run agent health checks:', error);
+    });
+  }, [performAgentHealthCheck]);
 
   // Fetch agents from the API
   const fetchAgents = useCallback(async () => {
@@ -152,6 +210,7 @@ const Dashboard: React.FC = () => {
       }
 
       const jwtToken = tokenResponse.data.token_data.access_token;
+      setAgentApiToken(jwtToken);
 
       // Fetch agents with JWT token
       const response = await axios.get('/api/agents', {
@@ -178,11 +237,14 @@ const Dashboard: React.FC = () => {
         const transformed = {
           name: agentInfo.name || 'Unknown Agent',
           path: agentInfo.path || '',
+          url: agentInfo.url || '',
           description: agentInfo.description || '',
           trust_level: agentInfo.trust_level || 'community',
           enabled: agentInfo.is_enabled !== undefined ? agentInfo.is_enabled : false,
           tags: agentInfo.tags || [],
-          rating: agentInfo.num_stars || 0
+          rating: agentInfo.num_stars || 0,
+          status: normalizeAgentStatus(agentInfo.status),
+          last_checked_time: agentInfo.last_checked_time || null
         };
 
         console.log(`Transformed agent ${transformed.name}:`, {
@@ -195,14 +257,16 @@ const Dashboard: React.FC = () => {
       });
 
       setAgents(transformedAgents);
+      runInitialAgentHealthChecks(transformedAgents, jwtToken);
     } catch (err: any) {
       console.error('Failed to fetch agents:', err);
       setAgentsError(err.response?.data?.detail || 'Failed to fetch agents');
       setAgents([]);
+      setAgentApiToken(null);
     } finally {
       setAgentsLoading(false);
     }
-  }, []);
+  }, [runInitialAgentHealthChecks]);
 
   // Fetch agents on component mount or when user changes
   useEffect(() => {
@@ -579,16 +643,6 @@ const Dashboard: React.FC = () => {
     );
   };
 
-  const handleAgentUpdate = (path: string, updates: Partial<Agent>) => {
-    setAgents(prevAgents =>
-      prevAgents.map(agent =>
-        agent.path === path
-          ? { ...agent, ...updates }
-          : agent
-      )
-    );
-  };
-
   const handleRegisterServer = useCallback(() => {
     setShowRegisterModal(true);
   }, []);
@@ -789,6 +843,7 @@ const Dashboard: React.FC = () => {
                     onRefreshSuccess={fetchAgents}
                     onShowToast={showToast}
                     onAgentUpdate={handleAgentUpdate}
+                    authToken={agentApiToken}
                   />
                 ))}
               </div>
