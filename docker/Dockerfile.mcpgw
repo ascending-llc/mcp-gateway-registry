@@ -49,7 +49,7 @@ EXPOSE 8003
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD nc -z localhost ${PORT:-8003} || exit 1
+    CMD curl -f http://localhost:${PORT:-8003}/health || exit 1
 
 # Create entrypoint script that validates environment and runs server.py
 RUN echo '#!/bin/bash\n\

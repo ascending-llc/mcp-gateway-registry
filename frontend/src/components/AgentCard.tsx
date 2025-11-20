@@ -22,6 +22,7 @@ import AgentDetailsModal from './AgentDetailsModal';
 export interface Agent {
   name: string;
   path: string;
+  url?: string;
   description?: string;
   version?: string;
   visibility?: 'public' | 'private' | 'group-restricted';
@@ -45,6 +46,7 @@ interface AgentCardProps {
   onRefreshSuccess?: () => void;
   onShowToast?: (message: string, type: 'success' | 'error') => void;
   onAgentUpdate?: (path: string, updates: Partial<Agent>) => void;
+  authToken?: string | null;
 }
 
 /**
@@ -92,6 +94,16 @@ const formatTimeSince = (timestamp: string | null | undefined): string | null =>
   }
 };
 
+const normalizeHealthStatus = (status?: string | null): Agent['status'] => {
+  if (status === 'healthy' || status === 'healthy-auth-expired') {
+    return status;
+  }
+  if (status === 'unhealthy') {
+    return 'unhealthy';
+  }
+  return 'unknown';
+};
+
 /**
  * AgentCard component for displaying A2A agents.
  *
@@ -105,7 +117,8 @@ const AgentCard: React.FC<AgentCardProps> = ({
   canModify,
   onRefreshSuccess,
   onShowToast,
-  onAgentUpdate
+  onAgentUpdate,
+  authToken
 }) => {
   const [showDetails, setShowDetails] = useState(false);
   const [loadingRefresh, setLoadingRefresh] = useState(false);
@@ -161,17 +174,17 @@ const AgentCard: React.FC<AgentCardProps> = ({
 
     setLoadingRefresh(true);
     try {
-      // Extract agent name from path (remove leading slash)
-      const agentName = agent.path.replace(/^\//, '');
-
-      const response = await axios.post(`/api/refresh/${agentName}`);
+      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : undefined;
+      const response = await axios.post(
+        `/api/agents${agent.path}/health`,
+        undefined,
+        headers ? { headers } : undefined
+      );
 
       // Update just this agent instead of triggering global refresh
       if (onAgentUpdate && response.data) {
         const updates: Partial<Agent> = {
-          status: response.data.status === 'healthy' ? 'healthy' :
-                  response.data.status === 'healthy-auth-expired' ? 'healthy-auth-expired' :
-                  response.data.status === 'unhealthy' ? 'unhealthy' : 'unknown',
+          status: normalizeHealthStatus(response.data.status),
           last_checked_time: response.data.last_checked_iso
         };
 
@@ -192,7 +205,7 @@ const AgentCard: React.FC<AgentCardProps> = ({
     } finally {
       setLoadingRefresh(false);
     }
-  }, [agent.path, loadingRefresh, onRefreshSuccess, onShowToast, onAgentUpdate]);
+  }, [agent.path, authToken, loadingRefresh, onRefreshSuccess, onShowToast, onAgentUpdate]);
 
   const handleCopyDetails = useCallback(
     async (data: any) => {
@@ -221,6 +234,12 @@ const AgentCard: React.FC<AgentCardProps> = ({
                 <span className="px-2 py-0.5 text-xs font-semibold bg-gradient-to-r from-cyan-100 to-blue-100 text-cyan-700 dark:from-cyan-900/30 dark:to-blue-900/30 dark:text-cyan-300 rounded-full flex-shrink-0 border border-cyan-200 dark:border-cyan-600">
                   AGENT
                 </span>
+                {/* Check if this is an ASOR agent */}
+                {(agent.tags?.includes('asor') || (agent as any).provider === 'ASOR') && (
+                  <span className="px-2 py-0.5 text-xs font-semibold bg-gradient-to-r from-orange-100 to-red-100 text-orange-700 dark:from-orange-900/30 dark:to-red-900/30 dark:text-orange-300 rounded-full flex-shrink-0 border border-orange-200 dark:border-orange-600">
+                    ASOR
+                  </span>
+                )}
                 {agent.trust_level && (
                   <span className={`px-2 py-0.5 text-xs font-semibold rounded-full flex-shrink-0 flex items-center gap-1 ${getTrustLevelColor()}`}>
                     {getTrustLevelIcon()}
@@ -246,6 +265,16 @@ const AgentCard: React.FC<AgentCardProps> = ({
                 <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
                   v{agent.version}
                 </span>
+              )}
+              {agent.url && (
+                <a
+                  href={agent.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-flex items-center gap-1 text-xs text-cyan-700 dark:text-cyan-300 break-all hover:underline"
+                >
+                  <span className="font-mono">{agent.url}</span>
+                </a>
               )}
             </div>
 
