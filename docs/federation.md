@@ -11,6 +11,12 @@ The MCP Gateway Registry supports federation with external registries, allowing 
 
 ---
 
+## Federation in Action
+
+<div align="center">
+<img src="img/federated-registry.png" alt="Federation Demo" width="800"/>
+</div>
+
 ## Quick Setup
 
 ### 1. Environment Variables
