@@ -560,6 +560,15 @@ logger.info(f"Environment variables - MCP_TRANSPORT: {os.environ.get('MCP_TRANSP
 mcp = FastMCP("MCPGateway")
 
 
+# --- Health Check Route ---
+@mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
+async def _health_check_route(request):
+    """Health check endpoint for the MCP Gateway server."""
+    from starlette.responses import JSONResponse
+    logger.debug("Health check endpoint called.")
+    return JSONResponse({"status": "ok"})
+
+
 # --- Helper function for making requests to the registry ---
 async def _call_registry_api(method: str, endpoint: str, ctx: Context = None, **kwargs) -> Dict[str, Any]:
     """
