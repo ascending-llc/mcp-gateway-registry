@@ -9,13 +9,11 @@ The MCP Gateway Registry supports federation with external registries, allowing 
 | **Anthropic MCP Registry** | MCP Servers | Official Anthropic curated MCP servers | `ANTHROPIC` (purple) |
 | **Workday ASOR** | AI Agents | Workday Agent System of Record | `ASOR` (orange) |
 
----
-
-## Federation in Action
-
 <div align="center">
 <img src="img/federated-registry.png" alt="Federation Demo" width="800"/>
 </div>
+
+---
 
 ## Quick Setup
 
