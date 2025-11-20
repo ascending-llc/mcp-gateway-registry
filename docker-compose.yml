@@ -20,6 +20,10 @@ services:
       - METRICS_API_KEY=${METRICS_API_KEY_REGISTRY}
       - METRICS_API_KEY_NGINX=${METRICS_API_KEY_REGISTRY}
       - AUTH_SERVER_URL=http://auth-server:8888
+      # External Registry Configuration
+      - EXTERNAL_REGISTRY_TAGS=${EXTERNAL_REGISTRY_TAGS:-anthropic-registry,workday-asor}
+      - ASOR_ACCESS_TOKEN=${ASOR_ACCESS_TOKEN}
+      - ASOR_CLIENT_CREDENTIALS=${ASOR_CLIENT_CREDENTIALS}
     ports:
       - "7860:7860"
     volumes:
