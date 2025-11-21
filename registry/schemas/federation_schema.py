@@ -24,8 +24,8 @@ class AsorAgentConfig(BaseModel):
 
 class AsorFederationConfig(BaseModel):
     """ASOR federation configuration."""
-    enabled: bool = True
-    endpoint: str
+    enabled: bool = False
+    endpoint: str = "https://wcpdev-services1.wd103.myworkday.com/ccx/api/asor/v1/awsasor_wcpdev1"
     auth_env_var: Optional[str] = None
     sync_on_startup: bool = False
     agents: List[AsorAgentConfig] = Field(default_factory=list)
