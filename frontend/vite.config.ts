@@ -7,6 +7,7 @@ const authURL = process.env.AUTH_SERVER_EXTERNAL_URL ? process.env.AUTH_SERVER_U
 
 export default defineConfig({
   plugins: [react()],
+  base: '/gateway/', // Add this line for production builds
   server: {
     port: 5173,
     host: '0.0.0.0',
