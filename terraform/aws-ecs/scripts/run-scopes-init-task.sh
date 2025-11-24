@@ -235,6 +235,19 @@ if [[ -z "$AWS_ACCOUNT" ]]; then
 fi
 log_success "AWS Account: $AWS_ACCOUNT"
 
+# Get execution role from existing auth-server task
+EXECUTION_ROLE=$(aws ecs describe-task-definition \
+    --task-definition mcp-gateway-v2-auth \
+    --region "$AWS_REGION" \
+    --query 'taskDefinition.executionRoleArn' \
+    --output text 2>/dev/null)
+
+if [[ -z "$EXECUTION_ROLE" ]]; then
+    log_error "Could not get execution role from auth-server task"
+    exit 1
+fi
+log_success "Execution Role: $EXECUTION_ROLE"
+
 # Step 4: Create task definition
 log_info "Step 4/6: Registering ECS task definition..."
 
@@ -245,7 +258,7 @@ TASK_DEF=$(cat <<EOF
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "256",
   "memory": "512",
-  "executionRoleArn": "arn:aws:iam::$AWS_ACCOUNT:role/ecsTaskExecutionRole",
+  "executionRoleArn": "$EXECUTION_ROLE",
   "containerDefinitions": [
     {
       "name": "scopes-init",

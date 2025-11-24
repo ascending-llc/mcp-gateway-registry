@@ -22,32 +22,35 @@ module "alb" {
   subnets = var.alb_scheme == "internal" ? var.private_subnet_ids : var.public_subnet_ids
 
   # Security Groups
-  security_group_ingress_rules = {
-    all_http = {
-      from_port   = 80
-      to_port     = 80
-      ip_protocol = "tcp"
-      cidr_ipv4   = var.ingress_cidr_blocks[0]
+  # Create dynamic ingress rules for each CIDR block and port combination
+  security_group_ingress_rules = merge([
+    for idx, cidr in var.ingress_cidr_blocks : {
+      "http_${idx}" = {
+        from_port   = 80
+        to_port     = 80
+        ip_protocol = "tcp"
+        cidr_ipv4   = cidr
+      }
+      "https_${idx}" = {
+        from_port   = 443
+        to_port     = 443
+        ip_protocol = "tcp"
+        cidr_ipv4   = cidr
+      }
+      "auth_port_${idx}" = {
+        from_port   = 8888
+        to_port     = 8888
+        ip_protocol = "tcp"
+        cidr_ipv4   = cidr
+      }
+      "gradio_port_${idx}" = {
+        from_port   = 7860
+        to_port     = 7860
+        ip_protocol = "tcp"
+        cidr_ipv4   = cidr
+      }
     }
-    all_https = {
-      from_port   = 443
-      to_port     = 443
-      ip_protocol = "tcp"
-      cidr_ipv4   = var.ingress_cidr_blocks[0]
-    }
-    auth_port = {
-      from_port   = 8888
-      to_port     = 8888
-      ip_protocol = "tcp"
-      cidr_ipv4   = var.ingress_cidr_blocks[0]
-    }
-    gradio_port = {
-      from_port   = 7860
-      to_port     = 7860
-      ip_protocol = "tcp"
-      cidr_ipv4   = var.ingress_cidr_blocks[0]
-    }
-  }
+  ]...)
   security_group_egress_rules = {
     all = {
       ip_protocol = "-1"
