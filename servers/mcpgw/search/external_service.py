@@ -49,7 +49,7 @@ class ExternalVectorSearchService(VectorSearchService):
             
             async with httpx.AsyncClient(timeout=self.timeout, auth=auth) as client:
                 # Try to reach the registry health endpoint
-                response = await client.get(f"{self.registry_base_url}/api/health")
+                response = await client.get(f"{self.registry_base_url}/health")
                 if response.status_code == 200:
                     self._initialized = True
                     logger.info(f"External vector search service initialized - registry available at {self.registry_base_url}")
@@ -187,7 +187,7 @@ class ExternalVectorSearchService(VectorSearchService):
                 auth = httpx.BasicAuth(self.registry_username, self.registry_password)
             
             async with httpx.AsyncClient(timeout=5.0, auth=auth) as client:
-                response = await client.get(f"{self.registry_base_url}/api/health")
+                response = await client.get(f"{self.registry_base_url}/health")
                 return response.status_code == 200
         except Exception as e:
             logger.debug(f"Registry availability check failed: {e}")
