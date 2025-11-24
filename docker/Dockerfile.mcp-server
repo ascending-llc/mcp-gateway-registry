@@ -1,4 +1,6 @@
-# Generic MCP Server Dockerfile - each server has pyproject.toml and server.py
+# Generic MCP Server Dockerfile for servers in the servers/ directory
+# Each server must have pyproject.toml and server.py
+# Build context should be the server directory (e.g., servers/currenttime)
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1
@@ -14,20 +16,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Build argument for server path
-ARG SERVER_PATH
-
-# Copy the specific MCP server files
-COPY ${SERVER_PATH}/ /app/
+# Copy all server files from the build context (which is the server directory)
+# Only .py, .md, .yml, .yaml, .lock, and pyproject.toml files from the server directory are included
+COPY . /app/
 
 # Install uv and setup Python environment
 RUN pip install uv && \
     uv venv .venv --python 3.12
 
-# Install dependencies from pyproject.toml
+# Install dependencies from pyproject.toml (copied from SERVER_PATH)
 RUN . .venv/bin/activate && \
-    if [ -f pyproject.toml ]; then \
-        uv pip install --requirement pyproject.toml; \
+    if [ -f /app/pyproject.toml ]; then \
+        uv pip install --requirement /app/pyproject.toml; \
     fi
 
 # Expose default port (can be overridden by environment variable)

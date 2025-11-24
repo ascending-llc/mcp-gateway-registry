@@ -43,6 +43,8 @@ export interface SemanticAgentHit {
   trust_level?: string;
   visibility?: string;
   is_enabled?: boolean;
+   url?: string;
+   agent_card?: Record<string, any>;
   relevance_score: number;
   match_context?: string;
 }

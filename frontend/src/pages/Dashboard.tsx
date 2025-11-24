@@ -30,6 +30,7 @@ interface Server {
 interface Agent {
   name: string;
   path: string;
+  url?: string;
   description?: string;
   version?: string;
   visibility?: 'public' | 'private' | 'group-restricted';
@@ -81,6 +82,19 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
   );
 };
 
+const normalizeAgentStatus = (status?: string | null): Agent['status'] => {
+  if (status === 'healthy' || status === 'healthy-auth-expired') {
+    return status;
+  }
+  if (status === 'unhealthy') {
+    return 'unhealthy';
+  }
+  return 'unknown';
+};
+
+const buildAgentAuthHeaders = (token?: string | null) =>
+  token ? { Authorization: `Bearer ${token}` } : undefined;
+
 const Dashboard: React.FC = () => {
   const { servers, activeFilter, loading, error, refreshData, setServers } = useServerStats();
   const { user } = useAuth();
@@ -117,6 +131,7 @@ const Dashboard: React.FC = () => {
   const [agentsLoading, setAgentsLoading] = useState(true);
   const [agentsError, setAgentsError] = useState<string | null>(null);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
+  const [agentApiToken, setAgentApiToken] = useState<string | null>(null);
 
   // View filter state
   const [viewFilter, setViewFilter] = useState<'all' | 'servers' | 'agents' | 'external'>('all');
@@ -130,6 +145,49 @@ const Dashboard: React.FC = () => {
     tags: [] as string[]
   });
   const [editAgentLoading, setEditAgentLoading] = useState(false);
+
+  const handleAgentUpdate = useCallback((path: string, updates: Partial<Agent>) => {
+    setAgents(prevAgents =>
+      prevAgents.map(agent =>
+        agent.path === path
+          ? { ...agent, ...updates }
+          : agent
+      )
+    );
+  }, []);
+
+  const performAgentHealthCheck = useCallback(async (agent: Agent, token?: string | null) => {
+    if (!agent?.path) return;
+
+    const headers = buildAgentAuthHeaders(token);
+    try {
+      const response = await axios.post(
+        `/api/agents${agent.path}/health`,
+        undefined,
+        headers ? { headers } : undefined
+      );
+
+      handleAgentUpdate(agent.path, {
+        status: normalizeAgentStatus(response.data?.status),
+        last_checked_time: response.data?.last_checked_iso || null
+      });
+    } catch (error) {
+      console.error(`Failed to check health for agent ${agent.name}:`, error);
+      handleAgentUpdate(agent.path, {
+        status: 'unhealthy',
+        last_checked_time: new Date().toISOString()
+      });
+    }
+  }, [handleAgentUpdate]);
+
+  const runInitialAgentHealthChecks = useCallback((agentsList: Agent[], token?: string | null) => {
+    const candidates = agentsList.filter(agent => agent.enabled);
+    if (!candidates.length) return;
+
+    Promise.allSettled(candidates.map(agent => performAgentHealthCheck(agent, token))).catch((error) => {
+      console.error('Failed to run agent health checks:', error);
+    });
+  }, [performAgentHealthCheck]);
 
   // Fetch agents from the API
   const fetchAgents = useCallback(async () => {
@@ -152,6 +210,7 @@ const Dashboard: React.FC = () => {
       }
 
       const jwtToken = tokenResponse.data.token_data.access_token;
+      setAgentApiToken(jwtToken);
 
       // Fetch agents with JWT token
       const response = await axios.get('/api/agents', {
@@ -178,11 +237,14 @@ const Dashboard: React.FC = () => {
         const transformed = {
           name: agentInfo.name || 'Unknown Agent',
           path: agentInfo.path || '',
+          url: agentInfo.url || '',
           description: agentInfo.description || '',
           trust_level: agentInfo.trust_level || 'community',
           enabled: agentInfo.is_enabled !== undefined ? agentInfo.is_enabled : false,
           tags: agentInfo.tags || [],
-          rating: agentInfo.num_stars || 0
+          rating: agentInfo.num_stars || 0,
+          status: normalizeAgentStatus(agentInfo.status),
+          last_checked_time: agentInfo.last_checked_time || null
         };
 
         console.log(`Transformed agent ${transformed.name}:`, {
@@ -195,14 +257,16 @@ const Dashboard: React.FC = () => {
       });
 
       setAgents(transformedAgents);
+      runInitialAgentHealthChecks(transformedAgents, jwtToken);
     } catch (err: any) {
       console.error('Failed to fetch agents:', err);
       setAgentsError(err.response?.data?.detail || 'Failed to fetch agents');
       setAgents([]);
+      setAgentApiToken(null);
     } finally {
       setAgentsLoading(false);
     }
-  }, []);
+  }, [runInitialAgentHealthChecks]);
 
   // Fetch agents on component mount or when user changes
   useEffect(() => {
@@ -213,7 +277,7 @@ const Dashboard: React.FC = () => {
 
   // External registry tags - can be configured via environment or constants
   // Default tags that identify servers from external registries
-  const EXTERNAL_REGISTRY_TAGS = ['anthropic-registry', 'workday-asor'];
+  const EXTERNAL_REGISTRY_TAGS = ['anthropic-registry', 'workday-asor', 'asor', 'federated'];
 
   // Separate internal and external registry servers
   const internalServers = useMemo(() => {
@@ -229,6 +293,21 @@ const Dashboard: React.FC = () => {
       return EXTERNAL_REGISTRY_TAGS.some(tag => serverTags.includes(tag));
     });
   }, [servers]);
+
+  // Separate internal and external registry agents
+  const internalAgents = useMemo(() => {
+    return agents.filter(a => {
+      const agentTags = a.tags || [];
+      return !EXTERNAL_REGISTRY_TAGS.some(tag => agentTags.includes(tag));
+    });
+  }, [agents]);
+
+  const externalAgents = useMemo(() => {
+    return agents.filter(a => {
+      const agentTags = a.tags || [];
+      return EXTERNAL_REGISTRY_TAGS.some(tag => agentTags.includes(tag));
+    });
+  }, [agents]);
 
   // Semantic search
   const semanticEnabled = committedQuery.trim().length >= 2;
@@ -295,9 +374,26 @@ const Dashboard: React.FC = () => {
     return filtered;
   }, [externalServers, searchTerm]);
 
+  // Filter external agents based on searchTerm
+  const filteredExternalAgents = useMemo(() => {
+    let filtered = externalAgents;
+
+    if (searchTerm) {
+      const query = searchTerm.toLowerCase();
+      filtered = filtered.filter(agent =>
+        agent.name.toLowerCase().includes(query) ||
+        (agent.description || '').toLowerCase().includes(query) ||
+        agent.path.toLowerCase().includes(query) ||
+        (agent.tags || []).some(tag => tag.toLowerCase().includes(query))
+      );
+    }
+
+    return filtered;
+  }, [externalAgents, searchTerm]);
+
   // Filter agents based on activeFilter and searchTerm
   const filteredAgents = useMemo(() => {
-    let filtered = agents;
+    let filtered = internalAgents;
 
     // Apply filter first
     if (activeFilter === 'enabled') filtered = filtered.filter(a => a.enabled);
@@ -579,16 +675,6 @@ const Dashboard: React.FC = () => {
     );
   };
 
-  const handleAgentUpdate = (path: string, updates: Partial<Agent>) => {
-    setAgents(prevAgents =>
-      prevAgents.map(agent =>
-        agent.path === path
-          ? { ...agent, ...updates }
-          : agent
-      )
-    );
-  };
-
   const handleRegisterServer = useCallback(() => {
     setShowRegisterModal(true);
   }, []);
@@ -789,6 +875,7 @@ const Dashboard: React.FC = () => {
                     onRefreshSuccess={fetchAgents}
                     onShowToast={showToast}
                     onAgentUpdate={handleAgentUpdate}
+                    authToken={agentApiToken}
                   />
                 ))}
               </div>
@@ -803,37 +890,76 @@ const Dashboard: React.FC = () => {
             External Registries
           </h2>
 
-          {filteredExternalServers.length === 0 ? (
+          {filteredExternalServers.length === 0 && filteredExternalAgents.length === 0 ? (
             <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
               <div className="text-gray-400 text-lg mb-2">
-                {externalServers.length === 0 ? 'No External Registries Available' : 'No Results Found'}
+                {externalServers.length === 0 && externalAgents.length === 0 ? 'No External Registries Available' : 'No Results Found'}
               </div>
               <p className="text-gray-500 dark:text-gray-300 text-sm max-w-md mx-auto">
-                {externalServers.length === 0
-                  ? 'External registry integrations (Anthropic, and more) will be available soon'
+                {externalServers.length === 0 && externalAgents.length === 0
+                  ? 'External registry integrations (Anthropic, ASOR, and more) will be available soon'
                   : 'Press Enter in the search bar to search semantically'}
               </p>
             </div>
           ) : (
-            <div
-              className="grid"
-              style={{
-                gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-                gap: 'clamp(1.5rem, 3vw, 2.5rem)'
-              }}
-            >
-              {filteredExternalServers.map((server) => (
-                <ServerCard
-                  key={server.path}
-                  server={server}
-                  onToggle={handleToggleServer}
-                  onEdit={handleEditServer}
-                  canModify={user?.can_modify_servers || false}
-                  onRefreshSuccess={refreshData}
-                  onShowToast={showToast}
-                  onServerUpdate={handleServerUpdate}
-                />
-              ))}
+            <div>
+              {/* External Servers */}
+              {filteredExternalServers.length > 0 && (
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">
+                    Servers
+                  </h3>
+                  <div
+                    className="grid"
+                    style={{
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+                      gap: 'clamp(1.5rem, 3vw, 2.5rem)'
+                    }}
+                  >
+                    {filteredExternalServers.map((server) => (
+                      <ServerCard
+                        key={server.path}
+                        server={server}
+                        onToggle={handleToggleServer}
+                        onEdit={handleEditServer}
+                        canModify={user?.can_modify_servers || false}
+                        onRefreshSuccess={refreshData}
+                        onShowToast={showToast}
+                        onServerUpdate={handleServerUpdate}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* External Agents */}
+              {filteredExternalAgents.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">
+                    Agents
+                  </h3>
+                  <div
+                    className="grid"
+                    style={{
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+                      gap: 'clamp(1.5rem, 3vw, 2.5rem)'
+                    }}
+                  >
+                    {filteredExternalAgents.map((agent) => (
+                      <AgentCard
+                        key={agent.path}
+                        agent={agent}
+                        onToggle={handleToggleAgent}
+                        onEdit={handleEditAgent}
+                        canModify={user?.can_modify_servers || false}
+                        onRefreshSuccess={fetchAgents}
+                        onShowToast={showToast}
+                        onAgentUpdate={handleAgentUpdate}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

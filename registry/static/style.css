@@ -260,6 +260,26 @@ main.content {
     /* vertical-align: middle; Handled by flex parent */
 }
 
+.anthropic-badge {
+    background: linear-gradient(135deg, #8b5cf6, #6366f1);
+    color: #fff;
+    font-size: 0.75em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid #7c3aed;
+    text-transform: uppercase;
+}
+
+.asor-badge {
+    background: linear-gradient(135deg, #f97316, #dc2626);
+    color: #fff;
+    font-size: 0.75em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid #ea580c;
+    text-transform: uppercase;
+}
+
 .card-header .icons {
     /* margin-left: auto; Removed - now part of flex group */
     font-size: 0.9em;

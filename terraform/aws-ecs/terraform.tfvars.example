@@ -1,0 +1,128 @@
+# Terraform Variables Example Template
+#
+# This is an EXAMPLE file showing all configurable variables.
+#
+# TO USE:
+# 1. Copy this file: cp terraform.tfvars.example terraform.tfvars
+# 2. Edit terraform.tfvars with YOUR values
+# 3. Run: terraform apply
+#
+# NOTE: terraform.tfvars is in .gitignore and will NOT be committed to git
+
+# ============================================================================
+# NETWORK CONFIGURATION - IP ADDRESSES
+# ============================================================================
+
+# Main ALB (Registry, Auth Server, Gradio) - Allowed IP addresses
+# These IPs can access:
+#   - http://mcp-gateway-alb-*.us-east-1.elb.amazonaws.com (ports 80, 443)
+#   - http://mcp-gateway-alb-*.us-east-1.elb.amazonaws.com:7860 (Registry)
+#   - http://mcp-gateway-alb-*.us-east-1.elb.amazonaws.com:8888 (Auth Server)
+# Options:
+#   - Specific IP: "YOUR.IP.ADDRESS/32" (most secure)
+#   - Public access: "0.0.0.0/0" (use with caution)
+#   - Enterprise CIDR: "10.0.0.0/8" (your organization's network)
+ingress_cidr_blocks = [
+  "71.114.44.148/32",      # Example: Your laptop IP
+  "44.192.72.20/32"        # Example: Your EC2 instance IP
+]
+
+# ============================================================================
+# DOMAIN CONFIGURATION
+# ============================================================================
+
+# Option 1: Use regional domains (RECOMMENDED for multi-region deployments)
+# This automatically creates domains based on the region:
+#   - Keycloak: kc.{region}.mycorp.click (e.g., kc.us-west-2.mycorp.click)
+#   - Registry: registry.{region}.mycorp.click (e.g., registry.us-west-2.mycorp.click)
+use_regional_domains = true
+base_domain          = "mycorp.click"
+
+# Option 2: Use custom static domains (set use_regional_domains = false)
+# Uncomment these if you want fixed domains regardless of region:
+# use_regional_domains = false
+# keycloak_domain = "kc.example.com"
+# root_domain = "example.com"
+
+# ============================================================================
+# KEYCLOAK CREDENTIALS (REQUIRED)
+# ============================================================================
+
+# Keycloak admin credentials
+keycloak_admin          = "admin"
+keycloak_admin_password = "CHANGE-ME-SECURE-PASSWORD"
+
+# Keycloak database credentials
+keycloak_database_username = "keycloak"
+keycloak_database_password = "CHANGE-ME-DB-PASSWORD"
+
+# ============================================================================
+# CONTAINER IMAGE URIS (REQUIRED)
+# ============================================================================
+
+# Registry image from ECR
+registry_image_uri = "YOUR_ACCOUNT_ID.dkr.ecr.YOUR_AWS_REGION.amazonaws.com/mcp-gateway-registry:latest"
+
+# Auth server image from ECR
+auth_server_image_uri = "YOUR_ACCOUNT_ID.dkr.ecr.YOUR_AWS_REGION.amazonaws.com/mcp-gateway-auth-server:latest"
+
+# MCP Server images from ECR
+currenttime_image_uri         = "YOUR_ACCOUNT_ID.dkr.ecr.YOUR_AWS_REGION.amazonaws.com/mcp-gateway-currenttime:latest"
+mcpgw_image_uri               = "YOUR_ACCOUNT_ID.dkr.ecr.YOUR_AWS_REGION.amazonaws.com/mcp-gateway-mcpgw:latest"
+realserverfaketools_image_uri = "YOUR_ACCOUNT_ID.dkr.ecr.YOUR_AWS_REGION.amazonaws.com/mcp-gateway-realserverfaketools:latest"
+
+# A2A Agent images from ECR
+flight_booking_agent_image_uri   = "YOUR_ACCOUNT_ID.dkr.ecr.YOUR_AWS_REGION.amazonaws.com/mcp-gateway-flight-booking-agent:latest"
+travel_assistant_agent_image_uri = "YOUR_ACCOUNT_ID.dkr.ecr.YOUR_AWS_REGION.amazonaws.com/mcp-gateway-travel-assistant-agent:latest"
+
+# ============================================================================
+# OPTIONAL: ADDITIONAL CONFIGURATION
+# ============================================================================
+
+# AWS Region
+# Can also be set via TF_VAR_aws_region environment variable
+# Default: "us-east-1"
+# aws_region = "us-west-2"
+
+# Deployment name prefix
+# Default: "mcp-gateway"
+# name = "mcp-gateway"
+
+# VPC CIDR block
+# Default: "10.0.0.0/16"
+# vpc_cidr = "10.0.0.0/16"
+
+# Enable CloudWatch monitoring
+# Default: true
+# enable_monitoring = true
+
+# Email for alarm notifications (optional)
+# alarm_email = ""
+
+# ============================================================================
+# OPTIONAL: KEYCLOAK DATABASE SCALING
+# ============================================================================
+
+# Database Aurora Serverless capacity (default values shown)
+# keycloak_database_min_acu = 0.5
+# keycloak_database_max_acu = 2
+
+# ============================================================================
+# OPTIONAL: KEYCLOAK LOGGING
+# ============================================================================
+
+# Keycloak log level
+# Default: "INFO"
+# keycloak_log_level = "INFO"
+
+# ============================================================================
+# OPTIONAL: SERVICE REPLICA COUNTS
+# ============================================================================
+
+# Service replica counts (when autoscaling is disabled)
+# Uncomment to override defaults (all default to 1)
+# currenttime_replicas              = 1
+# mcpgw_replicas                    = 1
+# realserverfaketools_replicas      = 1
+# flight_booking_agent_replicas     = 1
+# travel_assistant_agent_replicas   = 1

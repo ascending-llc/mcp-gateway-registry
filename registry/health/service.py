@@ -889,6 +889,11 @@ class HealthMonitoringService:
             from ..core.mcp_client import mcp_client_service
             from ..services.server_service import server_service
 
+            # Wait a moment to ensure health check session is fully closed
+            # This prevents connection conflicts with servers like currenttime and realserverfaketools
+            # that don't allow multiple concurrent sessions on the same endpoint
+            await asyncio.sleep(0.5)
+
             # Get server info to pass transport configuration
             server_info = server_service.get_server_info(service_path)
             logger.info(f"Fetching tools from {proxy_pass_url} for {service_path}")

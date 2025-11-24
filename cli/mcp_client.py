@@ -185,8 +185,9 @@ Examples:
 
 Authentication (priority order):
   1. --token-file: Path to file containing access token
-  2. Environment variables: CLIENT_ID, CLIENT_SECRET, KEYCLOAK_URL, KEYCLOAK_REALM
-  3. Ingress token: Automatically loaded from ~/.mcp/ingress_token if available
+  2. OAUTH_TOKEN environment variable: Direct JWT token
+  3. Environment variables: CLIENT_ID, CLIENT_SECRET, KEYCLOAK_URL, KEYCLOAK_REALM
+  4. Ingress token: Automatically loaded from ~/.mcp/ingress_token if available
         """)
     parser.add_argument('--url', default='http://localhost/mcpgw/mcp',
                        help='Gateway URL (default: %(default)s)')
@@ -199,14 +200,18 @@ Authentication (priority order):
 
     args = parser.parse_args()
 
-    # Load authentication (priority: token-file > M2M > ingress token)
+    # Load authentication (priority: token-file > OAUTH_TOKEN env var > M2M > ingress token)
     access_token = None
 
     # Try loading from file first if specified
     if args.token_file:
         access_token = _load_token_from_file(args.token_file)
 
-    # Fall back to M2M credentials if no token file or file loading failed
+    # Fall back to OAUTH_TOKEN environment variable if no token file or file loading failed
+    if not access_token:
+        access_token = os.getenv('OAUTH_TOKEN')
+
+    # Fall back to M2M credentials if no OAUTH_TOKEN
     if not access_token:
         access_token = _load_m2m_credentials()
 
@@ -221,6 +226,8 @@ Authentication (priority order):
             if client.access_token:
                 if args.token_file:
                     print(f"✓ Token file authentication successful ({args.token_file})")
+                elif os.getenv('OAUTH_TOKEN'):
+                    print("✓ OAuth token authentication successful (OAUTH_TOKEN env var)")
                 elif access_token:
                     print("✓ M2M authentication successful")
                 else:

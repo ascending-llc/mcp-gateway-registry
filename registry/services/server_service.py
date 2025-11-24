@@ -281,9 +281,36 @@ class ServerService:
 
         return self.registered_servers.get(alternate_path)
         
-    def get_all_servers(self) -> Dict[str, Dict[str, Any]]:
-        """Get all registered servers."""
-        return self.registered_servers.copy()
+    def get_all_servers(self, include_federated: bool = True) -> Dict[str, Dict[str, Any]]:
+        """
+        Get all registered servers.
+
+        Args:
+            include_federated: If True, include servers from federated registries
+
+        Returns:
+            Dict of all servers (local and federated if requested)
+        """
+        all_servers = self.registered_servers.copy()
+
+        # Add federated servers if requested
+        if include_federated:
+            try:
+                from .federation_service import get_federation_service
+                federation_service = get_federation_service()
+                federated_servers = federation_service.get_federated_servers()
+
+                # Add federated servers with their paths as keys
+                for fed_server in federated_servers:
+                    path = fed_server.get("path")
+                    if path and path not in all_servers:
+                        all_servers[path] = fed_server
+
+                logger.debug(f"Included {len(federated_servers)} federated servers")
+            except Exception as e:
+                logger.error(f"Failed to get federated servers: {e}")
+
+        return all_servers
         
     def get_filtered_servers(self, accessible_servers: List[str]) -> Dict[str, Dict[str, Any]]:
         """
@@ -319,25 +346,43 @@ class ServerService:
         logger.info(f"Filtered {len(filtered_servers)} servers from {len(self.registered_servers)} total servers")
         return filtered_servers
 
-    def get_all_servers_with_permissions(self, accessible_servers: Optional[List[str]] = None) -> Dict[str, Dict[str, Any]]:
+    def get_all_servers_with_permissions(
+        self,
+        accessible_servers: Optional[List[str]] = None,
+        include_federated: bool = True
+    ) -> Dict[str, Dict[str, Any]]:
         """
         Get servers with optional filtering based on user permissions.
-        
+
         Args:
             accessible_servers: Optional list of server names the user can access.
                                If None, returns all servers (admin access).
-                               
+            include_federated: If True, include servers from federated registries
+
         Returns:
             Dict of servers the user is authorized to see
         """
         if accessible_servers is None:
-            # Admin access - return all servers
+            # Admin access - return all servers (including federated)
             logger.debug("Admin access - returning all servers")
-            return self.get_all_servers()
+            return self.get_all_servers(include_federated=include_federated)
         else:
             # Filtered access - return only accessible servers
             logger.debug(f"Filtered access - returning servers accessible to user: {accessible_servers}")
-            return self.get_filtered_servers(accessible_servers)
+            # Note: Federated servers are read-only, so we include them in filtered results too
+            all_servers = self.get_all_servers(include_federated=include_federated)
+
+            # Filter based on accessible_servers
+            filtered_servers = {}
+            for path, server_info in all_servers.items():
+                server_name = server_info.get("server_name", "")
+                technical_name = path.strip('/')
+
+                # Check if user has access to this server using technical name
+                if technical_name in accessible_servers:
+                    filtered_servers[path] = server_info
+
+            return filtered_servers
 
     def user_can_access_server_path(self, path: str, accessible_servers: List[str]) -> bool:
         """

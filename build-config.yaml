@@ -1,0 +1,152 @@
+# Unified Container Build Configuration
+# Central definition of all Docker images to build and push to ECR
+# This is the SINGLE SOURCE OF TRUTH for all container builds
+#
+# NOTE: The build scripts now dynamically construct the ECR registry URL
+# based on the AWS_REGION environment variable and current AWS credentials.
+# The values below are DEFAULTS and will be overridden if AWS_REGION is set.
+#
+# To deploy to a different region:
+#   export AWS_REGION=us-east-1
+#   make build-push
+#
+# The build scripts will automatically use the correct ECR registry for your region.
+
+aws:
+  account_id: "123456789012"  # Placeholder - overridden by AWS credentials at runtime
+  region: "us-west-2"         # Default region - override with AWS_REGION env var
+  ecr_registry: "123456789012.dkr.ecr.us-west-2.amazonaws.com"  # Placeholder - constructed dynamically at runtime
+
+images:
+  # ========================================
+  # ECS-Deployed Core Services (5)
+  # ========================================
+
+  # Main MCP Gateway Registry with nginx reverse proxy, FAISS, models
+  registry:
+    repo_name: "mcp-gateway-registry"
+    dockerfile: "docker/Dockerfile.registry"
+    context: "."
+    description: "MCP Gateway Registry with nginx, FAISS, models"
+    tags:
+      - latest
+    build_args: {}
+
+  # OAuth2/OIDC Authentication Server
+  auth_server:
+    repo_name: "mcp-gateway-auth-server"
+    dockerfile: "docker/Dockerfile.auth"
+    context: "."
+    description: "OAuth2/OIDC authentication server"
+    tags:
+      - latest
+    build_args: {}
+
+  # Keycloak Identity Provider
+  keycloak:
+    repo_name: "keycloak"
+    dockerfile: "docker/keycloak/Dockerfile"
+    context: "docker/keycloak"
+    description: "Keycloak identity provider"
+    tags:
+      - latest
+    build_args:
+      BASE_IMAGE: "quay.io/keycloak/keycloak:latest"
+
+  # Keycloak Scopes and Roles Initialization
+  scopes_init:
+    repo_name: "mcp-gateway-scopes-init"
+    dockerfile: "docker/Dockerfile.scopes-init"
+    context: "."
+    description: "Initialize Keycloak scopes and roles"
+    tags:
+      - latest
+    build_args: {}
+
+  # Metrics Collection and Monitoring Service
+  metrics_service:
+    repo_name: "mcp-gateway-metrics"
+    dockerfile: "metrics-service/Dockerfile"
+    context: "metrics-service"
+    description: "Metrics collection and monitoring service"
+    tags:
+      - latest
+    build_args: {}
+
+  # ========================================
+  # MCP Servers (5)
+  # ========================================
+
+  # Generic MCP Server Template
+  mcp_server:
+    repo_name: "mcp-gateway-mcp-server"
+    dockerfile: "docker/Dockerfile.mcp-server"
+    context: "."
+    description: "Generic MCP server template"
+    tags:
+      - latest
+    build_args: {}
+
+  # CurrentTime MCP Server
+  currenttime:
+    repo_name: "mcp-gateway-currenttime"
+    dockerfile: "docker/Dockerfile.mcp-server"
+    context: "servers/currenttime"
+    description: "CurrentTime MCP server providing current time functionality"
+    tags:
+      - latest
+    build_args: {}
+
+  # MCPGW MCP Server
+  mcpgw:
+    repo_name: "mcp-gateway-mcpgw"
+    dockerfile: "docker/Dockerfile.mcp-server"
+    context: "servers/mcpgw"
+    description: "MCPGW MCP server"
+    tags:
+      - latest
+    build_args: {}
+
+  # Real Server Fake Tools MCP Server
+  realserverfaketools:
+    repo_name: "mcp-gateway-realserverfaketools"
+    dockerfile: "docker/Dockerfile.mcp-server"
+    context: "servers/realserverfaketools"
+    description: "Real Server Fake Tools MCP server"
+    tags:
+      - latest
+    build_args: {}
+
+  # Financial Info MCP Server
+  fininfo:
+    repo_name: "mcp-gateway-fininfo"
+    dockerfile: "docker/Dockerfile.mcp-server"
+    context: "servers/fininfo"
+    description: "Financial Info MCP server"
+    tags:
+      - latest
+    build_args: {}
+
+  # ========================================
+  # Agent Services (A2A) (2)
+  # ========================================
+
+  # Flight Booking Agent
+  flight_booking_agent:
+    repo_name: "mcp-gateway-flight-booking-agent"
+    dockerfile: "agents/a2a/src/flight-booking-agent/Dockerfile"
+    context: "agents/a2a/src/flight-booking-agent"
+    description: "Flight booking A2A agent"
+    tags:
+      - latest
+    build_args: {}
+
+  # Travel Assistant Agent
+  travel_assistant_agent:
+    repo_name: "mcp-gateway-travel-assistant-agent"
+    dockerfile: "agents/a2a/src/travel-assistant-agent/Dockerfile"
+    context: "agents/a2a/src/travel-assistant-agent"
+    description: "Travel assistant A2A agent"
+    tags:
+      - latest
+    build_args: {}

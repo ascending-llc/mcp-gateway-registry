@@ -49,6 +49,7 @@ const SemanticSearchResults: React.FC<SemanticSearchResultsProps> = ({
   const mapHitToAgent = (hit: SemanticAgentHit): AgentType => ({
     name: hit.agent_name,
     path: hit.path,
+     url: hit.url || (hit.agent_card as any)?.url,
     description: hit.description,
     version: (hit as any).version,
     visibility: (hit.visibility as AgentType['visibility']) ?? 'public',

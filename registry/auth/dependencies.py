@@ -129,18 +129,44 @@ def get_user_session_data(
 def load_scopes_config() -> Dict[str, Any]:
     """Load the scopes configuration from auth_server/scopes.yml"""
     try:
-        # Look for scopes.yml in auth_server directory
-        scopes_file = Path(__file__).parent.parent.parent / "auth_server" / "scopes.yml"
+        # Check for SCOPES_CONFIG_PATH environment variable first
+        import os
+        scopes_path = os.getenv("SCOPES_CONFIG_PATH")
+
+        # Print to stderr for immediate visibility before logging is configured
+        print(f"[SCOPES_INIT] SCOPES_CONFIG_PATH env var: {scopes_path}", flush=True)
+
+        # Fall back to default location if env var not set
+        if not scopes_path:
+            scopes_file = Path(__file__).parent.parent.parent / "auth_server" / "scopes.yml"
+        else:
+            scopes_file = Path(scopes_path)
+
+        # If file doesn't exist, try the EFS mounted location (auth_config subdirectory)
         if not scopes_file.exists():
+            alt_scopes_file = Path(__file__).parent.parent.parent / "auth_server" / "auth_config" / "scopes.yml"
+            if alt_scopes_file.exists():
+                scopes_file = alt_scopes_file
+                print(f"[SCOPES_INIT] File not found at primary location, using EFS mount location: {scopes_file}", flush=True)
+
+        print(f"[SCOPES_INIT] Looking for scopes config at: {scopes_file}", flush=True)
+        print(f"[SCOPES_INIT] Scopes file exists: {scopes_file.exists()}", flush=True)
+
+        if not scopes_file.exists():
+            print(f"[SCOPES_INIT] ERROR: Scopes config file not found at {scopes_file}", flush=True)
+            auth_server_dir = scopes_file.parent
+            print(f"[SCOPES_INIT] Auth server directory exists: {auth_server_dir.exists()}", flush=True)
+            if auth_server_dir.exists():
+                print(f"[SCOPES_INIT] Auth server directory contents: {list(auth_server_dir.iterdir())}", flush=True)
             logger.warning(f"Scopes config file not found at {scopes_file}")
             return {}
-            
+
         with open(scopes_file, 'r') as f:
             config = yaml.safe_load(f)
             logger.info(f"Loaded scopes configuration with {len(config.get('group_mappings', {}))} group mappings")
             return config
     except Exception as e:
-        logger.error(f"Failed to load scopes configuration: {e}")
+        logger.error(f"Failed to load scopes configuration: {e}", exc_info=True)
         return {}
 
 
