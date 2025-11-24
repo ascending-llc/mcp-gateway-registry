@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies  
+# Install dependencies
 COPY metrics-service/pyproject.toml .
 RUN pip install uv && uv pip install --system -e .
 

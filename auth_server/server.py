@@ -52,16 +52,23 @@ DEFAULT_TOKEN_LIFETIME_HOURS = 8
 
 # Rate limiting for token generation (simple in-memory counter)
 user_token_generation_counts = {}
-MAX_TOKENS_PER_USER_PER_HOUR = 10
+MAX_TOKENS_PER_USER_PER_HOUR = int(os.environ.get('MAX_TOKENS_PER_USER_PER_HOUR', '100'))
 
 # Load scopes configuration
 def load_scopes_config():
     """Load the scopes configuration from scopes.yml"""
     try:
-        scopes_file = Path(__file__).parent / "scopes.yml"
+        # Check for environment variable first (for EFS-mounted config)
+        scopes_path = os.environ.get('SCOPES_CONFIG_PATH')
+        if scopes_path:
+            scopes_file = Path(scopes_path)
+        else:
+            # Fall back to default location (baked into image)
+            scopes_file = Path(__file__).parent / "scopes.yml"
+
         with open(scopes_file, 'r') as f:
             config = yaml.safe_load(f)
-            logger.info(f"Loaded scopes configuration with {len(config.get('group_mappings', {}))} group mappings")
+            logger.info(f"Loaded scopes configuration from {scopes_file} with {len(config.get('group_mappings', {}))} group mappings")
             return config
     except Exception as e:
         logger.error(f"Failed to load scopes configuration: {e}")

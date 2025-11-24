@@ -10,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 import httpx
 
 from ..core.config import settings
-from ..auth.dependencies import web_auth, api_auth, enhanced_auth
+from ..auth.dependencies import web_auth, api_auth, enhanced_auth, nginx_proxied_auth
 from ..services.server_service import server_service
 
 logger = logging.getLogger(__name__)
@@ -2184,4 +2184,613 @@ async def get_admin_tokens(
             detail="Internal error retrieving Keycloak tokens"
         )
 
- 
+
+# ============================================================================
+# NEW API: /api/servers/* endpoints with JWT Bearer Token Authentication
+# ============================================================================
+# These are the modern, JWT-authenticated equivalents of the /api/internal/*
+# endpoints. They use Depends(nginx_proxied_auth) for authentication and
+# support fine-grained permission checks via user context.
+#
+# Architecture:
+# - Both /api/internal/* and /api/servers/* call the same internal functions
+# - No code duplication; external API simply wraps existing endpoints
+# - User context from JWT is passed through for audit logging
+#
+# Migration Path:
+# Phase 1 (Now): Both endpoints work identically with same business logic
+# Phase 2 (Future): Clients migrate to /api/servers/*
+# Phase 3 (Future): /api/internal/* deprecated with sunset headers
+# Phase 4 (Future): /api/internal/* removed in major version
+
+
+@router.post("/servers/register")
+async def register_service_api(
+    request: Request,
+    name: Annotated[str, Form()],
+    description: Annotated[str, Form()],
+    path: Annotated[str, Form()],
+    proxy_pass_url: Annotated[str, Form()],
+    user_context: Annotated[dict, Depends(nginx_proxied_auth)],
+    tags: Annotated[str, Form()] = "",
+    num_tools: Annotated[int, Form()] = 0,
+    num_stars: Annotated[int, Form()] = 0,
+    is_python: Annotated[bool, Form()] = False,
+    license_str: Annotated[str, Form(alias="license")] = "N/A",
+    overwrite: Annotated[bool, Form()] = True,
+    auth_provider: Annotated[str | None, Form()] = None,
+    auth_type: Annotated[str | None, Form()] = None,
+    supported_transports: Annotated[str | None, Form()] = None,
+    headers: Annotated[str | None, Form()] = None,
+    tool_list_json: Annotated[str | None, Form()] = None,
+):
+    """
+    Register a service via JWT Bearer Token authentication (External API).
+
+    This endpoint provides the same functionality as POST /api/internal/register
+    but uses modern JWT Bearer token authentication via nginx headers, making it
+    suitable for external service-to-service communication.
+
+    **Authentication:** JWT Bearer token (via nginx X-User header)
+    **Authorization:** Requires valid JWT token from auth system
+
+    **Request body (form data):**
+    - `name` (required): Service name
+    - `description` (required): Service description
+    - `path` (required): Service path (e.g., /myservice)
+    - `proxy_pass_url` (required): Proxy URL (e.g., http://localhost:8000)
+    - `tags` (optional): Comma-separated tags
+    - `num_tools` (optional): Number of tools
+    - `num_stars` (optional): Star rating
+    - `is_python` (optional): Is Python server (boolean)
+    - `license` (optional): License name
+    - `overwrite` (optional): Overwrite if exists (boolean, default true)
+    - `auth_provider` (optional): Auth provider name
+    - `auth_type` (optional): Auth type (e.g., oauth, basic)
+    - `supported_transports` (optional): JSON array of transports
+    - `headers` (optional): JSON object of headers
+    - `tool_list_json` (optional): JSON array of tool definitions
+
+    **Response:**
+    - `201 Created`: Service registered successfully
+    - `400 Bad Request`: Invalid input data
+    - `401 Unauthorized`: Missing or invalid JWT token
+    - `409 Conflict`: Service already exists (unless overwrite=true)
+    - `500 Internal Server Error`: Server error
+
+    **Example:**
+    ```bash
+    curl -X POST https://registry.example.com/api/servers/register \\
+      -H "Authorization: Bearer $JWT_TOKEN" \\
+      -F "name=My Service" \\
+      -F "description=My MCP Service" \\
+      -F "path=/myservice" \\
+      -F "proxy_pass_url=http://localhost:8000"
+    ```
+    """
+    logger.info(f"API register service request from user '{user_context.get('username')}' for service '{name}'")
+
+    # Implementation extracted from internal_register_service to avoid duplicating auth logic
+    # Auth is already validated by nginx_proxied_auth dependency
+    from ..search.service import faiss_service
+    from ..health.service import health_service
+    from ..core.nginx_service import nginx_service
+
+    # Validate path format
+    if not path.startswith('/'):
+        path = '/' + path
+    logger.warning(f"SERVERS REGISTER: Validated path: {path}")
+
+    # Process tags
+    tag_list = [tag.strip() for tag in tags.split(',') if tag.strip()] if tags else []
+
+    # Process supported_transports
+    if supported_transports:
+        try:
+            transports_list = json.loads(supported_transports) if supported_transports.startswith('[') else [t.strip() for t in supported_transports.split(',')]
+        except Exception as e:
+            logger.warning(f"SERVERS REGISTER: Failed to parse supported_transports, using default: {e}")
+            transports_list = ["streamable-http"]
+    else:
+        transports_list = ["streamable-http"]
+
+    # Process headers
+    headers_list = []
+    if headers:
+        try:
+            headers_list = json.loads(headers) if isinstance(headers, str) else headers
+        except Exception as e:
+            logger.warning(f"SERVERS REGISTER: Failed to parse headers: {e}")
+
+    # Process tool_list
+    tool_list = []
+    if tool_list_json:
+        try:
+            tool_list = json.loads(tool_list_json) if isinstance(tool_list_json, str) else tool_list_json
+        except Exception as e:
+            logger.warning(f"SERVERS REGISTER: Failed to parse tool_list_json: {e}")
+
+    # Create server entry
+    server_entry = {
+        "server_name": name,
+        "description": description,
+        "path": path,
+        "proxy_pass_url": proxy_pass_url,
+        "supported_transports": transports_list,
+        "auth_type": auth_type if auth_type else "none",
+        "tags": tag_list,
+        "num_tools": num_tools,
+        "num_stars": num_stars,
+        "is_python": is_python,
+        "license": license_str,
+        "tool_list": tool_list
+    }
+
+    # Add optional fields if provided
+    if auth_provider:
+        server_entry["auth_provider"] = auth_provider
+    if headers_list:
+        server_entry["headers"] = headers_list
+
+    # Check if server exists and handle overwrite logic
+    existing_server = server_service.get_server_info(path)
+    if existing_server and not overwrite:
+        logger.warning(f"SERVERS REGISTER: Server exists and overwrite=False for path {path}")
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "Service registration failed",
+                "reason": f"A service with path '{path}' already exists",
+                "detail": "Use overwrite=true to replace existing service"
+            }
+        )
+
+    try:
+        # Register service (use update_server if overwriting, otherwise register_server)
+        if existing_server and overwrite:
+            logger.info(f"Overwriting existing server at path {path} by user {user_context.get('username')}")
+            success = server_service.update_server(path, server_entry)
+        else:
+            success = server_service.register_server(server_entry)
+
+        if not success:
+            logger.error(f"Service registration failed for {path}")
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "error": "Service registration failed",
+                    "reason": f"Failed to register service at path '{path}'",
+                    "detail": "Check server logs for more information"
+                }
+            )
+
+        logger.info(f"Service registered successfully via API: {path} by user {user_context.get('username')}")
+
+        # Trigger async tasks for health check and FAISS sync
+        asyncio.create_task(health_service.perform_immediate_health_check(path))
+        asyncio.create_task(faiss_service.save_data())
+
+        return JSONResponse(
+            status_code=201,
+            content={
+                "path": path,
+                "name": name,
+                "message": f"Service '{name}' registered successfully at path '{path}'"
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Service registration failed for {path}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Service registration failed: {str(e)}"
+        )
+
+
+@router.get("/servers")
+async def list_services_api(
+    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+):
+    """
+    List all registered services via JWT Bearer Token authentication (External API).
+
+    This endpoint provides the same functionality as GET /api/internal/list
+    but uses modern JWT Bearer token authentication.
+
+    **Authentication:** JWT Bearer token (via nginx X-User header)
+    **Authorization:** Requires valid JWT token from auth system
+
+    **Response:**
+    Returns a list of all registered services with their metadata.
+
+    **Example:**
+    ```bash
+    curl -X GET https://registry.example.com/api/servers \\
+      -H "Authorization: Bearer $JWT_TOKEN"
+    ```
+    """
+    logger.info(f"API list services request from user '{user_context.get('username') if user_context else 'unknown'}'")
+
+    # Call the existing internal_list_services function
+    return await internal_list_services(user_context=user_context)
+
+
+@router.post("/servers/toggle")
+async def toggle_service_api(
+    path: Annotated[str, Form()],
+    new_state: Annotated[bool, Form()],
+    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+):
+    """
+    Toggle a service's enabled/disabled state via JWT authentication (External API).
+
+    This endpoint provides the same functionality as POST /api/internal/toggle
+    but uses modern JWT Bearer token authentication.
+
+    **Authentication:** JWT Bearer token (via nginx X-User header)
+    **Authorization:** Requires valid JWT token from auth system
+
+    **Request body (form data):**
+    - `path` (required): Service path
+    - `new_state` (required): New state (true=enabled, false=disabled)
+
+    **Response:**
+    Returns the updated service status.
+
+    **Example:**
+    ```bash
+    curl -X POST https://registry.example.com/api/servers/toggle \\
+      -H "Authorization: Bearer $JWT_TOKEN" \\
+      -F "path=/myservice" \\
+      -F "new_state=true"
+    ```
+    """
+    logger.info(f"API toggle service request from user '{user_context.get('username')}' for path '{path}' to {new_state}")
+
+    # Call the existing internal_toggle_service function
+    return await internal_toggle_service(path=path, new_state=new_state)
+
+
+@router.post("/servers/remove")
+async def remove_service_api(
+    path: Annotated[str, Form()],
+    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+):
+    """
+    Remove a service via JWT Bearer Token authentication (External API).
+
+    This endpoint provides the same functionality as POST /api/internal/remove
+    but uses modern JWT Bearer token authentication.
+
+    **Authentication:** JWT Bearer token (via nginx X-User header)
+    **Authorization:** Requires valid JWT token from auth system
+
+    **Request body (form data):**
+    - `path` (required): Service path to remove
+
+    **Response:**
+    Returns confirmation of removal.
+
+    **Example:**
+    ```bash
+    curl -X POST https://registry.example.com/api/servers/remove \\
+      -H "Authorization: Bearer $JWT_TOKEN" \\
+      -F "path=/myservice"
+    ```
+    """
+    from ..search.service import faiss_service
+    from ..health.service import health_service
+    from ..core.nginx_service import nginx_service
+    from ..utils.scopes_manager import remove_server_scopes
+
+    logger.info(f"API remove service request from user '{user_context.get('username')}' for path '{path}'")
+
+    # Normalize path
+    if not path.startswith('/'):
+        path = '/' + path
+
+    # Check if server exists
+    server_info = server_service.get_server_info(path)
+    if not server_info:
+        logger.warning(f"Service not found at path '{path}'")
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": "Service not found",
+                "reason": f"No service registered at path '{path}'",
+                "suggestion": "Check the service path and ensure it is registered"
+            },
+        )
+
+    # Remove the server
+    success = server_service.remove_server(path)
+
+    if not success:
+        logger.warning(f"Failed to remove service at path '{path}'")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Service removal failed",
+                "reason": f"Failed to remove service at path '{path}'",
+                "suggestion": "Check server logs for detailed error information"
+            },
+        )
+
+    logger.info(f"Service removed successfully: {path} by user {user_context.get('username')}")
+
+    # Remove from FAISS index
+    await faiss_service.remove_service(path)
+
+    # Regenerate Nginx configuration
+    enabled_servers = {
+        server_path: server_service.get_server_info(server_path)
+        for server_path in server_service.get_enabled_services()
+    }
+    await nginx_service.generate_config_async(enabled_servers)
+
+    # Broadcast health status update to WebSocket clients
+    await health_service.broadcast_health_update(path)
+
+    # Remove server from scopes.yml and reload auth server
+    try:
+        await remove_server_scopes(path)
+        logger.info(f"Successfully removed server {path} from scopes")
+    except Exception as e:
+        logger.warning(f"Failed to remove server {path} from scopes: {e}")
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "message": "Service removed successfully",
+            "path": path
+        }
+    )
+
+
+@router.get("/servers/health")
+async def healthcheck_api(
+    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+):
+    """
+    Get health status for all registered services via JWT authentication (External API).
+
+    This endpoint provides the same functionality as GET /api/internal/healthcheck
+    but uses modern JWT Bearer token authentication.
+
+    **Authentication:** JWT Bearer token (via nginx X-User header)
+    **Authorization:** Requires valid JWT token from auth system
+
+    **Response:**
+    Returns health status for all services.
+
+    **Example:**
+    ```bash
+    curl -X GET https://registry.example.com/api/servers/health \\
+      -H "Authorization: Bearer $JWT_TOKEN"
+    ```
+    """
+    logger.info(f"API healthcheck request from user '{user_context.get('username') if user_context else 'unknown'}'")
+
+    # Call the existing internal_healthcheck function
+    return await internal_healthcheck()
+
+
+@router.post("/servers/groups/add")
+async def add_server_to_groups_api(
+    request: Request,
+    server_name: Annotated[str, Form()],
+    group_names: Annotated[str, Form()],
+    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+):
+    """
+    Add a service to scope groups via JWT authentication (External API).
+
+    This endpoint provides the same functionality as POST /api/internal/add-to-groups
+    but uses modern JWT Bearer token authentication.
+
+    **Authentication:** JWT Bearer token (via nginx X-User header)
+    **Authorization:** Requires valid JWT token from auth system
+
+    **Request body (form data):**
+    - `server_name` (required): Service name
+    - `group_names` (required): Comma-separated list of group names
+
+    **Response:**
+    Returns confirmation of group assignment.
+
+    **Example:**
+    ```bash
+    curl -X POST https://registry.example.com/api/servers/groups/add \\
+      -H "Authorization: Bearer $JWT_TOKEN" \\
+      -F "server_name=myservice" \\
+      -F "group_names=admin,developers"
+    ```
+    """
+    logger.info(f"API add to groups request from user '{user_context.get('username')}' for server '{server_name}'")
+
+    # Call the existing internal_add_server_to_groups function
+    return await internal_add_server_to_groups(request, server_name, group_names)
+
+
+@router.post("/servers/groups/remove")
+async def remove_server_from_groups_api(
+    request: Request,
+    server_name: Annotated[str, Form()],
+    group_names: Annotated[str, Form()],
+    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+):
+    """
+    Remove a service from scope groups via JWT authentication (External API).
+
+    This endpoint provides the same functionality as POST /api/internal/remove-from-groups
+    but uses modern JWT Bearer token authentication.
+
+    **Authentication:** JWT Bearer token (via nginx X-User header)
+    **Authorization:** Requires valid JWT token from auth system
+
+    **Request body (form data):**
+    - `server_name` (required): Service name
+    - `group_names` (required): Comma-separated list of group names to remove
+
+    **Response:**
+    Returns confirmation of removal from groups.
+
+    **Example:**
+    ```bash
+    curl -X POST https://registry.example.com/api/servers/groups/remove \\
+      -H "Authorization: Bearer $JWT_TOKEN" \\
+      -F "server_name=myservice" \\
+      -F "group_names=developers"
+    ```
+    """
+    logger.info(f"API remove from groups request from user '{user_context.get('username')}' for server '{server_name}'")
+
+    # Call the existing internal_remove_server_from_groups function
+    return await internal_remove_server_from_groups(request, server_name, group_names)
+
+
+@router.post("/servers/groups/create")
+async def create_group_api(
+    request: Request,
+    group_name: Annotated[str, Form()],
+    description: Annotated[str, Form()] = "",
+    create_in_keycloak: Annotated[bool, Form()] = True,
+    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+):
+    """
+    Create a new scope group via JWT authentication (External API).
+
+    This endpoint provides the same functionality as POST /api/internal/create-group
+    but uses modern JWT Bearer token authentication.
+
+    **Authentication:** JWT Bearer token (via nginx X-User header)
+    **Authorization:** Requires valid JWT token from auth system
+
+    **Request body (form data):**
+    - `group_name` (required): Name of the new group
+    - `description` (optional): Group description
+    - `create_in_keycloak` (optional): Whether to create in Keycloak (default: true)
+
+    **Response:**
+    Returns confirmation of group creation.
+
+    **Example:**
+    ```bash
+    curl -X POST https://registry.example.com/api/servers/groups/create \\
+      -H "Authorization: Bearer $JWT_TOKEN" \\
+      -F "group_name=new-team" \\
+      -F "description=Team for new project" \\
+      -F "create_in_keycloak=true"
+    ```
+    """
+    logger.info(f"API create group request from user '{user_context.get('username')}' for group '{group_name}'")
+
+    # Call the existing internal_create_group function
+    return await internal_create_group(request, group_name, description, create_in_keycloak)
+
+
+@router.post("/servers/groups/delete")
+async def delete_group_api(
+    request: Request,
+    group_name: Annotated[str, Form()],
+    delete_from_keycloak: Annotated[bool, Form()] = True,
+    force: Annotated[bool, Form()] = False,
+    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+):
+    """
+    Delete a scope group via JWT authentication (External API).
+
+    This endpoint provides the same functionality as POST /api/internal/delete-group
+    but uses modern JWT Bearer token authentication.
+
+    **Authentication:** JWT Bearer token (via nginx X-User header)
+    **Authorization:** Requires valid JWT token from auth system
+
+    **Request body (form data):**
+    - `group_name` (required): Name of the group to delete
+    - `delete_from_keycloak` (optional): Whether to delete from Keycloak (default: true)
+    - `force` (optional): Force deletion of system groups (default: false)
+
+    **Response:**
+    Returns confirmation of group deletion.
+
+    **Example:**
+    ```bash
+    curl -X POST https://registry.example.com/api/servers/groups/delete \\
+      -H "Authorization: Bearer $JWT_TOKEN" \\
+      -F "group_name=old-team" \\
+      -F "delete_from_keycloak=true" \\
+      -F "force=false"
+    ```
+    """
+    logger.info(f"API delete group request from user '{user_context.get('username')}' for group '{group_name}'")
+
+    # Call the existing internal_delete_group function
+    return await internal_delete_group(request, group_name, delete_from_keycloak, force)
+
+
+@router.get("/servers/groups")
+async def list_groups_api(
+    request: Request,
+    include_keycloak: bool = True,
+    include_scopes: bool = True,
+    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+):
+    """
+    List all scope groups via JWT Bearer Token authentication (External API).
+
+    This endpoint provides the same functionality as GET /api/internal/list-groups
+    but uses modern JWT Bearer token authentication.
+
+    **Authentication:** JWT Bearer token (via nginx X-User header)
+    **Authorization:** Requires valid JWT token from auth system
+
+    **Response:**
+    Returns a list of all groups and their synchronization status.
+
+    **Example:**
+    ```bash
+    curl -X GET https://registry.example.com/api/servers/groups \\
+      -H "Authorization: Bearer $JWT_TOKEN"
+    ```
+    """
+    logger.info(f"API list groups request from user '{user_context.get('username') if user_context else 'unknown'}'")
+
+    # Call the existing internal_list_groups function
+    return await internal_list_groups(request, include_keycloak, include_scopes)
+
+
+@router.get("/servers/tools/{service_path:path}")
+async def get_service_tools_api(
+    service_path: str,
+    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+):
+    """
+    Get tool list for a service via JWT Bearer Token authentication (External API).
+
+    This endpoint provides the same functionality as GET /tools/{service_path}
+    but uses modern JWT Bearer token authentication.
+
+    **Authentication:** JWT Bearer token (via nginx X-User header)
+    **Authorization:** Requires valid JWT token from auth system
+
+    **Path Parameters:**
+    - `service_path` (required): Service path (e.g., /myservice or /all for all services)
+
+    **Response:**
+    Returns the list of tools available on the service, filtered by user permissions.
+
+    **Example:**
+    ```bash
+    curl -X GET https://registry.example.com/api/servers/tools/myservice \\
+      -H "Authorization: Bearer $JWT_TOKEN"
+
+    # Get tools from all accessible services
+    curl -X GET https://registry.example.com/api/servers/tools/all \\
+      -H "Authorization: Bearer $JWT_TOKEN"
+    ```
+    """
+    logger.info(f"API get tools request from user '{user_context.get('username') if user_context else 'unknown'}' for path '{service_path}'")
+
+    # Call the existing get_service_tools function
+    return await get_service_tools(service_path=service_path, user_context=user_context)

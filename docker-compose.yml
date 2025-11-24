@@ -136,10 +136,8 @@ services:
   # Current Time MCP Server
   currenttime-server:
     build:
-      context: .
-      dockerfile: docker/Dockerfile.mcp-server
-      args:
-        SERVER_PATH: servers/currenttime
+      context: servers/currenttime
+      dockerfile: ../../docker/Dockerfile.mcp-server
     environment:
       - PORT=8000
       - MCP_TRANSPORT=streamable-http
@@ -150,10 +148,8 @@ services:
   # Financial Info MCP Server
   fininfo-server:
     build:
-      context: .
-      dockerfile: docker/Dockerfile.mcp-server
-      args:
-        SERVER_PATH: servers/fininfo
+      context: servers/fininfo
+      dockerfile: ../../docker/Dockerfile.mcp-server
     environment:
       - PORT=8001
       - SECRET_KEY=${SECRET_KEY}
@@ -166,10 +162,8 @@ services:
   # MCP Gateway Server
   mcpgw-server:
     build:
-      context: .
-      dockerfile: docker/Dockerfile.mcp-server
-      args:
-        SERVER_PATH: servers/mcpgw
+      context: servers/mcpgw
+      dockerfile: ../../docker/Dockerfile.mcp-server
     environment:
       - PORT=8003
       - REGISTRY_BASE_URL=http://registry:7860
@@ -188,10 +182,8 @@ services:
   # Real Server Fake Tools MCP Server
   realserverfaketools-server:
     build:
-      context: .
-      dockerfile: docker/Dockerfile.mcp-server
-      args:
-        SERVER_PATH: servers/realserverfaketools
+      context: servers/realserverfaketools
+      dockerfile: ../../docker/Dockerfile.mcp-server
     environment:
       - PORT=8002
     ports:

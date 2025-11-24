@@ -207,10 +207,39 @@ class NginxConfigService:
             # Get API version from constants
             api_version = REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION
 
+            # Parse Keycloak configuration from KEYCLOAK_URL environment variable
+            import os
+            keycloak_url = os.environ.get('KEYCLOAK_URL', 'http://keycloak:8080')
+            try:
+                parsed_keycloak = urlparse(keycloak_url)
+                keycloak_scheme = parsed_keycloak.scheme or 'http'
+                keycloak_host = parsed_keycloak.hostname or 'keycloak'
+                # Use default port based on scheme if not specified
+                if parsed_keycloak.port:
+                    keycloak_port = str(parsed_keycloak.port)
+                else:
+                    keycloak_port = '443' if keycloak_scheme == 'https' else '8080'
+
+                # Validate that we can actually resolve the hostname
+                if not keycloak_host or keycloak_host == 'keycloak':
+                    # If we end up with just 'keycloak', use the full URL's netloc instead
+                    keycloak_host = parsed_keycloak.netloc.split(':')[0] if parsed_keycloak.netloc else 'keycloak'
+                    logger.warning(f"Keycloak hostname is 'keycloak', using netloc instead: {keycloak_host}")
+
+                logger.info(f"Using Keycloak configuration from KEYCLOAK_URL '{keycloak_url}': {keycloak_scheme}://{keycloak_host}:{keycloak_port}")
+            except Exception as e:
+                logger.warning(f"Failed to parse KEYCLOAK_URL '{keycloak_url}': {e}. Using defaults.")
+                keycloak_scheme = 'http'
+                keycloak_host = 'keycloak'
+                keycloak_port = '8080'
+
             # Replace placeholders in template
             config_content = template_content.replace("{{LOCATION_BLOCKS}}", "\n".join(location_blocks))
             config_content = config_content.replace("{{ADDITIONAL_SERVER_NAMES}}", additional_server_names)
             config_content = config_content.replace("{{ANTHROPIC_API_VERSION}}", api_version)
+            config_content = config_content.replace("{{KEYCLOAK_SCHEME}}", keycloak_scheme)
+            config_content = config_content.replace("{{KEYCLOAK_HOST}}", keycloak_host)
+            config_content = config_content.replace("{{KEYCLOAK_PORT}}", keycloak_port)
 
             # Write config file
             with open(settings.nginx_config_path, "w") as f:
@@ -317,6 +346,10 @@ class NginxConfigService:
         
         # Common proxy settings
         common_settings = f"""
+        # Use IPv4 resolver (disable IPv6)
+        resolver 8.8.8.8 8.8.4.4 valid=10s;
+        resolver_timeout 5s;
+
         # Authenticate request - pass entire request to auth server
         auth_request /validate;
         
@@ -332,6 +365,7 @@ class NginxConfigService:
         # Proxy to MCP server
         proxy_pass {proxy_pass_url};
         proxy_http_version 1.1;
+        proxy_ssl_server_name on;
         proxy_set_header Host {host_header};
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -369,22 +403,26 @@ class NginxConfigService:
             transport_settings = """
         # Capture request body for auth validation using Lua
         rewrite_by_lua_file /etc/nginx/lua/capture_body.lua;
-        
+
         # For SSE connections and WebSocket upgrades
         proxy_buffering off;
         proxy_cache off;
         proxy_set_header Connection $http_connection;
         proxy_set_header Upgrade $http_upgrade;
+        # Explicitly preserve Accept header for MCP protocol requirements
+        proxy_set_header Accept $http_accept;
         chunked_transfer_encoding off;"""
         
         elif transport_type == "streamable-http":
             transport_settings = """
         # Capture request body for auth validation using Lua
         rewrite_by_lua_file /etc/nginx/lua/capture_body.lua;
-        
+
         # HTTP transport configuration
         proxy_buffering off;
-        proxy_set_header Connection "";"""
+        proxy_set_header Connection "";
+        # Explicitly preserve Accept header for MCP protocol requirements
+        proxy_set_header Accept $http_accept;"""
         
         else:  # direct
             transport_settings = """

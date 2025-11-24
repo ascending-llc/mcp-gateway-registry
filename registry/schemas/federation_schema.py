@@ -11,7 +11,7 @@ class AnthropicServerConfig(BaseModel):
 
 class AnthropicFederationConfig(BaseModel):
     """Anthropic federation configuration."""
-    enabled: bool = True
+    enabled: bool = False
     endpoint: str = "https://registry.modelcontextprotocol.io"
     sync_on_startup: bool = False
     servers: List[AnthropicServerConfig] = Field(default_factory=list)
@@ -24,8 +24,8 @@ class AsorAgentConfig(BaseModel):
 
 class AsorFederationConfig(BaseModel):
     """ASOR federation configuration."""
-    enabled: bool = True
-    endpoint: str
+    enabled: bool = False
+    endpoint: str = ""
     auth_env_var: Optional[str] = None
     sync_on_startup: bool = False
     agents: List[AsorAgentConfig] = Field(default_factory=list)

@@ -34,7 +34,7 @@ providers:
     groups_claim: "cognito:groups"
     email_claim: "email"
     name_claim: "name"
-    enabled: true
+    enabled: false
 
   entra:
     display_name: "Microsoft Entra ID"
@@ -53,7 +53,7 @@ providers:
     groups_claim: "groups"
     email_claim: "email"
     name_claim: "name"
-    enabled: true
+    enabled: false
 
   github:
     display_name: "GitHub"
