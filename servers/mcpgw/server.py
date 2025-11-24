@@ -6,7 +6,9 @@ from fastmcp import FastMCP, Context
 from pydantic import Field
 from starlette.responses import JSONResponse
 from config import parse_arguments, settings
+from models.models import DatabaseQueryRequestBody
 from tools import auth_tools, service_mgmt, scopes_mgmt, search_tools
+from tools.search_tools import database_query_embeddings_by_text_service
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -230,6 +232,53 @@ async def intelligent_tool_finder(
         natural_language_query, tags, top_k_services, top_n_tools, ctx
     )
 
+@mcp.tool()
+async def query_embeddings_by_source_type(body: DatabaseQueryRequestBody) -> dict:
+    """
+    Vector Database Semantic Search Tool - Query similar content by text
+
+    This tool performs semantic search in the vector database to find document fragments
+    most similar to the input text. Supports searching across multiple data source
+    collections or limiting search to specific data source types.
+
+    Features:
+    - Uses vector similarity search technology to understand semantics beyond keyword matching
+    - Supports parallel search across multiple collections for improved performance
+    - Automatically sorts by similarity score, returning the most relevant results
+    - Supports data source type filtering (s3, gg, db, sp, etc)
+
+    Args:
+        body: DatabaseQueryRequestBody containing the following parameters:
+            - query (str): Search query text describing what to find
+            - k (int): Number of most similar results to return, defaults to 4
+            - entity_id (Optional[str]): User/entity ID for permission control, defaults to "public"
+            - sourceType (DataSourceType): Data source type filter,
+              options: s3, gg, db, sp, etc. If not specified, searches all data sources
+            - search_type (SearchType): Search algorithm to use, options:
+              - "near_text": Vector search returns the objects with most similar vectors to that of the query.
+              - "near_vector": Vector search based on provided vector
+              - "near_image": Image search uses an image as a search input to perform vector similarity search.
+              - "bm25": Keyword search, also called "BM25 (Best match 25)" or "sparse vector" search,
+                        returns objects that have the highest BM25F scores.
+              - "hybrid": Hybrid search combines the results of a vector search and
+                        a keyword (BM25F) search by fusing the two result sets.
+              - "fetch_objects": Fetch objects without similarity scoring
+    Returns:
+        dict: Formatted query results containing:
+            - results: List of search results, each containing document content, metadata, and similarity score
+            - total: Total number of returned results
+            - query: Original query text
+
+    Example:
+        >>> body = DatabaseQueryRequestBody(
+        ...     query="how to configure database connection",
+        ...     k=5,
+        ...     sourceType=DataSourceType.S3,
+        ...     searchType=searchType.NEAR_TEXT
+        ... )
+        >>> results = await query_embeddings_by_source_type(body)
+    """
+    return await database_query_embeddings_by_text_service(body)
 
 # ============================================================================
 # Main Entry Point

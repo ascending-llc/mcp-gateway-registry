@@ -12,6 +12,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "websockets>=15.0.1",
     "pyyaml>=6.0.2",
+    "weaviate-client>=4.18.1",
 ]
 
 [project.optional-dependencies]
@@ -29,5 +30,5 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["core", "search", "tools"]
+packages = ["core", "search", "tools", "db", "models"]
 py-modules = ["server", "config"]
