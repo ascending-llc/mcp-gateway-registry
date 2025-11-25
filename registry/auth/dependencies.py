@@ -524,6 +524,20 @@ def nginx_proxied_auth(
     Returns:
         Dict containing username, groups, scopes, and permission flags
     """
+    # CRITICAL DIAGNOSTIC: Log ALL incoming headers and auth parameters
+    logger.debug(f"[NGINX_AUTH_DEBUG] Request path: {request.url.path}")
+    logger.debug(f"[NGINX_AUTH_DEBUG] Request method: {request.method}")
+    logger.debug(f"[NGINX_AUTH_DEBUG] X-User header: '{x_user}' (type: {type(x_user).__name__})")
+    logger.debug(f"[NGINX_AUTH_DEBUG] X-Username header: '{x_username}' (type: {type(x_username).__name__})")
+    logger.debug(f"[NGINX_AUTH_DEBUG] X-Scopes header: '{x_scopes}' (type: {type(x_scopes).__name__})")
+    logger.debug(f"[NGINX_AUTH_DEBUG] X-Auth-Method header: '{x_auth_method}' (type: {type(x_auth_method).__name__})")
+    logger.debug(f"[NGINX_AUTH_DEBUG] Session cookie present: {session is not None}")
+    logger.debug(f"[NGINX_AUTH_DEBUG] Authorization header: {request.headers.get('authorization', 'NOT PRESENT')[:50] if request.headers.get('authorization') else 'NOT PRESENT'}")
+
+    # Log ALL headers for complete diagnostic
+    all_headers = dict(request.headers)
+    logger.debug(f"[NGINX_AUTH_DEBUG] ALL REQUEST HEADERS: {all_headers}")
+
     # First, try to get user context from nginx headers (JWT Bearer token flow)
     if x_user or x_username:
         username = x_username or x_user

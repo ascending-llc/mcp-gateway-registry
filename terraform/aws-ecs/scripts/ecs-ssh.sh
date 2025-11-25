@@ -25,7 +25,7 @@ declare -A SERVICE_MAP=(
 # Parameters
 SERVICE_TYPE="${1:-registry}"
 CLUSTER="${2:-mcp-gateway-ecs-cluster}"
-REGION="${3:-us-west-2}"
+REGION="${3:-us-east-1}"
 
 # Get service name and container name from map
 if [[ -z "${SERVICE_MAP[$SERVICE_TYPE]}" ]]; then

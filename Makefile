@@ -1,4 +1,4 @@
-.PHONY: help test test-unit test-integration test-e2e test-fast test-coverage test-auth test-servers test-search test-health test-core install-dev lint format check-deps clean build-keycloak push-keycloak build-and-push-keycloak deploy-keycloak update-keycloak save-outputs view-logs view-logs-keycloak view-logs-registry view-logs-auth view-logs-follow list-images build push build-push generate-manifest validate-config compose-up-agents compose-down-agents compose-logs-agents build-agents push-agents
+.PHONY: help test test-unit test-integration test-e2e test-fast test-coverage test-auth test-servers test-search test-health test-core install-dev lint format check-deps clean build-keycloak push-keycloak build-and-push-keycloak deploy-keycloak update-keycloak save-outputs view-logs view-logs-keycloak view-logs-registry view-logs-auth view-logs-follow list-images build push build-push generate-manifest validate-config publish-dockerhub publish-dockerhub-component publish-dockerhub-version publish-dockerhub-no-mirror publish-local compose-up-agents compose-down-agents compose-logs-agents build-agents push-agents
 
 # Default target
 help:
@@ -54,6 +54,13 @@ help:
 	@echo "  build-push IMAGE=name       Build and push specific image"
 	@echo "  generate-manifest           Generate image-manifest.json for Terraform"
 	@echo "  validate-config             Validate build-config.yaml syntax"
+	@echo ""
+	@echo "DockerHub Publishing:"
+	@echo "  publish-dockerhub           Publish all images to DockerHub"
+	@echo "  publish-dockerhub-component Publish specific component (COMPONENT=name)"
+	@echo "  publish-dockerhub-version   Publish with version tag (VERSION=v1.0.0)"
+	@echo "  publish-dockerhub-no-mirror Publish without external images"
+	@echo "  publish-local               Build locally without pushing"
 	@echo ""
 	@echo "Local A2A Agent Development:"
 	@echo "  compose-up-agents           Start A2A agents with docker-compose"
@@ -222,6 +229,30 @@ push:
 
 build-push:
 	@$(if $(IMAGE),IMAGE=$(IMAGE),) ./scripts/build-images.sh build-push
+
+# ========================================
+# DockerHub Publishing
+# ========================================
+
+publish-dockerhub:
+	@echo "Publishing all images to DockerHub..."
+	./scripts/publish_containers.sh --dockerhub
+
+publish-dockerhub-component:
+	@echo "Publishing $(COMPONENT) to DockerHub..."
+	./scripts/publish_containers.sh --dockerhub --component $(COMPONENT)
+
+publish-dockerhub-version:
+	@echo "Publishing all images to DockerHub with version $(VERSION)..."
+	./scripts/publish_containers.sh --dockerhub --version $(VERSION)
+
+publish-dockerhub-no-mirror:
+	@echo "Publishing all images to DockerHub (skipping external images)..."
+	./scripts/publish_containers.sh --dockerhub --skip-mirror
+
+publish-local:
+	@echo "Building all images locally (no push)..."
+	./scripts/publish_containers.sh --local
 
 # ========================================
 # Local A2A Agent Development

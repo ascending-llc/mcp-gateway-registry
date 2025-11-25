@@ -100,14 +100,14 @@ _discover_ecs_log_groups() {
     # Get all log groups matching ECS patterns
     local ecs_logs=$(aws logs describe-log-groups \
         --log-group-name-prefix "/ecs/" \
-        --region "${AWS_REGION:-us-west-2}" \
+        --region "$AWS_REGION" \
         --query 'logGroups[*].logGroupName' \
         --output text 2>/dev/null || true)
 
     if [[ -z "$ecs_logs" ]]; then
         ecs_logs=$(aws logs describe-log-groups \
             --log-group-name-prefix "/aws/ecs/" \
-            --region "${AWS_REGION:-us-west-2}" \
+            --region "$AWS_REGION" \
             --query 'logGroups[*].logGroupName' \
             --output text 2>/dev/null || true)
     fi
@@ -115,7 +115,7 @@ _discover_ecs_log_groups() {
     # Also add ALB logs
     local alb_logs=$(aws logs describe-log-groups \
         --log-group-name-prefix "/aws/alb" \
-        --region "${AWS_REGION:-us-west-2}" \
+        --region "$AWS_REGION" \
         --query 'logGroups[*].logGroupName' \
         --output text 2>/dev/null || true)
 
@@ -140,11 +140,14 @@ _discover_ecs_log_groups() {
     done
 
     if [[ ${#LOG_GROUPS[@]} -eq 0 ]]; then
-        log_warning "No ECS log groups found in region ${AWS_REGION:-us-west-2}"
+        log_warning "No ECS log groups found in region $AWS_REGION"
         return 1
     fi
 
     log_success "Found ${#LOG_GROUPS[@]} log groups"
+
+    # Debug: Show discovered components
+    log_info "Available components: ${!LOG_GROUPS[@]}"
 }
 
 _validate_outputs_file() {
@@ -163,9 +166,9 @@ _get_log_groups() {
         echo "${!LOG_GROUPS[@]}"
     else
         if [[ -z "${LOG_GROUPS[$comp]:-}" ]]; then
-            log_error "Unknown component: $comp"
-            log_info "Available components: ${!LOG_GROUPS[@]}"
-            exit 1
+            log_error "Unknown component: $comp" >&2
+            log_info "Available components: ${!LOG_GROUPS[@]}" >&2
+            return 1
         fi
         echo "$comp"
     fi
@@ -204,7 +207,7 @@ _check_log_group_exists() {
 
     if aws logs describe-log-groups \
         --log-group-name-prefix "$log_group" \
-        --region "${AWS_REGION:-us-west-2}" \
+        --region "$AWS_REGION" \
         &>/dev/null; then
         return 0
     else
@@ -243,13 +246,13 @@ _tail_logs() {
         aws logs tail "$log_group" \
             --follow \
             --since "${MINUTES}m" \
-            --region "${AWS_REGION:-us-west-2}" \
+            --region "$AWS_REGION" \
             $(if [[ -n "$FILTER_PATTERN" ]]; then echo "--filter-pattern $FILTER_PATTERN"; fi) \
-            2>/dev/null | while read -r message; do
+            2>&1 | while read -r message; do
             if ! _should_exclude_log "$message"; then
                 echo "$message"
             fi
-        done || true
+        done
     else
         # Display logs from the past N minutes
         local start_time=$(_calculate_start_time)
@@ -259,7 +262,7 @@ _tail_logs() {
             --log-group-name "$log_group" \
             --start-time "$start_time" \
             --end-time "$end_time" \
-            --region "${AWS_REGION:-us-west-2}" \
+            --region "$AWS_REGION" \
             $(if [[ -n "$FILTER_PATTERN" ]]; then echo "--filter-pattern $FILTER_PATTERN"; fi) \
             --query 'events[*].[timestamp, message]' \
             --output text \
@@ -288,7 +291,12 @@ _tail_logs() {
 
 _view_all_logs() {
     local follow="${1:-false}"
-    local components=$(_get_log_groups "$COMPONENT")
+    local components
+
+    # Get components and check for errors
+    if ! components=$(_get_log_groups "$COMPONENT"); then
+        exit 1
+    fi
 
     echo ""
     log_info "=========================================="
@@ -382,8 +390,15 @@ if ! command -v aws &> /dev/null; then
     exit 1
 fi
 
-# Set AWS region
-export AWS_REGION="${AWS_REGION:-us-west-2}"
+# Check AWS_REGION is set
+if [[ -z "${AWS_REGION:-}" ]]; then
+    log_error "AWS_REGION environment variable is not set"
+    log_info "Please set AWS_REGION before running this script:"
+    log_info "  export AWS_REGION=us-east-1"
+    exit 1
+fi
+
+log_info "Using AWS region: $AWS_REGION"
 
 # Main execution
 # Always try discovery first (more reliable than outputs file)

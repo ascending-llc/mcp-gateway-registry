@@ -329,6 +329,14 @@ async def list_agents(
     Returns:
         List of agent info objects
     """
+    # CRITICAL DIAGNOSTIC: Log user_context received by endpoint (for comparison with /servers)
+    logger.debug(f"[GET_AGENTS_DEBUG] Received user_context: {user_context}")
+    logger.debug(f"[GET_AGENTS_DEBUG] user_context type: {type(user_context)}")
+    if user_context:
+        logger.debug(f"[GET_AGENTS_DEBUG] Username: {user_context.get('username', 'NOT PRESENT')}")
+        logger.debug(f"[GET_AGENTS_DEBUG] Scopes: {user_context.get('scopes', 'NOT PRESENT')}")
+        logger.debug(f"[GET_AGENTS_DEBUG] Auth method: {user_context.get('auth_method', 'NOT PRESENT')}")
+
     all_agents = agent_service.get_all_agents()
 
     accessible_agents = _filter_agents_by_access(all_agents, user_context)

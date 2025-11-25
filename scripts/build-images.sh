@@ -10,15 +10,36 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# CRITICAL: Check if AWS_REGION is set
+if [[ -z "${AWS_REGION:-}" ]]; then
+    echo -e "${RED}${BOLD}============================================${NC}"
+    echo -e "${RED}${BOLD}ERROR: AWS_REGION environment variable is not set!${NC}"
+    echo -e "${RED}${BOLD}============================================${NC}"
+    echo ""
+    echo "Please set AWS_REGION before running build/push commands:"
+    echo "  export AWS_REGION=us-east-1"
+    echo ""
+    echo "This prevents accidentally pushing to the wrong region."
+    echo ""
+    exit 1
+fi
+
+# Display region in BIG BOLD LETTERS
+echo ""
+echo -e "${GREEN}${BOLD}============================================${NC}"
+echo -e "${GREEN}${BOLD}AWS REGION: ${AWS_REGION}${NC}"
+echo -e "${GREEN}${BOLD}============================================${NC}"
+echo ""
+
 # Configuration
 CONFIG_FILE="${REPO_ROOT}/build-config.yaml"
-AWS_REGION="${AWS_REGION:-us-west-2}"
 ACTION="${1:-build-push}"
 TARGET_IMAGE="${IMAGE:-}"
 

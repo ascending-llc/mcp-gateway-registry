@@ -365,6 +365,12 @@ def cmd_list(args: argparse.Namespace) -> int:
             logger.info("No servers registered")
             return 0
 
+        # Print raw JSON if requested
+        if hasattr(args, 'json') and args.json:
+            import json
+            print(json.dumps(response.model_dump(), indent=2, default=str))
+            return 0
+
         logger.info(f"Found {len(response.servers)} registered servers:\n")
 
         for server in response.servers:
@@ -376,7 +382,7 @@ def cmd_list(args: argparse.Namespace) -> int:
             }.get(server.health_status.value, "⚪")
 
             print(f"{status_icon} {health_icon} {server.path}")
-            print(f"   Name: {server.name}")
+            print(f"   Name: {server.display_name}")
             print(f"   Description: {server.description}")
             print(f"   Enabled: {server.is_enabled}")
             print(f"   Health: {server.health_status.value}")
@@ -1263,6 +1269,11 @@ Examples:
 
     # List command
     list_parser = subparsers.add_parser("list", help="List all servers")
+    list_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print raw JSON response"
+    )
 
     # Toggle command
     toggle_parser = subparsers.add_parser("toggle", help="Toggle server status")

@@ -72,7 +72,7 @@ class Server(BaseModel):
     """Server information model."""
 
     path: str = Field(..., description="Service path")
-    name: str = Field(..., description="Service name")
+    display_name: str = Field(..., description="Service display name")
     description: str = Field(..., description="Service description")
     is_enabled: bool = Field(..., description="Whether service is enabled")
     health_status: HealthStatus = Field(..., description="Health status")

@@ -119,12 +119,20 @@ async def read_root(
 @router.get("/servers")
 async def get_servers_json(
     query: str | None = None,
-    user_context: Annotated[dict, Depends(enhanced_auth)] = None,
+    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
 ):
-    """Get servers data as JSON for React frontend (reuses root route logic)."""
+    """Get servers data as JSON for React frontend and external API (supports both session cookies and Bearer tokens)."""
+    # CRITICAL DIAGNOSTIC: Log user_context received by endpoint
+    logger.debug(f"[GET_SERVERS_DEBUG] Received user_context: {user_context}")
+    logger.debug(f"[GET_SERVERS_DEBUG] user_context type: {type(user_context)}")
+    if user_context:
+        logger.debug(f"[GET_SERVERS_DEBUG] Username: {user_context.get('username', 'NOT PRESENT')}")
+        logger.debug(f"[GET_SERVERS_DEBUG] Scopes: {user_context.get('scopes', 'NOT PRESENT')}")
+        logger.debug(f"[GET_SERVERS_DEBUG] Auth method: {user_context.get('auth_method', 'NOT PRESENT')}")
+
     service_data = []
     search_query = query.lower() if query else ""
-    
+
     # Get servers based on user permissions (same logic as root route)
     if user_context['is_admin']:
         all_servers = server_service.get_all_servers()
@@ -2387,34 +2395,6 @@ async def register_service_api(
         )
 
 
-@router.get("/servers")
-async def list_services_api(
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
-):
-    """
-    List all registered services via JWT Bearer Token authentication (External API).
-
-    This endpoint provides the same functionality as GET /api/internal/list
-    but uses modern JWT Bearer token authentication.
-
-    **Authentication:** JWT Bearer token (via nginx X-User header)
-    **Authorization:** Requires valid JWT token from auth system
-
-    **Response:**
-    Returns a list of all registered services with their metadata.
-
-    **Example:**
-    ```bash
-    curl -X GET https://registry.example.com/api/servers \\
-      -H "Authorization: Bearer $JWT_TOKEN"
-    ```
-    """
-    logger.info(f"API list services request from user '{user_context.get('username') if user_context else 'unknown'}'")
-
-    # Call the existing internal_list_services function
-    return await internal_list_services(user_context=user_context)
-
-
 @router.post("/servers/toggle")
 async def toggle_service_api(
     path: Annotated[str, Form()],
@@ -2445,10 +2425,70 @@ async def toggle_service_api(
       -F "new_state=true"
     ```
     """
+    from ..search.service import faiss_service
+    from ..health.service import health_service
+    from ..core.nginx_service import nginx_service
+
     logger.info(f"API toggle service request from user '{user_context.get('username')}' for path '{path}' to {new_state}")
 
-    # Call the existing internal_toggle_service function
-    return await internal_toggle_service(path=path, new_state=new_state)
+    # Normalize path
+    if not path.startswith('/'):
+        path = '/' + path
+
+    # Check if server exists
+    server_info = server_service.get_server_info(path)
+    if not server_info:
+        raise HTTPException(status_code=404, detail="Service path not registered")
+
+    # Toggle the service
+    success = server_service.toggle_service(path, new_state)
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to toggle service")
+
+    logger.info(f"Toggled '{server_info['server_name']}' ({path}) to {new_state} by user '{user_context.get('username')}'")
+
+    # If enabling, perform immediate health check
+    status = "disabled"
+    last_checked_iso = None
+    if new_state:
+        logger.info(f"Performing immediate health check for {path} upon toggle ON...")
+        try:
+            status, last_checked_dt = await health_service.perform_immediate_health_check(path)
+            last_checked_iso = last_checked_dt.isoformat() if last_checked_dt else None
+            logger.info(f"Immediate health check for {path} completed. Status: {status}")
+        except Exception as e:
+            logger.error(f"ERROR during immediate health check for {path}: {e}")
+            status = f"error: immediate check failed ({type(e).__name__})"
+    else:
+        # When disabling, set status to disabled
+        status = "disabled"
+        logger.info(f"Service {path} toggled OFF. Status set to disabled.")
+
+    # Update FAISS metadata with new enabled state
+    await faiss_service.add_or_update_service(path, server_info, new_state)
+
+    # Regenerate Nginx configuration
+    enabled_servers = {
+        server_path: server_service.get_server_info(server_path)
+        for server_path in server_service.get_enabled_services()
+    }
+    await nginx_service.generate_config_async(enabled_servers)
+
+    # Broadcast health status update to WebSocket clients
+    await health_service.broadcast_health_update(path)
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "message": f"Toggle request for {path} processed.",
+            "service_path": path,
+            "new_enabled_state": new_state,
+            "status": status,
+            "last_checked_iso": last_checked_iso,
+            "num_tools": server_info.get("num_tools", 0)
+        }
+    )
 
 
 @router.post("/servers/remove")
@@ -2549,6 +2589,7 @@ async def remove_service_api(
 
 @router.get("/servers/health")
 async def healthcheck_api(
+    request: Request,
     user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
 ):
     """
@@ -2572,7 +2613,7 @@ async def healthcheck_api(
     logger.info(f"API healthcheck request from user '{user_context.get('username') if user_context else 'unknown'}'")
 
     # Call the existing internal_healthcheck function
-    return await internal_healthcheck()
+    return await internal_healthcheck(request)
 
 
 @router.post("/servers/groups/add")
