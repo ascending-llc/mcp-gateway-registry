@@ -40,7 +40,7 @@ class ExternalVectorSearchService(VectorSearchService):
     async def initialize(self):
         """Test connection to external HTTP vector search service."""
         logger.info(f"Connecting to external vector search service at {self.mcp_server_url}")
-        
+        # TODO: 直接连接DB python client
         try:
             client = await self._get_client()
             

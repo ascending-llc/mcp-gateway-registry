@@ -29,20 +29,20 @@ class WeaviateClient:
             weaviate.Client: Weaviate instance
         """
         conn_config = ConnectionConfig(
-            session_pool_connections=settings.WEAVIATE_SESSION_POOL_CONNECTIONS,  # 最大连接数
-            session_pool_maxsize=settings.WEAVIATE_SESSION_POOL_MAXSIZE
+            session_pool_connections=settings.weaviate_session_pool_connections,  # Maximum connections
+            session_pool_maxsize=settings.weaviate_session_pool_maxsize
         )
 
         client = weaviate.connect_to_local(
-            host=settings.WEAVIATE_HOST,
-            port=settings.WEAVIATE_PORT,
+            host=settings.weaviate_host,
+            port=settings.weaviate_port,
             auth_credentials=AuthApiKey(
-                api_key=settings.WEAVIATE_API_KEY) if settings.WEAVIATE_API_KEY else None,
+                api_key=settings.weaviate_api_key) if settings.weaviate_api_key else None,
             headers={},
             additional_config=AdditionalConfig(
-                timeout=Timeout(init=settings.WEAVIATE_INIT_TIME,
-                                query=settings.WEAVIATE_QUERY_TIME,
-                                insert=settings.WEAVIATE_INSERT_TIME),
+                timeout=Timeout(init=settings.weaviate_init_time,
+                                query=settings.weaviate_query_time,
+                                insert=settings.weaviate_insert_time),
                 connection=conn_config
             )
         )
@@ -70,10 +70,10 @@ class WeaviateClient:
 
     def ensure_connection(self):
         """
-        确保连接已建立，如果未连接则建立连接
+        Ensure connection is established, establish connection if not connected
 
         Returns:
-            bool: 连接前的状态（True 表示之前已连接，False 表示新建立连接）
+            bool: Connection state before this call (True means was already connected, False means newly established)
         """
         was_connected = False
         try:
@@ -92,10 +92,10 @@ class WeaviateClient:
 
     def managed_connection(self):
         """
-        返回一个上下文管理器，用于自动管理连接的生命周期
+        Return a context manager for automatically managing connection lifecycle
 
         Returns:
-            ManagedConnection: 连接管理器上下文
+            ManagedConnection: Connection manager context
         """
         return ManagedConnection(self)
 
@@ -114,41 +114,41 @@ class WeaviateClient:
 
 class ManagedConnection:
     """
-    Weaviate 连接管理器上下文类
+    Weaviate connection manager context class
 
-    自动管理 Weaviate 连接的生命周期：
-    - 进入时：确保连接已建立
-    - 退出时：关闭连接释放资源
+    Automatically manages Weaviate connection lifecycle:
+    - On enter: Ensure connection is established
+    - On exit: Close connection and release resources
 
     """
 
     def __init__(self, weaviate_client: 'WeaviateClient'):
         """
-        初始化连接管理器
+        Initialize connection manager
 
         Args:
-            weaviate_client: WeaviateClient 实例
+            weaviate_client: WeaviateClient instance
         """
         self.weaviate_client = weaviate_client
         self.was_connected = False
 
     def __enter__(self):
         """
-        进入上下文时确保连接已建立
+        Ensure connection is established when entering context
 
         Returns:
-            WeaviateClient: Weaviate 客户端实例
+            WeaviateClient: Weaviate client instance
         """
         self.was_connected = self.weaviate_client.ensure_connection()
         return self.weaviate_client
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """
-        退出上下文时关闭连接
+        Close connection when exiting context
 
         """
         try:
             self.weaviate_client.close()
         except Exception as e:
             logger.error(f"⚠️ Error closing connection in managed context: {e}")
-        return False  # 不抑制异常
+        return False  # Do not suppress exceptions
