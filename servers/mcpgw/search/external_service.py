@@ -120,7 +120,7 @@ class ExternalVectorSearchService(VectorSearchService):
             async with httpx.AsyncClient(timeout=self.timeout, auth=auth) as client:
                 logger.info(f"Calling registry semantic search: {self.registry_base_url}/api/search/semantic")
                 logger.debug(f"Search request: {search_request}")
-                
+                # TODO: 直接搜索
                 response = await client.post(
                     f"{self.registry_base_url}/api/search/semantic",
                     json=search_request,

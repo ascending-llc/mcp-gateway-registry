@@ -6,11 +6,10 @@ from pathlib import Path
 from typing import Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 from models.enums import ToolDiscoveryMode
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=os.environ.get("LOGLEVEL", "INFO"),
     format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -32,7 +31,6 @@ class Settings(BaseSettings):
     All settings can be overridden via environment variables with the same name.
     For nested configs, use double underscore (e.g., REGISTRY__BASE_URL).
     """
-
     # Registry configuration
     registry_base_url: str = Field(
         default="http://localhost:7860",
@@ -63,6 +61,24 @@ class Settings(BaseSettings):
         description="URL of the authentication server"
     )
 
+    # JWT authentication configuration
+    jwt_secret_key: Optional[str] = Field(
+        default=None,
+        description="Secret key for JWT token validation (HS256)"
+    )
+    jwt_issuer: str = Field(
+        default="mcp-auth-server",
+        description="Expected JWT token issuer"
+    )
+    jwt_audience: str = Field(
+        default="mcp-registry",
+        description="Expected JWT token audience"
+    )
+    jwt_self_signed_kid: str = Field(
+        default="self-signed-key-v1",
+        description="Key ID for self-signed JWT tokens"
+    )
+
     # Vector search configuration
     tool_discovery_mode: ToolDiscoveryMode = Field(
         default=ToolDiscoveryMode.EMBEDDED,
@@ -82,15 +98,33 @@ class Settings(BaseSettings):
     )
 
     # Weaviate Configuration
-    WEAVIATE_HOST: str = "weaviate"
-    WEAVIATE_PORT: int = 8080
-    WEAVIATE_API_KEY: Optional[str] = "test-secret-key"
+    weaviate_host: str = Field(default="weaviate")
+    weaviate_port: int = Field(default=8080)
+    weaviate_api_key: Optional[str] = Field(
+        default="test-secret-key",
+        description="API key for WEAVIATE server"
+    )
 
-    WEAVIATE_SESSION_POOL_CONNECTIONS: int = 20  # Maximum connections
-    WEAVIATE_SESSION_POOL_MAXSIZE: int = 100  # Connection pool size
-    WEAVIATE_INIT_TIME: int = 30  # 初始化超时时间
-    WEAVIATE_QUERY_TIME: int = 120  # 查询超时时间
-    WEAVIATE_INSERT_TIME: int = 300  # 插入超时时间
+    weaviate_session_pool_connections: int = Field(
+        default=20,
+        description=" Maximum connections"
+    )
+    weaviate_session_pool_maxsize: int = Field(
+        default=100,
+        description="Connection pool size"
+    )
+    weaviate_init_time: int = Field(
+        default=20,
+        description="Initialization time"
+    )
+    weaviate_query_time: int = Field(
+        default=120,
+        description="Query time in seconds"
+    )
+    weaviate_insert_time: int = Field(
+        default=300,
+        description="Insert time in seconds"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -141,21 +175,6 @@ class Settings(BaseSettings):
         logger.info(f"  Auth Server URL: {self.auth_server_url}")
         logger.info(f"  Tool Discovery Mode: {self.tool_discovery_mode}")
 
-        # Debug: check if .env file exists and show env var
-        env_file = Path(".env")
-        if env_file.exists():
-            logger.debug(f"  .env file found at: {env_file.absolute()}")
-        else:
-            logger.warning(f"  .env file NOT found at: {env_file.absolute()}")
-
-        # Debug: show environment variable value
-        env_value = os.getenv("TOOL_DISCOVERY_MODE")
-        if env_value:
-            logger.debug(f"  TOOL_DISCOVERY_MODE env var: {env_value}")
-        else:
-            logger.debug(f"  TOOL_DISCOVERY_MODE env var: not set")
-        logger.info(f"  Scopes Config Path: {self.scopes_config_path}")
-
 
 def parse_arguments() -> argparse.Namespace:
     """
@@ -187,5 +206,4 @@ def parse_arguments() -> argparse.Namespace:
 # Create global settings instance
 settings = Settings()
 
-# Log configuration on module import
 settings.log_config()
