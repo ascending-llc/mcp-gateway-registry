@@ -9,8 +9,9 @@ import logging
 import json
 from typing import List, Dict, Any, Optional
 from packages.db import WeaviateClientRegistry, init_weaviate, get_weaviate_client, SearchType
-from packages.models import McpTool
 from weaviate.classes.query import Filter
+
+from packages.shared.models import McpTool
 from .base import VectorSearchService
 from config import settings
 

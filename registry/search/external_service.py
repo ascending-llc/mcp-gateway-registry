@@ -1,6 +1,7 @@
 import logging
 from typing import Dict, Any, Optional, List
-from packages.models import McpTool
+
+from packages.shared.models import McpTool
 from .base import VectorSearchService
 from packages.db import WeaviateClientRegistry, init_weaviate, get_weaviate_client
 from ..constants import REGISTRY_CONSTANTS
