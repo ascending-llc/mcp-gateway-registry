@@ -38,8 +38,8 @@ class AuthMiddleware(Middleware):
         if method not in self.allowed_methods_without_auth:
             # Compatible with retrieving the range from auth or from the request header.
             user_scopes = await self._extract_user_scopes_for_user()
-            if len(user_scopes) == 0:
-                user_scopes = await self._extract_user_scopes_for_headers(context)
+            #if len(user_scopes) == 0:
+            #    user_scopes = await self._extract_user_scopes_for_headers(context)
             await self._store_auth_context(context, user_scopes)
         try:
             result = await call_next(context)

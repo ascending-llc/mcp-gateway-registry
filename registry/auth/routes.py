@@ -22,7 +22,7 @@ async def get_oauth2_providers():
     """Fetch available OAuth2 providers from auth server"""
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{settings.auth_server_url}/oauth2/providers", timeout=5.0)
+            response = await client.get(f"{settings.AUTH_SERVER_URL}/oauth2/providers", timeout=5.0)
             if response.status_code == 200:
                 data = response.json()
                 return data.get("providers", [])

@@ -53,8 +53,7 @@ class VectorSearchService(ABC):
             - overall_similarity_score: Similarity score (if semantic search used)
         """
         pass
-        # TODO: 搜索的tools，是这个Tools collection
-    
+
     @abstractmethod
     async def check_availability(self) -> bool:
         """

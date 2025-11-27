@@ -37,7 +37,7 @@ async def call_registry_api(
     """
     from config import settings, Constants
     
-    url = f"{settings.registry_base_url}{endpoint}"
+    url = f"{settings.REGISTRY_BASE_URL}{endpoint}"
 
     # Extract auth headers to pass through to registry
     auth_headers = {}
@@ -73,9 +73,9 @@ async def call_registry_api(
 
     # Get admin credentials from environment for registry API authentication
     auth = httpx.BasicAuth(
-        settings.registry_username, 
-        settings.registry_password
-    ) if settings.registry_username and settings.registry_password else None
+        settings.REGISTRY_USERNAME,
+        settings.REGISTRY_PASSWORD
+    ) if settings.REGISTRY_USERNAME and settings.REGISTRY_PASSWORD else None
 
     async with httpx.AsyncClient(timeout=Constants.REQUEST_TIMEOUT, auth=auth) as client:
         try:

@@ -23,8 +23,8 @@ async def call_scopes_api(endpoint: str, form_data: Dict[str, Any], method: str 
     Helper function for calling scopes management API endpoints.
     """
     try:
-        registry_admin_user = settings.registry_username or "admin"
-        registry_admin_password = settings.registry_password
+        registry_admin_user = settings.REGISTRY_USERNAME or "admin"
+        registry_admin_password = settings.REGISTRY_PASSWORD
 
         if not registry_admin_password:
             return {"success": False, "error": "REGISTRY_PASSWORD environment variable not set. Cannot authenticate to internal API."}
@@ -42,13 +42,13 @@ async def call_scopes_api(endpoint: str, form_data: Dict[str, Any], method: str 
         async with httpx.AsyncClient() as client:
             if method == "GET":
                 response = await client.get(
-                    f"{settings.registry_base_url}/{endpoint}",
+                    f"{settings.REGISTRY_BASE_URL}/{endpoint}",
                     headers=headers,
                     timeout=30.0
                 )
             else:
                 response = await client.post(
-                    f"{settings.registry_base_url}/{endpoint}",
+                    f"{settings.REGISTRY_BASE_URL}/{endpoint}",
                     data=form_data,
                     headers=headers,
                     timeout=30.0

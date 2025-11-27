@@ -13,7 +13,8 @@ making the service lightweight and suitable for deployment without ML dependenci
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
-from models.enums import ToolDiscoveryMode
+
+from packages.enums import ToolDiscoveryMode
 from .base import VectorSearchService
 from config import settings
 
@@ -43,21 +44,15 @@ def create_vector_search_service() -> VectorSearchService:
         ValueError: If TOOL_DISCOVERY_MODE is invalid
         ImportError: If embedded mode is requested but dependencies are not installed
     """
-    mode = settings.tool_discovery_mode
+    mode = settings.TOOL_DISCOVERY_MODE
 
     if mode == ToolDiscoveryMode.EXTERNAL:
         logger.info("Initializing EXTERNAL vector search service (lightweight, no FAISS)")
-        logger.info(f"  Registry URL: {settings.registry_base_url}")
+        logger.info(f"  Registry URL: {settings.REGISTRY_BASE_URL}")
 
         # Only import external service - no heavy dependencies
         from .external_service import ExternalVectorSearchService
-
-        return ExternalVectorSearchService(
-            registry_base_url=settings.registry_base_url,
-            registry_username=settings.registry_username,
-            registry_password=settings.registry_password,
-            timeout=30.0
-        )
+        return ExternalVectorSearchService()
 
     elif mode == ToolDiscoveryMode.EMBEDDED:
         logger.info("Initializing EMBEDDED FAISS vector search service")
@@ -92,15 +87,15 @@ def create_vector_search_service() -> VectorSearchService:
         # Go up from search/ to mcpgw/ to servers/ and then to registry/servers/
         registry_server_data_path = current_file.parent.parent.parent / "registry" / "servers"
 
-        logger.info(f"  Model: {settings.embeddings_model_name}")
-        logger.info(f"  Dimension: {settings.embeddings_model_dimension}")
+        logger.info(f"  Model: {settings.EMBEDDINGS_MODEL_NAME}")
+        logger.info(f"  Dimension: {settings.EMBEDDINGS_MODEL_DIMENSION}")
         logger.info(f"  Data path: {registry_server_data_path}")
 
         return EmbeddedFaissService(
             registry_server_data_path=registry_server_data_path,
-            embeddings_model_name=settings.embeddings_model_name,
-            embedding_dimension=settings.embeddings_model_dimension,
-            check_interval=settings.faiss_check_interval
+            embeddings_model_name=settings.EMBEDDINGS_MODEL_NAME,
+            embedding_dimension=settings.EMBEDDINGS_MODEL_DIMENSION,
+            check_interval=settings.FAISS_CHECK_INTERVAL
         )
 
     else:

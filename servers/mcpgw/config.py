@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from models.enums import ToolDiscoveryMode
+
+from packages.enums import ToolDiscoveryMode
 
 logging.basicConfig(
     level=os.environ.get("LOGLEVEL", "INFO"),
@@ -32,96 +33,96 @@ class Settings(BaseSettings):
     For nested configs, use double underscore (e.g., REGISTRY__BASE_URL).
     """
     # Registry configuration
-    registry_base_url: str = Field(
+    REGISTRY_BASE_URL: str = Field(
         default="http://localhost:7860",
         description="Base URL of the MCP Gateway Registry"
     )
-    registry_username: str = Field(
+    REGISTRY_USERNAME: str = Field(
         default="",
         description="Username for registry authentication"
     )
-    registry_password: str = Field(
+    REGISTRY_PASSWORD: str = Field(
         default="",
         description="Password for registry authentication"
     )
 
     # Server configuration
-    mcp_transport: str = Field(
+    MCP_TRANSPORT: str = Field(
         default=Constants.DEFAULT_MCP_TRANSPORT,
         description="Transport type for the MCP server"
     )
-    mcp_server_listen_port: str = Field(
+    MCP_SERVER_LISTEN_PORT: str = Field(
         default=Constants.DEFAULT_MCP_SERVER_LISTEN_PORT,
         description="Port for the MCP server to listen on"
     )
 
     # Auth server configuration
-    auth_server_url: str = Field(
+    AUTH_SERVER_URL: str = Field(
         default="http://localhost:8888",
         description="URL of the authentication server"
     )
 
     # JWT authentication configuration
-    jwt_secret_key: Optional[str] = Field(
+    JWT_SECRET_KEY: Optional[str] = Field(
         default=None,
         description="Secret key for JWT token validation (HS256)"
     )
-    jwt_issuer: str = Field(
+    JWT_ISSUER: str = Field(
         default="mcp-auth-server",
         description="Expected JWT token issuer"
     )
-    jwt_audience: str = Field(
+    JWT_AUDIENCE: str = Field(
         default="mcp-registry",
         description="Expected JWT token audience"
     )
-    jwt_self_signed_kid: str = Field(
+    JWT_SELF_SIGNED_KID: str = Field(
         default="self-signed-key-v1",
         description="Key ID for self-signed JWT tokens"
     )
 
     # Vector search configuration
-    tool_discovery_mode: ToolDiscoveryMode = Field(
+    TOOL_DISCOVERY_MODE: ToolDiscoveryMode = Field(
         default=ToolDiscoveryMode.EMBEDDED,
         description="Vector search mode: 'embedded' or 'external'"
     )
-    embeddings_model_name: str = Field(
+    EMBEDDINGS_MODEL_NAME: str = Field(
         default="all-MiniLM-L6-v2",
         description="Name of the sentence-transformers model"
     )
-    embeddings_model_dimension: int = Field(
+    EMBEDDINGS_MODEL_DIMENSION: int = Field(
         default=384,
         description="Dimension of embeddings"
     )
-    faiss_check_interval: float = Field(
+    FAISS_CHECK_INTERVAL: float = Field(
         default=5.0,
         description="Interval in seconds to check for FAISS index updates"
     )
 
     # Weaviate Configuration
-    weaviate_host: str = Field(default="weaviate")
-    weaviate_port: int = Field(default=8080)
-    weaviate_api_key: Optional[str] = Field(
+    WEAVIATE_HOST: str = Field(default="weaviate")
+    WEAVIATE_PORT: int = Field(default=8080)
+    WEAVIATE_API_KEY: Optional[str] = Field(
         default="test-secret-key",
         description="API key for WEAVIATE server"
     )
 
-    weaviate_session_pool_connections: int = Field(
+    WEAVIATE_SESSION_POOL_CONNECTIONS: int = Field(
         default=20,
         description=" Maximum connections"
     )
-    weaviate_session_pool_maxsize: int = Field(
+    WEAVIATE_SESSION_POOL_MAXSIZE: int = Field(
         default=100,
         description="Connection pool size"
     )
-    weaviate_init_time: int = Field(
+    WEAVIATE_INIT_TIME: int = Field(
         default=20,
         description="Initialization time"
     )
-    weaviate_query_time: int = Field(
+    WEAVIATE_QUERY_TIME: int = Field(
         default=120,
         description="Query time in seconds"
     )
-    weaviate_insert_time: int = Field(
+    WEAVIATE_INSERT_TIME: int = Field(
         default=300,
         description="Insert time in seconds"
     )
@@ -135,7 +136,7 @@ class Settings(BaseSettings):
         validate_default=True,
     )
 
-    @field_validator("registry_base_url")
+    @field_validator("REGISTRY_BASE_URL")
     @classmethod
     def validate_registry_url(cls, v: str) -> str:
         """Validate and normalize registry base URL."""
@@ -167,13 +168,13 @@ class Settings(BaseSettings):
     def log_config(self):
         """Log current configuration (hiding sensitive values)."""
         logger.info("Configuration loaded:")
-        logger.info(f"  Registry URL: {self.registry_base_url}")
-        logger.info(f"  Registry Username: {'***' if self.registry_username else 'not set'}")
-        logger.info(f"  Registry Password: {'***' if self.registry_password else 'not set'}")
-        logger.info(f"  MCP Transport: {self.mcp_transport}")
-        logger.info(f"  Listen Port: {self.mcp_server_listen_port}")
-        logger.info(f"  Auth Server URL: {self.auth_server_url}")
-        logger.info(f"  Tool Discovery Mode: {self.tool_discovery_mode}")
+        logger.info(f"  Registry URL: {self.REGISTRY_BASE_URL}")
+        logger.info(f"  Registry Username: {'***' if self.REGISTRY_USERNAME else 'not set'}")
+        logger.info(f"  Registry Password: {'***' if self.REGISTRY_PASSWORD else 'not set'}")
+        logger.info(f"  MCP Transport: {self.MCP_TRANSPORT}")
+        logger.info(f"  Listen Port: {self.MCP_SERVER_LISTEN_PORT}")
+        logger.info(f"  Auth Server URL: {self.AUTH_SERVER_URL}")
+        logger.info(f"  Tool Discovery Mode: {self.TOOL_DISCOVERY_MODE}")
 
 
 def parse_arguments() -> argparse.Namespace:

@@ -211,7 +211,7 @@ async def validate_session_cookie_with_auth_server(
     """
     if auth_server_url is None:
         from config import settings
-        auth_server_url = settings.auth_server_url
+        auth_server_url = settings.AUTH_SERVER_URL
     
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
