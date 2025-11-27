@@ -316,7 +316,9 @@ terraform-outputs.json.backup*
 
 # Terraform outputs and region-specific configs (environment-specific, do not commit)
 terraform-outputs.json
+terraform-outputs.txt
 terraform/aws-ecs/scripts/terraform-outputs.json
+terraform/aws-ecs/terraform-outputs.txt
 terraform.tfvars.*
 terraform/aws-ecs/terraform.tfvars.*
 

@@ -38,8 +38,8 @@ output "service_urls" {
   description = "URLs for MCP Gateway Registry services"
   value = {
     registry = var.domain_name != "" ? "https://${var.domain_name}" : "http://${module.alb.dns_name}"
-    auth     = var.domain_name != "" ? "https://${var.domain_name}:8888" : "http://${module.alb.dns_name}:8888"
-    gradio   = var.domain_name != "" ? "https://${var.domain_name}:7860" : "http://${module.alb.dns_name}:7860"
+    auth     = var.domain_name != "" ? "https://${var.domain_name}" : "http://${module.alb.dns_name}"
+    gradio   = var.domain_name != "" ? "https://${var.domain_name}" : "http://${module.alb.dns_name}"
   }
   sensitive = false
 }
