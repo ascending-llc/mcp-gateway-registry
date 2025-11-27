@@ -21,13 +21,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy MCPGW server files
-COPY servers/mcpgw/ /app/
+# Copy the application code (including packages module)
+COPY packages/ /app/packages/
+COPY servers/mcpgw/ /app/mcpgw/
 
 # Install Python dependencies based on TOOL_DISCOVERY_MODE
+# Step 1: Install packages (shared database ORM)
+# Step 2: Install mcpgw server with appropriate dependencies
 # Default (embedded): installs with ML dependencies (FAISS, torch, sentence-transformers)
 # External: installs only base dependencies
 RUN pip install --no-cache-dir uv && \
+    echo "Installing packages (shared db ORM)..." && \
+    cd /app/packages && uv pip install --system -e . && \
+    cd /app/mcpgw && \
     if [ "$TOOL_DISCOVERY_MODE" = "external" ]; then \
         echo "Building LIGHTWEIGHT image (external mode) - skipping ML dependencies"; \
         uv pip install --system -e .; \
@@ -37,7 +43,7 @@ RUN pip install --no-cache-dir uv && \
     fi
 
 # Create logs directory
-RUN mkdir -p /app/logs
+RUN mkdir -p /app/mcpgw/logs
 
 # Set default environment variables
 ENV EMBEDDINGS_MODEL_NAME=all-MiniLM-L6-v2 \
@@ -89,7 +95,7 @@ fi\n\
 echo "================================="\n\
 \n\
 # Run the server (environment variables are automatically available to Python)\n\
-cd /app\n\
+cd /app/mcpgw\n\
 exec python server.py --port ${PORT:-8003}' > /entrypoint.sh && \
     chmod +x /entrypoint.sh
 

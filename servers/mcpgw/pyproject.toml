@@ -15,6 +15,7 @@ dependencies = [
     "mcp>=1.9.3",
     "fastmcp>=2.13.1",
     "pyjwt>=2.10.0",
+    "packages",
 ]
 
 [project.optional-dependencies]
@@ -32,5 +33,5 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["core", "search", "tools", "db", "models"]
+packages = ["auth", "core", "search", "tools"]
 py-modules = ["server", "config"]

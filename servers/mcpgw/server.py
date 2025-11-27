@@ -44,17 +44,6 @@ async def _health_check_route(request):
     return JSONResponse({"status": "ok"})
 
 
-@mcp.custom_route("/", methods=["GET", "POST"], include_in_schema=False)
-async def _root_route(request):
-    """Root path handler - redirects to MCP endpoint."""
-    from starlette.responses import RedirectResponse
-    logger.debug("Root path accessed, redirecting to /mcp")
-    # For GET requests, redirect to /mcp
-    if request.method == "GET":
-        return RedirectResponse(url="/mcp", status_code=307)
-    return RedirectResponse(url="/mcp", status_code=307)
-
-
 # ============================================================================
 # Authentication Debugging Tools
 # ============================================================================
@@ -133,8 +122,8 @@ async def list_services(ctx: Context = None) -> Dict[str, Any]:
 
 @mcp.tool()
 async def remove_service(
-        service_path: str = Field(...,
-                                  description="The unique path identifier for the service to remove (e.g., '/fininfo'). Must start with '/'."),
+        service_path: str = Field(..., description="The unique path identifier for the service"
+                                                   " to remove (e.g., '/fininfo'). Must start with '/'."),
         ctx: Context = None
 ) -> Dict[str, Any]:
     """
@@ -145,8 +134,8 @@ async def remove_service(
 
 @mcp.tool()
 async def refresh_service(
-        service_path: str = Field(...,
-                                  description="The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'."),
+        service_path: str = Field(..., description="The unique path identifier for the service"
+                                                   " (e.g., '/fininfo'). Must start with '/'."),
         ctx: Context = None
 ) -> Dict[str, Any]:
     """
@@ -169,8 +158,8 @@ async def healthcheck(ctx: Context = None) -> Dict[str, Any]:
 
 @mcp.tool()
 async def add_server_to_scopes_groups(
-        server_name: str = Field(...,
-                                 description="Name of the server to add to groups (e.g., 'example-server'). Should not include leading slash."),
+        server_name: str = Field(..., description="Name of the server to add to groups"
+                                                  " (e.g., 'example-server'). Should not include leading slash."),
         group_names: List[str] = Field(..., description="List of scopes group names to add the server to."),
         ctx: Context = None
 ) -> Dict[str, Any]:
@@ -294,20 +283,20 @@ def main():
 
     # Override settings with command line arguments if provided
     if args.port:
-        settings.mcp_server_listen_port = args.port
+        settings.MCP_SERVER_LISTEN_PORT = args.port
     if args.transport:
-        settings.mcp_transport = args.transport
+        settings.MCP_TRANSPORT = args.transport
 
     # Log configuration
     logger.info("=" * 80)
     logger.info("Starting MCPGW - MCP Gateway Registry Interaction Server")
     logger.info("=" * 80)
     logger.info(f"Configuration:")
-    logger.info(f"  Port: {settings.mcp_server_listen_port}")
-    logger.info(f"  Transport: {settings.mcp_transport}")
-    logger.info(f"  Registry URL: {settings.registry_base_url}")
-    logger.info(f"  Tool Discovery Mode: {settings.tool_discovery_mode}")
-    logger.info(f"  Endpoint: http://0.0.0.0:{settings.mcp_server_listen_port}/mcp")
+    logger.info(f"  Port: {settings.MCP_SERVER_LISTEN_PORT}")
+    logger.info(f"  Transport: {settings.MCP_TRANSPORT}")
+    logger.info(f"  Registry URL: {settings.REGISTRY_BASE_URL}")
+    logger.info(f"  Tool Discovery Mode: {settings.TOOL_DISCOVERY_MODE}")
+    logger.info(f"  Endpoint: http://0.0.0.0:{settings.MCP_SERVER_LISTEN_PORT}/mcp")
     logger.info("=" * 80)
 
     # Initialize services
@@ -323,9 +312,9 @@ def main():
     logger.info("Starting server...")
     try:
         mcp.run(
-            transport=settings.mcp_transport,
+            transport=settings.MCP_TRANSPORT,
             host="0.0.0.0",
-            port=int(settings.mcp_server_listen_port)
+            port=int(settings.MCP_SERVER_LISTEN_PORT)
         )
     except KeyboardInterrupt:
         logger.info("Server shutdown requested by user")

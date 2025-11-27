@@ -133,8 +133,8 @@ async def healthcheck_impl(ctx: Context = None) -> Dict[str, Any]:
     Retrieves health status information from all registered MCP servers.
     """
     try:
-        registry_username = settings.registry_username or "admin"
-        registry_password = settings.registry_password
+        registry_username = settings.REGISTRY_USERNAME or "admin"
+        registry_password = settings.REGISTRY_PASSWORD
 
         if not registry_password:
             raise Exception("REGISTRY_PASSWORD not configured in environment")
@@ -146,7 +146,7 @@ async def healthcheck_impl(ctx: Context = None) -> Dict[str, Any]:
             "Content-Type": "application/x-www-form-urlencoded"
         }
 
-        healthcheck_url = f"{settings.registry_base_url}/api/internal/healthcheck"
+        healthcheck_url = f"{settings.REGISTRY_BASE_URL}/api/internal/healthcheck"
         logger.info(f"Calling internal health check endpoint: {healthcheck_url}")
 
         async with httpx.AsyncClient() as client:
