@@ -7,6 +7,12 @@
                 {% if server.official %}
                     <span class="badge official-badge">OFFICIAL</span>
                 {% endif %}
+                {% if server.tags and 'anthropic-registry' in server.tags %}
+                    <span class="badge anthropic-badge">ANTHROPIC</span>
+                {% endif %}
+                {% if server.tags and 'asor' in server.tags %}
+                    <span class="badge asor-badge">ASOR</span>
+                {% endif %}
                 <span class="badge status-badge {{ 'enabled' if is_enabled else 'disabled' }}">
                     {{ 'Enabled' if is_enabled else 'Disabled' }}
                 </span>
