@@ -6,8 +6,7 @@ from pathlib import Path
 from typing import Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-from packages.enums import ToolDiscoveryMode
+from packages.shared.enums import ToolDiscoveryMode
 
 logging.basicConfig(
     level=os.environ.get("LOGLEVEL", "INFO"),

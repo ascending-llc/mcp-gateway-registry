@@ -14,5 +14,13 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-package-dir = {"packages" = "."}
-packages = ["packages", "packages.db", "packages.db.core", "packages.db.managers", "packages.db.models", "packages.db.search"]
+# Map the package "packages" to the parent directory
+# When pip install -e ./packages is run from /app, 
+# it treats /app/packages/ as the "packages" module
+package-dir = {"" = ".."}
+
+[tool.setuptools.packages.find]
+# Find packages in parent directory, specifically the "packages" directory
+where = [".."]
+include = ["packages*"]
+namespaces = false

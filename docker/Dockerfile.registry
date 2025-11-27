@@ -25,14 +25,15 @@ WORKDIR /app
 COPY . /app/
 
 # Install Python dependencies based on TOOL_DISCOVERY_MODE
-# Step 1: Install packages (shared database ORM)
+# Step 1: Install packages (shared database ORM) from parent directory
+#         This ensures packages/ directory is installed as "packages" module
 # Step 2: Install registry with appropriate dependencies
 # Default (embedded): installs with ML dependencies (FAISS, torch, sentence-transformers)
 # External: installs only base dependencies
 RUN pip install --no-cache-dir uv && \
     echo "Installing packages (shared db ORM)..." && \
-    cd /app/packages && uv pip install --system -e . && \
-    cd /app && \
+    cd /app && uv pip install --system -e ./packages && \
+    echo "Installing registry..." && \
     if [ "$TOOL_DISCOVERY_MODE" = "external" ]; then \
         echo "Building LIGHTWEIGHT image (external mode) - skipping ML dependencies"; \
         uv pip install --system -e .; \
