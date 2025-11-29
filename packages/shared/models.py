@@ -166,13 +166,15 @@ class McpTool(Model):
 
     @classmethod
     def bulk_create_from_server_info(
-            cls,
-            service_path: str,
-            server_info: dict,
-            is_enabled: bool = False
-    ) -> List['McpTool']:
+        cls,
+        service_path: str,
+        server_info: dict,
+        is_enabled: bool = False
+    ):
         """
         Bulk create tools from server info dictionary.
+        
+        Returns BatchResult with complete error reporting (new in v2.0).
         
         Args:
             service_path: Service path identifier
@@ -180,15 +182,16 @@ class McpTool(Model):
             is_enabled: Whether the service is enabled
             
         Returns:
-            List of created MCPTool instances
+            BatchResult with success/failure statistics
             
         Raises:
-            Exception: If bulk creation fails
+            Exception: If bulk creation fails catastrophically
         """
         tool_list = server_info.get("tool_list", [])
         if not tool_list:
             logger.warning(f"No tools in server_info for '{service_path}'")
-            return []
+            from packages.db import BatchResult
+            return BatchResult(total=0, successful=0, failed=0, errors=[])
 
         server_name = server_info.get("server_name", "")
         server_tags = server_info.get("tags", [])
@@ -197,6 +200,8 @@ class McpTool(Model):
 
         # Convert all tools to MCPTool instances
         instances = []
+        conversion_errors = []
+        
         for i, tool in enumerate(tool_list):
             try:
                 mcp_tool = cls.create_from_tool_dict(
@@ -210,24 +215,57 @@ class McpTool(Model):
                 logger.debug(f"  Converted tool {i + 1}/{len(tool_list)}: {tool.get('name', 'unnamed')}")
             except ValueError as e:
                 logger.error(f"Skipping invalid tool in '{service_path}': {e}")
-                continue
+                conversion_errors.append({
+                    'uuid': None,
+                    'message': f"Conversion failed: {e}"
+                })
             except Exception as e:
                 logger.error(f"Unexpected error converting tool in '{service_path}': {e}")
-                continue
+                conversion_errors.append({
+                    'uuid': None,
+                    'message': f"Unexpected error: {e}"
+                })
 
-        # Batch create
+        # Batch create with error reporting
         if instances:
             logger.info(f"Bulk creating {len(instances)} MCPTool instances for '{service_path}'")
             try:
-                created = cls.objects.bulk_create(instances)
-                logger.info(f"Successfully bulk created {len(created)} tools for '{service_path}'")
-                return created
+                # Returns BatchResult (new in v2.0)
+                result = cls.objects.bulk_create(instances, batch_size=100)
+                
+                logger.info(
+                    f"Bulk create result: {result.successful}/{result.total} successful "
+                    f"({result.success_rate:.1f}%)"
+                )
+                
+                if result.has_errors:
+                    logger.warning(f"⚠️  {result.failed} tools failed:")
+                    for error in result.errors[:5]:
+                        logger.warning(f"   - {error}")
+                
+                # Combine conversion errors with creation errors
+                all_errors = conversion_errors + result.errors
+                
+                from packages.db import BatchResult
+                return BatchResult(
+                    total=len(tool_list),
+                    successful=result.successful,
+                    failed=len(all_errors),
+                    errors=all_errors
+                )
+                
             except Exception as e:
                 logger.error(f"Bulk create failed for '{service_path}': {e}", exc_info=True)
                 raise
         else:
             logger.warning(f"No valid tool instances to create for '{service_path}'")
-            return []
+            from packages.db import BatchResult
+            return BatchResult(
+                total=len(tool_list),
+                successful=0,
+                failed=len(conversion_errors),
+                errors=conversion_errors
+            )
 
     def __str__(self):
         return f"<MCPTool: {self.tool_name} ({self.server_path})>"

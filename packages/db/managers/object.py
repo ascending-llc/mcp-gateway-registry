@@ -1,10 +1,10 @@
 import logging
 import uuid
-from typing import Any, Dict, List, Optional, Type, TypeVar, Union
-from ..core.exceptions import DoesNotExist, MultipleObjectsReturned
-from ..core.enums import SearchType
-from ..search import SearchManager, AdvancedQuerySet
-from .queryset import QuerySet
+from typing import Any, Callable, Dict, List, Optional, Type, TypeVar
+
+from ..core.exceptions import DoesNotExist, MultipleObjectsReturned, InsertFailed, UpdateFailed, DeleteFailed
+from ..search.query_builder import QueryBuilder
+from .batch import BatchResult
 
 logger = logging.getLogger(__name__)
 
@@ -12,48 +12,80 @@ T = TypeVar('T', bound='Model')
 
 
 class ObjectManager:
-    """Manages CRUD operations and searches for model instances"""
+    """
+    Manager for CRUD operations with enhanced batch support.
+    
+    Follows Weaviate best practices:
+    - Uses batch.dynamic() or batch.fixed_size() for optimal performance
+    - Provides complete error reporting via BatchResult
+    - Supports progress tracking for large imports
+    - Optimized get_by_id for fast lookups
+    
+    Example:
+        # CRUD
+        article = Article.objects.create(title="Test")
+        article = Article.objects.get_by_id("uuid")
+        Article.objects.update(article, title="Updated")
+        article.delete()
+        
+        # Batch operations
+        result = Article.objects.bulk_create(articles, batch_size=200)
+        result = Article.objects.bulk_import(data_list, on_progress=callback)
+        count = Article.objects.delete_where(status="draft")
+    """
     
     def __init__(self, model_class: Type[T], client: 'WeaviateClient'):
+        """
+        Initialize object manager.
+        
+        Args:
+            model_class: The model class this manager operates on
+            client: Weaviate client instance
+        """
         self.model_class = model_class
         self.client = client
-        self._queryset_class = QuerySet
-        self._search_manager = SearchManager(model_class, client)
-        self._advanced_queryset_class = AdvancedQuerySet
     
-    # ===== CRUD Operations =====
+    # ===== Single Object Operations =====
     
     def create(self, **kwargs) -> T:
         """
         Create and save a new object.
         
         Args:
-            **kwargs: Object field values
+            **kwargs: Field values for the new object
             
         Returns:
-            T: Created object instance
+            Created and saved model instance
+            
+        Example:
+            article = Article.objects.create(
+                title="Hello World",
+                content="Test content"
+            )
         """
         instance = self.model_class(**kwargs)
         return self.save(instance)
     
     def save(self, instance: T) -> T:
         """
-        Save object instance to Weaviate.
+        Save an object instance to Weaviate.
         
         Args:
             instance: Model instance to save
             
         Returns:
-            T: Saved instance with ID populated
+            Saved instance with ID populated
+            
+        Raises:
+            InsertFailed: If save operation fails
         """
+        collection_name = self.model_class.get_collection_name()
+        
         try:
-            with self.client.managed_connection() as client:
-                collection_name = self.model_class.get_collection_name()
-                collection = client.client.collections.get(collection_name)
+            with self.client.managed_connection() as conn:
+                collection = conn.client.collections.get(collection_name)
                 
                 data = instance.to_dict()
-                
-                # Remove 'id' from property data as it's a reserved field
                 data_without_id = {k: v for k, v in data.items() if k != 'id'}
                 
                 # Generate UUID if not exists
@@ -61,152 +93,157 @@ class ObjectManager:
                 if not object_id:
                     object_id = str(uuid.uuid4())
                 
-                # Insert data using uuid parameter
+                # Insert data
                 result = collection.data.insert(
                     properties=data_without_id,
                     uuid=object_id
                 )
                 
-                # Set instance ID
                 instance.id = str(result)
-                logger.info(f"Object saved successfully with ID: {str(result)}")
+                logger.info(f"Object saved: {collection_name}/{str(result)}")
                 return instance
                 
         except Exception as e:
             logger.error(f"Failed to save object: {e}")
-            raise
+            raise InsertFailed(collection_name, str(e))
     
-    def bulk_create(self, instances: List[T]) -> List[T]:
+    def get_by_id(self, object_id: str) -> T:
         """
-        Bulk create multiple objects efficiently.
+        Get object by ID directly (optimized).
+        
+        Uses Weaviate's fetch_object_by_id for fast direct lookup.
+        Much faster than filter-based queries.
         
         Args:
-            instances: List of model instances
-            
+            object_id: Object UUID
+        
         Returns:
-            List[T]: List of created instances with IDs populated
+            Model instance
+        
+        Raises:
+            DoesNotExist: If object not found
+        
+        Example:
+            article = Article.objects.get_by_id("uuid-123")
+        
+        Reference:
+            https://docs.weaviate.io/weaviate/manage-objects/read
         """
+        collection_name = self.model_class.get_collection_name()
+        
         try:
-            with self.client.managed_connection() as client:
-                collection_name = self.model_class.get_collection_name()
-                collection = client.client.collections.get(collection_name)
+            with self.client.managed_connection() as conn:
+                collection = conn.client.collections.get(collection_name)
                 
-                from weaviate.collections.classes.data import DataObject
+                obj = collection.query.fetch_object_by_id(object_id)
                 
-                objects_to_insert = []
-                for instance in instances:
-                    data = instance.to_dict()
-                    # Remove 'id' as it's a reserved field
-                    data_without_id = {k: v for k, v in data.items() if k != 'id'}
-                    
-                    # Generate UUID if not exists
-                    object_id = getattr(instance, 'id', None)
-                    if not object_id:
-                        object_id = str(uuid.uuid4())
-                    
-                    # Use DataObject instead of dict to avoid property nesting
-                    objects_to_insert.append(DataObject(
-                        properties=data_without_id,
-                        uuid=object_id
-                    ))
+                if not obj:
+                    raise DoesNotExist(
+                        self.model_class.__name__,
+                        {"id": object_id}
+                    )
                 
-                # Bulk insert
-                results = collection.data.insert_many(objects_to_insert)
+                # Convert to instance
+                data = obj.properties.copy()
+                data['id'] = str(obj.uuid)
                 
-                # Process results and set IDs
-                if hasattr(results, 'uuids') and results.uuids:
-                    for i, uuid_obj in enumerate(results.uuids):
-                        if i < len(instances):
-                            instances[i].id = str(uuid_obj)
+                instance = self.model_class()
+                instance.id = data['id']
                 
-                logger.info(f"Bulk created {len(instances)} objects successfully")
-                return instances
+                for field_name in self.model_class._fields.keys():
+                    if field_name in data:
+                        setattr(instance, field_name, data[field_name])
                 
-        except Exception as e:
-            logger.error(f"Failed to bulk create objects: {e}")
+                return instance
+                
+        except DoesNotExist:
             raise
-    
-    def bulk_create_from_dicts(self, data_list: List[Dict[str, Any]]) -> List[T]:
-        """
-        Directly create objects from dictionary list (convenience method).
-        
-        Args:
-            data_list: List of dictionaries with field data
-            
-        Returns:
-            List[T]: Created object instances
-        """
-        instances = [self.model_class(**data) for data in data_list]
-        return self.bulk_create(instances)
+        except Exception as e:
+            logger.error(f"Failed to get object by ID: {e}")
+            raise DoesNotExist(self.model_class.__name__, {"id": object_id})
     
     def get(self, **kwargs) -> T:
         """
-        Get a single object matching the criteria.
+        Get single object by criteria.
+        
+        Optimized: If only 'id' or 'uuid' is provided, uses get_by_id (fast path).
+        Otherwise uses filter-based query (slower but supports any field).
         
         Args:
-            **kwargs: Filter conditions
-            
+            **kwargs: Filter criteria
+        
         Returns:
-            T: Object instance
-            
+            Single model instance
+        
         Raises:
             DoesNotExist: No matching object found
             MultipleObjectsReturned: Multiple objects match the criteria
+            
+        Example:
+            # Fast: direct ID/UUID lookup
+            article = Article.objects.get(id="uuid-123")
+            article = Article.objects.get(uuid="uuid-123")
+            
+            # Slow: filter-based
+            article = Article.objects.get(title="Hello World")
+        
+        Note:
+            'id' and 'uuid' are special fields in Weaviate (not schema properties).
+            They are used for direct object lookup, not filtering.
         """
-        queryset = self.filter(**kwargs)
-        results = queryset.all()
+        # Fast path: direct ID/UUID lookup
+        if len(kwargs) == 1:
+            if 'id' in kwargs:
+                return self.get_by_id(kwargs['id'])
+            elif 'uuid' in kwargs:
+                return self.get_by_id(kwargs['uuid'])
+        
+        # Slow path: filter-based query
+        # Note: Cannot use 'id' or 'uuid' in filter as they're not schema properties
+        if 'id' in kwargs or 'uuid' in kwargs:
+            raise ValueError(
+                "Cannot filter by 'id' or 'uuid' with other fields. "
+                "Use get(id='uuid') or get(uuid='uuid') for direct lookup, "
+                "or filter by schema properties only."
+            )
+        
+        results = self.filter(**kwargs).limit(2).all()
         
         if not results:
-            raise DoesNotExist(f"Object matching query does not exist")
+            raise DoesNotExist(self.model_class.__name__, kwargs)
         if len(results) > 1:
-            raise MultipleObjectsReturned(f"get() returned more than one object")
+            raise MultipleObjectsReturned(
+                self.model_class.__name__,
+                len(results),
+                kwargs
+            )
         
         return results[0]
     
-    def delete(self, instance: T) -> bool:
-        """
-        Delete an object instance.
-        
-        Args:
-            instance: Object instance to delete
-            
-        Returns:
-            bool: True if deletion successful
-        """
-        try:
-            with self.client.managed_connection() as client:
-                collection_name = self.model_class.get_collection_name()
-                collection = client.client.collections.get(collection_name)
-                
-                if hasattr(instance, 'id') and instance.id:
-                    collection.data.delete_by_id(instance.id)
-                    logger.info(f"Object deleted successfully with ID: {instance.id}")
-                    return True
-                else:
-                    logger.error("Cannot delete object without ID")
-                    return False
-                    
-        except Exception as e:
-            logger.error(f"Failed to delete object: {e}")
-            return False
-    
     def update(self, instance: T, **kwargs) -> T:
         """
-        Update an object instance with new values.
+        Update an object with new values.
         
         Args:
-            instance: Object instance to update
+            instance: Instance to update
             **kwargs: Fields to update
             
         Returns:
-            T: Updated object instance
+            Updated instance
+            
+        Raises:
+            UpdateFailed: If update operation fails
+            
+        Example:
+            Article.objects.update(article, title="New Title", views=100)
         """
+        collection_name = self.model_class.get_collection_name()
+        
         try:
-            with self.client.managed_connection() as client:
-                collection_name = self.model_class.get_collection_name()
-                collection = client.client.collections.get(collection_name)
+            with self.client.managed_connection() as conn:
+                collection = conn.client.collections.get(collection_name)
                 
-                # Update instance properties
+                # Update instance attributes
                 for key, value in kwargs.items():
                     if hasattr(instance, key):
                         setattr(instance, key, value)
@@ -217,296 +254,569 @@ class ObjectManager:
                         uuid=instance.id,
                         properties=instance.to_dict()
                     )
-                    logger.info(f"Object updated successfully with ID: {instance.id}")
+                    logger.info(f"Object updated: {instance.id}")
                     return instance
                 else:
-                    logger.error("Cannot update object without ID")
                     raise ValueError("Object must have an ID to update")
                     
+        except ValueError:
+            raise
         except Exception as e:
             logger.error(f"Failed to update object: {e}")
-            raise
+            raise UpdateFailed(collection_name, getattr(instance, 'id', 'unknown'), str(e))
     
-    # ===== Query Methods =====
-    
-    def filter(self, **kwargs) -> QuerySet:
+    def delete(self, instance: T) -> bool:
         """
-        Filter objects by field values.
+        Delete an object instance.
         
         Args:
-            **kwargs: Filter conditions
+            instance: Instance to delete
             
         Returns:
-            QuerySet: Query set instance (chainable)
+            True if deletion successful
+            
+        Raises:
+            DeleteFailed: If deletion fails
         """
-        queryset = self._queryset_class(self.model_class, self.client)
-        return queryset.filter(**kwargs)
+        collection_name = self.model_class.get_collection_name()
+        
+        try:
+            with self.client.managed_connection() as conn:
+                collection = conn.client.collections.get(collection_name)
+                
+                if not hasattr(instance, 'id') or not instance.id:
+                    raise ValueError("Cannot delete object without ID")
+                
+                collection.data.delete_by_id(instance.id)
+                logger.info(f"Object deleted: {instance.id}")
+                return True
+                    
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to delete object: {e}")
+            raise DeleteFailed(collection_name, getattr(instance, 'id', 'unknown'), str(e))
     
-    def all(self) -> QuerySet:
+    # ===== Batch Operations =====
+    
+    def bulk_create(
+        self,
+        instances: List[T],
+        batch_size: int = 100,
+        on_error: Optional[Callable[[Dict[str, Any]], None]] = None
+    ) -> BatchResult:
         """
-        Get all objects.
+        Bulk create with error handling using Weaviate Batch API.
+        
+        Uses Weaviate's batch.fixed_size() for efficient bulk insertion
+        with complete error reporting.
+        
+        Args:
+            instances: List of model instances
+            batch_size: Objects per batch (default: 100, Weaviate recommended)
+            on_error: Optional callback for each error: callback(error_dict)
         
         Returns:
-            QuerySet: Query set instance (chainable)
+            BatchResult with success/failure statistics
+        
+        Example:
+            # Simple usage
+            result = Article.objects.bulk_create(articles)
+            print(f"Created {result.successful}/{result.total}")
+            
+            # With error handling
+            def log_error(error):
+                logger.error(f"Failed {error['uuid']}: {error['message']}")
+            
+            result = Article.objects.bulk_create(
+                articles,
+                batch_size=200,
+                on_error=log_error
+            )
+            
+            if result.has_errors:
+                print(f"Errors: {result.errors}")
+        
+        Reference:
+            https://docs.weaviate.io/weaviate/manage-objects/import
         """
-        return self._queryset_class(self.model_class, self.client)
+        collection_name = self.model_class.get_collection_name()
+        
+        try:
+            with self.client.managed_connection() as conn:
+                collection = conn.client.collections.get(collection_name)
+                
+                from weaviate.collections.classes.data import DataObject
+                
+                # Prepare objects for insertion
+                objects_to_insert = []
+                uuid_to_instance = {}
+                
+                for instance in instances:
+                    data = instance.to_dict()
+                    data_without_id = {k: v for k, v in data.items() if k != 'id'}
+                    
+                    object_id = getattr(instance, 'id', None) or str(uuid.uuid4())
+                    
+                    objects_to_insert.append(DataObject(
+                        properties=data_without_id,
+                        uuid=object_id
+                    ))
+                    uuid_to_instance[object_id] = instance
+                
+                # Use batch API with fixed size
+                errors = []
+                
+                with collection.batch.fixed_size(batch_size=batch_size) as batch:
+                    for obj in objects_to_insert:
+                        batch.add_object(
+                            properties=obj.properties,
+                            uuid=obj.uuid
+                        )
+                
+                # Check for errors
+                failed_objects = batch.failed_objects if hasattr(batch, 'failed_objects') else []
+                failed_count = len(failed_objects)
+                
+                # Process errors
+                for failed_obj in failed_objects:
+                    error_dict = {
+                        'uuid': str(getattr(failed_obj, 'uuid', None)),
+                        'message': str(getattr(failed_obj, 'message', failed_obj))
+                    }
+                    errors.append(error_dict)
+                    
+                    if on_error:
+                        on_error(error_dict)
+                
+                # Set IDs on successfully created instances
+                # Note: failed instances won't have IDs set
+                successful_count = len(instances) - failed_count
+                
+                logger.info(
+                    f"Bulk create: {successful_count}/{len(instances)} successful "
+                    f"({successful_count/len(instances)*100:.1f}%)"
+                )
+                
+                return BatchResult(
+                    total=len(instances),
+                    successful=successful_count,
+                    failed=failed_count,
+                    errors=errors
+                )
+                
+        except Exception as e:
+            logger.error(f"Bulk create failed: {e}")
+            raise InsertFailed(collection_name, str(e))
     
-    def exclude(self, **kwargs) -> QuerySet:
+    def bulk_create_from_dicts(self, data_list: List[Dict[str, Any]], **kwargs) -> BatchResult:
+        """
+        Create objects from list of dictionaries.
+        
+        Convenience method that converts dicts to instances then calls bulk_create.
+        
+        Args:
+            data_list: List of dictionaries with field data
+            **kwargs: Additional arguments passed to bulk_create
+            
+        Returns:
+            BatchResult
+            
+        Example:
+            result = Article.objects.bulk_create_from_dicts([
+                {"title": "Article 1", "content": "..."},
+                {"title": "Article 2", "content": "..."},
+            ], batch_size=200)
+        """
+        instances = [self.model_class(**data) for data in data_list]
+        return self.bulk_create(instances, **kwargs)
+    
+    def bulk_import(
+        self,
+        data_list: List[Dict[str, Any]],
+        batch_size: int = 100,
+        use_dynamic: bool = False,
+        on_progress: Optional[Callable[[int, int], None]] = None,
+        on_error: Optional[Callable[[Dict[str, Any]], None]] = None
+    ) -> BatchResult:
+        """
+        Bulk import from dictionaries with progress tracking.
+        
+        Recommended for large data imports (1000+ objects).
+        Supports dynamic batching for automatic performance optimization.
+        
+        Args:
+            data_list: List of data dictionaries
+            batch_size: Batch size (default: 100, ignored if use_dynamic=True)
+            use_dynamic: Use dynamic batching for auto-optimization (default: False)
+            on_progress: Progress callback(current, total)
+            on_error: Error callback(error_dict)
+        
+        Returns:
+            BatchResult with statistics
+        
+        Example:
+            # Large import with progress
+            def show_progress(current, total):
+                pct = (current / total) * 100
+                print(f"\\rProgress: {current}/{total} ({pct:.1f}%)", end="")
+            
+            result = Article.objects.bulk_import(
+                data_list,
+                batch_size=200,
+                use_dynamic=True,
+                on_progress=show_progress
+            )
+            
+            print(f"\\n✅ Imported {result.successful}/{result.total}")
+        
+        Reference:
+            https://docs.weaviate.io/weaviate/manage-objects/import
+        """
+        collection_name = self.model_class.get_collection_name()
+        
+        try:
+            with self.client.managed_connection() as conn:
+                collection = conn.client.collections.get(collection_name)
+                
+                total = len(data_list)
+                processed = 0
+                errors = []
+                
+                # Choose batch mode
+                batch_context = (
+                    collection.batch.dynamic() if use_dynamic 
+                    else collection.batch.fixed_size(batch_size=batch_size)
+                )
+                
+                with batch_context as batch:
+                    for data in data_list:
+                        # Extract or generate UUID
+                        object_id = data.pop('id', None) or str(uuid.uuid4())
+                        
+                        batch.add_object(
+                            properties=data,
+                            uuid=object_id
+                        )
+                        
+                        processed += 1
+                        
+                        # Progress callback every 100 items
+                        if on_progress and processed % 100 == 0:
+                            on_progress(processed, total)
+                
+                # Final progress
+                if on_progress:
+                    on_progress(total, total)
+                
+                # Collect errors
+                failed_objects = batch.failed_objects if hasattr(batch, 'failed_objects') else []
+                failed_count = len(failed_objects)
+                
+                for failed_obj in failed_objects:
+                    error_dict = {
+                        'uuid': str(getattr(failed_obj, 'uuid', None)),
+                        'message': str(getattr(failed_obj, 'message', failed_obj))
+                    }
+                    errors.append(error_dict)
+                    
+                    if on_error:
+                        on_error(error_dict)
+                
+                logger.info(
+                    f"Bulk import: {total - failed_count}/{total} successful"
+                )
+                
+                return BatchResult(
+                    total=total,
+                    successful=total - failed_count,
+                    failed=failed_count,
+                    errors=errors
+                )
+                
+        except Exception as e:
+            logger.error(f"Bulk import failed: {e}")
+            raise InsertFailed(collection_name, str(e))
+    
+    def bulk_update(
+        self,
+        updates: List[Dict[str, Any]],
+        batch_size: int = 100,
+        on_error: Optional[Callable[[Dict[str, Any]], None]] = None
+    ) -> BatchResult:
+        """
+        Bulk update multiple objects.
+        
+        Each dict must contain 'id' and the fields to update.
+        
+        Args:
+            updates: List of dicts with 'id' and update fields
+            batch_size: Batch size (default: 100)
+            on_error: Optional error callback
+        
+        Returns:
+            BatchResult
+        
+        Example:
+            updates = [
+                {'id': 'uuid-1', 'views': 100, 'published': True},
+                {'id': 'uuid-2', 'views': 200, 'published': False},
+            ]
+            result = Article.objects.bulk_update(updates, batch_size=200)
+            print(f"Updated {result.successful}/{result.total}")
+        
+        Reference:
+            https://docs.weaviate.io/weaviate/manage-objects/update
+        """
+        collection_name = self.model_class.get_collection_name()
+        
+        try:
+            with self.client.managed_connection() as conn:
+                collection = conn.client.collections.get(collection_name)
+                
+                errors = []
+                successful = 0
+                
+                with collection.batch.fixed_size(batch_size=batch_size) as batch:
+                    for update_data in updates:
+                        if 'id' not in update_data:
+                            error_dict = {
+                                'uuid': None,
+                                'message': "Missing 'id' field in update data"
+                            }
+                            errors.append(error_dict)
+                            if on_error:
+                                on_error(error_dict)
+                            continue
+                        
+                        object_id = update_data.pop('id')
+                        
+                        try:
+                            batch.update_object(
+                                uuid=object_id,
+                                properties=update_data
+                            )
+                            successful += 1
+                        except Exception as e:
+                            error_dict = {
+                                'uuid': object_id,
+                                'message': str(e)
+                            }
+                            errors.append(error_dict)
+                            if on_error:
+                                on_error(error_dict)
+                
+                failed = len(errors)
+                
+                logger.info(f"Bulk update: {successful}/{len(updates)} successful")
+                
+                return BatchResult(
+                    total=len(updates),
+                    successful=successful,
+                    failed=failed,
+                    errors=errors
+                )
+                
+        except Exception as e:
+            logger.error(f"Bulk update failed: {e}")
+            raise UpdateFailed(collection_name, 'bulk', str(e))
+    
+    def bulk_delete(
+        self,
+        object_ids: List[str],
+        batch_size: int = 100,
+        on_error: Optional[Callable[[Dict[str, Any]], None]] = None
+    ) -> BatchResult:
+        """
+        Bulk delete objects by ID.
+        
+        Args:
+            object_ids: List of object UUIDs
+            batch_size: Batch size (default: 100)
+            on_error: Optional error callback
+        
+        Returns:
+            BatchResult
+        
+        Example:
+            ids = ['uuid-1', 'uuid-2', 'uuid-3']
+            result = Article.objects.bulk_delete(ids)
+            print(f"Deleted {result.successful}/{result.total}")
+        
+        Reference:
+            https://docs.weaviate.io/weaviate/manage-objects/delete
+        """
+        collection_name = self.model_class.get_collection_name()
+        
+        try:
+            with self.client.managed_connection() as conn:
+                collection = conn.client.collections.get(collection_name)
+                
+                errors = []
+                successful = 0
+                
+                with collection.batch.fixed_size(batch_size=batch_size) as batch:
+                    for object_id in object_ids:
+                        try:
+                            batch.delete_object(uuid=object_id)
+                            successful += 1
+                        except Exception as e:
+                            error_dict = {
+                                'uuid': object_id,
+                                'message': str(e)
+                            }
+                            errors.append(error_dict)
+                            if on_error:
+                                on_error(error_dict)
+                
+                logger.info(f"Bulk delete: {successful}/{len(object_ids)} successful")
+                
+                return BatchResult(
+                    total=len(object_ids),
+                    successful=successful,
+                    failed=len(errors),
+                    errors=errors
+                )
+                
+        except Exception as e:
+            logger.error(f"Bulk delete failed: {e}")
+            raise DeleteFailed(collection_name, 'bulk', str(e))
+    
+    def delete_where(self, **filters) -> int:
+        """
+        Delete multiple objects matching filters.
+        
+        Uses Weaviate's delete_many for efficient bulk deletion.
+        
+        Args:
+            **filters: Filter conditions (Django-style field lookups)
+        
+        Returns:
+            Number of deleted objects
+        
+        Example:
+            # Delete all draft articles
+            count = Article.objects.delete_where(status="draft")
+            print(f"Deleted {count} drafts")
+            
+            # Delete with complex filters
+            count = Article.objects.delete_where(
+                status="old",
+                views__lt=10,
+                created_at__lt="2020-01-01"
+            )
+        
+        Reference:
+            https://docs.weaviate.io/weaviate/manage-objects/delete
+        """
+        collection_name = self.model_class.get_collection_name()
+        
+        try:
+            with self.client.managed_connection() as conn:
+                collection = conn.client.collections.get(collection_name)
+                
+                # Build filter from kwargs
+                from ..search.filters import Q
+                q = Q(**filters)
+                weaviate_filter = q.to_weaviate_filter()
+                
+                if not weaviate_filter:
+                    logger.warning("delete_where called without filters, skipping")
+                    return 0
+                
+                # Delete matching objects
+                result = collection.data.delete_many(where=weaviate_filter)
+                
+                deleted_count = result.deleted if hasattr(result, 'deleted') else 0
+                logger.info(f"Deleted {deleted_count} objects from {collection_name}")
+                
+                return deleted_count
+                
+        except Exception as e:
+            logger.error(f"Delete where failed: {e}")
+            raise DeleteFailed(collection_name, 'filter-based', str(e))
+    
+    # ===== Query Methods (delegate to QueryBuilder) =====
+    
+    def filter(self, *args, **kwargs) -> QueryBuilder:
+        """
+        Filter objects by criteria.
+        
+        Returns a QueryBuilder for chaining additional operations.
+        
+        Args:
+            *args: Q objects
+            **kwargs: Field filters
+            
+        Returns:
+            QueryBuilder instance
+            
+        Example:
+            Article.objects.filter(category="tech", published=True)
+        """
+        return QueryBuilder(self.model_class, self.client).filter(*args, **kwargs)
+    
+    def exclude(self, *args, **kwargs) -> QueryBuilder:
         """
         Exclude objects matching criteria.
         
         Args:
-            **kwargs: Field name and value mappings
+            *args: Q objects
+            **kwargs: Field filters
             
         Returns:
-            QuerySet: Query set instance (chainable)
+            QueryBuilder instance
         """
-        queryset = self._queryset_class(self.model_class, self.client)
-        return queryset.exclude(**kwargs)
+        return QueryBuilder(self.model_class, self.client).exclude(*args, **kwargs)
     
-    # ===== Basic Search Methods =====
-    
-    def bm25(self, query: str, properties: Optional[List[str]] = None) -> QuerySet:
+    def all(self) -> QueryBuilder:
         """
-        BM25 keyword search.
+        Get all objects.
         
-        Args:
-            query: Search query
-            properties: Properties to search in (None = all text properties)
-            
         Returns:
-            QuerySet: Query set instance
+            QueryBuilder instance
         """
-        queryset = self._queryset_class(self.model_class, self.client)
-        return queryset.bm25(query, properties)
+        return QueryBuilder(self.model_class, self.client)
     
-    def vector_search(self, query: str, limit: Optional[int] = None) -> QuerySet:
+    # ===== Search Methods (delegate to QueryBuilder) =====
+    
+    def search(self, query: str, **kwargs) -> QueryBuilder:
+        """Perform hybrid search (default)."""
+        return QueryBuilder(self.model_class, self.client).hybrid(query, **kwargs)
+    
+    def bm25(self, query: str, **kwargs) -> QueryBuilder:
+        """BM25 keyword search."""
+        return QueryBuilder(self.model_class, self.client).bm25(query, **kwargs)
+    
+    def near_text(self, text: str, **kwargs) -> QueryBuilder:
+        """Semantic text search."""
+        return QueryBuilder(self.model_class, self.client).near_text(text, **kwargs)
+    
+    def near_vector(self, vector: List[float], **kwargs) -> QueryBuilder:
+        """Vector similarity search."""
+        return QueryBuilder(self.model_class, self.client).near_vector(vector, **kwargs)
+    
+    def hybrid(self, query: str, alpha: float = 0.7, **kwargs) -> QueryBuilder:
+        """Hybrid search (BM25 + semantic)."""
+        return QueryBuilder(self.model_class, self.client).hybrid(query, alpha=alpha, **kwargs)
+    
+    def fuzzy(self, query: str, **kwargs) -> QueryBuilder:
+        """Fuzzy search (typo-tolerant)."""
+        return QueryBuilder(self.model_class, self.client).fuzzy(query, **kwargs)
+    
+    def aggregate(self):
         """
-        Vector semantic search.
+        Create an aggregation builder for this model.
         
-        Args:
-            query: Search query
-            limit: Maximum number of results
-            
         Returns:
-            QuerySet: Query set instance
-        """
-        queryset = self._queryset_class(self.model_class, self.client)
-        return queryset.vector_search(query, limit)
-    
-    def hybrid_search(self, query: str, alpha: float = 0.5, limit: Optional[int] = None) -> QuerySet:
-        """
-        Hybrid search (BM25 + vector).
-        
-        Args:
-            query: Search query
-            alpha: Weight between BM25 (0.0) and vector (1.0)
-            limit: Maximum number of results
-            
-        Returns:
-            QuerySet: Query set instance
-        """
-        queryset = self._queryset_class(self.model_class, self.client)
-        return queryset.hybrid_search(query, alpha, limit)
-    
-    # ===== Advanced Search Methods =====
-    
-    def near_text_search(self, text: str, **kwargs) -> List[T]:
-        """
-        Semantic text search using vector embeddings.
-        
-        Args:
-            text: Text to search for
-            **kwargs: Additional search parameters
-            
-        Returns:
-            List[T]: List of model instances
-        """
-        return self._search_manager.near_text(text, **kwargs)
-    
-    def bm25_search(self, text: str, **kwargs) -> List[T]:
-        """
-        BM25 keyword search (direct execution).
-        
-        Args:
-            text: Text to search for
-            **kwargs: Additional search parameters
-            
-        Returns:
-            List[T]: List of model instances
-        """
-        return self._search_manager.bm25(text, **kwargs)
-    
-    def hybrid_search_advanced(self, text: str, **kwargs) -> List[T]:
-        """
-        Advanced hybrid search combining BM25 and vector search.
-        
-        Args:
-            text: Text to search for
-            **kwargs: Additional search parameters
-            
-        Returns:
-            List[T]: List of model instances
-        """
-        return self._search_manager.hybrid(text, **kwargs)
-    
-    def fuzzy_search(self, text: str, **kwargs) -> List[T]:
-        """
-        Fuzzy search with partial matching capabilities.
-        
-        Args:
-            text: Text to search for
-            **kwargs: Additional search parameters
-            
-        Returns:
-            List[T]: List of model instances with fuzzy matching
-        """
-        return self._search_manager.fuzzy_search(text, **kwargs)
-    
-    def near_vector_search(self, vector: List[float], **kwargs) -> List[T]:
-        """
-        Vector similarity search with custom vector.
-        
-        Args:
-            vector: Vector to search for
-            **kwargs: Additional search parameters
-            
-        Returns:
-            List[T]: List of model instances
-        """
-        return self._search_manager.near_vector(vector, **kwargs)
-    
-    def search_with_suggestions(self, text: str, **kwargs) -> Dict[str, List[T]]:
-        """
-        Comprehensive search returning multiple result types.
-        
-        Args:
-            text: Search text
-            **kwargs: Additional search parameters
-            
-        Returns:
-            Dict[str, List[T]]: Dictionary with different search result types
-                {
-                    "semantic": [...],  # Semantic search results
-                    "fuzzy": [...],     # Fuzzy search results
-                    "combined": [...]   # Hybrid search results
-                }
-        """
-        return self._search_manager.search_with_suggestions(text, **kwargs)
-    
-    def smart_search(
-        self,
-        query: Optional[str] = None,
-        limit: int = 10,
-        field_filters: Optional[Dict[str, Any]] = None,
-        list_filters: Optional[Dict[str, List[Any]]] = None,
-        **kwargs
-    ) -> List[T]:
-        """
-        Smart search with automatic query selection and filter building.
-        
-        Automatically chooses hybrid search (if query) or filtered fetch (no query).
-        Simplifies common search patterns with easy filter building.
-        
-        Args:
-            query: Search text (None for filtered fetch only)
-            limit: Maximum results
-            field_filters: Exact matches, e.g., {"is_enabled": True}
-            list_filters: Contains filters, e.g., {"tags": ["weather"]}
-            **kwargs: Additional parameters (alpha, offset, return_metadata)
-            
-        Returns:
-            List[T]: Model instances
+            AggregationBuilder instance
             
         Example:
-            # Semantic search with filters
-            tools = MCPTool.objects.smart_search(
-                query="weather forecast",
-                limit=10,
-                field_filters={"is_enabled": True},
-                list_filters={"tags": ["weather", "api"]}
-            )
-            
-            # Filtered fetch without semantic search
-            tools = MCPTool.objects.smart_search(
-                field_filters={"is_enabled": True},
-                limit=20
-            )
+            stats = Article.objects.aggregate()\
+                .group_by("category")\
+                .count()\
+                .avg("views")\
+                .execute()
         """
-        return self._search_manager.smart_search(
-            query=query,
-            limit=limit,
-            field_filters=field_filters,
-            list_filters=list_filters,
-            **kwargs
-        )
-    
-    def search_by_type(
-        self,
-        search_type: Union[SearchType, str],
-        **search_params
-    ) -> List[T]:
-        """
-        Universal search method that accepts a search type parameter.
-        
-        This method allows you to specify the search strategy dynamically at runtime,
-        making it easier to switch between different search modes without changing code.
-        
-        Args:
-            search_type: Type of search (SearchType enum or string)
-                - SearchType.NEAR_TEXT or "near_text": Semantic search using text
-                - SearchType.NEAR_VECTOR or "near_vector": Semantic search using vector
-                - SearchType.BM25 or "bm25": Keyword search (BM25F)
-                - SearchType.HYBRID or "hybrid": Hybrid search (BM25 + semantic)
-                - SearchType.FUZZY or "fuzzy": Fuzzy search (typo-tolerant)
-                - SearchType.FETCH_OBJECTS or "fetch_objects": Filtered fetch
-            **search_params: Parameters specific to the search type
-                For NEAR_TEXT: text, limit, offset, filters, return_distance, properties
-                For NEAR_VECTOR: vector, limit, offset, certainty, distance, filters, return_distance
-                For BM25: text, filters, limit, properties, k1, b
-                For HYBRID: text, filters, limit, offset, alpha, return_metadata
-                For FUZZY: text, metadata_fields, limit, offset, filters, alpha
-                For FETCH_OBJECTS: limit, offset, field_filters, list_filters
-                
-        Returns:
-            List[T]: List of model instances matching the search
-            
-        Example:
-            >>> # Semantic search
-            >>> results = Article.objects.search_by_type(
-            ...     SearchType.NEAR_TEXT,
-            ...     text="machine learning",
-            ...     limit=10
-            ... )
-            
-            >>> # Hybrid search
-            >>> results = Article.objects.search_by_type(
-            ...     SearchType.HYBRID,
-            ...     text="deep learning",
-            ...     alpha=0.7,
-            ...     limit=5
-            ... )
-            
-            >>> # Using string instead of enum
-            >>> results = Article.objects.search_by_type(
-            ...     "near_text",
-            ...     text="AI research",
-            ...     limit=10
-            ... )
-            
-            >>> # Dynamic strategy selection
-            >>> user_mode = "semantic"
-            >>> search_type = SearchType.NEAR_TEXT if user_mode == "semantic" else SearchType.BM25
-            >>> results = Article.objects.search_by_type(search_type, text="data science", limit=10)
-        """
-        return self._search_manager.search_by_type(search_type, **search_params)
-    
-    def advanced_search(self) -> AdvancedQuerySet:
-        """
-        Get advanced query set for chainable search operations.
-        
-        Returns:
-            AdvancedQuerySet: Advanced query set instance
-        """
-        return self._advanced_queryset_class(self.model_class, self.client)
-
+        from ..search.aggregation import AggregationBuilder
+        return AggregationBuilder(self.model_class, self.client)

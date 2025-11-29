@@ -6,7 +6,7 @@ from .base import ModelMeta, Field
 from weaviate.classes.config import Property, Configure, VectorDistances
 from ..managers import CollectionManager, ObjectManager
 from ..core.registry import get_weaviate_client
-from ..core.client import WeaviateConfig
+from ..core.providers import ProviderFactory
 
 logger = logging.getLogger(__name__)
 
@@ -88,12 +88,20 @@ class Model(metaclass=ModelMeta):
 
     @classmethod
     def get_vectorizer_config(cls):
-        """Get vectorizer configuration"""
-        # If model doesn't have vectorizer configured, use default configuration
+        """
+        Get vectorizer configuration.
+        
+        Returns vectorizer config based on model Meta or uses default from provider.
+        """
+        # If model doesn't have vectorizer configured, use default from provider
         if not hasattr(cls._meta, 'vectorizer'):
-            # Use default vectorizer configuration
-            default_vectorizer = WeaviateConfig.get_default_vectorizer()
-            return cls._get_vectorizer_by_name(default_vectorizer)
+            try:
+                provider = ProviderFactory.from_env()
+                default_vectorizer = provider.get_vectorizer_name()
+                return cls._get_vectorizer_by_name(default_vectorizer)
+            except Exception as e:
+                logger.warning(f"Could not get default vectorizer: {e}, using none")
+                return Configure.Vectorizer.none()
         
         vectorizer = cls._meta.vectorizer
         # If configuration is a string, use string configuration
@@ -205,13 +213,23 @@ class Model(metaclass=ModelMeta):
         return properties
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary format for Weaviate data insertion"""
+        """
+        Convert to dictionary format for Weaviate data insertion.
+        
+        Uses field converters to ensure proper format (e.g., RFC3339 for datetime).
+        """
         data = {}
-        for field_name in self._fields.keys():
+        for field_name, field in self._fields.items():
             value = getattr(self, field_name, None)
             if value is not None:
-                # Handle special types
-                if isinstance(value, datetime.datetime):
+                # Use field converter if available
+                if hasattr(field, 'to_weaviate'):
+                    value = field.to_weaviate(value)
+                elif isinstance(value, datetime.datetime):
+                    # Fallback: ensure RFC3339 format with timezone
+                    if value.tzinfo is None:
+                        from datetime import timezone
+                        value = value.replace(tzinfo=timezone.utc)
                     value = value.isoformat()
                 data[field_name] = value
         return data

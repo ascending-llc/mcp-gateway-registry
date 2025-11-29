@@ -279,7 +279,7 @@ wheels = [
 [[package]]
 name = "packages"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "pytest" },
     { name = "weaviate-client" },
