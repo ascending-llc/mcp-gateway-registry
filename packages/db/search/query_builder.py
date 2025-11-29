@@ -276,6 +276,78 @@ class QueryBuilder:
         """Fuzzy search (typo-tolerant)."""
         return self.search(query, SearchType.FUZZY, **kwargs)
     
+    def near_image(self, image, **kwargs) -> 'QueryBuilder':
+        """Image similarity search."""
+        self._ensure_not_executed()
+        self.state.search_type = SearchType.NEAR_IMAGE
+        self.state.search_params = {'image': image, **kwargs}
+        return self
+    
+    def search_by_type(
+        self,
+        search_type: 'SearchType',
+        query: Optional[str] = None,
+        **kwargs
+    ) -> 'QueryBuilder':
+        """
+        Execute search by type (unified method).
+        
+        Dispatches to the appropriate search method based on SearchType enum.
+        
+        Args:
+            search_type: SearchType enum value
+            query: Search query (required for most search types)
+            **kwargs: Additional search parameters
+        
+        Returns:
+            QueryBuilder instance
+        
+        Example:
+            from db import SearchType
+            
+            # BM25 search
+            results = Article.objects.search_by_type(
+                SearchType.BM25,
+                query="python programming"
+            ).all()
+            
+            # Hybrid search with alpha
+            results = Article.objects.search_by_type(
+                SearchType.HYBRID,
+                query="AI",
+                alpha=0.8
+            ).all()
+            
+            # Fetch without search
+            results = Article.objects.search_by_type(
+                SearchType.FETCH_OBJECTS
+            ).limit(10).all()
+        """
+
+        self._ensure_not_executed()
+        
+        if search_type == SearchType.BM25:
+            return self.bm25(query, **kwargs)
+        elif search_type == SearchType.NEAR_TEXT:
+            return self.near_text(query, **kwargs)
+        elif search_type == SearchType.NEAR_VECTOR:
+            return self.near_vector(kwargs.get('vector', []), **kwargs)
+        elif search_type == SearchType.HYBRID:
+            return self.hybrid(query, **kwargs)
+        elif search_type == SearchType.FUZZY:
+            return self.fuzzy(query, **kwargs)
+        elif search_type == SearchType.NEAR_IMAGE:
+            return self.near_image(kwargs.get('image'), **kwargs)
+        elif search_type == SearchType.FETCH_OBJECTS:
+            # Just apply any kwargs as params, no search
+            self.state.search_type = SearchType.FETCH_OBJECTS
+            self.state.search_params = kwargs
+            return self
+        else:
+            # Default to hybrid
+            logger.warning(f"Unknown search type {search_type}, defaulting to HYBRID")
+            return self.hybrid(query, **kwargs)
+    
     def limit(self, n: int) -> 'QueryBuilder':
         """Set result limit."""
         self._ensure_not_executed()

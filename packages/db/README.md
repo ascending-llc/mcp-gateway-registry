@@ -324,6 +324,41 @@ print(f"Deleted {count} objects")
 
 ## Search Operations
 
+### Unified Search by Type
+
+The `search_by_type()` method provides a unified interface for all search types:
+
+```python
+from db import SearchType
+
+# Works with models
+results = Article.objects.search_by_type(
+    SearchType.HYBRID,
+    query="machine learning"
+).all()
+
+# Works with collections (no model needed)
+from db.search import get_search_interface
+
+search = get_search_interface()
+results = search.collection("Articles").search_by_type(
+    SearchType.BM25,
+    query="python"
+).all()
+
+# Dynamic type selection
+def smart_search(query: str, mode: str):
+    type_map = {
+        'exact': SearchType.BM25,
+        'semantic': SearchType.NEAR_TEXT,
+        'balanced': SearchType.HYBRID
+    }
+    return Article.objects.search_by_type(
+        type_map.get(mode, SearchType.HYBRID),
+        query=query
+    ).all()
+```
+
 ### Basic Search
 
 ```python
@@ -341,6 +376,19 @@ results = Article.objects.hybrid("AI", alpha=0.7).all()
 
 # Fuzzy search (typo-tolerant)
 results = Article.objects.fuzzy("machin lernin").all()
+
+# Unified search by type (recommended for dynamic selection)
+from db import SearchType
+
+results = Article.objects.search_by_type(
+    SearchType.HYBRID,
+    query="machine learning"
+).all()
+
+results = Article.objects.search_by_type(
+    SearchType.BM25,
+    query="Python 3.11"
+).all()
 ```
 
 ### Filtering
@@ -446,6 +494,24 @@ search = get_search_interface()
 results = search.across(["Articles", "Documents"])\
     .search("python")\
     .all()
+
+# Dynamic search type selection
+from db import SearchType
+
+def search_with_mode(query: str, mode: str):
+    """Select search type based on mode."""
+    search_type_map = {
+        'exact': SearchType.BM25,
+        'semantic': SearchType.NEAR_TEXT,
+        'balanced': SearchType.HYBRID,
+        'fuzzy': SearchType.FUZZY
+    }
+    search_type = search_type_map.get(mode, SearchType.HYBRID)
+    
+    return Article.objects.search_by_type(search_type, query=query).all()
+
+# Use
+results = search_with_mode("python programming", mode="balanced")
 ```
 
 ---
