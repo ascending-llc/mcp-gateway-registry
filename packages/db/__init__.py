@@ -1,33 +1,127 @@
 # Core
 from .core import (
-    WeaviateClient, WeaviateConfig, WeaviateClientRegistry,
-    init_weaviate, get_weaviate_client, close_weaviate,
-    LLMProvider, SearchType,
-    DoesNotExist, MultipleObjectsReturned
+    # Client
+    WeaviateClient,
+    ManagedConnection,
+    
+    # Configuration
+    ConnectionConfig,
+    TimeoutConfig,
+    
+    # Providers
+    EmbeddingsProvider,
+    BedrockProvider,
+    OpenAIProvider,
+    ProviderFactory,
+    
+    # Registry
+    WeaviateClientRegistry,
+    init_weaviate,
+    get_weaviate_client,
+    close_weaviate,
+    
+    # Enums
+    LLMProvider,
+    SearchType,
+    
+    # Exceptions (all of them)
+    WeaviateORMException,
+    ConnectionException,
+    ConnectionFailed,
+    ConfigurationException,
+    InvalidProvider,
+    MissingCredentials,
+    QueryException,
+    DoesNotExist,
+    MultipleObjectsReturned,
+    ValidationException,
+    FieldValidationError,
+    CollectionException,
+    CollectionNotFound
 )
 
 # Models
 from .models import (
+    # Model base
     Model,
-    TextField, IntField, FloatField, BooleanField,
-    DateTimeField, UUIDField, TextArrayField, IntArrayField
+    
+    # Field types
+    TextField,
+    IntField,
+    FloatField,
+    BooleanField,
+    DateTimeField,
+    UUIDField,
+    TextArrayField,
+    IntArrayField,
+    
+    # Validators
+    FieldValidator,
+    RequiredValidator,
+    MaxLengthValidator,
+    MinLengthValidator,
+    RangeValidator,
+    PatternValidator,
+    ChoicesValidator,
+    EmailValidator,
+    URLValidator,
+    
+    # Converters
+    FieldConverter,
+    DateTimeConverter,
+    JSONConverter,
+    EnumConverter,
+    BoolConverter
 )
 
 # Managers
 from .managers import (
-    CollectionManager, QuerySet, ObjectManager, DirectDataManager
+    BatchResult,
+    CollectionManager,
+    ObjectManager,
 )
 
 # Search
-from .search import SearchManager, AdvancedQuerySet, DirectSearchManager, BaseSearchOperations
+from .search import (
+    # Core search
+    Q,
+    and_,
+    or_,
+    not_,
+    QueryBuilder,
+    UnifiedSearchInterface,
+    get_search_interface,
+    search_model,
+    search_collection,
+    
+    # Advanced
+    AggregationBuilder,
+    FilterOperatorRegistry,
+    SearchStrategyFactory,
+    
+    # Targets
+    SearchTarget,
+    ModelTarget,
+    CollectionTarget,
+)
 
 __all__ = [
     # Core - Client
     'WeaviateClient',
-    'WeaviateConfig',
-    'WeaviateClientRegistry',
+    'ManagedConnection',
+    
+    # Core - Configuration
+    'ConnectionConfig',
+    'TimeoutConfig',
+    
+    # Core - Providers
+    'EmbeddingsProvider',
+    'BedrockProvider',
+    'OpenAIProvider',
+    'ProviderFactory',
     
     # Core - Registry
+    'WeaviateClientRegistry',
     'init_weaviate',
     'get_weaviate_client',
     'close_weaviate',
@@ -37,10 +131,24 @@ __all__ = [
     'SearchType',
     
     # Core - Exceptions
+    'WeaviateORMException',
+    'ConnectionException',
+    'ConnectionFailed',
+    'ConfigurationException',
+    'InvalidProvider',
+    'MissingCredentials',
+    'QueryException',
     'DoesNotExist',
     'MultipleObjectsReturned',
+    'ValidationException',
+    'FieldValidationError',
+    'CollectionException',
+    'CollectionNotFound',
+    'InsertFailed',
+    'UpdateFailed',
+    'DeleteFailed',
     
-    # Models
+    # Models - Base
     'Model',
     
     # Models - Fields
@@ -53,15 +161,47 @@ __all__ = [
     'TextArrayField',
     'IntArrayField',
     
-    # Managers
-    'CollectionManager',
-    'QuerySet',
-    'ObjectManager',
-    'DirectDataManager',
+    # Models - Validators
+    'FieldValidator',
+    'RequiredValidator',
+    'MaxLengthValidator',
+    'MinLengthValidator',
+    'RangeValidator',
+    'PatternValidator',
+    'ChoicesValidator',
+    'EmailValidator',
+    'URLValidator',
     
-    # Search
-    'SearchManager',
-    'AdvancedQuerySet',
-    'DirectSearchManager',
-    'BaseSearchOperations',
+    # Models - Converters
+    'FieldConverter',
+    'DateTimeConverter',
+    'JSONConverter',
+    'EnumConverter',
+    'BoolConverter',
+    
+    # Managers
+    'BatchResult',
+    'CollectionManager',
+    'ObjectManager',
+    
+    # Search - Core
+    'Q',
+    'and_',
+    'or_',
+    'not_',
+    'QueryBuilder',
+    'UnifiedSearchInterface',
+    'get_search_interface',
+    'search_model',
+    'search_collection',
+    
+    # Search - Advanced
+    'AggregationBuilder',
+    'FilterOperatorRegistry',
+    'SearchStrategyFactory',
+    'SearchTarget',
+    'ModelTarget',
+    'CollectionTarget',
 ]
+
+__version__ = '2.0.0'

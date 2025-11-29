@@ -1,921 +1,659 @@
-# Weaviate Django-like ORM
+# Weaviate Django-ORM Framework
 
-A Django-inspired ORM framework for Weaviate with AWS Bedrock support and semantic search capabilities.
+A Django-inspired ORM framework for Weaviate with advanced search capabilities.
 
-1. **Model-based** (recommended for structured data): `Article.objects.smart_search(...)`
-2. **Direct search** (suitable for dynamic collections): `DirectSearchManager.smart_search("CollectionName", ...)`
+## Features
 
-👉 For detailed usage guide, see [DIRECT_SEARCH_USAGE.md](./DIRECT_SEARCH_USAGE.md)
-
-## Directory Structure
-
-```
-packages/db/
-├── core/          # Client, registry, exceptions
-├── models/        # Model base class and field types
-├── managers/      # CRUD and query operations
-│   └── data.py    # DirectDataManager - Direct data management (no model required)
-└── search/        # Semantic and hybrid search
-    ├── base.py    # BaseSearchOperations - Base search operations (shared)
-    ├── manager.py # SearchManager - Model-based search
-    └── direct.py  # DirectSearchManager - Direct search (no model required)
-```
-
----
-
-## 🚀 Quick Examples
-
-### Approach 1: Model-based (Recommended)
-
-```python
-from packages.db import Model, TextField
-
-class Article(Model):
-    title = TextField()
-    content = TextField()
-
-# Search
-results = Article.objects.smart_search(query="AI")
-```
-
-### Approach 2: Direct Search (No Model Required) ✨ NEW
-
-```python
-from packages.db import DirectSearchManager, DirectDataManager, get_weaviate_client
-
-client = get_weaviate_client()
-search_mgr = DirectSearchManager(client)
-data_mgr = DirectDataManager(client)
-
-# Search any collection directly, no model definition needed
-results = search_mgr.smart_search("Article", query="AI", limit=10)
-
-# Direct data operations
-data_mgr.insert("Article", {"title": "New Article", "content": "..."})
-```
+- 🎯 Django-like API with `Model.objects` pattern
+- 🔍 Advanced search (BM25, semantic, hybrid, fuzzy)
+- 📊 Aggregation (group by, count, avg, sum, min, max)
+- ✅ Field validation and type conversion
+- 🔧 Clean configuration (3 objects vs 17 parameters)
+- 🔌 Extensible providers, validators, and search strategies
+- 📦 Batch operations with error reporting
+- 🤖 Generative search (RAG) and reranking
+- ⚡ High performance (optimized queries, caching, parallel execution)
 
 ---
 
 ## Quick Start
 
-### 1. Create WeaviateClient
+### Installation
 
-```python
-from packages.db import WeaviateClient
-
-# From environment variables (recommended)
-client = WeaviateClient()
-
-# With custom parameters
-client = WeaviateClient(
-    host="localhost",
-    port=8099,
-    api_key="my-key",
-    embeddings_provider="bedrock",
-    aws_access_key="your-key",
-    aws_secret_key="your-secret",
-    aws_region="us-east-1"
-)
+```bash
+pip install -e ./packages
 ```
 
-**Environment Variables:**
+### Environment Variables
+
 ```bash
+# Weaviate Connection
 WEAVIATE_HOST=127.0.0.1
 WEAVIATE_PORT=8099
 WEAVIATE_API_KEY=your-api-key
-EMBEDDINGS_PROVIDER=bedrock
+
+# Embeddings Provider
+EMBEDDINGS_PROVIDER=bedrock  # or openai
+
+# AWS Bedrock - Option 1: Explicit credentials
 AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=your-key
 AWS_SECRET_ACCESS_KEY=your-secret
+
+# AWS Bedrock - Option 2: IAM Role (EC2/ECS/EKS)
+# No AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY needed
+# The SDK will automatically use instance profile credentials
+AWS_REGION=us-east-1
+
+# OpenAI
+OPENAI_API_KEY=sk-your-key
 ```
 
-### 2. Define Model
+### Basic Usage
 
 ```python
-from packages.db import Model, TextField, BooleanField
+from db import WeaviateClient, Model, TextField, IntField
 
+# 1. Initialize client
+client = WeaviateClient()
+
+# 2. Define model
 class Article(Model):
-    title = TextField(description="Article title")
-    content = TextField(description="Article content")
-    published = BooleanField(description="Published status")
+    title = TextField(required=True, max_length=200)
+    content = TextField(required=True)
+    views = IntField(min_value=0)
     
     class Meta:
         collection_name = "Articles"
-        vectorizer = "text2vec-aws"  # AWS Bedrock
-```
 
-### 3. Create Collection
+# 3. Create collection
+Article.create_collection()
 
-```python
-if not Article.collection_exists():
-    Article.create_collection()
-```
-
-### 4. CRUD Operations
-
-```python
-# Create
-article = Article.objects.create(
-    title="Hello World",
-    content="Article content",
-    published=True
-)
-
-# Read
-all_articles = Article.objects.all().all()
-published_articles = Article.objects.filter(published=True).all()
-
-# Update
-Article.objects.update(article, title="New Title")
-
-# Delete
+# 4. CRUD operations
+article = Article.objects.create(title="Test", content="...")
+article = Article.objects.get_by_id("uuid")
+Article.objects.update(article, title="Updated")
 article.delete()
+
+# 5. Search
+results = Article.objects.search("AI").limit(10).all()
+
+# 6. Batch operations
+result = Article.objects.bulk_create(articles, batch_size=200)
+print(f"Success: {result.successful}/{result.total}")
 ```
-
-### 5. Search
-
-#### Approach A: Model-based Search
-
-```python
-# Smart search (hybrid: 70% semantic + 30% keyword)
-results = Article.objects.smart_search(
-    query="python programming",
-    field_filters={"published": True},
-    limit=10
-)
-
-# Semantic search
-results = Article.objects.near_text_search(
-    text="machine learning",
-    limit=5
-)
-
-# NEW: Universal search with SearchType
-from packages.db import SearchType
-
-# Semantic search
-results = Article.objects.search_by_type(
-    SearchType.NEAR_TEXT,
-    text="machine learning",
-    limit=10
-)
-
-# Hybrid search
-results = Article.objects.search_by_type(
-    SearchType.HYBRID,
-    text="deep learning",
-    alpha=0.7,
-    limit=10
-)
-
-# Using string instead of enum
-results = Article.objects.search_by_type(
-    "near_text",  # String works too
-    text="AI research",
-    limit=10
-)
-```
-
-#### Approach B: Direct Search (No Model Required)
-
-```python
-from packages.db import DirectSearchManager, get_weaviate_client
-
-search_mgr = DirectSearchManager(get_weaviate_client())
-
-# Smart search - directly by collection name
-results = search_mgr.smart_search(
-    "Articles",  # collection name
-    query="python programming",
-    field_filters={"published": True},
-    limit=10
-)
-
-# Semantic search
-results = search_mgr.near_text(
-    "Articles",
-    text="machine learning",
-    limit=5
-)
-
-# BM25 keyword search
-results = search_mgr.bm25(
-    "Articles",
-    text="python tutorial",
-    limit=10
-)
-
-# Hybrid search
-results = search_mgr.hybrid(
-    "Articles",
-    text="deep learning",
-    alpha=0.7,  # 0.0 = BM25, 1.0 = semantic
-    limit=10
-)
-```
-
-📖 **More search examples and advanced usage**: [DIRECT_SEARCH_USAGE.md](./DIRECT_SEARCH_USAGE.md)
 
 ---
 
-## 🚀 Advanced Search Features
+## Architecture
 
-### Universal Search with SearchType
-
-The framework now provides a universal search API that accepts a `SearchType` parameter, allowing you to dynamically select search strategies at runtime.
-
-#### Available Search Types
-
-```python
-from packages.db import SearchType
-
-# Available search types:
-SearchType.NEAR_TEXT      # Semantic search using text
-SearchType.NEAR_VECTOR    # Semantic search using vector
-SearchType.NEAR_IMAGE     # Image similarity search
-SearchType.BM25           # Keyword search (BM25F)
-SearchType.HYBRID         # Hybrid search (BM25 + semantic)
-SearchType.FETCH_OBJECTS  # Simple object fetch with filters
-SearchType.FUZZY          # Fuzzy search (typo-tolerant)
+```
+db/
+├── core/                   # Client, configuration, providers
+│   ├── client.py           # WeaviateClient
+│   ├── config.py           # ConnectionConfig, TimeoutConfig
+│   ├── providers.py        # EmbeddingsProvider (strategy pattern)
+│   ├── registry.py         # Singleton registry
+│   └── exceptions.py       # Exception hierarchy
+│
+├── models/                 # Model definitions
+│   ├── model.py            # Model base class
+│   ├── base.py             # Field types
+│   ├── descriptors.py      # ObjectManagerDescriptor
+│   ├── validators.py       # Field validators
+│   └── converters.py       # Type converters
+│
+├── managers/               # CRUD operations
+│   ├── batch.py            # BatchResult
+│   ├── collection.py       # CollectionManager
+│   ├── object.py           # ObjectManager
+│   └── data.py             # DirectDataManager
+│
+└── search/                 # Search framework
+    ├── filters.py          # Q objects, FilterOperatorRegistry
+    ├── query_builder.py    # QueryBuilder, QueryExecutor
+    ├── strategies.py       # Search strategies
+    ├── unified.py          # UnifiedSearchInterface
+    ├── aggregation.py      # Aggregation support
+    ├── advanced.py         # Generative, reranking
+    ├── performance.py      # Caching, optimization
+    └── plugins.py          # Plugin system
 ```
 
-#### Understanding Search Types: BM25 vs Hybrid vs Semantic
-
-**1. BM25 (Keyword Search)**
-- **How it works**: Traditional keyword matching algorithm based on term frequency (TF) and inverse document frequency (IDF)
-- **Best for**: Exact term matching, technical keywords, product codes, IDs
-- **Pros**: Fast, deterministic, works well with precise terminology
-- **Cons**: Cannot understand meaning, synonyms, or context
-- **Example use case**: Searching for "Python 3.11.5" or specific product SKU
-
-```python
-# BM25 finds documents with exact keyword matches
-results = Article.objects.search_by_type(
-    SearchType.BM25,
-    text="Python programming tutorial",  # Matches "Python", "programming", "tutorial"
-    limit=10
-)
-```
-
-**2. NEAR_TEXT (Semantic Search)**
-- **How it works**: Uses AI embeddings to understand meaning and context
-- **Best for**: Conceptual queries, natural language, finding similar meanings
-- **Pros**: Understands context, synonyms, and semantic similarity
-- **Cons**: Slower, may miss exact keyword matches, requires vectorization
-- **Example use case**: "How to learn coding for beginners" finds articles about programming tutorials
-
-```python
-# Semantic search understands meaning
-results = Article.objects.search_by_type(
-    SearchType.NEAR_TEXT,
-    text="learning to code",  # Also finds "programming tutorial", "beginner coding"
-    limit=10
-)
-```
-
-**3. HYBRID (Best of Both Worlds)**
-- **How it works**: Combines BM25 keyword matching + semantic understanding
-- **Best for**: General-purpose search, balanced precision and recall
-- **Pros**: Gets both exact matches AND similar meanings
-- **Cons**: Slightly slower than BM25, requires tuning alpha parameter
-- **Example use case**: Most production search applications
-
-```python
-# Hybrid search combines both approaches
-results = Article.objects.search_by_type(
-    SearchType.HYBRID,
-    text="Python machine learning",
-    alpha=0.7,  # 0.0 = pure BM25, 1.0 = pure semantic, 0.7 = balanced toward semantic
-    limit=10
-)
-```
-
-**Alpha Parameter in Hybrid Search:**
-- `alpha=0.0`: 100% BM25 (keyword matching only)
-- `alpha=0.3`: 30% semantic, 70% keyword (good for technical content)
-- `alpha=0.5`: Balanced (50-50 split)
-- `alpha=0.7`: 70% semantic, 30% keyword (good for natural language)
-- `alpha=1.0`: 100% semantic (meaning-based only)
-
-**Comparison Table:**
-
-| Feature | BM25 | NEAR_TEXT | HYBRID |
-|---------|------|-----------|--------|
-| **Speed** | ⚡ Fastest | 🐢 Slower | ⚡ Fast |
-| **Exact matches** | ✅ Excellent | ❌ May miss | ✅ Good |
-| **Semantic understanding** | ❌ None | ✅ Excellent | ✅ Good |
-| **Synonyms** | ❌ No | ✅ Yes | ✅ Yes |
-| **Technical terms** | ✅ Excellent | ⚠️ Variable | ✅ Good |
-| **Natural language** | ⚠️ Limited | ✅ Excellent | ✅ Good |
-| **Typos** | ❌ Fails | ⚠️ Sometimes | ⚠️ Sometimes |
-
-**When to Use Each:**
-
-| Scenario | Recommended Type | Reason |
-|----------|-----------------|--------|
-| Product SKU search | BM25 | Need exact matching |
-| Academic paper search | NEAR_TEXT | Conceptual understanding |
-| E-commerce search | HYBRID (α=0.5) | Balance precision and discovery |
-| Technical docs search | HYBRID (α=0.3) | Favor exact terms but allow semantic |
-| FAQ/Support search | HYBRID (α=0.7) | Natural language queries |
-| Code search | BM25 | Exact function/variable names |
-| Blog/article search | NEAR_TEXT or HYBRID (α=0.7) | Content similarity |
-
-**Practical Example:**
-
-```python
-query = "machine learning algorithms"
-
-# BM25: Finds documents with those exact words
-bm25_results = Article.objects.search_by_type(SearchType.BM25, text=query)
-# Found: "Machine Learning Algorithms", "ML Algorithms Guide"
-
-# NEAR_TEXT: Finds conceptually similar content
-semantic_results = Article.objects.search_by_type(SearchType.NEAR_TEXT, text=query)
-# Found: "Neural Networks Tutorial", "Deep Learning Basics", "AI Model Training"
-
-# HYBRID: Gets both exact matches AND related content
-hybrid_results = Article.objects.search_by_type(
-    SearchType.HYBRID, 
-    text=query, 
-    alpha=0.7  # Favor semantic but include keyword matches
-)
-# Found: "Machine Learning Algorithms" (exact), "Neural Networks" (related), 
-#        "AI Model Training" (related), "ML Algorithms Guide" (exact)
-```
-
-#### Universal Search API
-
-The `search_by_type()` method is available in both approaches:
-
-**Model-based:**
-
-```python
-from packages.db import Model, TextField, SearchType
-
-class Article(Model):
-    title = TextField()
-    content = TextField()
-
-# Use search_by_type() with any search strategy
-results = Article.objects.search_by_type(
-    SearchType.HYBRID,  # Dynamically select search type
-    text="machine learning",
-    alpha=0.7,
-    limit=10
-)
-
-# Or use string instead of enum
-results = Article.objects.search_by_type(
-    "near_text",  # String works too
-    text="deep learning",
-    limit=10
-)
-```
-
-**Direct search (no model):**
-
-```python
-from packages.db import DirectSearchManager, SearchType, get_weaviate_client
-
-search_mgr = DirectSearchManager(get_weaviate_client())
-
-# Use search_by_type() with any search strategy
-results = search_mgr.search_by_type(
-    "Articles",  # Collection name
-    SearchType.HYBRID,
-    text="machine learning",
-    alpha=0.7,
-    limit=10
-)
-
-# Or use string instead of enum
-results = search_mgr.search_by_type(
-    "Articles",
-    "near_text",
-    text="deep learning",
-    limit=10
-)
-```
-
-#### Dynamic Search Strategy Selection
-
-```python
-from packages.db import SearchType
-
-# Select search strategy based on user preference
-user_preference = "precise"  # or "fuzzy" or "comprehensive"
-
-if user_preference == "precise":
-    search_type = SearchType.BM25
-elif user_preference == "fuzzy":
-    search_type = SearchType.FUZZY
-else:
-    search_type = SearchType.HYBRID
-
-# Execute search with selected strategy
-
-# Model-based approach:
-results = Article.objects.search_by_type(
-    search_type,
-    text="python programming",
-    limit=10
-)
-
-# Direct search approach:
-search_mgr = DirectSearchManager(get_weaviate_client())
-results = search_mgr.search_by_type(
-    "Articles",
-    search_type,
-    text="python programming",
-    limit=10
-)
-```
-
-### Cross-Collection Search
-
-Search across multiple collections concurrently with automatic result merging and sorting.
-
-#### Grouped Results by Collection
-
-```python
-from packages.db import DirectSearchManager, SearchType, get_weaviate_client
-
-search_mgr = DirectSearchManager(get_weaviate_client())
-
-# Search multiple collections, get results grouped by collection
-results = search_mgr.search_multiple_collections(
-    ["Articles", "Documents", "Notes"],
-    SearchType.NEAR_TEXT,
-    text="machine learning",
-    limit_per_collection=5
-)
-
-# Access results by collection
-for collection, items in results.items():
-    print(f"{collection}: {len(items)} results")
-    for item in items:
-        print(f"  - {item['title']} (from {item['_collection']})")
-```
-
-#### Merged and Sorted Results
-
-```python
-# Search multiple collections, get merged results sorted by relevance
-results = search_mgr.search_multiple_collections_merged(
-    ["Articles", "Documents", "Notes"],
-    SearchType.HYBRID,
-    text="python programming",
-    total_limit=10,  # Top 10 across all collections
-    alpha=0.7
-)
-
-# Results are automatically sorted by relevance
-for result in results:
-    print(f"[{result['_collection']}] {result['title']}")
-    print(f"  Score: {result.get('_score', 0):.4f}")
-```
-
-#### Compare Search Strategies
-
-Both model-based and direct search support easy comparison:
-
-```python
-from packages.db import SearchType
-
-query = "data science"
-strategies = [
-    (SearchType.NEAR_TEXT, "Semantic"),
-    (SearchType.BM25, "Keyword"),
-    (SearchType.HYBRID, "Hybrid"),
-]
-
-# Model-based approach:
-for search_type, name in strategies:
-    results = Article.objects.search_by_type(
-        search_type,
-        text=query,
-        limit=5
-    )
-    print(f"{name}: {len(results)} results")
-
-# Direct search approach:
-for search_type, name in strategies:
-    results = search_mgr.search_by_type(
-        "Articles",
-        search_type,
-        text=query,
-        limit=5
-    )
-    print(f"{name}: {len(results)} results")
-```
-
-### Key Benefits
-
-✅ **Single unified API** for all search types  
-✅ **Works with both model-based and direct search**  
-✅ **Dynamic strategy selection** at runtime  
-✅ **Concurrent cross-collection search**  
-✅ **Automatic result merging and sorting**  
-✅ **Easy comparison** of different search methods  
-✅ **Type-safe with models, flexible without models**  
-
-### Complete Example
-
-**Model-based approach:**
-
-```python
-from packages.db import Model, TextField, SearchType
-
-class Product(Model):
-    name = TextField()
-    description = TextField()
-    
-    class Meta:
-        collection_name = "Products"
-
-# 1. Universal search with different strategies
-results = Product.objects.search_by_type(
-    SearchType.HYBRID,
-    text="wireless headphones",
-    alpha=0.7,
-    limit=10
-)
-
-# 2. Compare strategies
-for search_type in [SearchType.NEAR_TEXT, SearchType.BM25, SearchType.HYBRID]:
-    results = Product.objects.search_by_type(
-        search_type,
-        text="bluetooth audio",
-        limit=5
-    )
-    print(f"{search_type.value}: {len(results)} results")
-
-# 3. Dynamic selection
-user_mode = "semantic"
-search_type = SearchType.NEAR_TEXT if user_mode == "semantic" else SearchType.BM25
-results = Product.objects.search_by_type(search_type, text="speakers", limit=10)
-```
-
-**Direct search approach (no model required):**
-
-```python
-from packages.db import DirectSearchManager, SearchType, get_weaviate_client
-
-# Initialize
-search_mgr = DirectSearchManager(get_weaviate_client())
-
-# 1. Universal search with different strategies
-results = search_mgr.search_by_type(
-    "Products",
-    SearchType.HYBRID,
-    text="wireless headphones",
-    alpha=0.7,
-    limit=10
-)
-
-# 2. Cross-collection search
-results = search_mgr.search_multiple_collections(
-    ["Products", "Reviews", "Docs"],
-    SearchType.NEAR_TEXT,
-    text="noise cancellation",
-    limit_per_collection=5
-)
-
-# 3. Merged cross-collection search
-top_results = search_mgr.search_multiple_collections_merged(
-    ["Products", "Reviews", "Docs"],
-    SearchType.HYBRID,
-    text="bluetooth audio",
-    total_limit=20,
-    alpha=0.6
-)
-```
-
-For more examples, see `packages/examples/advanced_search_example.py`
+**Design Patterns:**
+- Strategy (providers, search strategies)
+- Adapter (search targets)
+- Builder (query building)
+- Descriptor (lazy initialization)
+- Plugin (extensibility)
 
 ---
 
-## WeaviateClient Configuration
+## Configuration
 
-### All Parameters
+### Simple (Environment Variables)
 
 ```python
+from db import WeaviateClient
+
+client = WeaviateClient()  # Uses environment variables
+
+# Health check
+if client.is_ready():
+    print("✅ Client ready")
+```
+
+### Custom Configuration
+
+```python
+from db import WeaviateClient, ConnectionConfig, BedrockProvider, TimeoutConfig
+
+# With explicit AWS credentials
 client = WeaviateClient(
-    # Connection
-    host="127.0.0.1",              # Weaviate host
-    port=8099,                      # Weaviate port
-    api_key="test-secret-key",     # API key
-    
-    # Embeddings
-    embeddings_provider="bedrock",  # "bedrock" or "openai"
-    
-    # AWS (for Bedrock)
-    aws_access_key="...",
-    aws_secret_key="...",
-    aws_session_token=None,         # Optional
-    aws_region="us-east-1",
-    
-    # OpenAI (alternative)
-    openai_api_key=None,
-    
-    # Performance
-    session_pool_connections=10,
-    session_pool_maxsize=10,
-    init_timeout=10,
-    query_timeout=60,
-    insert_timeout=60
+    connection=ConnectionConfig(
+        host="localhost",
+        port=8099,
+        api_key="secret",
+        pool_connections=20
+    ),
+    provider=BedrockProvider(
+        access_key="aws-key",
+        secret_key="aws-secret",
+        region="us-east-1"
+    ),
+    timeouts=TimeoutConfig(query=120)
 )
+
+# Using IAM Role (no credentials needed)
+client = WeaviateClient(
+    connection=ConnectionConfig(host="localhost", port=8099),
+    provider=BedrockProvider(
+        access_key="",  # Empty = use IAM Role
+        secret_key="",
+        region="us-east-1"
+    )
+)
+
+# Or simply (from env, supports both methods)
+client = WeaviateClient()  # Auto-detects IAM Role if no credentials in env
 ```
 
-### Parameter Priority
+### Custom Provider
 
-1. **Passed parameters** (highest)
-2. **Environment variables**
-3. **Default values** (lowest)
+```python
+from db.core.providers import EmbeddingsProvider, ProviderFactory
+
+class CustomProvider(EmbeddingsProvider):
+    def get_headers(self):
+        return {'X-Custom-Key': self.api_key}
+    
+    def get_vectorizer_name(self):
+        return "text2vec-custom"
+    
+    def get_model_name(self):
+        return "custom-model"
+    
+    @classmethod
+    def from_env(cls):
+        import os
+        return cls(os.getenv("CUSTOM_KEY"))
+
+ProviderFactory.register('custom', CustomProvider)
+```
 
 ---
 
 ## Model Definition
 
-### Field Types
+### Basic Model
 
 ```python
-from packages.db import (
-    TextField,        # Text field
-    IntField,        # Integer
-    FloatField,      # Float
-    BooleanField,    # Boolean
-    DateTimeField,   # DateTime
-    TextArrayField,  # Text array
-    IntArrayField    # Integer array
-)
-```
+from db import Model, TextField, IntField, BooleanField, DateTimeField
 
-### Example Model
-
-```python
-class Product(Model):
-    name = TextField(description="Product name")
-    price = IntField(description="Price in cents")
-    tags = TextArrayField(description="Tags")
-    in_stock = BooleanField(description="In stock")
+class Article(Model):
+    title = TextField(required=True)
+    content = TextField(required=True)
+    views = IntField()
+    published = BooleanField()
+    created_at = DateTimeField()
     
     class Meta:
-        collection_name = "Products"
-        vectorizer = "text2vec-aws"
+        collection_name = "Articles"
+        vectorizer = "text2vec-openai"
 ```
+
+### Model with Validation
+
+```python
+from db import TextField, IntField, FloatField, EmailValidator, RangeValidator
+
+class User(Model):
+    username = TextField(required=True, min_length=3, max_length=50)
+    email = TextField(required=True, validators=[EmailValidator()])
+    age = IntField(min_value=0, max_value=150)
+    rating = FloatField(validators=[RangeValidator(0.0, 5.0)])
+```
+
+### Available Validators
+
+- `RequiredValidator` - Not None
+- `MaxLengthValidator(max)` - String max length
+- `MinLengthValidator(min)` - String min length
+- `RangeValidator(min, max)` - Numeric range
+- `PatternValidator(regex)` - Regex pattern
+- `ChoicesValidator(choices)` - Allowed values
+- `EmailValidator()` - Email format
+- `URLValidator()` - URL format
+
+### Available Converters
+
+- `DateTimeConverter` - datetime ↔ ISO string
+- `JSONConverter` - dict/list ↔ JSON string
+- `EnumConverter(enum_class)` - Enum ↔ string
+- `BoolConverter` - Flexible bool conversion
 
 ---
 
-## Query Operations
+## CRUD Operations
 
-### Basic Queries
+### Single Operations
 
 ```python
-# Get all
-products = Product.objects.all().all()
+# Create
+article = Article.objects.create(title="Test", content="...")
 
-# Filter
-active = Product.objects.filter(in_stock=True).all()
+# Get by ID (fast)
+article = Article.objects.get_by_id("uuid-123")
 
-# Exclude
-not_keyboards = Product.objects.exclude(name="Keyboard").all()
+# Get by field
+article = Article.objects.get(title="Test")
 
-# Chaining
-results = (Product.objects
-           .filter(in_stock=True)
-           .limit(20)
-           .offset(10)
-           .all())
+# Update
+Article.objects.update(article, title="Updated", views=100)
 
-# Count
-total = Product.objects.filter(in_stock=True).count()
-
-# Get one
-product = Product.objects.get(name="Laptop")
+# Delete
+article.delete()
 ```
 
-### Bulk Operations
+### Batch Operations
 
 ```python
-# Bulk create from instances
-products = [
-    Product(name="Laptop", price=129999),
-    Product(name="Mouse", price=2999),
-]
-Product.objects.bulk_create(products)
+# Bulk create with error reporting
+articles = [Article(title=f"Article {i}") for i in range(1000)]
+result = Article.objects.bulk_create(articles, batch_size=200)
 
-# Bulk create from dicts (simpler)
-Product.objects.bulk_create_from_dicts([
-    {"name": "Monitor", "price": 49999},
-    {"name": "Webcam", "price": 7999},
-])
+print(f"Success: {result.successful}/{result.total}")
+print(f"Failed: {result.failed}")
+print(f"Success rate: {result.success_rate}%")
+
+if result.has_errors:
+    for error in result.errors[:5]:
+        print(f"  {error['uuid']}: {error['message']}")
+
+# Bulk import with progress tracking
+data_list = [{"title": f"Title {i}", "content": "..."} for i in range(10000)]
+
+def show_progress(current, total):
+    print(f"\rProgress: {current}/{total} ({current/total*100:.1f}%)", end="")
+
+result = Article.objects.bulk_import(
+    data_list,
+    batch_size=200,
+    use_dynamic=True,  # Auto-optimize batch size
+    on_progress=show_progress
+)
+
+print(f"\n✅ Imported {result.successful}/{result.total}")
+
+# Bulk update
+updates = [
+    {'id': 'uuid-1', 'views': 100},
+    {'id': 'uuid-2', 'views': 200}
+]
+result = Article.objects.bulk_update(updates)
+
+# Bulk delete by ID
+result = Article.objects.bulk_delete(['uuid-1', 'uuid-2'])
+
+# Delete by condition
+count = Article.objects.delete_where(status="draft", views__lt=10)
+print(f"Deleted {count} objects")
 ```
 
 ---
 
 ## Search Operations
 
-### 1. Smart Search (Recommended)
-
-Automatically selects hybrid search (if query) or filtered fetch (no query).
+### Basic Search
 
 ```python
-# With query: hybrid search (70% semantic + 30% keyword)
-results = Article.objects.smart_search(
-    query="machine learning",
-    limit=10,
-    field_filters={"published": True},
-    list_filters={"tags": ["ai", "ml"]},
-    alpha=0.7  # Higher = more semantic
-)
+# Hybrid search (default)
+results = Article.objects.search("machine learning").limit(10).all()
 
-# Without query: filtered fetch only
-results = Article.objects.smart_search(
-    limit=20,
-    field_filters={"published": True}
-)
+# BM25 keyword search
+results = Article.objects.bm25("Python 3.11").all()
+
+# Semantic search
+results = Article.objects.near_text("artificial intelligence").all()
+
+# Hybrid with alpha control
+results = Article.objects.hybrid("AI", alpha=0.7).all()
+
+# Fuzzy search (typo-tolerant)
+results = Article.objects.fuzzy("machin lernin").all()
 ```
 
-### 2. Semantic Search (Vector)
+### Filtering
 
 ```python
-results = Article.objects.near_text_search(
-    text="deep learning neural networks",
-    limit=5,
-    return_distance=True
-)
+from db import Q
 
-# Access similarity scores
-for article in results:
-    print(f"{article.title}: {article._distance}")
+# Simple filters
+results = Article.objects.filter(category="tech", published=True).all()
+
+# Field lookups
+results = Article.objects.filter(
+    views__gt=1000,
+    tags__contains_any=["python", "ai"],
+    created_at__gte="2024-01-01"
+).all()
+
+# Q objects with logical operators
+results = Article.objects.filter(
+    Q(category="tech") | Q(category="science")
+).filter(views__gt=100).all()
+
+# Complex conditions
+results = Article.objects.filter(
+    (Q(category="tech") | Q(category="science")) &
+    Q(published=True) &
+    ~Q(status="draft")
+).all()
 ```
 
-### 3. Keyword Search (BM25)
+### Field Lookups
 
 ```python
-results = Article.objects.bm25_search(
-    text="python tutorial",
-    limit=10
-)
+# Comparison
+Article.objects.filter(views__gt=1000)
+Article.objects.filter(views__gte=1000)
+Article.objects.filter(views__lt=100)
+Article.objects.filter(views__lte=100)
+Article.objects.filter(status__ne="draft")
+
+# Arrays
+Article.objects.filter(tags__contains_any=["python", "java"])
+Article.objects.filter(tags__contains_all=["python", "web"])
+Article.objects.filter(category__in=["tech", "science"])
+
+# Strings
+Article.objects.filter(title__like="*Python*")
+
+# Nulls
+Article.objects.filter(deleted_at__is_null=True)
+Article.objects.filter(deleted_at__not_null=True)
 ```
 
-### 4. Hybrid Search
+### Aggregation
 
 ```python
-results = Article.objects.hybrid_search_advanced(
-    text="database optimization",
-    alpha=0.5,  # 0.0=pure BM25, 1.0=pure vector
-    limit=10
-)
+# Group by with metrics
+stats = Article.objects.aggregate()\
+    .group_by("category")\
+    .count()\
+    .avg("views")\
+    .sum("likes")\
+    .execute()
+
+# Result: [
+#   {"group": "tech", "count": 150, "avg_views": 1200},
+#   {"group": "science", "count": 80, "avg_views": 900}
+# ]
+
+# Overall statistics
+stats = Article.objects.aggregate()\
+    .count()\
+    .avg("views")\
+    .max("views")\
+    .execute()
+
+# Filtered aggregation
+stats = Article.objects.aggregate()\
+    .filter(published=True)\
+    .group_by("author")\
+    .count()\
+    .execute()
+```
+
+### Advanced Features
+
+```python
+# Generative search (RAG)
+results = Article.objects.near_text("AI ethics").generative(
+    single_prompt="Summarize: {content}"
+).all()
+
+# Reranking
+results = Article.objects.search("ML").rerank(
+    property="content",
+    query="deep learning"
+).all()
+
+# Cross-collection search
+from db.search import get_search_interface
+
+search = get_search_interface()
+results = search.across(["Articles", "Documents"])\
+    .search("python")\
+    .all()
 ```
 
 ---
 
-## Real-World Examples
-
-### Example 1: Direct Model Usage
+## Collection Management
 
 ```python
-from packages.db import Model, TextField, TextArrayField, BooleanField, WeaviateClient
+from db.managers import CollectionManager
+from weaviate.classes.config import DataType
 
-# Define model
-class MCPTool(Model):
-    tool_name = TextField(description="Tool name")
-    server_path = TextField(description="Server path")
-    description_main = TextField(description="Description")
-    tags = TextArrayField(description="Tags")
-    is_enabled = BooleanField(description="Enabled")
-    
-    class Meta:
-        collection_name = "MCP_GATEWAY"
-        vectorizer = "text2vec-aws"
-
-# Initialize client (from env vars)
-client = WeaviateClient()
+manager = CollectionManager(client)
 
 # Create collection
-if not MCPTool.collection_exists():
-    MCPTool.create_collection()
+Article.create_collection()
 
-# Add tools
-tools = MCPTool.objects.bulk_create_from_dicts([
-    {
-        "tool_name": "get_weather",
-        "server_path": "/weather",
-        "description_main": "Get weather data",
-        "tags": ["weather", "api"],
-        "is_enabled": True
-    }
-])
+# Check if exists
+exists = Article.collection_exists()
 
-# Search with filters
-results = MCPTool.objects.smart_search(
-    query="weather forecast",
-    field_filters={"is_enabled": True},
-    list_filters={"tags": ["weather"]},
-    limit=10
+# List all collections
+collections = manager.list_all_collections()
+print(f"Collections: {collections}")
+
+# Add property dynamically
+manager.add_property(
+    Article,
+    "featured",
+    DataType.BOOL,
+    description="Is featured"
 )
 
-# Remove by service
-tools = MCPTool.objects.filter(server_path="/weather").all()
-for tool in tools:
-    tool.delete()
-```
+# Get collection stats
+stats = manager.get_collection_stats(Article)
+print(f"Objects: {stats['object_count']}")
+print(f"Properties: {stats['property_count']}")
 
-### Example 2: Vector Search Service
+# Batch create collections
+results = manager.batch_create_collections([Article, Product, User])
 
-```python
-from packages.db import WeaviateClient
+# Delete collection
+Article.delete_collection()
 
-
-class VectorSearchService:
-    """Service wrapper using packages.db"""
-
-    def __init__(self):
-        """Initialize from environment variables (no params needed!)"""
-        # WeaviateClient automatically created from env vars
-        # Singleton pattern ensures only one instance
-        pass
-
-    async def initialize(self):
-        """Initialize and ensure collection exists"""
-        from registry.search.models import McpTool
-
-        if not McpTool.collection_exists():
-            McpTool.create_collection()
-
-    async def add_service(self, service_path, server_info, is_enabled=True):
-        """Add or update service tools"""
-        from registry.search.models import McpTool
-
-        # Remove old tools
-        old_tools = McpTool.objects.filter(server_path=service_path).all()
-        for tool in old_tools:
-            tool.delete()
-
-        # Add new tools
-        tools = McpTool.bulk_create_from_server_info(
-            service_path, server_info, is_enabled
-        )
-        return len(tools)
-
-    async def search(self, query, tags=None, limit=10):
-        """Search with vector similarity"""
-        from registry.search.models import McpTool
-
-        tools = McpTool.objects.smart_search(
-            query=query,
-            field_filters={"is_enabled": True},
-            list_filters={"tags": tags} if tags else None,
-            limit=limit,
-            alpha=0.7  # 70% semantic, 30% keyword
-        )
-
-        return [
-            {
-                "tool_name": t.tool_name,
-                "server_path": t.server_path,
-                "distance": getattr(t, '_distance', None)
-            }
-            for t in tools
-        ]
-
-
-# Usage
-service = VectorSearchService()
-await service.initialize()
-
-# Add tools
-count = await service.add_service("/weather", server_info, True)
-
-# Search
-results = await service.search("weather forecast", tags=["weather"])
+# Clear cache
+manager.clear_cache()
 ```
 
 ---
 
-## Import Guide
-
-### Recommended Imports
+## Exception Handling
 
 ```python
-from packages.db import (
-    WeaviateClient,
-    Model,
-    TextField, BooleanField, TextArrayField,
-    DoesNotExist, MultipleObjectsReturned
+from db import (
+    DoesNotExist,
+    MultipleObjectsReturned,
+    FieldValidationError,
+    CollectionNotFound,
+    MissingCredentials,
+    ConnectionFailed
+)
+
+# Query exceptions
+try:
+    article = Article.objects.get(title="Nonexistent")
+except DoesNotExist as e:
+    print(f"Not found: {e.model_name} with {e.filters}")
+
+# Validation exceptions
+try:
+    article = Article(title="X")  # Too short
+    article.save()
+except FieldValidationError as e:
+    print(f"{e.field_name}: {e.reason}")
+
+# Configuration exceptions
+try:
+    provider = ProviderFactory.create("invalid")
+except InvalidProvider as e:
+    print(f"Available: {e.available}")
+
+# Connection exceptions
+try:
+    client = WeaviateClient(
+        connection=ConnectionConfig(host="invalid", port=9999)
+    )
+except ConnectionFailed as e:
+    print(f"{e.host}:{e.port} - {e.reason}")
+```
+
+---
+
+## Extensibility
+
+### Custom Filter Operator
+
+```python
+from db.search import FilterOperatorRegistry
+from weaviate.classes.query import Filter
+
+def between(field, value):
+    min_val, max_val = value
+    return (Filter.by_property(field).greater_or_equal(min_val) &
+            Filter.by_property(field).less_or_equal(max_val))
+
+FilterOperatorRegistry.register("between", between)
+
+# Use
+Article.objects.filter(price__between=(10, 100)).all()
+```
+
+### Custom Validator
+
+```python
+from db.models.validators import FieldValidator
+
+class ISBNValidator(FieldValidator):
+    def validate(self, value):
+        return value and len(str(value)) in (10, 13)
+    
+    def get_error_message(self, value):
+        return "Invalid ISBN format"
+
+# Use in model
+class Book(Model):
+    isbn = TextField(validators=[ISBNValidator()])
+```
+
+### Search Plugin
+
+```python
+from db.search.plugins import SearchPlugin, get_plugin_manager
+
+class TimingPlugin(SearchPlugin):
+    def on_before_search(self, state):
+        self.start = time.time()
+        return None
+    
+    def on_after_search(self, state, results, duration):
+        print(f"Search took {duration:.2f}s")
+        return None
+    
+    def on_error(self, state, error):
+        print(f"Error: {error}")
+
+get_plugin_manager().register(TimingPlugin())
+```
+
+---
+
+## Performance
+
+### Query Caching
+
+```python
+from db.search.performance import get_cache
+
+cache = get_cache(max_size=1000, ttl=300)
+
+# Queries are automatically cached
+results = Article.objects.search("AI").all()  # Cached
+results = Article.objects.search("AI").all()  # From cache
+
+# Cache stats
+print(cache.stats())
+# {'hits': 50, 'misses': 10, 'hit_rate': '83.33%'}
+```
+
+### Batch Configuration
+
+```python
+# Fixed batch size
+result = Article.objects.bulk_create(articles, batch_size=500)
+
+# Dynamic batching (auto-optimized)
+result = Article.objects.bulk_import(
+    data_list,
+    use_dynamic=True  # Weaviate auto-tunes batch size
 )
 ```
 
-### Module-Specific Imports
+---
 
-```python
-from packages.db.core import WeaviateClient
-from packages.db.models import Model
-from packages.db.managers import ObjectManager, QuerySet
-from packages.db.search import SearchManager
+## Testing
+
+### Run Tests
+
+```bash
+cd packages
+source .venv/bin/activate
+
+# All tests
+python -m pytest tests/ -v
+
+# By module
+python -m pytest tests/search/ -v      # 186 tests
+python -m pytest tests/core/ -v        # 48 tests
+python -m pytest tests/managers/ -v    # 23 tests
+
+# Quick run
+python -m pytest tests/ -q
+```
+
+### Expected Results
+
+```
+Search:     186 passed ✅
+Core:        48 passed ✅
+Managers:    23 passed ✅
+Total:      257 passed ✅
+Time:       ~1.6 seconds
 ```
 
 ---
@@ -925,118 +663,245 @@ from packages.db.search import SearchManager
 ### WeaviateClient
 
 ```python
-WeaviateClient(
-    host=None,                    # Weaviate host
-    port=None,                    # Weaviate port
-    api_key=None,                 # API key
-    embeddings_provider=None,     # "bedrock" or "openai"
-    aws_access_key=None,         # AWS credentials
-    aws_secret_key=None,
-    aws_region=None,
-    # ... more parameters
-)
+client = WeaviateClient(connection, provider, timeouts)
+client.is_ready() -> bool
+client.ping() -> bool
+client.close()
 ```
 
-### Model Methods
+### ConnectionConfig
 
 ```python
-# Collection management
+config = ConnectionConfig(
+    host="127.0.0.1",
+    port=8099,
+    api_key=None,
+    pool_connections=10,
+    pool_maxsize=10
+)
+config = ConnectionConfig.from_env()
+```
+
+### Model
+
+```python
 Model.create_collection() -> bool
 Model.delete_collection() -> bool
 Model.collection_exists() -> bool
 Model.get_collection_info() -> Dict
-
-# Instance methods
-instance.save() -> Model
-instance.delete() -> bool
+Model.objects -> ObjectManager
 ```
 
-### ObjectManager (Model.objects)
+### ObjectManager
+
+**CRUD:**
+```python
+.create(**kwargs) -> T
+.save(instance) -> T
+.get(**kwargs) -> T
+.get_by_id(uuid) -> T
+.update(instance, **kwargs) -> T
+.delete(instance) -> bool
+```
+
+**Batch:**
+```python
+.bulk_create(instances, batch_size, on_error) -> BatchResult
+.bulk_create_from_dicts(data_list) -> BatchResult
+.bulk_import(data_list, batch_size, use_dynamic, on_progress, on_error) -> BatchResult
+.bulk_update(updates, batch_size) -> BatchResult
+.bulk_delete(ids, batch_size) -> BatchResult
+.delete_where(**filters) -> int
+```
+
+**Query:**
+```python
+.all() -> QueryBuilder
+.filter(**kwargs) -> QueryBuilder
+.exclude(**kwargs) -> QueryBuilder
+```
+
+**Search:**
+```python
+.search(query) -> QueryBuilder
+.bm25(query) -> QueryBuilder
+.near_text(text) -> QueryBuilder
+.hybrid(query, alpha) -> QueryBuilder
+.fuzzy(query) -> QueryBuilder
+```
+
+**Aggregation:**
+```python
+.aggregate() -> AggregationBuilder
+```
+
+### QueryBuilder
 
 ```python
-# CRUD
-Model.objects.create(**kwargs) -> Model
-Model.objects.bulk_create(instances) -> List[Model]
-Model.objects.bulk_create_from_dicts(data_list) -> List[Model]
-Model.objects.get(**kwargs) -> Model
-Model.objects.update(instance, **kwargs) -> Model
-Model.objects.delete(instance) -> bool
+.filter(**kwargs) -> QueryBuilder
+.exclude(**kwargs) -> QueryBuilder
+.search(query) -> QueryBuilder
+.bm25(query) -> QueryBuilder
+.near_text(text) -> QueryBuilder
+.hybrid(query, alpha) -> QueryBuilder
+.limit(n) -> QueryBuilder
+.offset(n) -> QueryBuilder
+.only(*fields) -> QueryBuilder
+.all() -> List
+.first() -> Optional
+.count() -> int
+.exists() -> bool
+```
 
-# Query
-Model.objects.all() -> QuerySet
-Model.objects.filter(**kwargs) -> QuerySet
-Model.objects.exclude(**kwargs) -> QuerySet
+### CollectionManager
 
-# Search
-Model.objects.smart_search(query, limit, field_filters, list_filters, alpha)
-Model.objects.near_text_search(text, limit, **kwargs)
-Model.objects.bm25_search(text, limit, **kwargs)
-Model.objects.hybrid_search_advanced(text, alpha, limit, **kwargs)
+```python
+manager = CollectionManager(client)
+manager.create_collection(model_class, if_not_exists) -> bool
+manager.delete_collection(model_class, if_exists) -> bool
+manager.collection_exists(model_class) -> bool
+manager.get_collection_info(model_class, use_cache) -> Dict
+manager.get_collection_stats(model_class) -> Dict
+manager.batch_create_collections(model_classes) -> Dict
+manager.add_property(model_class, name, data_type, **options) -> bool
+manager.list_all_collections() -> List[str]
+manager.clear_cache()
+```
+
+### BatchResult
+
+```python
+result.total -> int
+result.successful -> int
+result.failed -> int
+result.errors -> List[Dict]
+result.success_rate -> float
+result.is_complete_success -> bool
+result.has_errors -> bool
+```
+
+---
+
+## Examples
+
+### E-commerce Product Search
+
+```python
+class Product(Model):
+    name = TextField(required=True, max_length=100)
+    price = IntField(required=True, min_value=0)
+    in_stock = BooleanField()
+
+# Search products
+results = Product.objects.filter(
+    in_stock=True,
+    price__gte=100,
+    price__lte=500
+).search("wireless headphones").limit(20).all()
+```
+
+### Blog with Statistics
+
+```python
+# Get article stats by category
+stats = Article.objects.aggregate()\
+    .filter(published=True)\
+    .group_by("category")\
+    .count()\
+    .avg("views")\
+    .sum("likes")\
+    .execute()
+
+for stat in stats:
+    print(f"{stat['group']}: {stat['count']} articles, {stat['avg_views']} avg views")
+```
+
+### Large Data Import
+
+```python
+import csv
+
+# Read from CSV
+data_list = []
+with open('articles.csv') as f:
+    reader = csv.DictReader(f)
+    data_list = list(reader)
+
+# Import with progress
+result = Article.objects.bulk_import(
+    data_list,
+    batch_size=500,
+    use_dynamic=True,
+    on_progress=lambda c, t: print(f"\r{c}/{t}", end="")
+)
+
+print(f"\nImported: {result.successful}/{result.total}")
+if result.has_errors:
+    print(f"Failed: {result.failed}")
 ```
 
 ---
 
 ## Best Practices
 
-### 1. Use Environment Variables
+1. **Use environment variables** for configuration
+2. **Enable field validation** for data integrity
+3. **Use batch operations** for multiple objects
+4. **Set appropriate limits** in queries
+5. **Use get_by_id** when you have the UUID
+6. **Handle BatchResult errors** in production
+7. **Use progress callbacks** for large imports
+8. **Monitor with plugins** for observability
+
+---
+
+## Troubleshooting
+
+### Connection Issues
 
 ```python
-# Good: Production config via env vars
 client = WeaviateClient()
+
+if not client.is_ready():
+    print("Client not connected")
+
+if not client.ping():
+    print("Server not responding")
 ```
 
-### 2. Use Bulk Operations
+### Validation Errors
 
 ```python
-# Good: Bulk create
-Model.objects.bulk_create(instances)
-
-# Avoid: Individual saves
-for instance in instances:
-    instance.save()  # Slow
+try:
+    article = Article(title="X")  # Too short
+    article.save()
+except FieldValidationError as e:
+    print(f"{e.field_name}: {e.reason}")
 ```
 
-### 3. Use Smart Search
+### Batch Failures
 
 ```python
-# Good: Automatic method selection
-results = Model.objects.smart_search(query="...", limit=10)
+result = Article.objects.bulk_create(articles)
 
-# Also good: Specific when needed
-results = Model.objects.near_text_search(text="...", limit=10)
-```
-
-### 4. Always Specify Limits
-
-```python
-# Good
-results = Model.objects.filter(field=value).limit(100).all()
-
-# Bad: May return too many results
-results = Model.objects.filter(field=value).all()
+if result.has_errors:
+    print(f"Failed: {result.failed}/{result.total}")
+    for error in result.errors:
+        print(f"  {error['uuid']}: {error['message']}")
 ```
 
 ---
 
-## Summary
+## Documentation
 
-**Simple, powerful, parameter-driven:**
+- **README.md** - This file (usage guide)
+- **tests/** - Test examples and patterns
+- **db/example/search_examples.py** - Usage examples
 
-```python
-from packages.db import WeaviateClient, Model, TextField
+---
 
-# Create client from env vars
-client = WeaviateClient()
+**Version**: 2.0.0  
+**Tests**: 257/257 passing ✅  
+**Status**: Production Ready  
 
-# Define model
-class MyModel(Model):
-    name = TextField()
-    class Meta:
-        vectorizer = "text2vec-aws"
-
-# Use it
-MyModel.create_collection()
-results = MyModel.objects.smart_search(query="test", limit=10)
-```
-
-**Clean, modular, Django-like ORM for Weaviate! 🚀**
+Built for high-performance vector search applications.
