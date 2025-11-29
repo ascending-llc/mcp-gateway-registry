@@ -1,1158 +1,233 @@
-"""
-This server provides tools to interact with the MCP Gateway Registry API.
-"""
-
-import os
-import httpx # Use httpx for async requests
-import argparse
-import asyncio # Added for locking
+#!/usr/bin/env python3
+import asyncio
 import logging
-import json
-import websockets # For WebSocket connections
-from pathlib import Path # Added Path
-from pydantic import BaseModel, Field
-from fastmcp import FastMCP, Context  # Updated import for FastMCP 2.0
-from fastmcp.server.dependencies import get_http_request  # New dependency function for HTTP access
-from typing import Dict, Any, Optional, ClassVar, List
-from dotenv import load_dotenv
-import os
-import yaml # Added for scopes.yml parsing
+from typing import Dict, Any, Optional, List
+from fastmcp import FastMCP, Context
+from pydantic import Field
+from starlette.responses import JSONResponse
+
+from auth.custom_jwt import jwtVerifier
+from auth.middleware import AuthMiddleware
+from config import parse_arguments, settings
+from tools import auth_tools, service_mgmt, scopes_mgmt, search_tools
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
-)
 logger = logging.getLogger(__name__)
 
-load_dotenv()  # Load environment variables from .env file
-
-# Get Registry URL from environment variable (keep this one)
-REGISTRY_BASE_URL = os.environ.get("REGISTRY_BASE_URL", "http://localhost:7860") # Default to localhost
-
-if not REGISTRY_BASE_URL:
-    raise ValueError("REGISTRY_BASE_URL environment variable is not set.")
-
-# Global variable to cache loaded scopes
-_scopes_config = None
+mcp = FastMCP("MCPGateway", auth=jwtVerifier)
+mcp.add_middleware(AuthMiddleware())
 
 
-# --- Scopes Management Helper Functions ---
-async def load_scopes_config() -> Dict[str, Any]:
-    """
-    Load and parse the scopes.yml configuration file.
-    
-    Returns:
-        Dict containing the parsed scopes configuration
-    """
-    global _scopes_config
-    
-    if _scopes_config is not None:
-        return _scopes_config
-    
-    try:
-        # Look for scopes.yml in the auth_server directory
-        # First try the docker container path, then fallback to local development path
-        scopes_path = Path("/app/auth_server/scopes.yml")
-        if not scopes_path.exists():
-            scopes_path = Path(__file__).parent.parent / "auth_server" / "scopes.yml"
-        
-        if not scopes_path.exists():
-            logger.warning(f"Scopes file not found at {scopes_path}")
-            return {}
-        
-        with open(scopes_path, 'r') as f:
-            _scopes_config = yaml.safe_load(f)
-        
-        logger.info(f"Successfully loaded scopes configuration from {scopes_path}")
-        return _scopes_config
-        
-    except Exception as e:
-        logger.error(f"Failed to load scopes configuration: {e}")
-        return {}
+# ============================================================================
+# Vector Search Initialization
+# ============================================================================
 
-
-def extract_user_scopes_from_headers(headers: Dict[str, str]) -> List[str]:
-    """
-    Extract user scopes from HTTP headers.
-    
-    Args:
-        headers: Dictionary of HTTP headers
-        
-    Returns:
-        List of scopes the user has access to
-    """
-    scopes = []
-    
-    # Check for scopes in various header formats
-    scope_headers = ['x-scopes', 'x-user-scopes', 'scopes']
-    
-    for header_name in scope_headers:
-        header_value = headers.get(header_name) or headers.get(header_name.lower())
-        if header_value:
-            # Scopes might be comma-separated or space-separated
-            if ',' in header_value:
-                scopes.extend([s.strip() for s in header_value.split(',')])
-            else:
-                scopes.extend([s.strip() for s in header_value.split()])
-            break
-    
-    logger.info(f"Extracted scopes from headers: {scopes}")
-    return scopes
-
-
-def check_tool_access(server_name: str, tool_name: str, user_scopes: List[str], scopes_config: Dict[str, Any]) -> bool:
-    """
-    Check if a user has access to a specific tool based on their scopes.
-    
-    Args:
-        server_name: Name of the server (e.g., 'mcpgw', 'fininfo')
-        tool_name: Name of the tool 
-        user_scopes: List of scopes the user has
-        scopes_config: Parsed scopes configuration
-        
-    Returns:
-        True if user has access, False otherwise
-    """
-    if not scopes_config or not user_scopes:
-        logger.warning(f"Access denied: {server_name}.{tool_name} - no scopes config or user scopes")
-        return False
-    
-    logger.info(f"Checking access for {server_name}.{tool_name} with user scopes: {user_scopes}")
-    logger.info(f"Available scope keys in config: {list(scopes_config.keys())}")
-    
-    # Check direct scope access
-    for user_scope in user_scopes:
-        logger.info(f"Checking user scope: {user_scope}")
-        if user_scope in scopes_config:
-            scope_data = scopes_config[user_scope]
-            logger.info(f"Found scope data for {user_scope}: {type(scope_data)}")
-            if isinstance(scope_data, list):
-                # This is a server scope (like mcp-servers-unrestricted/read)
-                for server_config in scope_data:
-                    logger.info(f"Checking server config: {server_config.get('server')} vs {server_name}")
-                    # Normalize server names by stripping trailing slashes for comparison
-                    config_server_name = server_config.get('server', '').rstrip('/')
-                    normalized_server_name = server_name.rstrip('/')
-                    if config_server_name == normalized_server_name:
-                        tools = server_config.get('tools', [])
-                        logger.info(f"Available tools for {server_name}: {tools}")
-                        if tool_name in tools:
-                            logger.info(f"Access granted: {server_name}.{tool_name} via scope {user_scope}")
-                            return True
-    
-    # Check group mappings for additional access
-    group_mappings = scopes_config.get('group_mappings', {})
-    logger.debug(f"Checking group mappings: {group_mappings}")
-    for group, mapped_scopes in group_mappings.items():
-        if group in user_scopes:
-            logger.debug(f"User is in group {group}, checking mapped scopes: {mapped_scopes}")
-            # User is in this group, check the mapped scopes
-            for mapped_scope in mapped_scopes:
-                if mapped_scope in scopes_config:
-                    scope_data = scopes_config[mapped_scope]
-                    if isinstance(scope_data, list):
-                        for server_config in scope_data:
-                            # Normalize server names by stripping trailing slashes for comparison
-                            config_server_name = server_config.get('server', '').rstrip('/')
-                            normalized_server_name = server_name.rstrip('/')
-                            if config_server_name == normalized_server_name:
-                                tools = server_config.get('tools', [])
-                                if tool_name in tools:
-                                    logger.info(f"Access granted: {server_name}.{tool_name} via group {group} -> {mapped_scope}")
-                                    return True
-    
-    logger.warning(f"Access denied: {server_name}.{tool_name} for scopes {user_scopes}")
-    return False
-
-
-# --- Authentication Context Helper Functions ---
-async def extract_auth_context(ctx: Context) -> Dict[str, Any]:
-    """
-    Extract authentication context from the MCP Context.
-    FastMCP 2.0 version with improved HTTP header access.
-    
-    Args:
-        ctx: FastMCP Context object
-        
-    Returns:
-        Dict containing authentication information
-    """
-    try:
-        # Basic context information we can reliably access
-        auth_context = {
-            "request_id": ctx.request_id,
-            "client_id": ctx.client_id,
-            "session_available": ctx.session is not None,
-            "request_context_available": ctx.request_context is not None,
-        }
-        
-        # Try to get HTTP request information using FastMCP 2.0 dependency system
-        try:
-            http_request = get_http_request()
-            if http_request:
-                auth_context["http_request_available"] = True
-                
-                # Access HTTP headers directly
-                headers = dict(http_request.headers)
-                auth_headers = {}
-                
-                # Extract auth-related headers
-                for key, value in headers.items():
-                    key_lower = key.lower()
-                    if key_lower in ['authorization', 'x-user-pool-id', 'x-client-id', 'x-region', 'x-scopes', 'x-user', 'x-username', 'x-auth-method', 'cookie']:
-                        if key_lower == 'authorization':
-                            # Don't log full auth token, just indicate presence
-                            auth_headers[key] = "Bearer Token Present" if value.startswith('Bearer ') else "Auth Header Present"
-                        elif key_lower == 'cookie' and 'mcp_gateway_session=' in value:
-                            # Extract session cookie safely
-                            import re
-                            match = re.search(r'mcp_gateway_session=([^;]+)', value)
-                            if match:
-                                cookie_value = match.group(1)
-                                auth_headers["session_cookie"] = cookie_value[:20] + "..." if len(cookie_value) > 20 else cookie_value
-                        else:
-                            auth_headers[key] = str(value)[:100]  # Truncate long values
-                
-                if auth_headers:
-                    auth_context["auth_headers"] = auth_headers
-                else:
-                    auth_context["auth_headers"] = "No auth headers found"
-                
-                # Additional HTTP request info
-                auth_context["http_info"] = {
-                    "method": http_request.method,
-                    "url": str(http_request.url),
-                    "client_host": http_request.client.host if http_request.client else "Unknown",
-                    "user_agent": headers.get("user-agent", "Unknown")
-                }
-            else:
-                auth_context["http_request_available"] = False
-                auth_context["auth_headers"] = "No HTTP request context"
-                
-        except RuntimeError as e:
-            # get_http_request() raises RuntimeError when not in HTTP context
-            auth_context["http_request_available"] = False
-            auth_context["auth_headers"] = f"Not in HTTP context: {str(e)}"
-        except Exception as http_error:
-            logger.debug(f"Could not access HTTP request: {http_error}")
-            auth_context["http_request_available"] = False
-            auth_context["auth_headers"] = f"HTTP access error: {str(http_error)}"
-        
-        # Try to inspect the session for transport-level information (fallback)
-        session_info = {}
-        try:
-            session = ctx.session
-            if session:
-                session_info["session_type"] = type(session).__name__
-                
-                # Check if session has transport
-                if hasattr(session, 'transport'):
-                    transport = session.transport
-                    if transport:
-                        session_info["transport_type"] = type(transport).__name__
-                        
-                        # Try to access any available transport attributes
-                        transport_attrs = [attr for attr in dir(transport) if not attr.startswith('_')]
-                        session_info["transport_attributes"] = transport_attrs[:10]  # Limit to avoid spam
-                        
-        except Exception as session_error:
-            logger.debug(f"Could not access session info: {session_error}")
-            session_info["error"] = str(session_error)
-        
-        auth_context["session_info"] = session_info
-        
-        # Try to access request context metadata
-        request_info = {}
-        try:
-            request_context = ctx.request_context
-            if request_context:
-                request_info["request_context_type"] = type(request_context).__name__
-                
-                if hasattr(request_context, 'meta') and request_context.meta:
-                    meta = request_context.meta
-                    meta_info = {}
-                    
-                    # Check for standard meta attributes
-                    for attr in ['client_id', 'user_pool_id', 'region', 'progressToken']:
-                        if hasattr(meta, attr):
-                            value = getattr(meta, attr)
-                            meta_info[attr] = str(value) if value is not None else None
-                    
-                    request_info["meta"] = meta_info
-                    
-        except Exception as request_error:
-            logger.debug(f"Could not access request context info: {request_error}")
-            request_info["error"] = str(request_error)
-        
-        auth_context["request_info"] = request_info
-        
-        return auth_context
-        
-    except Exception as e:
-        logger.error(f"Failed to extract auth context: {e}")
-        return {
-            "error": f"Failed to extract auth context: {str(e)}",
-            "request_id": getattr(ctx, 'request_id', 'unknown'),
-            "client_id": getattr(ctx, 'client_id', None)
-        }
-
-
-async def log_auth_context(tool_name: str, ctx: Context) -> Dict[str, Any]:
-    """
-    Log authentication context for a tool call and return the context.
-    
-    Args:
-        tool_name: Name of the tool being called
-        ctx: FastMCP Context object
-        
-    Returns:
-        Dict containing the auth context
-    """
-    auth_context = await extract_auth_context(ctx)
-    
-    # Log the context for debugging via MCP logging
-    await ctx.info(f"🔐 Auth Context for {tool_name}:")
-    await ctx.info(f"   Request ID: {auth_context.get('request_id', 'Unknown')}")
-    await ctx.info(f"   Client ID: {auth_context.get('client_id', 'Not present')}")
-    await ctx.info(f"   Session Available: {auth_context.get('session_available', False)}")
-    
-    # Log auth headers if found
-    auth_headers = auth_context.get('auth_headers', {})
-    if auth_headers:
-        await ctx.info(f"   Auth Headers Found:")
-        for key, value in auth_headers.items():
-            await ctx.info(f"     {key}: {value}")
-    else:
-        await ctx.info(f"   No auth headers detected")
-    
-    # Log session info if available
-    session_info = auth_context.get('session_info', {})
-    if session_info.get('session_type'):
-        await ctx.info(f"   Session Type: {session_info['session_type']}")
-        if session_info.get('transport_type'):
-            await ctx.info(f"   Transport Type: {session_info['transport_type']}")
-    
-    # Log request info if available
-    request_info = auth_context.get('request_info', {})
-    if request_info.get('meta'):
-        await ctx.info(f"   Request Meta: {request_info['meta']}")
-    
-    # Also log to server logs for debugging
-    logger.info(f"AUTH_CONTEXT for {tool_name}: {json.dumps(auth_context, indent=2, default=str)}")
-    
-    return auth_context
-
-
-async def validate_session_cookie_with_auth_server(session_cookie: str, auth_server_url: str = "http://localhost:8888") -> Dict[str, Any]:
-    """
-    Validate a session cookie with the auth server and return user context.
-    
-    Args:
-        session_cookie: The session cookie value
-        auth_server_url: URL of the auth server
-        
-    Returns:
-        Dict containing user context information including username, groups, scopes, etc.
-    """
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # Call the auth server to validate the session cookie
-            response = await client.post(
-                f"{auth_server_url}/validate",
-                headers={
-                    "Cookie": f"mcp_gateway_session={session_cookie}",
-                    "Content-Type": "application/json"
-                },
-                json={"action": "validate_session"}  # Indicate we want session validation
-            )
-            
-            if response.status_code == 200:
-                user_context = response.json()
-                logger.info(f"Session validation successful for user: {user_context.get('username', 'unknown')}")
-                return user_context
-            else:
-                logger.warning(f"Session validation failed: HTTP {response.status_code}")
-                return {"valid": False, "error": f"HTTP {response.status_code}"}
-                
-    except Exception as e:
-        logger.error(f"Error validating session cookie: {e}")
-        return {"valid": False, "error": str(e)}
-
-
-async def extract_user_scopes_from_auth_context(auth_context: Dict[str, Any]) -> List[str]:
-    """
-    Extract user scopes from the authentication context.
-    
-    Args:
-        auth_context: Authentication context from extract_auth_context()
-        
-    Returns:
-        List of user scopes
-    """
-    # Try to get scopes from auth headers (set by nginx from auth server)
-    auth_headers = auth_context.get("auth_headers", {})
-    if isinstance(auth_headers, dict) and "x-scopes" in auth_headers:
-        scopes_header = auth_headers["x-scopes"]
-        if scopes_header and scopes_header.strip():
-            # Scopes are space-separated in the header
-            scopes = scopes_header.split()
-            logger.info(f"Extracted scopes from auth headers: {scopes}")
-            return scopes
-    
-    logger.warning("No scopes found in auth context")
-    return []
-
-
-async def validate_user_access_to_tool(ctx: Context, tool_name: str, server_name: str = "mcpgw", action: str = "execute") -> bool:
-    """
-    Validate if the authenticated user has access to execute a specific tool.
-    
-    Args:
-        ctx: FastMCP Context object
-        tool_name: Name of the tool being accessed
-        server_name: Name of the server (default: "mcpgw")  
-        action: Action being performed ("read" or "execute")
-        
-    Returns:
-        True if access is granted, False otherwise
-        
-    Raises:
-        Exception: If access is denied
-    """
-    # Extract authentication context
-    auth_context = await extract_auth_context(ctx)
-    
-    # Get user info
-    auth_headers = auth_context.get("auth_headers", {})
-    username = auth_headers.get("x-user", "unknown") or auth_headers.get("x-username", "unknown")
-    
-    # Extract scopes
-    user_scopes = await extract_user_scopes_from_auth_context(auth_context)
-    
-    if not user_scopes:
-        logger.error(f"FGAC: Access denied for user '{username}' to tool '{tool_name}' - no scopes available")
-        raise Exception(f"Access denied: No scopes configured for user")
-    
-    logger.info(f"FGAC: Validating access for user '{username}' to tool '{tool_name}' on server '{server_name}' with action '{action}'")
-    logger.info(f"FGAC: User scopes: {user_scopes}")
-    
-    # Check for server-specific scopes that allow this action
-    required_scope_patterns = [
-        f"mcp-servers-unrestricted/{action}",  # Unrestricted access for this action
-        f"mcp-servers-restricted/{action}",    # Restricted access for this action
-    ]
-    
-    for scope in user_scopes:
-        if scope in required_scope_patterns:
-            logger.info(f"FGAC: Access granted - user '{username}' has scope '{scope}' for tool '{tool_name}'")
-            return True
-    
-    # If no matching scope found, deny access
-    logger.error(f"FGAC: Access denied for user '{username}' to tool '{tool_name}' - insufficient permissions")
-    logger.error(f"FGAC: Required one of: {required_scope_patterns}")
-    logger.error(f"FGAC: User has: {user_scopes}")
-    
-    raise Exception(f"Access denied: Insufficient permissions to execute '{tool_name}'. Required scopes: {required_scope_patterns}")
-
-
-async def check_user_permission_for_tool(auth_context: Dict[str, Any], tool_name: str, action: str = "execute") -> bool:
-    """
-    DEPRECATED: Legacy function for backward compatibility.
-    Use validate_user_access_to_tool() instead for proper FGAC.
-    """
-    logger.warning(f"Using deprecated check_user_permission_for_tool - consider upgrading to validate_user_access_to_tool")
-    
-    if not auth_context.get("valid", False):
-        logger.warning(f"Access denied for {tool_name}: Invalid auth context")
-        return False
-    
-    username = auth_context.get("username", "unknown")
-    scopes = auth_context.get("scopes", [])
-    groups = auth_context.get("groups", [])
-    
-    # Example permission logic - you can customize this based on your needs
-    
-    # Admin users can access everything
-    if "mcp-registry-admin" in groups:
-        logger.info(f"Access granted for {tool_name}: Admin user {username}")
-        return True
-    
-    # Check for specific tool permissions in scopes
-    # You could implement more sophisticated scope checking here
-    tool_permission = f"mcp-tools/{tool_name}/{action}"
-    if tool_permission in scopes:
-        logger.info(f"Access granted for {tool_name}: User {username} has scope {tool_permission}")
-        return True
-    
-    # Check for wildcard permissions
-    wildcard_permission = f"mcp-tools/*/{action}"
-    if wildcard_permission in scopes:
-        logger.info(f"Access granted for {tool_name}: User {username} has wildcard scope")
-        return True
-    
-    # Deny access by default
-    logger.warning(f"Access denied for {tool_name}: User {username} lacks required permissions. Available scopes: {scopes}")
-    return False
-
-
-# --- Vector Search Service Integration --- START
-# Import the vector search service (will be embedded or external based on config)
-from search import vector_search_service
-
-# Initialize the service on startup
 async def initialize_vector_search():
     """Initialize the vector search service."""
     try:
+        from search import vector_search_service
         await vector_search_service.initialize()
         logger.info("Vector search service initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize vector search service: {e}", exc_info=True)
         logger.warning("Server will continue but intelligent_tool_finder may not work")
 
-# --- Vector Search Service Integration --- END
 
+# ============================================================================
+# Custom HTTP Routes
+# ============================================================================
 
-class Constants(BaseModel):
-    # Using ClassVar to define class-level constants
-    DESCRIPTION: ClassVar[str] = "MCP Gateway Registry Interaction Server (mcpgw)"
-    DEFAULT_MCP_TRANSPORT: ClassVar[str] = "streamable-http"
-    DEFAULT_MCP_SEVER_LISTEN_PORT: ClassVar[str] = "8003" # Default to a different port
-    REQUEST_TIMEOUT: ClassVar[float] = 15.0 # Timeout for HTTP requests
-
-    # Disable instance creation - optional but recommended for constants
-    class Config:
-        frozen = True  # Make instances immutable
-
-
-def parse_arguments():
-    """Parse command line arguments with defaults matching environment variables."""
-    parser = argparse.ArgumentParser(description=Constants.DESCRIPTION)
-
-    parser.add_argument(
-        "--port",
-        type=str,
-        default=os.environ.get(
-            "MCP_SERVER_LISTEN_PORT", Constants.DEFAULT_MCP_SEVER_LISTEN_PORT
-        ),
-        help=f"Port for the MCP server to listen on (default: {Constants.DEFAULT_MCP_SEVER_LISTEN_PORT})",
-    )
-
-    parser.add_argument(
-        "--transport",
-        type=str,
-        default=os.environ.get("MCP_TRANSPORT", Constants.DEFAULT_MCP_TRANSPORT),
-        choices=["streamable-http"],
-        help=f"Transport type for the MCP server (default: {Constants.DEFAULT_MCP_TRANSPORT})",
-    )
-
-    return parser.parse_args()
-
-
-# Parse arguments at module level to make them available
-args = parse_arguments()
-
-# Log parsed arguments for debugging
-logger.info(f"Parsed arguments - port: {args.port}, transport: {args.transport}")
-logger.info(f"Environment variables - MCP_TRANSPORT: {os.environ.get('MCP_TRANSPORT', 'NOT SET')}, MCP_SERVER_LISTEN_PORT: {os.environ.get('MCP_SERVER_LISTEN_PORT', 'NOT SET')}")
-
-# Initialize FastMCP server
-mcp = FastMCP("MCPGateway")
-
-
-# --- Health Check Route ---
 @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
 async def _health_check_route(request):
     """Health check endpoint for the MCP Gateway server."""
-    from starlette.responses import JSONResponse
     logger.debug("Health check endpoint called.")
     return JSONResponse({"status": "ok"})
 
 
-# --- Helper function for making requests to the registry ---
-async def _call_registry_api(method: str, endpoint: str, ctx: Context = None, **kwargs) -> Dict[str, Any]:
-    """
-    Helper function to make async requests to the registry API with auth passthrough.
-    
-    Args:
-        method: HTTP method (GET, POST, etc.)
-        endpoint: API endpoint path
-        ctx: FastMCP Context to extract auth headers from
-        **kwargs: Additional arguments to pass to the HTTP request
-        
-    Returns:
-        Dict[str, Any]: JSON response from the API
-    """
-    url = f"{REGISTRY_BASE_URL.rstrip('/')}{endpoint}"
-
-    # Extract auth headers to pass through to registry
-    auth_headers = {}
-    if ctx:
-        try:
-            http_request = get_http_request()
-            if http_request:
-                # Extract auth-related headers to pass through
-                for key, value in http_request.headers.items():
-                    key_lower = key.lower()
-                    if key_lower in ['authorization', 'x-user-pool-id', 'x-client-id', 'x-region', 'x-scopes', 'x-user', 'x-username', 'x-auth-method', 'cookie']:
-                        auth_headers[key] = value
-                        
-                if auth_headers:
-                    logger.info(f"Passing through auth headers to registry: {list(auth_headers.keys())}")
-                else:
-                    logger.info("No auth headers found to pass through")
-            else:
-                logger.info("No HTTP request context available for auth passthrough")
-        except RuntimeError:
-            # Not in HTTP context, no auth headers to pass through
-            logger.info("Not in HTTP context, no auth headers to pass through")
-        except Exception as e:
-            logger.warning(f"Could not extract auth headers for passthrough: {e}")
-
-    # Merge auth headers with any existing headers in kwargs
-    if 'headers' in kwargs:
-        kwargs['headers'].update(auth_headers)
-    else:
-        kwargs['headers'] = auth_headers
-
-    # Use a single client instance for potential connection pooling benefits
-    # Get admin credentials from environment for registry API authentication
-    registry_username = os.environ.get("REGISTRY_USERNAME")
-    registry_password = os.environ.get("REGISTRY_PASSWORD")
-    auth = httpx.BasicAuth(registry_username, registry_password) if registry_username and registry_password else None
-
-    async with httpx.AsyncClient(timeout=Constants.REQUEST_TIMEOUT, auth=auth) as client:
-        try:
-            logger.info(f"Calling Registry API: {method} {url}") # Log the actual call
-            response = await client.request(method, url, **kwargs)
-            response.raise_for_status() # Raise HTTPStatusError for bad responses (4xx or 5xx)
-
-            # Handle cases where response might be empty (e.g., 204 No Content)
-            if response.status_code == 204:
-                return {"status": "success", "message": "Operation successful, no content returned."}
-            return response.json()
-
-        except httpx.HTTPStatusError as e:
-            # Handle HTTP errors
-            error_detail = "No specific error detail provided."
-            try:
-                error_detail = e.response.json().get("detail", error_detail)
-            except Exception as json_error:
-                # Log that we couldn't get detailed error from JSON, but continue with existing error info
-                logger.debug(f"MCPGW: Could not extract detailed error from response: {json_error}")
-            raise Exception(f"Registry API Error ({e.response.status_code}): {error_detail} for {method} {url}") from e
-        except httpx.RequestError as e:
-            # Network or connection error during the API call
-            raise Exception(f"Registry API Request Error: Failed to connect or communicate with {url}. Details: {e}") from e
-        except Exception as e: # Catch other potential errors during API call
-             raise Exception(f"An unexpected error occurred while calling the Registry API at {url}: {e}") from e
-
-
-# --- MCP Tools ---
+# ============================================================================
+# Authentication Debugging Tools
+# ============================================================================
 
 @mcp.tool()
 async def debug_auth_context(ctx: Context = None) -> Dict[str, Any]:
     """
     Debug tool to explore what authentication context is available.
     This tool helps understand what auth information can be accessed through the MCP Context.
-    
-    Returns:
-        Dict[str, Any]: Detailed debug information about available auth context
     """
-    if not ctx:
-        return {"error": "No context available"}
-    
-    debug_info = {
-        "context_type": type(ctx).__name__,
-        "available_attributes": sorted([attr for attr in dir(ctx) if not attr.startswith('_')]),
-        "context_properties": {}
-    }
-    
-    # Try to access each property safely
-    for prop in ['client_id', 'request_id', 'session', 'request_context', 'fastmcp']:
-        try:
-            value = getattr(ctx, prop, "NOT_AVAILABLE")
-            if value == "NOT_AVAILABLE":
-                debug_info["context_properties"][prop] = "NOT_AVAILABLE"
-            elif value is None:
-                debug_info["context_properties"][prop] = "None"
-            else:
-                debug_info["context_properties"][prop] = {
-                    "type": type(value).__name__,
-                    "available": True
-                }
-                
-                # For session, explore further
-                if prop == "session" and value:
-                    session_attrs = [attr for attr in dir(value) if not attr.startswith('_')]
-                    debug_info["context_properties"][prop]["attributes"] = session_attrs[:20]
-                    
-                    # Check for transport
-                    if hasattr(value, 'transport') and value.transport:
-                        transport = value.transport
-                        transport_attrs = [attr for attr in dir(transport) if not attr.startswith('_')]
-                        debug_info["context_properties"][prop]["transport"] = {
-                            "type": type(transport).__name__,
-                            "attributes": transport_attrs[:20]
-                        }
-                
-                # For request_context, explore further
-                if prop == "request_context" and value:
-                    rc_attrs = [attr for attr in dir(value) if not attr.startswith('_')]
-                    debug_info["context_properties"][prop]["attributes"] = rc_attrs[:20]
-                    
-                    if hasattr(value, 'meta') and value.meta:
-                        meta = value.meta
-                        meta_attrs = [attr for attr in dir(meta) if not attr.startswith('_')]
-                        debug_info["context_properties"][prop]["meta"] = {
-                            "type": type(meta).__name__,
-                            "attributes": meta_attrs[:20]
-                        }
-                        
-        except Exception as e:
-            debug_info["context_properties"][prop] = f"ERROR: {str(e)}"
-    
-    # Log the full auth context
-    auth_context = await log_auth_context("debug_auth_context", ctx)
-    debug_info["extracted_auth_context"] = auth_context
-    
-    return debug_info
+    return await auth_tools.debug_auth_context_impl(ctx)
 
 
 @mcp.tool()
 async def get_http_headers(ctx: Context = None) -> Dict[str, Any]:
     """
-    FastMCP 2.0 tool to access HTTP headers directly using the new dependency system.
+    FastMCP 2.0 tool to access HTTP headers directly.
     This tool demonstrates how to get HTTP request information including auth headers.
-    
-    Returns:
-        Dict[str, Any]: HTTP request information including headers
     """
-    if not ctx:
-        return {"error": "No context available"}
-    
-    result = {
-        "fastmcp_version": "2.0",
-        "tool_name": "get_http_headers",
-        "timestamp": str(asyncio.get_event_loop().time())
-    }
-    
-    try:
-        # Use FastMCP 2.0's dependency function to get HTTP request
-        http_request = get_http_request()
-        
-        if http_request:
-            # Extract all headers
-            all_headers = dict(http_request.headers)
-            
-            # Separate auth-related headers for easy viewing
-            auth_headers = {}
-            other_headers = {}
-            
-            for key, value in all_headers.items():
-                key_lower = key.lower()
-                if key_lower in ['authorization', 'x-user-pool-id', 'x-client-id', 'x-region', 'cookie', 'x-api-key']:
-                    if key_lower == 'authorization':
-                        # Show type of auth but not full token
-                        if value.startswith('Bearer '):
-                            auth_headers[key] = f"Bearer <TOKEN_HIDDEN> (length: {len(value)})"
-                        else:
-                            auth_headers[key] = f"<AUTH_HIDDEN> (length: {len(value)})"
-                    elif key_lower == 'cookie':
-                        # Show cookie names but hide values
-                        cookies = [c.split('=')[0] for c in value.split(';')]
-                        auth_headers[key] = f"Cookies: {', '.join(cookies)}"
-                    else:
-                        auth_headers[key] = value
-                else:
-                    other_headers[key] = value
-            
-            result.update({
-                "http_request_available": True,
-                "method": http_request.method,
-                "url": str(http_request.url),
-                "path": http_request.url.path,
-                "query_params": dict(http_request.query_params),
-                "client_info": {
-                    "host": http_request.client.host if http_request.client else "Unknown",
-                    "port": http_request.client.port if http_request.client else "Unknown"
-                },
-                "auth_headers": auth_headers,
-                "other_headers": other_headers,
-                "total_headers_count": len(all_headers)
-            })
-            
-            # Log the auth headers for server-side debugging
-            await ctx.info(f"🔐 HTTP Headers Debug - Auth Headers Found: {list(auth_headers.keys())}")
-            if auth_headers:
-                for key, value in auth_headers.items():
-                    await ctx.info(f"   {key}: {value}")
-            else:
-                await ctx.info("   No auth-related headers found")
-                
-        else:
-            result.update({
-                "http_request_available": False,
-                "error": "No HTTP request context available"
-            })
-            await ctx.warning("No HTTP request context available - may be running in non-HTTP transport mode")
-            
-    except RuntimeError as e:
-        # This happens when not in HTTP context (e.g., stdio transport)
-        result.update({
-            "http_request_available": False,
-            "error": f"Not in HTTP context: {str(e)}",
-            "transport_mode": "Likely STDIO or other non-HTTP transport"
-        })
-        await ctx.info(f"Not in HTTP context - this is expected for STDIO transport: {e}")
-        
-    except Exception as e:
-        result.update({
-            "http_request_available": False,
-            "error": f"Error accessing HTTP request: {str(e)}"
-        })
-        await ctx.error(f"Error accessing HTTP request: {e}")
-        logger.error(f"Error in get_http_headers: {e}", exc_info=True)
-    
-    return result
+    return await auth_tools.get_http_headers_impl(ctx)
 
 
-async def print_all_http_headers(ctx: Context = None) -> str:
-    """
-    Helper function to print out all HTTP request headers in a formatted string.
-    This function can be called internally by other tools to display HTTP headers.
-    
-    Args:
-        ctx: FastMCP Context object
-        
-    Returns:
-        str: Formatted string containing all HTTP headers
-    """
-    if not ctx:
-        return "Error: No context available"
-    
-    output = []
-    output.append("=== HTTP Request Headers ===")
-    output.append(f"Server: mcpgw")
-    output.append(f"Timestamp: {asyncio.get_event_loop().time()}")
-    output.append("")
-    
-    try:
-        # Use FastMCP 2.0's dependency function to get HTTP request
-        http_request = get_http_request()
-        
-        if http_request:
-            # Extract all headers
-            all_headers = dict(http_request.headers)
-            
-            output.append(f"Total Headers: {len(all_headers)}")
-            output.append(f"HTTP Method: {http_request.method}")
-            output.append(f"URL: {http_request.url}")
-            output.append(f"Path: {http_request.url.path}")
-            output.append("")
-            output.append("Headers:")
-            output.append("-" * 50)
-            
-            # Sort headers for consistent output
-            for key in sorted(all_headers.keys()):
-                value = all_headers[key]
-                # Mask sensitive headers
-                if key.lower() in ['authorization', 'cookie']:
-                    if key.lower() == 'authorization':
-                        if value.startswith('Bearer '):
-                            masked_value = f"Bearer <TOKEN_MASKED> (length: {len(value)})"
-                        else:
-                            masked_value = f"<AUTH_MASKED> (length: {len(value)})"
-                    else:  # cookie
-                        cookie_names = [c.split('=')[0] for c in value.split(';')]
-                        masked_value = f"<COOKIES_MASKED>: {', '.join(cookie_names)}"
-                    output.append(f"{key}: {masked_value}")
-                else:
-                    output.append(f"{key}: {value}")
-            
-            # Log to context as well
-            await ctx.info(f"📋 Printed all HTTP headers - Total: {len(all_headers)}")
-            
-        else:
-            output.append("No HTTP request context available")
-            output.append("This may occur when using STDIO transport")
-            await ctx.warning("No HTTP request context available")
-            
-    except RuntimeError as e:
-        output.append(f"Not in HTTP context: {str(e)}")
-        output.append("This is expected for STDIO transport")
-        await ctx.info(f"Not in HTTP context - this is expected for STDIO transport: {e}")
-        
-    except Exception as e:
-        output.append(f"Error accessing HTTP request: {str(e)}")
-        await ctx.error(f"Error accessing HTTP request: {e}")
-        logger.error(f"Error in print_all_http_headers: {e}", exc_info=True)
-    
-    return "\n".join(output)
-
+# ============================================================================
+# Service Management Tools
+# ============================================================================
 
 @mcp.tool()
 async def toggle_service(
-    service_path: str = Field(..., description="The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'."),
-    ctx: Context = None
+        service_path: str = Field(...,
+                                  description="The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'."),
+        ctx: Context = None
 ) -> Dict[str, Any]:
     """
     Toggles the enabled/disabled state of a registered MCP server in the gateway.
-
-    Args:
-        service_path: The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'.
-
-    Returns:
-        Dict[str, Any]: Response from the registry API indicating success or failure.
-
-    Raises:
-        Exception: If the API call fails.
     """
-    endpoint = "/api/internal/toggle"
-    form_data = {
-        "service_path": service_path
-    }
-    # Send as form data instead of JSON
-    return await _call_registry_api("POST", endpoint, ctx, data=form_data)
+    return await service_mgmt.toggle_service_impl(service_path, ctx)
 
 
 @mcp.tool()
 async def register_service(
-    server_name: str = Field(..., description="Display name for the server."),
-    path: str = Field(..., description="Unique URL path prefix for the server (e.g., '/my-service'). Must start with '/'."),
-    proxy_pass_url: str = Field(..., description="The internal URL where the actual MCP server is running (e.g., 'http://localhost:8001')."),
-    description: Optional[str] = Field("", description="Description of the server."),
-    tags: Optional[List[str]] = Field(None, description="Optional list of tags for categorization."),
-    num_tools: Optional[int] = Field(0, description="Number of tools provided by the server."),
-    num_stars: Optional[int] = Field(0, description="Number of stars/rating for the server."),
-    is_python: Optional[bool] = Field(False, description="Whether the server is implemented in Python."),
-    license: Optional[str] = Field("N/A", description="License information for the server."),
-    auth_provider: Optional[str] = Field(None, description="Authentication provider (e.g., 'bedrock-agentcore', 'oauth')."),
-    auth_type: Optional[str] = Field(None, description="Authentication type (e.g., 'oauth', 'none')."),
-    supported_transports: Optional[List[str]] = Field(None, description="List of supported transports (e.g., ['streamable-http'])."),
-    headers: Optional[List[Dict[str, str]]] = Field(None, description="List of header dictionaries to include in requests."),
-    tool_list: Optional[List[Dict[str, Any]]] = Field(None, description="List of tools with their schemas."),
-    ctx: Context = None
+        server_name: str = Field(..., description="Display name for the server."),
+        path: str = Field(...,
+                          description="Unique URL path prefix for the server (e.g., '/my-service'). Must start with '/'."),
+        proxy_pass_url: str = Field(...,
+                                    description="The internal URL where the actual MCP server is running (e.g., 'http://localhost:8001')."),
+        description: Optional[str] = Field("", description="Description of the server."),
+        tags: Optional[List[str]] = Field(None, description="Optional list of tags for categorization."),
+        num_tools: Optional[int] = Field(0, description="Number of tools provided by the server."),
+        num_stars: Optional[int] = Field(0, description="Number of stars/rating for the server."),
+        is_python: Optional[bool] = Field(False, description="Whether the server is implemented in Python."),
+        license: Optional[str] = Field("N/A", description="License information for the server."),
+        auth_provider: Optional[str] = Field(None, description="Authentication provider."),
+        auth_type: Optional[str] = Field(None, description="Authentication type."),
+        supported_transports: Optional[List[str]] = Field(None, description="List of supported transports."),
+        headers: Optional[List[Dict[str, str]]] = Field(None, description="List of header dictionaries."),
+        tool_list: Optional[List[Dict[str, Any]]] = Field(None, description="List of tools with their schemas."),
+        ctx: Context = None
 ) -> Dict[str, Any]:
     """
     Registers a new MCP server with the gateway.
-    
-    Args:
-        server_name: Display name for the server.
-        path: Unique URL path prefix for the server (e.g., '/my-service'). Must start with '/'.
-        proxy_pass_url: The internal URL where the actual MCP server is running (e.g., 'http://localhost:8001').
-        description: Description of the server.
-        tags: Optional list of tags for categorization.
-        num_tools: Number of tools provided by the server.
-        num_stars: Number of stars/rating for the server.
-        is_python: Whether the server is implemented in Python.
-        license: License information for the server.
-        
-    Returns:
-        Dict[str, Any]: Response from the registry API, likely including the registered server details.
-        
-    Raises:
-        Exception: If the API call fails.
     """
-    endpoint = "/api/internal/register"
-
-    # Convert tags list to comma-separated string if it's a list
-    tags_str = ",".join(tags) if isinstance(tags, list) and tags is not None else tags
-
-    # Create form data to send to the API
-    form_data = {
-        "name": server_name,  # Use 'name' as expected by the registry API
-        "path": path,
-        "proxy_pass_url": proxy_pass_url,
-        "description": description if description is not None else "",
-        "tags": tags_str if tags_str is not None else "",
-        "num_tools": num_tools,
-        "num_stars": num_stars,
-        "is_python": is_python,
-        "license_str": license  # The registry API uses license_str field name
-    }
-
-    # Add optional fields if provided
-    if auth_provider is not None:
-        form_data["auth_provider"] = auth_provider
-    if auth_type is not None:
-        form_data["auth_type"] = auth_type
-    if supported_transports is not None:
-        # Convert list to JSON string for form data
-        form_data["supported_transports"] = json.dumps(supported_transports) if isinstance(supported_transports, list) else supported_transports
-    if headers is not None:
-        # Convert list to JSON string for form data
-        form_data["headers"] = json.dumps(headers) if isinstance(headers, list) else headers
-    if tool_list is not None:
-        # Convert list to JSON string for form data
-        form_data["tool_list_json"] = json.dumps(tool_list) if isinstance(tool_list, list) else tool_list
-
-    # Remove None values
-    form_data = {k: v for k, v in form_data.items() if v is not None}
-
-    # Send as form data instead of JSON
-    return await _call_registry_api("POST", endpoint, ctx, data=form_data)
+    return await service_mgmt.register_service_impl(
+        server_name, path, proxy_pass_url, description, tags, num_tools,
+        num_stars, is_python, license, auth_provider, auth_type,
+        supported_transports, headers, tool_list, ctx
+    )
 
 
 @mcp.tool()
-async def list_services(
-    ctx: Context = None
-) -> Dict[str, Any]:
+async def list_services(ctx: Context = None) -> Dict[str, Any]:
     """
     Lists all registered MCP services in the gateway.
-
-    Returns:
-        A dictionary containing:
-        - services: List of service information with details like name, path, status, etc.
-        - total_count: Total number of services
-
-    Example:
-        services_info = await list_services()
-        for service in services_info["services"]:
-            print(f"Service: {service['server_name']} at {service['path']}")
     """
-    logger.info("MCPGW: list_services tool called")
-
-    # Call the registry's internal list endpoint
-    endpoint = "/api/internal/list"
-
-    try:
-        result = await _call_registry_api("GET", endpoint, ctx)
-
-        if isinstance(result, dict) and "services" in result:
-            logger.info(f"MCPGW: Successfully retrieved {result.get('total_count', len(result['services']))} services")
-            return result
-        else:
-            logger.warning(f"MCPGW: Unexpected response format from registry list endpoint: {result}")
-            return {
-                "services": [],
-                "total_count": 0,
-                "error": "Unexpected response format from registry"
-            }
-
-    except Exception as e:
-        logger.error(f"MCPGW: Failed to list services: {e}")
-        return {
-            "services": [],
-            "total_count": 0,
-            "error": f"Failed to retrieve services: {str(e)}"
-        }
+    return await service_mgmt.list_services_impl(ctx)
 
 
 @mcp.tool()
 async def remove_service(
-    service_path: str = Field(..., description="The unique path identifier for the service to remove (e.g., '/fininfo'). Must start with '/'."),
-    ctx: Context = None
+        service_path: str = Field(..., description="The unique path identifier for the service"
+                                                   " to remove (e.g., '/fininfo'). Must start with '/'."),
+        ctx: Context = None
 ) -> Dict[str, Any]:
     """
     Removes a registered MCP server from the gateway.
-
-    Args:
-        service_path: The unique path identifier for the service to remove (e.g., '/fininfo'). Must start with '/'.
-
-    Returns:
-        Dict[str, Any]: Response from the registry API indicating success or failure of the removal.
-
-    Raises:
-        Exception: If the API call fails or the server is not found.
     """
-    endpoint = "/api/internal/remove"
-
-    # Create form data to send to the API
-    form_data = {
-        "service_path": service_path
-    }
-
-    # Send as form data instead of JSON
-    return await _call_registry_api("POST", endpoint, ctx, data=form_data)
+    return await service_mgmt.remove_service_impl(service_path, ctx)
 
 
 @mcp.tool()
 async def refresh_service(
-    service_path: str = Field(..., description="The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'."),
-    ctx: Context = None
+        service_path: str = Field(..., description="The unique path identifier for the service"
+                                                   " (e.g., '/fininfo'). Must start with '/'."),
+        ctx: Context = None
 ) -> Dict[str, Any]:
     """
     Triggers a refresh of the tool list for a specific registered MCP server.
-    The registry will re-connect to the target server to get its latest tools.
-
-    Args:
-        service_path: The unique path identifier for the service (e.g., '/fininfo'). Must start with '/'.
-
-    Returns:
-        Dict[str, Any]: Response from the registry API indicating the result of the refresh attempt.
-
-    Raises:
-        Exception: If the API call fails.
     """
-    endpoint = f"/api/refresh/{service_path.lstrip('/')}"
-        
-    return await _call_registry_api("POST", endpoint, ctx)
+    return await service_mgmt.refresh_service_impl(service_path, ctx)
 
 
 @mcp.tool()
 async def healthcheck(ctx: Context = None) -> Dict[str, Any]:
     """
-    Retrieves health status information from all registered MCP servers via the registry's internal API.
-
-    Returns:
-        Dict[str, Any]: Health status information for all registered servers, including:
-            - status: 'healthy' or 'disabled'
-            - last_checked_iso: ISO timestamp of when the server was last checked
-            - num_tools: Number of tools provided by the server
-
-    Raises:
-        Exception: If the API call fails or data cannot be retrieved
+    Retrieves health status information from all registered MCP servers.
     """
-    try:
-        import httpx
-        import base64
-        import os
+    return await service_mgmt.healthcheck_impl(ctx)
 
-        # Get admin credentials from environment
-        registry_username = os.getenv("REGISTRY_USERNAME", "admin")
-        registry_password = os.getenv("REGISTRY_PASSWORD")
 
-        if not registry_password:
-            raise Exception("REGISTRY_PASSWORD not configured in environment")
+# ============================================================================
+# Scopes and Groups Management Tools
+# ============================================================================
 
-        # Create Basic Auth header
-        credentials = f"{registry_username}:{registry_password}"
-        encoded_credentials = base64.b64encode(credentials.encode()).decode()
-        headers = {
-            "Authorization": f"Basic {encoded_credentials}",
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
-
-        # Call registry's internal health check endpoint
-        registry_base_url = os.getenv("REGISTRY_BASE_URL", "http://registry:7860")
-        healthcheck_url = f"{registry_base_url}/api/internal/healthcheck"
-
-        logger.info(f"Calling internal health check endpoint: {healthcheck_url}")
-
-        async with httpx.AsyncClient() as client:
-            response = await client.post(healthcheck_url, headers=headers)
-
-            if response.status_code == 200:
-                health_data = response.json()
-                logger.info(f"Retrieved health status data for {len(health_data)} servers")
-                return health_data
-            else:
-                logger.error(f"Health check API returned status {response.status_code}: {response.text}")
-                raise Exception(f"Health check API call failed with status {response.status_code}")
-
-    except Exception as e:
-        logger.error(f"Error retrieving health status: {e}")
-        raise Exception(f"Failed to retrieve health status: {str(e)}")
+@mcp.tool()
+async def add_server_to_scopes_groups(
+        server_name: str = Field(..., description="Name of the server to add to groups"
+                                                  " (e.g., 'example-server'). Should not include leading slash."),
+        group_names: List[str] = Field(..., description="List of scopes group names to add the server to."),
+        ctx: Context = None
+) -> Dict[str, Any]:
+    """
+    Add a server and all its known tools/methods to specific scopes groups.
+    """
+    return await scopes_mgmt.add_server_to_scopes_groups_impl(server_name, group_names, ctx)
 
 
 @mcp.tool()
+async def remove_server_from_scopes_groups(
+        server_name: str = Field(..., description="Name of the server to remove from groups."),
+        group_names: List[str] = Field(..., description="List of scopes group names to remove the server from."),
+        ctx: Context = None
+) -> Dict[str, Any]:
+    """
+    Remove a server from specific scopes groups.
+    """
+    return await scopes_mgmt.remove_server_from_scopes_groups_impl(server_name, group_names, ctx)
+
+
+@mcp.tool()
+async def create_group(
+        group_name: str = Field(..., description="Name of the group to create (e.g., 'mcp-servers-finance/read')"),
+        description: Optional[str] = Field("", description="Optional description for the group"),
+        ctx: Context = None
+) -> Dict[str, Any]:
+    """
+    Create a new group in both Keycloak and scopes.yml.
+    """
+    return await scopes_mgmt.create_group_impl(group_name, description, ctx)
+
+
+@mcp.tool()
+async def delete_group(
+        group_name: str = Field(..., description="Name of the group to delete"),
+        ctx: Context = None
+) -> Dict[str, Any]:
+    """
+    Delete a group from both Keycloak and scopes.yml.
+    """
+    return await scopes_mgmt.delete_group_impl(group_name, ctx)
+
+
+@mcp.tool()
+async def list_groups(ctx: Context = None) -> Dict[str, Any]:
+    """
+    List all groups from Keycloak and scopes.yml with synchronization status.
+    """
+    return await scopes_mgmt.list_groups_impl(ctx)
+
+
+# ============================================================================
+# Intelligent Tool Finder
+# ============================================================================
+
+@mcp.tool()
 async def intelligent_tool_finder(
-    natural_language_query: Optional[str] = Field(None, description="Your query in natural language describing the task you want to perform. Optional if tags are provided."),
-    tags: Optional[List[str]] = Field(None, description="List of tags to filter tools by using AND logic. IMPORTANT: AI agents should ONLY use this if the user explicitly provides specific tags. DO NOT infer tags - incorrect tags will exclude valid results."),
-    top_k_services: int = Field(3, description="Number of top services to consider from initial FAISS search (ignored if only tags provided)."),
-    top_n_tools: int = Field(1, description="Number of best matching tools to return."),
-    ctx: Context = None
+        natural_language_query: Optional[str] = Field(None,
+                                                      description="Your query in natural language describing the task you want to perform."
+                                                                  " Optional if tags are provided."),
+        tags: Optional[List[str]] = Field(None, description="List of tags to filter tools by using AND logic. "
+                                                            "IMPORTANT: AI agents should ONLY use this if the user explicitly provides specific tags. "
+                                                            "DO NOT infer tags - incorrect tags will exclude valid results."),
+        top_k_services: int = Field(3, description="Number of top services to consider "
+                                                   "from initial FAISS search (ignored if only tags provided)."),
+        top_n_tools: int = Field(1, description="Number of best matching tools to return."),
+        ctx: Optional[Context] = None
 ) -> List[Dict[str, Any]]:
     """
     Finds the most relevant MCP tool(s) across all registered and enabled services
@@ -1171,6 +246,7 @@ async def intelligent_tool_finder(
               CAUTION: Only use this parameter if explicitly provided by the user. Incorrect tags will filter out valid results.
         top_k_services: How many top-matching services to analyze for tools from search (ignored if only tags provided).
         top_n_tools: How many best tools to return from the combined list.
+        ctx: Optional context to pass to services_mgmt as an argument.
 
     Returns:
         A list of dictionaries, each describing a recommended tool, its parent service, and similarity score (if semantic search used).
@@ -1189,655 +265,63 @@ async def intelligent_tool_finder(
         # Pure tag-based filtering (ONLY when user provides tags without a query)
         tools = await intelligent_tool_finder(tags=["database", "analytics"], top_n_tools=10)
     """
-    # Extract user scopes from headers
-    user_scopes = []
-    
-    if ctx:
-        try:
-            http_request = get_http_request()
-            if http_request:
-                headers = dict(http_request.headers)
-                user_scopes = extract_user_scopes_from_headers(headers)
-            else:
-                logger.warning("No HTTP request context available for scope extraction")
-        except RuntimeError:
-            logger.warning("Not in HTTP context, no scopes to extract")
-        except Exception as e:
-            logger.warning(f"Could not extract scopes from headers: {e}")
-    
-    if not user_scopes:
-        logger.warning("No user scopes found - user may not have access to any tools")
-    
-    # Use the vector search service
-    try:
-        results = await vector_search_service.search_tools(
-            query=natural_language_query,
-            tags=tags,
-            user_scopes=user_scopes,
-            top_k_services=top_k_services,
-            top_n_tools=top_n_tools
-        )
-        
-        logger.info(f"intelligent_tool_finder returned {len(results)} tools")
-        return results
-        
-    except Exception as e:
-        logger.error(f"Error in intelligent_tool_finder: {e}", exc_info=True)
-        raise Exception(f"Tool search failed: {str(e)}")
+    return await search_tools.intelligent_tool_finder_impl(
+        natural_language_query, tags, top_k_services, top_n_tools, ctx
+    )
 
-    registry_faiss_metadata = _faiss_metadata_mcpgw["metadata"] # This is {service_path: {id, text, full_server_info}}
 
-    # Determine which services to process based on whether we're doing semantic search
-    services_to_process = []
-    use_semantic_ranking = False
-
-    if natural_language_query:
-        use_semantic_ranking = True
-        # 1. Embed the natural language query
-        try:
-            query_embedding = await asyncio.to_thread(_embedding_model_mcpgw.encode, [natural_language_query])
-            query_embedding_np = np.array(query_embedding, dtype=np.float32)
-        except Exception as e:
-            logger.error(f"MCPGW: Error encoding natural language query: {e}", exc_info=True)
-            raise Exception(f"MCPGW: Error encoding query: {e}")
-
-        # 2. Search FAISS for top_k_services
-        # The FAISS index in registry/main.py stores SERVICE embeddings.
-        try:
-            logger.info(f"MCPGW: Searching FAISS index for top {top_k_services} services matching query.")
-            distances, faiss_ids = await asyncio.to_thread(_faiss_index_mcpgw.search, query_embedding_np, top_k_services)
-        except Exception as e:
-            logger.error(f"MCPGW: Error searching FAISS index: {e}", exc_info=True)
-            raise Exception(f"MCPGW: Error searching FAISS index: {e}")
-
-        # Create a reverse map from FAISS internal ID to service_path for quick lookup
-        id_to_service_path_map = {}
-        for Svc_path, meta_item in registry_faiss_metadata.items():
-            if "id" in meta_item:
-                id_to_service_path_map[meta_item["id"]] = Svc_path
-            else:
-                logger.warning(f"MCPGW: Metadata for service {Svc_path} missing 'id' field. Skipping.")
-
-        # Extract service paths from FAISS results
-        for i in range(len(faiss_ids[0])):
-            faiss_id = faiss_ids[0][i]
-            if faiss_id == -1: # FAISS uses -1 for no more results or if k > ntotal
-                continue
-            service_path = id_to_service_path_map.get(faiss_id)
-            if service_path:
-                services_to_process.append(service_path)
-                logger.debug(f"MCPGW: Found service_path {service_path} for FAISS ID {faiss_id}")
-            else:
-                logger.warning(f"MCPGW: Could not find service_path for FAISS ID {faiss_id}. Skipping.")
-
-        logger.info(f"MCPGW: Processing {len(services_to_process)} services from FAISS search results.")
-    else:
-        # Tags-only mode: process all services
-        services_to_process = list(registry_faiss_metadata.keys())
-        logger.info(f"MCPGW: Tags-only mode - processing all {len(services_to_process)} services")
-
-    candidate_tools = []
-    tools_before_scope_filter = 0
-
-    # 3. Filter and Collect Tools from services
-    for service_path in services_to_process:
-            
-        service_metadata = registry_faiss_metadata.get(service_path)
-        if not service_metadata or "full_server_info" not in service_metadata:
-            logger.warning(f"MCPGW: Metadata or full_server_info not found for service path {service_path}. Skipping.")
-            continue
-        else:
-            logger.debug(f"MCPGW: Found metadata for service path {service_path}, service_metadata: {service_metadata}")
-        full_server_info = service_metadata["full_server_info"]
-
-        if not full_server_info.get("is_enabled", False):
-            logger.info(f"MCPGW: Service {service_path} is disabled. Skipping its tools.")
-            continue
-
-        # Apply tag filtering if tags are specified
-        if normalized_tags:
-            server_tags = full_server_info.get("tags", "")
-            if isinstance(server_tags, str):
-                server_tags_list = [tag.strip().lower() for tag in server_tags.split(",") if tag.strip()]
-            else:
-                server_tags_list = [str(tag).lower().strip() for tag in server_tags] if server_tags else []
-
-            # Check if all required tags are present (AND logic)
-            if not all(tag in server_tags_list for tag in normalized_tags):
-                logger.info(f"MCPGW: Service {service_path} does not match required tags {normalized_tags}, has tags {server_tags_list}. Skipping.")
-                continue
-            else:
-                logger.info(f"MCPGW: Service {service_path} matches required tags {normalized_tags}")
-        logger.info(f"MCPGW: Processing service {service_path} with full_server_info: {full_server_info}")
-        service_name = full_server_info.get("server_name", "Unknown Service")
-        tool_list = full_server_info.get("tool_list", [])
-        supported_transports = full_server_info.get("supported_transports", ["streamable-http"])
-        auth_provider = full_server_info.get("auth_provider", None)
-        logger.info(f"MCPGW: Found {len(tool_list)} tools for service {service_name} at path {service_path}, supported_transports: {supported_transports}") 
-        for tool_info in tool_list:
-            tool_name = tool_info.get("name", "Unknown Tool")
-            parsed_desc = tool_info.get("parsed_description", {})
-            main_desc = parsed_desc.get("main", "No description.")
-            
-            tools_before_scope_filter += 1
-            
-            # Check if user has access to this tool based on scopes
-            # Map service_path to server name for scope checking
-            server_name = service_path.lstrip('/') if service_path.startswith('/') else service_path
-            logger.info(f"MCPGW: Checking access for user to tool {server_name}.{tool_name} with scopes {user_scopes}")
-            if not check_tool_access(server_name, tool_name, user_scopes, scopes_config):
-                logger.warning(f"User does not have access to tool {server_name}.{tool_name}, skipping")
-                continue
-            
-            # Create descriptive text for this specific tool
-            tool_text_for_embedding = f"Service: {service_name}. Tool: {tool_name}. Description: {main_desc}"
-            
-            candidate_tools.append({
-                "text_for_embedding": tool_text_for_embedding,
-                "tool_name": tool_name,
-                "tool_parsed_description": parsed_desc,
-                "tool_schema": tool_info.get("schema", {}),
-                "service_path": service_path,
-                "service_name": service_name,
-                "supported_transports": supported_transports,
-                "auth_provider": auth_provider,
-            })
-
-    logger.info(f"MCPGW: Scope filtering results - {tools_before_scope_filter} tools found, {len(candidate_tools)} accessible after filtering")
-    
-    if not candidate_tools:
-        logger.info("MCPGW: No accessible tools found in the top services from FAISS search after scope filtering.")
-        return []
-
-    # Apply semantic ranking if we have a natural language query
-    if use_semantic_ranking:
-        # 4. Embed all candidate tool descriptions
-        logger.info(f"MCPGW: Embedding {len(candidate_tools)} candidate tools (after scope filtering) for secondary ranking.")
-        try:
-            tool_texts = [tool["text_for_embedding"] for tool in candidate_tools]
-            tool_embeddings = await asyncio.to_thread(_embedding_model_mcpgw.encode, tool_texts)
-            tool_embeddings_np = np.array(tool_embeddings, dtype=np.float32)
-        except Exception as e:
-            logger.error(f"MCPGW: Error encoding tool descriptions: {e}", exc_info=True)
-            raise Exception(f"MCPGW: Error encoding tool descriptions: {e}")
-
-        # 5. Calculate cosine similarity between query and each tool embedding
-        similarities = cosine_similarity(query_embedding_np, tool_embeddings_np)[0] # Get the first row (query vs all tools)
-
-        # 6. Add similarity score to each tool and sort
-        ranked_tools = []
-        for i, tool_data in enumerate(candidate_tools):
-            ranked_tools.append({
-                **tool_data,
-                "overall_similarity_score": float(similarities[i])
-            })
-
-        ranked_tools.sort(key=lambda x: x["overall_similarity_score"], reverse=True)
-    else:
-        # Tags-only mode: no semantic ranking, just use the tools as-is
-        ranked_tools = candidate_tools
-        logger.info(f"MCPGW: Tags-only mode - {len(ranked_tools)} tools found without semantic ranking")
-
-    # 7. Select top N tools
-    final_results = ranked_tools[:top_n_tools]
-    logger.info(f"MCPGW: Top {len(final_results)} tools found after scope filtering and ranking")
-    
-    # Log which tools were returned for debugging
-    for i, tool in enumerate(final_results):
-        if 'overall_similarity_score' in tool:
-            logger.info(f"  {i+1}. {tool['service_name']}.{tool['tool_name']} (similarity: {tool['overall_similarity_score']:.3f})")
-        else:
-            logger.info(f"  {i+1}. {tool['service_name']}.{tool['tool_name']} (tags-only mode)")
-    
-    # Remove the temporary 'text_for_embedding' field from results
-    for res in final_results:
-        del res["text_for_embedding"]
-    logger.info(f"intelligent_tool_finder, final_results: {json.dumps(final_results, indent=2, default=str)}")    
-    return final_results
-
-
-@mcp.tool()
-async def add_server_to_scopes_groups(
-    server_name: str = Field(..., description="Name of the server to add to groups (e.g., 'example-server'). Should not include leading slash."),
-    group_names: List[str] = Field(..., description="List of scopes group names to add the server to (e.g., ['mcp-servers-restricted/read', 'mcp-servers-restricted/execute'])."),
-    ctx: Context = None
-) -> Dict[str, Any]:
-    """
-    Add a server and all its known tools/methods to specific scopes groups.
-
-    This tool retrieves the server's tools from the last health check and adds
-    them to the specified groups in scopes.yml using the same format as other servers.
-
-    Args:
-        server_name: Name of the server (without leading slash)
-        group_names: List of group names to add the server to
-
-    Returns:
-        Dict with success status and details about the operation
-    """
-    logger.info(f"add_server_to_scopes_groups called with server_name={server_name}, group_names={group_names}")
-
-    try:
-        # Get admin credentials
-        registry_admin_user = os.environ.get("REGISTRY_USERNAME", "admin")
-        registry_admin_password = os.environ.get("REGISTRY_PASSWORD")
-
-        if not registry_admin_password:
-            error_msg = "REGISTRY_PASSWORD environment variable not set. Cannot authenticate to internal API."
-            logger.error(error_msg)
-            return {"success": False, "error": error_msg}
-
-        # Prepare the request data
-        form_data = {
-            "server_name": server_name,
-            "group_names": ",".join(group_names)  # Convert list to comma-separated string
-        }
-
-        # Prepare Basic Auth header
-        import base64
-        credentials = f"{registry_admin_user}:{registry_admin_password}"
-        encoded_credentials = base64.b64encode(credentials.encode()).decode()
-        headers = {
-            "Authorization": f"Basic {encoded_credentials}",
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
-
-        # Make request to internal API
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{REGISTRY_BASE_URL}/api/internal/add-to-groups",
-                data=form_data,
-                headers=headers,
-                timeout=30.0
-            )
-
-        if response.status_code == 200:
-            result = response.json()
-            logger.info(f"Successfully added server {server_name} to groups {group_names}")
-            return {
-                "success": True,
-                "message": result.get("message", "Server successfully added to groups"),
-                "server_name": server_name,
-                "groups": group_names,
-                "server_path": result.get("server_path")
-            }
-        else:
-            error_detail = f"HTTP {response.status_code}: {response.text}"
-            logger.error(f"Failed to add server {server_name} to groups: {error_detail}")
-            return {
-                "success": False,
-                "error": error_detail,
-                "status_code": response.status_code
-            }
-
-    except Exception as e:
-        error_msg = f"Error adding server {server_name} to groups {group_names}: {str(e)}"
-        logger.error(error_msg, exc_info=True)
-        return {
-            "success": False,
-            "error": error_msg
-        }
-
-
-@mcp.tool()
-async def remove_server_from_scopes_groups(
-    server_name: str = Field(..., description="Name of the server to remove from groups (e.g., 'example-server'). Should not include leading slash."),
-    group_names: List[str] = Field(..., description="List of scopes group names to remove the server from (e.g., ['mcp-servers-restricted/read', 'mcp-servers-restricted/execute'])."),
-    ctx: Context = None
-) -> Dict[str, Any]:
-    """
-    Remove a server from specific scopes groups.
-
-    This tool removes the server from the specified groups in scopes.yml.
-    Useful for revoking access or moving servers between access levels.
-
-    Args:
-        server_name: Name of the server (without leading slash)
-        group_names: List of group names to remove the server from
-
-    Returns:
-        Dict with success status and details about the operation
-    """
-    logger.info(f"remove_server_from_scopes_groups called with server_name={server_name}, group_names={group_names}")
-
-    try:
-        # Get admin credentials
-        registry_admin_user = os.environ.get("REGISTRY_USERNAME", "admin")
-        registry_admin_password = os.environ.get("REGISTRY_PASSWORD")
-
-        if not registry_admin_password:
-            error_msg = "REGISTRY_PASSWORD environment variable not set. Cannot authenticate to internal API."
-            logger.error(error_msg)
-            return {"success": False, "error": error_msg}
-
-        # Prepare the request data
-        form_data = {
-            "server_name": server_name,
-            "group_names": ",".join(group_names)  # Convert list to comma-separated string
-        }
-
-        # Prepare Basic Auth header
-        import base64
-        credentials = f"{registry_admin_user}:{registry_admin_password}"
-        encoded_credentials = base64.b64encode(credentials.encode()).decode()
-        headers = {
-            "Authorization": f"Basic {encoded_credentials}",
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
-
-        # Make request to internal API
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{REGISTRY_BASE_URL}/api/internal/remove-from-groups",
-                data=form_data,
-                headers=headers,
-                timeout=30.0
-            )
-
-        if response.status_code == 200:
-            result = response.json()
-            logger.info(f"Successfully removed server {server_name} from groups {group_names}")
-            return {
-                "success": True,
-                "message": result.get("message", "Server successfully removed from groups"),
-                "server_name": server_name,
-                "groups": group_names,
-                "server_path": result.get("server_path")
-            }
-        else:
-            error_detail = f"HTTP {response.status_code}: {response.text}"
-            logger.error(f"Failed to remove server {server_name} from groups: {error_detail}")
-            return {
-                "success": False,
-                "error": error_detail,
-                "status_code": response.status_code
-            }
-
-    except Exception as e:
-        error_msg = f"Error removing server {server_name} from groups {group_names}: {str(e)}"
-        logger.error(error_msg, exc_info=True)
-        return {
-            "success": False,
-            "error": error_msg
-        }
-
-
-@mcp.tool()
-async def create_group(
-    group_name: str = Field(..., description="Name of the group to create (e.g., 'mcp-servers-finance/read')"),
-    description: Optional[str] = Field("", description="Optional description for the group"),
-    ctx: Context = None
-) -> Dict[str, Any]:
-    """
-    Create a new group in both Keycloak and scopes.yml.
-
-    This tool creates a new access control group that can be used to manage
-    server permissions. The group is automatically created in both Keycloak
-    (for authentication) and scopes.yml (for authorization).
-
-    Args:
-        group_name: Name of the group (e.g., 'mcp-servers-finance/read')
-        description: Optional description of the group's purpose
-
-    Returns:
-        Dict with success status and creation details
-
-    Example:
-        create_group(
-            group_name="mcp-servers-finance/read",
-            description="Finance team read access"
-        )
-    """
-    logger.info(f"create_group called with group_name={group_name}")
-
-    try:
-        # Get admin credentials
-        registry_admin_user = os.environ.get("REGISTRY_USERNAME", "admin")
-        registry_admin_password = os.environ.get("REGISTRY_PASSWORD")
-
-        if not registry_admin_password:
-            error_msg = "REGISTRY_PASSWORD environment variable not set. Cannot authenticate to internal API."
-            logger.error(error_msg)
-            return {"success": False, "error": error_msg}
-
-        # Prepare the request data
-        form_data = {
-            "group_name": group_name,
-            "description": description
-        }
-
-        # Prepare Basic Auth header
-        import base64
-        credentials = f"{registry_admin_user}:{registry_admin_password}"
-        encoded_credentials = base64.b64encode(credentials.encode()).decode()
-        headers = {
-            "Authorization": f"Basic {encoded_credentials}",
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
-
-        # Make request to internal API
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{REGISTRY_BASE_URL}/api/internal/create-group",
-                data=form_data,
-                headers=headers,
-                timeout=30.0
-            )
-
-        if response.status_code == 200:
-            result = response.json()
-            logger.info(f"Successfully created group {group_name}")
-            return {
-                "success": True,
-                "message": result.get("message", "Group successfully created"),
-                "group_name": group_name,
-                "created_in_keycloak": result.get("created_in_keycloak", False),
-                "created_in_scopes": result.get("created_in_scopes", False)
-            }
-        else:
-            error_detail = f"HTTP {response.status_code}: {response.text}"
-            logger.error(f"Failed to create group {group_name}: {error_detail}")
-            return {
-                "success": False,
-                "error": error_detail,
-                "status_code": response.status_code
-            }
-
-    except Exception as e:
-        error_msg = f"Error creating group {group_name}: {str(e)}"
-        logger.error(error_msg, exc_info=True)
-        return {
-            "success": False,
-            "error": error_msg
-        }
-
-
-@mcp.tool()
-async def delete_group(
-    group_name: str = Field(..., description="Name of the group to delete"),
-    ctx: Context = None
-) -> Dict[str, Any]:
-    """
-    Delete a group from both Keycloak and scopes.yml.
-
-    This tool removes an access control group from the system. It deletes the
-    group from both Keycloak and scopes.yml, and removes it from group_mappings.
-    System groups cannot be deleted.
-
-    Args:
-        group_name: Name of the group to delete
-
-    Returns:
-        Dict with success status and deletion details
-
-    Example:
-        delete_group(group_name="mcp-servers-finance/read")
-    """
-    logger.info(f"delete_group called with group_name={group_name}")
-
-    try:
-        # Get admin credentials
-        registry_admin_user = os.environ.get("REGISTRY_USERNAME", "admin")
-        registry_admin_password = os.environ.get("REGISTRY_PASSWORD")
-
-        if not registry_admin_password:
-            error_msg = "REGISTRY_PASSWORD environment variable not set. Cannot authenticate to internal API."
-            logger.error(error_msg)
-            return {"success": False, "error": error_msg}
-
-        # Prepare the request data
-        form_data = {
-            "group_name": group_name
-        }
-
-        # Prepare Basic Auth header
-        import base64
-        credentials = f"{registry_admin_user}:{registry_admin_password}"
-        encoded_credentials = base64.b64encode(credentials.encode()).decode()
-        headers = {
-            "Authorization": f"Basic {encoded_credentials}",
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
-
-        # Make request to internal API
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{REGISTRY_BASE_URL}/api/internal/delete-group",
-                data=form_data,
-                headers=headers,
-                timeout=30.0
-            )
-
-        if response.status_code == 200:
-            result = response.json()
-            logger.info(f"Successfully deleted group {group_name}")
-            return {
-                "success": True,
-                "message": result.get("message", "Group successfully deleted"),
-                "group_name": group_name,
-                "deleted_from_keycloak": result.get("deleted_from_keycloak", False),
-                "deleted_from_scopes": result.get("deleted_from_scopes", False)
-            }
-        else:
-            error_detail = f"HTTP {response.status_code}: {response.text}"
-            logger.error(f"Failed to delete group {group_name}: {error_detail}")
-            return {
-                "success": False,
-                "error": error_detail,
-                "status_code": response.status_code
-            }
-
-    except Exception as e:
-        error_msg = f"Error deleting group {group_name}: {str(e)}"
-        logger.error(error_msg, exc_info=True)
-        return {
-            "success": False,
-            "error": error_msg
-        }
-
-
-@mcp.tool()
-async def list_groups(ctx: Context = None) -> Dict[str, Any]:
-    """
-    List all groups from Keycloak and scopes.yml with synchronization status.
-
-    This tool provides a comprehensive view of all access control groups in the
-    system, showing which groups exist in Keycloak, scopes.yml, or both. It also
-    identifies groups that are out of sync between the two systems.
-
-    Returns:
-        Dict containing:
-        - keycloak_groups: List of groups in Keycloak
-        - scopes_groups: Dict of groups in scopes.yml with server counts
-        - synchronized: List of groups in both systems
-        - keycloak_only: List of groups only in Keycloak
-        - scopes_only: List of groups only in scopes.yml
-        - summary: Statistics about group counts
-
-    Example:
-        list_groups()
-    """
-    logger.info("list_groups called")
-
-    try:
-        # Get admin credentials
-        registry_admin_user = os.environ.get("REGISTRY_USERNAME", "admin")
-        registry_admin_password = os.environ.get("REGISTRY_PASSWORD")
-
-        if not registry_admin_password:
-            error_msg = "REGISTRY_PASSWORD environment variable not set. Cannot authenticate to internal API."
-            logger.error(error_msg)
-            return {"success": False, "error": error_msg}
-
-        # Prepare Basic Auth header
-        import base64
-        credentials = f"{registry_admin_user}:{registry_admin_password}"
-        encoded_credentials = base64.b64encode(credentials.encode()).decode()
-        headers = {
-            "Authorization": f"Basic {encoded_credentials}"
-        }
-
-        # Make request to internal API
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{REGISTRY_BASE_URL}/api/internal/list-groups",
-                headers=headers,
-                timeout=30.0
-            )
-
-        if response.status_code == 200:
-            result = response.json()
-            logger.info("Successfully listed groups")
-
-            # Add success flag
-            result["success"] = True
-
-            # Calculate summary stats
-            result["summary"] = {
-                "total_keycloak": len(result.get("keycloak_groups", [])),
-                "total_scopes": len(result.get("scopes_groups", {})),
-                "synchronized_count": len(result.get("synchronized", [])),
-                "keycloak_only_count": len(result.get("keycloak_only", [])),
-                "scopes_only_count": len(result.get("scopes_only", []))
-            }
-
-            return result
-        else:
-            error_detail = f"HTTP {response.status_code}: {response.text}"
-            logger.error(f"Failed to list groups: {error_detail}")
-            return {
-                "success": False,
-                "error": error_detail,
-                "status_code": response.status_code
-            }
-
-    except Exception as e:
-        error_msg = f"Error listing groups: {str(e)}"
-        logger.error(error_msg, exc_info=True)
-        return {
-            "success": False,
-            "error": error_msg
-        }
-
-
-# --- Main Execution ---
+# ============================================================================
+# Main Entry Point
+# ============================================================================
 
 def main():
-    # Log transport and endpoint information
-    endpoint = "/mcp"  # streamable-http always uses /mcp endpoint
-    logger.info(f"Starting MCPGateway server on port {args.port} with transport {args.transport}")
-    logger.info(f"Server will be available at: http://localhost:{args.port}{endpoint}")
-    
-    # Initialize vector search service
-    import asyncio
+    """
+    Main entry point for the MCPGW server.
+    """
+    # Parse command line arguments
+    args = parse_arguments()
+
+    # Override settings with command line arguments if provided
+    if args.port:
+        settings.MCP_SERVER_LISTEN_PORT = args.port
+    if args.transport:
+        settings.MCP_TRANSPORT = args.transport
+
+    # Log configuration
+    logger.info("=" * 80)
+    logger.info("Starting MCPGW - MCP Gateway Registry Interaction Server")
+    logger.info("=" * 80)
+    logger.info(f"Configuration:")
+    logger.info(f"  Port: {settings.MCP_SERVER_LISTEN_PORT}")
+    logger.info(f"  Transport: {settings.MCP_TRANSPORT}")
+    logger.info(f"  Registry URL: {settings.REGISTRY_BASE_URL}")
+    logger.info(f"  Tool Discovery Mode: {settings.TOOL_DISCOVERY_MODE}")
+    logger.info(f"  Endpoint: http://0.0.0.0:{settings.MCP_SERVER_LISTEN_PORT}/mcp")
+    logger.info("=" * 80)
+
+    # Initialize services
     try:
-        asyncio.get_event_loop().run_until_complete(initialize_vector_search())
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(initialize_vector_search())
     except Exception as e:
-        logger.warning(f"Failed to initialize vector search on startup: {e}")
-        logger.warning("Server will start but intelligent_tool_finder may not work until initialized")
-    
-    # Run the server with the specified transport from command line args
-    mcp.run(transport=args.transport, host="0.0.0.0", port=int(args.port))
+        logger.warning(f"Startup initialization encountered issues: {e}")
+        logger.warning("Server will continue but some features may not work until initialized")
+
+    # Run the server
+    logger.info("Starting server...")
+    try:
+        mcp.run(
+            transport=settings.MCP_TRANSPORT,
+            host="0.0.0.0",
+            port=int(settings.MCP_SERVER_LISTEN_PORT)
+        )
+    except KeyboardInterrupt:
+        logger.info("Server shutdown requested by user")
+    except Exception as e:
+        logger.error(f"Server error: {e}", exc_info=True)
+        raise
+
 
 if __name__ == "__main__":
     main()

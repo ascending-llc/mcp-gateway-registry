@@ -4,7 +4,7 @@ Vector search service factory.
 This module provides the main entry point for vector search operations.
 Depending on the configuration (discovery_mode), it will either use:
 - Embedded FAISS with sentence-transformers (default, requires heavy dependencies)
-- External MCP vector search service (lightweight, no heavy dependencies)
+- Weaviate-based vector search service (uses WeaviateClient for tool indexing)
 """
 
 import logging
@@ -16,6 +16,10 @@ from .base import VectorSearchService
 if TYPE_CHECKING:
     from .embedded_service import EmbeddedFaissService
     from .external_service import ExternalVectorSearchService
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,12 +29,12 @@ def create_vector_search_service() -> VectorSearchService:
     Factory function to create the appropriate vector search service based on configuration.
     
     Returns:
-        VectorSearchService: Either EmbeddedFaissService or ExternalVectorSearchService
+        VectorSearchService: Either EmbeddedFaissService or ExternalVectorSearchService (Weaviate-based)
     """
     if settings.use_external_discovery:
-        logger.info(f"Initializing EXTERNAL vector search service at {settings.external_vector_search_url}")
+        logger.info("Initializing Weaviate-based vector search service for MCP tools")
         from .external_service import ExternalVectorSearchService
-        return ExternalVectorSearchService(settings.external_vector_search_url)
+        return ExternalVectorSearchService()
     else:
         logger.info("Initializing EMBEDDED FAISS vector search service")
         from .embedded_service import EmbeddedFaissService

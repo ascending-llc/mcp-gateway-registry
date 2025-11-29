@@ -4,17 +4,19 @@ Constants and enums for the MCP Gateway Registry.
 
 import os
 from enum import Enum
-from typing import List
-from pydantic import BaseModel
+from typing import List, Optional
+from pydantic import BaseModel, ConfigDict
+
+from packages.db import LLMProvider
 
 
 class HealthStatus(str, Enum):
     """Health status constants for services."""
-    
+
     HEALTHY = "healthy"
     HEALTHY_AUTH_EXPIRED = "healthy-auth-expired"
     UNHEALTHY_TIMEOUT = "unhealthy: timeout"
-    UNHEALTHY_CONNECTION_ERROR = "unhealthy: connection error" 
+    UNHEALTHY_CONNECTION_ERROR = "unhealthy: connection error"
     UNHEALTHY_ENDPOINT_CHECK_FAILED = "unhealthy: endpoint check failed"
     UNHEALTHY_MISSING_PROXY_URL = "unhealthy: missing proxy URL"
     CHECKING = "checking"
@@ -41,9 +43,7 @@ class TransportType(str, Enum):
 class RegistryConstants(BaseModel):
     """Registry configuration constants."""
 
-    class Config:
-        """Pydantic config."""
-        frozen = True
+    model_config = ConfigDict(frozen=True)
 
     # Health check settings
     DEFAULT_HEALTH_CHECK_TIMEOUT: int = 30
@@ -77,7 +77,22 @@ class RegistryConstants(BaseModel):
         "EXTERNAL_REGISTRY_TAGS",
         "anthropic-registry,workday-asor"
     )
+    # Weaviate Configuration
+    WEAVIATE_HOST: str = os.getenv("WEAVIATE_HOST", "weaviate")
+    WEAVIATE_PORT: int = int(os.getenv("WEAVIATE_PORT", "8080"))
+    WEAVIATE_API_KEY: Optional[str] = os.getenv("WEAVIATE_API_KEY", "test-secret-key")
+    WEAVIATE_EMBEDDINGS_PROVIDER:LLMProvider= os.getenv("WEAVIATE_EMBEDDINGS_PROVIDER","bedrock")
 
+    WEAVIATE_SESSION_POOL_CONNECTIONS: int = 20  # Maximum connections
+    WEAVIATE_SESSION_POOL_MAXSIZE: int = 100  # Connection pool size
+    WEAVIATE_INIT_TIME: int = 30
+    WEAVIATE_QUERY_TIME: int = 120
+    WEAVIATE_INSERT_TIME: int = 300
+
+    AWS_ACCESS_KEY_ID: str = os.getenv("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY: str = os.getenv("AWS_SECRET_ACCESS_KEY")
+    AWS_SESSION_TOKEN: str = os.getenv("AWS_SESSION_TOKEN")
+    AWS_REGION: str = os.getenv("AWS_REGION")
 
 # Global instance
 REGISTRY_CONSTANTS = RegistryConstants()

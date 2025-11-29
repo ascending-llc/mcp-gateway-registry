@@ -37,6 +37,7 @@ dependencies = [
     "faker>=37.11.0",
     "factory-boy>=3.3.3",
     "cisco-ai-mcp-scanner>=3.0.1",
+    "weaviate-client>=4.18.1",
 ]
 
 [project.optional-dependencies]
@@ -150,3 +151,9 @@ exclude_lines = [
 [tool.coverage.html]
 directory = "htmlcov"
 title = "MCP Registry Coverage Report"
+
+[tool.uv.workspace]
+members = [
+    "libraries/libraries",
+    "libraries",
+]
