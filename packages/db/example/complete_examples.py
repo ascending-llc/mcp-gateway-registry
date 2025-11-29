@@ -22,13 +22,11 @@ import os
 from pathlib import Path
 from datetime import datetime, timezone
 
+
 # Add packages to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from db import (
-    WeaviateClient,
-    ConnectionConfig,
-    BedrockProvider,
     Model,
     TextField,
     IntField,
@@ -37,15 +35,15 @@ from db import (
     DateTimeField,
     TextArrayField,
     RangeValidator,
-    EmailValidator,
     Q,
     DoesNotExist,
     FieldValidationError,
     get_weaviate_client,
-    init_weaviate,
+    init_weaviate, SearchType,
 )
 from weaviate.classes.config import DataType
 import dotenv
+from db.search import get_search_interface
 
 dotenv_path = "../../.env"
 dotenv.load_dotenv(dotenv_path)
@@ -573,9 +571,162 @@ def example_8_large_batch_import():
 # Example 9: Performance Demo
 # ============================================================================
 
-def example_9_performance():
-    """Example 9: Performance Comparison."""
-    print_section("EXAMPLE 9: Performance: get_by_id vs filter")
+def example_9_search_by_type_with_model():
+    """Example 9: search_by_type with Model."""
+    print_section("EXAMPLE 9: search_by_type with Model")
+    
+    try:
+        if not Article.collection_exists():
+            Article.create_collection()
+        
+        # Create test data
+        print("\n1. Creating test data...")
+        test_data = [
+            {
+                "title": "Python Programming Guide for Beginners",
+                "content": "Complete Python programming tutorial with examples. " * 15,
+                "category": "tech",
+                "tags": ["python", "programming", "tutorial"],
+                "views": 1000,
+                "published": True,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            },
+            {
+                "title": "Machine Learning with Python",
+                "content": "Learn machine learning algorithms using Python. " * 15,
+                "category": "tech",
+                "tags": ["ml", "python", "ai"],
+                "views": 1500,
+                "published": True,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+        ]
+        result = Article.objects.bulk_import(test_data)
+        print(f"   ✅ Created {result.successful} articles")
+        
+        # Compare different search types
+        print("\n2. Compare search types for 'python machine learning':")
+        search_types = [
+            (SearchType.BM25, "BM25 (keyword)"),
+            (SearchType.NEAR_TEXT, "Semantic"),
+            (SearchType.HYBRID, "Hybrid"),
+            (SearchType.FUZZY, "Fuzzy"),
+        ]
+        
+        for search_type, name in search_types:
+            results = Article.objects.search_by_type(
+                search_type,
+                query="python machine learning"
+            ).limit(5).all()
+            print(f"   {name:20s}: {len(results)} results")
+        
+        # Dynamic selection based on user preference
+        print("\n3. Dynamic search type selection:")
+        
+        def search_with_preference(query, preference):
+            """Select search type based on user preference."""
+            type_map = {
+                'exact': SearchType.BM25,
+                'smart': SearchType.HYBRID,
+                'semantic': SearchType.NEAR_TEXT,
+                'tolerant': SearchType.FUZZY
+            }
+            search_type = type_map.get(preference, SearchType.HYBRID)
+            return Article.objects.search_by_type(search_type, query=query).all()
+        
+        for pref in ['exact', 'smart', 'semantic']:
+            results = search_with_preference("python", pref)
+            print(f"   Preference '{pref}': {len(results)} results")
+        
+        # Cleanup
+        count = Article.objects.delete_where(views__gte=0)
+        print(f"\n4. Cleanup: Deleted {count} articles")
+        
+        print("\n✅ search_by_type with Model working")
+        
+    except Exception as e:
+        print(f"   ❌ Error: {e}")
+
+
+def example_10_search_by_type_without_model():
+    """Example 10: search_by_type without Model (Collection-based)."""
+    print_section("EXAMPLE 10: search_by_type without Model (Collection)")
+    
+    try:
+
+        
+        if not Article.collection_exists():
+            Article.create_collection()
+        
+        # Create test data
+        print("\n1. Creating test data...")
+        data = [
+            {
+                "title": "Data Science Tutorial",
+                "content": "Learn data science with Python and R. " * 15,
+                "category": "science",
+                "tags": ["data", "python"],
+                "views": 800,
+                "published": True,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+        ]
+        result = Article.objects.bulk_import(data)
+        print(f"   ✅ Created {result.successful} articles")
+        
+        # Collection-based search with search_by_type
+        print("\n2. Collection-based search (no Model definition needed):")
+        
+        search = get_search_interface()
+        
+        # Different search types on collection
+        print("\n   Testing different search types on 'ExampleArticles' collection:")
+        
+        # BM25
+        results = search.collection("ExampleArticles").search_by_type(
+            SearchType.BM25,
+            query="data science"
+        ).limit(5).all()
+        print(f"   BM25: {len(results)} results")
+        
+        # Semantic
+        results = search.collection("ExampleArticles").search_by_type(
+            SearchType.NEAR_TEXT,
+            query="data analysis and visualization"
+        ).limit(5).all()
+        print(f"   Semantic: {len(results)} results")
+        
+        # Hybrid (recommended)
+        results = search.collection("ExampleArticles").search_by_type(
+            SearchType.HYBRID,
+            query="python data science"
+        ).limit(5).all()
+        print(f"   Hybrid: {len(results)} results")
+        
+        # With filters
+        print("\n3. Collection-based search with filters:")
+        results = search.collection("ExampleArticles")\
+            .filter(published=True, views__gt=500)\
+            .search_by_type(SearchType.HYBRID, query="data")\
+            .limit(10)\
+            .all()
+        print(f"   Found {len(results)} published articles with views > 500")
+        
+        # Cleanup
+        count = Article.objects.delete_where(views__gte=0)
+        print(f"\n4. Cleanup: Deleted {count} articles")
+        
+        print("\n✅ search_by_type without Model working")
+        
+    except Exception as e:
+        print(f"   ❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def example_11_performance():
+    """Example 11: Performance Comparison."""
+    print_section("EXAMPLE 11: Performance: get_by_id vs filter")
 
     try:
         if not Article.collection_exists():
@@ -671,14 +822,17 @@ def main():
 
     # Run examples
     examples = [
-        ("Client Configuration", example_1_client_configuration),
-        ("Collection Management", example_2_collection_management),
-        ("CRUD Operations", example_3_crud_operations),
-        ("Batch Operations", example_4_batch_operations),
-        ("Search and Filter", example_5_search_operations),
-        ("Aggregation", example_6_aggregation),
-        ("Field Validation", example_7_field_validation),
-        ("Performance Demo", example_9_performance),
+        # ("Client Configuration", example_1_client_configuration),
+        # ("Collection Management", example_2_collection_management),
+        # ("CRUD Operations", example_3_crud_operations),
+        # ("Batch Operations", example_4_batch_operations),
+        # ("Search and Filter", example_5_search_operations),
+        # ("Aggregation", example_6_aggregation),
+        # ("Field Validation", example_7_field_validation),
+        # ("Large Batch Import", example_8_large_batch_import),
+        ("search_by_type with Model", example_9_search_by_type_with_model),
+        ("search_by_type without Model", example_10_search_by_type_without_model),
+        # ("Performance Demo", example_11_performance),
     ]
 
     print("\n" + "=" * 70)
@@ -714,9 +868,6 @@ def main():
     print("   ✅ Field validation and conversion")
     print("   ✅ Advanced search and aggregation")
 
-    print("\n📊 Test Status:")
-    print("   257 tests, 100% pass rate ✅")
-    print("\n")
 
 
 if __name__ == "__main__":

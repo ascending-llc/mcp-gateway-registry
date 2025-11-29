@@ -804,6 +804,41 @@ class ObjectManager:
         """Fuzzy search (typo-tolerant)."""
         return QueryBuilder(self.model_class, self.client).fuzzy(query, **kwargs)
     
+    def search_by_type(self, search_type, query: Optional[str] = None, **kwargs) -> QueryBuilder:
+        """
+        Execute search by type (unified method).
+        
+        Simplifies search type selection by delegating to QueryBuilder.search_by_type().
+        
+        Args:
+            search_type: SearchType enum value
+            query: Search query
+            **kwargs: Additional search parameters
+        
+        Returns:
+            QueryBuilder instance
+        
+        Example:
+            from db import SearchType
+            
+            # Use any search type
+            results = Article.objects.search_by_type(
+                SearchType.HYBRID,
+                query="machine learning"
+            ).all()
+            
+            # With filters
+            results = Article.objects.filter(category="tech").search_by_type(
+                SearchType.BM25,
+                query="python"
+            ).all()
+        """
+        return QueryBuilder(self.model_class, self.client).search_by_type(
+            search_type,
+            query=query,
+            **kwargs
+        )
+    
     def aggregate(self):
         """
         Create an aggregation builder for this model.

@@ -1,5 +1,5 @@
 import json
-from typing import List
+from packages.db import BatchResult
 from packages.db import TextField, TextArrayField, BooleanField, Model
 from weaviate.classes.config import VectorDistances
 import logging
@@ -166,10 +166,10 @@ class McpTool(Model):
 
     @classmethod
     def bulk_create_from_server_info(
-        cls,
-        service_path: str,
-        server_info: dict,
-        is_enabled: bool = False
+            cls,
+            service_path: str,
+            server_info: dict,
+            is_enabled: bool = False
     ):
         """
         Bulk create tools from server info dictionary.
@@ -190,7 +190,6 @@ class McpTool(Model):
         tool_list = server_info.get("tool_list", [])
         if not tool_list:
             logger.warning(f"No tools in server_info for '{service_path}'")
-            from packages.db import BatchResult
             return BatchResult(total=0, successful=0, failed=0, errors=[])
 
         server_name = server_info.get("server_name", "")
@@ -201,7 +200,7 @@ class McpTool(Model):
         # Convert all tools to MCPTool instances
         instances = []
         conversion_errors = []
-        
+
         for i, tool in enumerate(tool_list):
             try:
                 mcp_tool = cls.create_from_tool_dict(
@@ -232,34 +231,33 @@ class McpTool(Model):
             try:
                 # Returns BatchResult (new in v2.0)
                 result = cls.objects.bulk_create(instances, batch_size=100)
-                
+
                 logger.info(
                     f"Bulk create result: {result.successful}/{result.total} successful "
                     f"({result.success_rate:.1f}%)"
                 )
-                
+
                 if result.has_errors:
                     logger.warning(f"⚠️  {result.failed} tools failed:")
                     for error in result.errors[:5]:
                         logger.warning(f"   - {error}")
-                
+
                 # Combine conversion errors with creation errors
                 all_errors = conversion_errors + result.errors
-                
-                from packages.db import BatchResult
+
                 return BatchResult(
                     total=len(tool_list),
                     successful=result.successful,
                     failed=len(all_errors),
                     errors=all_errors
                 )
-                
+
             except Exception as e:
                 logger.error(f"Bulk create failed for '{service_path}': {e}", exc_info=True)
                 raise
         else:
             logger.warning(f"No valid tool instances to create for '{service_path}'")
-            from packages.db import BatchResult
+
             return BatchResult(
                 total=len(tool_list),
                 successful=0,

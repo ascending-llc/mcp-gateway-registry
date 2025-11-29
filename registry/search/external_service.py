@@ -179,10 +179,9 @@ class ExternalVectorSearchService(VectorSearchService):
         """
         if not self._initialized:
             return None
-
         try:
             deleted_count = McpTool.objects.delete_where(server_path=service_path)
-            logger.info(f"✅ Removed {deleted_count} tools for '{service_path}'")
+            logger.info(f"Removed {deleted_count} tools for '{service_path}'")
             return {"deleted_tools": deleted_count}
         except Exception as e:
             logger.error(f"Removal failed for '{service_path}': {e}")

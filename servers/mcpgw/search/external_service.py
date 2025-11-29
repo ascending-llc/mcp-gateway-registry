@@ -129,35 +129,67 @@ class ExternalVectorSearchService(VectorSearchService):
         search_type: SearchType = SearchType.HYBRID
     ) -> List[Dict[str, Any]]:
         """
-        Search for tools with support for multiple search types.
+        Search for tools with flexible search type selection.
         
-        Uses SearchType enum for type-safe search method selection.
+        Uses the unified search_by_type() method from QueryBuilder for
+        clean, type-safe search execution across all search types.
         
         Args:
             query: Search query text
-            tags: List of tags to filter by (contains_any logic)
-            user_scopes: List of user scopes (not currently used in filtering)
-            top_k_services: Maximum services (not used in direct search)
+            tags: List of tags to filter by (uses contains_any logic)
+            user_scopes: User scopes for access control (currently not used)
+            top_k_services: Max services to consider (not used in direct DB search)
             top_n_tools: Maximum number of tools to return
-            search_type: Type of search (default: SearchType.HYBRID)
-                Options:
-                - SearchType.BM25: Keyword search
-                - SearchType.NEAR_TEXT: Semantic search
-                - SearchType.HYBRID: Combined (70% semantic + 30% keyword)
+            search_type: Type of search to execute (default: SearchType.HYBRID)
+                Available types:
+                - SearchType.BM25: Fast keyword/exact match search
+                - SearchType.NEAR_TEXT: Semantic similarity search  
+                - SearchType.HYBRID: Combined semantic + keyword (recommended)
                 - SearchType.FUZZY: Typo-tolerant search
+                - SearchType.FETCH_OBJECTS: Simple filtered fetch (no search)
         
         Returns:
-            List of tool dictionaries in mcpgw format
+            List of tool dictionaries in mcpgw format with fields:
+            - tool_name: Name of the tool
+            - tool_parsed_description: Parsed description object
+            - tool_schema: JSON schema for the tool
+            - service_path: Path to the service
+            - service_name: Display name of the service
+            - supported_transports: List of supported transports
+            - overall_similarity_score: Search relevance score (if available)
             
         Example:
             from packages.db import SearchType
             
+            # Hybrid search (default, best for most cases)
             results = await service.search_tools(
                 query="get weather data",
                 tags=["weather", "api"],
                 top_n_tools=5,
                 search_type=SearchType.HYBRID
             )
+            
+            # BM25 for exact keyword matching
+            results = await service.search_tools(
+                query="get_weather",
+                search_type=SearchType.BM25
+            )
+            
+            # Semantic for natural language
+            results = await service.search_tools(
+                query="I need to check the weather forecast",
+                search_type=SearchType.NEAR_TEXT
+            )
+            
+            # Fuzzy for typo tolerance
+            results = await service.search_tools(
+                query="wether forcast",  # typos
+                search_type=SearchType.FUZZY
+            )
+        
+        Note:
+            This method leverages the unified search_by_type() from QueryBuilder,
+            eliminating code duplication across model-based and collection-based searches.
         """
         if not self._initialized:
             raise Exception("Vector search service not initialized")
@@ -179,23 +211,12 @@ class ExternalVectorSearchService(VectorSearchService):
             if tags:
                 query_builder = query_builder.filter(tags__contains_any=tags)
             
-            # Execute search based on type (using enum comparison)
-            if query:
-                if search_type == SearchType.BM25:
-                    results = query_builder.bm25(query).limit(top_n_tools).all()
-                elif search_type == SearchType.NEAR_TEXT:
-                    results = query_builder.near_text(query).limit(top_n_tools).all()
-                elif search_type == SearchType.HYBRID:
-                    results = query_builder.hybrid(query, alpha=0.7).limit(top_n_tools).all()
-                elif search_type == SearchType.FUZZY:
-                    results = query_builder.fuzzy(query).limit(top_n_tools).all()
-                else:
-                    # Default to hybrid
-                    logger.warning(f"Unknown search_type {search_type}, using hybrid")
-                    results = query_builder.hybrid(query, alpha=0.7).limit(top_n_tools).all()
-            else:
-                # No query, just filtered fetch
-                results = query_builder.limit(top_n_tools).all()
+            # Execute search using unified search_by_type method
+            results = query_builder.search_by_type(
+                search_type,
+                query=query,
+                alpha=0.7  # For hybrid search
+            ).limit(top_n_tools).all()
             
             logger.info(f"Search returned {len(results)} tools")
             
