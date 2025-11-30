@@ -74,26 +74,48 @@ resource "aws_security_group" "keycloak_lb" {
   )
 }
 
-# Load Balancer Ingress from Internet (HTTP)
+# Load Balancer Ingress from allowed CIDR blocks (HTTP)
 resource "aws_security_group_rule" "keycloak_lb_ingress_http" {
-  description       = "Ingress from internet to load balancer (HTTP)"
+  description       = "Ingress from allowed CIDR blocks to load balancer (HTTP)"
   type              = "ingress"
   from_port         = 80
   to_port           = 80
   protocol          = "tcp"
-  cidr_blocks       = ["0.0.0.0/0"]
+  cidr_blocks       = var.ingress_cidr_blocks
   security_group_id = aws_security_group.keycloak_lb.id
 }
 
-# Load Balancer Ingress from Internet (HTTPS)
+# Load Balancer Ingress from allowed CIDR blocks (HTTPS)
 resource "aws_security_group_rule" "keycloak_lb_ingress_https" {
-  description       = "Ingress from internet to load balancer (HTTPS)"
+  description       = "Ingress from allowed CIDR blocks to load balancer (HTTPS)"
   type              = "ingress"
   from_port         = 443
   to_port           = 443
   protocol          = "tcp"
-  cidr_blocks       = ["0.0.0.0/0"]
+  cidr_blocks       = var.ingress_cidr_blocks
   security_group_id = aws_security_group.keycloak_lb.id
+}
+
+# Load Balancer Ingress from MCP Gateway Auth Server (HTTPS)
+resource "aws_security_group_rule" "keycloak_lb_ingress_auth_server" {
+  description              = "Ingress from MCP Gateway Auth Server to Keycloak load balancer (HTTPS)"
+  type                     = "ingress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.keycloak_lb.id
+  source_security_group_id = module.mcp_gateway.ecs_security_group_ids.auth
+}
+
+# Load Balancer Ingress from MCP Gateway Registry (HTTPS)
+resource "aws_security_group_rule" "keycloak_lb_ingress_registry" {
+  description              = "Ingress from MCP Gateway Registry to Keycloak load balancer (HTTPS)"
+  type                     = "ingress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.keycloak_lb.id
+  source_security_group_id = module.mcp_gateway.ecs_security_group_ids.registry
 }
 
 # Load Balancer Egress to ECS

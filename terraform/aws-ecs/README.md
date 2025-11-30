@@ -740,7 +740,8 @@ For running Terraform and the deployment scripts, your IAM user or role needs th
         "cloudwatch:*",
         "sns:*",
         "ssm:*",
-        "kms:*"
+        "kms:*",
+        "servicediscovery:*"
     ],
     "Resource": "*"
 }
