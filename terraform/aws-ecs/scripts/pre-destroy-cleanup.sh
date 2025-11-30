@@ -126,33 +126,57 @@ else
 fi
 
 
-# Step 4: Force delete ECR repositories
+# Step 4: ECR Repositories - PRESERVED (not deleted)
 echo ""
-echo "Step 4: Cleaning up ECR Repositories"
-echo "-------------------------------------"
+echo "Step 4: ECR Repositories"
+echo "------------------------"
+echo ""
+log_warn "============================================================"
+log_warn "ECR REPOSITORIES ARE NOT DELETED BY THIS SCRIPT"
+log_warn "============================================================"
+log_warn ""
+log_warn "Container images are preserved to avoid expensive rebuilds."
+log_warn "Images can be reused after terraform apply without rebuilding."
+log_warn ""
+log_warn "If you want to delete ECR repositories manually, run:"
+log_warn ""
+log_warn "  aws ecr delete-repository --repository-name keycloak --force --region $AWS_REGION"
+log_warn "  aws ecr delete-repository --repository-name mcp-gateway-registry --force --region $AWS_REGION"
+log_warn "  aws ecr delete-repository --repository-name mcp-gateway-auth-server --force --region $AWS_REGION"
+log_warn "  aws ecr delete-repository --repository-name mcp-gateway-currenttime --force --region $AWS_REGION"
+log_warn "  aws ecr delete-repository --repository-name mcp-gateway-mcpgw --force --region $AWS_REGION"
+log_warn "  aws ecr delete-repository --repository-name mcp-gateway-realserverfaketools --force --region $AWS_REGION"
+log_warn "  aws ecr delete-repository --repository-name mcp-gateway-flight-booking-agent --force --region $AWS_REGION"
+log_warn "  aws ecr delete-repository --repository-name mcp-gateway-travel-assistant-agent --force --region $AWS_REGION"
+log_warn ""
+log_warn "============================================================"
+echo ""
 
-ECR_REPOS=(
-    "mcp-gateway-registry"
-    "mcp-gateway-auth-server"
-    "mcp-gateway-currenttime"
-    "mcp-gateway-mcpgw"
-    "mcp-gateway-realserverfaketools"
-    "mcp-gateway-flight-booking-agent"
-    "mcp-gateway-travel-assistant-agent"
-    "keycloak"
+
+# Step 5: Force delete Secrets Manager secrets
+echo ""
+echo "Step 5: Cleaning up Secrets Manager Secrets"
+echo "--------------------------------------------"
+
+SECRETS=(
+    "keycloak/database"
+    "mcp-gateway-keycloak-client-secret"
+    "mcp-gateway-keycloak-m2m-client-secret"
 )
 
-for repo in "${ECR_REPOS[@]}"; do
-    if aws ecr describe-repositories --repository-names "$repo" --region "$AWS_REGION" &>/dev/null; then
-        log_info "Force deleting ECR repository: $repo"
-        aws ecr delete-repository --repository-name "$repo" --force --region "$AWS_REGION" 2>/dev/null || log_warn "Failed to delete $repo"
+for secret in "${SECRETS[@]}"; do
+    if aws secretsmanager describe-secret --secret-id "$secret" --region "$AWS_REGION" &>/dev/null; then
+        log_info "Force deleting secret: $secret"
+        aws secretsmanager delete-secret --secret-id "$secret" --force-delete-without-recovery --region "$AWS_REGION" 2>/dev/null || log_warn "Failed to delete $secret"
+    else
+        log_info "Secret not found (already deleted): $secret"
     fi
 done
 
 
-# Step 5: Clean up any orphaned load balancers
+# Step 6: Clean up any orphaned load balancers
 echo ""
-echo "Step 5: Checking for orphaned resources"
+echo "Step 6: Checking for orphaned resources"
 echo "----------------------------------------"
 
 # Check for target groups that might block ALB deletion

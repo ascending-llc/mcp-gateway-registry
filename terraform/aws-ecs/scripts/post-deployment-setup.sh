@@ -344,7 +344,7 @@ _verify_ecs_services() {
     local keycloak_cluster="keycloak"
     local keycloak_service="keycloak"
 
-    local max_attempts=30
+    local max_attempts=40
     local wait_interval=20
 
     log_info "Checking ECS services are running..."
@@ -530,7 +530,7 @@ _restart_services() {
 
     log_info "Waiting for services to stabilize..."
 
-    local max_attempts=30
+    local max_attempts=40
     local wait_interval=10
 
     for attempt in $(seq 1 $max_attempts); do

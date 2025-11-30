@@ -881,8 +881,108 @@ curl https://kc.us-east-1.YOUR.DOMAIN/health
 # ============================================================================
 # CLEANUP
 # ============================================================================
-# Destroy infrastructure (WARNING: Deletes everything)
+# See "Destroying Resources" section below for detailed instructions
+./scripts/pre-destroy-cleanup.sh  # Run first to clean up blocking resources
+terraform destroy                  # Then destroy infrastructure
+```
+
+## Destroying Resources
+
+Before running `terraform destroy`, you must run the pre-destroy cleanup script to remove resources that may block deletion:
+
+```bash
+cd terraform/aws-ecs
+
+# Step 1: Run pre-destroy cleanup
+./scripts/pre-destroy-cleanup.sh
+
+# Step 2: Destroy infrastructure
 terraform destroy
+```
+
+### Why Pre-Destroy Cleanup is Required
+
+Terraform destroy may fail due to:
+- **ECS Services**: Services must be scaled to 0 and deleted before clusters can be removed
+- **Service Discovery Namespaces**: Must delete services within namespaces before deleting namespaces
+- **ECS Cluster Capacity Providers**: Clusters with active capacity providers cannot be deleted
+- **Secrets Manager Secrets**: Deleted secrets are scheduled for deletion (7-30 days) and block recreation with the same name
+
+**Note:** ECR repositories are intentionally NOT deleted by the pre-destroy cleanup script. Container images are preserved to avoid expensive rebuilds when redeploying. See the "ECR Repository Cleanup (Optional)" section below for manual deletion commands.
+
+### Manual Cleanup Commands
+
+If `terraform destroy` fails, you may need to run these commands manually:
+
+```bash
+export AWS_REGION=us-east-1
+
+# ============================================================================
+# ECS Services Cleanup
+# ============================================================================
+# Scale down and delete ECS services
+aws ecs update-service --cluster mcp-gateway-ecs-cluster --service mcp-gateway-v2-registry --desired-count 0 --region $AWS_REGION
+aws ecs delete-service --cluster mcp-gateway-ecs-cluster --service mcp-gateway-v2-registry --force --region $AWS_REGION
+
+aws ecs update-service --cluster mcp-gateway-ecs-cluster --service mcp-gateway-v2-auth --desired-count 0 --region $AWS_REGION
+aws ecs delete-service --cluster mcp-gateway-ecs-cluster --service mcp-gateway-v2-auth --force --region $AWS_REGION
+
+aws ecs update-service --cluster keycloak --service keycloak --desired-count 0 --region $AWS_REGION
+aws ecs delete-service --cluster keycloak --service keycloak --force --region $AWS_REGION
+
+# Wait for tasks to stop (check with)
+aws ecs list-tasks --cluster mcp-gateway-ecs-cluster --region $AWS_REGION
+aws ecs list-tasks --cluster keycloak --region $AWS_REGION
+
+# ============================================================================
+# Service Discovery Cleanup
+# ============================================================================
+# List namespaces
+aws servicediscovery list-namespaces --region $AWS_REGION
+
+# Delete services in namespace first
+aws servicediscovery list-services --filters Name=NAMESPACE_ID,Values=ns-xxxxx --region $AWS_REGION
+aws servicediscovery delete-service --id srv-xxxxx --region $AWS_REGION
+
+# Then delete namespace
+aws servicediscovery delete-namespace --id ns-xxxxx --region $AWS_REGION
+
+# ============================================================================
+# Secrets Manager Cleanup
+# ============================================================================
+# Force delete secrets that are scheduled for deletion (required before recreating)
+aws secretsmanager delete-secret --secret-id "keycloak/database" --force-delete-without-recovery --region $AWS_REGION
+aws secretsmanager delete-secret --secret-id "mcp-gateway-keycloak-client-secret" --force-delete-without-recovery --region $AWS_REGION
+aws secretsmanager delete-secret --secret-id "mcp-gateway-keycloak-m2m-client-secret" --force-delete-without-recovery --region $AWS_REGION
+
+# ============================================================================
+# Targeted Terraform Destroy
+# ============================================================================
+# If full destroy fails, try targeted destroy of remaining resources
+terraform state list  # List remaining resources
+
+terraform destroy \
+  -target=module.mcp_gateway.aws_service_discovery_private_dns_namespace.mcp \
+  -target=module.ecs_cluster.aws_ecs_cluster.this[0] \
+  -target=module.vpc.aws_vpc.this[0]
+```
+
+### ECR Repository Cleanup (Optional)
+
+ECR repositories are intentionally NOT deleted by the pre-destroy cleanup script to preserve container images and avoid expensive rebuilds when redeploying. If you want to completely remove all resources including ECR repositories, run these commands manually:
+
+```bash
+export AWS_REGION=us-east-1
+
+# Delete all ECR repositories (WARNING: This deletes all container images!)
+aws ecr delete-repository --repository-name keycloak --force --region $AWS_REGION
+aws ecr delete-repository --repository-name mcp-gateway-registry --force --region $AWS_REGION
+aws ecr delete-repository --repository-name mcp-gateway-auth-server --force --region $AWS_REGION
+aws ecr delete-repository --repository-name mcp-gateway-currenttime --force --region $AWS_REGION
+aws ecr delete-repository --repository-name mcp-gateway-mcpgw --force --region $AWS_REGION
+aws ecr delete-repository --repository-name mcp-gateway-realserverfaketools --force --region $AWS_REGION
+aws ecr delete-repository --repository-name mcp-gateway-flight-booking-agent --force --region $AWS_REGION
+aws ecr delete-repository --repository-name mcp-gateway-travel-assistant-agent --force --region $AWS_REGION
 ```
 
 ### File Structure Reference
@@ -911,7 +1011,8 @@ terraform/aws-ecs/
     ├── user_mgmt.sh                   # Keycloak user management
     ├── service_mgmt.sh                # Service management utilities
     ├── rotate-keycloak-web-client-secret.sh  # Rotate OAuth2 secrets
-    └── save-terraform-outputs.sh      # Export terraform outputs as JSON
+    ├── save-terraform-outputs.sh      # Export terraform outputs as JSON
+    └── pre-destroy-cleanup.sh         # Run before terraform destroy
 ```
 
 ### Environment Variables Reference
