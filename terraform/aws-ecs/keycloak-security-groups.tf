@@ -97,6 +97,8 @@ resource "aws_security_group_rule" "keycloak_lb_ingress_https" {
 }
 
 # Load Balancer Ingress from MCP Gateway Auth Server (HTTPS)
+# Note: This rule is for direct VPC traffic. For traffic via NAT gateway,
+# see keycloak_lb_ingress_nat_gateway rule below.
 resource "aws_security_group_rule" "keycloak_lb_ingress_auth_server" {
   description              = "Ingress from MCP Gateway Auth Server to Keycloak load balancer (HTTPS)"
   type                     = "ingress"
@@ -105,6 +107,19 @@ resource "aws_security_group_rule" "keycloak_lb_ingress_auth_server" {
   protocol                 = "tcp"
   security_group_id        = aws_security_group.keycloak_lb.id
   source_security_group_id = module.mcp_gateway.ecs_security_group_ids.auth
+}
+
+# Load Balancer Ingress from NAT Gateways (for ECS tasks making HTTPS requests to Keycloak public URL)
+# When ECS tasks in private subnets call Keycloak's public DNS name, traffic goes through NAT gateway.
+# The source IP becomes the NAT gateway's public IP, not the ECS task's security group.
+resource "aws_security_group_rule" "keycloak_lb_ingress_nat_gateway" {
+  description       = "Ingress from NAT gateways to Keycloak load balancer (HTTPS)"
+  type              = "ingress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  cidr_blocks       = [for ip in module.vpc.nat_public_ips : "${ip}/32"]
+  security_group_id = aws_security_group.keycloak_lb.id
 }
 
 # Load Balancer Ingress from MCP Gateway Registry (HTTPS)
