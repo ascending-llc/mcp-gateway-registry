@@ -149,8 +149,9 @@ const Login: React.FC = () => {
 
   const handleOAuthLogin = (provider: string) => {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const basePath = import.meta.env.VITE_BASE_PATH || '/';
     const currentOrigin = window.location.origin;
-    const redirectUri = encodeURIComponent(currentOrigin + '/');
+    const redirectUri = encodeURIComponent(currentOrigin + basePath);
 
     if (isLocalhost) {
       window.location.href = `http://localhost:8888/oauth2/login/${provider}?redirect_uri=${redirectUri}`;
