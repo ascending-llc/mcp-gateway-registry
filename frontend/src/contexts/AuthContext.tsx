@@ -4,6 +4,9 @@ import axios from 'axios';
 // Configure axios to include credentials (cookies) with all requests
 axios.defaults.withCredentials = true;
 
+// Add base URL for production
+axios.defaults.baseURL = import.meta.env.VITE_BASE_PATH || '/';
+
 interface User {
   username: string;
   email?: string;

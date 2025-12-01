@@ -1,6 +1,9 @@
 # Start with a Nodejs base image
 FROM node:22-bookworm AS builder
 
+ARG VITE_BASE_PATH=/gateway
+ENV VITE_BASE_PATH=$VITE_BASE_PATH
+
 # Copy & build Frontend 
 WORKDIR /app/frontend
 COPY frontend/package.json ./
