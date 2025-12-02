@@ -55,7 +55,7 @@ jobs:
         with:
           role-to-assume: ${{ steps.set-role.outputs.role }}
           role-session-name: deployment-role-session
-          aws-region: ${{ inputs.region }
+          aws-region: ${{ inputs.region }}
       
       - name: Update kubeconfig
         run: aws eks update-kubeconfig --name ${{ steps.config.outputs.eks_cluster_name }} --region ${{ inputs.region }}
@@ -136,7 +136,7 @@ jobs:
         with:
           role-to-assume: ${{ steps.set-role.outputs.role }}
           role-session-name: deployment-role-session
-          aws-region: ${{ inputs.region }
+          aws-region: ${{ inputs.region }}
       
       - name: Update kubeconfig
         run: aws eks update-kubeconfig --name ${{ steps.config.outputs.eks_cluster_name }} --region ${{ inputs.region }}
@@ -213,7 +213,7 @@ jobs:
         with:
           role-to-assume: ${{ steps.set-role.outputs.role }}
           role-session-name: deployment-role-session
-          aws-region: ${{ inputs.region }
+          aws-region: ${{ inputs.region }}
       
       - name: Update kubeconfig
         run: aws eks update-kubeconfig --name ${{ steps.config.outputs.eks_cluster_name }} --region ${{ inputs.region }}
@@ -287,7 +287,7 @@ jobs:
         with:
           role-to-assume: ${{ steps.set-role.outputs.role }}
           role-session-name: deployment-role-session
-          aws-region: ${{ inputs.region }
+          aws-region: ${{ inputs.region }}
       
       - name: Update kubeconfig
         run: aws eks update-kubeconfig --name ${{ steps.config.outputs.eks_cluster_name }} --region ${{ inputs.region }}
@@ -361,7 +361,7 @@ jobs:
         with:
           role-to-assume: ${{ steps.set-role.outputs.role }}
           role-session-name: deployment-role-session
-          aws-region: ${{ inputs.region }
+          aws-region: ${{ inputs.region }}
       
       - name: Update kubeconfig
         run: aws eks update-kubeconfig --name ${{ steps.config.outputs.eks_cluster_name }} --region ${{ inputs.region }}
