@@ -15,7 +15,7 @@ RUN npm run build
 FROM nginx:1.27-bookworm AS production
 COPY --from=builder /app/frontend/build/ /usr/share/nginx/html
 
-# Copy Nginx configuration files
+# Copy Nginx configuration files (with ${BASE_PATH} placeholder)
 COPY /frontend/nginx_http_only.conf /nginx_http_only.conf
 COPY /frontend/nginx_http_and_https.conf /nginx_http_and_https.conf
 
