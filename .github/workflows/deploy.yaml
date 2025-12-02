@@ -16,16 +16,7 @@ on:
         type: string
         required: true
         default: us-east-1
-      MCP_Gateway_Component:
-        description: 'MCP Gateway Component to deploy'
-        type: multi_choice
-        options:
-          - registry
-          - registry-frontend
-          - auth-server
-          - mcpgateway
-        required: true
-        default: [registry, registry-frontend, auth-server, mcpgateway]
+
 
 
 run-name: Deploy MCP Gateway for ${{ inputs.application }}
@@ -85,7 +76,7 @@ jobs:
 
   build-and-deploy-mcpgateway:
     runs-on: ubuntu-latest
-    if: contains( inputs.MCP_Gateway_Component, 'mcpgateway' )
+    needs: refresh_secrets
     env:
       DEPLOYMENT_NAME: mcpgateway-gwserver
     steps:
@@ -162,7 +153,7 @@ jobs:
 
   build-and-deploy-registry:
     runs-on: ubuntu-latest
-    if: contains( inputs.MCP_Gateway_Component, 'registry' )
+    needs: refresh_secrets
     env:
       DEPLOYMENT_NAME: mcpgateway-registry
     steps:
@@ -239,7 +230,7 @@ jobs:
 
   build-and-deploy-registry-frontend:
     runs-on: ubuntu-latest
-    if: contains( inputs.MCP_Gateway_Component, 'registry-frontend' )
+    needs: refresh_secrets
     env:
       DEPLOYMENT_NAME: mcpgateway-frontend
     steps:
@@ -313,7 +304,7 @@ jobs:
 
   build-and-deploy-auth-server:
     runs-on: ubuntu-latest
-    if: contains( inputs.MCP_Gateway_Component, 'auth-server' )
+    needs: refresh_secrets
     env:
       DEPLOYMENT_NAME: auth-server
     steps:
