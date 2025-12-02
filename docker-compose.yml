@@ -60,8 +60,8 @@ services:
   # Metrics Collection Service
   metrics-service:
     build:
-      context: .
-      dockerfile: metrics-service/Dockerfile
+      context: metrics-service
+      dockerfile: Dockerfile
     environment:
       - METRICS_SERVICE_PORT=8890
       - METRICS_SERVICE_HOST=0.0.0.0
