@@ -1,4 +1,5 @@
 import json
+from typing import List
 from packages.db import BatchResult
 from packages.db import TextField, TextArrayField, BooleanField, Model
 from weaviate.classes.config import VectorDistances
@@ -27,6 +28,12 @@ class McpTool(Model):
 
     server_name = TextField(
         description="Server display name",
+        index_filterable=True,
+        index_searchable=True
+    )
+
+    entity_type = TextArrayField(
+        description="Entity types for multi-type search support (e.g., ['mcp_server', 'tool'], ['a2a_agent', 'tool'], or ['all']). Default is ['all'].",
         index_filterable=True,
         index_searchable=True
     )
@@ -104,7 +111,8 @@ class McpTool(Model):
             service_path: str,
             server_name: str,
             server_tags: list,
-            is_enabled: bool = False
+            is_enabled: bool = False,
+            entity_type: List[str] = None
     ) -> 'McpTool':
         """
         Create MCPTool instance from raw tool dictionary.
@@ -115,10 +123,13 @@ class McpTool(Model):
             server_name: Server display name
             server_tags: List of server tags
             is_enabled: Whether the service is enabled
+            entity_type: Entity types for search filtering (default: ["all"])
             
         Returns:
             MCPTool instance
         """
+        if entity_type is None:
+            entity_type = ["all"]
 
         tool_name = tool.get("name", "")
         if not tool_name:
@@ -154,6 +165,7 @@ class McpTool(Model):
             tool_name=tool_name,
             server_path=service_path,
             server_name=server_name,
+            entity_type=entity_type,
             description_main=desc_main,
             description_args=desc_args,
             description_returns=desc_returns,
@@ -188,14 +200,48 @@ class McpTool(Model):
             Exception: If bulk creation fails catastrophically
         """
         tool_list = server_info.get("tool_list", [])
+        server_name = server_info.get("server_name", "")
+        server_tags = server_info.get("tags", [])
+        # Extract entity_type from server_info, default to "mcp_server" for backward compatibility
+        entity_type = server_info.get("entity_type", "mcp_server")
+        
+        # For agents without tools, create a virtual tool to store agent information
+        if not tool_list and entity_type == "a2a_agent":
+            # Create a virtual tool representing the agent itself
+            agent_description = server_info.get("description", "")
+            skills = server_info.get("skills", [])
+            skills_text = ""
+            if skills:
+                if isinstance(skills[0], dict):
+                    skills_text = ", ".join([skill.get("name", "") for skill in skills])
+                else:
+                    skills_text = ", ".join([str(skill) for skill in skills])
+            
+            tool_list = [{
+                "name": server_name or service_path.strip("/"),
+                "description": agent_description,
+                "parsed_description": {
+                    "main": f"{agent_description}. Skills: {skills_text}" if skills_text else agent_description
+                },
+                "schema": {}
+            }]
+            logger.info(f"Created virtual tool for agent '{service_path}' (no tools in server_info)")
+        
         if not tool_list:
             logger.warning(f"No tools in server_info for '{service_path}'")
             return BatchResult(total=0, successful=0, failed=0, errors=[])
 
-        server_name = server_info.get("server_name", "")
-        server_tags = server_info.get("tags", [])
+        # For tools, we store the entity_type to support multi-type search
+        # If entity_type is "mcp_server", we also include "tool" in entity_type
+        if entity_type == "mcp_server":
+            entity_type_list = ["mcp_server", "tool"]
+        elif entity_type == "a2a_agent":
+            entity_type_list = ["a2a_agent", "tool"]
+        else:
+            # Default to "all" if entity_type is not recognized
+            entity_type_list = ["all"]
 
-        logger.info(f"Converting {len(tool_list)} tools to MCPTool instances for '{service_path}'")
+        logger.info(f"Converting {len(tool_list)} tools to MCPTool instances for '{service_path}' (entity_type: {entity_type_list})")
 
         # Convert all tools to MCPTool instances
         instances = []
@@ -208,7 +254,8 @@ class McpTool(Model):
                     service_path=service_path,
                     server_name=server_name,
                     server_tags=server_tags,
-                    is_enabled=is_enabled
+                    is_enabled=is_enabled,
+                    entity_type=entity_type_list
                 )
                 instances.append(mcp_tool)
                 logger.debug(f"  Converted tool {i + 1}/{len(tool_list)}: {tool.get('name', 'unnamed')}")

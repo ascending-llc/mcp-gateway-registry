@@ -1971,7 +1971,7 @@ async def generate_user_token(
                 "Content-Type": "application/json"
             }
             
-            auth_server_url = settings.AUTH_SERVER_URL
+            auth_server_url = settings.auth_server_url
             response = await client.post(
                 f"{auth_server_url}/internal/tokens",
                 json=auth_request,
