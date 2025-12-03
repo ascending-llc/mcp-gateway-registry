@@ -13,8 +13,8 @@ Example:
 import argparse
 import logging
 import os
-from mcp import ClientSession
-from mcp.client.sse import sse_client
+from mcp_management import ClientSession
+from mcp_management.client.sse import sse_client
 
 # Configure logging
 logging.basicConfig(

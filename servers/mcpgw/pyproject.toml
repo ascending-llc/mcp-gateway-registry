@@ -21,3 +21,6 @@ embedded-search = [
     "sentence-transformers>=2.2.2",
     "scikit-learn>=1.3.0",
 ]
+
+[tool.setuptools]
+packages.find = { where = ["."], exclude = ["auth", "core", "tools"] }

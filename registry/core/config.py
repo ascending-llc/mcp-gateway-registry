@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     wellknown_cache_ttl: int = 300  # 5 minutes
     
     # Vector search / tool discovery settings
-    tool_discovery_mode: str = "embedded"  # "embedded" (FAISS+transformers) or "external" (MCP service)
+    tool_discovery_mode: str = "external"  # "embedded" (FAISS+transformers) or "external" (MCP service)
     external_vector_search_url: str = "http://localhost:8000/mcp"  # Used when tool_discovery_mode=external
     
     # Container paths - adjust for local development

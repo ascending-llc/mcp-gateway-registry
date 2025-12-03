@@ -5,7 +5,7 @@ This server provides an interface to get the current time in a specified timezon
 import os
 import argparse
 import logging
-from mcp.server.fastmcp import FastMCP
+from mcp_management.server.fastmcp import FastMCP
 from pydantic import Field
 from typing import Annotated
 

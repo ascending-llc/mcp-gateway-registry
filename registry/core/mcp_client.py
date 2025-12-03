@@ -13,9 +13,9 @@ import re
 from urllib.parse import urlparse
 
 # MCP Client imports
-from mcp import ClientSession
-from mcp.client.sse import sse_client
-from mcp.client.streamable_http import streamablehttp_client
+from mcp_management import ClientSession
+from mcp_management.client.sse import sse_client
+from mcp_management.client.streamable_http import streamablehttp_client
 
 logger = logging.getLogger(__name__)
 

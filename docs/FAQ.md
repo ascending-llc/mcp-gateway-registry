@@ -54,8 +54,9 @@ See [Authentication Documentation](auth.md) for detailed setup instructions.
 
 ```python
 # Connect to different servers via the gateway using SSE client
-from mcp import ClientSession
-from mcp.client.sse import sse_client
+from mcp_management import ClientSession
+from mcp_management.client.sse import sse_client
+
 
 async def connect_to_server(server_url):
     async with sse_client(server_url) as (read, write):
@@ -63,6 +64,7 @@ async def connect_to_server(server_url):
             await session.initialize()
             # Use the session for tool calls
             return session
+
 
 # Example server URLs through the gateway
 server_url = f"https://your-gateway.com/currenttime/sse"
