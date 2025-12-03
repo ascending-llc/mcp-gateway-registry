@@ -45,7 +45,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.registry-frontend
     environment:
-      - NGINX_BASE_PATH=${NGINX_BASE_PATH:-/}
+      - NGINX_BASE_PATH=${NGINX_BASE_PATH:-}
     ports:
       - "80:80"
       - "443:443"
