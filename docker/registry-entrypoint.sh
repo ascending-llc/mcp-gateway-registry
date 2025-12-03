@@ -16,10 +16,6 @@ install_nginx_config() {
     HTTP_AND_HTTPS_TEMPLATE_PATH="${2:?}"
     DEST_PATH="${3:?}"
 
-    # NGINX_BASE_PATH defaults to empty string (root path /)
-    export NGINX_BASE_PATH="${NGINX_BASE_PATH:-}"
-    echo "NGINX_BASE_PATH configured as: '${NGINX_BASE_PATH:-/}'"
-
     echo "Checking for SSL certificates..."
     if [ ! -f "$SSL_CERT_PATH" ] || [ ! -f "$SSL_KEY_PATH" ]; then
         echo "=========================================="
@@ -62,6 +58,19 @@ install_nginx_config() {
 case "$MODE" in
     frontend)
         echo "Starting Registry Frontend Setup..."
+
+        # NGINX_BASE_PATH defaults to empty string (root path /)
+        export NGINX_BASE_PATH="${NGINX_BASE_PATH:-}"
+        echo "NGINX_BASE_PATH configured as: '${NGINX_BASE_PATH:-/}'"
+
+        # Generate runtime config.js for React app
+        cat > /usr/share/nginx/html/config.js << EOF
+// Runtime configuration - generated at container startup
+window.__RUNTIME_CONFIG__ = {
+  BASE_PATH: "${NGINX_BASE_PATH}"
+};
+EOF
+        echo "Generated config.js with BASE_PATH=${NGINX_BASE_PATH}"
 
         # Config paths matching Dockerfile.registry-frontend
         NGINX_HTTP_ONLY_CONF="/nginx_http_only.conf"
