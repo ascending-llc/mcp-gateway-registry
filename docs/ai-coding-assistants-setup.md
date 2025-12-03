@@ -173,10 +173,11 @@ cat .oauth-tokens/ingress.json
 ```
 
 **Example Integration:**
+
 ```python
 import json
-import mcp
-from mcp.client.sse import sse_client
+import mcp_management
+from mcp_management.client.sse import sse_client
 
 # Load authentication from generated file
 with open('.oauth-tokens/ingress.json') as f:
@@ -191,7 +192,7 @@ headers = {
 
 # Connect to MCP server
 async with sse_client('https://gateway.com/mcpgw/sse', headers=headers) as (read, write):
-    async with mcp.ClientSession(read, write) as session:
+    async with mcp_management.ClientSession(read, write) as session:
         await session.initialize()
         tools = await session.list_tools()
 ```

@@ -8,7 +8,7 @@ dependencies = [
     "fastapi>=0.115.12",
     "itsdangerous>=2.2.0",
     "jinja2>=3.1.6",
-    "mcp>=1.9.3",
+    "mcp[cli]>=1.9.3",
     "pydantic>=2.11.3",
     "pydantic-settings>=2.0.0",
     "httpx>=0.27.0",
@@ -73,7 +73,7 @@ docs = [
 ]
 
 [tool.setuptools]
-packages = ["registry"]
+packages.find = { where = ["."], include = ["registry*"] }
 
 # Pytest Configuration
 [tool.pytest.ini_options]
