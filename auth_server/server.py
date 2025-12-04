@@ -15,7 +15,7 @@ import time
 import uuid
 import hashlib
 from jwt.api_jwk import PyJWK
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Optional, List, Any
 from functools import lru_cache
 from botocore.exceptions import ClientError
@@ -1735,6 +1735,8 @@ async def oauth2_callback(
             logger.info(f"Raw user info from {provider}: {user_info}")
             mapped_user = map_user_info(user_info, provider_config)
             logger.info(f"Mapped user info: {mapped_user}")
+
+
         
         # Create session cookie compatible with registry
         session_data = {
@@ -1774,7 +1776,30 @@ async def oauth2_callback(
         logger.error(f"Error in OAuth2 callback for {provider}: {e}")
         error_url = OAUTH2_CONFIG.get("registry", {}).get("error_redirect", "/login")
         return RedirectResponse(url=f"{error_url}?error=oauth2_callback_failed", status_code=302)
-    
+
+
+def set_user_cookie(response: Response, user_id: str, expiry_in_milliseconds: int, is_production: bool = False):
+    # 创建JWT token
+    signed_user_id = jwt.encode(
+        {"id": user_id},
+        JWT_REFRESH_SECRET,
+        algorithm="HS256",
+    )
+    payload = {
+        "id": user_id,
+        "exp": datetime.utcnow() + timedelta(milliseconds=expiry_in_milliseconds)
+    }
+    signed_user_id = jwt.encode(payload, JWT_REFRESH_SECRET, algorithm="HS256")
+    expiration_date = datetime.utcnow() + timedelta(milliseconds=expiry_in_milliseconds)
+    response.set_cookie(
+        key="openid_user_id",
+        value=signed_user_id,
+        expires=expiration_date,
+        httponly=True,
+        secure=is_production,
+        samesite="strict"
+    )
+
 async def exchange_code_for_token(provider: str, code: str, provider_config: dict, auth_server_url: str = None) -> dict:
     """Exchange authorization code for access token"""
     if auth_server_url is None:

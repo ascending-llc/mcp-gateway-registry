@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Initialize session signer for WebSocket authentication
-signer = URLSafeTimedSerializer(settings.secret_key)
+signer = URLSafeTimedSerializer(settings.SECRET_KEY)
 
 
 @router.websocket("/ws/health_status")
@@ -28,7 +28,7 @@ async def websocket_endpoint(websocket: WebSocket):
         
         # Try different ways to access cookies from WebSocket
         if hasattr(websocket, 'cookies') and websocket.cookies:
-            session_cookie = websocket.cookies.get(settings.session_cookie_name)
+            session_cookie = websocket.cookies.get(settings.SESSION_COOKIE_NAME)
             logger.debug(f"WebSocket cookies found via websocket.cookies: {list(websocket.cookies.keys())}")
         
         # Alternative: Try to get cookies from headers
@@ -42,11 +42,11 @@ async def websocket_endpoint(websocket: WebSocket):
                     if '=' in cookie_pair:
                         name, value = cookie_pair.strip().split('=', 1)
                         cookies[name] = value
-                session_cookie = cookies.get(settings.session_cookie_name)
+                session_cookie = cookies.get(settings.SESSION_COOKIE_NAME)
         
         # Alternative: Try to get from query parameters as fallback
         if not session_cookie and hasattr(websocket, 'query_params'):
-            session_cookie = websocket.query_params.get(settings.session_cookie_name)
+            session_cookie = websocket.query_params.get(settings.SESSION_COOKIE_NAME)
         
         logger.debug(f"WebSocket session cookie found: {bool(session_cookie)}")
         
@@ -55,7 +55,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 # Validate session
                 session_data = signer.loads(
                     session_cookie, 
-                    max_age=settings.session_max_age_seconds
+                    max_age=settings.SESSION_MAX_AGE_SECONDS
                 )
                 username = session_data.get('username')
                 if username:

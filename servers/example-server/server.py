@@ -6,7 +6,7 @@ This server provides simple tools for demonstration purposes.
 import os
 import argparse
 import logging
-from mcp_management.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 from typing import Annotated, Dict, Any
 

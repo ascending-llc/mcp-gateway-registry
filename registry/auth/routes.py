@@ -83,12 +83,12 @@ async def oauth2_callback(request: Request, error: str = None, details: str = No
         
         # If we reach here, the auth server should have set the session cookie
         # Verify the session is valid by checking the cookie
-        session_cookie = request.cookies.get(settings.session_cookie_name)
+        session_cookie = request.cookies.get(settings.SESSION_COOKIE_NAME)
         if session_cookie:
             try:
                 from .dependencies import signer
                 # Validate session cookie
-                session_data = signer.loads(session_cookie, max_age=settings.session_max_age_seconds)
+                session_data = signer.loads(session_cookie, max_age=settings.SESSION_MAX_AGE_SECONDS)
                 username = session_data.get("username")
                 auth_method = session_data.get("auth_method", "unknown")
                 
@@ -131,9 +131,9 @@ async def login_submit(
             response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
         
         response.set_cookie(
-            key=settings.session_cookie_name,
+            key=settings.SESSION_COOKIE_NAME,
             value=session_data,
-            max_age=settings.session_max_age_seconds,
+            max_age=settings.SESSION_MAX_AGE_SECONDS,
             httponly=True,
             samesite="lax",
         )
@@ -161,7 +161,7 @@ async def login_submit(
 
 async def logout_handler(
     request: Request,
-    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None
+    session: Annotated[str | None, Cookie(alias=settings.SESSION_COOKIE_NAME)] = None
 ):
     """Shared logout logic for both GET and POST requests"""
     try:
@@ -170,8 +170,8 @@ async def logout_handler(
         if session:
             try:
                 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
-                serializer = URLSafeTimedSerializer(settings.secret_key)
-                session_data = serializer.loads(session, max_age=settings.session_max_age_seconds)
+                serializer = URLSafeTimedSerializer(settings.SECRET_KEY)
+                session_data = serializer.loads(session, max_age=settings.SESSION_MAX_AGE_SECONDS)
                 
                 if session_data.get('auth_method') == 'oauth2':
                     provider = session_data.get('provider')
@@ -182,7 +182,7 @@ async def logout_handler(
         
         # Clear local session cookie
         response = RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
-        response.delete_cookie(settings.session_cookie_name)
+        response.delete_cookie(settings.SESSION_COOKIE_NAME)
         
         # If user was logged in via OAuth2, redirect to provider logout
         if provider:
@@ -201,7 +201,7 @@ async def logout_handler(
             logout_url = f"{auth_external_url}/oauth2/logout/{provider}?redirect_uri={redirect_uri}"
             logger.info(f"Redirecting to {provider} logout: {logout_url}")
             response = RedirectResponse(url=logout_url, status_code=status.HTTP_303_SEE_OTHER)
-            response.delete_cookie(settings.session_cookie_name)
+            response.delete_cookie(settings.SESSION_COOKIE_NAME)
         
         logger.info("User logged out.")
         return response
@@ -210,14 +210,14 @@ async def logout_handler(
         logger.error(f"Error during logout: {e}")
         # Fallback to simple logout
         response = RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
-        response.delete_cookie(settings.session_cookie_name)
+        response.delete_cookie(settings.SESSION_COOKIE_NAME)
         return response
 
 
 @router.get("/logout")
 async def logout_get(
     request: Request,
-    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None
+    session: Annotated[str | None, Cookie(alias=settings.SESSION_COOKIE_NAME)] = None
 ):
     """Handle logout via GET request (for URL navigation)"""
     return await logout_handler(request, session)
@@ -226,7 +226,7 @@ async def logout_get(
 @router.post("/logout")
 async def logout_post(
     request: Request,
-    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None
+    session: Annotated[str | None, Cookie(alias=settings.SESSION_COOKIE_NAME)] = None
 ):
     """Handle logout via POST request (for forms)"""
     return await logout_handler(request, session)

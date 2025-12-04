@@ -514,10 +514,11 @@ The registry uses `itsdangerous.URLSafeTimedSerializer` for secure session manag
 # registry/auth/dependencies.py
 from itsdangerous import URLSafeTimedSerializer
 
-signer = URLSafeTimedSerializer(settings.secret_key)
+signer = URLSafeTimedSerializer(settings.SECRET_KEY)
 
-def create_session_cookie(username: str, auth_method: str = "traditional", 
-                         provider: str = "local") -> str:
+
+def create_session_cookie(username: str, auth_method: str = "traditional",
+                          provider: str = "local") -> str:
     """Create a session cookie for a user"""
     session_data = {
         "username": username,
@@ -525,7 +526,7 @@ def create_session_cookie(username: str, auth_method: str = "traditional",
         "provider": provider,
         "created_at": datetime.utcnow().isoformat(),
         "groups": [],  # Populated during OAuth2 flow
-        "scopes": []   # Calculated from groups
+        "scopes": []  # Calculated from groups
     }
     return signer.dumps(session_data)
 ```
@@ -741,10 +742,11 @@ async def get_oauth2_providers():
 #### 1. Session Cookie Problems
 
 **Issue**: User gets redirected to login page repeatedly
+
 ```python
 # Debug session cookie validation
 try:
-    data = signer.loads(session, max_age=settings.session_max_age_seconds)
+    data = signer.loads(session, max_age=settings.SESSION_MAX_AGE_SECONDS)
     logger.info(f"Session data: {data}")
 except SignatureExpired:
     logger.warning("Session expired")
@@ -760,6 +762,7 @@ except BadSignature:
 #### 2. OAuth2 Integration Issues
 
 **Issue**: OAuth2 login fails or redirects incorrectly
+
 ```python
 # Debug OAuth2 callback
 @router.get("/auth/callback")
@@ -767,9 +770,9 @@ async def oauth2_callback(request: Request, error: str = None):
     if error:
         logger.error(f"OAuth2 error: {error}")
         return RedirectResponse(url=f"/login?error={error}")
-    
+
     # Check session cookie validity
-    session_cookie = request.cookies.get(settings.session_cookie_name)
+    session_cookie = request.cookies.get(settings.SESSION_COOKIE_NAME)
     logger.info(f"OAuth2 callback session: {session_cookie[:20]}..." if session_cookie else "No session")
 ```
 

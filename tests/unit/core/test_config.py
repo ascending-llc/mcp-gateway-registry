@@ -22,8 +22,8 @@ class TestSettings:
         
         assert settings.admin_user == "admin"
         assert settings.admin_password == "password"
-        assert settings.session_cookie_name == "mcp_gateway_session"
-        assert settings.session_max_age_seconds == 60 * 60 * 8  # 8 hours
+        assert settings.SESSION_COOKIE_NAME == "mcp_gateway_session"
+        assert settings.SESSION_MAX_AGE_SECONDS == 60 * 60 * 8  # 8 hours
         assert settings.embeddings_model_name == "all-MiniLM-L6-v2"
         assert settings.embeddings_model_dimensions == 384
         assert settings.health_check_interval_seconds == 300  # 5 minutes
@@ -34,8 +34,8 @@ class TestSettings:
         # Create settings without loading .env file
         settings = Settings(_env_file=None)
         
-        assert settings.secret_key is not None
-        assert len(settings.secret_key) == 64  # 32 bytes in hex = 64 characters
+        assert settings.SECRET_KEY is not None
+        assert len(settings.SECRET_KEY) == 64  # 32 bytes in hex = 64 characters
 
     @patch.dict(os.environ, {}, clear=True)
     def test_custom_secret_key(self):
@@ -43,7 +43,7 @@ class TestSettings:
         custom_key = "my-custom-secret-key"
         settings = Settings(secret_key=custom_key, _env_file=None)
         
-        assert settings.secret_key == custom_key
+        assert settings.SECRET_KEY == custom_key
 
     @patch.dict(os.environ, {}, clear=True)
     @patch('pathlib.Path.exists')
@@ -98,7 +98,7 @@ class TestSettings:
         
         assert settings.admin_user == "testuser"
         assert settings.admin_password == "testpass"
-        assert settings.secret_key == "test-secret"
+        assert settings.SECRET_KEY == "test-secret"
         assert settings.embeddings_model_name == "test-model"
         assert settings.health_check_interval_seconds == 120
 
