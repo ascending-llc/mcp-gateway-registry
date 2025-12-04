@@ -147,7 +147,7 @@ jobs:
 
       - name: Update backend images on EKS
         env:
-          image: ${{ needs.package_and_push.outputs.ecr_repo }}/jarvis/mcpgateway:${{ github.sha }}
+          image: ${{ steps.login-ecr.outputs.registry }}/jarvis/mcpgateway:${{ github.sha }}
         run: |
           kubectl set image deploy/${{ env.DEPLOYMENT_NAME }} mcpgateway-server=$image -n ${{ inputs.application  }}
 
@@ -224,7 +224,7 @@ jobs:
 
       - name: Update backend images on EKS
         env:
-          image: ${{ needs.package_and_push.outputs.ecr_repo }}/jarvis/registry:${{ github.sha }}
+          image: ${{ steps.login-ecr.outputs.registry }}/jarvis/registry:${{ github.sha }}
         run: |
           kubectl set image deploy/${{ env.DEPLOYMENT_NAME }} mcpgateway-registry=$image -n ${{ inputs.application  }}
 
@@ -298,7 +298,7 @@ jobs:
 
       - name: Update backend images on EKS
         env:
-          image: ${{ needs.package_and_push.outputs.ecr_repo }}/jarvis/registry-frontend:${{ github.sha }}
+          image: ${{ steps.login-ecr.outputs.registry }}/jarvis/registry-frontend:${{ github.sha }}
         run: |
           kubectl set image deploy/${{ env.DEPLOYMENT_NAME }} mcpgateway-frontend=$image -n ${{ inputs.application  }}
 
@@ -372,7 +372,7 @@ jobs:
 
       - name: Update backend images on EKS
         env:
-          image: ${{ needs.package_and_push.outputs.ecr_repo }}/jarvis/auth-server:${{ github.sha }}
+          image: ${{ steps.login-ecr.outputs.registry }}/jarvis/auth-server:${{ github.sha }}
         run: |
           kubectl set image deploy/${{ env.DEPLOYMENT_NAME }} auth-server=$image -n ${{ inputs.application  }}
 
