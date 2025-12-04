@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { getBasePath } from '../config';
 import axios from 'axios';
 import { EyeIcon, EyeSlashIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
@@ -149,8 +150,9 @@ const Login: React.FC = () => {
 
   const handleOAuthLogin = (provider: string) => {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const basePath = getBasePath();
     const currentOrigin = window.location.origin;
-    const redirectUri = encodeURIComponent(currentOrigin + '/');
+    const redirectUri = encodeURIComponent(currentOrigin + (basePath || '/'));
 
     if (isLocalhost) {
       window.location.href = `http://localhost:8888/oauth2/login/${provider}?redirect_uri=${redirectUri}`;
