@@ -12,11 +12,11 @@ from ..core.config import settings
 logger = logging.getLogger(__name__)
 
 # Initialize session signer
-signer = URLSafeTimedSerializer(settings.secret_key)
+signer = URLSafeTimedSerializer(settings.SECRET_KEY)
 
 
 def get_current_user(
-    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
+    session: Annotated[str | None, Cookie(alias=settings.SESSION_COOKIE_NAME)] = None,
 ) -> str:
     """
     Get the current authenticated user from session cookie.
@@ -35,7 +35,7 @@ def get_current_user(
         )
     
     try:
-        data = signer.loads(session, max_age=settings.session_max_age_seconds)
+        data = signer.loads(session, max_age=settings.SESSION_MAX_AGE_SECONDS)
         username = data.get('username')
         
         if not username:
@@ -69,7 +69,7 @@ def get_current_user(
 
 
 def get_user_session_data(
-    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
+    session: Annotated[str | None, Cookie(alias=settings.SESSION_COOKIE_NAME)] = None,
 ) -> Dict[str, Any]:
     """
     Get the full session data for the authenticated user.
@@ -88,7 +88,7 @@ def get_user_session_data(
         )
     
     try:
-        data = signer.loads(session, max_age=settings.session_max_age_seconds)
+        data = signer.loads(session, max_age=settings.SESSION_MAX_AGE_SECONDS)
         
         if not data.get('username'):
             logger.warning("No username found in session data")
@@ -393,7 +393,7 @@ def user_can_access_server(server_name: str, user_scopes: List[str]) -> bool:
 
 
 def api_auth(
-    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
+    session: Annotated[str | None, Cookie(alias=settings.SESSION_COOKIE_NAME)] = None,
 ) -> str:
     """
     API authentication dependency that returns the username.
@@ -403,7 +403,7 @@ def api_auth(
 
 
 def web_auth(
-    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
+    session: Annotated[str | None, Cookie(alias=settings.SESSION_COOKIE_NAME)] = None,
 ) -> str:
     """
     Web authentication dependency that returns the username.
@@ -413,7 +413,7 @@ def web_auth(
 
 
 def enhanced_auth(
-    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
+    session: Annotated[str | None, Cookie(alias=settings.SESSION_COOKIE_NAME)] = None,
 ) -> Dict[str, Any]:
     """
     Enhanced authentication dependency that returns full user context.
@@ -480,7 +480,7 @@ def enhanced_auth(
 
 def nginx_proxied_auth(
     request: Request,
-    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
+    session: Annotated[str | None, Cookie(alias=settings.SESSION_COOKIE_NAME)] = None,
     x_user: Annotated[str | None, Header(alias="X-User")] = None,
     x_username: Annotated[str | None, Header(alias="X-Username")] = None,
     x_scopes: Annotated[str | None, Header(alias="X-Scopes")] = None,

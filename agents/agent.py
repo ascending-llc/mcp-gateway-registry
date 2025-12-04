@@ -57,10 +57,10 @@ from langgraph.prebuilt import create_react_agent
 from langchain_anthropic import ChatAnthropic
 from langchain_aws import ChatBedrock
 from langchain_core.tools import tool
-import mcp_management
-from mcp_management import ClientSession
-from mcp_management.client.sse import sse_client
-from mcp_management.client.streamable_http import streamablehttp_client
+import mcp
+from mcp import ClientSession
+from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamablehttp_client
 import httpx
 import re
 
@@ -619,7 +619,7 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
         if use_sse:
             # Create an MCP SSE client
             async with sse_client(server_url, headers=headers) as (read, write):
-                async with mcp_management.ClientSession(read, write, sampling_callback=None) as session:
+                async with mcp.ClientSession(read, write, sampling_callback=None) as session:
                     # Initialize the connection
                     await session.initialize()
                     
@@ -635,7 +635,7 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
         else:
             # Create an MCP streamable-http client
             async with streamablehttp_client(url=server_url, headers=headers) as (read, write, get_session_id):
-                async with mcp_management.ClientSession(read, write, sampling_callback=None) as session:
+                async with mcp.ClientSession(read, write, sampling_callback=None) as session:
                     # Initialize the connection
                     await session.initialize()
                     

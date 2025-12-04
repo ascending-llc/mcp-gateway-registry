@@ -8,9 +8,9 @@ Extends UserConnectionManager to handle both app-level and user-specific connect
 import logging
 from typing import Dict, Any, Optional, List
 
-from mcp_management.user_connection_manager import UserConnectionManager
-from mcp_management.mcp_connection import MCPConnection, ConnectionState
-from mcp_management.connections_repository import ConnectionsRepository
+from .user_connection_manager import UserConnectionManager
+from .mcp_connection import MCPConnection, ConnectionState
+from .connections_repository import ConnectionsRepository
 
 logger = logging.getLogger(__name__)
 

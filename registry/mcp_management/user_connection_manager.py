@@ -8,8 +8,8 @@ Based on jarvis-api TypeScript implementation, adapted to Python.
 import asyncio
 import logging
 from typing import Dict, Any, Optional, List, Set
-from mcp_management.connections_repository import ConnectionsRepository
-from mcp_management.mcp_connection import MCPConnection
+from .connections_repository import ConnectionsRepository
+from .mcp_connection import MCPConnection
 
 logger = logging.getLogger(__name__)
 

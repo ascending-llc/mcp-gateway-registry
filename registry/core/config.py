@@ -1,36 +1,35 @@
-import os
 import secrets
 from pathlib import Path
-from pydantic import ConfigDict
-from pydantic_settings import BaseSettings
+
+from pydantic_settings import SettingsConfigDict
+
+from common.config.config import SharedSettings
 
 
-class Settings(BaseSettings):
+class Settings(SharedSettings):
     """Application settings with environment variable support."""
     
-    model_config = ConfigDict(
+    model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=False,
         extra="ignore"  # Ignore extra environment variables
     )
     
     # Auth settings
-    secret_key: str = ""
     admin_user: str = "admin"
     admin_password: str = "password"
-    session_cookie_name: str = "mcp_gateway_session"
-    session_max_age_seconds: int = 60 * 60 * 8  # 8 hours
+
     auth_server_url: str = "http://localhost:8888"
     auth_server_external_url: str = "http://localhost:8888"  # External URL for OAuth redirects
-    
+
     # Embeddings settings
     embeddings_model_name: str = "all-MiniLM-L6-v2"
     embeddings_model_dimensions: int = 384
-    
+
     # Health check settings
     health_check_interval_seconds: int = 300  # 5 minutes for automatic background checks (configurable via env var)
     health_check_timeout_seconds: int = 2  # Very fast timeout for user-driven actions
-    
+
     # WebSocket performance settings
     max_websocket_connections: int = 100  # Reasonable limit for development/testing
     websocket_send_timeout_seconds: float = 2.0  # Allow slightly more time per connection
@@ -41,16 +40,16 @@ class Settings(BaseSettings):
     # Well-known discovery settings
     enable_wellknown_discovery: bool = True
     wellknown_cache_ttl: int = 300  # 5 minutes
-    
+
     # Vector search / tool discovery settings
     tool_discovery_mode: str = "external"  # "embedded" (FAISS+transformers) or "external" (MCP service)
     external_vector_search_url: str = "http://localhost:8000/mcp"  # Used when tool_discovery_mode=external
-    
+
     # Container paths - adjust for local development
     container_app_dir: Path = Path("/app")
     container_registry_dir: Path = Path("/app/registry")
     container_log_dir: Path = Path("/app/logs")
-    
+
     # Local development mode detection
     @property
     def is_local_dev(self) -> bool:
@@ -60,13 +59,14 @@ class Settings(BaseSettings):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Generate secret key if not provided
-        if not self.secret_key:
-            self.secret_key = secrets.token_hex(32)
-        
+        if not self.SECRET_KEY:
+            self.SECRET_KEY = secrets.token_hex(32)
+
         # Validate tool_discovery_mode
         if self.tool_discovery_mode not in ["embedded", "external"]:
-            raise ValueError(f"Invalid tool_discovery_mode: {self.tool_discovery_mode}. Must be 'embedded' or 'external'")
-    
+            raise ValueError(
+                f"Invalid tool_discovery_mode: {self.tool_discovery_mode}. Must be 'embedded' or 'external'")
+
     @property
     def use_external_discovery(self) -> bool:
         """Check if using external vector search service."""

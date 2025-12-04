@@ -25,7 +25,7 @@ templates = Jinja2Templates(directory=settings.templates_dir)
 async def read_root(
     request: Request,
     query: str | None = None,
-    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
+    session: Annotated[str | None, Cookie(alias=settings.SESSION_COOKIE_NAME)] = None,
 ):
     """Main dashboard page showing services based on user permissions."""
     # Check authentication first and redirect if not authenticated

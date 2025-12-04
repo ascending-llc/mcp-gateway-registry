@@ -16,6 +16,8 @@ from mcp.client.stdio import stdio_client
 from mcp.client.websocket import websocket_client
 from mcp.client.session import ClientSession
 
+from constants import TransportType
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,14 +28,6 @@ class ConnectionState(str, Enum):
     CONNECTED = "connected"
     ERROR = "error"
     REQUIRES_AUTH = "requires_auth"
-
-
-class TransportType(str, Enum):
-    """Supported transport types for MCP connections."""
-    STDIO = "stdio"
-    WEBSOCKET = "websocket"
-    SSE = "sse"
-    STREAMABLE_HTTP = "streamable-http"
 
 
 class MCPOptions(Dict[str, Any]):

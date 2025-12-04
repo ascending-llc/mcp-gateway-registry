@@ -7,7 +7,7 @@ Thread-safe storage for MCPConnection objects.
 import asyncio
 import logging
 from typing import Dict, Any, Optional, List, Iterator
-from mcp_management.mcp_connection import MCPConnection
+from .mcp_connection import MCPConnection
 
 logger = logging.getLogger(__name__)
 

@@ -1168,20 +1168,21 @@ The registry uses `itsdangerous.URLSafeTimedSerializer` for secure, stateless se
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 
 # Initialize session signer with secret key
-signer = URLSafeTimedSerializer(settings.secret_key)
+signer = URLSafeTimedSerializer(settings.SECRET_KEY)
 
-def create_session_cookie(username: str, auth_method: str = "traditional", 
-                         provider: str = "local") -> str:
+
+def create_session_cookie(username: str, auth_method: str = "traditional",
+                          provider: str = "local") -> str:
     """Create a secure session cookie for a user"""
     session_data = {
         "username": username,
         "auth_method": auth_method,  # 'traditional' or 'oauth2'
-        "provider": provider,        # 'local', 'cognito', 'saml', etc.
+        "provider": provider,  # 'local', 'cognito', 'saml', etc.
         "created_at": datetime.utcnow().isoformat(),
-        "groups": [],               # Populated during OAuth2 flow
-        "scopes": []                # Calculated from groups
+        "groups": [],  # Populated during OAuth2 flow
+        "scopes": []  # Calculated from groups
     }
-    
+
     # Create signed, time-limited cookie
     return signer.dumps(session_data)
 ```
@@ -1193,24 +1194,24 @@ def get_user_session_data(session: str = Cookie(alias="mcp_gateway_session")) ->
     """Extract and validate session data from cookie"""
     if not session:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     try:
         # Validate signature and expiration
-        data = signer.loads(session, max_age=settings.session_max_age_seconds)
-        
+        data = signer.loads(session, max_age=settings.SESSION_MAX_AGE_SECONDS)
+
         if not data.get('username'):
             raise HTTPException(status_code=401, detail="Invalid session data")
-        
+
         # Set defaults for traditional auth users
         if data.get('auth_method') != 'oauth2':
             data.setdefault('groups', ['mcp-admin'])
             data.setdefault('scopes', [
-                'mcp-servers-unrestricted/read', 
+                'mcp-servers-unrestricted/read',
                 'mcp-servers-unrestricted/execute'
             ])
-        
+
         return data
-        
+
     except SignatureExpired:
         raise HTTPException(status_code=401, detail="Session has expired")
     except BadSignature:
@@ -1322,9 +1323,9 @@ def get_current_user(session: str = Cookie(alias="mcp_gateway_session")) -> str:
     """Basic authentication - returns username only"""
     if not session:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     try:
-        data = signer.loads(session, max_age=settings.session_max_age_seconds)
+        data = signer.loads(session, max_age=settings.SESSION_MAX_AGE_SECONDS)
         username = data.get('username')
         if not username:
             raise HTTPException(status_code=401, detail="Invalid session data")
@@ -1332,17 +1333,19 @@ def get_current_user(session: str = Cookie(alias="mcp_gateway_session")) -> str:
     except (SignatureExpired, BadSignature):
         raise HTTPException(status_code=401, detail="Invalid or expired session")
 
+
 # Level 2: Session Data Extraction  
 def get_user_session_data(session: str = Cookie(alias="mcp_gateway_session")) -> Dict[str, Any]:
     """Full session data extraction with validation"""
     # Implementation shown above
     pass
 
+
 # Level 3: Enhanced Authentication with Permissions
 def enhanced_auth(session: str = Cookie(alias="mcp_gateway_session")) -> Dict[str, Any]:
     """Complete user context with permissions and authorization"""
     session_data = get_user_session_data(session)
-    
+
     # Calculate permissions and accessible servers
     # Implementation shown in Authorization section
     return user_context
@@ -1363,16 +1366,16 @@ async def websocket_endpoint(websocket: WebSocket):
         # Validate session before accepting connection
         session_cookie = None
         for cookie in websocket.cookies:
-            if cookie.name == settings.session_cookie_name:
+            if cookie.name == settings.SESSION_COOKIE_NAME:
                 session_cookie = cookie.value
                 break
-        
+
         if session_cookie:
             try:
                 # Validate session
                 session_data = signer.loads(
-                    session_cookie, 
-                    max_age=settings.session_max_age_seconds
+                    session_cookie,
+                    max_age=settings.SESSION_MAX_AGE_SECONDS
                 )
                 username = session_data.get('username')
                 if username:
@@ -1387,19 +1390,19 @@ async def websocket_endpoint(websocket: WebSocket):
             logger.warning("WebSocket connection without valid session cookie")
             await websocket.close(code=1008, reason="Authentication required")
             return
-        
+
         # Accept connection after successful authentication
         connection_added = await health_service.add_websocket_connection(websocket)
         if not connection_added:
             return  # Connection rejected (server at capacity)
-        
+
         # Keep connection alive
         while True:
             try:
                 await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
             except asyncio.TimeoutError:
                 await websocket.ping()  # Keep-alive ping
-            
+
     except WebSocketDisconnect:
         logger.debug(f"WebSocket client disconnected")
     except Exception as e:
@@ -1619,8 +1622,8 @@ def validate_login_credentials(username: str, password: str) -> bool:
 def __init__(self, **kwargs):
     super().__init__(**kwargs)
     # Generate secret key if not provided
-    if not self.secret_key:
-        self.secret_key = secrets.token_hex(32)
+    if not self.SECRET_KEY:
+        self.SECRET_KEY = secrets.token_hex(32)
         logger.warning("Generated random SECRET_KEY - sessions will not persist across restarts")
 ```
 
@@ -1629,12 +1632,12 @@ def __init__(self, **kwargs):
 ```python
 # Session cookie configuration
 response.set_cookie(
-    key=settings.session_cookie_name,
+    key=settings.SESSION_COOKIE_NAME,
     value=session_data,
-    max_age=settings.session_max_age_seconds,
-    httponly=True,        # Prevent XSS access
-    samesite="lax",       # CSRF protection
-    secure=False          # Set to True in production with HTTPS
+    max_age=settings.SESSION_MAX_AGE_SECONDS,
+    httponly=True,  # Prevent XSS access
+    samesite="lax",  # CSRF protection
+    secure=False  # Set to True in production with HTTPS
 )
 ```
 
@@ -1699,13 +1702,14 @@ COGNITO_REGION=us-east-1
 **Issue**: Users get redirected to login page repeatedly
 
 **Diagnosis**:
+
 ```python
 # Add debug logging to session validation
 def get_user_session_data(session: str = None) -> Dict[str, Any]:
     logger.info(f"Session cookie received: {session[:20] if session else 'None'}...")
-    
+
     try:
-        data = signer.loads(session, max_age=settings.session_max_age_seconds)
+        data = signer.loads(session, max_age=settings.SESSION_MAX_AGE_SECONDS)
         logger.info(f"Session data valid for user: {data.get('username')}")
         return data
     except SignatureExpired:
@@ -1727,28 +1731,29 @@ def get_user_session_data(session: str = None) -> Dict[str, Any]:
 **Issue**: OAuth2 login fails or redirects incorrectly
 
 **Diagnosis**:
+
 ```python
 # Debug OAuth2 callback handling
 @router.get("/auth/callback")
 async def oauth2_callback(request: Request, error: str = None, details: str = None):
     logger.info(f"OAuth2 callback received - Error: {error}, Details: {details}")
-    
+
     if error:
         logger.error(f"OAuth2 authentication error: {error} - {details}")
         return RedirectResponse(url=f"/login?error={urllib.parse.quote(error)}")
-    
+
     # Check session cookie from auth server
-    session_cookie = request.cookies.get(settings.session_cookie_name)
+    session_cookie = request.cookies.get(settings.SESSION_COOKIE_NAME)
     logger.info(f"OAuth2 callback session cookie: {'Present' if session_cookie else 'Missing'}")
-    
+
     if session_cookie:
         try:
-            session_data = signer.loads(session_cookie, max_age=settings.session_max_age_seconds)
+            session_data = signer.loads(session_cookie, max_age=settings.SESSION_MAX_AGE_SECONDS)
             logger.info(f"OAuth2 session valid for: {session_data.get('username')}")
             return RedirectResponse(url="/", status_code=302)
         except Exception as e:
             logger.error(f"OAuth2 session validation failed: {e}")
-    
+
     return RedirectResponse(url="/login?error=oauth2_session_invalid", status_code=302)
 ```
 
@@ -1799,28 +1804,29 @@ def enhanced_auth(session: str = None) -> Dict[str, Any]:
 **Issue**: Real-time updates not working, WebSocket connections failing
 
 **Diagnosis**:
+
 ```python
 # Debug WebSocket authentication
 @router.websocket("/ws/health_status")
 async def websocket_endpoint(websocket: WebSocket):
     logger.info(f"WebSocket connection attempt from: {websocket.client}")
-    
+
     # Debug cookie extraction
     session_cookie = None
     logger.info(f"WebSocket cookies: {list(websocket.cookies.keys())}")
-    
+
     for cookie_name, cookie_value in websocket.cookies.items():
         logger.info(f"Cookie: {cookie_name} = {cookie_value[:20]}...")
-        if cookie_name == settings.session_cookie_name:
+        if cookie_name == settings.SESSION_COOKIE_NAME:
             session_cookie = cookie_value
-    
+
     if not session_cookie:
         logger.warning("WebSocket connection without session cookie")
         await websocket.close(code=1008, reason="No session cookie")
         return
-    
+
     try:
-        session_data = signer.loads(session_cookie, max_age=settings.session_max_age_seconds)
+        session_data = signer.loads(session_cookie, max_age=settings.SESSION_MAX_AGE_SECONDS)
         username = session_data.get('username')
         logger.info(f"WebSocket authenticated for user: {username}")
         await websocket.accept()
