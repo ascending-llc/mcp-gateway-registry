@@ -27,6 +27,11 @@ jobs:
   refresh_secrets:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
