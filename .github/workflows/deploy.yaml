@@ -9,7 +9,6 @@ on:
         default: jarvis-demo
         options:
           - jarvis
-          - askcto
           - jarvis-demo
       region:
         description: 'AWS Region to deploy to'
@@ -28,6 +27,11 @@ jobs:
   refresh_secrets:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
@@ -40,7 +44,7 @@ jobs:
       - name: Load Application Configuration
         id: config
         run: |
-          CONFIG=$(cat .github/config/applications.json | jq -r --arg app "${{ inputs.application }}" '.[$app]')
+          CONFIG=$(cat .github/workflows/config/applications.json | jq -r --arg app "${{ inputs.application }}" '.[$app]')
           echo "eks_cluster_name=$(echo $CONFIG | jq -r '.eks_cluster_name')" >> $GITHUB_OUTPUT
           echo "aws_deploy_role=$(echo $CONFIG | jq -r '.aws_deploy_role')" >> $GITHUB_OUTPUT
           echo "secret_name=$(echo $CONFIG | jq -r '.secret_name')" >> $GITHUB_OUTPUT
@@ -66,7 +70,7 @@ jobs:
           SECRET_NAME: ${{ steps.config.outputs.secret_name }}
         run: |
           echo "Generating new mcp gateway env YAML..."
-          python .github/utils/generate_k8s_mcp_gateway_env.py
+          python .github/workflows/utils/generate_k8s_mcp_gateway_env.py
 
           echo "Applying new env vars..."
           kubectl apply -f kubernetes/mcpgateway_env_externalsecret.yaml -n ${{ inputs.application  }}
@@ -121,7 +125,7 @@ jobs:
       - name: Load Application Configuration
         id: config
         run: |
-          CONFIG=$(cat .github/config/applications.json | jq -r --arg app "${{ inputs.application }}" '.[$app]')
+          CONFIG=$(cat .github/workflows/config/applications.json | jq -r --arg app "${{ inputs.application }}" '.[$app]')
           echo "eks_cluster_name=$(echo $CONFIG | jq -r '.eks_cluster_name')" >> $GITHUB_OUTPUT
           echo "aws_deploy_role=$(echo $CONFIG | jq -r '.aws_deploy_role')" >> $GITHUB_OUTPUT
           echo "secret_name=$(echo $CONFIG | jq -r '.secret_name')" >> $GITHUB_OUTPUT
@@ -143,7 +147,7 @@ jobs:
 
       - name: Update backend images on EKS
         env:
-          image: ${{ needs.package_and_push.outputs.ecr_repo }}/jarvis/mcpgateway:${{ github.sha }}
+          image: ${{ steps.login-ecr.outputs.registry }}/jarvis/mcpgateway:${{ github.sha }}
         run: |
           kubectl set image deploy/${{ env.DEPLOYMENT_NAME }} mcpgateway-server=$image -n ${{ inputs.application  }}
 
@@ -198,7 +202,7 @@ jobs:
       - name: Load Application Configuration
         id: config
         run: |
-          CONFIG=$(cat .github/config/applications.json | jq -r --arg app "${{ inputs.application }}" '.[$app]')
+          CONFIG=$(cat .github/workflows/config/applications.json | jq -r --arg app "${{ inputs.application }}" '.[$app]')
           echo "eks_cluster_name=$(echo $CONFIG | jq -r '.eks_cluster_name')" >> $GITHUB_OUTPUT
           echo "aws_deploy_role=$(echo $CONFIG | jq -r '.aws_deploy_role')" >> $GITHUB_OUTPUT
           echo "secret_name=$(echo $CONFIG | jq -r '.secret_name')" >> $GITHUB_OUTPUT
@@ -220,7 +224,7 @@ jobs:
 
       - name: Update backend images on EKS
         env:
-          image: ${{ needs.package_and_push.outputs.ecr_repo }}/jarvis/registry:${{ github.sha }}
+          image: ${{ steps.login-ecr.outputs.registry }}/jarvis/registry:${{ github.sha }}
         run: |
           kubectl set image deploy/${{ env.DEPLOYMENT_NAME }} mcpgateway-registry=$image -n ${{ inputs.application  }}
 
@@ -273,7 +277,7 @@ jobs:
       - name: Load Application Configuration
         id: config
         run: |
-          CONFIG=$(cat .github/config/applications.json | jq -r --arg app "${{ inputs.application }}" '.[$app]')
+          CONFIG=$(cat .github/workflows/config/applications.json | jq -r --arg app "${{ inputs.application }}" '.[$app]')
           echo "eks_cluster_name=$(echo $CONFIG | jq -r '.eks_cluster_name')" >> $GITHUB_OUTPUT
           echo "aws_deploy_role=$(echo $CONFIG | jq -r '.aws_deploy_role')" >> $GITHUB_OUTPUT
 
@@ -294,7 +298,7 @@ jobs:
 
       - name: Update backend images on EKS
         env:
-          image: ${{ needs.package_and_push.outputs.ecr_repo }}/jarvis/registry-frontend:${{ github.sha }}
+          image: ${{ steps.login-ecr.outputs.registry }}/jarvis/registry-frontend:${{ github.sha }}
         run: |
           kubectl set image deploy/${{ env.DEPLOYMENT_NAME }} mcpgateway-frontend=$image -n ${{ inputs.application  }}
 
@@ -347,7 +351,7 @@ jobs:
       - name: Load Application Configuration
         id: config
         run: |
-          CONFIG=$(cat .github/config/applications.json | jq -r --arg app "${{ inputs.application }}" '.[$app]')
+          CONFIG=$(cat .github/workflows/config/applications.json | jq -r --arg app "${{ inputs.application }}" '.[$app]')
           echo "eks_cluster_name=$(echo $CONFIG | jq -r '.eks_cluster_name')" >> $GITHUB_OUTPUT
           echo "aws_deploy_role=$(echo $CONFIG | jq -r '.aws_deploy_role')" >> $GITHUB_OUTPUT
 
@@ -368,7 +372,7 @@ jobs:
 
       - name: Update backend images on EKS
         env:
-          image: ${{ needs.package_and_push.outputs.ecr_repo }}/jarvis/auth-server:${{ github.sha }}
+          image: ${{ steps.login-ecr.outputs.registry }}/jarvis/auth-server:${{ github.sha }}
         run: |
           kubectl set image deploy/${{ env.DEPLOYMENT_NAME }} auth-server=$image -n ${{ inputs.application  }}
 
