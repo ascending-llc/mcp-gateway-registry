@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import Depends, HTTPException, status, Cookie, Header, Request
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 
-from ..core.config import settings
+from registry.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -420,13 +420,13 @@ def enhanced_auth(
     Returns username, groups, scopes, and permission flags.
     """
     session_data = get_user_session_data(session)
-    
+
     username = session_data['username']
     groups = session_data.get('groups', [])
     auth_method = session_data.get('auth_method', 'traditional')
-    
+
     logger.info(f"Enhanced auth debug for {username}: groups={groups}, auth_method={auth_method}")
-    
+
     # Map groups to scopes for OAuth2 users
     if auth_method == 'oauth2':
         scopes = map_cognito_groups_to_scopes(groups)
@@ -444,7 +444,7 @@ def enhanced_auth(
             # Fallback for traditional users if no mapping exists
             scopes = ['mcp-registry-admin', 'mcp-servers-unrestricted/read', 'mcp-servers-unrestricted/execute']
         logger.info(f"Traditional user {username} with groups {groups} mapped to scopes: {scopes}")
-    
+
     # Get UI permissions
     ui_permissions = get_ui_permissions_for_user(scopes)
 
