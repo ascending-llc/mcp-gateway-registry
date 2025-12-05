@@ -22,24 +22,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy the application code
-COPY . /app/
-
-# Copy nginx configurations (both HTTP-only and HTTP+HTTPS versions)
-COPY docker/nginx_rev_proxy_http_only.conf /app/docker/nginx_rev_proxy_http_only.conf
-COPY docker/nginx_rev_proxy_http_and_https.conf /app/docker/nginx_rev_proxy_http_and_https.conf
-
-# Build React frontend
-WORKDIR /app/frontend
-COPY frontend/package.json ./
-RUN npm install --legacy-peer-deps
-COPY frontend/ ./
-RUN npm run build
-
-# Return to app directory
-WORKDIR /app
-
-# Install uv and setup Python environment
 RUN pip install uv && \
     uv venv .venv --python 3.12 && \
     . .venv/bin/activate && \
@@ -59,8 +41,27 @@ RUN pip install uv && \
     "scikit-learn>=1.3.0" \
     "torch>=1.6.0" \
     "huggingface-hub[cli,hf_xet]>=0.31.1" \
-    "hf_xet>=0.1.0" && \
-    uv pip install -e .
+    "hf_xet>=0.1.0"
+
+# Copy the application code
+COPY . /app/
+
+# Copy nginx configurations (both HTTP-only and HTTP+HTTPS versions)
+COPY docker/nginx_rev_proxy_http_only.conf /app/docker/nginx_rev_proxy_http_only.conf
+COPY docker/nginx_rev_proxy_http_and_https.conf /app/docker/nginx_rev_proxy_http_and_https.conf
+
+# Build React frontend
+WORKDIR /app/frontend
+COPY frontend/package.json ./
+RUN npm install --legacy-peer-deps
+COPY frontend/ ./
+RUN npm run build
+
+# Return to app directory
+WORKDIR /app
+
+# Install uv and setup Python environment
+RUN . .venv/bin/activate && uv pip install -e .
 
 # Create logs directory
 RUN mkdir -p /app/logs
