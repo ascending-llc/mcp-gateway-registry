@@ -21,3 +21,8 @@ embedded-search = [
     "sentence-transformers>=2.2.2",
     "scikit-learn>=1.3.0",
 ]
+
+[tool.setuptools]
+# Explicitly specify packages to avoid multiple top-level packages error
+# Include all packages that contain __init__.py files
+packages = ["search", "auth", "core"]
