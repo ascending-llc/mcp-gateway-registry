@@ -104,7 +104,7 @@ class EmbeddedFaissService(VectorSearchService):
                 self.embedding_model = SentenceTransformer(str(self.settings.embeddings_model_dir))
             else:
                 logger.info(f"Local model not found at {self.settings.embeddings_model_dir}, downloading from Hugging Face")
-                self.embedding_model = SentenceTransformer(str(self.settings.embeddings_model_name))
+                self.embedding_model = SentenceTransformer(str(self.settings.EMBEDDINGS_MODEL_NAME))
             
             # Restore original environment variable
             if original_st_home:
