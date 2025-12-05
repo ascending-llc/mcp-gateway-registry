@@ -1,10 +1,9 @@
 import logging
 from typing import Annotated, List, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
-
-from ..auth.dependencies import nginx_proxied_auth
+from fastapi import APIRouter, Request
 from ..search.service import faiss_service
 from ..services.server_service import server_service
 from ..services.agent_service import agent_service
@@ -98,8 +97,8 @@ def _user_can_access_server(path: str, server_name: str, user_context: dict) -> 
 
     technical_name = path.strip("/")
     return (
-        technical_name in accessible_servers
-        or (server_name and server_name in accessible_servers)
+            technical_name in accessible_servers
+            or (server_name and server_name in accessible_servers)
     )
 
 
@@ -136,24 +135,27 @@ def _user_can_access_agent(agent_path: str, user_context: dict) -> bool:
     summary="Unified semantic search for MCP servers and tools",
 )
 async def semantic_search(
-    request: SemanticSearchRequest,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)],
+        request: Request,
+        search_request: SemanticSearchRequest,
 ) -> SemanticSearchResponse:
     """
     Run a semantic search against MCP servers (and their tools) using FAISS embeddings.
     """
+    if not request.state.is_authenticated:
+        raise HTTPException(detail="Not authenticated", status_code=401)
+    user_context = request.state.user
     logger.info(
         "Semantic search requested by %s (entities=%s, max=%s)",
         user_context.get("username"),
-        request.entity_types or ["mcp_server", "tool"],
-        request.max_results,
+        search_request.entity_types or ["mcp_server", "tool"],
+        search_request.max_results,
     )
 
     try:
         raw_results = await faiss_service.search_mixed(
-            query=request.query,
-            entity_types=request.entity_types,
-            max_results=request.max_results,
+            query=search_request.query,
+            entity_types=search_request.entity_types,
+            max_results=search_request.max_results,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -169,9 +171,9 @@ async def semantic_search(
     filtered_servers: List[ServerSearchResult] = []
     for server in raw_results.get("servers", []):
         if not _user_can_access_server(
-            server.get("path", ""),
-            server.get("server_name", ""),
-            user_context,
+                server.get("path", ""),
+                server.get("server_name", ""),
+                user_context,
         ):
             continue
 
@@ -258,12 +260,12 @@ async def semantic_search(
                 is_enabled=agent_card_dict.get("is_enabled", False),
                 relevance_score=agent.get("relevance_score", 0.0),
                 match_context=agent.get("match_context")
-                or agent_card_dict.get("description"),
+                              or agent_card_dict.get("description"),
             )
         )
 
     return SemanticSearchResponse(
-        query=request.query.strip(),
+        query=search_request.query.strip(),
         servers=filtered_servers,
         tools=filtered_tools,
         agents=filtered_agents,
