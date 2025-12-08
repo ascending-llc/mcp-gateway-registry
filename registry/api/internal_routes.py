@@ -1,7 +1,5 @@
 import json
 import logging
-import base64
-import os
 from typing import Annotated
 from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import JSONResponse
@@ -43,64 +41,7 @@ async def internal_register_service(
         tool_list_json: Annotated[str | None, Form()] = None,
 ):
     """Internal service registration endpoint for mcpgw-server (requires HTTP Basic Authentication with admin credentials)."""
-    logger.warning("INTERNAL REGISTER: Function called - starting execution")  # TODO: replace with debug
-
-    logger.warning(
-        f"INTERNAL REGISTER: Request parameters - name={name}, path={path}, proxy_pass_url={proxy_pass_url}")  # TODO: replace with debug
-
-    # Check for HTTP Basic Authentication
-    auth_header = request.headers.get("Authorization")
-    logger.warning(f"INTERNAL REGISTER: Auth header present: {auth_header is not None}")  # TODO: replace with debug
-
-    if not auth_header or not auth_header.startswith("Basic "):
-        logger.warning(
-            "INTERNAL REGISTER: Authentication failed - no valid Basic auth header")  # TODO: replace with debug
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    # Decode Basic Auth credentials
-    try:
-        encoded_credentials = auth_header.split(" ")[1]
-        decoded_credentials = base64.b64decode(encoded_credentials).decode("utf-8")
-        username, password = decoded_credentials.split(":", 1)
-        logger.warning(f"INTERNAL REGISTER: Decoded credentials - username={username}")  # TODO: replace with debug
-    except (IndexError, ValueError, Exception) as e:
-        logger.warning(f"INTERNAL REGISTER: Auth decoding failed: {e}")  # TODO: replace with debug
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication format",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    # Verify admin credentials from environment
-    admin_user = os.environ.get("ADMIN_USER", "admin")
-    admin_password = os.environ.get("ADMIN_PASSWORD")
-
-    logger.warning(
-        f"INTERNAL REGISTER: Checking credentials - expected_user={admin_user}, has_password={admin_password is not None}")  # TODO: replace with debug
-
-    if not admin_password:
-        logger.warning("INTERNAL REGISTER: ADMIN_PASSWORD environment variable not set")  # TODO: replace with debug
-        logger.error("ADMIN_PASSWORD environment variable not set for internal registration")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server configuration error"
-        )
-
-    if username != admin_user or password != admin_password:
-        logger.warning(
-            f"INTERNAL REGISTER: Auth failed - expected {admin_user}, got {username}")  # TODO: replace with debug
-        logger.warning(f"Failed admin authentication attempt for internal registration from {username}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid admin credentials",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    logger.warning(f"INTERNAL REGISTER: Authentication successful for user {username}")  # TODO: replace with debug
+    username = request.state.user.get('username', 'unknown')
     logger.info(f"Internal service registration request from admin user '{username}'")
 
     # Validate path format
@@ -115,10 +56,9 @@ async def internal_register_service(
     # Process supported_transports
     if supported_transports:
         try:
-            transports_list = json.loads(supported_transports) if supported_transports.startswith('[') else [t.strip()
-                                                                                                             for t in
-                                                                                                             supported_transports.split(
-                                                                                                                 ',')]
+            transports_list = json.loads(supported_transports) \
+                if supported_transports.startswith('[') \
+                else [t.strip() for t in supported_transports.split(',')]
         except Exception as e:
             logger.warning(f"INTERNAL REGISTER: Failed to parse supported_transports, using default: {e}")
             transports_list = ["streamable-http"]
@@ -260,59 +200,7 @@ async def internal_remove_service(
         service_path: Annotated[str, Form()],
 ):
     """Internal service removal endpoint for mcpgw-server (requires HTTP Basic Authentication with admin credentials)."""
-
-    logger.warning("INTERNAL REMOVE: Function called - starting execution")  # TODO: replace with debug
-
-    # Check for HTTP Basic Authentication
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Basic "):
-        logger.warning("INTERNAL REMOVE: No Basic Auth header found")  # TODO: replace with debug
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    logger.warning("INTERNAL REMOVE: Basic Auth header found, decoding credentials")  # TODO: replace with debug
-
-    # Decode Basic Auth credentials
-    try:
-        encoded_credentials = auth_header.split(" ")[1]
-        decoded_credentials = base64.b64decode(encoded_credentials).decode("utf-8")
-        username, password = decoded_credentials.split(":", 1)
-        logger.warning(f"INTERNAL REMOVE: Decoded username: {username}")  # TODO: replace with debug
-    except (IndexError, ValueError, Exception):
-        logger.warning("INTERNAL REMOVE: Failed to decode Basic Auth credentials")  # TODO: replace with debug
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication format",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    # Verify admin credentials from environment
-    admin_user = os.environ.get("ADMIN_USER", "admin")
-    admin_password = os.environ.get("ADMIN_PASSWORD")
-
-    logger.warning(
-        f"INTERNAL REMOVE: Checking credentials against admin_user: {admin_user}")  # TODO: replace with debug
-
-    if not admin_password:
-        logger.error("ADMIN_PASSWORD environment variable not set for internal removal")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server configuration error"
-        )
-
-    if username != admin_user or password != admin_password:
-        logger.warning(f"Failed admin authentication attempt for internal removal from {username}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid admin credentials",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    logger.warning(
-        f"INTERNAL REMOVE: Authentication successful for admin user '{username}'")  # TODO: replace with debug
+    username = request.state.user.get('username', 'unknown')
     logger.info(f"Internal service removal request from admin user '{username}' for service '{service_path}'")
 
     # Validate path format
@@ -391,58 +279,7 @@ async def internal_toggle_service(
         service_path: Annotated[str, Form()],
 ):
     """Internal service toggle endpoint for mcpgw-server (requires HTTP Basic Authentication with admin credentials)."""
-    logger.warning("INTERNAL TOGGLE: Function called - starting execution")  # TODO: replace with debug
-
-    # Check for HTTP Basic Authentication
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Basic "):
-        logger.warning("INTERNAL TOGGLE: No Basic Auth header found")  # TODO: replace with debug
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    logger.warning("INTERNAL TOGGLE: Basic Auth header found, decoding credentials")  # TODO: replace with debug
-
-    # Decode Basic Auth credentials
-    try:
-        encoded_credentials = auth_header.split(" ")[1]
-        decoded_credentials = base64.b64decode(encoded_credentials).decode("utf-8")
-        username, password = decoded_credentials.split(":", 1)
-        logger.warning(f"INTERNAL TOGGLE: Decoded username: {username}")  # TODO: replace with debug
-    except (IndexError, ValueError, Exception):
-        logger.warning("INTERNAL TOGGLE: Failed to decode Basic Auth credentials")  # TODO: replace with debug
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication format",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    # Verify admin credentials from environment
-    admin_user = os.environ.get("ADMIN_USER", "admin")
-    admin_password = os.environ.get("ADMIN_PASSWORD")
-
-    logger.warning(
-        f"INTERNAL TOGGLE: Checking credentials against admin_user: {admin_user}")  # TODO: replace with debug
-
-    if not admin_password:
-        logger.error("ADMIN_PASSWORD environment variable not set for internal toggle")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server configuration error"
-        )
-
-    if username != admin_user or password != admin_password:
-        logger.warning(f"Failed admin authentication attempt for internal toggle from {username}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid admin credentials",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    logger.warning(
-        f"INTERNAL TOGGLE: Admin authentication successful for user '{username}'")  # TODO: replace with debug
+    username = request.state.user.get('username', 'unknown')
 
     # Ensure service_path starts with /
     if not service_path.startswith("/"):
@@ -523,55 +360,6 @@ async def internal_toggle_service(
 @router.post("/internal/healthcheck")
 async def internal_healthcheck(request: Request):
     """Internal health check endpoint for mcpgw-server (requires HTTP Basic Authentication with admin credentials)."""
-    logger.warning("INTERNAL HEALTHCHECK: Function called - starting execution")  # TODO: replace with debug
-
-    # Check for HTTP Basic Authentication
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Basic "):
-        logger.warning("INTERNAL HEALTHCHECK: No Basic Auth header found")  # TODO: replace with debug
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    logger.warning("INTERNAL HEALTHCHECK: Basic Auth header found, decoding credentials")  # TODO: replace with debug
-
-    # Decode Basic Auth credentials
-    try:
-        encoded_credentials = auth_header.split(" ")[1]
-        decoded_credentials = base64.b64decode(encoded_credentials).decode("utf-8")
-        username, password = decoded_credentials.split(":", 1)
-        logger.warning(f"INTERNAL HEALTHCHECK: Decoded username: {username}")  # TODO: replace with debug
-    except (IndexError, ValueError, Exception):
-        logger.warning("INTERNAL HEALTHCHECK: Failed to decode Basic Auth credentials")  # TODO: replace with debug
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication format",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    # Verify admin credentials from environment
-    admin_user = os.getenv("ADMIN_USER", "admin")
-    admin_password = os.getenv("ADMIN_PASSWORD")
-
-    if not admin_password:
-        logger.error("INTERNAL HEALTHCHECK: ADMIN_PASSWORD not set in environment")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Server configuration error"
-        )
-
-    if username != admin_user or password != admin_password:
-        logger.warning(f"INTERNAL HEALTHCHECK: Invalid credentials for user: {username}")  # TODO: replace with debug
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    logger.warning(f"INTERNAL HEALTHCHECK: Admin authenticated successfully: {username}")  # TODO: replace with debug
-
     # Get health status for all servers
     try:
         health_data = health_service.get_all_health_status()
@@ -597,43 +385,7 @@ async def internal_add_server_to_groups(
         group_names: Annotated[str, Form()],  # Comma-separated list
 ):
     """Internal endpoint to add a server to specific scopes groups (requires HTTP Basic Authentication with admin credentials)."""
-
-    # Extract and validate Basic Auth
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Basic "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid authorization header",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    try:
-        credentials = base64.b64decode(auth_header[6:]).decode("utf-8")
-        username, password = credentials.split(":", 1)
-    except (ValueError, TypeError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    admin_user = os.environ.get("ADMIN_USER", "admin")
-    admin_password = os.environ.get("ADMIN_PASSWORD")
-
-    if not admin_password:
-        logger.error("ADMIN_PASSWORD environment variable not set for internal add-to-groups")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server configuration error"
-        )
-
-    if username != admin_user or password != admin_password:
-        logger.warning(f"Failed admin authentication attempt for internal add-to-groups from {username}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid admin credentials",
-            headers={"WWW-Authenticate": "Basic"},
-        )
+    username = request.state.user.get('username', 'unknown')
 
     # Parse group names from comma-separated string
     groups = [group.strip() for group in group_names.split(",") if group.strip()]
@@ -681,43 +433,7 @@ async def internal_remove_server_from_groups(
         group_names: Annotated[str, Form()],  # Comma-separated list
 ):
     """Internal endpoint to remove a server from specific scopes groups (requires HTTP Basic Authentication with admin credentials)."""
-
-    # Extract and validate Basic Auth
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Basic "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid authorization header",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    try:
-        credentials = base64.b64decode(auth_header[6:]).decode("utf-8")
-        username, password = credentials.split(":", 1)
-    except (ValueError, TypeError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    admin_user = os.environ.get("ADMIN_USER", "admin")
-    admin_password = os.environ.get("ADMIN_PASSWORD")
-
-    if not admin_password:
-        logger.error("ADMIN_PASSWORD environment variable not set for internal remove-from-groups")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server configuration error"
-        )
-
-    if username != admin_user or password != admin_password:
-        logger.warning(f"Failed admin authentication attempt for internal remove-from-groups from {username}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid admin credentials",
-            headers={"WWW-Authenticate": "Basic"},
-        )
+    username = request.state.user.get('username', 'unknown')
 
     # Parse group names from comma-separated string
     groups = [group.strip() for group in group_names.split(",") if group.strip()]
@@ -763,56 +479,7 @@ async def internal_list_services(
         request: Request,
 ):
     """Internal service listing endpoint for mcpgw-server (requires HTTP Basic Authentication with admin credentials)."""
-    logger.warning("INTERNAL LIST: Function called - starting execution")  # TODO: replace with debug
-
-    # Check for HTTP Basic Authentication
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Basic "):
-        logger.warning("INTERNAL LIST: No Basic Auth header found")  # TODO: replace with debug
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    logger.warning("INTERNAL LIST: Basic Auth header found, decoding credentials")  # TODO: replace with debug
-
-    # Decode Basic Auth credentials
-    try:
-        encoded_credentials = auth_header.split(" ")[1]
-        decoded_credentials = base64.b64decode(encoded_credentials).decode("utf-8")
-        username, password = decoded_credentials.split(":", 1)
-        logger.warning(f"INTERNAL LIST: Decoded username: {username}")  # TODO: replace with debug
-    except (IndexError, ValueError, Exception):
-        logger.warning("INTERNAL LIST: Failed to decode Basic Auth credentials")  # TODO: replace with debug
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication format",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    # Verify admin credentials from environment
-    admin_user = os.environ.get("ADMIN_USER", "admin")
-    admin_password = os.environ.get("ADMIN_PASSWORD")
-
-    logger.warning(f"INTERNAL LIST: Checking credentials against admin_user: {admin_user}")  # TODO: replace with debug
-
-    if not admin_password:
-        logger.error("ADMIN_PASSWORD environment variable not set for internal list")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server configuration error"
-        )
-
-    if username != admin_user or password != admin_password:
-        logger.warning(f"Failed admin authentication attempt for internal list from {username}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid admin credentials",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    logger.warning(f"INTERNAL LIST: Authentication successful for admin user '{username}'")  # TODO: replace with debug
+    username = request.state.user.get('username', 'unknown')
     logger.info(f"Internal service list request from admin user '{username}'")
 
     # Get all servers (admin access - no permission filtering)
@@ -865,42 +532,7 @@ async def internal_create_group(
         create_in_keycloak: Annotated[bool, Form()] = True,
 ):
     """Internal endpoint to create a new group in both Keycloak and scopes.yml (requires HTTP Basic Authentication with admin credentials)."""
-    # Extract and validate Basic Auth
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Basic "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid authorization header",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    try:
-        credentials = base64.b64decode(auth_header[6:]).decode("utf-8")
-        username, password = credentials.split(":", 1)
-    except (ValueError, TypeError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    admin_user = os.environ.get("ADMIN_USER", "admin")
-    admin_password = os.environ.get("ADMIN_PASSWORD")
-
-    if not admin_password:
-        logger.error("ADMIN_PASSWORD environment variable not set for internal create-group")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server configuration error"
-        )
-
-    if username != admin_user or password != admin_password:
-        logger.warning(f"Failed admin authentication attempt for internal create-group from {username}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid admin credentials",
-            headers={"WWW-Authenticate": "Basic"},
-        )
+    username = request.state.user.get('username', 'unknown')
 
     # Validate group name
     if not group_name or not group_name.strip():
@@ -967,42 +599,7 @@ async def internal_delete_group(
         force: Annotated[bool, Form()] = False,
 ):
     """Internal endpoint to delete a group from both Keycloak and scopes.yml (requires HTTP Basic Authentication with admin credentials)."""
-    # Extract and validate Basic Auth
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Basic "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid authorization header",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    try:
-        credentials = base64.b64decode(auth_header[6:]).decode("utf-8")
-        username, password = credentials.split(":", 1)
-    except (ValueError, TypeError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    admin_user = os.environ.get("ADMIN_USER", "admin")
-    admin_password = os.environ.get("ADMIN_PASSWORD")
-
-    if not admin_password:
-        logger.error("ADMIN_PASSWORD environment variable not set for internal delete-group")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server configuration error"
-        )
-
-    if username != admin_user or password != admin_password:
-        logger.warning(f"Failed admin authentication attempt for internal delete-group from {username}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid admin credentials",
-            headers={"WWW-Authenticate": "Basic"},
-        )
+    username = request.state.user.get('username', 'unknown')
 
     # Validate group name
     if not group_name or not group_name.strip():
@@ -1084,45 +681,8 @@ async def internal_list_groups(
         include_scopes: bool = True,
 ):
     """Internal endpoint to list groups from Keycloak and/or scopes.yml (requires HTTP Basic Authentication with admin credentials)."""
-    # Extract and validate Basic Auth
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Basic "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid authorization header",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    try:
-        credentials = base64.b64decode(auth_header[6:]).decode("utf-8")
-        username, password = credentials.split(":", 1)
-    except (ValueError, TypeError):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    admin_user = os.environ.get("ADMIN_USER", "admin")
-    admin_password = os.environ.get("ADMIN_PASSWORD")
-
-    if not admin_password:
-        logger.error("ADMIN_PASSWORD environment variable not set for internal list-groups")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server configuration error"
-        )
-
-    if username != admin_user or password != admin_password:
-        logger.warning(f"Failed admin authentication attempt for internal list-groups from {username}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid admin credentials",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
+    username = request.state.user.get('username', 'unknown')
     logger.info(f"Listing groups via internal endpoint by admin '{username}'")
-
     try:
         result = {
             "keycloak_groups": [],
