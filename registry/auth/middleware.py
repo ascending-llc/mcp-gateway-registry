@@ -1,3 +1,5 @@
+import base64
+import os
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from itsdangerous import SignatureExpired, BadSignature
@@ -61,21 +63,40 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             return JSONResponse(status_code=500, content={"detail": "Authentication error"})
 
     def _is_public_path(self, path: str) -> bool:
-        """检查路径是否为公开路径"""
-        all_paths = self.public_paths + self.internal_paths
-        for public_path in all_paths:
+        """Check if the path is a public path (excludes internal paths which require authentication)"""
+        for public_path in self.public_paths:
             if public_path == "/" and path == "/":
                 return True
             elif public_path != "/" and (path == public_path or path.startswith(public_path + "/")):
                 return True
         return False
 
+    def _is_internal_path(self, path: str) -> bool:
+        """Check if the path is an internal path that requires Basic authentication"""
+        for internal_path in self.internal_paths:
+            if internal_path == "/" and path == "/":
+                return True
+            elif internal_path != "/" and (path == internal_path or path.startswith(internal_path + "/")):
+                return True
+        return False
+
     async def _authenticate(self, request: Request) -> Dict[str, Any]:
         """
-        Unified authentication logic: Implementing the logic of the original nginx_proxied_auth
-            1. Prioritize nginx headers (JWT)
-            2. As a fallback, try session cookies (enhanced_auth logic)
+        Unified authentication logic:
+            1. For internal paths: Use Basic authentication
+            2. For other paths: Try nginx headers first, then session cookies
         """
+        # Check if this is an internal path
+        if self._is_internal_path(request.url.path):
+            # Use Basic authentication for internal endpoints
+            user_context = self._try_basic_auth(request)
+            if user_context:
+                user_context['auth_source'] = 'basic_auth'
+                logger.info(f"basic auth success: {user_context['username']}")
+                return user_context
+            raise AuthenticationError("Basic authentication required")
+
+        # For non-internal paths, use existing nginx/session auth
         # 1. Try nginx headers authentication (the first part of nginx_proxied_auth).
         user_context = self._try_nginx_headers_auth(request)
         if user_context:
@@ -93,7 +114,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         raise AuthenticationError("No valid authentication found")
 
     def _try_nginx_headers_auth(self, request: Request) -> Optional[Dict[str, Any]]:
-        """nginx 代理认证 (原 nginx_proxied_auth 逻辑)"""
+        """Nginx proxy authentication (original nginx_proxied_auth logic)"""
         try:
             x_user = request.headers.get("X-User")
             x_username = request.headers.get("X-Username")
@@ -128,8 +149,50 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.debug(f"nginx headers auth failed: {e}")
             return None
 
+    def _try_basic_auth(self, request: Request) -> Optional[Dict[str, Any]]:
+        """Basic authentication for internal endpoints"""
+        try:
+            # Get Authorization header
+            auth_header = request.headers.get("Authorization")
+            if not auth_header or not auth_header.startswith("Basic "):
+                return None
+
+            # Decode Basic Auth credentials
+            try:
+                encoded_credentials = auth_header.split(" ")[1]
+                decoded_credentials = base64.b64decode(encoded_credentials).decode("utf-8")
+                username, password = decoded_credentials.split(":", 1)
+            except (IndexError, ValueError, Exception) as e:
+                logger.debug(f"Basic auth decoding failed: {e}")
+                return None
+
+            # Verify admin credentials from environment
+            admin_user = os.environ.get("ADMIN_USER", "admin")
+            admin_password = os.environ.get("ADMIN_PASSWORD")
+
+            if not admin_password:
+                logger.error("ADMIN_PASSWORD environment variable not set")
+                return None
+
+            if username != admin_user or password != admin_password:
+                logger.debug(f"Basic auth failed: invalid credentials for {username}")
+                return None
+
+            # Return user context for admin user
+            return self._build_user_context(
+                username=username,
+                groups=['mcp-registry-admin'],
+                scopes=['mcp-registry-admin', 'mcp-servers-unrestricted/read', 'mcp-servers-unrestricted/execute'],
+                auth_method='basic',
+                provider='basic'
+            )
+
+        except Exception as e:
+            logger.debug(f"Basic auth failed: {e}")
+            return None
+
     def _try_session_auth(self, request: Request) -> Optional[Dict[str, Any]]:
-        """session 认证 (原 enhanced_auth 逻辑)"""
+        """Session authentication (original enhanced_auth logic)"""
         try:
             session_cookie = request.cookies.get(settings.session_cookie_name)
             if not session_cookie:
@@ -144,14 +207,14 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
             logger.info(f"Enhanced auth debug for {username}: groups={groups}, auth_method={auth_method}")
 
-            # 按照 enhanced_auth 的逻辑处理权限
+            # Process permissions according to enhanced_auth logic
             if auth_method == 'oauth2':
                 scopes = map_cognito_groups_to_scopes(groups)
                 logger.info(f"OAuth2 user {username} with groups {groups} mapped to scopes: {scopes}")
                 if not groups:
                     logger.warning(f"OAuth2 user {username} has no groups!")
             else:
-                # 传统用户动态映射到 admin
+                # Traditional users dynamically mapped to admin
                 if not groups:
                     groups = ['mcp-registry-admin']
                 scopes = map_cognito_groups_to_scopes(groups)
