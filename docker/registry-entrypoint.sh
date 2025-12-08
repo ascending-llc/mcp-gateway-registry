@@ -46,13 +46,25 @@ install_nginx_config() {
     # Check if SSL certificates exist and use appropriate config
     if [ ! -f "$SSL_CERT_PATH" ] || [ ! -f "$SSL_KEY_PATH" ]; then
         echo "Using HTTP-only Nginx configuration (no SSL certificates)..."
-        envsubst '${NGINX_BASE_PATH}' < "$HTTP_ONLY_TEMPLATE_PATH" > "$DEST_PATH"
-        echo "HTTP-only Nginx configuration installed."
+        TEMPLATE_PATH="$HTTP_ONLY_TEMPLATE_PATH"
     else
         echo "Using HTTP + HTTPS Nginx configuration (SSL certificates found)..."
-        envsubst '${NGINX_BASE_PATH}' < "$HTTP_AND_HTTPS_TEMPLATE_PATH" > "$DEST_PATH"
-        echo "HTTP + HTTPS Nginx configuration installed."
+        TEMPLATE_PATH="$HTTP_AND_HTTPS_TEMPLATE_PATH"
     fi
+
+    # Process template with envsubst and handle NGINX_BASE_PATH location directive
+    if [ -z "$NGINX_BASE_PATH" ]; then
+        # When NGINX_BASE_PATH is empty, location becomes "/" (with trailing slash)
+        echo "NGINX_BASE_PATH is empty - using root path location /"
+        envsubst '${NGINX_BASE_PATH}' < "$TEMPLATE_PATH" > "$DEST_PATH"
+    else
+        # When NGINX_BASE_PATH is not empty, remove trailing slash from location directive
+        echo "NGINX_BASE_PATH is '${NGINX_BASE_PATH}' - adjusting location directive (no trailing slash)"
+        envsubst '${NGINX_BASE_PATH}' < "$TEMPLATE_PATH" | \
+            sed "s|location ${NGINX_BASE_PATH}/ {|location ${NGINX_BASE_PATH} {|g" > "$DEST_PATH"
+    fi
+
+    echo "Nginx configuration installed."
 }
 
 case "$MODE" in
