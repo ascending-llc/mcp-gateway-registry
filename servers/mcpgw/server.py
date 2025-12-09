@@ -16,11 +16,27 @@ from fastmcp.server.dependencies import get_http_request  # New dependency funct
 from typing import Dict, Any, Optional, ClassVar, List
 from dotenv import load_dotenv
 import os
-from sentence_transformers import SentenceTransformer # Added
 import numpy as np # Added
 from sklearn.metrics.pairwise import cosine_similarity # Added
 import faiss # Added
 import yaml # Added for scopes.yml parsing
+
+# Import embeddings client from registry
+import sys
+from pathlib import Path
+
+# Add registry to path - works in both Docker and local dev
+registry_path_docker = Path("/app/registry")
+registry_path_local = Path(__file__).parent.parent.parent / "registry"
+
+if registry_path_docker.exists():
+    sys.path.insert(0, str(registry_path_docker))
+elif registry_path_local.exists():
+    sys.path.insert(0, str(registry_path_local))
+else:
+    raise ImportError("Cannot find registry module. Ensure registry directory is accessible.")
+
+from embeddings import create_embeddings_client, EmbeddingsClient
 
 # Configure logging
 logging.basicConfig(
@@ -500,9 +516,9 @@ async def check_user_permission_for_tool(auth_context: Dict[str, Any], tool_name
     return False
 
 
-# --- FAISS and Sentence Transformer Integration for mcpgw --- START
+# --- FAISS and Embeddings Integration for mcpgw --- START
 _faiss_data_lock = asyncio.Lock()
-_embedding_model_mcpgw: Optional[SentenceTransformer] = None
+_embedding_model_mcpgw: Optional[EmbeddingsClient] = None
 _faiss_index_mcpgw: Optional[faiss.Index] = None
 _faiss_metadata_mcpgw: Optional[Dict[str, Any]] = None # This will store the content of service_index_metadata.json
 _last_faiss_index_mtime: Optional[float] = None
@@ -517,10 +533,6 @@ FAISS_INDEX_PATH_MCPGW = _registry_server_data_path / "service_index.faiss"
 FAISS_METADATA_PATH_MCPGW = _registry_server_data_path / "service_index_metadata.json"
 EMBEDDING_DIMENSION_MCPGW = 384 # Should match the one used in main registry
 
-# Get configuration from environment variables
-EMBEDDINGS_MODEL_NAME = os.environ.get('EMBEDDINGS_MODEL_NAME', 'all-MiniLM-L6-v2')
-EMBEDDINGS_MODEL_DIR = _registry_server_data_path.parent / "models" / EMBEDDINGS_MODEL_NAME
-
 async def load_faiss_data_for_mcpgw():
     """Loads the FAISS index, metadata, and embedding model for the mcpgw server.
        Reloads data if underlying files have changed since last load.
@@ -532,33 +544,35 @@ async def load_faiss_data_for_mcpgw():
         # Load embedding model if not already loaded (model doesn't change on disk typically)
         if _embedding_model_mcpgw is None:
             try:
-                model_cache_path = _registry_server_data_path.parent / ".cache"
-                model_cache_path.mkdir(parents=True, exist_ok=True)
-                
-                # Set SENTENCE_TRANSFORMERS_HOME to use the defined cache path
-                original_st_home = os.environ.get('SENTENCE_TRANSFORMERS_HOME')
-                os.environ['SENTENCE_TRANSFORMERS_HOME'] = str(model_cache_path)
-                
-                # Check if the model path exists and is not empty
-                model_path = Path(EMBEDDINGS_MODEL_DIR)
-                model_exists = model_path.exists() and any(model_path.iterdir()) if model_path.exists() else False
-                
-                if model_exists:
-                    logger.info(f"MCPGW: Loading SentenceTransformer model from local path: {EMBEDDINGS_MODEL_DIR}")
-                    _embedding_model_mcpgw = await asyncio.to_thread(SentenceTransformer, str(EMBEDDINGS_MODEL_DIR))
-                else:
-                    logger.info(f"MCPGW: Local model not found at {EMBEDDINGS_MODEL_DIR}, downloading from Hugging Face")
-                    _embedding_model_mcpgw = await asyncio.to_thread(SentenceTransformer, str(EMBEDDINGS_MODEL_NAME))
-                
-                # Restore original environment variable if it was set
-                if original_st_home:
-                    os.environ['SENTENCE_TRANSFORMERS_HOME'] = original_st_home
-                else:
-                    del os.environ['SENTENCE_TRANSFORMERS_HOME'] # Remove if not originally set
-                    
-                logger.info("MCPGW: SentenceTransformer model loaded successfully.")
+                # Get embeddings configuration from environment
+                embeddings_provider = os.environ.get('EMBEDDINGS_PROVIDER', 'sentence-transformers')
+                embeddings_model_name = os.environ.get('EMBEDDINGS_MODEL_NAME', 'all-MiniLM-L6-v2')
+                embeddings_api_key = os.environ.get('EMBEDDINGS_API_KEY')
+                embeddings_api_base = os.environ.get('EMBEDDINGS_API_BASE')
+                embeddings_aws_region = os.environ.get('EMBEDDINGS_AWS_REGION', 'us-east-1')
+                embeddings_model_dimensions = int(os.environ.get('EMBEDDINGS_MODEL_DIMENSIONS', '384'))
+
+                logger.info(f"MCPGW: Loading embeddings model with provider: {embeddings_provider}, model: {embeddings_model_name}")
+
+                # Compute model directory for sentence-transformers
+                embeddings_model_dir = _registry_server_data_path.parent / "models" / embeddings_model_name if embeddings_provider == 'sentence-transformers' else None
+
+                # Create embeddings client using the factory function
+                _embedding_model_mcpgw = await asyncio.to_thread(
+                    create_embeddings_client,
+                    provider=embeddings_provider,
+                    model_name=embeddings_model_name,
+                    model_dir=embeddings_model_dir,
+                    cache_dir=_registry_server_data_path.parent / ".cache" if embeddings_provider == 'sentence-transformers' else None,
+                    api_key=embeddings_api_key if embeddings_provider == 'litellm' else None,
+                    api_base=embeddings_api_base if embeddings_provider == 'litellm' else None,
+                    aws_region=embeddings_aws_region if embeddings_provider == 'litellm' else None,
+                    embedding_dimension=embeddings_model_dimensions,
+                )
+
+                logger.info(f"MCPGW: Embeddings client loaded successfully. Provider: {embeddings_provider}, Model: {embeddings_model_name}")
             except Exception as e:
-                logger.error(f"MCPGW: Failed to load SentenceTransformer model: {e}", exc_info=True)
+                logger.error(f"MCPGW: Failed to load embeddings client: {e}", exc_info=True)
                 return # Cannot proceed without the model for subsequent logic
 
         # Check FAISS index file

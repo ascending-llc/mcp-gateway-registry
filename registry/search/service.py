@@ -14,12 +14,15 @@ from typing import (
 
 import faiss
 import numpy as np
-from sentence_transformers import SentenceTransformer
 from pydantic import HttpUrl
 
 from ..core.config import settings
 from ..core.schemas import ServerInfo
 from ..schemas.agent_models import AgentCard
+from ..embeddings import (
+    EmbeddingsClient,
+    create_embeddings_client,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +44,9 @@ class _PydanticAwareJSONEncoder(json.JSONEncoder):
 
 class FaissService:
     """Service for managing FAISS vector database operations."""
-    
+
     def __init__(self):
-        self.embedding_model: Optional[SentenceTransformer] = None
+        self.embedding_model: Optional[EmbeddingsClient] = None
         self.faiss_index: Optional[faiss.IndexIDMap] = None
         self.metadata_store: Dict[str, Dict[str, Any]] = {}
         self.next_id_counter: int = 0
@@ -54,41 +57,58 @@ class FaissService:
         await self._load_faiss_data()
         
     async def _load_embedding_model(self):
-        """Load the sentence transformer model."""
-        logger.info("Loading FAISS data and embedding model...")
-        
+        """Load the embeddings model using the configured provider."""
+        logger.info(
+            f"Loading embedding model with provider: {settings.embeddings_provider}"
+        )
+
         # Ensure servers directory exists
         settings.servers_dir.mkdir(parents=True, exist_ok=True)
-        
+
         try:
+            # Prepare cache directory for sentence-transformers
             model_cache_path = settings.container_registry_dir / ".cache"
             model_cache_path.mkdir(parents=True, exist_ok=True)
-            
-            # Set cache path for sentence transformers
-            import os
-            original_st_home = os.environ.get('SENTENCE_TRANSFORMERS_HOME')
-            os.environ['SENTENCE_TRANSFORMERS_HOME'] = str(model_cache_path)
-            
-            # Check if local model exists
-            model_path = settings.embeddings_model_dir
-            model_exists = model_path.exists() and any(model_path.iterdir()) if model_path.exists() else False
-            
-            if model_exists:
-                logger.info(f"Loading SentenceTransformer model from local path: {settings.embeddings_model_dir}")
-                self.embedding_model = SentenceTransformer(str(settings.embeddings_model_dir))
-            else:
-                logger.info(f"Local model not found at {settings.embeddings_model_dir}, downloading from Hugging Face")
-                self.embedding_model = SentenceTransformer(str(settings.embeddings_model_name))
-            
-            # Restore original environment variable
-            if original_st_home:
-                os.environ['SENTENCE_TRANSFORMERS_HOME'] = original_st_home
-            else:
-                del os.environ['SENTENCE_TRANSFORMERS_HOME']
-                
-            logger.info("SentenceTransformer model loaded successfully.")
+
+            # Create embeddings client using factory
+            self.embedding_model = create_embeddings_client(
+                provider=settings.embeddings_provider,
+                model_name=settings.embeddings_model_name,
+                model_dir=settings.embeddings_model_dir
+                if settings.embeddings_provider == "sentence-transformers"
+                else None,
+                cache_dir=model_cache_path
+                if settings.embeddings_provider == "sentence-transformers"
+                else None,
+                api_key=settings.embeddings_api_key
+                if settings.embeddings_provider == "litellm"
+                else None,
+                api_base=settings.embeddings_api_base
+                if settings.embeddings_provider == "litellm"
+                else None,
+                aws_region=settings.embeddings_aws_region
+                if settings.embeddings_provider == "litellm"
+                else None,
+                embedding_dimension=settings.embeddings_model_dimensions,
+            )
+
+            # Get and log the embedding dimension
+            embedding_dim = self.embedding_model.get_embedding_dimension()
+            logger.info(
+                f"Embedding model loaded successfully. Provider: {settings.embeddings_provider}, "
+                f"Model: {settings.embeddings_model_name}, Dimension: {embedding_dim}"
+            )
+
+            # Warn if dimension doesn't match configuration
+            if embedding_dim != settings.embeddings_model_dimensions:
+                logger.warning(
+                    f"Embedding dimension mismatch: configured={settings.embeddings_model_dimensions}, "
+                    f"actual={embedding_dim}. Using actual dimension."
+                )
+                settings.embeddings_model_dimensions = embedding_dim
+
         except Exception as e:
-            logger.error(f"Failed to load SentenceTransformer model: {e}", exc_info=True)
+            logger.error(f"Failed to load embedding model: {e}", exc_info=True)
             self.embedding_model = None
             
     async def _load_faiss_data(self):
@@ -119,10 +139,15 @@ class FaissService:
             self._initialize_new_index()
             
     def _initialize_new_index(self):
-        """Initialize a new FAISS index."""
-        self.faiss_index = faiss.IndexIDMap(faiss.IndexFlatL2(settings.embeddings_model_dimensions))
+        """Initialize a new FAISS index with Inner Product (IP) for cosine similarity.
+
+        Uses IndexFlatIP instead of IndexFlatL2 to enable cosine similarity search.
+        When embeddings are normalized to unit length, inner product equals cosine similarity.
+        """
+        self.faiss_index = faiss.IndexIDMap(faiss.IndexFlatIP(settings.embeddings_model_dimensions))
         self.metadata_store = {}
         self.next_id_counter = 0
+        logger.info(f"Initialized FAISS IndexFlatIP with {settings.embeddings_model_dimensions} dimensions for cosine similarity")
         
     async def save_data(self):
         """Save FAISS index and metadata to disk."""
@@ -237,7 +262,12 @@ class FaissService:
                 # Run model encoding in a separate thread
                 embedding = await asyncio.to_thread(self.embedding_model.encode, [text_to_embed])
                 embedding_np = np.array([embedding[0]], dtype=np.float32)
-                
+
+                # Normalize embedding for cosine similarity (IndexFlatIP)
+                normalized_embedding = self._normalize_embedding(embedding_np[0])
+                embedding_np = np.array([normalized_embedding], dtype=np.float32)
+                logger.debug(f"Normalized embedding for '{service_path}' (norm check: {np.linalg.norm(normalized_embedding):.4f})")
+
                 ids_to_remove = np.array([current_faiss_id])
                 if existing_entry:
                     try:
@@ -359,6 +389,11 @@ class FaissService:
                     [text_to_embed],
                 )
                 embedding_np = np.array([embedding[0]], dtype=np.float32)
+
+                # Normalize embedding for cosine similarity (IndexFlatIP)
+                normalized_embedding = self._normalize_embedding(embedding_np[0])
+                embedding_np = np.array([normalized_embedding], dtype=np.float32)
+                logger.debug(f"Normalized embedding for '{agent_path}' (norm check: {np.linalg.norm(normalized_embedding):.4f})")
 
                 ids_to_remove = np.array([current_faiss_id])
                 if existing_entry:
@@ -537,12 +572,172 @@ class FaissService:
 
 
     def _distance_to_relevance(self, distance: float) -> float:
-        """Convert FAISS L2 distance to a normalized relevance score (0-1)."""
+        """Convert FAISS Inner Product distance to cosine similarity score (0-1).
+
+        FAISS IndexFlatIP behavior depends on index configuration:
+        - Standard IndexFlatIP: Returns (1 - inner_product) as distance
+          Example: inner_product=0.95 → distance=0.05 → similarity=0.95
+        - With negated scores: Returns -inner_product as distance
+          Example: inner_product=0.95 → distance=-0.95 → similarity=0.95
+
+        For normalized vectors: inner_product = cosine_similarity
+
+        This function handles both cases:
+        - Positive distances (0 to 1): similarity = 1 - distance
+        - Negative distances (-1 to 0): similarity = -distance
+
+        Expected behavior:
+        - distance=0.05 → similarity=0.95 (95% match)
+        - distance=-0.95 → similarity=0.95 (95% match)
+        - distance=0.50 → similarity=0.50 (50% match)
+        - distance=-0.50 → similarity=0.50 (50% match)
+
+        Args:
+            distance: Distance from FAISS IndexFlatIP
+
+        Returns:
+            Cosine similarity score in range 0-1
+        """
         try:
-            relevance = 1.0 / (1.0 + float(distance))
-            return max(0.0, min(1.0, relevance))
-        except Exception:
+            dist = float(distance)
+
+            # Handle both positive and negative distance conventions
+            if dist < 0:
+                # Negative distance: negate to get similarity
+                similarity = -dist
+            else:
+                # Positive distance: convert from (1-IP) to similarity
+                similarity = 1.0 - dist
+
+            # Clamp to 0-1 range (handle edge cases)
+            clamped_similarity = max(0.0, min(1.0, similarity))
+
+            # Log conversion for debugging
+            logger.info(
+                f"IP-to-similarity conversion: "
+                f"faiss_distance={distance:.4f}, similarity={similarity:.4f}, "
+                f"clamped={clamped_similarity:.4f}, percentage={clamped_similarity*100:.1f}%"
+            )
+
+            return clamped_similarity
+        except Exception as e:
+            logger.error(
+                f"Error in _distance_to_relevance: faiss_distance={distance}, "
+                f"exception={str(e)}",
+                exc_info=True
+            )
             return 0.0
+
+
+    def _normalize_embedding(
+        self,
+        embedding: np.ndarray,
+    ) -> np.ndarray:
+        """Normalize embedding vector to unit length for cosine similarity.
+
+        Converts any embedding vector to unit length (L2 norm = 1).
+        This allows FAISS IndexFlatIP to compute cosine similarity via inner product.
+
+        Args:
+            embedding: Input embedding vector (numpy array)
+
+        Returns:
+            Normalized embedding with L2 norm = 1
+        """
+        norm = np.linalg.norm(embedding)
+        if norm == 0:
+            logger.warning("Zero-norm embedding detected, returning as-is")
+            return embedding
+        return embedding / norm
+
+
+    def _calculate_keyword_boost(
+        self,
+        query: str,
+        server_info: Dict[str, Any],
+    ) -> float:
+        """Calculate keyword match boost for hybrid search.
+
+        Boosts semantic similarity score when query keywords appear in:
+        - Server name (highest boost)
+        - Tool names (high boost)
+        - Tags (medium boost)
+        - Description (low boost)
+
+        Args:
+            query: Search query
+            server_info: Server information dict
+
+        Returns:
+            Boost multiplier (1.0 = no boost, up to 2.0 = maximum boost)
+        """
+        # Filter out stopwords to prevent false matches
+        stopwords = {
+            "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+            "have", "has", "had", "do", "does", "did", "will", "would", "could",
+            "should", "may", "might", "can", "to", "of", "in", "on", "at", "by",
+            "for", "with", "about", "as", "into", "through", "from", "what", "when",
+            "where", "who", "which", "how", "why", "get", "set", "put"
+        }
+
+        query_lower = query.lower()
+        query_tokens = set(
+            token for token in re.split(r"\W+", query_lower)
+            if token and len(token) > 2 and token not in stopwords
+        )
+
+        if not query_tokens:
+            return 1.0
+
+        boost = 1.0
+        boost_reasons = []
+
+        # Server name exact match: +0.5 boost
+        server_name = server_info.get("server_name", "").lower()
+        if any(token in server_name for token in query_tokens):
+            boost += 0.5
+            boost_reasons.append(f"name({server_name}):+0.5")
+
+        # Tool name matches: +0.3 boost per matching tool (max +0.6)
+        tools = server_info.get("tool_list") or []
+        tool_matches = 0
+        matching_tool_names = []
+        for tool in tools:
+            tool_name = tool.get("name", "").lower()
+            if any(token in tool_name for token in query_tokens):
+                tool_matches += 1
+                matching_tool_names.append(tool_name)
+
+        tool_boost = min(0.6, tool_matches * 0.3)
+        if tool_boost > 0:
+            boost += tool_boost
+            boost_reasons.append(f"tools({','.join(matching_tool_names[:2])}):+{tool_boost:.1f}")
+
+        # Tag matches: +0.2 boost per matching tag (max +0.4)
+        tags = server_info.get("tags", [])
+        tag_matches = sum(1 for tag in tags if any(token in tag.lower() for token in query_tokens))
+        tag_boost = min(0.4, tag_matches * 0.2)
+        if tag_boost > 0:
+            boost += tag_boost
+            boost_reasons.append(f"tags:{tag_matches}:+{tag_boost:.1f}")
+
+        # Description keyword density: +0.1 to +0.2 based on match ratio
+        description = server_info.get("description", "").lower()
+        if description:
+            desc_matches = sum(1 for token in query_tokens if token in description)
+            match_ratio = desc_matches / len(query_tokens)
+            desc_boost = match_ratio * 0.2
+            if desc_boost > 0.01:  # Only log if significant
+                boost += desc_boost
+                boost_reasons.append(f"desc:{desc_matches}/{len(query_tokens)}:+{desc_boost:.2f}")
+
+        # Log boost reasoning if there's any boost
+        if boost_reasons:
+            logger.info(f"  Keyword boost breakdown: {' | '.join(boost_reasons)}")
+
+        # Cap total boost at 2.0 (100% increase)
+        return min(2.0, boost)
+
 
     def _extract_matching_tools(self, query: str, server_info: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Extract tool matches using simple keyword overlap."""
@@ -550,7 +745,19 @@ class FaissService:
         if not tools:
             return []
 
-        tokens = [token for token in re.split(r"\W+", query.lower()) if token]
+        # Filter out stopwords and short tokens to improve matching quality
+        stopwords = {
+            "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+            "have", "has", "had", "do", "does", "did", "will", "would", "could",
+            "should", "may", "might", "can", "to", "of", "in", "on", "at", "by",
+            "for", "with", "about", "as", "into", "through", "from", "what", "when",
+            "where", "who", "which", "how", "why", "get", "set", "put"
+        }
+
+        tokens = [
+            token for token in re.split(r"\W+", query.lower())
+            if token and len(token) > 2 and token not in stopwords
+        ]
         if not tokens:
             return []
 
@@ -564,16 +771,31 @@ class FaissService:
                 or parsed_description.get("summary")
                 or ""
             )
-            tool_args = parsed_description.get("args", "")
+            tool_args = parsed_description.get("args") or ""
+
+            # Ensure all values are strings to avoid NoneType errors
+            tool_name = tool_name or ""
+            tool_desc = tool_desc or ""
+            tool_args = tool_args or ""
+
             searchable_text = f"{tool_name} {tool_desc} {tool_args}".lower()
             if not searchable_text.strip():
                 continue
 
-            matches_found = sum(1 for token in tokens if token in searchable_text)
-            if matches_found == 0:
+            # Calculate matches with higher weight for tool name matches
+            tool_name_lower = tool_name.lower()
+            name_matches = sum(1 for token in tokens if token in tool_name_lower)
+            desc_matches = sum(1 for token in tokens if token in tool_desc.lower() or token in tool_args.lower())
+
+            # Weight tool name matches more heavily (2x)
+            weighted_matches = (name_matches * 2.0) + desc_matches
+            max_possible_score = len(tokens) * 2.0  # If all tokens match in name
+
+            if weighted_matches == 0:
                 continue
 
-            coverage = matches_found / len(tokens)
+            # Normalize to 0-1 range, with name matches getting higher scores
+            coverage = min(1.0, weighted_matches / max_possible_score)
             matches.append(
                 (
                     coverage,
@@ -630,6 +852,11 @@ class FaissService:
         )
         query_np = np.array([query_embedding[0]], dtype=np.float32)
 
+        # Normalize query embedding for cosine similarity (IndexFlatIP)
+        normalized_query = self._normalize_embedding(query_np[0])
+        query_np = np.array([normalized_query], dtype=np.float32)
+        logger.debug(f"Normalized query embedding (norm check: {np.linalg.norm(normalized_query):.4f})")
+
         distances, indices = self.faiss_index.search(query_np, top_k)
         distance_row = distances[0]
         id_row = indices[0]
@@ -652,12 +879,16 @@ class FaissService:
 
             metadata_entry = self.metadata_store.get(path, {})
             entity_type = metadata_entry.get("entity_type", "mcp_server")
-            relevance = self._distance_to_relevance(distance)
+            base_relevance = self._distance_to_relevance(distance)
 
             if entity_type == "mcp_server":
                 server_info = metadata_entry.get("full_server_info", {})
                 if not server_info:
                     continue
+
+                # Apply keyword boost for hybrid search
+                keyword_boost = self._calculate_keyword_boost(query, server_info)
+                relevance = min(1.0, base_relevance * keyword_boost)
 
                 match_context = (
                     server_info.get("description")
@@ -668,6 +899,22 @@ class FaissService:
                 matching_tools: List[Dict[str, Any]] = []
                 if "tool" in entity_filter:
                     matching_tools = self._extract_matching_tools(query, server_info)[:5]
+
+                # Comprehensive trace for search debugging
+                logger.info(
+                    f"[SEARCH] Server: {server_info.get('server_name')} | "
+                    f"Distance: {distance:.4f} | "
+                    f"Base Similarity: {base_relevance:.2%} | "
+                    f"Keyword Boost: {keyword_boost:.2f}x | "
+                    f"Final Score: {relevance:.2%} | "
+                    f"Matching Tools: {len(matching_tools)}"
+                )
+                if matching_tools:
+                    for tool in matching_tools[:3]:  # Show top 3 matching tools
+                        logger.info(
+                            f"  └─ Tool: {tool.get('tool_name')} | "
+                            f"Coverage: {tool.get('raw_score', 0):.2%}"
+                        )
 
                 if "mcp_server" in entity_filter:
                     server_results.append(
@@ -719,6 +966,17 @@ class FaissService:
                 if not agent_card:
                     continue
 
+                # Apply keyword boost for agents (using base_relevance from line 831)
+                # For agents, check name, description, skills, and tags
+                agent_info_for_boost = {
+                    "server_name": agent_card.get("name", ""),
+                    "description": agent_card.get("description", ""),
+                    "tags": agent_card.get("tags", []),
+                    "tool_list": [{"name": skill.get("name", "")} for skill in agent_card.get("skills", []) if isinstance(skill, dict)]
+                }
+                keyword_boost = self._calculate_keyword_boost(query, agent_info_for_boost)
+                agent_relevance = min(1.0, base_relevance * keyword_boost)
+
                 skills = [
                     skill.get("name")
                     for skill in agent_card.get("skills", [])
@@ -728,6 +986,16 @@ class FaissService:
                     agent_card.get("description")
                     or ", ".join(skills)
                     or ", ".join(agent_card.get("tags", []))
+                )
+
+                # Comprehensive trace for agent search debugging
+                logger.info(
+                    f"[SEARCH] Agent: {agent_card.get('name')} | "
+                    f"Distance: {distance:.4f} | "
+                    f"Base Similarity: {base_relevance:.2%} | "
+                    f"Keyword Boost: {keyword_boost:.2f}x | "
+                    f"Final Score: {agent_relevance:.2%} | "
+                    f"Skills: {len(skills)}"
                 )
 
                 agent_results.append(
@@ -741,7 +1009,7 @@ class FaissService:
                         "visibility": agent_card.get("visibility", "public"),
                         "trust_level": agent_card.get("trust_level"),
                         "is_enabled": agent_card.get("is_enabled", False),
-                        "relevance_score": relevance,
+                        "relevance_score": agent_relevance,
                         "match_context": match_context,
                         "agent_card": agent_card,
                     }

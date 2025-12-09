@@ -1,6 +1,8 @@
 import os
 import secrets
 from pathlib import Path
+from typing import Optional
+
 from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
@@ -23,9 +25,19 @@ class Settings(BaseSettings):
     auth_server_url: str = "http://localhost:8888"
     auth_server_external_url: str = "http://localhost:8888"  # External URL for OAuth redirects
     
-    # Embeddings settings
+    # Embeddings settings [Default]
+    embeddings_provider: str = "sentence-transformers"  # 'sentence-transformers' or 'litellm'
     embeddings_model_name: str = "all-MiniLM-L6-v2"
-    embeddings_model_dimensions: int = 384
+    embeddings_model_dimensions: int = 384 # 384 for default and 1024 for bedrock titan v2
+    print(embeddings_provider, embeddings_model_name, embeddings_model_dimensions)
+
+    # LiteLLM-specific settings (only used when embeddings_provider='litellm')
+    # For Bedrock: Set to None and configure AWS credentials via standard methods
+    # (IAM roles, AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY env vars, or ~/.aws/credentials)
+    embeddings_api_key: Optional[str] = None
+    embeddings_secret_key: Optional[str] = None
+    embeddings_api_base: Optional[str] = None
+    embeddings_aws_region: Optional[str] = "us-east-1"
     
     # Health check settings
     health_check_interval_seconds: int = 300  # 5 minutes for automatic background checks (configurable via env var)

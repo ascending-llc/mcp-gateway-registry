@@ -103,26 +103,48 @@ else
     echo "HTTP + HTTPS Nginx configuration installed."
 fi
 
-# --- Model Check ---
-EMBEDDINGS_MODEL_NAME="all-MiniLM-L6-v2"
-EMBEDDINGS_MODEL_DIR="/app/registry/models/$EMBEDDINGS_MODEL_NAME"
+# --- Embeddings Configuration ---
+# Get embeddings configuration from environment or use defaults
+EMBEDDINGS_PROVIDER="${EMBEDDINGS_PROVIDER:-sentence-transformers}"
+EMBEDDINGS_MODEL_NAME="${EMBEDDINGS_MODEL_NAME:-all-MiniLM-L6-v2}"
+EMBEDDINGS_MODEL_DIMENSIONS="${EMBEDDINGS_MODEL_DIMENSIONS:-384}"
 
-echo "Checking for sentence-transformers model..."
-if [ ! -d "$EMBEDDINGS_MODEL_DIR" ] || [ -z "$(ls -A "$EMBEDDINGS_MODEL_DIR")" ]; then
-    echo "=========================================="
-    echo "WARNING: Embeddings model not found!"
-    echo "=========================================="
-    echo ""
-    echo "The registry requires the sentence-transformers model to function properly."
-    echo "Please download the model to: $EMBEDDINGS_MODEL_DIR"
-    echo ""
-    echo "Run this command to download the model:"
-    echo "  docker run --rm -v \$(pwd)/models:/models huggingface/transformers-pytorch-cpu python -c \"from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/$EMBEDDINGS_MODEL_NAME').save('/models/$EMBEDDINGS_MODEL_NAME')\""
-    echo ""
-    echo "Or see the README for alternative download methods."
-    echo "=========================================="
-else
-    echo "Embeddings model found at $EMBEDDINGS_MODEL_DIR"
+echo "Embeddings Configuration:"
+echo "  Provider: $EMBEDDINGS_PROVIDER"
+echo "  Model: $EMBEDDINGS_MODEL_NAME"
+echo "  Dimensions: $EMBEDDINGS_MODEL_DIMENSIONS"
+
+# Only check for local model if using sentence-transformers
+if [ "$EMBEDDINGS_PROVIDER" = "sentence-transformers" ]; then
+    EMBEDDINGS_MODEL_DIR="/app/registry/models/$EMBEDDINGS_MODEL_NAME"
+
+    echo "Checking for sentence-transformers model..."
+    if [ ! -d "$EMBEDDINGS_MODEL_DIR" ] || [ -z "$(ls -A "$EMBEDDINGS_MODEL_DIR")" ]; then
+        echo "=========================================="
+        echo "WARNING: Embeddings model not found!"
+        echo "=========================================="
+        echo ""
+        echo "The registry requires the sentence-transformers model to function properly."
+        echo "Please download the model to: $EMBEDDINGS_MODEL_DIR"
+        echo ""
+        echo "Run this command to download the model:"
+        echo "  docker run --rm -v \$(pwd)/models:/models huggingface/transformers-pytorch-cpu python -c \"from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/$EMBEDDINGS_MODEL_NAME').save('/models/$EMBEDDINGS_MODEL_NAME')\""
+        echo ""
+        echo "Or see the README for alternative download methods."
+        echo "=========================================="
+    else
+        echo "Embeddings model found at $EMBEDDINGS_MODEL_DIR"
+    fi
+elif [ "$EMBEDDINGS_PROVIDER" = "litellm" ]; then
+    echo "Using LiteLLM provider - no local model download required"
+    echo "Model: $EMBEDDINGS_MODEL_NAME"
+    if [[ "$EMBEDDINGS_MODEL_NAME" == bedrock/* ]]; then
+        echo "Bedrock model will use AWS credential chain for authentication"
+    elif [ ! -z "$EMBEDDINGS_API_KEY" ]; then
+        echo "API key configured for cloud embeddings"
+    else
+        echo "WARNING: No EMBEDDINGS_API_KEY set for cloud provider"
+    fi
 fi
 
 # --- Environment Variable Substitution for MCP Server Auth Tokens ---
@@ -140,8 +162,10 @@ done
 echo "MCP Server configuration processing completed."
 
 # --- Start Background Services ---
+# Export embeddings configuration for the registry service
+export EMBEDDINGS_PROVIDER=$EMBEDDINGS_PROVIDER
 export EMBEDDINGS_MODEL_NAME=$EMBEDDINGS_MODEL_NAME
-export EMBEDDINGS_MODEL_DIMENSIONS=384
+export EMBEDDINGS_MODEL_DIMENSIONS=$EMBEDDINGS_MODEL_DIMENSIONS
 
 echo "Starting MCP Registry in the background..."
 cd /app

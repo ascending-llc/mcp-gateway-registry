@@ -41,6 +41,7 @@ dependencies = [
     "cisco-ai-mcp-scanner>=3.0.1",
     "awscli>=1.36.0",
     "boto3>=1.35.0",
+    "litellm>=1.50.0",
 ]
 
 [project.optional-dependencies]

@@ -74,3 +74,20 @@ resource "aws_secretsmanager_secret_version" "keycloak_m2m_client_secret" {
     ignore_changes = [secret_string]
   }
 }
+
+
+# Embeddings API key secret (optional - only needed for LiteLLM provider)
+resource "aws_secretsmanager_secret" "embeddings_api_key" {
+  name_prefix = "${local.name_prefix}-embeddings-api-key-"
+  description = "API key for embeddings provider (OpenAI, Anthropic, etc.)"
+  tags        = local.common_tags
+}
+
+resource "aws_secretsmanager_secret_version" "embeddings_api_key" {
+  secret_id     = aws_secretsmanager_secret.embeddings_api_key.id
+  secret_string = var.embeddings_api_key != "" ? var.embeddings_api_key : "not-configured"
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
+}

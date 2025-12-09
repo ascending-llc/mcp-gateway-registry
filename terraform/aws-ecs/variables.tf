@@ -186,3 +186,39 @@ variable "travel_assistant_agent_replicas" {
   default     = 1
 }
 
+
+#
+# Embeddings Configuration
+#
+
+variable "embeddings_provider" {
+  description = "Embeddings provider: 'sentence-transformers' for local models or 'litellm' for API-based models"
+  type        = string
+  default     = "sentence-transformers"
+}
+
+variable "embeddings_model_name" {
+  description = "Name of the embeddings model to use (e.g., 'all-MiniLM-L6-v2' for sentence-transformers, 'openai/text-embedding-ada-002' for litellm)"
+  type        = string
+  default     = "all-MiniLM-L6-v2"
+}
+
+variable "embeddings_model_dimensions" {
+  description = "Dimension of the embeddings model (e.g., 384 for MiniLM, 1536 for OpenAI/Titan)"
+  type        = number
+  default     = 384
+}
+
+variable "embeddings_aws_region" {
+  description = "AWS region for Bedrock embeddings (only used when embeddings_provider is 'litellm' with Bedrock)"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "embeddings_api_key" {
+  description = "API key for embeddings provider (OpenAI, Anthropic, etc.). Only used when embeddings_provider is 'litellm'. Leave empty for Bedrock (uses IAM)."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+

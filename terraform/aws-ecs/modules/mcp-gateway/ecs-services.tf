@@ -354,6 +354,22 @@ module "ecs_service_registry" {
         {
           name  = "SCOPES_CONFIG_PATH"
           value = "/app/auth_server/scopes.yml"
+        },
+        {
+          name  = "EMBEDDINGS_PROVIDER"
+          value = var.embeddings_provider
+        },
+        {
+          name  = "EMBEDDINGS_MODEL_NAME"
+          value = var.embeddings_model_name
+        },
+        {
+          name  = "EMBEDDINGS_MODEL_DIMENSIONS"
+          value = tostring(var.embeddings_model_dimensions)
+        },
+        {
+          name  = "EMBEDDINGS_AWS_REGION"
+          value = var.embeddings_aws_region
         }
       ]
 
@@ -373,6 +389,10 @@ module "ecs_service_registry" {
         {
           name      = "KEYCLOAK_M2M_CLIENT_SECRET"
           valueFrom = "${aws_secretsmanager_secret.keycloak_m2m_client_secret.arn}:client_secret::"
+        },
+        {
+          name      = "EMBEDDINGS_API_KEY"
+          valueFrom = aws_secretsmanager_secret.embeddings_api_key.arn
         }
       ]
 
@@ -678,8 +698,8 @@ module "ecs_service_mcpgw" {
 
   create_task_exec_iam_role = true
   task_exec_iam_role_policies = {
-    SecretsManagerAccess      = aws_iam_policy.ecs_secrets_access.arn
-    EcsExecTaskExecution      = aws_iam_policy.ecs_exec_task_execution.arn
+    SecretsManagerAccess = aws_iam_policy.ecs_secrets_access.arn
+    EcsExecTaskExecution = aws_iam_policy.ecs_exec_task_execution.arn
   }
   create_tasks_iam_role = true
   tasks_iam_role_policies = {

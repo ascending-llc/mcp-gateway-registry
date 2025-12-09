@@ -217,19 +217,19 @@ For now, make these additional essential changes in the `.env` file:
 
 ```bash
 # Set authentication provider to Keycloak
-AUTH_PROVIDER=keycloak
+AUTH_PROVIDER=keycloak #Do not change
 
 # Set a secure admin password (change this!)
 # This is used for Keycloak API authentication during setup
-KEYCLOAK_ADMIN_PASSWORD=YourSecureAdminPassword123!
+KEYCLOAK_ADMIN_PASSWORD=YourSecureAdminPassword123! # change me
 
 # CRITICAL: Set INITIAL_ADMIN_PASSWORD to the SAME VALUE as KEYCLOAK_ADMIN_PASSWORD
 # This is used to set the password for the initial admin user in the realm
 # THESE MUST MATCH - see Step 5 for details
-INITIAL_ADMIN_PASSWORD=YourSecureAdminPassword123!
+INITIAL_ADMIN_PASSWORD=YourSecureAdminPassword123! # change me
 
 # Set Keycloak database password (change this!)
-KEYCLOAK_DB_PASSWORD=SecureKeycloakDB123!
+KEYCLOAK_DB_PASSWORD=SecureKeycloakDB123! # change me
 
 # Leave other Keycloak settings as default for now
 KEYCLOAK_URL=http://localhost:8080
@@ -307,13 +307,13 @@ If these passwords don't match:
 
 ```bash
 # Start only the database and Keycloak services first
-docker-compose up -d keycloak-db keycloak
+docker compose up -d keycloak-db keycloak
 
 # Check if services are starting
-docker-compose ps
+docker compose ps
 
 # Monitor logs to see when Keycloak is ready
-docker-compose logs -f keycloak
+docker compose logs -f keycloak
 # Wait for message: "Keycloak 25.x.x started in xxxms"
 # Press Ctrl+C to exit logs when you see this message
 ```

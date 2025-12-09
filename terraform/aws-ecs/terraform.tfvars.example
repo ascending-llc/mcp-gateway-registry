@@ -126,3 +126,30 @@ travel_assistant_agent_image_uri = "YOUR_ACCOUNT_ID.dkr.ecr.YOUR_AWS_REGION.amaz
 # realserverfaketools_replicas      = 1
 # flight_booking_agent_replicas     = 1
 # travel_assistant_agent_replicas   = 1
+
+# ============================================================================
+# EMBEDDINGS CONFIGURATION
+# ============================================================================
+
+# Embeddings provider and model configuration for semantic search
+#
+# Option 1: Use local sentence-transformers (DEFAULT - no API costs)
+# Default values (uncomment to use):
+# embeddings_provider         = "sentence-transformers"
+# embeddings_model_name       = "all-MiniLM-L6-v2"
+# embeddings_model_dimensions = 384
+
+# Option 2: Use OpenAI embeddings (better quality, requires API key)
+# Uncomment and set your API key:
+# embeddings_provider         = "litellm"
+# embeddings_model_name       = "openai/text-embedding-ada-002"
+# embeddings_model_dimensions = 1536
+# embeddings_api_key          = "sk-proj-YOUR-OPENAI-API-KEY"
+
+# Option 3: Use Amazon Bedrock Titan embeddings (uses IAM, no API key needed)
+# Uncomment to use Bedrock:
+# embeddings_provider         = "litellm"
+# embeddings_model_name       = "bedrock/amazon.titan-embed-text-v1"
+# embeddings_model_dimensions = 1536
+# embeddings_aws_region       = "us-east-1"
+# embeddings_api_key          = ""  # Empty for Bedrock (uses IAM)
