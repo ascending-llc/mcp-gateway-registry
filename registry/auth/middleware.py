@@ -8,9 +8,9 @@ from typing import Optional, Dict, Any
 import logging
 
 from registry.auth.dependencies import (map_cognito_groups_to_scopes, signer, get_ui_permissions_for_user,
-                               get_user_accessible_servers, get_accessible_services_for_user,
-                               get_accessible_agents_for_user, user_can_modify_servers,
-                               user_has_wildcard_access)
+                                        get_user_accessible_servers, get_accessible_services_for_user,
+                                        get_accessible_agents_for_user, user_can_modify_servers,
+                                        user_has_wildcard_access)
 from registry.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             request.state.user = user_context
             request.state.is_authenticated = True
             request.state.auth_source = user_context.get('auth_source', 'unknown')
+            logger.info(f"User {user_context.get('username')} is authenticated")
             return await call_next(request)
         except AuthenticationError as e:
             logger.warning(f"Auth failed for {request.url.path}: {e}")
@@ -84,7 +85,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         """
         Unified authentication logic:
             1. For internal paths: Use Basic authentication
-            2. For other paths: Try nginx headers first, then session cookies
+            2. For other paths:  then session cookies
         """
         # Check if this is an internal path
         if self._is_internal_path(request.url.path):
@@ -96,15 +97,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 return user_context
             raise AuthenticationError("Basic authentication required")
 
-        # For non-internal paths, use existing nginx/session auth
-        # 1. Try nginx headers authentication (the first part of nginx_proxied_auth).
-        user_context = self._try_nginx_headers_auth(request)
-        if user_context:
-            user_context['auth_source'] = 'nginx_headers'
-            logger.info(f"nginx headers auth success: {user_context['username']}")
-            return user_context
-
-        # 2. Attempt session cookie authentication (enhanced_auth logic)
+        # 1. Attempt session cookie authentication (enhanced_auth logic)
         user_context = self._try_session_auth(request)
         if user_context:
             user_context['auth_source'] = 'session_cookie'
@@ -112,42 +105,6 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             return user_context
 
         raise AuthenticationError("No valid authentication found")
-
-    def _try_nginx_headers_auth(self, request: Request) -> Optional[Dict[str, Any]]:
-        """Nginx proxy authentication (original nginx_proxied_auth logic)"""
-        try:
-            x_user = request.headers.get("X-User")
-            x_username = request.headers.get("X-Username")
-            x_scopes = request.headers.get("X-Scopes")
-            x_auth_method = request.headers.get("X-Auth-Method")
-
-            if not (x_user or x_username):
-                return None
-
-            username = x_username or x_user
-            scopes = x_scopes.split() if x_scopes else []
-
-            groups = []
-            if x_auth_method in ['keycloak', 'entra', 'cognito']:
-                if ('mcp-servers-unrestricted/read' in scopes and
-                        'mcp-servers-unrestricted/execute' in scopes):
-                    groups = ['mcp-registry-admin']
-                else:
-                    groups = ['mcp-registry-user']
-
-            logger.info(f"nginx-proxied auth for user: {username}, method: {x_auth_method}, scopes: {scopes}")
-
-            return self._build_user_context(
-                username=username,
-                groups=groups,
-                scopes=scopes,
-                auth_method=x_auth_method or 'keycloak',
-                provider=x_auth_method or 'keycloak'
-            )
-
-        except Exception as e:
-            logger.debug(f"nginx headers auth failed: {e}")
-            return None
 
     def _try_basic_auth(self, request: Request) -> Optional[Dict[str, Any]]:
         """Basic authentication for internal endpoints"""

@@ -7,6 +7,7 @@ from ..services.server_service import server_service
 from starlette import status
 from ..search.service import faiss_service
 from ..health.service import health_service
+from ..auth.dependencies import CurrentUser
 from ..utils.scopes_manager import add_server_to_groups
 from ..utils.scopes_manager import remove_server_from_groups
 from ..utils.scopes_manager import create_group_in_scopes
@@ -23,7 +24,7 @@ router = APIRouter()
 
 @router.post("/internal/register")
 async def internal_register_service(
-        request: Request,
+        user_context: CurrentUser,
         name: Annotated[str, Form()],
         description: Annotated[str, Form()],
         path: Annotated[str, Form()],
@@ -41,7 +42,7 @@ async def internal_register_service(
         tool_list_json: Annotated[str | None, Form()] = None,
 ):
     """Internal service registration endpoint for mcpgw-server (requires HTTP Basic Authentication with admin credentials)."""
-    username = request.state.user.get('username', 'unknown')
+    username = user_context.get("username")
     logger.info(f"Internal service registration request from admin user '{username}'")
 
     # Validate path format
@@ -196,11 +197,11 @@ async def internal_register_service(
 
 @router.post("/internal/remove")
 async def internal_remove_service(
-        request: Request,
+        user_context: CurrentUser,
         service_path: Annotated[str, Form()],
 ):
     """Internal service removal endpoint for mcpgw-server (requires HTTP Basic Authentication with admin credentials)."""
-    username = request.state.user.get('username', 'unknown')
+    username = user_context.get("username")
     logger.info(f"Internal service removal request from admin user '{username}' for service '{service_path}'")
 
     # Validate path format
@@ -275,11 +276,11 @@ async def internal_remove_service(
 
 @router.post("/internal/toggle")
 async def internal_toggle_service(
-        request: Request,
+        user_context: CurrentUser,
         service_path: Annotated[str, Form()],
 ):
     """Internal service toggle endpoint for mcpgw-server (requires HTTP Basic Authentication with admin credentials)."""
-    username = request.state.user.get('username', 'unknown')
+    username = user_context.get("username")
 
     # Ensure service_path starts with /
     if not service_path.startswith("/"):
@@ -380,12 +381,12 @@ async def internal_healthcheck(request: Request):
 
 @router.post("/internal/add-to-groups")
 async def internal_add_server_to_groups(
-        request: Request,
+        user_context: CurrentUser,
         server_name: Annotated[str, Form()],
         group_names: Annotated[str, Form()],  # Comma-separated list
 ):
     """Internal endpoint to add a server to specific scopes groups (requires HTTP Basic Authentication with admin credentials)."""
-    username = request.state.user.get('username', 'unknown')
+    username = user_context.get("username")
 
     # Parse group names from comma-separated string
     groups = [group.strip() for group in group_names.split(",") if group.strip()]
@@ -428,12 +429,12 @@ async def internal_add_server_to_groups(
 
 @router.post("/internal/remove-from-groups")
 async def internal_remove_server_from_groups(
-        request: Request,
+        user_context: CurrentUser,
         server_name: Annotated[str, Form()],
         group_names: Annotated[str, Form()],  # Comma-separated list
 ):
     """Internal endpoint to remove a server from specific scopes groups (requires HTTP Basic Authentication with admin credentials)."""
-    username = request.state.user.get('username', 'unknown')
+    username = user_context.get("username")
 
     # Parse group names from comma-separated string
     groups = [group.strip() for group in group_names.split(",") if group.strip()]
@@ -476,10 +477,10 @@ async def internal_remove_server_from_groups(
 
 @router.get("/internal/list")
 async def internal_list_services(
-        request: Request,
+        user_context: CurrentUser,
 ):
     """Internal service listing endpoint for mcpgw-server (requires HTTP Basic Authentication with admin credentials)."""
-    username = request.state.user.get('username', 'unknown')
+    username = user_context.get("username")
     logger.info(f"Internal service list request from admin user '{username}'")
 
     # Get all servers (admin access - no permission filtering)
@@ -526,13 +527,13 @@ async def internal_list_services(
 
 @router.post("/internal/create-group")
 async def internal_create_group(
-        request: Request,
+        user_context: CurrentUser,
         group_name: Annotated[str, Form()],
         description: Annotated[str, Form()] = "",
         create_in_keycloak: Annotated[bool, Form()] = True,
 ):
     """Internal endpoint to create a new group in both Keycloak and scopes.yml (requires HTTP Basic Authentication with admin credentials)."""
-    username = request.state.user.get('username', 'unknown')
+    username = user_context.get("username")
 
     # Validate group name
     if not group_name or not group_name.strip():
@@ -593,13 +594,13 @@ async def internal_create_group(
 
 @router.post("/internal/delete-group")
 async def internal_delete_group(
-        request: Request,
+        user_context: CurrentUser,
         group_name: Annotated[str, Form()],
         delete_from_keycloak: Annotated[bool, Form()] = True,
         force: Annotated[bool, Form()] = False,
 ):
     """Internal endpoint to delete a group from both Keycloak and scopes.yml (requires HTTP Basic Authentication with admin credentials)."""
-    username = request.state.user.get('username', 'unknown')
+    username = user_context.get("username")
 
     # Validate group name
     if not group_name or not group_name.strip():
@@ -676,12 +677,12 @@ async def internal_delete_group(
 
 @router.get("/internal/list-groups")
 async def internal_list_groups(
-        request: Request,
+        user_context: CurrentUser,
         include_keycloak: bool = True,
         include_scopes: bool = True,
 ):
     """Internal endpoint to list groups from Keycloak and/or scopes.yml (requires HTTP Basic Authentication with admin credentials)."""
-    username = request.state.user.get('username', 'unknown')
+    username = user_context.get("username")
     logger.info(f"Listing groups via internal endpoint by admin '{username}'")
     try:
         result = {

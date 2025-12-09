@@ -29,8 +29,7 @@ from registry.api.agent_routes import router as agent_router
 from registry.health.routes import router as health_router
 from registry.proxy.routes import router as proxy_router, shutdown_proxy_client
 
-# Import auth dependencies
-from registry.auth.dependencies import enhanced_auth
+from registry.auth.dependencies import CurrentUser
 
 # Import services for initialization
 from registry.services.server_service import server_service
@@ -220,7 +219,7 @@ app.include_router(wellknown_router, prefix="/.well-known", tags=["Discovery"])
 
 # Add user info endpoint for React auth context
 @app.get("/api/auth/me")
-async def get_current_user(user_context: Dict[str, Any] = Depends(enhanced_auth)):
+async def get_current_user(user_context: CurrentUser):
     """Get current user information for React auth context"""
     # Return user info with scopes for token generation
     return {
