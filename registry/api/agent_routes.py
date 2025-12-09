@@ -26,6 +26,7 @@ from ..services.agent_service import agent_service
 from ..schemas.agent_models import (
     AgentCard,
     AgentInfo,
+    AgentProvider,
     AgentRegistrationRequest,
 )
 from ..core.config import settings
@@ -212,6 +213,14 @@ async def register_agent(
 
     tag_list = [tag.strip() for tag in request.tags.split(",") if tag.strip()]
 
+    # Convert provider dict to AgentProvider object if provided
+    provider_obj = None
+    if request.provider:
+        provider_obj = AgentProvider(
+            organization=request.provider.get("organization", ""),
+            url=request.provider.get("url", ""),
+        )
+
     try:
         from ..utils.agent_validator import agent_validator
 
@@ -222,7 +231,7 @@ async def register_agent(
             url=request.url,
             path=path,
             version=request.version,
-            provider=request.provider,
+            provider=provider_obj,
             security_schemes=request.security_schemes or {},
             skills=request.skills or [],
             streaming=request.streaming,
@@ -320,6 +329,14 @@ async def list_agents(
     Returns:
         List of agent info objects
     """
+    # CRITICAL DIAGNOSTIC: Log user_context received by endpoint (for comparison with /servers)
+    logger.debug(f"[GET_AGENTS_DEBUG] Received user_context: {user_context}")
+    logger.debug(f"[GET_AGENTS_DEBUG] user_context type: {type(user_context)}")
+    if user_context:
+        logger.debug(f"[GET_AGENTS_DEBUG] Username: {user_context.get('username', 'NOT PRESENT')}")
+        logger.debug(f"[GET_AGENTS_DEBUG] Scopes: {user_context.get('scopes', 'NOT PRESENT')}")
+        logger.debug(f"[GET_AGENTS_DEBUG] Auth method: {user_context.get('auth_method', 'NOT PRESENT')}")
+
     all_agents = agent_service.get_all_agents()
 
     accessible_agents = _filter_agents_by_access(all_agents, user_context)
@@ -340,6 +357,12 @@ async def list_agents(
         )
 
         if not search_query or search_query in searchable_text:
+            # Extract streaming capability from agent capabilities dict
+            streaming = agent.capabilities.get("streaming", False) if agent.capabilities else False
+
+            # Extract provider organization name (provider is AgentProvider object)
+            provider_name = agent.provider.organization if agent.provider else None
+
             agent_info = AgentInfo(
                 name=agent.name,
                 description=agent.description,
@@ -350,8 +373,8 @@ async def list_agents(
                 num_skills=len(agent.skills),
                 num_stars=agent.num_stars,
                 is_enabled=agent_service.is_agent_enabled(agent.path),
-                provider=agent.provider,
-                streaming=agent.streaming,
+                provider=provider_name,
+                streaming=streaming,
                 trust_level=agent.trust_level,
             )
             filtered_agents.append(agent_info)
