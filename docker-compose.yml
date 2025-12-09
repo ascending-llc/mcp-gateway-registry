@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   # Registry service (includes nginx, SSL, FAISS, models)
-  mcpgateway-registry:
+  registry:
     build:
       context: .
       dockerfile: docker/Dockerfile.registry
@@ -50,7 +50,7 @@ services:
       - "80:80"
       - "443:443"
     depends_on:
-      - mcpgateway-registry
+      - registry
     restart: unless-stopped
     env_file:
       - .env
@@ -163,7 +163,7 @@ services:
       dockerfile: docker/Dockerfile.mcpgw
     environment:
       - PORT=8003
-      - REGISTRY_BASE_URL=http://mcpgateway-registry:7860
+      - REGISTRY_BASE_URL=http://registry:7860
       - REGISTRY_USERNAME=${ADMIN_USER:-admin}
       - REGISTRY_PASSWORD=${ADMIN_PASSWORD}
     volumes:
