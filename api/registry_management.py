@@ -44,6 +44,12 @@ Agent Management (A2A):
     # Delete agent
     uv run python registry_management.py agent-delete --path /code-reviewer
 
+    # Rate an agent (1-5 stars)
+    uv run python registry_management.py agent-rate --path /code-reviewer --rating 5
+
+    # Get agent rating information
+    uv run python registry_management.py agent-rating --path /code-reviewer
+
     # Discover agents by skills
     uv run python registry_management.py agent-discover --skills code_analysis,bug_detection
 
@@ -103,6 +109,8 @@ from registry_client import (
     AgentToggleResponse,
     AgentDiscoveryResponse,
     AgentSemanticDiscoveryResponse,
+    RatingResponse,
+    RatingInfoResponse,
     AnthropicServerList,
     AnthropicServerResponse,
 )
@@ -277,7 +285,18 @@ def _create_client(
             raise FileNotFoundError(f"Token file not found: {args.token_file}")
 
         logger.debug(f"Loading token from file: {args.token_file}")
-        token = token_path.read_text().strip()
+
+        # Try to parse as JSON first (token files from generate-agent-token.sh)
+        try:
+            with open(token_path, 'r') as f:
+                token_data = json.load(f)
+            # Extract access_token from JSON structure
+            token = token_data.get('access_token')
+            if not token:
+                raise RuntimeError(f"No 'access_token' field found in token file: {args.token_file}")
+        except json.JSONDecodeError:
+            # Fall back to plain text token file
+            token = token_path.read_text().strip()
 
         if not token:
             raise RuntimeError(f"Empty token in file: {args.token_file}")
@@ -1030,6 +1049,67 @@ def cmd_agent_search(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_agent_rate(args: argparse.Namespace) -> int:
+    """
+    Rate an agent (1-5 stars).
+
+    Args:
+        args: Command arguments with path and rating
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
+    try:
+        client = _create_client(args)
+        response: RatingResponse = client.rate_agent(
+            path=args.path,
+            rating=args.rating
+        )
+
+        logger.info(f"✓ {response.message}")
+        logger.info(f"Average rating: {response.average_rating:.2f} stars")
+
+        return 0
+
+    except Exception as e:
+        logger.error(f"Failed to rate agent: {e}")
+        return 1
+
+
+def cmd_agent_rating(args: argparse.Namespace) -> int:
+    """
+    Get rating information for an agent.
+
+    Args:
+        args: Command arguments with path
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
+    try:
+        client = _create_client(args)
+        response: RatingInfoResponse = client.get_agent_rating(path=args.path)
+
+        logger.info(f"\nRating for agent '{args.path}':")
+        logger.info(f"  Average: {response.num_stars:.2f} stars")
+        logger.info(f"  Total ratings: {len(response.rating_details)}")
+
+        if response.rating_details:
+            logger.info("\nIndividual ratings (most recent):")
+            # Show first 10 ratings
+            for detail in response.rating_details[:10]:
+                logger.info(f"  {detail.user}: {detail.rating} stars")
+
+            if len(response.rating_details) > 10:
+                logger.info(f"  ... and {len(response.rating_details) - 10} more")
+
+        return 0
+
+    except Exception as e:
+        logger.error(f"Failed to get ratings: {e}")
+        return 1
+
+
 def cmd_anthropic_list_servers(args: argparse.Namespace) -> int:
     """
     List all servers using Anthropic Registry API v0.1.
@@ -1480,6 +1560,29 @@ Examples:
         help="Maximum number of results (default: 10)"
     )
 
+    # Agent rate command
+    agent_rate_parser = subparsers.add_parser("agent-rate", help="Rate an agent (1-5 stars)")
+    agent_rate_parser.add_argument(
+        "--path",
+        required=True,
+        help="Agent path (e.g., /code-reviewer)"
+    )
+    agent_rate_parser.add_argument(
+        "--rating",
+        required=True,
+        type=int,
+        choices=[1, 2, 3, 4, 5],
+        help="Rating value (1-5 stars)"
+    )
+
+    # Agent rating command
+    agent_rating_parser = subparsers.add_parser("agent-rating", help="Get rating information for an agent")
+    agent_rating_parser.add_argument(
+        "--path",
+        required=True,
+        help="Agent path (e.g., /code-reviewer)"
+    )
+
     # Anthropic Registry API Commands
 
     # Anthropic list servers command
@@ -1565,6 +1668,8 @@ Examples:
         "agent-toggle": cmd_agent_toggle,
         "agent-discover": cmd_agent_discover,
         "agent-search": cmd_agent_search,
+        "agent-rate": cmd_agent_rate,
+        "agent-rating": cmd_agent_rating,
         "anthropic-list": cmd_anthropic_list_servers,
         "anthropic-versions": cmd_anthropic_list_versions,
         "anthropic-get": cmd_anthropic_get_server

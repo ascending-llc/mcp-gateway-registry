@@ -417,6 +417,33 @@ class AgentSemanticDiscoveryResponse(BaseModel):
     agents: List[SemanticDiscoveredAgent] = Field(..., description="Semantically discovered agents")
 
 
+class RatingDetail(BaseModel):
+    """Individual rating detail."""
+
+    user: str = Field(..., description="Username who submitted the rating")
+    rating: int = Field(..., ge=1, le=5, description="Rating value (1-5 stars)")
+
+
+class RatingRequest(BaseModel):
+    """Rating submission request."""
+
+    rating: int = Field(..., ge=1, le=5, description="Rating value (1-5 stars)")
+
+
+class RatingResponse(BaseModel):
+    """Rating submission response."""
+
+    message: str = Field(..., description="Success message")
+    average_rating: float = Field(..., ge=1.0, le=5.0, description="Updated average rating")
+
+
+class RatingInfoResponse(BaseModel):
+    """Rating information response."""
+
+    num_stars: float = Field(..., ge=0.0, le=5.0, description="Average rating (0.0 if no ratings)")
+    rating_details: List[RatingDetail] = Field(..., description="Individual ratings (max 100)")
+
+
 # Anthropic Registry API Models (v0.1)
 
 
@@ -588,9 +615,9 @@ class RegistryClient:
         logger.debug(f"{method} {url}")
 
         # Determine content type based on endpoint
-        # Agent registration uses JSON, server registration uses form data
-        if endpoint == "/api/agents/register":
-            # Send as JSON for agent registration
+        # Agent endpoints use JSON, server registration uses form data
+        if endpoint.startswith("/api/agents"):
+            # Send as JSON for all agent endpoints
             response = requests.request(
                 method=method,
                 url=url,
@@ -1167,6 +1194,74 @@ class RegistryClient:
 
         result = AgentSemanticDiscoveryResponse(**response.json())
         logger.info(f"Discovered {len(result.agents)} agents via semantic search")
+        return result
+
+
+    def rate_agent(
+        self,
+        path: str,
+        rating: int
+    ) -> RatingResponse:
+        """
+        Submit a rating for an agent (1-5 stars).
+
+        Each user can only have one active rating. If user has already rated,
+        this updates their existing rating. System maintains a rotating buffer
+        of the last 100 ratings.
+
+        Args:
+            path: Agent path (e.g., /code-reviewer)
+            rating: Rating value (1-5 stars)
+
+        Returns:
+            Rating response with success message and updated average rating
+
+        Raises:
+            requests.HTTPError: If rating fails (400 for invalid rating, 403 for unauthorized, 404 for not found)
+        """
+        logger.info(f"Rating agent '{path}' with {rating} stars")
+
+        request_data = RatingRequest(rating=rating)
+
+        response = self._make_request(
+            method="POST",
+            endpoint=f"/api/agents{path}/rate",
+            data=request_data.model_dump()
+        )
+
+        result = RatingResponse(**response.json())
+        logger.info(f"Agent '{path}' rated successfully. New average: {result.average_rating:.2f}")
+        return result
+
+
+    def get_agent_rating(
+        self,
+        path: str
+    ) -> RatingInfoResponse:
+        """
+        Get rating information for an agent.
+
+        Returns average rating and up to 100 most recent individual ratings
+        (maintained as rotating buffer).
+
+        Args:
+            path: Agent path (e.g., /code-reviewer)
+
+        Returns:
+            Rating information with average and individual ratings
+
+        Raises:
+            requests.HTTPError: If retrieval fails (403 for unauthorized, 404 for not found)
+        """
+        logger.info(f"Getting ratings for agent: {path}")
+
+        response = self._make_request(
+            method="GET",
+            endpoint=f"/api/agents{path}/rating"
+        )
+
+        result = RatingInfoResponse(**response.json())
+        logger.info(f"Retrieved ratings for '{path}': {result.num_stars:.2f} stars ({len(result.rating_details)} ratings)")
         return result
 
     # Anthropic Registry API Methods (v0.1)

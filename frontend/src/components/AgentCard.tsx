@@ -15,6 +15,7 @@ import {
   InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 import AgentDetailsModal from './AgentDetailsModal';
+import StarRatingWidget from './StarRatingWidget';
 
 /**
  * Agent interface representing an A2A agent.
@@ -32,6 +33,7 @@ export interface Agent {
   last_checked_time?: string;
   usersCount?: number;
   rating?: number;
+  rating_details?: Array<{ user: string; rating: number }>;
   status?: 'healthy' | 'healthy-auth-expired' | 'unhealthy' | 'unknown';
 }
 
@@ -340,15 +342,19 @@ const AgentCard: React.FC<AgentCardProps> = ({
         {/* Stats */}
         <div className="px-5 pb-4">
           <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-yellow-50 dark:bg-yellow-900/30 rounded">
-                <StarIcon className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-gray-900 dark:text-white">{agent.rating || 0}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Rating</div>
-              </div>
-            </div>
+            <StarRatingWidget
+              agentPath={agent.path}
+              initialRating={agent.rating || 0}
+              initialCount={agent.rating_details?.length || 0}
+              authToken={authToken}
+              onShowToast={onShowToast}
+              onRatingUpdate={(newRating) => {
+                // Update local agent rating when user submits rating
+                if (onAgentUpdate) {
+                  onAgentUpdate(agent.path, { rating: newRating });
+                }
+              }}
+            />
             <div className="flex items-center gap-2">
               <div className="p-1.5 bg-cyan-50 dark:bg-cyan-900/30 rounded">
                 <CpuChipIcon className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
