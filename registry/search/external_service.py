@@ -217,7 +217,11 @@ class ExternalVectorSearchService(VectorSearchService):
         except Exception as e:
             logger.warning(f"Search via external service failed: {e}, returning empty results")
             return []
-    
+
+    async def save_data(self):
+        # TODO: need to be implemented
+        pass
+
     async def cleanup(self):
         """Cleanup resources - close HTTP client."""
         logger.info("Cleaning up external vector search service")

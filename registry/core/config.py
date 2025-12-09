@@ -7,13 +7,13 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     """Application settings with environment variable support."""
-    
+
     model_config = ConfigDict(
         env_file=".env",
         case_sensitive=False,
         extra="ignore"  # Ignore extra environment variables
     )
-    
+
     # Auth settings
     secret_key: str = ""
     admin_user: str = "admin"
@@ -22,15 +22,15 @@ class Settings(BaseSettings):
     session_max_age_seconds: int = 60 * 60 * 8  # 8 hours
     auth_server_url: str = "http://localhost:8888"
     auth_server_external_url: str = "http://localhost:8888"  # External URL for OAuth redirects
-    
+
     # Embeddings settings
     embeddings_model_name: str = "all-MiniLM-L6-v2"
     embeddings_model_dimensions: int = 384
-    
+
     # Health check settings
     health_check_interval_seconds: int = 300  # 5 minutes for automatic background checks (configurable via env var)
     health_check_timeout_seconds: int = 2  # Very fast timeout for user-driven actions
-    
+
     # WebSocket performance settings
     max_websocket_connections: int = 100  # Reasonable limit for development/testing
     websocket_send_timeout_seconds: float = 2.0  # Allow slightly more time per connection
@@ -41,16 +41,21 @@ class Settings(BaseSettings):
     # Well-known discovery settings
     enable_wellknown_discovery: bool = True
     wellknown_cache_ttl: int = 300  # 5 minutes
-    
+
     # Vector search / tool discovery settings
     tool_discovery_mode: str = "embedded"  # "embedded" (FAISS+transformers) or "external" (MCP service)
     external_vector_search_url: str = "http://localhost:8000/mcp"  # Used when tool_discovery_mode=external
-    
+
     # Container paths - adjust for local development
     container_app_dir: Path = Path("/app")
     container_registry_dir: Path = Path("/app/registry")
     container_log_dir: Path = Path("/app/logs")
-    
+
+    # Note:  It will be overwritten from the .env file.
+    JWT_ISSUER: str = "mcp-auth-server"
+    JWT_AUDIENCE: str = "mcp-registry"
+    JWT_SELF_SIGNED_KID: str = "self-signed-key-v1"
+
     # Local development mode detection
     @property
     def is_local_dev(self) -> bool:
@@ -62,11 +67,12 @@ class Settings(BaseSettings):
         # Generate secret key if not provided
         if not self.secret_key:
             self.secret_key = secrets.token_hex(32)
-        
+
         # Validate tool_discovery_mode
         if self.tool_discovery_mode not in ["embedded", "external"]:
-            raise ValueError(f"Invalid tool_discovery_mode: {self.tool_discovery_mode}. Must be 'embedded' or 'external'")
-    
+            raise ValueError(
+                f"Invalid tool_discovery_mode: {self.tool_discovery_mode}. Must be 'embedded' or 'external'")
+
     @property
     def use_external_discovery(self) -> bool:
         """Check if using external vector search service."""
@@ -145,4 +151,4 @@ class Settings(BaseSettings):
 
 
 # Global settings instance
-settings = Settings() 
+settings = Settings()

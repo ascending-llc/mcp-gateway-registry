@@ -12,7 +12,6 @@ from .internal_routes import (internal_list_groups, internal_healthcheck, intern
                               internal_remove_server_from_groups, internal_create_group, internal_delete_group)
 from ..core.mcp_client import mcp_client_service
 from ..core.config import settings
-from ..auth.dependencies import enhanced_auth, nginx_proxied_auth
 from ..services.server_service import server_service
 from ..auth.dependencies import user_has_ui_permission_for_service
 from ..search.service import faiss_service
@@ -41,7 +40,7 @@ async def read_root(
         return RedirectResponse(url="/login", status_code=302)
     try:
         # Get user context
-        user_context = enhanced_auth(session)
+        user_context = CurrentUser
     except HTTPException as e:
         logger.info(f"Authentication failed at root route: {e.detail}, redirecting to login")
         return RedirectResponse(url="/login", status_code=302)
