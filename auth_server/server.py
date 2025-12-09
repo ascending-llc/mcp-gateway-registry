@@ -1222,12 +1222,13 @@ async def generate_user_token(
     """
     try:
         # Note: No internal API key validation needed since registry already validates user session
-        
+
         # Extract user context
         user_context = request.user_context
         username = user_context.get('username')
         user_scopes = user_context.get('scopes', [])
-        
+        user_groups = user_context.get('groups', [])
+        logger.info(f"User context: {user_context}")
         if not username:
             raise HTTPException(
                 status_code=400,
@@ -1273,6 +1274,7 @@ async def generate_user_token(
             "aud": JWT_AUDIENCE,
             "sub": username,
             "scope": " ".join(requested_scopes),
+            "groups": user_groups,  # Include user groups from context
             "exp": expires_at,
             "iat": current_time,
             "jti": str(uuid.uuid4()),  # Unique token ID
