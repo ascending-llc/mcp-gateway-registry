@@ -8,10 +8,8 @@ Based on: docs/design/a2a-protocol-integration.md
 """
 
 import logging
-import httpx
 from datetime import datetime, timezone
 from typing import Annotated, Dict, List, Optional, Any
-from ..search.service import faiss_service
 
 from fastapi import (
     APIRouter,
@@ -21,14 +19,17 @@ from fastapi import (
     Query,
 )
 from fastapi.responses import JSONResponse
-from fastapi import APIRouter, Request
+import httpx
 from ..services.agent_service import agent_service
 from ..schemas.agent_models import (
     AgentCard,
     AgentInfo,
+    AgentProvider,
     AgentRegistrationRequest,
 )
+from ..auth.dependencies import CurrentUser
 from ..core.config import settings
+from ..search.service import faiss_service
 
 # Configure logging with basicConfig
 logging.basicConfig(
@@ -38,12 +39,13 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+
 router = APIRouter()
 
 
 def _normalize_path(
-        path: Optional[str],
-        agent_name: Optional[str] = None,
+    path: Optional[str],
+    agent_name: Optional[str] = None,
 ) -> str:
     """
     Normalize agent path format.
@@ -78,9 +80,9 @@ def _normalize_path(
 
 
 def _check_agent_permission(
-        permission: str,
-        agent_name: str,
-        user_context: Dict[str, Any],
+    permission: str,
+    agent_name: str,
+    user_context: CurrentUser,
 ) -> None:
     """
     Check if user has permission for agent operation.
@@ -96,9 +98,9 @@ def _check_agent_permission(
     from ..auth.dependencies import user_has_ui_permission_for_service
 
     if not user_has_ui_permission_for_service(
-            permission,
-            agent_name,
-            user_context.get("ui_permissions", {}),
+        permission,
+        agent_name,
+        user_context.get("ui_permissions", {}),
     ):
         logger.warning(
             f"User {user_context['username']} attempted to perform {permission} "
@@ -111,8 +113,8 @@ def _check_agent_permission(
 
 
 def _filter_agents_by_access(
-        agents: List[AgentCard],
-        user_context: Dict[str, Any],
+    agents: List[AgentCard],
+    user_context: CurrentUser,
 ) -> List[AgentCard]:
     """
     Filter agents based on user access permissions.
@@ -163,8 +165,8 @@ def _filter_agents_by_access(
 
 @router.post("/agents/register")
 async def register_agent(
-        agent_request: AgentRegistrationRequest,
-        request: Request,
+    request: AgentRegistrationRequest,
+    user_context: CurrentUser,
 ):
     """
     Register a new A2A agent in the registry.
@@ -172,8 +174,8 @@ async def register_agent(
     Requires publish_agent scope/permission.
 
     Args:
-        agent_request: Agent registration request data
-        request:  user context from auth
+        request: Agent registration request data
+        user_context: Authenticated user context
 
     Returns:
         201 with agent card and registration metadata
@@ -181,10 +183,6 @@ async def register_agent(
     Raises:
         HTTPException: 409 if path exists, 422 if validation fails, 403 if unauthorized
     """
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
-
     ui_permissions = user_context.get("ui_permissions", {})
     publish_permissions = ui_permissions.get("publish_agent", [])
 
@@ -198,9 +196,9 @@ async def register_agent(
         )
 
     logger.info(f"Agent registration request from user '{user_context['username']}'")
-    logger.info(f"Name: {agent_request.name}, Path: {agent_request.path}, URL: {agent_request.url}")
+    logger.info(f"Name: {request.name}, Path: {request.path}, URL: {request.url}")
 
-    path = _normalize_path(agent_request.path, agent_request.name)
+    path = _normalize_path(request.path, request.name)
 
     if agent_service.get_agent_info(path):
         logger.error(f"Agent registration failed: path '{path}' already exists")
@@ -212,25 +210,33 @@ async def register_agent(
             },
         )
 
-    tag_list = [tag.strip() for tag in agent_request.tags.split(",") if tag.strip()]
+    tag_list = [tag.strip() for tag in request.tags.split(",") if tag.strip()]
+
+    # Convert provider dict to AgentProvider object if provided
+    provider_obj = None
+    if request.provider:
+        provider_obj = AgentProvider(
+            organization=request.provider.get("organization", ""),
+            url=request.provider.get("url", ""),
+        )
 
     try:
         from ..utils.agent_validator import agent_validator
 
         agent_card = AgentCard(
-            protocol_version=agent_request.protocol_version,
-            name=agent_request.name,
-            description=agent_request.description,
-            url=agent_request.url,
+            protocol_version=request.protocol_version,
+            name=request.name,
+            description=request.description,
+            url=request.url,
             path=path,
-            version=agent_request.version,
-            provider=agent_request.provider,
-            security_schemes=agent_request.security_schemes or {},
-            skills=agent_request.skills or [],
-            streaming=agent_request.streaming,
+            version=request.version,
+            provider=provider_obj,
+            security_schemes=request.security_schemes or {},
+            skills=request.skills or [],
+            streaming=request.streaming,
             tags=tag_list,
-            license=agent_request.license,
-            visibility=agent_request.visibility,
+            license=request.license,
+            visibility=request.visibility,
             registered_by=user_context["username"],
         )
 
@@ -268,7 +274,6 @@ async def register_agent(
             },
         )
 
-
     is_enabled = agent_service.is_agent_enabled(path)
     await faiss_service.add_or_update_entity(
         path,
@@ -278,7 +283,7 @@ async def register_agent(
     )
 
     logger.info(
-        f"New agent registered: '{agent_request.name}' at path '{path}' "
+        f"New agent registered: '{request.name}' at path '{path}' "
         f"by user '{user_context['username']}'"
     )
 
@@ -304,26 +309,31 @@ async def register_agent(
 
 @router.get("/agents")
 async def list_agents(
-        request: Request,
-        query: Optional[str] = Query(None, description="Search query string"),
-        enabled_only: bool = Query(False, description="Show only enabled agents"),
-        visibility: Optional[str] = Query(None, description="Filter by visibility"),
+    query: Optional[str] = Query(None, description="Search query string"),
+    enabled_only: bool = Query(False, description="Show only enabled agents"),
+    visibility: Optional[str] = Query(None, description="Filter by visibility"),
+    user_context: CurrentUser = None,
 ):
     """
     List all agents filtered by user permissions.
 
     Args:
-        request:  user context from auth
         query: Optional search query
         enabled_only: Only return enabled agents
         visibility: Filter by visibility level
+        user_context: Authenticated user context
 
     Returns:
         List of agent info objects
     """
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
+    # CRITICAL DIAGNOSTIC: Log user_context received by endpoint (for comparison with /servers)
+    logger.debug(f"[GET_AGENTS_DEBUG] Received user_context: {user_context}")
+    logger.debug(f"[GET_AGENTS_DEBUG] user_context type: {type(user_context)}")
+    if user_context:
+        logger.debug(f"[GET_AGENTS_DEBUG] Username: {user_context.get('username', 'NOT PRESENT')}")
+        logger.debug(f"[GET_AGENTS_DEBUG] Scopes: {user_context.get('scopes', 'NOT PRESENT')}")
+        logger.debug(f"[GET_AGENTS_DEBUG] Auth method: {user_context.get('auth_method', 'NOT PRESENT')}")
+
     all_agents = agent_service.get_all_agents()
 
     accessible_agents = _filter_agents_by_access(all_agents, user_context)
@@ -344,6 +354,12 @@ async def list_agents(
         )
 
         if not search_query or search_query in searchable_text:
+            # Extract streaming capability from agent capabilities dict
+            streaming = agent.capabilities.get("streaming", False) if agent.capabilities else False
+
+            # Extract provider organization name (provider is AgentProvider object)
+            provider_name = agent.provider.organization if agent.provider else None
+
             agent_info = AgentInfo(
                 name=agent.name,
                 description=agent.description,
@@ -354,8 +370,8 @@ async def list_agents(
                 num_skills=len(agent.skills),
                 num_stars=agent.num_stars,
                 is_enabled=agent_service.is_agent_enabled(agent.path),
-                provider=agent.provider,
-                streaming=agent.streaming,
+                provider=provider_name,
+                streaming=streaming,
                 trust_level=agent.trust_level,
             )
             filtered_agents.append(agent_info)
@@ -373,8 +389,8 @@ async def list_agents(
 
 @router.get("/agents/{path:path}")
 async def get_agent(
-        request: Request,
-        path: str,
+    path: str,
+    user_context: CurrentUser,
 ):
     """
     Get a single agent by path.
@@ -383,8 +399,8 @@ async def get_agent(
     Private and group-restricted agents require authorization.
 
     Args:
-        request: user context from auth
         path: Agent path
+        user_context: Authenticated user context
 
     Returns:
         Complete agent card
@@ -392,9 +408,6 @@ async def get_agent(
     Raises:
         HTTPException: 404 if not found, 403 if not authorized
     """
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
     path = _normalize_path(path)
 
     agent_card = agent_service.get_agent_info(path)
@@ -421,13 +434,10 @@ async def get_agent(
 
 @router.post("/agents/{path:path}/health")
 async def check_agent_health(
-        request: Request,
-        path: str,
+    path: str,
+    user_context: CurrentUser,
 ):
     """Perform a live /ping health check against an agent endpoint."""
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
     path = _normalize_path(path)
 
     agent_card = agent_service.get_agent_info(path)
@@ -502,9 +512,9 @@ async def check_agent_health(
 
 @router.put("/agents/{path:path}")
 async def update_agent(
-        request: Request,
-        path: str,
-        agent_request: AgentRegistrationRequest,
+    path: str,
+    request: AgentRegistrationRequest,
+    user_context: CurrentUser,
 ):
     """
     Update an existing agent card.
@@ -513,9 +523,9 @@ async def update_agent(
     User must be agent owner or admin.
 
     Args:
-        request: user context from auth
         path: Agent path
-        agent_request: Updated agent data
+        request: Updated agent data
+        user_context: Authenticated user context
 
     Returns:
         Updated agent card
@@ -523,9 +533,6 @@ async def update_agent(
     Raises:
         HTTPException: 404 if not found, 403 if unauthorized
     """
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
     path = _normalize_path(path)
 
     existing_agent = agent_service.get_agent_info(path)
@@ -549,23 +556,23 @@ async def update_agent(
             detail="You can only update agents you registered",
         )
 
-    tag_list = [tag.strip() for tag in agent_request.tags.split(",") if tag.strip()]
+    tag_list = [tag.strip() for tag in request.tags.split(",") if tag.strip()]
 
     try:
         updated_agent = AgentCard(
-            protocol_version=agent_request.protocol_version,
-            name=agent_request.name,
-            description=agent_request.description,
-            url=agent_request.url,
+            protocol_version=request.protocol_version,
+            name=request.name,
+            description=request.description,
+            url=request.url,
             path=path,
-            version=agent_request.version,
-            provider=agent_request.provider,
-            security_schemes=agent_request.security_schemes or {},
-            skills=agent_request.skills or [],
-            streaming=agent_request.streaming,
+            version=request.version,
+            provider=request.provider,
+            security_schemes=request.security_schemes or {},
+            skills=request.skills or [],
+            streaming=request.streaming,
             tags=tag_list,
-            license=agent_request.license,
-            visibility=agent_request.visibility,
+            license=request.license,
+            visibility=request.visibility,
             registered_by=existing_agent.registered_by,
             registered_at=existing_agent.registered_at,
             is_enabled=existing_agent.is_enabled,
@@ -620,8 +627,8 @@ async def update_agent(
 
 @router.delete("/agents/{path:path}")
 async def delete_agent(
-        request: Request,
-        path: str,
+    path: str,
+    user_context: CurrentUser,
 ):
     """
     Delete an agent from the registry.
@@ -629,8 +636,8 @@ async def delete_agent(
     Requires admin permission or agent ownership.
 
     Args:
-        request: user context from auth
         path: Agent path
+        user_context: Authenticated user context
 
     Returns:
         204 No Content
@@ -638,9 +645,6 @@ async def delete_agent(
     Raises:
         HTTPException: 404 if not found, 403 if unauthorized
     """
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
     path = _normalize_path(path)
 
     existing_agent = agent_service.get_agent_info(path)
@@ -684,9 +688,9 @@ async def delete_agent(
 
 @router.post("/agents/{path:path}/toggle")
 async def toggle_agent(
-        request: Request,
-        path: str,
-        enabled: bool,
+    path: str,
+    enabled: bool,
+    user_context: CurrentUser,
 ):
     """
     Enable or disable an agent.
@@ -694,9 +698,9 @@ async def toggle_agent(
     Requires toggle_service permission for the agent.
 
     Args:
-        request: Request
         path: Agent path
         enabled: New enabled state
+        user_context: Authenticated user context
 
     Returns:
         Updated agent status
@@ -704,10 +708,6 @@ async def toggle_agent(
     Raises:
         HTTPException: 404 if not found, 403 if unauthorized
     """
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
-
     path = _normalize_path(path)
 
     agent_card = agent_service.get_agent_info(path)
@@ -748,10 +748,10 @@ async def toggle_agent(
 
 @router.post("/agents/discover")
 async def discover_agents_by_skills(
-        request: Request,
-        skills: List[str],
-        tags: Optional[List[str]] = None,
-        max_results: int = Query(10, ge=1, le=100),
+    skills: List[str],
+    tags: Optional[List[str]] = None,
+    max_results: int = Query(10, ge=1, le=100),
+    user_context: CurrentUser = None,
 ):
     """
     Discover agents by required skills.
@@ -759,10 +759,10 @@ async def discover_agents_by_skills(
     Returns agents that have the specified skills, ranked by relevance.
 
     Args:
-        request: Request
         skills: Required skill names or IDs
         tags: Optional tag filters
         max_results: Maximum number of results
+        user_context: Authenticated user context
 
     Returns:
         List of matching agents with relevance scores
@@ -770,10 +770,6 @@ async def discover_agents_by_skills(
     Raises:
         HTTPException: 400 if no skills provided
     """
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
-
     if not skills:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -861,9 +857,9 @@ async def discover_agents_by_skills(
 
 @router.post("/agents/discover/semantic")
 async def discover_agents_semantic(
-        request: Request,
-        query: str,
-        max_results: int = Query(10, ge=1, le=100),
+    query: str,
+    max_results: int = Query(10, ge=1, le=100),
+    user_context: CurrentUser = None,
 ):
     """
     Discover agents using natural language semantic search.
@@ -871,9 +867,9 @@ async def discover_agents_semantic(
     Uses FAISS vector search to find agents matching the query intent.
 
     Args:
-        request: Request sent by client
         query: Natural language query describing needed capabilities
         max_results: Maximum number of results
+        user_context: Authenticated user context
 
     Returns:
         List of matching agents with relevance scores
@@ -881,10 +877,6 @@ async def discover_agents_semantic(
     Raises:
         HTTPException: 400 if query is empty
     """
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
-
     if not query or not query.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
