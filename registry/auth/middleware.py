@@ -28,10 +28,10 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         self.public_paths = public_paths or [
             "/", "/health", "/docs", "/openapi.json",
             "/static",
-            "/api/auth/login",
-            "/logout",
-            "/auth",
+
             "/callback",
+            "/api/auth/providers",
+            "/api/auth/login",
         ]
         self.internal_paths = [
             "/internal/register",
