@@ -2,7 +2,7 @@ import logging
 import httpx
 import os
 from typing import Annotated
-from fastapi import APIRouter, Request, Form, HTTPException, Cookie
+from fastapi import (APIRouter, Request, Form, HTTPException, Cookie, status)
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
@@ -11,8 +11,8 @@ from ..core.config import settings
 from ..auth.dependencies import enhanced_auth
 from ..services.server_service import server_service
 from ..auth.dependencies import user_has_ui_permission_for_service
-from starlette import status
 from ..search.service import faiss_service
+from ..auth.dependencies import CurrentUser
 from ..health.service import health_service
 
 logger = logging.getLogger(__name__)
@@ -118,14 +118,10 @@ async def read_root(
 
 @router.get("/servers")
 async def get_servers_json(
-        request: Request,
+        user_context: CurrentUser,
         query: str | None = None,
 ):
     """Get servers data as JSON for React frontend (reuses root route logic)."""
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
-
     service_data = []
     search_query = query.lower() if query else ""
 
@@ -182,18 +178,13 @@ async def get_servers_json(
 
 @router.post("/toggle/{service_path:path}")
 async def toggle_service_route(
-        request: Request,
+        user_context: CurrentUser,
         service_path: str,
         enabled: Annotated[str | None, Form()] = None,
 ):
     """Toggle a service on/off (requires toggle_service UI permission)."""
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
-
     if not service_path.startswith("/"):
         service_path = "/" + service_path
-
     server_info = server_service.get_server_info(service_path)
     if not server_info:
         raise HTTPException(status_code=404, detail="Service path not registered")
@@ -202,10 +193,10 @@ async def toggle_service_route(
 
     # Check if user has toggle_service permission for this specific service
     if not user_has_ui_permission_for_service('toggle_service', service_name, user_context.get('ui_permissions', {})):
-        logger.warning(
-            f"User {user_context['username']} attempted to toggle service {service_name} without toggle_service permission")
+        logger.warning(f"User {user_context['username']} attempted to toggle service"
+                       f" {service_name} without toggle_service permission")
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=403,
             detail=f"You do not have permission to toggle {service_name}"
         )
 
@@ -214,7 +205,7 @@ async def toggle_service_route(
         if not server_service.user_can_access_server_path(service_path, user_context['accessible_servers']):
             logger.warning(f"User {user_context['username']} attempted to toggle service {service_path} without access")
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
+                status_code=403,
                 detail="You do not have access to this server"
             )
 
@@ -265,7 +256,7 @@ async def toggle_service_route(
 
 @router.post("/register")
 async def register_service(
-        request: Request,
+        user_context: CurrentUser,
         name: Annotated[str, Form()],
         description: Annotated[str, Form()],
         path: Annotated[str, Form()],
@@ -277,14 +268,6 @@ async def register_service(
         license_str: Annotated[str, Form(alias="license")] = "N/A",
 ):
     """Register a new service (requires register_service UI permission)."""
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
-
-    from ..search.service import faiss_service
-    from ..health.service import health_service
-    from ..auth.dependencies import user_has_ui_permission_for_service
-
     # Check if user has register_service permission for any service
     ui_permissions = user_context.get('ui_permissions', {})
     register_permissions = ui_permissions.get('register_service', [])
@@ -350,14 +333,11 @@ async def register_service(
 
 @router.get("/edit/{service_path:path}", response_class=HTMLResponse)
 async def edit_server_form(
+        user_context: CurrentUser,
         request: Request,
         service_path: str,
 ):
     """Show edit form for a service (requires modify_service UI permission)."""
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
-
     if not service_path.startswith('/'):
         service_path = '/' + service_path
 
@@ -398,7 +378,7 @@ async def edit_server_form(
 
 @router.post("/edit/{service_path:path}")
 async def edit_server_submit(
-        request: Request,
+        user_context: CurrentUser,
         service_path: str,
         name: Annotated[str, Form()],
         proxy_pass_url: Annotated[str, Form()],
@@ -410,10 +390,6 @@ async def edit_server_submit(
         license_str: Annotated[str, Form(alias="license")] = "N/A",
 ):
     """Handle server edit form submission (requires modify_service UI permission)."""
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
-
     if not service_path.startswith('/'):
         service_path = '/' + service_path
 
@@ -480,11 +456,9 @@ async def edit_server_submit(
 @router.get("/tokens", response_class=HTMLResponse)
 async def token_generation_page(
         request: Request,
+        user_context: CurrentUser,
 ):
     """Show token generation page for authenticated users."""
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
     return templates.TemplateResponse(
         "token_generation.html",
         {
@@ -499,13 +473,10 @@ async def token_generation_page(
 
 @router.get("/server_details/{service_path:path}")
 async def get_server_details(
-        request: Request,
         service_path: str,
+        user_context: CurrentUser,
 ):
     """Get server details by path, or all servers if path is 'all' (filtered by permissions)."""
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
     # Normalize the path to ensure it starts with '/'
     if not service_path.startswith('/'):
         service_path = '/' + service_path
@@ -537,14 +508,10 @@ async def get_server_details(
 
 @router.get("/tools/{service_path:path}")
 async def get_service_tools(
-        request: Request,
         service_path: str,
+        user_context: CurrentUser,
 ):
     """Get tool list for a service (filtered by permissions)."""
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
-
     if not service_path.startswith('/'):
         service_path = '/' + service_path
 
@@ -661,14 +628,10 @@ async def get_service_tools(
 
 @router.post("/refresh/{service_path:path}")
 async def refresh_service(
-        request: Request,
         service_path: str,
+        user_context: CurrentUser,
 ):
     """Refresh service health and tool information (requires health_check_service permission)."""
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
-
     if not service_path.startswith('/'):
         service_path = '/' + service_path
 
@@ -740,6 +703,7 @@ async def refresh_service(
 @router.post("/tokens/generate")
 async def generate_user_token(
         request: Request,
+        user_context: CurrentUser,
 ):
     """
     Generate a JWT token for the authenticated user.
@@ -757,9 +721,6 @@ async def generate_user_token(
     Raises:
         HTTPException: If request fails or user lacks permissions
     """
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
 
     try:
         # Parse request body
@@ -867,7 +828,7 @@ async def generate_user_token(
 
 @router.get("/admin/tokens")
 async def get_admin_tokens(
-        request: Request,
+        user_context: CurrentUser,
 ):
     """
     Admin-only endpoint to retrieve JWT tokens from Keycloak.
@@ -880,10 +841,6 @@ async def get_admin_tokens(
     Raises:
         HTTPException: If user is not admin or token retrieval fails
     """
-    if not request.state.is_authenticated:
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=f"not authenticated")
-    user_context = request.state.user
-
     # Check if user is admin
     if not user_context.get("is_admin", False):
         logger.warning(
