@@ -89,7 +89,7 @@ def get_current_user(
         )
 
 
-@DeprecationWarning
+# @DeprecationWarning
 def get_user_session_data(
         session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
 ) -> Dict[str, Any]:
@@ -461,7 +461,7 @@ def web_auth(
     return get_current_user(session)
 
 
-@DeprecationWarning
+# @DeprecationWarning
 def enhanced_auth(
         session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
 ) -> Dict[str, Any]:
@@ -529,7 +529,7 @@ def enhanced_auth(
     return user_context
 
 
-@DeprecationWarning
+# @DeprecationWarning
 def nginx_proxied_auth(
         request: Request,
         session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,

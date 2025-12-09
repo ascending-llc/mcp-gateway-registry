@@ -1,19 +1,24 @@
 import logging
 import httpx
 import os
+import json
+import asyncio
 from typing import Annotated
-from fastapi import (APIRouter, Request, Form, HTTPException, Cookie, status)
+from fastapi import (APIRouter, Request, Form, HTTPException, Cookie, status, Depends)
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
+from .internal_routes import (internal_list_groups, internal_healthcheck, internal_add_server_to_groups,
+                              internal_remove_server_from_groups, internal_create_group, internal_delete_group)
 from ..core.mcp_client import mcp_client_service
 from ..core.config import settings
-from ..auth.dependencies import enhanced_auth
+from ..auth.dependencies import enhanced_auth, nginx_proxied_auth
 from ..services.server_service import server_service
 from ..auth.dependencies import user_has_ui_permission_for_service
 from ..search.service import faiss_service
 from ..auth.dependencies import CurrentUser
 from ..health.service import health_service
+from ..utils.scopes_manager import remove_server_scopes
 
 logger = logging.getLogger(__name__)
 
@@ -959,7 +964,7 @@ async def register_service_api(
     description: Annotated[str, Form()],
     path: Annotated[str, Form()],
     proxy_pass_url: Annotated[str, Form()],
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)],
+    user_context: CurrentUser,
     tags: Annotated[str, Form()] = "",
     num_tools: Annotated[int, Form()] = 0,
     num_stars: Annotated[int, Form()] = 0,
@@ -1018,11 +1023,6 @@ async def register_service_api(
     """
     logger.info(f"API register service request from user '{user_context.get('username')}' for service '{name}'")
 
-    # Implementation extracted from internal_register_service to avoid duplicating auth logic
-    # Auth is already validated by nginx_proxied_auth dependency
-    from ..search.service import faiss_service
-    from ..health.service import health_service
-
     # Validate path format
     if not path.startswith('/'):
         path = '/' + path
@@ -1034,7 +1034,10 @@ async def register_service_api(
     # Process supported_transports
     if supported_transports:
         try:
-            transports_list = json.loads(supported_transports) if supported_transports.startswith('[') else [t.strip() for t in supported_transports.split(',')]
+            transports_list = json.loads(supported_transports) if supported_transports.startswith('[') else [t.strip()
+                                                                                                             for t in
+                                                                                                             supported_transports.split(
+                                                                                                                 ',')]
         except Exception as e:
             logger.warning(f"SERVERS REGISTER: Failed to parse supported_transports, using default: {e}")
             transports_list = ["streamable-http"]
@@ -1136,9 +1139,9 @@ async def register_service_api(
 
 @router.post("/servers/toggle")
 async def toggle_service_api(
-    path: Annotated[str, Form()],
-    new_state: Annotated[bool, Form()],
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+        path: Annotated[str, Form()],
+        new_state: Annotated[bool, Form()],
+        user_context: CurrentUser = None,
 ):
     """
     Toggle a service's enabled/disabled state via JWT authentication (External API).
@@ -1164,10 +1167,8 @@ async def toggle_service_api(
       -F "new_state=true"
     ```
     """
-    from ..search.service import faiss_service
-    from ..health.service import health_service
-
-    logger.info(f"API toggle service request from user '{user_context.get('username')}' for path '{path}' to {new_state}")
+    logger.info(
+        f"API toggle service request from user '{user_context.get('username')}' for path '{path}' to {new_state}")
 
     # Normalize path
     if not path.startswith('/'):
@@ -1184,7 +1185,8 @@ async def toggle_service_api(
     if not success:
         raise HTTPException(status_code=500, detail="Failed to toggle service")
 
-    logger.info(f"Toggled '{server_info['server_name']}' ({path}) to {new_state} by user '{user_context.get('username')}'")
+    logger.info(
+        f"Toggled '{server_info['server_name']}' ({path}) to {new_state} by user '{user_context.get('username')}'")
 
     # If enabling, perform immediate health check
     status = "disabled"
@@ -1224,8 +1226,8 @@ async def toggle_service_api(
 
 @router.post("/servers/remove")
 async def remove_service_api(
-    path: Annotated[str, Form()],
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+        path: Annotated[str, Form()],
+        user_context: CurrentUser = None,
 ):
     """
     Remove a service via JWT Bearer Token authentication (External API).
@@ -1249,10 +1251,6 @@ async def remove_service_api(
       -F "path=/myservice"
     ```
     """
-    from ..search.service import faiss_service
-    from ..health.service import health_service
-    from ..utils.scopes_manager import remove_server_scopes
-
     logger.info(f"API remove service request from user '{user_context.get('username')}' for path '{path}'")
 
     # Normalize path
@@ -1312,8 +1310,8 @@ async def remove_service_api(
 
 @router.get("/servers/health")
 async def healthcheck_api(
-    request: Request,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+        request: Request,
+        user_context: CurrentUser = None,
 ):
     """
     Get health status for all registered services via JWT authentication (External API).
@@ -1341,10 +1339,10 @@ async def healthcheck_api(
 
 @router.post("/servers/groups/add")
 async def add_server_to_groups_api(
-    request: Request,
-    server_name: Annotated[str, Form()],
-    group_names: Annotated[str, Form()],
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+        request: Request,
+        server_name: Annotated[str, Form()],
+        group_names: Annotated[str, Form()],
+        user_context: CurrentUser = None,
 ):
     """
     Add a service to scope groups via JWT authentication (External API).
@@ -1373,15 +1371,15 @@ async def add_server_to_groups_api(
     logger.info(f"API add to groups request from user '{user_context.get('username')}' for server '{server_name}'")
 
     # Call the existing internal_add_server_to_groups function
-    return await internal_add_server_to_groups(request, server_name, group_names)
+    return await internal_add_server_to_groups(server_name, group_names)
 
 
 @router.post("/servers/groups/remove")
 async def remove_server_from_groups_api(
-    request: Request,
-    server_name: Annotated[str, Form()],
-    group_names: Annotated[str, Form()],
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+        request: Request,
+        server_name: Annotated[str, Form()],
+        group_names: Annotated[str, Form()],
+        user_context: CurrentUser = None,
 ):
     """
     Remove a service from scope groups via JWT authentication (External API).
@@ -1410,16 +1408,16 @@ async def remove_server_from_groups_api(
     logger.info(f"API remove from groups request from user '{user_context.get('username')}' for server '{server_name}'")
 
     # Call the existing internal_remove_server_from_groups function
-    return await internal_remove_server_from_groups(request, server_name, group_names)
+    return await internal_remove_server_from_groups(server_name, group_names)
 
 
 @router.post("/servers/groups/create")
 async def create_group_api(
-    request: Request,
-    group_name: Annotated[str, Form()],
-    description: Annotated[str, Form()] = "",
-    create_in_keycloak: Annotated[bool, Form()] = True,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+        request: Request,
+        group_name: Annotated[str, Form()],
+        description: Annotated[str, Form()] = "",
+        create_in_keycloak: Annotated[bool, Form()] = True,
+        user_context: CurrentUser = None,
 ):
     """
     Create a new scope group via JWT authentication (External API).
@@ -1450,16 +1448,16 @@ async def create_group_api(
     logger.info(f"API create group request from user '{user_context.get('username')}' for group '{group_name}'")
 
     # Call the existing internal_create_group function
-    return await internal_create_group(request, group_name, description, create_in_keycloak)
+    return await internal_create_group(group_name=group_name, description=description, create_in_keycloak=create_in_keycloak)
 
 
 @router.post("/servers/groups/delete")
 async def delete_group_api(
-    request: Request,
-    group_name: Annotated[str, Form()],
-    delete_from_keycloak: Annotated[bool, Form()] = True,
-    force: Annotated[bool, Form()] = False,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+        request: Request,
+        group_name: Annotated[str, Form()],
+        delete_from_keycloak: Annotated[bool, Form()] = True,
+        force: Annotated[bool, Form()] = False,
+        user_context: CurrentUser = None,
 ):
     """
     Delete a scope group via JWT authentication (External API).
@@ -1490,15 +1488,15 @@ async def delete_group_api(
     logger.info(f"API delete group request from user '{user_context.get('username')}' for group '{group_name}'")
 
     # Call the existing internal_delete_group function
-    return await internal_delete_group(request, group_name, delete_from_keycloak, force)
+    return await internal_delete_group(group_name=group_name, delete_from_keycloak=delete_from_keycloak, force=force)
 
 
 @router.get("/servers/groups")
 async def list_groups_api(
-    request: Request,
-    include_keycloak: bool = True,
-    include_scopes: bool = True,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+        request: Request,
+        include_keycloak: bool = True,
+        include_scopes: bool = True,
+        user_context: CurrentUser = None,
 ):
     """
     List all scope groups via JWT Bearer Token authentication (External API).
@@ -1521,13 +1519,13 @@ async def list_groups_api(
     logger.info(f"API list groups request from user '{user_context.get('username') if user_context else 'unknown'}'")
 
     # Call the existing internal_list_groups function
-    return await internal_list_groups(request, include_keycloak, include_scopes)
+    return await internal_list_groups(include_keycloak=include_keycloak, include_scopes=include_scopes)
 
 
 @router.get("/servers/tools/{service_path:path}")
 async def get_service_tools_api(
-    service_path: str,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+        service_path: str,
+        user_context: CurrentUser = None,
 ):
     """
     Get tool list for a service via JWT Bearer Token authentication (External API).
@@ -1554,7 +1552,8 @@ async def get_service_tools_api(
       -H "Authorization: Bearer $JWT_TOKEN"
     ```
     """
-    logger.info(f"API get tools request from user '{user_context.get('username') if user_context else 'unknown'}' for path '{service_path}'")
+    logger.info(
+        f"API get tools request from user '{user_context.get('username') if user_context else 'unknown'}' for path '{service_path}'")
 
     # Call the existing get_service_tools function
     return await get_service_tools(service_path=service_path, user_context=user_context)
