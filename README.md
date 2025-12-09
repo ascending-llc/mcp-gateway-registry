@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/github/license/agentic-community/mcp-gateway-registry?style=flat)](https://github.com/agentic-community/mcp-gateway-registry/blob/main/LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/agentic-community/mcp-gateway-registry?style=flat&logo=github)](https://github.com/agentic-community/mcp-gateway-registry/releases)
 
-[🚀 Get Running Now](#option-a-pre-built-images-instant-setup) | [Quick Start](#quick-start) | [Documentation](docs/) | [Enterprise Features](#enterprise-features) | [Community](#community)
+[🚀 Get Running Now](#option-a-pre-built-images-instant-setup) | [Production Deployment](terraform/aws-ecs/README.md) | [Quick Start](#quick-start) | [Documentation](docs/) | [Enterprise Features](#enterprise-features) | [Community](#community)
 
 **Demo Videos:** ⭐ [MCP Registry CLI Demo](https://github.com/user-attachments/assets/98200866-e8bd-4ac3-bad6-c6d42b261dbe) | [Full End-to-End Functionality](https://github.com/user-attachments/assets/5ffd8e81-8885-4412-a4d4-3339bbdba4fb) | [OAuth 3-Legged Authentication](https://github.com/user-attachments/assets/3c3a570b-29e6-4dd3-b213-4175884396cc) | [Dynamic Tool Discovery](https://github.com/user-attachments/assets/cee25b31-61e4-4089-918c-c3757f84518c)
 
@@ -129,10 +129,11 @@ Interactive terminal interface for chatting with AI models and discovering MCP t
 
 ## What's New
 
+- **☁️ AWS ECS Production Deployment** - Production-ready deployment on Amazon ECS Fargate with multi-AZ architecture, Application Load Balancer with HTTPS, auto-scaling, CloudWatch monitoring, and NAT Gateway high availability. Complete Terraform configuration for deploying the entire stack. [ECS Deployment Guide](terraform/aws-ecs/README.md)
+- **Federated Registry** - MCP Gateway registry now supports federation of servers and agents from other registries. [Federation Guide](docs/federation.md)
 - **🔗 Agent-to-Agent (A2A) Protocol Support** - Agents can now register, discover, and communicate with other agents through a secure, centralized registry. Enable autonomous agent ecosystems with Keycloak-based access control and fine-grained permissions. [A2A Guide](docs/a2a.md)
 - **🏢 Microsoft Entra ID Integration** - Enterprise SSO with Microsoft Entra ID (Azure AD) authentication. Group-based access control, conditional access policies, and seamless integration with existing Microsoft 365 environments. [Entra ID Setup Guide](docs/entra-id-setup.md)
 - **🤖 Agentic CLI for MCP Registry** - Talk to the Registry in natural language using a Claude Code-like interface. Discover tools, ask questions, and execute MCP commands conversationally. [Learn more](docs/mcp-registry-cli.md)
-- **💬 Interactive MCP-Registry CLI** - Terminal-based chat interface with AI-powered MCP tool discovery. Supports Amazon Bedrock and Anthropic API. [MCP-Registry CLI](docs/mcp-registry-cli.md)
 - **🔒 MCP Server Security Scanning** - Integrated vulnerability scanning with [Cisco AI Defence MCP Scanner](https://github.com/cisco-ai-defense/mcp-scanner). Automatic security scans during server registration, periodic registry-wide scans with detailed markdown reports, and automatic disabling of servers with security issues.
 - **📥 Import Servers from Anthropic MCP Registry** - Import curated MCP servers from Anthropic's registry with a single command. [Import Guide](docs/anthropic-registry-import.md)
 - **🔌 Anthropic MCP Registry REST API Compatibility** - Full compatibility with Anthropic's MCP Registry REST API specification. [API Documentation](docs/anthropic_registry_api.md)
@@ -141,6 +142,7 @@ Interactive terminal interface for chatting with AI models and discovering MCP t
 - **🔐 Keycloak Integration** - Enterprise authentication with AI agent audit trails and group-based authorization. [Learn more](docs/keycloak-integration.md)
 - **📊 Real-Time Metrics & Observability** - Grafana dashboards with SQLite and OpenTelemetry integration. [Observability Guide](docs/OBSERVABILITY.md)
 - **Amazon Bedrock AgentCore Integration** - AgentCore Gateway support with dual authentication. [Integration Guide](docs/agentcore.md)
+
 
 ---
 
@@ -529,15 +531,45 @@ echo 'ASOR_ACCESS_TOKEN=your_token' >> .env
 
 ---
 
+## Deployments
+
+### AWS Elastic Container Service (ECS)
+
+<div align="center">
+<img src="terraform/aws-ecs/img/MCP-Gateway-Registry-first-login.png" alt="MCP Gateway Registry on AWS ECS" width="800"/>
+</div>
+
+**Production-ready deployment** on Amazon ECS Fargate with comprehensive enterprise features:
+
+- **Multi-AZ Architecture** - High availability across multiple availability zones
+- **Application Load Balancer** - HTTPS/SSL termination with automatic certificate management via ACM
+- **Auto-scaling** - Dynamic scaling based on CPU and memory utilization
+- **CloudWatch Integration** - Comprehensive monitoring, logging, and alerting
+- **NAT Gateway HA** - High-availability NAT gateway configuration for secure outbound connectivity
+- **Keycloak Integration** - Enterprise authentication with RDS Aurora PostgreSQL backend
+- **EFS Shared Storage** - Persistent storage for models, logs, and configuration
+- **Service Discovery** - AWS Cloud Map for service-to-service communication
+
+**[Complete ECS Deployment Guide](terraform/aws-ecs/README.md)** - Step-by-step instructions for deploying the entire stack with Terraform.
+
+### Amazon EKS (Kubernetes)
+
+**Coming Soon** - Kubernetes deployment on Amazon EKS with Helm charts for container orchestration at scale.
+
+---
+
 ## Documentation
 
 | Getting Started | Enterprise Setup | Developer & Operations |
 |------------------|-------------------|------------------------|
 | [Complete Setup Guide](docs/complete-setup-guide.md)<br/>**NEW!** Step-by-step from scratch on AWS EC2 | [Authentication Guide](docs/auth.md)<br/>OAuth and identity provider integration | [AI Coding Assistants Setup](docs/ai-coding-assistants-setup.md)<br/>VS Code, Cursor, Claude Code integration |
-| [Installation Guide](docs/installation.md)<br/>Complete setup instructions for EC2 and EKS | [Keycloak Integration](docs/keycloak-integration.md)<br/>Enterprise identity with agent audit trails | [API Reference](docs/registry_api.md)<br/>Programmatic registry management |
-| [Quick Start Tutorial](docs/quick-start.md)<br/>Get running in 5 minutes | [Amazon Cognito Setup](docs/cognito.md)<br/>Step-by-step IdP configuration | [Token Refresh Service](docs/token-refresh-service.md)<br/>Automated token refresh and lifecycle management |
-| [Configuration Reference](docs/configuration.md)<br/>Environment variables and settings | [Anthropic Registry Import](docs/anthropic-registry-import.md)<br/>**NEW!** Import servers from Anthropic MCP Registry | [Observability Guide](docs/OBSERVABILITY.md)<br/>**NEW!** Metrics, monitoring, and OpenTelemetry setup | [Federation Guide](docs/federation.md)<br/>**NEW!** External registry integration (Anthropic, ASOR) | [Anthropic Registry API](docs/anthropic_registry_api.md)<br/>**NEW!** REST API compatibility | [Fine-Grained Access Control](docs/scopes.md)<br/>Permission management and security | [Dynamic Tool Discovery](docs/dynamic-tool-discovery.md)<br/>Autonomous agent capabilities |
-| | [Service Management](docs/service-management.md)<br/>Server lifecycle and operations | |
+| [Installation Guide](docs/installation.md)<br/>Complete setup instructions for EC2 and EKS | [AWS ECS Deployment](terraform/aws-ecs/README.md)<br/>Production-ready deployment on AWS ECS Fargate | [API Reference](docs/registry_api.md)<br/>Programmatic registry management |
+| [Quick Start Tutorial](docs/quick-start.md)<br/>Get running in 5 minutes | [Keycloak Integration](docs/keycloak-integration.md)<br/>Enterprise identity with agent audit trails | [Token Refresh Service](docs/token-refresh-service.md)<br/>Automated token refresh and lifecycle management |
+| [Configuration Reference](docs/configuration.md)<br/>Environment variables and settings | [Amazon Cognito Setup](docs/cognito.md)<br/>Step-by-step IdP configuration | [Observability Guide](docs/OBSERVABILITY.md)<br/>**NEW!** Metrics, monitoring, and OpenTelemetry setup |
+| | [Anthropic Registry Import](docs/anthropic-registry-import.md)<br/>**NEW!** Import servers from Anthropic MCP Registry | [Federation Guide](docs/federation.md)<br/>**NEW!** External registry integration (Anthropic, ASOR) |
+| | [Service Management](docs/service-management.md)<br/>Server lifecycle and operations | [Anthropic Registry API](docs/anthropic_registry_api.md)<br/>**NEW!** REST API compatibility |
+| | | [Fine-Grained Access Control](docs/scopes.md)<br/>Permission management and security |
+| | | [Dynamic Tool Discovery](docs/dynamic-tool-discovery.md)<br/>Autonomous agent capabilities |
 | | | [Production Deployment](docs/installation.md)<br/>Complete setup for production environments |
 | | | [Troubleshooting Guide](docs/FAQ.md)<br/>Common issues and solutions |
 
@@ -566,8 +598,8 @@ The following GitHub issues represent our current development roadmap and planne
 
 **Major Features**
 
-- **[#203 - Deploy MCP Gateway Registry on AWS ECS Fargate](https://github.com/agentic-community/mcp-gateway-registry/issues/203)** 🚧 **IN PROGRESS**
-  Comprehensive production-ready ECS deployment guide with multi-AZ architecture, auto-scaling, HTTPS/SSL, CloudWatch monitoring, and NAT Gateway HA. Complete Terraform configuration templates for deploying the entire stack on AWS.
+- **[#203 - Deploy MCP Gateway Registry on AWS ECS Fargate](https://github.com/agentic-community/mcp-gateway-registry/issues/203)** ✅ **COMPLETE**
+  Production-ready ECS deployment implemented with multi-AZ architecture, auto-scaling, HTTPS/SSL, CloudWatch monitoring, and NAT Gateway HA. Complete Terraform configuration and comprehensive deployment guide available. [ECS Deployment Guide](terraform/aws-ecs/README.md)
 
 - **[#195 - Add A2A (Agent-to-Agent) Protocol Support to Registry](https://github.com/agentic-community/mcp-gateway-registry/issues/195)** ✅ **COMPLETE**
   Agents can now register, discover, and communicate with other agents through the secure registry. Full implementation includes agent lifecycle management, Keycloak-based access control, fine-grained permissions, comprehensive testing, and documentation. [A2A Guide](docs/a2a.md)
