@@ -71,7 +71,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             {/* Right side */}
             <div className="flex items-center space-x-4">
               {/* GitHub link */}
-              <a
+              {/* <a
                 href="https://github.com/agentic-community/mcp-gateway-registry"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -90,7 +90,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                     clipRule="evenodd"
                   />
                 </svg>
-              </a>
+              </a> */}
 
               {/* Theme toggle */}
               <button
