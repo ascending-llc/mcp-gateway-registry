@@ -1,10 +1,8 @@
 import logging
 from typing import Dict, Any, Optional, List
-from packages.db.managers import CollectionManager
 from packages.shared.models import McpTool
 from packages.db import (
     ConnectionConfig,
-    ProviderFactory,
     init_weaviate,
     get_weaviate_client,
     BatchResult,
@@ -28,31 +26,17 @@ class ExternalVectorSearchService(VectorSearchService):
 
         """
         try:
-            # Use new configuration system
             connection = ConnectionConfig(
                 host=REGISTRY_CONSTANTS.WEAVIATE_HOST,
                 port=REGISTRY_CONSTANTS.WEAVIATE_PORT,
                 api_key=REGISTRY_CONSTANTS.WEAVIATE_API_KEY
             )
-
-            # Get provider from environment (supports IAM Role)
-            provider = ProviderFactory.from_env()
-
-            # Initialize client with config objects
-            init_weaviate(
-                connection=connection,
-                provider=provider
-            )
-
-            self._client = get_weaviate_client()
+            self._client = init_weaviate(connection=connection)
             self._initialized = True
-
             logger.info(
-                f"Vector search service initialized with "
-                f"{provider.__class__.__name__} "
-                f"({provider.get_vectorizer_name()})"
+                f"Vector search service initialized with connection to "
+                f"{connection.host}:{connection.port}"
             )
-
         except Exception as e:
             logger.error(f"Failed to initialize vector search service: {e}")
             self._client = None
@@ -86,14 +70,19 @@ class ExternalVectorSearchService(VectorSearchService):
             else:
                 logger.info("MCPTool collection exists")
 
-                # Get collection stats
-                manager = CollectionManager(self._client)
-                stats = manager.get_collection_stats(McpTool)
-                if stats:
-                    logger.info(
-                        f"   Collection has {stats['object_count']} tools, "
-                        f"{stats['property_count']} properties"
-                    )
+                # Get collection stats using ObjectManager
+                try:
+                    # Get collection info
+                    info = McpTool.objects.get_collection_info()
+                    if info:
+                        # Get object count using QueryBuilder
+                        object_count = McpTool.objects.all().count()
+                        logger.info(
+                            f"   Collection has {object_count} tools, "
+                            f"{info.get('property_count', 0)} properties"
+                        )
+                except Exception as e:
+                    logger.debug(f"Could not get collection stats: {e}")
             self._initialized = True
             logger.info("Vector search service initialized successfully")
 

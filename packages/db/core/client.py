@@ -2,17 +2,15 @@ import os
 import time
 import weaviate
 import logging
-import time
 from typing import Optional
 
-import weaviate
 from weaviate.auth import AuthApiKey
 from weaviate.client import WeaviateClient as OriginalWeaviateClient
 from weaviate.config import AdditionalConfig, ConnectionConfig as WeaviateConnectionConfig, Timeout
 
 from .config import ConnectionConfig, TimeoutConfig
-from .providers import EmbeddingsProvider, ProviderFactory
-from .exceptions import ConnectionFailed, ConnectionTimeout
+from .providers import EmbeddingsProvider, create_provider_from_env
+from .exceptions import ConnectionException
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +50,7 @@ class WeaviateClient:
             timeouts: Timeout configuration (default: standard timeouts)
         """
         self.connection = connection or ConnectionConfig.from_env()
-        self.provider = provider or ProviderFactory.from_env()
+        self.provider = provider or create_provider_from_env()
         self.timeouts = timeouts or TimeoutConfig()
         
         self.client = self._create_client()
@@ -100,7 +98,7 @@ class WeaviateClient:
             
         except Exception as e:
             logger.error(f"Failed to create Weaviate client: {e}")
-            raise ConnectionFailed(
+            raise ConnectionException(
                 self.connection.host,
                 self.connection.port,
                 str(e)
@@ -151,7 +149,7 @@ class WeaviateClient:
                 else:
                     logger.error(f"Connection failed after {max_retries} attempts")
         
-        raise ConnectionFailed(
+        raise ConnectionException(
             self.connection.host,
             self.connection.port,
             f"Failed after {max_retries} attempts. Last error: {last_exception}"
@@ -259,8 +257,6 @@ class ManagedConnection:
 
     async def __aenter__(self):
         """Enter context (asynchronous)."""
-        # For async, we need to handle connection differently
-        # For now, use sync version
         self.was_connected = self.weaviate_client.ensure_connection()
         return self.weaviate_client
 

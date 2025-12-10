@@ -8,9 +8,8 @@ from db.core.providers import (
     EmbeddingsProvider,
     BedrockProvider,
     OpenAIProvider,
-    ProviderFactory
+    create_provider_from_env
 )
-from db.core.exceptions import InvalidProvider, MissingCredentials
 
 
 class TestBedrockProvider:
@@ -135,88 +134,55 @@ class TestOpenAIProvider:
         """Test error when API key missing."""
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         
-        with pytest.raises(MissingCredentials) as exc_info:
+        with pytest.raises(ValueError) as exc_info:
             OpenAIProvider.from_env()
         
-        assert "openai" in str(exc_info.value).lower()
+        assert "OPENAI_API_KEY" in str(exc_info.value)
 
 
-class TestProviderFactory:
-    """Test ProviderFactory."""
+class TestCreateProviderFromEnv:
+    """Test create_provider_from_env function."""
     
-    def test_list_providers(self):
-        """Test listing registered providers."""
-        providers = ProviderFactory.list_providers()
-        
-        assert 'bedrock' in providers
-        assert 'openai' in providers
-    
-    def test_create_bedrock(self):
-        """Test creating Bedrock provider."""
-        provider = ProviderFactory.create(
-            'bedrock',
-            access_key="key",
-            secret_key="secret"
-        )
-        
-        assert isinstance(provider, BedrockProvider)
-        assert provider.access_key == "key"
-    
-    def test_create_openai(self):
-        """Test creating OpenAI provider."""
-        provider = ProviderFactory.create(
-            'openai',
-            api_key="sk-test"
-        )
-        
-        assert isinstance(provider, OpenAIProvider)
-        assert provider.api_key == "sk-test"
-    
-    def test_create_invalid_provider(self):
-        """Test error when creating invalid provider."""
-        with pytest.raises(InvalidProvider) as exc_info:
-            ProviderFactory.create('invalid_provider')
-        
-        assert exc_info.value.provider == 'invalid_provider'
-        assert 'bedrock' in exc_info.value.available
-        assert 'openai' in exc_info.value.available
-    
-    def test_from_env_bedrock(self, monkeypatch):
-        """Test creating provider from env (Bedrock)."""
+    def test_create_bedrock_from_env(self, monkeypatch):
+        """Test creating Bedrock provider from env."""
         monkeypatch.setenv("EMBEDDINGS_PROVIDER", "bedrock")
         monkeypatch.setenv("AWS_ACCESS_KEY_ID", "key")
         monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret")
         
-        provider = ProviderFactory.from_env()
+        provider = create_provider_from_env()
         
         assert isinstance(provider, BedrockProvider)
+        assert provider.access_key == "key"
+        assert provider.secret_key == "secret"
     
-    def test_from_env_openai(self, monkeypatch):
-        """Test creating provider from env (OpenAI)."""
+    def test_create_openai_from_env(self, monkeypatch):
+        """Test creating OpenAI provider from env."""
         monkeypatch.setenv("EMBEDDINGS_PROVIDER", "openai")
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
         
-        provider = ProviderFactory.from_env()
+        provider = create_provider_from_env()
         
         assert isinstance(provider, OpenAIProvider)
+        assert provider.api_key == "sk-test"
     
-    def test_register_custom_provider(self):
-        """Test registering custom provider."""
-        class CustomProvider(EmbeddingsProvider):
-            def get_headers(self):
-                return {}
-            def get_vectorizer_name(self):
-                return "custom-vectorizer"
-            def get_model_name(self):
-                return "custom-model"
-            @classmethod
-            def from_env(cls):
-                return cls()
+    def test_create_default_bedrock(self, monkeypatch):
+        """Test default provider is Bedrock."""
+        # Clear provider env var
+        monkeypatch.delenv("EMBEDDINGS_PROVIDER", raising=False)
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "key")
+        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret")
         
-        ProviderFactory.register('custom', CustomProvider)
+        provider = create_provider_from_env()
         
-        assert 'custom' in ProviderFactory.list_providers()
+        assert isinstance(provider, BedrockProvider)
+    
+    def test_create_invalid_provider(self, monkeypatch):
+        """Test error when creating invalid provider."""
+        monkeypatch.setenv("EMBEDDINGS_PROVIDER", "invalid")
         
-        provider = ProviderFactory.create('custom')
-        assert isinstance(provider, CustomProvider)
-
+        with pytest.raises(ValueError) as exc_info:
+            create_provider_from_env()
+        
+        assert "Invalid provider" in str(exc_info.value)
+        assert "bedrock" in str(exc_info.value)
+        assert "openai" in str(exc_info.value)

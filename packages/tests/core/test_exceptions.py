@@ -18,20 +18,20 @@ class TestExceptionHierarchy:
     
     def test_connection_exception_hierarchy(self):
         """Test connection exception hierarchy."""
-        exc = ConnectionTimeout("localhost", 8099, 30.0)
+        exc = ConnectionException("localhost", 8099, "Connection timeout")
         
         assert isinstance(exc, ConnectionException)
         assert isinstance(exc, WeaviateORMException)
         assert "localhost:8099" in str(exc)
-        assert "30.0" in str(exc)
+        assert "Connection timeout" in str(exc)
     
     def test_configuration_exception_hierarchy(self):
         """Test configuration exception hierarchy."""
-        exc = InvalidProvider("invalid", ["bedrock", "openai"])
+        exc = ConfigurationException("Invalid configuration")
         
         assert isinstance(exc, ConfigurationException)
         assert isinstance(exc, WeaviateORMException)
-        assert "invalid" in str(exc)
+        assert "Invalid configuration" in str(exc)
     
     def test_query_exception_hierarchy(self):
         """Test query exception hierarchy."""
@@ -106,33 +106,16 @@ class TestCollectionExceptions:
         assert exc.collection_name == "Articles"
         assert "Articles" in str(exc)
         assert "not found" in str(exc)
+
+
+class TestDataOperationException:
+    """Test data operation exceptions."""
     
-    def test_collection_already_exists(self):
-        """Test CollectionAlreadyExists exception."""
-        exc = CollectionAlreadyExists("Articles")
-        
-        assert exc.collection_name == "Articles"
-        assert "already exists" in str(exc)
-    
-    def test_collection_creation_failed(self):
-        """Test CollectionCreationFailed exception."""
-        exc = CollectionCreationFailed("Articles", "Connection timeout")
+    def test_insert_failed(self):
+        """Test InsertFailed exception."""
+        exc = InsertFailed("Articles", "Connection timeout")
         
         assert exc.collection_name == "Articles"
         assert exc.reason == "Connection timeout"
         assert "Articles" in str(exc)
         assert "Connection timeout" in str(exc)
-
-
-class TestMissingCredentials:
-    """Test MissingCredentials exception."""
-    
-    def test_with_missing_keys(self):
-        """Test exception with list of missing keys."""
-        exc = MissingCredentials("bedrock", ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"])
-        
-        assert exc.provider == "bedrock"
-        assert exc.missing_keys == ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]
-        assert "bedrock" in str(exc)
-        assert "AWS_ACCESS_KEY_ID" in str(exc)
-
