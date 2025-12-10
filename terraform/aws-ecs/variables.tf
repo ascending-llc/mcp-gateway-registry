@@ -222,3 +222,20 @@ variable "embeddings_api_key" {
   sensitive   = true
 }
 
+
+# =============================================================================
+# SESSION COOKIE SECURITY CONFIGURATION
+# =============================================================================
+
+variable "session_cookie_secure" {
+  description = "Enable secure flag on session cookies (HTTPS-only transmission). Set to true in production with HTTPS."
+  type        = bool
+  default     = true
+}
+
+variable "session_cookie_domain" {
+  description = "Domain for session cookies (e.g., '.example.com' for cross-subdomain sharing). Leave empty for single-domain deployments (cookie scoped to exact host only)."
+  type        = string
+  default     = ""
+}
+

@@ -128,6 +128,36 @@ travel_assistant_agent_image_uri = "YOUR_ACCOUNT_ID.dkr.ecr.YOUR_AWS_REGION.amaz
 # travel_assistant_agent_replicas   = 1
 
 # ============================================================================
+# SESSION COOKIE CONFIGURATION
+# ============================================================================
+
+# Session cookie secure flag (HTTPS-only transmission)
+# MUST be set to true in production deployments with HTTPS
+# Set to false only for local development over HTTP
+# Default: true
+session_cookie_secure = true
+
+# Session cookie domain (for cross-subdomain authentication)
+# Leave unset or empty for single-domain deployments (RECOMMENDED for most cases)
+# Set to domain with leading dot for cross-subdomain sharing
+#
+# Examples:
+#   Single domain deployment (registry.example.com): Leave empty or unset
+#     session_cookie_domain = ""
+#
+#   Cross-subdomain (registry.mycorp.click + kc.mycorp.click):
+#     session_cookie_domain = ".mycorp.click"
+#
+#   Multi-region with regional subdomains (registry.us-east-1.mycorp.click):
+#     session_cookie_domain = ".mycorp.click"
+#
+#   Multi-level organizational domains (registry.region-1.corp.company.internal):
+#     session_cookie_domain = ".corp.company.internal"
+#
+# Default: Empty (cookie scoped to exact host only - safest option)
+session_cookie_domain = ""
+
+# ============================================================================
 # EMBEDDINGS CONFIGURATION
 # ============================================================================
 

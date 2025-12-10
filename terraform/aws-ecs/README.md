@@ -224,6 +224,8 @@ cp terraform.tfvars.example terraform.tfvars
 | `ingress_cidr_blocks` | IP addresses allowed to access the ALB |
 | `keycloak_admin_password` | Keycloak admin password (min 12 chars) |
 | `keycloak_database_password` | Database password (min 12 chars) |
+| `session_cookie_secure` | HTTPS-only cookie flag (true for production, false for HTTP) |
+| `session_cookie_domain` | Cookie domain for cross-subdomain auth (empty for single domain) |
 | 7 ECR image URIs | Container image URIs with your account ID and region |
 
 **Helper commands to get your configuration values:**
@@ -283,6 +285,11 @@ ingress_cidr_blocks = [
 # Keycloak credentials (CHANGE THESE)
 keycloak_admin_password    = "YourSecurePassword123!"
 keycloak_database_password = "YourDBPassword456!"
+
+# Session cookie configuration (IMPORTANT for login to work)
+session_cookie_secure = true        # Set to true for HTTPS production deployments
+session_cookie_domain = ""          # Leave empty for single-domain (recommended)
+                                    # Set to ".your.domain" for cross-subdomain auth
 
 # ECR image URIs (after running sed commands above)
 registry_image_uri               = "123456789012.dkr.ecr.us-east-1.amazonaws.com/mcp-gateway-registry:latest"

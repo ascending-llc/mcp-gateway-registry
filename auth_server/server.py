@@ -1794,30 +1794,25 @@ async def oauth2_callback(
         response = RedirectResponse(url=redirect_url, status_code=302)
         
         # Set registry-compatible session cookie
-        cookie_secure = OAUTH2_CONFIG.get("session", {}).get("secure", False)
+        # Check if HTTPS is terminated at load balancer (x-forwarded-proto header)
+        x_forwarded_proto = request.headers.get("x-forwarded-proto", "")
+        is_https = x_forwarded_proto == "https" or request.url.scheme == "https"
+
+        # Only set secure=True if the original request was HTTPS
+        cookie_secure_config = OAUTH2_CONFIG.get("session", {}).get("secure", False)
+        cookie_secure = cookie_secure_config and is_https
         cookie_samesite = OAUTH2_CONFIG.get("session", {}).get("samesite", "lax")
         cookie_domain = OAUTH2_CONFIG.get("session", {}).get("domain", "")
 
-        # Auto-infer domain from request if not explicitly configured
+        # Handle domain configuration - only use explicitly configured values
+        # Empty string or placeholder means no domain attribute (exact host only)
         if not cookie_domain or cookie_domain == "${SESSION_COOKIE_DOMAIN}":
-            # Get the host from headers (ALB sets x-forwarded-host or use Host header)
-            host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
+            cookie_domain = None
+            logger.info(f"No cookie domain configured - cookie will be set for exact host only")
+        else:
+            logger.info(f"Using explicitly configured cookie domain: {cookie_domain}")
 
-            # Extract base domain for cross-subdomain cookies
-            # e.g., "auth-server.subdomain.domain.tld" -> ".domain.tld"
-            if host and "." in host:
-                # Remove port if present
-                host = host.split(":")[0]
-
-                # Split by dots and take last 2 parts for base domain
-                parts = host.split(".")
-                if len(parts) >= 2:
-                    # Skip if it's localhost or an IP address
-                    if not host.startswith("localhost") and not host.replace(".", "").isdigit():
-                        cookie_domain = f".{'.'.join(parts[-2:])}"
-                        logger.info(f"Auto-inferred cookie domain from host '{host}': {cookie_domain}")
-
-        logger.info(f"Auth server setting session cookie: secure={cookie_secure}, samesite={cookie_samesite}, domain={cookie_domain or 'not set'}, request_scheme={request.url.scheme}")
+        logger.info(f"Auth server setting session cookie: secure={cookie_secure} (config={cookie_secure_config}, is_https={is_https}), samesite={cookie_samesite}, domain={cookie_domain or 'not set'}, x-forwarded-proto={x_forwarded_proto}, request_scheme={request.url.scheme}")
 
         cookie_params = {
             "key": "mcp_gateway_session",  # Same as registry SESSION_COOKIE_NAME

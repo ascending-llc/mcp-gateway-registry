@@ -74,4 +74,8 @@ module "mcp_gateway" {
   embeddings_model_dimensions = var.embeddings_model_dimensions
   embeddings_aws_region       = var.embeddings_aws_region
   embeddings_api_key          = var.embeddings_api_key
+
+  # Session cookie security configuration
+  session_cookie_secure = var.session_cookie_secure
+  session_cookie_domain = var.session_cookie_domain
 }

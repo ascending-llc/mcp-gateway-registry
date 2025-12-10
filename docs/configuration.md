@@ -105,6 +105,59 @@ cat keycloak/setup/keycloak-client-secrets.txt
 | `COGNITO_CLIENT_SECRET` | Amazon Cognito App Client Secret | `85ps32t55df39hm61k966fqjurj...` | ✅ |
 | `COGNITO_DOMAIN` | Cognito domain (optional) | `auto` | Optional |
 
+### Session Cookie Security Configuration
+
+**CRITICAL:** These settings control how session cookies are transmitted and shared. Incorrect configuration will cause login failures.
+
+| Variable | Description | Example | Required | Default |
+|----------|-------------|---------|----------|---------|
+| `SESSION_COOKIE_SECURE` | Enable HTTPS-only cookie transmission | `false` (localhost)<br/>`true` (production) | ✅ | `false` |
+| `SESSION_COOKIE_DOMAIN` | Cookie domain for cross-subdomain sharing | `""` (single domain)<br/>`.example.com` (cross-subdomain) | ❌ | Empty |
+
+#### SESSION_COOKIE_SECURE - Critical for Your Environment
+
+**YOU MUST SET THIS CORRECTLY OR LOGIN WILL FAIL:**
+
+**For Local Development (localhost via HTTP):**
+```bash
+SESSION_COOKIE_SECURE=false  # MUST be false
+```
+- Localhost runs over HTTP (not HTTPS)
+- Cookies with `secure=true` are ONLY sent over HTTPS
+- Setting this to `true` on localhost = **login will fail** ❌
+
+**For Production with HTTPS:**
+```bash
+SESSION_COOKIE_SECURE=true  # MUST be true
+```
+- Production deployments use HTTPS
+- Cookies must have `secure=true` to prevent session hijacking
+- Setting this to `false` in production = **security vulnerability** ❌
+
+#### SESSION_COOKIE_DOMAIN - When to Set This
+
+**Most deployments should leave this EMPTY** (default behavior = safest):
+
+```bash
+SESSION_COOKIE_DOMAIN=  # Empty string or unset
+```
+
+**Only set this if you need cross-subdomain authentication:**
+
+| Deployment Type | Example Domains | SESSION_COOKIE_DOMAIN |
+|----------------|-----------------|----------------------|
+| **Single domain** | `mcpgateway.ddns.net` | `""` (empty) |
+| **Cross-subdomain** | `auth.example.com`<br/>`registry.example.com` | `.example.com` |
+| **Multi-level domains** | `registry.region-1.corp.company.internal` | `.corp.company.internal` |
+
+**Important Security Notes:**
+- Empty domain = cookie scoped to exact host only (safest)
+- Set domain only when you control ALL subdomains
+- Never set to public suffixes (`.com`, `.net`, `.ddns.net`)
+- Domain must start with a dot (`.example.com`)
+
+**See Also:** [Cookie Security Design Documentation](design/cookie-security-design.md) for detailed security analysis and deployment scenarios.
+
 ### Optional Variables
 
 | Variable | Description | Example | Default |
@@ -420,11 +473,28 @@ When using Keycloak as the authentication provider, the following configuration 
 
 ### Common Issues
 
-1. **Missing environment variables**: Check that all required variables are set in the appropriate `.env` files
-2. **Invalid credentials**: Verify OAuth client IDs and secrets with providers
-3. **Network connectivity**: Ensure firewall rules allow OAuth callback URLs
-4. **Token expiration**: Use the credential refresh scripts to update expired tokens
-5. **Scope mismatches**: Verify requested OAuth scopes match provider configurations
+1. **Login redirects back to login page**
+   - **Most Common Cause:** `SESSION_COOKIE_SECURE=true` but accessing via HTTP
+   - **Solution for localhost:** Set `SESSION_COOKIE_SECURE=false` in `.env`
+   - **Solution for production:** Ensure HTTPS is properly configured
+   - **Check:** Browser dev tools → Application → Cookies (cookie should be present)
+   - **Check:** Server logs for `Auth server setting session cookie: secure=...`
+
+2. **Missing environment variables**: Check that all required variables are set in the appropriate `.env` files
+
+3. **Invalid credentials**: Verify OAuth client IDs and secrets with providers
+
+4. **Network connectivity**: Ensure firewall rules allow OAuth callback URLs
+
+5. **Token expiration**: Use the credential refresh scripts to update expired tokens
+
+6. **Scope mismatches**: Verify requested OAuth scopes match provider configurations
+
+7. **Session cookie not being sent by browser**
+   - Check cookie domain matches your hostname
+   - Verify `SESSION_COOKIE_DOMAIN` is empty for single-domain deployments
+   - Check browser third-party cookie settings
+   - Inspect cookie attributes in browser dev tools
 
 ### Validation Commands
 
