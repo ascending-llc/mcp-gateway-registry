@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 from itsdangerous import SignatureExpired, BadSignature
 
 from registry.auth.dependencies import (
-    api_auth, web_auth, get_current_user, 
+    api_auth, web_auth, get_current_user,
     create_session_cookie, validate_login_credentials
 )
 

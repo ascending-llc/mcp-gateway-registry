@@ -20,8 +20,6 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 import httpx
-
-from ..auth.dependencies import nginx_proxied_auth, SCOPES_CONFIG
 from ..services.agent_service import agent_service
 from ..schemas.agent_models import (
     AgentCard,
@@ -29,8 +27,9 @@ from ..schemas.agent_models import (
     AgentProvider,
     AgentRegistrationRequest,
 )
+from ..auth.dependencies import CurrentUser
 from ..core.config import settings
-
+from ..search.service import faiss_service
 
 # Configure logging with basicConfig
 logging.basicConfig(
@@ -83,7 +82,7 @@ def _normalize_path(
 def _check_agent_permission(
     permission: str,
     agent_name: str,
-    user_context: Dict[str, Any],
+    user_context: CurrentUser,
 ) -> None:
     """
     Check if user has permission for agent operation.
@@ -115,7 +114,7 @@ def _check_agent_permission(
 
 def _filter_agents_by_access(
     agents: List[AgentCard],
-    user_context: Dict[str, Any],
+    user_context: CurrentUser,
 ) -> List[AgentCard]:
     """
     Filter agents based on user access permissions.
@@ -167,7 +166,7 @@ def _filter_agents_by_access(
 @router.post("/agents/register")
 async def register_agent(
     request: AgentRegistrationRequest,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)],
+    user_context: CurrentUser,
 ):
     """
     Register a new A2A agent in the registry.
@@ -275,8 +274,6 @@ async def register_agent(
             },
         )
 
-    from ..search.service import faiss_service
-
     is_enabled = agent_service.is_agent_enabled(path)
     await faiss_service.add_or_update_entity(
         path,
@@ -315,7 +312,7 @@ async def list_agents(
     query: Optional[str] = Query(None, description="Search query string"),
     enabled_only: bool = Query(False, description="Show only enabled agents"),
     visibility: Optional[str] = Query(None, description="Filter by visibility"),
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+    user_context: CurrentUser = None,
 ):
     """
     List all agents filtered by user permissions.
@@ -393,7 +390,7 @@ async def list_agents(
 @router.get("/agents/{path:path}")
 async def get_agent(
     path: str,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)],
+    user_context: CurrentUser,
 ):
     """
     Get a single agent by path.
@@ -438,7 +435,7 @@ async def get_agent(
 @router.post("/agents/{path:path}/health")
 async def check_agent_health(
     path: str,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)],
+    user_context: CurrentUser,
 ):
     """Perform a live /ping health check against an agent endpoint."""
     path = _normalize_path(path)
@@ -517,7 +514,7 @@ async def check_agent_health(
 async def update_agent(
     path: str,
     request: AgentRegistrationRequest,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)],
+    user_context: CurrentUser,
 ):
     """
     Update an existing agent card.
@@ -612,8 +609,6 @@ async def update_agent(
             content={"detail": "Failed to save updated agent data"},
         )
 
-    from ..search.service import faiss_service
-
     is_enabled = agent_service.is_agent_enabled(path)
     await faiss_service.add_or_update_entity(
         path,
@@ -633,7 +628,7 @@ async def update_agent(
 @router.delete("/agents/{path:path}")
 async def delete_agent(
     path: str,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)],
+    user_context: CurrentUser,
 ):
     """
     Delete an agent from the registry.
@@ -679,8 +674,6 @@ async def delete_agent(
             content={"detail": "Failed to delete agent"},
         )
 
-    from ..search.service import faiss_service
-
     await faiss_service.remove_entity(path)
 
     logger.info(
@@ -697,7 +690,7 @@ async def delete_agent(
 async def toggle_agent(
     path: str,
     enabled: bool,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)],
+    user_context: CurrentUser,
 ):
     """
     Enable or disable an agent.
@@ -734,8 +727,6 @@ async def toggle_agent(
             content={"detail": "Failed to toggle agent state"},
         )
 
-    from ..search.service import faiss_service
-
     await faiss_service.add_or_update_entity(
         path,
         agent_card.model_dump(),
@@ -760,7 +751,7 @@ async def discover_agents_by_skills(
     skills: List[str],
     tags: Optional[List[str]] = None,
     max_results: int = Query(10, ge=1, le=100),
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+    user_context: CurrentUser = None,
 ):
     """
     Discover agents by required skills.
@@ -868,7 +859,7 @@ async def discover_agents_by_skills(
 async def discover_agents_semantic(
     query: str,
     max_results: int = Query(10, ge=1, le=100),
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+    user_context: CurrentUser = None,
 ):
     """
     Discover agents using natural language semantic search.
@@ -895,8 +886,6 @@ async def discover_agents_semantic(
     logger.info(
         f"User {user_context['username']} semantic search for agents: {query}"
     )
-
-    from ..search.service import faiss_service
 
     try:
         results = await faiss_service.search_entities(
