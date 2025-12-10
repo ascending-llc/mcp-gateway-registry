@@ -11,13 +11,9 @@ from typing import List, Dict, Any, Optional
 
 from packages.db import (
     ConnectionConfig,
-    ProviderFactory,
     init_weaviate,
-    get_weaviate_client,
-    Q,
     SearchType
 )
-from packages.db.managers import CollectionManager
 from packages.shared.models import McpTool
 from .base import VectorSearchService
 from config import settings
@@ -28,19 +24,11 @@ logger = logging.getLogger(__name__)
 class ExternalVectorSearchService(VectorSearchService):
     """
     External vector search using Weaviate with multiple search types.
-    
-    Refactored to use:
-    - New configuration system (ConnectionConfig, Provider)
-    - QueryBuilder with method selection
-    - Q objects for filtering
-    - Enhanced error handling
     """
 
     def __init__(self):
         """
         Initialize vector search service using new config system.
-        
-        Supports both explicit credentials and IAM Role authentication.
         """
         try:
             # Use new configuration system
@@ -49,22 +37,11 @@ class ExternalVectorSearchService(VectorSearchService):
                 port=settings.WEAVIATE_PORT,
                 api_key=settings.WEAVIATE_API_KEY
             )
-            
-            # Get provider from environment (auto-detects IAM Role)
-            provider = ProviderFactory.from_env()
-            
-            # Initialize with config objects
-            init_weaviate(
-                connection=connection,
-                provider=provider
-            )
-            
-            self._client = get_weaviate_client()
+            self._client = init_weaviate(connection=connection)
             self._initialized = False
-            
             logger.info(
-                f"MCPGW vector search initialized with {provider.__class__.__name__} "
-                f"({provider.get_vectorizer_name()})"
+                f"Vector search service initialized with connection to "
+                f"{connection.host}:{connection.port}"
             )
             
         except Exception as e:
@@ -102,14 +79,18 @@ class ExternalVectorSearchService(VectorSearchService):
             else:
                 logger.info("MCPTool collection exists")
                 
-                # Get stats
-                manager = CollectionManager(self._client)
-                stats = manager.get_collection_stats(McpTool)
-                if stats:
-                    logger.info(
-                        f"Collection: {stats['object_count']} tools, "
-                        f"{stats['property_count']} properties"
-                    )
+                try:
+                    # Get collection info
+                    info = McpTool.objects.get_collection_info()
+                    if info:
+                        # Get object count using QueryBuilder
+                        object_count = McpTool.objects.all().count()
+                        logger.info(
+                            f"   Collection has {object_count} tools, "
+                            f"{info.get('property_count', 0)} properties"
+                        )
+                except Exception as e:
+                    logger.debug(f"Could not get collection stats: {e}")
 
             self._initialized = True
             logger.info("Vector search initialized successfully")

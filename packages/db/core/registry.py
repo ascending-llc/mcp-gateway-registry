@@ -1,6 +1,8 @@
 import logging
 from typing import Optional
 from .client import WeaviateClient
+from .config import ConnectionConfig
+from .providers import create_provider_from_env
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +13,7 @@ class WeaviateClientRegistry:
     _instance: Optional[WeaviateClient] = None
 
     @classmethod
-    def initialize(cls,**client_kwargs) -> WeaviateClient:
+    def initialize(cls, **client_kwargs) -> WeaviateClient:
         """
         Initialize global client
         
@@ -59,9 +61,33 @@ class WeaviateClientRegistry:
         return self._instance
 
 
-def init_weaviate( **kwargs) -> WeaviateClient:
-    """Initialize Weaviate client"""
-    return WeaviateClientRegistry.initialize(**kwargs)
+def init_weaviate(connection: Optional[ConnectionConfig] = None, **kwargs) -> WeaviateClient:
+    """
+    Initialize Weaviate client with simplified interface.
+    
+    If connection is provided, creates provider internally from environment.
+    Maintains backward compatibility with direct kwargs.
+    
+    Args:
+        connection: Connection configuration (optional)
+        **kwargs: Additional client initialization parameters
+        
+    Returns:
+        WeaviateClient: Global client instance
+    """
+    # If connection is provided, we'll handle provider internally
+    if connection is not None:
+        # Create provider from environment internally
+        provider = create_provider_from_env()
+        client_kwargs = {
+            'connection': connection,
+            'provider': provider
+        }
+        client_kwargs.update(kwargs)
+        return WeaviateClientRegistry.initialize(**client_kwargs)
+    else:
+        # Backward compatibility: pass all kwargs directly
+        return WeaviateClientRegistry.initialize(**kwargs)
 
 
 def get_weaviate_client() -> WeaviateClient:

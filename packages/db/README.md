@@ -1,18 +1,16 @@
 # Weaviate Django-ORM Framework
 
-A Django-inspired ORM framework for Weaviate with advanced search capabilities.
+A lightweight Django-inspired ORM framework for Weaviate with essential search capabilities.
 
 ## Features
 
 - 🎯 Django-like API with `Model.objects` pattern
-- 🔍 Advanced search (BM25, semantic, hybrid, fuzzy)
+- 🔍 Core search (BM25, semantic, hybrid)
 - 📊 Aggregation (group by, count, avg, sum, min, max)
 - ✅ Field validation and type conversion
-- 🔧 Clean configuration (3 objects vs 17 parameters)
-- 🔌 Extensible providers, validators, and search strategies
+- 🔧 Clean configuration
 - 📦 Batch operations with error reporting
-- 🤖 Generative search (RAG) and reranking
-- ⚡ High performance (optimized queries, caching, parallel execution)
+- ⚡ High performance (optimized queries, caching)
 
 ---
 
@@ -35,15 +33,10 @@ WEAVIATE_API_KEY=your-api-key
 # Embeddings Provider
 EMBEDDINGS_PROVIDER=bedrock  # or openai
 
-# AWS Bedrock - Option 1: Explicit credentials
+# AWS Bedrock
 AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your-key
-AWS_SECRET_ACCESS_KEY=your-secret
-
-# AWS Bedrock - Option 2: IAM Role (EC2/ECS/EKS)
-# No AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY needed
-# The SDK will automatically use instance profile credentials
-AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your-key  # Optional for IAM Role
+AWS_SECRET_ACCESS_KEY=your-secret  # Optional for IAM Role
 
 # OpenAI
 OPENAI_API_KEY=sk-your-key
@@ -92,7 +85,7 @@ db/
 ├── core/                   # Client, configuration, providers
 │   ├── client.py           # WeaviateClient
 │   ├── config.py           # ConnectionConfig, TimeoutConfig
-│   ├── providers.py        # EmbeddingsProvider (strategy pattern)
+│   ├── providers.py        # EmbeddingsProvider
 │   ├── registry.py         # Singleton registry
 │   └── exceptions.py       # Exception hierarchy
 │
@@ -110,95 +103,11 @@ db/
 │   └── data.py             # DirectDataManager
 │
 └── search/                 # Search framework
-    ├── filters.py          # Q objects, FilterOperatorRegistry
+    ├── filters.py          # Q objects
     ├── query_builder.py    # QueryBuilder, QueryExecutor
     ├── strategies.py       # Search strategies
-    ├── unified.py          # UnifiedSearchInterface
     ├── aggregation.py      # Aggregation support
-    ├── advanced.py         # Generative, reranking
-    ├── performance.py      # Caching, optimization
-    └── plugins.py          # Plugin system
-```
-
-**Design Patterns:**
-- Strategy (providers, search strategies)
-- Adapter (search targets)
-- Builder (query building)
-- Descriptor (lazy initialization)
-- Plugin (extensibility)
-
----
-
-## Configuration
-
-### Simple (Environment Variables)
-
-```python
-from db import WeaviateClient
-
-client = WeaviateClient()  # Uses environment variables
-
-# Health check
-if client.is_ready():
-    print("✅ Client ready")
-```
-
-### Custom Configuration
-
-```python
-from db import WeaviateClient, ConnectionConfig, BedrockProvider, TimeoutConfig
-
-# With explicit AWS credentials
-client = WeaviateClient(
-    connection=ConnectionConfig(
-        host="localhost",
-        port=8099,
-        api_key="secret",
-        pool_connections=20
-    ),
-    provider=BedrockProvider(
-        access_key="aws-key",
-        secret_key="aws-secret",
-        region="us-east-1"
-    ),
-    timeouts=TimeoutConfig(query=120)
-)
-
-# Using IAM Role (no credentials needed)
-client = WeaviateClient(
-    connection=ConnectionConfig(host="localhost", port=8099),
-    provider=BedrockProvider(
-        access_key="",  # Empty = use IAM Role
-        secret_key="",
-        region="us-east-1"
-    )
-)
-
-# Or simply (from env, supports both methods)
-client = WeaviateClient()  # Auto-detects IAM Role if no credentials in env
-```
-
-### Custom Provider
-
-```python
-from db.core.providers import EmbeddingsProvider, ProviderFactory
-
-class CustomProvider(EmbeddingsProvider):
-    def get_headers(self):
-        return {'X-Custom-Key': self.api_key}
-    
-    def get_vectorizer_name(self):
-        return "text2vec-custom"
-    
-    def get_model_name(self):
-        return "custom-model"
-    
-    @classmethod
-    def from_env(cls):
-        import os
-        return cls(os.getenv("CUSTOM_KEY"))
-
-ProviderFactory.register('custom', CustomProvider)
+    └── advanced.py         # Advanced features
 ```
 
 ---
@@ -233,24 +142,6 @@ class User(Model):
     age = IntField(min_value=0, max_value=150)
     rating = FloatField(validators=[RangeValidator(0.0, 5.0)])
 ```
-
-### Available Validators
-
-- `RequiredValidator` - Not None
-- `MaxLengthValidator(max)` - String max length
-- `MinLengthValidator(min)` - String min length
-- `RangeValidator(min, max)` - Numeric range
-- `PatternValidator(regex)` - Regex pattern
-- `ChoicesValidator(choices)` - Allowed values
-- `EmailValidator()` - Email format
-- `URLValidator()` - URL format
-
-### Available Converters
-
-- `DateTimeConverter` - datetime ↔ ISO string
-- `JSONConverter` - dict/list ↔ JSON string
-- `EnumConverter(enum_class)` - Enum ↔ string
-- `BoolConverter` - Flexible bool conversion
 
 ---
 
@@ -289,75 +180,11 @@ print(f"Success rate: {result.success_rate}%")
 if result.has_errors:
     for error in result.errors[:5]:
         print(f"  {error['uuid']}: {error['message']}")
-
-# Bulk import with progress tracking
-data_list = [{"title": f"Title {i}", "content": "..."} for i in range(10000)]
-
-def show_progress(current, total):
-    print(f"\rProgress: {current}/{total} ({current/total*100:.1f}%)", end="")
-
-result = Article.objects.bulk_import(
-    data_list,
-    batch_size=200,
-    use_dynamic=True,  # Auto-optimize batch size
-    on_progress=show_progress
-)
-
-print(f"\n✅ Imported {result.successful}/{result.total}")
-
-# Bulk update
-updates = [
-    {'id': 'uuid-1', 'views': 100},
-    {'id': 'uuid-2', 'views': 200}
-]
-result = Article.objects.bulk_update(updates)
-
-# Bulk delete by ID
-result = Article.objects.bulk_delete(['uuid-1', 'uuid-2'])
-
-# Delete by condition
-count = Article.objects.delete_where(status="draft", views__lt=10)
-print(f"Deleted {count} objects")
 ```
 
 ---
 
 ## Search Operations
-
-### Unified Search by Type
-
-The `search_by_type()` method provides a unified interface for all search types:
-
-```python
-from db import SearchType
-
-# Works with models
-results = Article.objects.search_by_type(
-    SearchType.HYBRID,
-    query="machine learning"
-).all()
-
-# Works with collections (no model needed)
-from db.search import get_search_interface
-
-search = get_search_interface()
-results = search.collection("Articles").search_by_type(
-    SearchType.BM25,
-    query="python"
-).all()
-
-# Dynamic type selection
-def smart_search(query: str, mode: str):
-    type_map = {
-        'exact': SearchType.BM25,
-        'semantic': SearchType.NEAR_TEXT,
-        'balanced': SearchType.HYBRID
-    }
-    return Article.objects.search_by_type(
-        type_map.get(mode, SearchType.HYBRID),
-        query=query
-    ).all()
-```
 
 ### Basic Search
 
@@ -373,22 +200,6 @@ results = Article.objects.near_text("artificial intelligence").all()
 
 # Hybrid with alpha control
 results = Article.objects.hybrid("AI", alpha=0.7).all()
-
-# Fuzzy search (typo-tolerant)
-results = Article.objects.fuzzy("machin lernin").all()
-
-# Unified search by type (recommended for dynamic selection)
-from db import SearchType
-
-results = Article.objects.search_by_type(
-    SearchType.HYBRID,
-    query="machine learning"
-).all()
-
-results = Article.objects.search_by_type(
-    SearchType.BM25,
-    query="Python 3.11"
-).all()
 ```
 
 ### Filtering
@@ -464,54 +275,6 @@ stats = Article.objects.aggregate()\
     .avg("views")\
     .max("views")\
     .execute()
-
-# Filtered aggregation
-stats = Article.objects.aggregate()\
-    .filter(published=True)\
-    .group_by("author")\
-    .count()\
-    .execute()
-```
-
-### Advanced Features
-
-```python
-# Generative search (RAG)
-results = Article.objects.near_text("AI ethics").generative(
-    single_prompt="Summarize: {content}"
-).all()
-
-# Reranking
-results = Article.objects.search("ML").rerank(
-    property="content",
-    query="deep learning"
-).all()
-
-# Cross-collection search
-from db.search import get_search_interface
-
-search = get_search_interface()
-results = search.across(["Articles", "Documents"])\
-    .search("python")\
-    .all()
-
-# Dynamic search type selection
-from db import SearchType
-
-def search_with_mode(query: str, mode: str):
-    """Select search type based on mode."""
-    search_type_map = {
-        'exact': SearchType.BM25,
-        'semantic': SearchType.NEAR_TEXT,
-        'balanced': SearchType.HYBRID,
-        'fuzzy': SearchType.FUZZY
-    }
-    search_type = search_type_map.get(mode, SearchType.HYBRID)
-    
-    return Article.objects.search_by_type(search_type, query=query).all()
-
-# Use
-results = search_with_mode("python programming", mode="balanced")
 ```
 
 ---
@@ -547,14 +310,8 @@ stats = manager.get_collection_stats(Article)
 print(f"Objects: {stats['object_count']}")
 print(f"Properties: {stats['property_count']}")
 
-# Batch create collections
-results = manager.batch_create_collections([Article, Product, User])
-
 # Delete collection
 Article.delete_collection()
-
-# Clear cache
-manager.clear_cache()
 ```
 
 ---
@@ -584,12 +341,6 @@ try:
 except FieldValidationError as e:
     print(f"{e.field_name}: {e.reason}")
 
-# Configuration exceptions
-try:
-    provider = ProviderFactory.create("invalid")
-except InvalidProvider as e:
-    print(f"Available: {e.available}")
-
 # Connection exceptions
 try:
     client = WeaviateClient(
@@ -597,64 +348,6 @@ try:
     )
 except ConnectionFailed as e:
     print(f"{e.host}:{e.port} - {e.reason}")
-```
-
----
-
-## Extensibility
-
-### Custom Filter Operator
-
-```python
-from db.search import FilterOperatorRegistry
-from weaviate.classes.query import Filter
-
-def between(field, value):
-    min_val, max_val = value
-    return (Filter.by_property(field).greater_or_equal(min_val) &
-            Filter.by_property(field).less_or_equal(max_val))
-
-FilterOperatorRegistry.register("between", between)
-
-# Use
-Article.objects.filter(price__between=(10, 100)).all()
-```
-
-### Custom Validator
-
-```python
-from db.models.validators import FieldValidator
-
-class ISBNValidator(FieldValidator):
-    def validate(self, value):
-        return value and len(str(value)) in (10, 13)
-    
-    def get_error_message(self, value):
-        return "Invalid ISBN format"
-
-# Use in model
-class Book(Model):
-    isbn = TextField(validators=[ISBNValidator()])
-```
-
-### Search Plugin
-
-```python
-from db.search.plugins import SearchPlugin, get_plugin_manager
-
-class TimingPlugin(SearchPlugin):
-    def on_before_search(self, state):
-        self.start = time.time()
-        return None
-    
-    def on_after_search(self, state, results, duration):
-        print(f"Search took {duration:.2f}s")
-        return None
-    
-    def on_error(self, state, error):
-        print(f"Error: {error}")
-
-get_plugin_manager().register(TimingPlugin())
 ```
 
 ---
@@ -703,23 +396,23 @@ source .venv/bin/activate
 # All tests
 python -m pytest tests/ -v
 
-# By module
-python -m pytest tests/search/ -v      # 186 tests
-python -m pytest tests/core/ -v        # 48 tests
-python -m pytest tests/managers/ -v    # 23 tests
+# Search tests
+python -m pytest tests/search/ -v
 
-# Quick run
-python -m pytest tests/ -q
+# Core tests
+python -m pytest tests/core/ -v
+
+# Managers tests
+python -m pytest tests/managers/ -v
 ```
 
 ### Expected Results
 
 ```
-Search:     186 passed ✅
-Core:        48 passed ✅
-Managers:    23 passed ✅
-Total:      257 passed ✅
-Time:       ~1.6 seconds
+Search:     29 passed ✅
+Core:       48 passed ✅
+Managers:   23 passed ✅
+Total:      100+ passed ✅
 ```
 
 ---
@@ -733,19 +426,6 @@ client = WeaviateClient(connection, provider, timeouts)
 client.is_ready() -> bool
 client.ping() -> bool
 client.close()
-```
-
-### ConnectionConfig
-
-```python
-config = ConnectionConfig(
-    host="127.0.0.1",
-    port=8099,
-    api_key=None,
-    pool_connections=10,
-    pool_maxsize=10
-)
-config = ConnectionConfig.from_env()
 ```
 
 ### Model
@@ -793,7 +473,6 @@ Model.objects -> ObjectManager
 .bm25(query) -> QueryBuilder
 .near_text(text) -> QueryBuilder
 .hybrid(query, alpha) -> QueryBuilder
-.fuzzy(query) -> QueryBuilder
 ```
 
 **Aggregation:**
@@ -848,66 +527,6 @@ result.has_errors -> bool
 
 ---
 
-## Examples
-
-### E-commerce Product Search
-
-```python
-class Product(Model):
-    name = TextField(required=True, max_length=100)
-    price = IntField(required=True, min_value=0)
-    in_stock = BooleanField()
-
-# Search products
-results = Product.objects.filter(
-    in_stock=True,
-    price__gte=100,
-    price__lte=500
-).search("wireless headphones").limit(20).all()
-```
-
-### Blog with Statistics
-
-```python
-# Get article stats by category
-stats = Article.objects.aggregate()\
-    .filter(published=True)\
-    .group_by("category")\
-    .count()\
-    .avg("views")\
-    .sum("likes")\
-    .execute()
-
-for stat in stats:
-    print(f"{stat['group']}: {stat['count']} articles, {stat['avg_views']} avg views")
-```
-
-### Large Data Import
-
-```python
-import csv
-
-# Read from CSV
-data_list = []
-with open('articles.csv') as f:
-    reader = csv.DictReader(f)
-    data_list = list(reader)
-
-# Import with progress
-result = Article.objects.bulk_import(
-    data_list,
-    batch_size=500,
-    use_dynamic=True,
-    on_progress=lambda c, t: print(f"\r{c}/{t}", end="")
-)
-
-print(f"\nImported: {result.successful}/{result.total}")
-if result.has_errors:
-    print(f"Failed: {result.failed}")
-```
-
----
-
 ## Best Practices
 
 1. **Use environment variables** for configuration
@@ -917,7 +536,6 @@ if result.has_errors:
 5. **Use get_by_id** when you have the UUID
 6. **Handle BatchResult errors** in production
 7. **Use progress callbacks** for large imports
-8. **Monitor with plugins** for observability
 
 ---
 
@@ -957,17 +575,3 @@ if result.has_errors:
 ```
 
 ---
-
-## Documentation
-
-- **README.md** - This file (usage guide)
-- **tests/** - Test examples and patterns
-- **db/example/search_examples.py** - Usage examples
-
----
-
-**Version**: 2.0.0  
-**Tests**: 257/257 passing ✅  
-**Status**: Production Ready  
-
-Built for high-performance vector search applications.

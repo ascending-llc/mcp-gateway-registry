@@ -1,6 +1,6 @@
-from weaviate.classes.config import DataType, Property, Configure, VectorDistances, Tokenization
-from typing import Any, Dict, List, Optional, Union, ClassVar
-from dataclasses import dataclass, field
+from weaviate.classes.config import DataType, Property, Tokenization
+from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
 
 from .validators import FieldValidator, RequiredValidator
 from .converters import FieldConverter
@@ -9,7 +9,7 @@ from ..core.exceptions import FieldValidationError
 
 @dataclass
 class FieldConfig:
-    """Field configuration data class."""
+    """Field configuration."""
     data_type: DataType
     name: Optional[str] = None
     description: Optional[str] = None
@@ -17,54 +17,25 @@ class FieldConfig:
     index_filterable: bool = True
     index_searchable: bool = True
     tokenization: Optional[str] = None
-    nested_properties: Optional[List['Property']] = None
     skip_vectorization: bool = False
-    vectorize_property_name: bool = False
 
 
 class Field:
-    """
-    Base field class with validation and conversion support.
-    
-    Provides:
-    - Validation through pluggable validators
-    - Type conversion through converters
-    - Clean Weaviate property generation
-    """
+    """Base field class."""
 
     def __init__(
         self,
-                 data_type: DataType,
+        data_type: DataType,
         required: bool = False,
         default: Any = None,
-                 description: Optional[str] = None,
+        description: Optional[str] = None,
         validators: Optional[List[FieldValidator]] = None,
         converter: Optional[FieldConverter] = None,
-        # Weaviate-specific options
-                 index_filterable: bool = True,
-                 index_searchable: bool = True,
-                 tokenization: Optional[str] = None,
-                 skip_vectorization: bool = False,
-        vectorize_property_name: bool = False,
-        nested_properties: Optional[List[Property]] = None
+        index_filterable: bool = True,
+        index_searchable: bool = True,
+        tokenization: Optional[str] = None,
+        skip_vectorization: bool = False,
     ):
-        """
-        Initialize field.
-        
-        Args:
-            data_type: Weaviate data type
-            required: Whether field is required
-            default: Default value
-            description: Field description
-            validators: List of validators to apply
-            converter: Converter for type conversion
-            index_filterable: Whether field is filterable
-            index_searchable: Whether field is searchable
-            tokenization: Tokenization strategy
-            skip_vectorization: Skip vectorization for this field
-            vectorize_property_name: Include field name in vectorization
-            nested_properties: Nested properties (for object types)
-        """
         self.config = FieldConfig(
             data_type=data_type,
             description=description,
@@ -72,35 +43,22 @@ class Field:
             index_filterable=index_filterable,
             index_searchable=index_searchable,
             tokenization=tokenization,
-            nested_properties=nested_properties,
             skip_vectorization=skip_vectorization,
-            vectorize_property_name=vectorize_property_name
         )
         
         self.default = default
         self.validators = validators or []
         self.converter = converter
-        self.attname = None  # Set during model initialization
+        self.attname = None
         
-        # Auto-add required validator if field is required
         if required and not any(isinstance(v, RequiredValidator) for v in self.validators):
             self.validators.insert(0, RequiredValidator())
 
     def contribute_to_class(self, cls, name):
-        """Add field to model class."""
         self.attname = name
         self.model = cls
 
     def validate(self, value: Any) -> None:
-        """
-        Validate field value.
-        
-        Args:
-            value: Value to validate
-        
-        Raises:
-            FieldValidationError: If validation fails
-        """
         for validator in self.validators:
             if not validator.validate(value):
                 raise FieldValidationError(
@@ -110,36 +68,16 @@ class Field:
                 )
     
     def to_python(self, value: Any) -> Any:
-        """
-        Convert from Weaviate format to Python type.
-        
-        Args:
-            value: Value from Weaviate
-        
-        Returns:
-            Converted Python value
-        """
         if self.converter:
             return self.converter.to_python(value)
         return value
     
     def to_weaviate(self, value: Any) -> Any:
-        """
-        Convert from Python type to Weaviate format.
-        
-        Args:
-            value: Python value
-        
-        Returns:
-            Weaviate-compatible value
-        """
         if self.converter:
             return self.converter.to_weaviate(value)
         return value
 
     def to_weaviate_property(self) -> Property:
-        """Convert to Weaviate Property object."""
-        # Handle tokenization configuration
         tokenization_config = None
         if self.config.tokenization:
             tokenization_map = {
@@ -150,9 +88,8 @@ class Field:
             }
             tokenization_config = tokenization_map.get(self.config.tokenization)
 
-        # Ensure field name is valid
         if not self.attname:
-            raise ValueError(f"Field name not set for field")
+            raise ValueError(f"Field name not set")
 
         return Property(
             name=self.attname,
@@ -161,23 +98,11 @@ class Field:
             index_filterable=self.config.index_filterable,
             index_searchable=self.config.index_searchable,
             tokenization=tokenization_config,
-            nested_properties=self.config.nested_properties
         )
 
 
 class TextField(Field):
-    """
-    Text field with optional validation.
-    
-    Args:
-        required: Whether field is required
-        max_length: Maximum string length
-        min_length: Minimum string length
-        description: Field description
-        tokenization: Tokenization strategy (word, field, whitespace, lowercase)
-        index_searchable: Whether field should be searchable (default: True)
-        **kwargs: Additional Field arguments
-    """
+    """Text field."""
 
     def __init__(
         self,
@@ -189,7 +114,6 @@ class TextField(Field):
         index_searchable: bool = True,
         **kwargs
     ):
-        # Build validators
         validators = kwargs.pop('validators', [])
         
         if max_length:

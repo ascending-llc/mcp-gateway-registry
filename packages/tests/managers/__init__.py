@@ -1,4 +1,0 @@
-"""
-Managers module test suite.
-"""
-

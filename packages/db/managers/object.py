@@ -1,19 +1,55 @@
 import logging
+import time
 import uuid
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Type, TypeVar
 
-from ..core.exceptions import DoesNotExist, MultipleObjectsReturned, InsertFailed, UpdateFailed, DeleteFailed
+from ..core.exceptions import DoesNotExist, MultipleObjectsReturned, InsertFailed
 from ..search.query_builder import QueryBuilder
-from .batch import BatchResult
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar('T', bound='Model')
 
 
+@dataclass
+class BatchResult:
+    """
+    Result of a batch operation with success/failure tracking.
+    
+    Attributes:
+        total: Total number of operations attempted
+        successful: Number of successful operations
+        failed: Number of failed operations
+        errors: List of error dictionaries with 'uuid' and 'message'
+    """
+    total: int
+    successful: int
+    failed: int
+    errors: List[Dict[str, Any]]
+    
+    @property
+    def success_rate(self) -> float:
+        """Calculate success rate as percentage."""
+        return (self.successful / self.total * 100) if self.total > 0 else 0.0
+    
+    @property
+    def has_errors(self) -> bool:
+        """Check if any operations failed."""
+        return self.failed > 0
+    
+    def __str__(self) -> str:
+        return (
+            f"BatchResult(total={self.total}, "
+            f"successful={self.successful}, "
+            f"failed={self.failed}, "
+            f"success_rate={self.success_rate:.1f}%)"
+        )
+
+
 class ObjectManager:
     """
-    Manager for CRUD operations with enhanced batch support.
+    Manager for CRUD operations and collection management.
     
     Follows Weaviate best practices:
     - Uses batch.dynamic() or batch.fixed_size() for optimal performance
@@ -32,6 +68,10 @@ class ObjectManager:
         result = Article.objects.bulk_create(articles, batch_size=200)
         result = Article.objects.bulk_import(data_list, on_progress=callback)
         count = Article.objects.delete_where(status="draft")
+        
+        # Collection management
+        Article.objects.create_collection()
+        Article.objects.delete_collection()
     """
     
     def __init__(self, model_class: Type[T], client: 'WeaviateClient'):
@@ -44,6 +84,8 @@ class ObjectManager:
         """
         self.model_class = model_class
         self.client = client
+        self._collection_cache: Dict[str, Dict[str, Any]] = {}
+        self._cache_timestamps: Dict[str, float] = {}
     
     # ===== Single Object Operations =====
     
@@ -232,7 +274,7 @@ class ObjectManager:
             Updated instance
             
         Raises:
-            UpdateFailed: If update operation fails
+            Exception: If update operation fails
             
         Example:
             Article.objects.update(article, title="New Title", views=100)
@@ -263,7 +305,7 @@ class ObjectManager:
             raise
         except Exception as e:
             logger.error(f"Failed to update object: {e}")
-            raise UpdateFailed(collection_name, getattr(instance, 'id', 'unknown'), str(e))
+            raise Exception(f"Failed to update object in {collection_name}: {str(e)}")
     
     def delete(self, instance: T) -> bool:
         """
@@ -276,7 +318,7 @@ class ObjectManager:
             True if deletion successful
             
         Raises:
-            DeleteFailed: If deletion fails
+            Exception: If deletion fails
         """
         collection_name = self.model_class.get_collection_name()
         
@@ -295,7 +337,7 @@ class ObjectManager:
             raise
         except Exception as e:
             logger.error(f"Failed to delete object: {e}")
-            raise DeleteFailed(collection_name, getattr(instance, 'id', 'unknown'), str(e))
+            raise Exception(f"Failed to delete object from {collection_name}: {str(e)}")
     
     # ===== Batch Operations =====
     
@@ -619,7 +661,7 @@ class ObjectManager:
                 
         except Exception as e:
             logger.error(f"Bulk update failed: {e}")
-            raise UpdateFailed(collection_name, 'bulk', str(e))
+            raise Exception(f"Bulk update failed in {collection_name}: {str(e)}")
     
     def bulk_delete(
         self,
@@ -680,7 +722,7 @@ class ObjectManager:
                 
         except Exception as e:
             logger.error(f"Bulk delete failed: {e}")
-            raise DeleteFailed(collection_name, 'bulk', str(e))
+            raise Exception(f"Bulk delete failed in {collection_name}: {str(e)}")
     
     def delete_where(self, **filters) -> int:
         """
@@ -734,7 +776,203 @@ class ObjectManager:
                 
         except Exception as e:
             logger.error(f"Delete where failed: {e}")
-            raise DeleteFailed(collection_name, 'filter-based', str(e))
+            raise Exception(f"Delete where failed in {collection_name}: {str(e)}")
+    
+    # ===== Collection Management Methods =====
+    
+    def create_collection(self, if_not_exists: bool = True) -> bool:
+        """
+        Create a Weaviate collection from model definition.
+        
+        Args:
+            if_not_exists: If True, skip creation if collection exists (default: True)
+            
+        Returns:
+            bool: True if creation successful
+        """
+        collection_name = self.model_class.get_collection_name()
+        
+        try:
+            with self.client.managed_connection() as client:
+                properties = self.model_class.get_properties()
+                vectorizer_config = self.model_class.get_vectorizer_config()
+                vector_index_config = self.model_class.get_vector_index_config()
+                generative_config = self.model_class.get_generative_config()
+                
+                # Check if collection already exists
+                if client.client.collections.exists(collection_name):
+                    if not if_not_exists:
+                        logger.info(f"Collection {collection_name} already exists")
+                        return False
+                    logger.info(f"Collection {collection_name} already exists, skipping")
+                    return True
+                
+                # Create collection
+                create_kwargs = {
+                    "name": collection_name,
+                    "properties": properties,
+                }
+                
+                # Configure vector settings
+                if vectorizer_config or vector_index_config:
+                    vector_config = [{
+                        "name": "default",
+                        "vectorizer": vectorizer_config,
+                        "vector_index_config": vector_index_config
+                    }]
+                    create_kwargs["vector_config"] = vector_config
+                
+                if generative_config:
+                    create_kwargs["generative_config"] = generative_config
+                
+                collection = client.client.collections.create(**create_kwargs)
+                logger.info(f"✅ Collection {collection_name} created")
+                
+                # Invalidate cache
+                self._invalidate_cache(collection_name)
+                return True
+                
+        except Exception as e:
+            logger.error(f"Failed to create collection {collection_name}: {e}")
+            return False
+    
+    def delete_collection(self, if_exists: bool = True) -> bool:
+        """
+        Delete a Weaviate collection.
+        
+        Args:
+            if_exists: If True, don't raise error if collection doesn't exist
+            
+        Returns:
+            bool: True if deletion successful
+        """
+        collection_name = self.model_class.get_collection_name()
+        
+        try:
+            with self.client.managed_connection() as client:
+                if not client.client.collections.exists(collection_name):
+                    if not if_exists:
+                        raise Exception(f"Collection {collection_name} does not exist")
+                    logger.info(f"Collection {collection_name} does not exist, skipping")
+                    return True
+                
+                client.client.collections.delete(collection_name)
+                logger.info(f"✅ Collection {collection_name} deleted")
+                
+                # Invalidate cache
+                self._invalidate_cache(collection_name)
+                return True
+                
+        except Exception as e:
+            logger.error(f"Failed to delete collection {collection_name}: {e}")
+            return False
+    
+    def collection_exists(self) -> bool:
+        """
+        Check if a collection exists in Weaviate.
+        
+        Returns:
+            bool: True if collection exists, False otherwise
+        """
+        try:
+            with self.client.managed_connection() as client:
+                collection_name = self.model_class.get_collection_name()
+                return client.client.collections.exists(collection_name)
+        except Exception as e:
+            logger.error(f"Failed to check collection existence: {e}")
+            return False
+    
+    def get_collection_info(self, use_cache: bool = True) -> Optional[Dict[str, Any]]:
+        """
+        Get collection configuration and metadata with caching.
+        
+        Args:
+            use_cache: Whether to use cached info (default: True)
+            
+        Returns:
+            Optional[Dict]: Collection information or None if not found
+        """
+        collection_name = self.model_class.get_collection_name()
+        
+        # Check cache
+        if use_cache and self._is_cached(collection_name):
+            logger.debug(f"Returning cached info for {collection_name}")
+            return self._collection_cache[collection_name]
+        
+        # Fetch from Weaviate
+        try:
+            with self.client.managed_connection() as client:
+                if not client.client.collections.exists(collection_name):
+                    return None
+                
+                collection = client.client.collections.get(collection_name)
+                config = collection.config.get()
+                
+                # Parse vector configuration
+                vectorizer = None
+                distance_metric = "cosine"
+                vector_index_type = "hnsw"
+                
+                if config.vector_config and 'default' in config.vector_config:
+                    vector_config = config.vector_config['default']
+                    if hasattr(vector_config, 'vectorizer') and vector_config.vectorizer:
+                        vectorizer = vector_config.vectorizer.vectorizer.value if hasattr(vector_config.vectorizer, 'vectorizer') else str(vector_config.vectorizer)
+                    
+                    if hasattr(vector_config, 'vector_index_config') and vector_config.vector_index_config:
+                        if hasattr(vector_config.vector_index_config, 'distance_metric'):
+                            distance_metric = vector_config.vector_index_config.distance_metric.value
+                
+                info = {
+                    "name": collection_name,
+                    "properties": [prop.name for prop in config.properties],
+                    "property_count": len(config.properties),
+                    "vectorizer": vectorizer,
+                    "vector_index_type": vector_index_type,
+                    "distance_metric": distance_metric
+                }
+                
+                # Cache it
+                self._collection_cache[collection_name] = info
+                self._cache_timestamps[collection_name] = time.time()
+                logger.debug(f"Cached info for {collection_name}")
+                
+                return info
+                
+        except Exception as e:
+            logger.error(f"Failed to get collection info: {e}")
+            return None
+    
+    def _is_cached(self, collection_name: str) -> bool:
+        """
+        Check if collection info is in cache and not expired.
+        
+        Args:
+            collection_name: Collection name
+        
+        Returns:
+            True if cached and fresh
+        """
+        if collection_name not in self._collection_cache:
+            return False
+        
+        timestamp = self._cache_timestamps.get(collection_name, 0)
+        age = time.time() - timestamp
+        
+        return age < 300  # 5 minutes TTL
+    
+    def _invalidate_cache(self, collection_name: str):
+        """
+        Invalidate cache for a collection.
+        
+        Args:
+            collection_name: Collection name
+        """
+        if collection_name in self._collection_cache:
+            del self._collection_cache[collection_name]
+            logger.debug(f"Invalidated cache for {collection_name}")
+        
+        if collection_name in self._cache_timestamps:
+            del self._cache_timestamps[collection_name]
     
     # ===== Query Methods (delegate to QueryBuilder) =====
     

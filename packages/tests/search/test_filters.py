@@ -1,12 +1,11 @@
 """
-Tests for the filter system (Q objects and FilterOperatorRegistry).
+Tests for the filter system (Q objects).
 """
 
 import pytest
 from weaviate.classes.query import Filter
 from db.search.filters import (
     Q,
-    FilterOperatorRegistry,
     and_,
     or_,
     not_
@@ -222,95 +221,8 @@ class TestConvenienceFunctions:
         assert weaviate_filter is not None
 
 
-class TestFilterOperatorRegistry:
-    """Test FilterOperatorRegistry functionality."""
-    
-    def test_list_operators(self):
-        """Test listing registered operators."""
-        operators = FilterOperatorRegistry.list_operators()
-        
-        # Should have standard operators
-        assert "gt" in operators
-        assert "lt" in operators
-        assert "eq" in operators
-        assert "contains_any" in operators
-    
-    def test_get_operator(self):
-        """Test getting an operator handler."""
-        handler = FilterOperatorRegistry.get("gt")
-        assert handler is not None
-        assert callable(handler)
-    
-    def test_get_nonexistent_operator(self):
-        """Test getting non-existent operator returns None."""
-        handler = FilterOperatorRegistry.get("nonexistent")
-        assert handler is None
-    
-    def test_register_custom_operator(self):
-        """Test registering a custom operator."""
-        def custom_op(field, value):
-            return Filter.by_property(field).equal(value)
-        
-        FilterOperatorRegistry.register("test_custom", custom_op)
-        
-        # Should be in list
-        assert "test_custom" in FilterOperatorRegistry.list_operators()
-        
-        # Should be retrievable
-        handler = FilterOperatorRegistry.get("test_custom")
-        assert handler is not None
-        
-        # Should work in Q object
-        q = Q(field__test_custom="value")
-        assert not q.is_empty()
-        
-        # Cleanup
-        FilterOperatorRegistry.unregister("test_custom")
-    
-    def test_unregister_operator(self):
-        """Test unregistering an operator."""
-        # Register temporary operator
-        def temp_op(field, value):
-            return Filter.by_property(field).equal(value)
-        
-        FilterOperatorRegistry.register("temp_test", temp_op)
-        assert "temp_test" in FilterOperatorRegistry.list_operators()
-        
-        # Unregister
-        FilterOperatorRegistry.unregister("temp_test")
-        assert "temp_test" not in FilterOperatorRegistry.list_operators()
-    
-    def test_custom_operator_usage(self):
-        """Test using a custom operator in queries."""
-        # Import all Weaviate filter types
-        try:
-            from weaviate.collections.classes.filters import _FilterValue, _FilterAnd, _FilterOr
-            weaviate_filter_types = (_FilterValue, _FilterAnd, _FilterOr)
-        except ImportError:
-            from weaviate.collections.classes.filters import _FilterValue
-            weaviate_filter_types = (_FilterValue,)
-        
-        # Register a range operator
-        def within_range(field, value):
-            min_val, max_val = value
-            base = Filter.by_property(field)
-            # Return proper Weaviate filter combination
-            return base.greater_or_equal(min_val) & base.less_or_equal(max_val)
-        
-        FilterOperatorRegistry.register("within", within_range)
-        
-        try:
-            # Use in Q object
-            q = Q(views__within=(100, 1000))
-            assert not q.is_empty()
-            
-            weaviate_filter = q.to_weaviate_filter()
-            # Should return a valid Weaviate filter (any type)
-            assert weaviate_filter is not None
-            assert isinstance(weaviate_filter, weaviate_filter_types)
-        finally:
-            # Cleanup
-            FilterOperatorRegistry.unregister("within")
+# Note: FilterOperatorRegistry class has been removed as part of the simplification.
+# Tests for Q object and convenience functions only.
 
 
 class TestFilterIntegration:
@@ -359,4 +271,3 @@ class TestFilterIntegration:
         assert not q.is_empty()
         weaviate_filter = q.to_weaviate_filter()
         assert weaviate_filter is not None
-

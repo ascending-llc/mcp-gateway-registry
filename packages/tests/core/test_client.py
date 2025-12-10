@@ -7,7 +7,7 @@ from unittest.mock import Mock, MagicMock, patch
 from db.core.client import WeaviateClient, ManagedConnection
 from db.core.config import ConnectionConfig, TimeoutConfig
 from db.core.providers import BedrockProvider
-from db.core.exceptions import ConnectionFailed
+from db.core.exceptions import ConnectionException
 
 
 class TestWeaviateClient:
@@ -143,4 +143,3 @@ class TestManagedConnection:
                 
                 # Connection should be closed if we opened it
                 # (tested indirectly through ensure_connection call)
-

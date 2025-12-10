@@ -15,4 +15,3 @@ class SearchType(Enum):
     BM25 = "bm25"  # Keyword search (BM25F)
     HYBRID = "hybrid"  # Hybrid search (BM25 + semantic)
     FETCH_OBJECTS = "fetch_objects"  # Simple object fetch with filters
-    FUZZY = "fuzzy"  # Fuzzy search (hybrid optimized for fuzzy matching)
