@@ -96,6 +96,7 @@ session:
   secure: true  # Set to false for development
   httponly: true
   samesite: "lax"
+  domain: "${SESSION_COOKIE_DOMAIN}"  # Set to your domain (with leading dot) to share cookies across subdomains, e.g., ".example.com"
 
 # Registry integration settings
 registry:
