@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.app.name }}
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.app.name }}
+    app.kubernetes.io/component: {{ .Values.app.name }}
+spec:
+  replicas: {{ .Values.app.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.app.name }}
+      app.kubernetes.io/component: {{ .Values.app.name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.app.name }}
+        app.kubernetes.io/component: {{ .Values.app.name }}
+    spec:
+      containers:
+        - name: {{ .Values.app.name }}
+          image: "{{ .Values.global.image.repository }}:{{ .Values.global.image.tag }}"
+          imagePullPolicy: {{ .Values.global.image.pullPolicy }}
+          ports:
+            - containerPort: 80
+              name: http
+            - containerPort: 443
+              name: https
+            - containerPort: 7860
+              name: registry
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.app.envSecretName }}

@@ -1,0 +1,50 @@
+# Global configuration
+global:
+  image:
+    repository: mcpgateway/auth-server
+    tag: v1.0.7
+    pullPolicy: IfNotPresent
+
+# Application configuration
+app:
+  name: auth-server
+  replicas: 1
+  envSecretName: auth-server-secret
+
+  # External URLs
+  externalUrl: http://localhost:8888
+
+  # Security settings
+  secretKey: apassword
+  sessionCookieDomain: ""  # Auto-inferred from Host header if empty
+  sessionCookieSecure: true
+
+# Keycloak integration
+keycloak:
+  enabled: true
+  externalUrl: http://localhost:8080
+  realm: mcp-gateway
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8888
+  annotations: { }
+
+# Resource limits and requests
+resources:
+  requests:
+    cpu: 1
+    memory: 1Gi
+  limits:
+    cpu: 2
+    memory: 2Gi
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: alb
+  hostname: ""
+  annotations: { }
+  tls: false
+

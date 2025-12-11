@@ -1,0 +1,24 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: {{ include "common.capabilities.ingress.apiVersion" . }}
+kind: Ingress
+metadata:
+  name: {{ .Values.app.name }}
+  namespace: {{ include "common.names.namespace" . | quote }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ printf "mcpregistry.%s" (.Values.global.domain | default .Values.ingress.hostname) | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.app.name }}
+                port:
+                  name: registry
+{{- end }}

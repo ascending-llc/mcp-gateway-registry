@@ -1,0 +1,21 @@
+# This template patches the Keycloak ingress hostname to use the global domain
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-keycloak
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    {{- toYaml .Values.global.ingress.annotations | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.global.ingress.className }}
+  rules:
+    - host: keycloak.{{ .Values.global.domain }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-keycloak-headless
+                port:
+                  number: 8080

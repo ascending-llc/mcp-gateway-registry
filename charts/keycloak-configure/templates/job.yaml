@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: setup-keycloak
+  namespace: {{ include "common.names.namespace" . | quote }}
+spec:
+  template:
+    spec:
+      containers:
+        - name: job
+          image: python:3.13-slim
+          command: ["/bin/bash", "/app/script.sh"]
+          envFrom:
+            - secretRef:
+                name: keycloak-configure-secret
+          env:
+            - valueFrom:
+                secretKeyRef:
+                  key: admin-password
+                  name: {{ .Release.Name}}-keycloak
+              name: KEYCLOAK_ADMIN_PASSWORD
+          volumeMounts:
+            - mountPath: /app/script.sh
+              name: script
+              subPath: script.sh
+      restartPolicy: Never
+      volumes:
+        - name: script
+          configMap:
+            name: setup-keycloak
+      serviceAccountName: keycloak-configure-sa
+  backoffLimit: 4

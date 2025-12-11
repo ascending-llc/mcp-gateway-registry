@@ -1,0 +1,41 @@
+# Global configuration
+global:
+  image:
+    repository: mcpgateway/registry
+    tag: v1.0.7
+    pullPolicy: IfNotPresent
+
+# Application configuration
+app:
+  name: registry
+  replicas: 1
+  envSecretName: registry-secret
+
+  # External URLs
+  authServerUrl: http://localhost:8888
+
+  # Security settings
+  secretKey: apassword
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8000
+  annotations: {}
+
+# Resource limits and requests
+resources:
+  requests:
+    cpu: 1
+    memory: 1Gi
+  limits:
+    cpu: 2
+    memory: 2Gi
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: alb
+  hostname: ""
+  annotations: {}
+  tls: false

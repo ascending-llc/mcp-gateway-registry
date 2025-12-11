@@ -1,0 +1,13 @@
+apiVersion: v2
+name: registry
+description: A Helm chart for registry for MCP Gateway Registry
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+dependencies:
+  - name: common
+    repository: oci://registry-1.docker.io/bitnamicharts
+    tags:
+      - bitnami-common
+    version: 2.x.x
+

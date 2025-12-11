@@ -1,0 +1,111 @@
+# Global configuration - these values are passed to all subcharts
+global:
+  # Domain configuration - update this to your actual domain
+  domain: "DOMAIN"
+
+  # Security settings - CHANGE THESE IN PRODUCTION
+  secretKey: "aReallyGoodKeyThatShouldBeChanged"
+
+  # Common ingress settings
+  ingress:
+    className: alb
+    tls: true
+    annotations:
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/ssl-redirect: '443'
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/success-codes: 200,302
+
+# Keycloak configuration
+keycloak:
+  image:
+    repository: bitnamilegacy/keycloak
+
+  global:
+    security:
+      allowInsecureImages: true
+
+  postgresql:
+    image:
+      repository: bitnamilegacy/postgresql
+
+  extraEnvVars:
+    - name: KC_PROXY
+      value: edge
+    - name: KC_PROXY_HEADERS
+      value: xforwarded
+
+  ingress:
+    enabled: false  # We use a custom ingress template that supports global.domain
+
+  # Lifecycle hook to configure realm SSL settings
+  lifecycleHooks:
+    postStart:
+      exec:
+        command:
+          - "/bin/bash"
+          - "-c"
+          - |
+            (
+              echo "PostStart: Waiting for Keycloak to be ready..."
+              for i in {1..120}; do
+                if curl -sf http://localhost:8080/realms/$KC_SPI_ADMIN_REALM > /dev/null 2>&1; then
+                  echo "Keycloak ready after $i attempts"
+                  break
+                fi
+                sleep 5
+              done
+              sleep 10
+              echo "Configuring $KC_SPI_ADMIN_REALM realm..."
+              /opt/bitnami/keycloak/bin/kcadm.sh config credentials \
+                --config /tmp/kcadm.config \
+                --server http://localhost:8080 \
+                --realm $KC_SPI_ADMIN_REALM \
+                --user $KC_BOOTSTRAP_ADMIN_USERNAME \
+                --password $(cat $KC_BOOTSTRAP_ADMIN_PASSWORD_FILE)
+              /opt/bitnami/keycloak/bin/kcadm.sh update \
+                --config /tmp/kcadm.config \
+                realms/$KC_SPI_ADMIN_REALM \
+                -s sslRequired=NONE
+              echo "✓ $KC_SPI_ADMIN_REALM realm configured!"
+            ) > /tmp/poststart-config.log 2>&1 &
+
+# Keycloak configuration job
+keycloak-configure:
+  keycloak:
+    realm: mcp-gateway
+    adminUser: user
+  # authServer.externalUrl will be templated in the subchart using global.domain
+
+# Registry service configuration
+registry:
+  # app.secretKey and app.authServerUrl will be templated in the subchart using global values
+  ingress:
+    enabled: true
+    ingressClassName: alb
+    annotations:
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/ssl-redirect: '443'
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/success-codes: 200,302
+
+# Auth server configuration
+auth-server:
+  # app.secretKey, app.externalUrl, app.sessionCookieDomain will be templated using global values
+  keycloak:
+    enabled: true
+    realm: mcp-gateway
+    # externalUrl will be templated in the subchart using global.domain
+
+  ingress:
+    enabled: true
+    ingressClassName: alb
+    annotations:
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/ssl-redirect: '443'
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/success-codes: 200,302
+      alb.ingress.kubernetes.io/healthcheck-path: /health

@@ -1,0 +1,15 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: secret-read-write
+  namespace: {{ include "common.names.namespace" . | quote }}
+subjects:
+  - kind: ServiceAccount
+    name: keycloak-configure-sa # "name" is case sensitive
+    apiGroup: ""
+roleRef:
+  # "roleRef" specifies the binding to a Role / ClusterRole
+  kind: Role #this must be Role or ClusterRole
+  name: secret-read-write # this must match the name of the Role or ClusterRole you wish to bind to
+  apiGroup: rbac.authorization.k8s.io
+

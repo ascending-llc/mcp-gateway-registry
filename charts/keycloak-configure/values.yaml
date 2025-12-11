@@ -1,0 +1,9 @@
+# Keycloak configuration
+keycloak:
+  adminUser: user
+  realm: mcp-gateway
+
+# Auth server configuration
+authServer:
+  externalUrl: http://localhost:8888
+

@@ -1,0 +1,19 @@
+apiVersion: v2
+name: mcp-gateway-registry-stack
+description: A Helm chart for deploying the MCP Gateway Registry Stack
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+dependencies:
+  - name: keycloak
+    version: 25.2.0
+    repository: https://charts.bitnami.com/bitnami
+  - name: auth-server
+    version: 0.1.0
+    repository: "file://../auth-server"
+  - name: registry
+    version: 0.1.0
+    repository: "file://../registry"
+  - name: keycloak-configure
+    version: 0.1.0
+    repository: "file://../keycloak-configure"
