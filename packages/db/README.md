@@ -36,33 +36,43 @@ db.close()
 
 ## Configuration
 
+**Required environment variables:**
 ```bash
-# Required
-VECTOR_STORE_TYPE=weaviate  # VectorStoreType: weaviate | chroma
-EMBEDDING_PROVIDER=aws_bedrock  # EmbeddingProvider: openai | aws_bedrock
+VECTOR_STORE_TYPE=weaviate     # weaviate | chroma
+EMBEDDING_PROVIDER=aws_bedrock # openai | aws_bedrock
+```
 
-# Weaviate
+**Database-specific:**
+```bash
+# Weaviate (required)
 WEAVIATE_HOST=localhost
-WEAVIATE_PORT=8099
+WEAVIATE_PORT=8099            # Must be 1-65535
 
-# AWS Bedrock
-AWS_REGION=us-east-1
+# Chroma (with defaults)
+CHROMA_PERSIST_DIRECTORY=./chroma_db  # Default: ./chroma_db
+CHROMA_COLLECTION_NAME=Default        # Default: Default
+```
 
-# OpenAI
-OPENAI_API_KEY=sk-...
+**Embedding-specific:**
+```bash
+# AWS Bedrock (required)
+AWS_REGION=us-east-1          # Must be valid region
+EMBEDDING_MODEL=amazon.titan-embed-text-v2:0  # Optional
+
+# OpenAI (required)
+OPENAI_API_KEY=sk-...         # Must start with 'sk-'
+OPENAI_MODEL=text-embedding-3-small  # Default: text-embedding-3-small
 ```
 
 **Enums:**
-
 ```python
 from packages.db.enum.enums import VectorStoreType, EmbeddingProvider
 
-# Available types
-VectorStoreType.WEAVIATE  # "weaviate"
-VectorStoreType.CHROMA  # "chroma"
+VectorStoreType.WEAVIATE      # "weaviate"
+VectorStoreType.CHROMA        # "chroma"
 
-EmbeddingProvider.OPENAI  # "openai"
-EmbeddingProvider.AWS_BEDROCK  # "aws_bedrock"
+EmbeddingProvider.OPENAI      # "openai"
+EmbeddingProvider.AWS_BEDROCK # "aws_bedrock"
 ```
 
 ## API Layers
@@ -213,12 +223,6 @@ LangChain VectorStore (Chroma / WeaviateVectorStore)
 **Repository**: Type-safe Model API, Model ↔ Document conversion  
 **VectorStoreAdapter**: Proxy VectorStore methods + extend missing features  
 **VectorStore**: Native database operations (from LangChain)
-
-📚 **Documentation:**
-
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - Design details
-- [FILTERS.md](./FILTERS.md) - Filter usage guide
-- [MIGRATION.md](./MIGRATION.md) - Migration from old architecture
 
 ### Directory Structure
 
