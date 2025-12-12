@@ -239,7 +239,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
     def _try_session_auth(self, request: Request) -> Optional[Dict[str, Any]]:
         """Session authentication (original enhanced_auth logic)"""
         try:
-            session_cookie = request.cookies.get(settings.session_cookie_name)
+            session_cookie = request.cookies.get(settings.SESSION_COOKIE_NAME)
             if not session_cookie:
                 return None
             session_data = self._parse_session_data(session_cookie)
