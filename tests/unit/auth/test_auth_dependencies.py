@@ -23,7 +23,7 @@ class TestAuthDependencies:
         settings = Mock()
         settings.secret_key = "test_secret_key_12345"
         settings.session_cookie_name = "session"
-        settings.session_max_age_seconds = 3600
+        settings.SESSION_MAX_AGE_SECONDS = 3600
         settings.admin_user = "admin"
         settings.admin_password = "password123"
         return settings
