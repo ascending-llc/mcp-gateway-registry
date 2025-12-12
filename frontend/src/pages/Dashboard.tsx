@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { MagnifyingGlassIcon, PlusIcon, XMarkIcon, ArrowPathIcon, CheckCircleIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
-import { useServerStats } from '../hooks/useServerStats';
 import { useAuth } from '../contexts/AuthContext';
+import { useServer } from '../contexts/ServerContext';
 import ServerCard from '../components/ServerCard';
 import AgentCard from '../components/AgentCard';
 import SemanticSearchResults from '../components/SemanticSearchResults';
@@ -96,7 +96,7 @@ const buildAgentAuthHeaders = (token?: string | null) =>
   token ? { Authorization: `Bearer ${token}` } : undefined;
 
 const Dashboard: React.FC = () => {
-  const { servers, activeFilter, loading, error, refreshData, setServers } = useServerStats();
+  const { servers, activeFilter, loading, error, refreshData, setServers } = useServer();
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [committedQuery, setCommittedQuery] = useState('');
@@ -598,15 +598,6 @@ const Dashboard: React.FC = () => {
   };
 
   const handleToggleServer = async (path: string, enabled: boolean) => {
-    // Optimistically update the UI first
-    setServers(prevServers =>
-      prevServers.map(server =>
-        server.path === path
-          ? { ...server, enabled }
-          : server
-      )
-    );
-
     try {
       const formData = new FormData();
       formData.append('enabled', enabled ? 'on' : 'off');
@@ -617,20 +608,18 @@ const Dashboard: React.FC = () => {
         },
       });
 
-      // No need to refresh all data - the optimistic update is enough
+      const updatedServers = servers.map(server =>
+        server.path === path ? { ...server, enabled } : server
+      );
+
+      await refreshData();
       showToast(`Server ${enabled ? 'enabled' : 'disabled'} successfully!`, 'success');
     } catch (error: any) {
       console.error('Failed to toggle server:', error);
-
-      // Revert the optimistic update on error
-      setServers(prevServers =>
-        prevServers.map(server =>
-          server.path === path
-            ? { ...server, enabled: !enabled }
-            : server
-        )
+      const revertedServers = servers.map(server =>
+        server.path === path ? { ...server, enabled: !enabled } : server
       );
-
+      await refreshData();
       showToast(error.response?.data?.detail || 'Failed to toggle server', 'error');
     }
   };

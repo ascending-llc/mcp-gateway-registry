@@ -50,6 +50,12 @@ class Settings(SharedSettings):
     container_registry_dir: Path = Path("/app/registry")
     container_log_dir: Path = Path("/app/logs")
 
+
+    # Note:  It will be overwritten from the .env file.
+    JWT_ISSUER: str = "mcp-auth-server"
+    JWT_AUDIENCE: str = "mcp-registry"
+    JWT_SELF_SIGNED_KID: str = "self-signed-key-v1"
+
     # Local development mode detection
     @property
     def is_local_dev(self) -> bool:
@@ -145,4 +151,4 @@ class Settings(SharedSettings):
 
 
 # Global settings instance
-settings = Settings() 
+settings = Settings()

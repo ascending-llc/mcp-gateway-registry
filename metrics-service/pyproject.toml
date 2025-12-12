@@ -50,3 +50,7 @@ python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+
+[tool.uv]
+# Local-only project - never resolve from PyPI
+package = false

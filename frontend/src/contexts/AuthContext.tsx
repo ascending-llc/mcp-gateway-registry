@@ -1,8 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import axios from 'axios';
+import { getBasePath } from '../config';
 
 // Configure axios to include credentials (cookies) with all requests
 axios.defaults.withCredentials = true;
+
+// Add base URL from runtime config
+axios.defaults.baseURL = getBasePath() || '/';
 
 interface User {
   username: string;

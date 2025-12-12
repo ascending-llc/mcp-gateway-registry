@@ -31,3 +31,7 @@ dev = [
     "black>=23.0.0",
     "isort>=5.12.0"
 ]
+
+[tool.uv]
+# Local-only project - never resolve from PyPI
+package = false

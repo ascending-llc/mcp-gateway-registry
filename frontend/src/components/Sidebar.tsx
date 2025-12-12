@@ -13,8 +13,8 @@ import {
   CheckIcon,
   ArrowDownTrayIcon
 } from '@heroicons/react/24/outline';
-import { useServerStats } from '../hooks/useServerStats';
 import { useAuth } from '../contexts/AuthContext';
+import { useServer } from '../contexts/ServerContext';
 import axios from 'axios';
 
 interface SidebarProps {
@@ -23,7 +23,7 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
-  const { stats, activeFilter, setActiveFilter } = useServerStats();
+  const { stats, activeFilter, setActiveFilter } = useServer();
   const { user } = useAuth();
   const location = useLocation();
   const [showScopes, setShowScopes] = useState(false);

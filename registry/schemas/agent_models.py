@@ -9,10 +9,11 @@ Based on: docs/design/a2a-protocol-integration.md
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
     field_validator,
     model_validator,
@@ -183,6 +184,8 @@ class SecurityScheme(BaseModel):
 
     Supports various authentication methods including OAuth2, bearer tokens,
     API keys, and OpenID Connect.
+
+    Note: Uses snake_case internally but serializes to camelCase for A2A compliance.
     """
 
     type: str = Field(
@@ -204,6 +207,7 @@ class SecurityScheme(BaseModel):
     )
     bearer_format: Optional[str] = Field(
         None,
+        alias="bearerFormat",
         description="Bearer token format hint (e.g., JWT)",
     )
     flows: Optional[Dict[str, Any]] = Field(
@@ -212,8 +216,12 @@ class SecurityScheme(BaseModel):
     )
     openid_connect_url: Optional[str] = Field(
         None,
+        alias="openIdConnectUrl",
         description="OpenID Connect discovery URL",
     )
+
+    class Config:
+        populate_by_name = True  # Allow both snake_case and camelCase on input
 
     @field_validator("type")
     @classmethod
@@ -245,13 +253,35 @@ class SecurityScheme(BaseModel):
         return v
 
 
+class AgentProvider(BaseModel):
+    """
+    A2A Agent Provider information.
+
+    Represents the service provider of an agent with organization name and website URL.
+    Per A2A specification, if provider is present, both organization and url are required.
+    """
+
+    organization: str = Field(
+        ...,
+        description="Provider organization name",
+    )
+    url: str = Field(
+        ...,
+        description="Provider website or documentation URL",
+    )
+
+    class Config:
+        populate_by_name = True
+
+
 class Skill(BaseModel):
     """
-    Agent skill definition.
+    Agent skill definition per A2A protocol specification.
 
     A skill represents a discrete capability that an agent can perform.
-    Each skill has a unique ID, name, description, and optional parameters
-    defined using JSON Schema.
+    Skills describe high-level capabilities without operation-specific schemas.
+
+    Note: Uses snake_case internally but serializes to camelCase for A2A compliance.
     """
 
     id: str = Field(
@@ -266,14 +296,31 @@ class Skill(BaseModel):
         ...,
         description="Detailed skill description",
     )
-    parameters: Optional[Dict[str, Any]] = Field(
-        None,
-        description="JSON Schema for skill parameters",
-    )
     tags: List[str] = Field(
-        default_factory=list,
-        description="Skill categorization tags",
+        ...,
+        description="Skill categorization tags - keywords describing capability",
     )
+    examples: Optional[List[str]] = Field(
+        None,
+        description="Usage scenarios and examples",
+    )
+    input_modes: Optional[List[str]] = Field(
+        None,
+        alias="inputModes",
+        description="Skill-specific input MIME types",
+    )
+    output_modes: Optional[List[str]] = Field(
+        None,
+        alias="outputModes",
+        description="Skill-specific output MIME types",
+    )
+    security: Optional[List[Dict[str, List[str]]]] = Field(
+        None,
+        description="Skill-level security requirements",
+    )
+
+    class Config:
+        populate_by_name = True  # Allow both snake_case and camelCase on input
 
     @field_validator("id")
     @classmethod
@@ -305,17 +352,20 @@ class AgentCard(BaseModel):
     A2A Agent Card - machine-readable agent profile.
 
     This model represents a complete agent card following the A2A protocol
-    specification, with extensions for MCP Gateway Registry integration.
+    specification (v0.3.0), with extensions for MCP Gateway Registry integration.
 
     The agent card includes:
-    - Required A2A fields (protocol_version, name, description, url)
-    - Optional A2A fields (version, provider, skills, security, etc.)
+    - Required A2A fields (protocolVersion, name, description, url, version, capabilities, etc.)
+    - Optional A2A fields (provider, skills, security, etc.)
     - MCP Gateway Registry extensions (path, tags, visibility, trust_level)
+
+    Note: Uses snake_case internally but serializes to camelCase for A2A compliance.
     """
 
     # Required A2A fields
     protocol_version: str = Field(
-        ...,
+        "1.0",
+        alias="protocolVersion",
         description="A2A protocol version (e.g., '1.0')",
     )
     name: str = Field(
@@ -330,31 +380,62 @@ class AgentCard(BaseModel):
         ...,
         description="Agent endpoint URL (HTTP or HTTPS)",
     )
-
-    # Optional A2A fields
-    version: Optional[str] = Field(
-        None,
+    version: str = Field(
+        ...,
         description="Agent version",
     )
-    provider: Optional[str] = Field(
+    capabilities: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Feature declarations (e.g., {'streaming': true})",
+    )
+    default_input_modes: List[str] = Field(
+        default_factory=lambda: ["text/plain"],
+        alias="defaultInputModes",
+        description="Supported input MIME types",
+    )
+    default_output_modes: List[str] = Field(
+        default_factory=lambda: ["text/plain"],
+        alias="defaultOutputModes",
+        description="Supported output MIME types",
+    )
+    skills: List[Skill] = Field(
+        default_factory=list,
+        description="Agent capabilities (skills)",
+    )
+
+    # Optional A2A fields
+    preferred_transport: Optional[str] = Field(
+        "JSONRPC",
+        alias="preferredTransport",
+        description="Preferred transport protocol: JSONRPC, GRPC, HTTP+JSON",
+    )
+    provider: Optional[AgentProvider] = Field(
         None,
-        description="Agent provider/author",
+        description="Agent provider information per A2A spec",
+    )
+    icon_url: Optional[str] = Field(
+        None,
+        alias="iconUrl",
+        description="Agent icon URL",
+    )
+    documentation_url: Optional[str] = Field(
+        None,
+        alias="documentationUrl",
+        description="Documentation URL",
     )
     security_schemes: Dict[str, SecurityScheme] = Field(
         default_factory=dict,
+        alias="securitySchemes",
         description="Supported authentication methods",
     )
     security: Optional[List[Dict[str, List[str]]]] = Field(
         None,
         description="Security requirements array",
     )
-    skills: List[Skill] = Field(
-        default_factory=list,
-        description="Agent capabilities",
-    )
-    streaming: bool = Field(
-        False,
-        description="Supports streaming responses",
+    supports_authenticated_extended_card: Optional[bool] = Field(
+        None,
+        alias="supportsAuthenticatedExtendedCard",
+        description="Supports extended card with auth",
     )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
@@ -372,11 +453,13 @@ class AgentCard(BaseModel):
     )
     is_enabled: bool = Field(
         False,
+        alias="isEnabled",
         description="Whether agent is enabled in registry",
     )
     num_stars: int = Field(
         0,
         ge=0,
+        alias="numStars",
         description="Community rating",
     )
     license: str = Field(
@@ -387,14 +470,17 @@ class AgentCard(BaseModel):
     # Registry metadata
     registered_at: Optional[datetime] = Field(
         None,
+        alias="registeredAt",
         description="Registration timestamp",
     )
     updated_at: Optional[datetime] = Field(
         None,
+        alias="updatedAt",
         description="Last update timestamp",
     )
     registered_by: Optional[str] = Field(
         None,
+        alias="registeredBy",
         description="Username who registered agent",
     )
 
@@ -405,6 +491,7 @@ class AgentCard(BaseModel):
     )
     allowed_groups: List[str] = Field(
         default_factory=list,
+        alias="allowedGroups",
         description="Groups with access",
     )
 
@@ -415,8 +502,12 @@ class AgentCard(BaseModel):
     )
     trust_level: str = Field(
         "unverified",
+        alias="trustLevel",
         description="unverified, community, verified, trusted",
     )
+
+    class Config:
+        populate_by_name = True  # Allow both snake_case and camelCase on input
 
     @field_validator("protocol_version")
     @classmethod
@@ -529,6 +620,8 @@ class AgentInfo(BaseModel):
 
     This lightweight model is used for agent discovery results and listings,
     containing only the essential information needed for agent selection.
+
+    Note: Uses snake_case internally but serializes to camelCase for A2A compliance.
     """
 
     name: str = Field(
@@ -558,15 +651,18 @@ class AgentInfo(BaseModel):
     num_skills: int = Field(
         0,
         ge=0,
+        alias="numSkills",
         description="Number of skills",
     )
     num_stars: int = Field(
         0,
         ge=0,
+        alias="numStars",
         description="Community rating",
     )
     is_enabled: bool = Field(
         False,
+        alias="isEnabled",
         description="Whether agent is enabled",
     )
     provider: Optional[str] = Field(
@@ -579,8 +675,12 @@ class AgentInfo(BaseModel):
     )
     trust_level: str = Field(
         "unverified",
+        alias="trustLevel",
         description="unverified, community, verified, trusted",
     )
+
+    class Config:
+        populate_by_name = True  # Allow both snake_case and camelCase on input
 
 
 class AgentRegistrationRequest(BaseModel):
@@ -589,6 +689,7 @@ class AgentRegistrationRequest(BaseModel):
 
     This model is used for the agent registration API endpoint and converts
     form-style inputs (e.g., comma-separated tags) into the proper types.
+    Accepts both snake_case (Python) and camelCase (A2A spec JSON) field names.
     """
 
     name: str = Field(
@@ -611,18 +712,20 @@ class AgentRegistrationRequest(BaseModel):
     )
     protocol_version: str = Field(
         default="1.0",
+        alias="protocolVersion",
         description="A2A protocol version",
     )
     version: Optional[str] = Field(
         None,
         description="Agent version",
     )
-    provider: Optional[str] = Field(
+    provider: Optional[Dict[str, str]] = Field(
         None,
-        description="Agent provider/author",
+        description="Agent provider information {organization, url}",
     )
     security_schemes: Optional[Dict[str, Dict[str, Any]]] = Field(
         None,
+        alias="securitySchemes",
         description="Security schemes configuration",
     )
     skills: Optional[List[Dict[str, Any]]] = Field(
@@ -633,9 +736,9 @@ class AgentRegistrationRequest(BaseModel):
         False,
         description="Supports streaming responses",
     )
-    tags: str = Field(
+    tags: Union[str, List[str]] = Field(
         default="",
-        description="Comma-separated tags",
+        description="Comma-separated tags or list of tags",
     )
     license: str = Field(
         default="N/A",
@@ -645,6 +748,21 @@ class AgentRegistrationRequest(BaseModel):
         default="public",
         description="Visibility: public, private, or group-restricted",
     )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _normalize_tags(
+        cls,
+        v: Union[str, List[str], None],
+    ) -> str:
+        """Normalize tags to comma-separated string."""
+        if v is None:
+            return ""
+        if isinstance(v, list):
+            return ",".join(v)
+        return v
 
     @field_validator("path")
     @classmethod

@@ -106,10 +106,6 @@ def _validate_skills(
         if not skill.description:
             errors.append(f"Skill {idx}: description cannot be empty")
 
-        if skill.parameters is not None:
-            if not isinstance(skill.parameters, dict):
-                errors.append(f"Skill {idx}: parameters must be a dictionary")
-
     return errors
 
 

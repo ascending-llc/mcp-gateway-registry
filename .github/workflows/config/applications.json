@@ -1,0 +1,23 @@
+{
+  "jarvis": {
+    "environment": "dev",
+    "bucket": "ascending-jarvis-bucket",
+    "aws_deploy_role": "SAAS_AWS_DEPLOY_ROLE_ARN",
+    "eks_cluster_name": "ascending-s-api-cluster",
+    "secret_name": "jarvis/mcpgateway-env"
+  },
+  "jarvis-demo": {
+    "environment": "demo",
+    "bucket": "jarvis-demo-bucket-f9e80583",
+    "aws_deploy_role": "SAAS_AWS_DEPLOY_ROLE_ARN",
+    "eks_cluster_name": "ascending-s-api-cluster",
+    "secret_name": "jarvis-demo/mcpgateway-env"
+  },
+  "askcto": {
+    "environment": "dev",
+    "bucket": "ascending-askcto-frontend",
+    "aws_deploy_role": "AWS_DEPLOY_ROLE_ARN",
+    "eks_cluster_name": "ascending-askcto-cluster",
+    "secret_name": "askcto/mcpgateway-env"
+  }
+}

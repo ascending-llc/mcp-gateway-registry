@@ -5,7 +5,11 @@ description = "Example MCP server demonstrating basic functionality"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-   "mcp>=1.9.3",
-   "pydantic>=2.11.3",
-   "aiohttp>=3.8.0",
+    "mcp>=1.9.3",
+    "pydantic>=2.11.3",
+    "aiohttp>=3.8.0",
 ]
+
+[tool.uv]
+# Local-only project - never resolve from PyPI
+package = false
