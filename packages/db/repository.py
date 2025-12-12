@@ -3,6 +3,7 @@ from typing import Optional, List, Dict, Any, TypeVar, Generic, Type, TYPE_CHECK
 from langchain_core.documents import Document
 
 from .batch_result import BatchResult
+from .enum.enums import SearchType
 
 if TYPE_CHECKING:
     from .client import DatabaseClient
@@ -119,7 +120,7 @@ class Repository(Generic[T]):
             logger.error(f"Failed to delete {self.model_class.__name__} {doc_id}: {e}")
             return False
 
-    def search(
+    def similarity_search(
             self,
             query: str,
             k: int = 10,
@@ -142,11 +143,32 @@ class Repository(Generic[T]):
                 filters=filters,
                 collection_name=self.collection
             )
-            
             return [self.model_class.from_document(doc) for doc in docs]
         except Exception as e:
             logger.error(f"Search failed: {e}")
             return []
+
+    def search(
+            self,
+            search_type: SearchType,
+            query: str,
+            k: int = 10,
+            filters: Optional[Any] = None
+    ) -> List[T]:
+        try:
+            docs = self.adapter.search(
+                query=query,
+                search_type=search_type,
+                k=k,
+                filters=filters,
+                collection_name=self.collection,
+            )
+            return [self.model_class.from_document(doc) for doc in docs]
+        except Exception as e:
+            logger.error(f"Search failed: {e}")
+            return []
+
+
 
     def filter(
             self,

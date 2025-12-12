@@ -9,18 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class ExternalVectorSearchService(VectorSearchService):
-    """
-    Vector search service using three-layer architecture.
-    
-    Architecture:
-        ExternalVectorSearchService (Business logic)
-            ↓
-        Repository (Type-safe Model API)
-            ↓
-        VectorStoreAdapter (Proxy + Extension)
-            ↓
-        LangChain VectorStore (Native DB operations)
-    """
+    """Vector search service that uses"""
 
     def __init__(self):
         """Initialize vector search service from environment variables."""
@@ -28,13 +17,11 @@ class ExternalVectorSearchService(VectorSearchService):
             self._client = initialize_database()
             self._mcp_tools = self._client.for_model(McpTool)
             self._initialized = True
-            self._adapter_type = self._client.get_info().get('adapter_type', 'Unknown')
-            logger.info(f"Vector search service initialized with {self._adapter_type}")
+            logger.info(f"Vector search service initialized successfully")
         except Exception as e:
             self._client = None
             self._mcp_tools = None
             self._initialized = False
-            self._adapter_type = None
             logger.error(f"Failed to initialize vector search service: {e}")
 
     async def initialize(self):
@@ -86,11 +73,9 @@ class ExternalVectorSearchService(VectorSearchService):
             )
             # Bulk save
             result = self._mcp_tools.bulk_save(tools)
-
-            logger.info(
-                f"Indexed {result.successful}/{result.total} tools for '{service_path}' "
-                f"(success rate: {result.success_rate:.1f}%)"
-            )
+            logger.info(f"Indexed {result.successful}/{result.total} "
+                        f"tools for '{service_path}' "
+                        f""f"(success rate: {result.success_rate:.1f}%)")
 
             if result.has_errors:
                 logger.warning(f"{result.failed} tools failed to index:")
@@ -101,7 +86,6 @@ class ExternalVectorSearchService(VectorSearchService):
                 "indexed_tools": result.successful,
                 "failed_tools": result.failed
             }
-
         except Exception as e:
             logger.error(f"Indexing failed for '{service_path}': {e}", exc_info=True)
             return None
@@ -122,7 +106,6 @@ class ExternalVectorSearchService(VectorSearchService):
         try:
             # Use simple dict filter (auto-converted by adapter)
             filters = {"server_path": service_path}
-            
             deleted_count = self._mcp_tools.delete_by_filter(filters)
             logger.info(f"Removed {deleted_count} tools for '{service_path}'")
             return {"deleted_tools": deleted_count}
@@ -193,7 +176,6 @@ class ExternalVectorSearchService(VectorSearchService):
         except Exception as e:
             logger.error(f"Search failed: {e}", exc_info=True)
             return []
-    
 
     def _tools_to_results(self, tools: List[McpTool]) -> List[Dict[str, Any]]:
         """
