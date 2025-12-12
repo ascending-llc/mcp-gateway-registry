@@ -1,128 +1,73 @@
 {
-  "protocol_version": "1.0",
+  "protocolVersion": "1.0",
   "name": "Code Reviewer Agent",
   "description": "Comprehensive code review agent that analyzes code quality, identifies bugs, suggests improvements, and provides detailed feedback on code structure and best practices",
   "url": "https://example.com/agents/code-reviewer",
   "version": "2.1.0",
-  "provider": "Example Corp",
-  "path": "/code-reviewer",
-  "tags": "code-review,quality-analysis,testing,best-practices",
-  "is_enabled": true,
-  "num_stars": 42,
-  "license": "MIT",
-  "visibility": "public",
-  "trust_level": "verified",
-  "streaming": true,
-  "security_schemes": {
-    "bearer_auth": {
-      "type": "http",
-      "scheme": "bearer",
-      "bearer_format": "JWT"
-    }
+  "capabilities": {
+    "streaming": true
   },
-  "security": [
-    {
-      "bearer_auth": []
-    }
-  ],
+  "defaultInputModes": ["text/plain", "application/json"],
+  "defaultOutputModes": ["text/plain", "application/json"],
   "skills": [
     {
       "id": "analyze_code_quality",
       "name": "Analyze Code Quality",
       "description": "Analyze code for quality metrics including complexity, duplication, and maintainability",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "description": "The code to analyze"
-          },
-          "language": {
-            "type": "string",
-            "enum": [
-              "python",
-              "javascript",
-              "java",
-              "go",
-              "rust"
-            ],
-            "description": "Programming language"
-          }
-        },
-        "required": [
-          "code",
-          "language"
-        ]
-      },
       "tags": [
         "analysis",
         "metrics"
-      ]
+      ],
+      "examples": [
+        "Analyze code quality for this Python function",
+        "Check code quality metrics for JavaScript module"
+      ],
+      "inputModes": ["text/plain"],
+      "outputModes": ["application/json"]
     },
     {
       "id": "detect_bugs",
       "name": "Detect Bugs",
       "description": "Identify potential bugs and issues in the code",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "description": "The code to analyze for bugs"
-          },
-          "severity": {
-            "type": "string",
-            "enum": [
-              "critical",
-              "high",
-              "medium",
-              "low"
-            ],
-            "description": "Minimum severity level to report"
-          }
-        },
-        "required": [
-          "code"
-        ]
-      },
       "tags": [
         "bug-detection",
         "validation"
-      ]
+      ],
+      "examples": [
+        "Detect critical bugs in this code",
+        "Find high severity issues"
+      ],
+      "inputModes": ["text/plain"],
+      "outputModes": ["application/json"]
     },
     {
       "id": "suggest_improvements",
       "name": "Suggest Improvements",
       "description": "Provide suggestions for code improvements and refactoring",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string",
-            "description": "The code to improve"
-          },
-          "focus_areas": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "performance",
-                "readability",
-                "testability",
-                "security"
-              ]
-            },
-            "description": "Areas to focus improvements on"
-          }
-        },
-        "required": [
-          "code"
-        ]
-      },
       "tags": [
         "improvement",
         "refactoring"
-      ]
+      ],
+      "examples": [
+        "Suggest performance improvements for this code",
+        "Recommend security enhancements"
+      ],
+      "inputModes": ["text/plain"],
+      "outputModes": ["application/json"]
+    }
+  ],
+  "preferredTransport": "JSONRPC",
+  "provider": "Example Corp",
+  "securitySchemes": {
+    "bearer_auth": {
+      "type": "http",
+      "scheme": "bearer",
+      "bearerFormat": "JWT"
+    }
+  },
+  "security": [
+    {
+      "bearer_auth": []
     }
   ],
   "metadata": {
@@ -134,5 +79,12 @@
     ],
     "response_time_ms": 2000,
     "availability": "99.9%"
-  }
+  },
+  "path": "/code-reviewer",
+  "tags": ["code-review", "quality-analysis", "testing", "best-practices"],
+  "isEnabled": true,
+  "numStars": 42,
+  "license": "MIT",
+  "visibility": "public",
+  "trustLevel": "verified"
 }

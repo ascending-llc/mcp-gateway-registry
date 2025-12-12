@@ -17,9 +17,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from registry.auth.middleware import UnifiedAuthMiddleware
 # Import domain routers
 from registry.auth.routes import router as auth_router
 from registry.api.server_routes import router as servers_router
+from registry.api.internal_routes import router as internal_router
 from registry.api.search_routes import router as search_router
 from registry.api.wellknown_routes import router as wellknown_router
 from registry.api.registry_routes import router as registry_router
@@ -28,8 +30,7 @@ from registry.health.routes import router as health_router
 from registry.api.mcp_routes import router as mcp_router
 from registry.proxy.routes import router as proxy_router, shutdown_proxy_client
 
-# Import auth dependencies
-from registry.auth.dependencies import enhanced_auth
+from registry.auth.dependencies import CurrentUser
 
 # Import services for initialization
 from registry.services.server_service import server_service
@@ -198,9 +199,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(
+    UnifiedAuthMiddleware
+)
+
 # Register API routers with /api prefix
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(servers_router, prefix="/api", tags=["Server Management"])
+app.include_router(internal_router, prefix="/api", tags=["Server Management[internal]"])
 app.include_router(agent_router, prefix="/api", tags=["Agent Management"])
 app.include_router(search_router, prefix="/api/search", tags=["Semantic Search"])
 app.include_router(health_router, prefix="/api/health", tags=["Health Monitoring"])
@@ -215,7 +221,7 @@ app.include_router(wellknown_router, prefix="/.well-known", tags=["Discovery"])
 
 # Add user info endpoint for React auth context
 @app.get("/api/auth/me")
-async def get_current_user(user_context: Dict[str, Any] = Depends(enhanced_auth)):
+async def get_current_user(user_context: CurrentUser):
     """Get current user information for React auth context"""
     # Return user info with scopes for token generation
     return {

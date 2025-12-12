@@ -7,13 +7,13 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies  
-COPY metrics-service/pyproject.toml .
+# Install dependencies
+COPY pyproject.toml .
 RUN pip install uv && uv pip install --system -e .
 
 # Copy application
-COPY metrics-service/app/ app/
-COPY metrics-service/create_api_key.py ./
+COPY app/ app/
+COPY create_api_key.py ./
 
 # Create data directory
 RUN mkdir -p /var/lib/sqlite

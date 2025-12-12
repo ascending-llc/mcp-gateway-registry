@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { getBasePath } from '../config';
 import axios from 'axios';
 import { EyeIcon, EyeSlashIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 
@@ -19,12 +20,14 @@ const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [authServerUrl, setAuthServerUrl] = useState<string>('');
   const { login } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
     console.log('[Login] Component mounted, fetching OAuth providers...');
+    fetchAuthConfig();
     fetchOAuthProviders();
 
     // Check for error parameter from URL (e.g., from OAuth callback)
@@ -41,6 +44,17 @@ const Login: React.FC = () => {
       setCredentials(prev => ({ ...prev, username: savedUsername }));
     }
   }, [searchParams]);
+
+    const fetchAuthConfig = async () => {
+        try {
+            const response = await axios.get('/api/auth/config');
+            setAuthServerUrl(response.data.auth_server_url || '');
+        } catch (error) {
+            console.error('Failed to fetch auth config:', error);
+            // Fallback to localhost for development
+            setAuthServerUrl('http://localhost:8888');
+        }
+    };
 
   // Log when oauthProviders state changes
   useEffect(() => {
@@ -149,14 +163,13 @@ const Login: React.FC = () => {
 
   const handleOAuthLogin = (provider: string) => {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const basePath = getBasePath();
     const currentOrigin = window.location.origin;
-    const redirectUri = encodeURIComponent(currentOrigin + '/');
+    const redirectUri = encodeURIComponent(currentOrigin + (basePath || '/'));
 
-    if (isLocalhost) {
-      window.location.href = `http://localhost:8888/oauth2/login/${provider}?redirect_uri=${redirectUri}`;
-    } else {
-      window.location.href = `/oauth2/login/${provider}?redirect_uri=${redirectUri}`;
-    }
+    // Use the auth server URL from config, fallback to localhost if not loaded yet
+    const authUrl = authServerUrl || 'http://localhost:8888';
+    window.location.href = `${authUrl}/oauth2/login/${provider}?redirect_uri=${redirectUri}`;
   };
 
   return (

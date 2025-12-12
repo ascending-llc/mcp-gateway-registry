@@ -19,3 +19,7 @@ dev = [
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
+
+[tool.uv]
+# Local-only project - never resolve from PyPI
+package = false

@@ -212,21 +212,6 @@ class ServerService:
 
         except Exception as e:
             logger.error(f"Failed to update FAISS index after server update: {e}")
-
-        # Regenerate nginx config if this is an enabled service (proxy_pass_url might have changed)
-        if self.is_service_enabled(path):
-            try:
-                from ..core.nginx_service import nginx_service
-                enabled_servers = {
-                    service_path: self.get_server_info(service_path)
-                    for service_path in self.get_enabled_services()
-                }
-                nginx_service.generate_config(enabled_servers)
-                nginx_service.reload_nginx()
-                logger.info(f"Regenerated nginx config due to server update: {path}")
-            except Exception as e:
-                logger.error(f"Failed to regenerate nginx configuration after server update: {e}")
-
         return True
         
     def toggle_service(self, path: str, enabled: bool) -> bool:
@@ -240,18 +225,6 @@ class ServerService:
         
         server_name = self.registered_servers[path]["server_name"]
         logger.info(f"Toggled '{server_name}' ({path}) to {enabled}")
-        
-        # Trigger nginx config regeneration and reload
-        try:
-            from ..core.nginx_service import nginx_service
-            enabled_servers = {
-                service_path: self.get_server_info(service_path) 
-                for service_path in self.get_enabled_services()
-            }
-            nginx_service.generate_config(enabled_servers)
-            nginx_service.reload_nginx()
-        except Exception as e:
-            logger.error(f"Failed to update nginx configuration after toggle: {e}")
         
         return True
         
@@ -441,19 +414,6 @@ class ServerService:
         
         if previous_enabled_services != current_enabled_services:
             logger.info(f"Service state changes detected: {len(previous_enabled_services)} -> {len(current_enabled_services)} enabled services")
-            
-            # Regenerate nginx configuration due to state changes
-            try:
-                from ..core.nginx_service import nginx_service
-                enabled_servers = {
-                    service_path: self.get_server_info(service_path) 
-                    for service_path in self.get_enabled_services()
-                }
-                nginx_service.generate_config(enabled_servers)
-                nginx_service.reload_nginx()
-                logger.info("Regenerated nginx config due to state reload")
-            except Exception as e:
-                logger.error(f"Failed to regenerate nginx configuration after state reload: {e}")
         else:
             logger.info("No service state changes detected after reload")
 

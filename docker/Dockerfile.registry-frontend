@@ -12,11 +12,9 @@ RUN npm run build
 FROM nginx:1.27-bookworm AS production
 COPY --from=builder /app/frontend/build/ /usr/share/nginx/html
 
-# Copy Nginx configuration files
 COPY /frontend/nginx_http_only.conf /nginx_http_only.conf
 COPY /frontend/nginx_http_and_https.conf /nginx_http_and_https.conf
 
-# Entrypoint script to configure Nginx 
 COPY /docker/registry-entrypoint.sh /entrypoint.sh
 RUN chmod +x entrypoint.sh
 EXPOSE 80 443
