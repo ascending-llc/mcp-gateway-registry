@@ -12,8 +12,6 @@ from typing import Dict, Any, List
 from fastmcp import Context
 from fastmcp.server.dependencies import get_http_request
 
-from core.scopes import extract_user_scopes_from_headers
-
 logger = logging.getLogger(__name__)
 
 
