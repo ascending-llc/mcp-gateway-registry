@@ -7,8 +7,6 @@ from enum import Enum
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
 
-from packages.db import LLMProvider
-
 
 class HealthStatus(str, Enum):
     """Health status constants for services."""
@@ -26,7 +24,7 @@ class HealthStatus(str, Enum):
     def get_healthy_statuses(cls) -> List[str]:
         """Get list of statuses that should be considered healthy for nginx inclusion."""
         return [cls.HEALTHY, cls.HEALTHY_AUTH_EXPIRED]
-    
+
     @classmethod
     def is_healthy(cls, status: str) -> bool:
         """Check if a status should be considered healthy."""
@@ -35,7 +33,7 @@ class HealthStatus(str, Enum):
 
 class TransportType(str, Enum):
     """Supported transport types for MCP servers."""
-    
+
     STREAMABLE_HTTP = "streamable-http"
     SSE = "sse"
 
@@ -81,7 +79,7 @@ class RegistryConstants(BaseModel):
     WEAVIATE_HOST: str = os.getenv("WEAVIATE_HOST", "weaviate")
     WEAVIATE_PORT: int = int(os.getenv("WEAVIATE_PORT", "8080"))
     WEAVIATE_API_KEY: Optional[str] = os.getenv("WEAVIATE_API_KEY", "test-secret-key")
-    WEAVIATE_EMBEDDINGS_PROVIDER:LLMProvider= os.getenv("WEAVIATE_EMBEDDINGS_PROVIDER","bedrock")
+    WEAVIATE_EMBEDDINGS_PROVIDER: str = os.getenv("WEAVIATE_EMBEDDINGS_PROVIDER", "bedrock")
 
     WEAVIATE_SESSION_POOL_CONNECTIONS: int = 20  # Maximum connections
     WEAVIATE_SESSION_POOL_MAXSIZE: int = 100  # Connection pool size
@@ -93,6 +91,7 @@ class RegistryConstants(BaseModel):
     AWS_SECRET_ACCESS_KEY: str = os.getenv("AWS_SECRET_ACCESS_KEY")
     AWS_SESSION_TOKEN: str = os.getenv("AWS_SESSION_TOKEN")
     AWS_REGION: str = os.getenv("AWS_REGION")
+
 
 # Global instance
 REGISTRY_CONSTANTS = RegistryConstants()

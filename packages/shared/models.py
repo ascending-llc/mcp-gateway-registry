@@ -1,108 +1,144 @@
 import json
-from typing import List
-from packages.db import BatchResult
-from packages.db import TextField, TextArrayField, BooleanField, Model
-from weaviate.classes.config import VectorDistances
+import uuid
+from typing import List, Dict, Any
+from langchain_core.documents import Document
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-class McpTool(Model):
-    """
-    mcp Tool model for vector search.
-    """
+class McpTool:
+    COLLECTION_NAME = "MCP_GATEWAY"
 
-    # Tool identification
-    tool_name = TextField(
-        description="Tool name",
-        index_filterable=True,
-        index_searchable=True
-    )
-
-    server_path = TextField(
-        description="Server path (e.g., /weather)",
-        index_filterable=True,
-        index_searchable=True
-    )
-
-    server_name = TextField(
-        description="Server display name",
-        index_filterable=True,
-        index_searchable=True
-    )
-
-    entity_type = TextArrayField(
-        description="Entity types for multi-type search support (e.g., ['mcp_server', 'tool'], ['a2a_agent', 'tool'], or ['all']). Default is ['all'].",
-        index_filterable=True,
-        index_searchable=True
-    )
-
-    # Tool descriptions
-    description_main = TextField(
-        description="Main tool description",
-        index_filterable=False,
-        index_searchable=True
-    )
-
-    description_args = TextField(
-        description="Tool arguments description",
-        index_filterable=False,
-        index_searchable=True
-    )
-
-    description_returns = TextField(
-        description="Tool returns description",
-        index_filterable=False,
-        index_searchable=True
-    )
-
-    description_raises = TextField(
-        description="Tool raises description",
-        index_filterable=False,
-        index_searchable=True
-    )
-
-    # Schema and metadata
-    schema_json = TextField(
-        description="Tool JSON schema as string",
-        index_filterable=False,
-        index_searchable=False,
-        skip_vectorization=True
-    )
-
-    tags = TextArrayField(
-        description="Server tags",
-        index_filterable=True,
-        index_searchable=True,
-        skip_vectorization=True
-    )
-
-    is_enabled = BooleanField(
-        description="Whether the service is enabled",
-        index_filterable=True,
-    )
-
-    # Combined searchable text for better semantic search
-    combined_text = TextField(
-        description="Combined searchable text for semantic search",
-        index_filterable=False,
-        index_searchable=True
-    )
-
-    class Meta:
+    def __init__(
+            self,
+            tool_name: str,
+            server_path: str,
+            server_name: str,
+            entity_type: List[str] = None,
+            description_main: str = "",
+            description_args: str = "",
+            description_returns: str = "",
+            description_raises: str = "",
+            schema_json: str = "{}",
+            tags: List[str] = None,
+            is_enabled: bool = True,
+            content: str = "",
+            id: str = "",
+    ):
         """
-        Model metadata configuration.
-        
-        Configures the collection to use AWS Bedrock (text2vec-aws) for embeddings.
-        The vectorizer will be automatically configured based on the EMBEDDINGS_PROVIDER
-        environment variable (should be set to 'bedrock').
+        Initialize MCP Tool instance.
+
+        Args:
+            tool_name: Tool name
+            server_path: Server path (e.g., /weather)
+            server_name: Server display name
+            entity_type: Entity types for search filtering
+            description_main: Main tool description
+            description_args: Tool arguments description
+            description_returns: Tool returns description
+            description_raises: Tool raises description
+            schema_json: Tool JSON schema as string
+            tags: Server tags
+            is_enabled: Whether the service is enabled
+            content: Combined searchable text for semantic search
+            id: Unique identifier (auto-generated if not provided)
         """
-        collection_name = "MCP_GATEWAY"
-        vectorizer = "text2vec-aws"  # AWS Bedrock embeddings
-        vector_index_config = type('VectorIndexConfig', (), {
-            'distance': VectorDistances.COSINE
-        })()
+        self.id = id or str(uuid.uuid4())
+        self.tool_name = tool_name
+        self.server_path = server_path
+        self.server_name = server_name
+        self.entity_type = entity_type or ["all"]
+        self.description_main = description_main
+        self.description_args = description_args
+        self.description_returns = description_returns
+        self.description_raises = description_raises
+        self.schema_json = schema_json
+        self.tags = tags or []
+        self.is_enabled = is_enabled
+        self.content = content
+
+    def to_document(self) -> Document:
+        """
+        Convert the MCP Tool instance to a LangChain Document for vector storage.
+
+        Returns:
+            Document: LangChain Document object
+        """
+        # Create content for vectorization (combined searchable text)
+        if not self.content:
+            self._generate_content()
+
+        metadata = {
+            'tool_name': self.tool_name,
+            'server_path': self.server_path,
+            'server_name': self.server_name,
+            'entity_type': self.entity_type,
+            'description_main': self.description_main,
+            'description_args': self.description_args,
+            'description_returns': self.description_returns,
+            'description_raises': self.description_raises,
+            'schema_json': self.schema_json,
+            'tags': self.tags,
+            'is_enabled': self.is_enabled,
+            'collection': self.COLLECTION_NAME
+        }
+        return Document(
+            page_content=self.content,
+            metadata=metadata,
+            id=self.id
+        )
+
+    def _generate_content(self) -> None:
+        """
+        Generate combined searchable text for semantic search.
+
+        Note: combined text
+        """
+        combined_parts = [
+            f"Tool: {self.tool_name}",
+            f"Server: {self.server_name} ({self.server_path})",
+            f"Description: {self.description_main}",
+        ]
+        if self.description_args:
+            combined_parts.append(f"Arguments: {self.description_args}")
+        if self.description_returns:
+            combined_parts.append(f"Returns: {self.description_returns}")
+        if self.tags:
+            combined_parts.append(f"Tags: {', '.join(self.tags)}")
+
+        self.content = " | ".join(combined_parts)
+
+    @classmethod
+    def from_document(cls, document: Document) -> 'McpTool':
+        """
+        Create MCP Tool instance from LangChain Document.
+
+        Args:
+            document: LangChain Document object
+
+        Returns:
+            McpTool: MCP Tool instance
+        """
+        metadata = document.metadata
+
+        # 从 Document.id 属性读取 id，而不是从 metadata 中读取
+        return cls(
+            id=document.id if hasattr(document, 'id') and document.id else metadata.get('id'),
+            tool_name=metadata.get('tool_name', ''),
+            server_path=metadata.get('server_path', ''),
+            server_name=metadata.get('server_name', ''),
+            entity_type=metadata.get('entity_type', ['all']),
+            # metadata 中使用的是 'content' 键，而不是 'description_main'
+            description_main=metadata.get('description_main', ''),
+            description_args=metadata.get('description_args', ''),
+            description_returns=metadata.get('description_returns', ''),
+            description_raises=metadata.get('description_raises', ''),
+            schema_json=metadata.get('schema_json', '{}'),
+            tags=metadata.get('tags', []),
+            is_enabled=metadata.get('is_enabled', True),
+            content=document.page_content
+        )
 
     @classmethod
     def create_from_tool_dict(
@@ -116,7 +152,7 @@ class McpTool(Model):
     ) -> 'McpTool':
         """
         Create MCPTool instance from raw tool dictionary.
-        
+
         Args:
             tool: Tool dictionary from server info
             service_path: Service path (e.g., /weather)
@@ -124,7 +160,7 @@ class McpTool(Model):
             server_tags: List of server tags
             is_enabled: Whether the service is enabled
             entity_type: Entity types for search filtering (default: ["all"])
-            
+
         Returns:
             MCPTool instance
         """
@@ -146,22 +182,8 @@ class McpTool(Model):
         schema = tool.get("schema", {})
         schema_json = json.dumps(schema) if schema else "{}"
 
-        # Create combined text for better semantic search
-        combined_parts = [
-            f"Tool: {tool_name}",
-            f"Server: {server_name} ({service_path})",
-            f"Description: {desc_main}",
-        ]
-        if desc_args:
-            combined_parts.append(f"Arguments: {desc_args}")
-        if desc_returns:
-            combined_parts.append(f"Returns: {desc_returns}")
-        if server_tags:
-            combined_parts.append(f"Tags: {', '.join(server_tags)}")
-
-        combined_text = " | ".join(combined_parts)
-
-        return cls(
+        # Create MCP Tool instance
+        mcp_tool = cls(
             tool_name=tool_name,
             server_path=service_path,
             server_name=server_name,
@@ -172,42 +194,39 @@ class McpTool(Model):
             description_raises=desc_raises,
             schema_json=schema_json,
             tags=server_tags,
-            is_enabled=is_enabled,
-            combined_text=combined_text
+            is_enabled=is_enabled
         )
+        mcp_tool._generate_content()
+        return mcp_tool
 
     @classmethod
-    def bulk_create_from_server_info(
+    def create_tools_from_server_info(
             cls,
             service_path: str,
             server_info: dict,
             is_enabled: bool = False
-    ):
+    ) -> List['McpTool']:
         """
-        Bulk create tools from server info dictionary.
-        
-        Returns BatchResult with complete error reporting (new in v2.0).
-        
+        Create list of McpTool instances from server info.
+
         Args:
-            service_path: Service path identifier
-            server_info: Server info with tool_list
+            service_path: Service path (e.g., /weather)
+            server_info: Server information dictionary containing tool_list
             is_enabled: Whether the service is enabled
-            
+
         Returns:
-            BatchResult with success/failure statistics
-            
+            List of McpTool instances
+
         Raises:
-            Exception: If bulk creation fails catastrophically
+            ValueError: If conversion fails for any tool
         """
         tool_list = server_info.get("tool_list", [])
         server_name = server_info.get("server_name", "")
         server_tags = server_info.get("tags", [])
-        # Extract entity_type from server_info, default to "mcp_server" for backward compatibility
         entity_type = server_info.get("entity_type", "mcp_server")
-        
-        # For agents without tools, create a virtual tool to store agent information
+
+        # Handle agents without tools - create virtual tool
         if not tool_list and entity_type == "a2a_agent":
-            # Create a virtual tool representing the agent itself
             agent_description = server_info.get("description", "")
             skills = server_info.get("skills", [])
             skills_text = ""
@@ -216,7 +235,7 @@ class McpTool(Model):
                     skills_text = ", ".join([skill.get("name", "") for skill in skills])
                 else:
                     skills_text = ", ".join([str(skill) for skill in skills])
-            
+
             tool_list = [{
                 "name": server_name or service_path.strip("/"),
                 "description": agent_description,
@@ -225,95 +244,62 @@ class McpTool(Model):
                 },
                 "schema": {}
             }]
-            logger.info(f"Created virtual tool for agent '{service_path}' (no tools in server_info)")
-        
-        if not tool_list:
-            logger.warning(f"No tools in server_info for '{service_path}'")
-            return BatchResult(total=0, successful=0, failed=0, errors=[])
 
-        # For tools, we store the entity_type to support multi-type search
-        # If entity_type is "mcp_server", we also include "tool" in entity_type
+        if not tool_list:
+            return []
+
+        # Determine entity_type list
         if entity_type == "mcp_server":
             entity_type_list = ["mcp_server", "tool"]
         elif entity_type == "a2a_agent":
             entity_type_list = ["a2a_agent", "tool"]
         else:
-            # Default to "all" if entity_type is not recognized
             entity_type_list = ["all"]
 
-        logger.info(f"Converting {len(tool_list)} tools to MCPTool instances for '{service_path}' (entity_type: {entity_type_list})")
-
-        # Convert all tools to MCPTool instances
-        instances = []
-        conversion_errors = []
-
-        for i, tool in enumerate(tool_list):
+        # Convert to McpTool instances
+        tools = []
+        for tool_dict in tool_list:
             try:
                 mcp_tool = cls.create_from_tool_dict(
-                    tool=tool,
+                    tool=tool_dict,
                     service_path=service_path,
                     server_name=server_name,
                     server_tags=server_tags,
                     is_enabled=is_enabled,
                     entity_type=entity_type_list
                 )
-                instances.append(mcp_tool)
-                logger.debug(f"  Converted tool {i + 1}/{len(tool_list)}: {tool.get('name', 'unnamed')}")
-            except ValueError as e:
-                logger.error(f"Skipping invalid tool in '{service_path}': {e}")
-                conversion_errors.append({
-                    'uuid': None,
-                    'message': f"Conversion failed: {e}"
-                })
+                tools.append(mcp_tool)
             except Exception as e:
-                logger.error(f"Unexpected error converting tool in '{service_path}': {e}")
-                conversion_errors.append({
-                    'uuid': None,
-                    'message': f"Unexpected error: {e}"
-                })
-
-        # Batch create with error reporting
-        if instances:
-            logger.info(f"Bulk creating {len(instances)} MCPTool instances for '{service_path}'")
-            try:
-                # Returns BatchResult (new in v2.0)
-                result = cls.objects.bulk_create(instances, batch_size=100)
-
-                logger.info(
-                    f"Bulk create result: {result.successful}/{result.total} successful "
-                    f"({result.success_rate:.1f}%)"
-                )
-
-                if result.has_errors:
-                    logger.warning(f"⚠️  {result.failed} tools failed:")
-                    for error in result.errors[:5]:
-                        logger.warning(f"   - {error}")
-
-                # Combine conversion errors with creation errors
-                all_errors = conversion_errors + result.errors
-
-                return BatchResult(
-                    total=len(tool_list),
-                    successful=result.successful,
-                    failed=len(all_errors),
-                    errors=all_errors
-                )
-
-            except Exception as e:
-                logger.error(f"Bulk create failed for '{service_path}': {e}", exc_info=True)
+                logger.error(f"Failed to convert tool {tool_dict.get('name', 'unknown')}: {e}")
                 raise
-        else:
-            logger.warning(f"No valid tool instances to create for '{service_path}'")
 
-            return BatchResult(
-                total=len(tool_list),
-                successful=0,
-                failed=len(conversion_errors),
-                errors=conversion_errors
-            )
+        return tools
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert MCP Tool instance to dictionary.
+
+        Returns:
+            Dict[str, Any]: Dictionary representation
+        """
+        return {
+            'id': self.id,
+            'tool_name': self.tool_name,
+            'server_path': self.server_path,
+            'server_name': self.server_name,
+            'entity_type': self.entity_type,
+            'description_main': self.description_main,
+            'description_args': self.description_args,
+            'description_returns': self.description_returns,
+            'description_raises': self.description_raises,
+            'schema_json': self.schema_json,
+            'tags': self.tags,
+            'is_enabled': self.is_enabled,
+            'content': self.content
+        }
 
     def __str__(self):
-        return f"<MCPTool: {self.tool_name} ({self.server_path})>"
+        return f"<McpTool: {self.tool_name} ({self.server_path})>"
 
     def __repr__(self):
         return self.__str__()

@@ -1,16 +1,28 @@
-from packages.db import DirectSearchManager, DirectDataManager, get_weaviate_client
+from db import initialize_database
+import dotenv
+from shared import McpTool
+from weaviate.classes.query import Filter
 
-client = get_weaviate_client()
-search_mgr = DirectSearchManager(client)
-data_mgr = DirectDataManager(client)
+dotenv.load_dotenv()
 
-# Search any collection directly, no model definition needed
-results = search_mgr.smart_search(
-    collection_name="MCP_GATEWAY",
-    query="ool: print_stock_data | Server: Financial Info Proxy (/fininfo)",
-    limit=10,
-    field_filters={"is_enabled": True},
-    list_filters=None,
-    alpha=0.5)
+db = initialize_database()
 
-print(results)
+try:
+    mcp_tools = db.for_model(McpTool)
+    filters = Filter.by_property("server_path").equal("/currenttime/")
+    results = mcp_tools.filter(filters=filters)
+
+    aa = mcp_tools.delete_by_filter(filters=filters)
+    print(aa)
+
+    print(f"Found {len(results)} tools:")
+    for tool in results:
+        print(f"  - {tool.tool_name} ({tool.server_path})")
+finally:
+    db.close()
+    print("\n✅ Database connection closed")
+
+
+
+
+

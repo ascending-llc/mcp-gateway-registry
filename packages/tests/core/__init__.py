@@ -1,4 +1,0 @@
-"""
-Core module test suite.
-"""
-
