@@ -23,63 +23,34 @@ async def load_scopes_config() -> Dict[str, Any]:
         Dict containing the parsed scopes configuration
     """
     global _scopes_config
-    
+
     if _scopes_config is not None:
         return _scopes_config
-    
+
     try:
         from config import settings
         scopes_path = settings.scopes_config_path
-        
+
         if not scopes_path.exists():
             logger.warning(f"Scopes file not found at {scopes_path}")
             return {}
-        
+
         with open(scopes_path, 'r') as f:
             _scopes_config = yaml.safe_load(f)
-        
+
         logger.info(f"Successfully loaded scopes configuration from {scopes_path}")
         return _scopes_config
-        
+
     except Exception as e:
         logger.error(f"Failed to load scopes configuration: {e}")
         return {}
 
 
-def extract_user_scopes_from_headers(headers: Dict[str, str]) -> List[str]:
-    """
-    Extract user scopes from HTTP headers.
-    
-    Args:
-        headers: Dictionary of HTTP headers
-        
-    Returns:
-        List of scopes the user has access to
-    """
-    scopes = []
-    
-    # Check for scopes in various header formats
-    scope_headers = ['x-scopes', 'x-user-scopes', 'scopes']
-    
-    for header_name in scope_headers:
-        header_value = headers.get(header_name) or headers.get(header_name.lower())
-        if header_value:
-            # Scopes might be comma-separated or space-separated
-            if ',' in header_value:
-                scopes.extend([s.strip() for s in header_value.split(',')])
-            else:
-                scopes.extend([s.strip() for s in header_value.split()])
-            break
-    
-    logger.info(f"Extracted scopes from headers: {scopes}")
-    return scopes
-
-
 def check_tool_access(
-    server_name: str, 
-    tool_name: str, 
-    user_scopes: List[str], 
-    scopes_config: Dict[str, Any]
+        server_name: str,
+        tool_name: str,
+        user_scopes: List[str],
+        scopes_config: Dict[str, Any]
 ) -> bool:
     """
     Check if a user has access to a specific tool based on their scopes.
@@ -119,7 +90,7 @@ def check_tool_access(
                         if tool_name in tools:
                             logger.info(f"Access granted: {server_name}.{tool_name} via scope {user_scope}")
                             return True
-    
+
     # Check group mappings for additional access
     group_mappings = scopes_config.get('group_mappings', {})
     logger.debug(f"Checking group mappings: {group_mappings}")
