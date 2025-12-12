@@ -1,85 +1,165 @@
-# Packages
+# MCP Gateway Registry - Packages
 
-## Overview
+Unified vector database interface with three-layer architecture.
 
-The `packages` directory contains shared Python libraries and utilities used as common dependencies across various services in the MCP Gateway Registry project. These packages provide reusable functionality that can be imported and used by multiple services, promoting code reuse and consistency.
+## Architecture
 
-## Purpose
-
-These packages serve as the foundation for building services within the ecosystem. By centralizing common functionality, we:
-
-- **Reduce code duplication** - Common patterns and utilities are implemented once
-- **Ensure consistency** - All services use the same interfaces and implementations
-- **Simplify maintenance** - Updates and fixes are applied in one place
-- **Improve developer experience** - Clear, documented APIs for shared functionality
-
-## Available Packages
-
-### `db` - Weaviate ORM and Database Utilities
-
-A Django-like ORM for Weaviate vector database with simplified configuration and query building.
-
-**Key Features:**
-- Django-style model definitions with field validation
-- Simplified client configuration with environment-based setup
-- Comprehensive query building with filter chaining
-- Batch operations with error reporting
-- Collection management utilities
-
-For detailed documentation, usage examples, and API reference, see: [packages/db/README.md](./db/README.md)
-
-### `shared` - Common Types and Models
-
-Shared enumerations, data models, and types used across multiple services.
-
-**Key Features:**
-- Common enumerations (e.g., `ToolDiscoveryMode`)
-- Shared data models (e.g., `McpTool` for vector search)
-- Type definitions used by multiple services
-- Centralized schema definitions
-
-**Contents:**
-- `enums.py` - Shared enumeration types
-- `models.py` - Shared data model definitions
-- Common type definitions and constants
-
-This package provides a single source of truth for types and models that need to be consistent across different services.
-
-## Usage
-
-To use these packages in your service:
-
-1. **Add dependency** - Include the package in your service's `pyproject.toml`
-2. **Import modules** - Use standard Python imports to access functionality
-3. **Follow patterns** - Adhere to the established patterns and conventions
-
-Example import for `db` package:
-```python
-from packages.db import Model, TextField, init_weaviate, get_weaviate_client
-from packages.db.search.filters import Q
+```
+Repository (Type-safe Model API)
+    ↓
+VectorStoreAdapter (Proxy + Extension)
+    ↓
+LangChain VectorStore (Native DB)
 ```
 
-Example import for `shared` package:
+**Key principles:**
+- Maximize LangChain utilization
+- Native filter support (no conversion)
+- Direct method proxying
+- Minimal abstraction
+
+## Quick Start
+
 ```python
-from packages.shared.enums import ToolDiscoveryMode
-from packages.shared.models import McpTool
+from db import initialize_database
+from shared.models import McpTool
+
+# Initialize
+db = initialize_database()
+tools_repo = db.for_model(McpTool)
+
+# Search with native filters
+if db.get_info()['adapter_type'] == 'WeaviateStore':
+    from weaviate.classes.query import Filter
+    filters = Filter.by_property("is_enabled").equal(True)
+else:  # Chroma
+    filters = {"is_enabled": True}
+
+results = tools_repo.search("weather api", filters=filters, k=10)
+
+# Close
+db.close()
 ```
 
-## Development
+## Structure
 
-When developing new packages or modifying existing ones:
+```
+packages/
+├── db/                    # Vector database layer
+│   ├── client.py          # DatabaseClient (facade)
+│   ├── repository.py      # Generic Repository[T]
+│   ├── adapters/
+│   │   ├── adapter.py     # VectorStoreAdapter (base)
+│   │   ├── factory.py     # Factory + registry
+│   │   └── create/        # Creator functions
+│   ├── backends/
+│   │   ├── weaviate_store.py  # Weaviate implementation
+│   │   └── chroma_store.py    # Chroma implementation
+│   ├── config/            # Configuration classes
+│   └── enum/              # Enums and exceptions
+├── shared/
+│   ├── models.py          # McpTool model
+│   └── batch_result.py    # BatchResult
+└── registry/
+    └── search/
+        └── external_service.py  # Search service
+```
 
-1. **Maintain backward compatibility** - Avoid breaking changes when possible
-2. **Add comprehensive tests** - Ensure reliability across all consuming services
-3. **Update documentation** - Keep README files and docstrings current
-4. **Consider service impact** - Changes may affect multiple services
+## Key Features
 
-## Adding New Packages
+### 1. Repository API (Recommended)
 
-To add a new shared package:
+```python
+repo = db.for_model(McpTool)
 
-1. Create a new subdirectory under `packages/`
-2. Include a `pyproject.toml` with proper metadata
-3. Add comprehensive documentation in a `README.md`
-4. Implement the functionality with clear, reusable APIs
-5. Add tests in the `packages/tests/` directory
+# CRUD
+tool_id = repo.save(tool)
+tool = repo.get(tool_id)
+repo.update(tool)
+repo.delete(tool_id)
+
+# Search
+results = repo.search("query", filters=filters, k=10)
+results = repo.filter(filters, limit=50)
+
+# Bulk
+result = repo.bulk_save([tool1, tool2])
+count = repo.delete_by_filter(filters)
+```
+
+### 2. Smart Filter Conversion
+
+**Dict format (auto-converted):**
+```python
+# Simple - works with any database
+filters = {"is_enabled": True, "points": {"$gt": 500}}
+results = repo.search("query", filters=filters)
+```
+
+**Native format (for complex queries):**
+```python
+# Weaviate
+from weaviate.classes.query import Filter
+filters = Filter.by_property("is_enabled").equal(True)
+
+# Chroma (dict is native)
+filters = {"$and": [{"is_enabled": True}, {"points": {"$gt": 500}}]}
+```
+
+**Conversion happens in VectorStoreAdapter** - business code stays clean.
+
+### 3. Extended Features
+
+```python
+adapter = db.adapter
+
+# Get by ID
+doc = adapter.get_by_id("doc-id-123")
+
+# Filter by metadata (no vector search)
+docs = adapter.filter_by_metadata(filters, limit=50)
+
+# List collections
+collections = adapter.list_collections()
+
+# Get VectorStore
+store = adapter.get_vector_store("MCP_GATEWAY")
+```
+
+## Configuration
+
+```bash
+# Required
+VECTOR_STORE_TYPE=weaviate  # or chroma
+EMBEDDING_PROVIDER=aws_bedrock  # or openai
+
+# Weaviate
+WEAVIATE_HOST=localhost
+WEAVIATE_PORT=8099
+
+# AWS Bedrock
+AWS_REGION=us-east-1
+EMBEDDING_MODEL=amazon.titan-embed-text-v2:0
+
+# OpenAI
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=text-embedding-3-small
+```
+
+## Documentation
+
+- [db/README.md](./db/README.md) - Complete API reference
+- [db/ARCHITECTURE.md](./db/ARCHITECTURE.md) - Design details (if exists)
+- [db/FILTERS.md](./db/FILTERS.md) - Filter guide (if exists)
+
+## Testing
+
+```bash
+uv run pytest tests/ -v
+```
+
+## Extending
+
+See [db/README.md#extending-the-system](./db/README.md#extending-the-system) for:
+- Adding new vector stores
+- Adding new embedding providers

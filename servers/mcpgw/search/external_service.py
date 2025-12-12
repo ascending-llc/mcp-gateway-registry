@@ -1,97 +1,73 @@
-"""
-External Vector Search Service for MCPGW
-
-This implementation uses direct database search via McpTool.objects.search_by_type()
-instead of HTTP API calls for better performance and simplicity.
-"""
-
 import logging
 import json
 from typing import List, Dict, Any, Optional
-
-from packages.db import (
-    ConnectionConfig,
-    init_weaviate,
-    SearchType
-)
+from packages.db import initialize_database
 from packages.shared.models import McpTool
 from .base import VectorSearchService
-from config import settings
 
 logger = logging.getLogger(__name__)
 
 
 class ExternalVectorSearchService(VectorSearchService):
     """
-    External vector search using Weaviate with multiple search types.
+    External vector search using three-layer architecture.
+    
+    Supports both Weaviate and Chroma with native filter formats.
     """
 
     def __init__(self):
-        """
-        Initialize vector search service using new config system.
-        """
+        """Initialize vector search service using DatabaseClient."""
         try:
-            # Use new configuration system
-            connection = ConnectionConfig(
-                host=settings.WEAVIATE_HOST,
-                port=settings.WEAVIATE_PORT,
-                api_key=settings.WEAVIATE_API_KEY
-            )
-            self._client = init_weaviate(connection=connection)
-            self._initialized = False
-            logger.info(
-                f"Vector search service initialized with connection to "
-                f"{connection.host}:{connection.port}"
-            )
+            self._client = initialize_database()
+            self._mcp_tools = self._client.for_model(McpTool)
+            self._adapter_type = self._client.get_info().get('adapter_type', 'Unknown')
+            self._initialized = True
+            logger.info(f"Vector search service initialized with {self._adapter_type}")
             
         except Exception as e:
             logger.error(f"Failed to initialize vector search: {e}")
             self._client = None
+            self._mcp_tools = None
+            self._adapter_type = None
             self._initialized = False
 
     async def initialize(self) -> None:
         """
-        Initialize Weaviate and ensure MCPTool collection exists.
+        Initialize and verify database connection.
         
-        Verifies connection and creates collection if needed.
+        Checks adapter status and collection availability.
         """
         if not self._client:
             logger.error("Client not initialized")
             self._initialized = False
-            raise Exception("Weaviate client not initialized")
+            raise Exception("DatabaseClient not initialized")
         
         try:
-            # Check connection
-            if not self._client.is_ready():
-                logger.warning("Client not ready, connecting...")
-                self._client.ensure_connection()
+            if not self._client.is_initialized():
+                raise Exception("DatabaseClient not initialized")
             
-            # Verify server responds
-            if not self._client.ping():
-                raise ConnectionError("Weaviate server not responding")
+            # Get adapter info
+            adapter = self._client.adapter
+            collection_name = McpTool.COLLECTION_NAME
             
-            # Ensure collection exists
-            if not McpTool.collection_exists():
-                logger.info("Creating MCPTool collection...")
-                if not McpTool.create_collection():
-                    raise RuntimeError("Failed to create MCPTool collection")
-                logger.info("MCPTool collection created")
-            else:
-                logger.info("MCPTool collection exists")
-                
-                try:
-                    # Get collection info
-                    info = McpTool.objects.get_collection_info()
-                    if info:
-                        # Get object count using QueryBuilder
-                        object_count = McpTool.objects.all().count()
-                        logger.info(
-                            f"   Collection has {object_count} tools, "
-                            f"{info.get('property_count', 0)} properties"
-                        )
-                except Exception as e:
-                    logger.debug(f"Could not get collection stats: {e}")
-
+            # Check if collection exists
+            if hasattr(adapter, 'collection_exists'):
+                exists = adapter.collection_exists(collection_name)
+                if exists:
+                    logger.info(f"Collection '{collection_name}' exists")
+                else:
+                    logger.warning(f"Collection '{collection_name}' may not exist yet")
+            
+            # Try a simple filter query to verify
+            try:
+                test_results = self._mcp_tools.filter(
+                    filters={"is_enabled": True},  # Dict auto-converted
+                    limit=1
+                )
+                logger.info(f"Collection check: found {len(test_results)} tools")
+            except Exception as e:
+                logger.debug(f"Collection verification query failed: {e}")
+            
             self._initialized = True
             logger.info("Vector search initialized successfully")
             
@@ -106,103 +82,71 @@ class ExternalVectorSearchService(VectorSearchService):
         tags: Optional[List[str]] = None,
         user_scopes: Optional[List[str]] = None,
         top_k_services: int = 3,
-        top_n_tools: int = 1,
-        search_type: SearchType = SearchType.HYBRID
+        top_n_tools: int = 10,
+        search_type: str = "semantic"
     ) -> List[Dict[str, Any]]:
         """
-        Search for tools with flexible search type selection.
+        Search for tools using Repository API.
         
-        Uses the unified search_by_type() method from QueryBuilder for
-        clean, type-safe search execution across all search types.
+        Uses native filters for optimal performance.
         
         Args:
             query: Search query text
-            tags: List of tags to filter by (uses contains_any logic)
-            user_scopes: User scopes for access control (currently not used)
-            top_k_services: Max services to consider (not used in direct DB search)
+            tags: List of tags to filter by
+            user_scopes: User scopes for access control (not implemented)
+            top_k_services: Max services (not used in new architecture)
             top_n_tools: Maximum number of tools to return
-            search_type: Type of search to execute (default: SearchType.HYBRID)
-                Available types:
-                - SearchType.BM25: Fast keyword/exact match search
-                - SearchType.NEAR_TEXT: Semantic similarity search  
-                - SearchType.HYBRID: Combined semantic + keyword (recommended)
-                - SearchType.FUZZY: Typo-tolerant search
-                - SearchType.FETCH_OBJECTS: Simple filtered fetch (no search)
+            search_type: Type of search ("semantic", "hybrid", "keyword")
         
         Returns:
-            List of tool dictionaries in mcpgw format with fields:
-            - tool_name: Name of the tool
-            - tool_parsed_description: Parsed description object
-            - tool_schema: JSON schema for the tool
-            - service_path: Path to the service
-            - service_name: Display name of the service
-            - supported_transports: List of supported transports
-            - overall_similarity_score: Search relevance score (if available)
+            List of tool dictionaries in mcpgw format
             
         Example:
-            from packages.db import SearchType
-            
-            # Hybrid search (default, best for most cases)
+            # Semantic search with filters
             results = await service.search_tools(
                 query="get weather data",
-                tags=["weather", "api"],
-                top_n_tools=5,
-                search_type=SearchType.HYBRID
+                tags=["weather"],
+                top_n_tools=5
             )
-            
-            # BM25 for exact keyword matching
-            results = await service.search_tools(
-                query="get_weather",
-                search_type=SearchType.BM25
-            )
-            
-            # Semantic for natural language
-            results = await service.search_tools(
-                query="I need to check the weather forecast",
-                search_type=SearchType.NEAR_TEXT
-            )
-            
-            # Fuzzy for typo tolerance
-            results = await service.search_tools(
-                query="wether forcast",  # typos
-                search_type=SearchType.FUZZY
-            )
-        
-        Note:
-            This method leverages the unified search_by_type() from QueryBuilder,
-            eliminating code duplication across model-based and collection-based searches.
         """
         if not self._initialized:
             raise Exception("Vector search service not initialized")
 
-        # Input validation
         if not query and not tags:
             raise Exception("At least one of 'query' or 'tags' must be provided")
         
         logger.info(
-            f"Searching tools: type={search_type.value}, query='{query}', "
-            f"tags={tags}, limit={top_n_tools}"
+            f"Searching tools: query='{query}', tags={tags}, limit={top_n_tools}"
         )
-        
         try:
-            # Build query with filters
-            query_builder = McpTool.objects.filter(is_enabled=True)
+            filter_conditions = {"is_enabled": True}
+            if query:
+                tools = self._mcp_tools.search(
+                    query=query,
+                    k=top_n_tools * 2,  # Get more for tag filtering
+                    filters=filter_conditions  # Dict auto-converted
+                )
+            else:
+                tools = self._mcp_tools.filter(
+                    filters=filter_conditions,  # Dict auto-converted
+                    limit=top_n_tools * 2
+                )
             
-            # Add tag filter if provided
+            # Apply tag filtering in-memory if needed
             if tags:
-                query_builder = query_builder.filter(tags__contains_any=tags)
+                filtered_tools = []
+                for tool in tools:
+                    tool_tags = tool.tags or []
+                    if any(tag in tool_tags for tag in tags):
+                        filtered_tools.append(tool)
+                tools = filtered_tools[:top_n_tools]
+            else:
+                tools = tools[:top_n_tools]
             
-            # Execute search using unified search_by_type method
-            results = query_builder.search_by_type(
-                search_type,
-                query=query,
-                alpha=0.7  # For hybrid search
-            ).limit(top_n_tools).all()
-            
-            logger.info(f"Search returned {len(results)} tools")
+            logger.info(f"Search returned {len(tools)} tools")
             
             # Convert to mcpgw format
-            formatted_tools = self._format_tools_for_mcpgw(results)
+            formatted_tools = self._format_tools_for_mcpgw(tools)
             
             logger.info(f"Returning {len(formatted_tools)} formatted tools")
             return formatted_tools
@@ -210,6 +154,7 @@ class ExternalVectorSearchService(VectorSearchService):
         except Exception as e:
             logger.error(f"Tool search failed: {e}", exc_info=True)
             raise
+    
 
     def _format_tools_for_mcpgw(self, tools: List[McpTool]) -> List[Dict[str, Any]]:
         """
@@ -272,4 +217,20 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             True if initialized and ready
         """
-        return self._initialized and self._client is not None and self._client.is_ready()
+        return self._initialized and self._client is not None and self._client.is_initialized()
+    
+    async def cleanup(self):
+        """Cleanup resources and close database connection."""
+        logger.info("Cleaning up vector search service")
+        
+        if self._initialized and self._client:
+            try:
+                self._client.close()
+                logger.info("Database connection closed")
+            except Exception as e:
+                logger.warning(f"Cleanup error: {e}")
+        
+        self._client = None
+        self._mcp_tools = None
+        self._initialized = False
+        logger.info("Vector search cleanup complete")
