@@ -282,7 +282,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
     def _parse_session_data(self, session_cookie: str) -> Optional[Dict[str, Any]]:
         try:
-            data = signer.loads(session_cookie, max_age=settings.session_max_age_seconds)
+            data = signer.loads(session_cookie, max_age=settings.SESSION_MAX_AGE_SECONDS)
             if not data.get('username'):
                 return None
             # Sets the default value for traditionally authenticated users (from the original get_user_session_data).

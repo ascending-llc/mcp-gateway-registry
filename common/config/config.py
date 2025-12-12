@@ -5,6 +5,7 @@
      Unified management of all configuration variables.
 """
 from pathlib import Path
+from typing import Optional
 
 from pydantic_settings import SettingsConfigDict, BaseSettings
 
@@ -14,7 +15,7 @@ BASE_DIR = Path(__file__).resolve().parent
 class SharedSettings(BaseSettings):
     DEBUG: bool = False
 
-    SECRET_KEY: str = None
+    SECRET_KEY: Optional[str] = None
     SESSION_COOKIE_NAME: str = "mcp_gateway_session"
     SESSION_OPENID_USER_ID: str = "openid_user_id"
     SESSION_OPENID_ACCESS_TOKEN: str = "openid_access_token"

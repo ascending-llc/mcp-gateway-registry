@@ -14,6 +14,25 @@ logger = logging.getLogger(__name__)
 # Initialize session signer
 signer = URLSafeTimedSerializer(settings.SECRET_KEY)
 
+def get_current_user_by_mid(request: Request) -> Dict[str, Any]:
+    """
+        Get current authenticated user from request state
+        This function replaces the need for Depends(enhanced_auth) or
+    Depends(nginx_proxied_auth) in route handlers.
+
+    Args:
+        request: FastAPI request object
+
+    Returns:
+        User context dictionary with all authentication details
+
+    Raises:
+        HTTPException: If user is not authenticated
+    """
+    if not hasattr(request.state, 'user') or not request.state.is_authenticated:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Authentication required")
+    return request.state.user
 
 def get_current_user(
     session: Annotated[str | None, Cookie(alias=settings.SESSION_COOKIE_NAME)] = None,
@@ -35,7 +54,7 @@ def get_current_user(
         )
     
     try:
-        data = signer.loads(session, max_age=settings.session_max_age_seconds)
+        data = signer.loads(session, max_age=settings.SESSION_MAX_AGE_SECONDS)
         username = data.get('username')
         
         if not username:

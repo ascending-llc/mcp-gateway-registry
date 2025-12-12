@@ -38,7 +38,7 @@ class TestAuthRoutes:
         with patch('registry.auth.routes.settings') as mock_settings:
             mock_settings.auth_server_url = "http://auth.example.com"
             mock_settings.session_cookie_name = "session"
-            mock_settings.session_max_age_seconds = 3600
+            mock_settings.SESSION_MAX_AGE_SECONDS = 3600
             mock_settings.templates_dir = "/templates"
             yield mock_settings
 
