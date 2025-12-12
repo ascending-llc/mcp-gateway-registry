@@ -20,16 +20,16 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 import httpx
-
-from ..auth.dependencies import nginx_proxied_auth, SCOPES_CONFIG
 from ..services.agent_service import agent_service
 from ..schemas.agent_models import (
     AgentCard,
     AgentInfo,
+    AgentProvider,
     AgentRegistrationRequest,
 )
+from ..auth.dependencies import CurrentUser
 from ..core.config import settings
-
+from ..search.service import faiss_service
 
 # Configure logging with basicConfig
 logging.basicConfig(
@@ -82,7 +82,7 @@ def _normalize_path(
 def _check_agent_permission(
     permission: str,
     agent_name: str,
-    user_context: Dict[str, Any],
+    user_context: CurrentUser,
 ) -> None:
     """
     Check if user has permission for agent operation.
@@ -114,7 +114,7 @@ def _check_agent_permission(
 
 def _filter_agents_by_access(
     agents: List[AgentCard],
-    user_context: Dict[str, Any],
+    user_context: CurrentUser,
 ) -> List[AgentCard]:
     """
     Filter agents based on user access permissions.
@@ -166,7 +166,7 @@ def _filter_agents_by_access(
 @router.post("/agents/register")
 async def register_agent(
     request: AgentRegistrationRequest,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)],
+    user_context: CurrentUser,
 ):
     """
     Register a new A2A agent in the registry.
@@ -212,6 +212,14 @@ async def register_agent(
 
     tag_list = [tag.strip() for tag in request.tags.split(",") if tag.strip()]
 
+    # Convert provider dict to AgentProvider object if provided
+    provider_obj = None
+    if request.provider:
+        provider_obj = AgentProvider(
+            organization=request.provider.get("organization", ""),
+            url=request.provider.get("url", ""),
+        )
+
     try:
         from ..utils.agent_validator import agent_validator
 
@@ -222,7 +230,7 @@ async def register_agent(
             url=request.url,
             path=path,
             version=request.version,
-            provider=request.provider,
+            provider=provider_obj,
             security_schemes=request.security_schemes or {},
             skills=request.skills or [],
             streaming=request.streaming,
@@ -266,8 +274,6 @@ async def register_agent(
             },
         )
 
-    from ..search.service import faiss_service
-
     is_enabled = agent_service.is_agent_enabled(path)
     await faiss_service.add_or_update_entity(
         path,
@@ -306,7 +312,7 @@ async def list_agents(
     query: Optional[str] = Query(None, description="Search query string"),
     enabled_only: bool = Query(False, description="Show only enabled agents"),
     visibility: Optional[str] = Query(None, description="Filter by visibility"),
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+    user_context: CurrentUser = None,
 ):
     """
     List all agents filtered by user permissions.
@@ -320,6 +326,14 @@ async def list_agents(
     Returns:
         List of agent info objects
     """
+    # CRITICAL DIAGNOSTIC: Log user_context received by endpoint (for comparison with /servers)
+    logger.debug(f"[GET_AGENTS_DEBUG] Received user_context: {user_context}")
+    logger.debug(f"[GET_AGENTS_DEBUG] user_context type: {type(user_context)}")
+    if user_context:
+        logger.debug(f"[GET_AGENTS_DEBUG] Username: {user_context.get('username', 'NOT PRESENT')}")
+        logger.debug(f"[GET_AGENTS_DEBUG] Scopes: {user_context.get('scopes', 'NOT PRESENT')}")
+        logger.debug(f"[GET_AGENTS_DEBUG] Auth method: {user_context.get('auth_method', 'NOT PRESENT')}")
+
     all_agents = agent_service.get_all_agents()
 
     accessible_agents = _filter_agents_by_access(all_agents, user_context)
@@ -340,6 +354,12 @@ async def list_agents(
         )
 
         if not search_query or search_query in searchable_text:
+            # Extract streaming capability from agent capabilities dict
+            streaming = agent.capabilities.get("streaming", False) if agent.capabilities else False
+
+            # Extract provider organization name (provider is AgentProvider object)
+            provider_name = agent.provider.organization if agent.provider else None
+
             agent_info = AgentInfo(
                 name=agent.name,
                 description=agent.description,
@@ -350,8 +370,8 @@ async def list_agents(
                 num_skills=len(agent.skills),
                 num_stars=agent.num_stars,
                 is_enabled=agent_service.is_agent_enabled(agent.path),
-                provider=agent.provider,
-                streaming=agent.streaming,
+                provider=provider_name,
+                streaming=streaming,
                 trust_level=agent.trust_level,
             )
             filtered_agents.append(agent_info)
@@ -370,7 +390,7 @@ async def list_agents(
 @router.get("/agents/{path:path}")
 async def get_agent(
     path: str,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)],
+    user_context: CurrentUser,
 ):
     """
     Get a single agent by path.
@@ -415,7 +435,7 @@ async def get_agent(
 @router.post("/agents/{path:path}/health")
 async def check_agent_health(
     path: str,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)],
+    user_context: CurrentUser,
 ):
     """Perform a live /ping health check against an agent endpoint."""
     path = _normalize_path(path)
@@ -494,7 +514,7 @@ async def check_agent_health(
 async def update_agent(
     path: str,
     request: AgentRegistrationRequest,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)],
+    user_context: CurrentUser,
 ):
     """
     Update an existing agent card.
@@ -589,8 +609,6 @@ async def update_agent(
             content={"detail": "Failed to save updated agent data"},
         )
 
-    from ..search.service import faiss_service
-
     is_enabled = agent_service.is_agent_enabled(path)
     await faiss_service.add_or_update_entity(
         path,
@@ -610,7 +628,7 @@ async def update_agent(
 @router.delete("/agents/{path:path}")
 async def delete_agent(
     path: str,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)],
+    user_context: CurrentUser,
 ):
     """
     Delete an agent from the registry.
@@ -656,8 +674,6 @@ async def delete_agent(
             content={"detail": "Failed to delete agent"},
         )
 
-    from ..search.service import faiss_service
-
     await faiss_service.remove_entity(path)
 
     logger.info(
@@ -674,7 +690,7 @@ async def delete_agent(
 async def toggle_agent(
     path: str,
     enabled: bool,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)],
+    user_context: CurrentUser,
 ):
     """
     Enable or disable an agent.
@@ -711,8 +727,6 @@ async def toggle_agent(
             content={"detail": "Failed to toggle agent state"},
         )
 
-    from ..search.service import faiss_service
-
     await faiss_service.add_or_update_entity(
         path,
         agent_card.model_dump(),
@@ -737,7 +751,7 @@ async def discover_agents_by_skills(
     skills: List[str],
     tags: Optional[List[str]] = None,
     max_results: int = Query(10, ge=1, le=100),
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+    user_context: CurrentUser = None,
 ):
     """
     Discover agents by required skills.
@@ -845,7 +859,7 @@ async def discover_agents_by_skills(
 async def discover_agents_semantic(
     query: str,
     max_results: int = Query(10, ge=1, le=100),
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+    user_context: CurrentUser = None,
 ):
     """
     Discover agents using natural language semantic search.
@@ -872,8 +886,6 @@ async def discover_agents_semantic(
     logger.info(
         f"User {user_context['username']} semantic search for agents: {query}"
     )
-
-    from ..search.service import faiss_service
 
     try:
         results = await faiss_service.search_entities(

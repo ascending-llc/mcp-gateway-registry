@@ -203,9 +203,10 @@ class AgentService:
         settings.agents_dir.mkdir(parents=True, exist_ok=True)
 
         temp_agents = {}
-        agent_files = list(settings.agents_dir.glob("**/*.json"))
+        # Only load files matching *_agent.json pattern (excludes FAISS metadata files)
+        agent_files = list(settings.agents_dir.glob("**/*_agent.json"))
 
-        # Filter out state file from agent files
+        # Additionally filter out agent_state.json if it somehow matches pattern
         agent_files = [
             f for f in agent_files
             if f.name != settings.agent_state_file_path.name

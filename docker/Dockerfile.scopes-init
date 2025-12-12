@@ -1,0 +1,11 @@
+FROM busybox:latest
+
+# Copy scopes.yml into the container
+COPY auth_server/scopes.yml /scopes.yml
+
+# Create a script to copy the file to the mount point
+RUN printf '#!/bin/sh\nset -e\n\necho "Starting scopes.yml initialization..."\necho "Source file: /scopes.yml"\necho "Destination: /mnt/scopes.yml"\n\nif [ ! -f /scopes.yml ]; then\n    echo "ERROR: /scopes.yml not found!"\n    exit 1\nfi\n\nif [ ! -w /mnt ]; then\n    echo "ERROR: /mnt is not writable!"\n    ls -la /mnt\n    exit 1\nfi\n\ncp /scopes.yml /mnt/scopes.yml\n\nif [ ! -f /mnt/scopes.yml ]; then\n    echo "ERROR: Failed to copy scopes.yml to /mnt/"\n    exit 1\nfi\n\nchmod 644 /mnt/scopes.yml\n\necho "Successfully copied scopes.yml to EFS mount"\necho "File size: $(wc -c < /mnt/scopes.yml) bytes"\necho "Scopes initialization complete!"\n' > /copy-scopes.sh && chmod +x /copy-scopes.sh
+
+WORKDIR /
+
+ENTRYPOINT ["/copy-scopes.sh"]
