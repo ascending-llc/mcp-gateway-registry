@@ -34,12 +34,10 @@ class TestServerRoutes:
         
         with patch('registry.api.server_routes.server_service') as mock_service, \
              patch('registry.search.service.faiss_service') as mock_faiss, \
-             patch('registry.core.nginx_service.nginx_service') as mock_nginx, \
              patch('registry.health.service.health_service') as mock_health:
             
             mock_service.register_server.return_value = True
             mock_faiss.add_or_update_service = AsyncMock()
-            mock_nginx.generate_config.return_value = True
             mock_health.broadcast_health_update = AsyncMock()
             mock_service.get_enabled_services.return_value = []
             mock_service.get_server_info.return_value = None
@@ -85,13 +83,11 @@ class TestServerRoutes:
         
         with patch('registry.api.server_routes.server_service') as mock_service, \
              patch('registry.search.service.faiss_service') as mock_faiss, \
-             patch('registry.core.nginx_service.nginx_service') as mock_nginx, \
              patch('registry.health.service.health_service') as mock_health:
             
             mock_service.get_server_info.return_value = server_data
             mock_service.toggle_service.return_value = True
             mock_faiss.add_or_update_service = AsyncMock()
-            mock_nginx.generate_config.return_value = True
             mock_health.broadcast_health_update = AsyncMock()
             mock_service.get_enabled_services.return_value = []
             
@@ -208,15 +204,13 @@ class TestServerRoutes:
         server_data = ServerInfoFactory()
         
         with patch('registry.api.server_routes.server_service') as mock_service, \
-             patch('registry.search.service.faiss_service') as mock_faiss, \
-             patch('registry.core.nginx_service.nginx_service') as mock_nginx:
+             patch('registry.search.service.faiss_service') as mock_faiss:
             
             mock_service.get_server_info.return_value = server_data
             mock_service.update_server.return_value = True
             mock_service.is_service_enabled.return_value = False
             mock_service.get_enabled_services.return_value = []
             mock_faiss.add_or_update_service = AsyncMock()
-            mock_nginx.generate_config.return_value = True
             
             response = test_client.post(f"/edit{server_data['path']}", data={
                 "name": "Updated Name",
