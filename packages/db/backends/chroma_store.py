@@ -3,6 +3,7 @@ from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 import logging
 from ..adapters.adapter import VectorStoreAdapter
+from ..enum.enums import SearchType
 
 logger = logging.getLogger(__name__)
 
@@ -121,11 +122,12 @@ class ChromaStore(VectorStoreAdapter):
             logger.error(f"Failed to check collection existence: {e}")
             return collection_name in self._stores
 
-    def _filter_by_metadata_impl(
+    def filter_by_metadata(
             self,
             filters: Any,
-            limit: int,
-            collection_name: Optional[str]
+            limit: int = 100,
+            collection_name: Optional[str] = None,
+            **kwargs
     ) -> List[Document]:
         """Implement Chroma metadata filtering (filters already normalized)."""
         client = self._get_chroma_client()
@@ -153,3 +155,32 @@ class ChromaStore(VectorStoreAdapter):
         except Exception as e:
             logger.error(f"Filter by metadata failed: {e}")
             return []
+
+    def bm25_search(self,
+                    query: str,
+                    k: int = 10,
+                    filters: Any = None,
+                    collection_name: Optional[str] = None,
+                    **kwargs) -> List[Document]:
+        raise NotImplementedError(
+            "Chroma does not support BM25 search. Use similarity_search instead."
+        )
+
+    def hybrid_search(self,
+                      query: str,
+                      k: int = 10,
+                      alpha: float = 0.5,
+                      filters: Any = None,
+                      collection_name: Optional[str] = None, **kwargs) -> List[Document]:
+        raise NotImplementedError(
+            "Chroma does not support hybrid search. Use similarity_search instead."
+        )
+
+    def near_text(self, **kwargs):
+        raise NotImplementedError(
+            "Chroma does not support near_text search. Use similarity_search instead."
+        )
+
+    def search(self, search_type: SearchType, query: str, k: int = 10, filters: Any = None,
+               collection_name: Optional[str] = None, **kwargs) -> List[Document]:
+        pass

@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 import logging
+from ..enum.enums import SearchType
 
 logger = logging.getLogger(__name__)
 
@@ -33,23 +34,23 @@ class VectorStoreAdapter(ABC):
         self.embedding = embedding
         self.config = config
         self.embedding_config = embedding_config or {}
-        
+
         # Collection management
         self._default_collection = config.get('collection_name', 'Default')
         self._stores: Dict[str, VectorStore] = {}  # collection_name -> LangChain VectorStore
-    
+
     def __enter__(self):
         """Enter context manager."""
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit context manager, close connections."""
         self.close()
-    
+
     # ========================================
     # Abstract methods - Subclasses must implement
     # ========================================
-    
+
     @abstractmethod
     def _create_vector_store(self, collection_name: str) -> VectorStore:
         """
@@ -62,16 +63,16 @@ class VectorStoreAdapter(ABC):
             LangChain VectorStore instance (Chroma, WeaviateVectorStore, etc.)
         """
         pass
-    
+
     @abstractmethod
     def close(self):
         """Close all connections and clean up resources."""
         pass
-    
+
     # ========================================
     # Collection management
     # ========================================
-    
+
     def get_vector_store(self, collection_name: Optional[str] = None) -> VectorStore:
         """
         Get or create LangChain VectorStore for collection.
@@ -83,24 +84,24 @@ class VectorStoreAdapter(ABC):
             LangChain VectorStore instance
         """
         name = collection_name or self._default_collection
-        
+
         if name not in self._stores:
             self._stores[name] = self._create_vector_store(name)
-        
+
         return self._stores[name]
-    
+
     # ========================================
     # Standard VectorStore operations (Proxy)
     # These directly use LangChain VectorStore methods
     # ========================================
-    
+
     def similarity_search(
-        self,
-        query: str,
-        k: int = 10,
-        filters: Any = None,
-        collection_name: Optional[str] = None,
-        **kwargs
+            self,
+            query: str,
+            k: int = 10,
+            filters: Any = None,
+            collection_name: Optional[str] = None,
+            **kwargs
     ) -> List[Document]:
         """
         Proxy to VectorStore.similarity_search() with smart filter handling.
@@ -122,12 +123,12 @@ class VectorStoreAdapter(ABC):
             
         """
         store = self.get_vector_store(collection_name)
-        
+
         # Smart filter normalization
         native_filters = self._normalize_filters(filters)
-        
+
         return store.similarity_search(query, k=k, filters=native_filters, **kwargs)
-    
+
     def _normalize_filters(self, filters: Any) -> Any:
         """
         Normalize filters to native format.
@@ -142,19 +143,19 @@ class VectorStoreAdapter(ABC):
         """
         if filters is None:
             return None
-        
+
         # If already native format, use directly
         if self._is_native_filter(filters):
             return filters
-        
+
         # If dict, convert to native format
         if isinstance(filters, dict):
             return self._dict_to_native_filter(filters)
-        
+
         # Unknown format, pass through (let database handle/error)
         logger.warning(f"Unknown filter format: {type(filters)}, passing through")
         return filters
-    
+
     @abstractmethod
     def _is_native_filter(self, filters: Any) -> bool:
         """
@@ -167,7 +168,7 @@ class VectorStoreAdapter(ABC):
             True if native format
         """
         pass
-    
+
     @abstractmethod
     def _dict_to_native_filter(self, filters: Dict[str, Any]) -> Any:
         """
@@ -185,12 +186,12 @@ class VectorStoreAdapter(ABC):
             Native filter object
         """
         pass
-    
+
     def add_documents(
-        self,
-        documents: List[Document],
-        collection_name: Optional[str] = None,
-        **kwargs
+            self,
+            documents: List[Document],
+            collection_name: Optional[str] = None,
+            **kwargs
     ) -> List[str]:
         """
         Proxy to VectorStore.add_documents()
@@ -205,12 +206,12 @@ class VectorStoreAdapter(ABC):
         """
         store = self.get_vector_store(collection_name)
         return store.add_documents(documents, **kwargs)
-    
+
     def delete(
-        self,
-        ids: List[str],
-        collection_name: Optional[str] = None,
-        **kwargs
+            self,
+            ids: List[str],
+            collection_name: Optional[str] = None,
+            **kwargs
     ) -> Optional[bool]:
         """
         Proxy to VectorStore.delete()
@@ -229,16 +230,16 @@ class VectorStoreAdapter(ABC):
         except Exception as e:
             logger.error(f"Failed to delete documents: {e}")
             return False
-    
+
     # ========================================
     # Extended functionality - Not in base VectorStore
     # Subclasses should implement these
     # ========================================
-    
+
     def get_by_id(
-        self,
-        doc_id: str,
-        collection_name: Optional[str] = None
+            self,
+            doc_id: str,
+            collection_name: Optional[str] = None
     ) -> Optional[Document]:
         """
         Extended feature: Get document by ID
@@ -257,12 +258,14 @@ class VectorStoreAdapter(ABC):
             f"{self.__class__.__name__} must implement get_by_id(). "
             "Use database-specific API to retrieve document by ID."
         )
-    
+
+    @abstractmethod
     def filter_by_metadata(
-        self,
-        filters: Any,
-        limit: int = 100,
-        collection_name: Optional[str] = None
+            self,
+            filters: Any,
+            limit: int,
+            collection_name: Optional[str] = None,
+            **kwargs
     ) -> List[Document]:
         """
         Extended feature: Filter documents by metadata only (no vector search)
@@ -278,26 +281,60 @@ class VectorStoreAdapter(ABC):
             List of matching LangChain Documents
             
         """
-        # Smart filter normalization
-        native_filters = self._normalize_filters(filters)
-        
-        # Call subclass implementation
-        return self._filter_by_metadata_impl(native_filters, limit, collection_name)
-    
+        raise NotImplementedError()
+
     @abstractmethod
-    def _filter_by_metadata_impl(
-        self,
-        filters: Any,
-        limit: int,
-        collection_name: Optional[str]
-    ) -> List[Document]:
+    def bm25_search(self,
+                    query: str,
+                    k: int = 10,
+                    filters: Any = None,
+                    collection_name: Optional[str] = None,
+                    **kwargs) -> List[Document]:
         """
-        Implement metadata filtering using database-specific APIs.
-        
-        Filters are already normalized to native format.
+            Extended feature: BM25 search (Keyword search)
         """
-        pass
-    
+        raise NotImplementedError()
+
+    @abstractmethod
+    def hybrid_search(self,
+                      query: str,
+                      k: int = 10,
+                      alpha: float = 0.5,
+                      filters: Any = None,
+                      collection_name: Optional[str] = None,
+                      **kwargs) -> List[Document]:
+        """
+        Extended feature: Hybrid search
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def near_text(self,
+                  query: str,
+                  k: int = 10,
+                  alpha: float = 0.5,
+                  filters: Any = None,
+                  collection_name: Optional[str] = None,
+                  **kwargs) -> List[Document]:
+        """
+        Extended feature: Near text
+        find objects with the nearest vector to an input text
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def search(self,
+               query: str,
+               search_type: SearchType = SearchType.NEAR_TEXT,
+               k: int = 10,
+               filters: Any = None,
+               collection_name: Optional[str] = None,
+               **kwargs) -> List[Document]:
+        """
+        Extended feature: Search by search type
+        """
+        raise NotImplementedError()
+
     def list_collections(self) -> List[str]:
         """
         Extended feature: List all collections
@@ -310,7 +347,7 @@ class VectorStoreAdapter(ABC):
         """
         # Default implementation: return initialized collections
         return list(self._stores.keys())
-    
+
     def collection_exists(self, collection_name: str) -> bool:
         """
         Extended feature: Check if collection exists
@@ -322,15 +359,15 @@ class VectorStoreAdapter(ABC):
             True if collection exists
         """
         return collection_name in self.list_collections()
-    
+
     # ========================================
     # Utility methods
     # ========================================
-    
+
     def get_default_collection(self) -> str:
         """Get default collection name."""
         return self._default_collection
-    
+
     def describe(self) -> Dict[str, Any]:
         """Get adapter description and status."""
         return {

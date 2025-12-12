@@ -3,6 +3,7 @@ from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 import logging
 from ..adapters.adapter import VectorStoreAdapter
+from ..enum.enums import SearchType
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +139,15 @@ class WeaviateStore(VectorStoreAdapter):
     # Extended features implementation
     # ========================================
 
+    def get_collection(self, collection_name):
+        """
+        Get Weaviate collection by name.
+        """
+        client = self._get_client()
+        if self.collection_exists(collection_name):
+            return client.collections.get(collection_name)
+        raise Exception(f"Failed to get collection: {collection_name}")
+
     def get_by_id(
             self,
             doc_id: str,
@@ -153,11 +163,7 @@ class WeaviateStore(VectorStoreAdapter):
         Returns:
             LangChain Document or None
         """
-        client = self._get_client()
-        collection = client.collections.get(
-            collection_name or self._default_collection
-        )
-
+        collection = self.get_collection(collection_name)
         try:
             obj = collection.query.fetch_object_by_id(doc_id)
             if obj:
@@ -191,34 +197,114 @@ class WeaviateStore(VectorStoreAdapter):
             logger.error(f"Failed to check collection existence: {e}")
             return collection_name in self._stores
 
-    def _filter_by_metadata_impl(
+    def filter_by_metadata(
             self,
             filters: Any,
-            limit: int,
-            collection_name: Optional[str]
+            limit: int = 100,
+            collection_name: Optional[str] = None,
+            **kwargs
     ) -> List[Document]:
         """Implement Weaviate metadata filtering (filters already normalized)."""
-        client = self._get_client()
-        collection = client.collections.get(
-            collection_name or self._default_collection
-        )
-
+        collection = self.get_collection(collection_name)
         try:
             response = collection.query.fetch_objects(
                 filters=filters,
                 limit=limit
             )
-
-            docs = []
-            for obj in response.objects:
-                doc = Document(
-                    page_content=obj.properties.get('content', ''),
-                    metadata=obj.properties,
-                    id=str(obj.uuid)
-                )
-                docs.append(doc)
-
+            docs = self.get_document_response(response)
             return docs
         except Exception as e:
             logger.error(f"Filter by metadata failed: {e}")
             return []
+
+    def bm25_search(self,
+                    query: str,
+                    k: int = 10,
+                    filters: Any = None,
+                    collection_name: Optional[str] = None,
+                    **kwargs
+                    ) -> List[Document]:
+        collection = self.get_collection(collection_name)
+        try:
+            response = collection.query.bm25(
+                query=query,
+                limit=k,
+                filters=filters,
+                **kwargs
+            )
+            docs = self.get_document_response(response)
+            return docs
+        except Exception as e:
+            logger.error(f"bm25 text failed: {e}")
+            return []
+
+    def hybrid_search(self,
+                      query: str,
+                      k: int = 10,
+                      alpha: float = 0.5,
+                      filters: Any = None,
+                      collection_name: Optional[str] = None,
+                      **kwargs
+                      ) -> List[Document]:
+        collection = self.get_collection(collection_name)
+        try:
+            response = collection.query.hybrid(
+                query=query,
+                limit=k,
+                filters=filters,
+                **kwargs
+            )
+            docs = self.get_document_response(response)
+            return docs
+        except Exception as e:
+            logger.error(f"Hybrid text failed: {e}")
+            return []
+
+    def near_text(self,
+                  query: str,
+                  k: int = 10,
+                  alpha: float = 0.5,
+                  filters: Any = None,
+                  collection_name: Optional[str] = None,
+                  **kwargs) -> List[Document]:
+        collection = self.get_collection(collection_name)
+        try:
+            response = collection.query.near_text(
+                query=query,
+                limit=k,
+                filters=filters,
+                **kwargs
+            )
+            docs = self.get_document_response(response)
+            return docs
+        except Exception as e:
+            logger.error(f"Near text failed: {e}")
+            return []
+
+    def search(self,
+               query: str,
+               search_type: SearchType = SearchType.NEAR_TEXT,
+               k: int = 10,
+               filters: Any = None,
+               collection_name: Optional[str] = None,
+               **kwargs) -> List[Document]:
+        if search_type == SearchType.BM25:
+            return self.bm25_search(query, k, filters, collection_name, **kwargs)
+        elif search_type == SearchType.HYBRID:
+            return self.hybrid_search(query, k, filters, collection_name, **kwargs)
+        elif search_type == SearchType.NEAR_TEXT:
+            return self.near_text(query, k, filters, collection_name, **kwargs)
+        else:
+            logger.error(f"Unknown search type: {search_type}")
+
+    @staticmethod
+    def get_document_response(response):
+        docs = []
+        for obj in response.objects:
+            doc = Document(
+                page_content=obj.properties.get('content', ''),
+                metadata=obj.properties,
+                id=str(obj.uuid)
+            )
+            docs.append(doc)
+        return docs
