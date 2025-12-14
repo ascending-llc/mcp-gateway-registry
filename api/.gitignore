@@ -1,0 +1,5 @@
+# Temporary JSON files created during testing
+*.json
+
+# Token files
+.token

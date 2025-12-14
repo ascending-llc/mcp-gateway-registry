@@ -506,11 +506,11 @@ def enhanced_auth(
 
 def nginx_proxied_auth(
     request: Request,
-    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
-    x_user: Annotated[str | None, Header(alias="X-User")] = None,
-    x_username: Annotated[str | None, Header(alias="X-Username")] = None,
-    x_scopes: Annotated[str | None, Header(alias="X-Scopes")] = None,
-    x_auth_method: Annotated[str | None, Header(alias="X-Auth-Method")] = None,
+    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name, include_in_schema=False)] = None,
+    x_user: Annotated[str | None, Header(alias="X-User", include_in_schema=False)] = None,
+    x_username: Annotated[str | None, Header(alias="X-Username", include_in_schema=False)] = None,
+    x_scopes: Annotated[str | None, Header(alias="X-Scopes", include_in_schema=False)] = None,
+    x_auth_method: Annotated[str | None, Header(alias="X-Auth-Method", include_in_schema=False)] = None,
 ) -> Dict[str, Any]:
     """
     Authentication dependency that works with both nginx-proxied requests and direct requests.

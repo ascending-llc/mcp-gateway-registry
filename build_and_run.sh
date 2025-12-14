@@ -316,6 +316,37 @@ if [ -z "$ADMIN_PASSWORD" ] || [ "$ADMIN_PASSWORD" = "your_secure_password" ]; t
     exit 1
 fi
 
+# Determine BUILD_VERSION from git
+log "Determining version from git..."
+if command -v git &> /dev/null && [ -d .git ]; then
+    # Get the current git tag
+    GIT_TAG=$(git describe --tags --exact-match 2>/dev/null || echo "")
+
+    if [ -n "$GIT_TAG" ]; then
+        # We're on a tagged commit - use just the tag (remove 'v' prefix)
+        export BUILD_VERSION="${GIT_TAG#v}"
+        log "Building release version: $BUILD_VERSION"
+    else
+        # Not on a tag - include branch name and commit info
+        GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+        GIT_DESCRIBE=$(git describe --tags --always 2>/dev/null || echo "dev")
+
+        # Format: version-branch or describe-branch
+        if [[ "$GIT_DESCRIBE" =~ ^[0-9] ]]; then
+            # Starts with version number from describe
+            export BUILD_VERSION="${GIT_DESCRIBE#v}-${GIT_BRANCH}"
+        else
+            # No version tags found, use commit hash
+            export BUILD_VERSION="${GIT_DESCRIBE}-${GIT_BRANCH}"
+        fi
+
+        log "Building development version: $BUILD_VERSION"
+    fi
+else
+    export BUILD_VERSION="1.0.0-dev"
+    log "Git not available, using default version: $BUILD_VERSION"
+fi
+
 # Build or pull Docker images
 if [ "$USE_PREBUILT" = true ]; then
     log "Pulling pre-built Docker images..."

@@ -16,6 +16,7 @@ from fastapi import FastAPI, Cookie, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 
 # Import domain routers
 from registry.auth.routes import router as auth_router
@@ -24,6 +25,7 @@ from registry.api.search_routes import router as search_router
 from registry.api.wellknown_routes import router as wellknown_router
 from registry.api.registry_routes import router as registry_router
 from registry.api.agent_routes import router as agent_router
+from registry.api.management_routes import router as management_router
 from registry.health.routes import router as health_router
 
 # Import auth dependencies
@@ -39,6 +41,9 @@ from registry.services.federation_service import get_federation_service
 
 # Import core configuration
 from registry.core.config import settings
+
+# Import version
+from registry.version import __version__
 
 # Configure logging with file and console handlers
 def setup_logging():
@@ -184,8 +189,41 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="MCP Gateway Registry",
     description="A registry and management system for Model Context Protocol (MCP) servers",
-    version="1.0.0",
-    lifespan=lifespan
+    version=__version__,
+    lifespan=lifespan,
+    swagger_ui_parameters={
+        "persistAuthorization": True,
+    },
+    openapi_tags=[
+        {
+            "name": "Authentication",
+            "description": "OAuth2 and session-based authentication endpoints"
+        },
+        {
+            "name": "Server Management",
+            "description": "MCP server registration and management. Requires JWT Bearer token authentication."
+        },
+        {
+            "name": "Agent Management",
+            "description": "A2A agent registration and management. Requires JWT Bearer token authentication."
+        },
+        {
+            "name": "Management API",
+            "description": "IAM and user management operations. Requires JWT Bearer token with admin permissions."
+        },
+        {
+            "name": "Semantic Search",
+            "description": "Vector-based semantic search for agents. Requires JWT Bearer token authentication."
+        },
+        {
+            "name": "Health Monitoring",
+            "description": "Service health check endpoints"
+        },
+        {
+            "name": "Anthropic Registry API",
+            "description": "Anthropic-compatible registry API (v0.1) for MCP server discovery"
+        }
+    ]
 )
 
 # Add CORS middleware for React development and Docker deployment
@@ -201,6 +239,7 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(servers_router, prefix="/api", tags=["Server Management"])
 app.include_router(agent_router, prefix="/api", tags=["Agent Management"])
+app.include_router(management_router, prefix="/api")
 app.include_router(search_router, prefix="/api/search", tags=["Semantic Search"])
 app.include_router(health_router, prefix="/api/health", tags=["Health Monitoring"])
 
@@ -209,6 +248,49 @@ app.include_router(registry_router, tags=["Anthropic Registry API"])
 
 # Register well-known discovery router
 app.include_router(wellknown_router, prefix="/.well-known", tags=["Discovery"])
+
+
+# Customize OpenAPI schema to add security schemes
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+
+    # Add security schemes
+    openapi_schema["components"]["securitySchemes"] = {
+        "Bearer": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "JWT Bearer token obtained from Keycloak OAuth2 authentication. "
+                          "Include in Authorization header as: `Authorization: Bearer <token>`"
+        }
+    }
+
+    # Apply Bearer security to all endpoints except auth, health, and public discovery endpoints
+    for path, path_item in openapi_schema["paths"].items():
+        # Skip authentication, health check, and public discovery endpoints
+        if path.startswith("/api/auth/") or path == "/health" or path.startswith("/.well-known/"):
+            continue
+
+        # Apply Bearer security to all methods in this path
+        for method in path_item:
+            if method in ["get", "post", "put", "delete", "patch"]:
+                if "security" not in path_item[method]:
+                    path_item[method]["security"] = [{"Bearer": []}]
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
+
 
 # Add user info endpoint for React auth context
 @app.get("/api/auth/me")
@@ -230,6 +312,14 @@ async def get_current_user(user_context: Dict[str, Any] = Depends(enhanced_auth)
 async def health_check():
     """Simple health check for load balancers and monitoring."""
     return {"status": "healthy", "service": "mcp-gateway-registry"}
+
+
+# Version endpoint for UI
+@app.get("/api/version")
+async def get_version():
+    """Get application version."""
+    return {"version": __version__}
+
 
 # Serve React static files
 FRONTEND_BUILD_PATH = Path(__file__).parent.parent / "frontend" / "build"

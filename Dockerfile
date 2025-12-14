@@ -38,11 +38,13 @@ EXPOSE 80 443 7860
 
 # Define environment variables for registry/server configuration (can be overridden at runtime)
 # Provide sensible defaults or leave empty if they should be explicitly set
+ARG BUILD_VERSION="1.0.0"
 ARG SECRET_KEY=""
 ARG ADMIN_USER="admin"
 ARG ADMIN_PASSWORD=""
 ARG POLYGON_API_KEY=""
 
+ENV BUILD_VERSION=$BUILD_VERSION
 ENV SECRET_KEY=$SECRET_KEY
 ENV ADMIN_USER=$ADMIN_USER
 ENV ADMIN_PASSWORD=$ADMIN_PASSWORD

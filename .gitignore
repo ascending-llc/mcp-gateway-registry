@@ -194,6 +194,9 @@ cookies.txt
 # Roo IDE files
 .roo/
 
+# Kiro files
+.kiro
+
 # OAuth tokens and credentials - never commit these!
 .oauth-tokens/
 .agentcore-params

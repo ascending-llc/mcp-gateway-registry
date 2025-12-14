@@ -386,6 +386,10 @@ module "ecs_service_registry" {
         {
           name  = "SESSION_COOKIE_DOMAIN"
           value = var.session_cookie_domain
+        },
+        {
+          name  = "KEYCLOAK_ADMIN"
+          value = "admin"
         }
       ]
 
@@ -405,6 +409,10 @@ module "ecs_service_registry" {
         {
           name      = "KEYCLOAK_M2M_CLIENT_SECRET"
           valueFrom = "${aws_secretsmanager_secret.keycloak_m2m_client_secret.arn}:client_secret::"
+        },
+        {
+          name      = "KEYCLOAK_ADMIN_PASSWORD"
+          valueFrom = aws_secretsmanager_secret.keycloak_admin_password.arn
         },
         {
           name      = "EMBEDDINGS_API_KEY"

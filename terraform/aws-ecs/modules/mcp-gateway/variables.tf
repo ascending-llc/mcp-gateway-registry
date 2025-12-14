@@ -332,6 +332,14 @@ variable "embeddings_api_key" {
   sensitive   = true
 }
 
+
+# Keycloak Admin Credentials (for Management API)
+variable "keycloak_admin_password" {
+  description = "Keycloak admin password for Management API user/group operations"
+  type        = string
+  sensitive   = true
+}
+
 # =============================================================================
 # SESSION COOKIE SECURITY CONFIGURATION
 # =============================================================================

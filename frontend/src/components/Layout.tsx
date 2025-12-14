@@ -1,4 +1,4 @@
-import React, { useState, Fragment } from 'react';
+import React, { useState, useEffect, Fragment } from 'react';
 import { Menu, Transition } from '@headlessui/react';
 import { Link } from 'react-router-dom';
 import { 
@@ -22,8 +22,17 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [version, setVersion] = useState<string | null>(null);
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+
+  useEffect(() => {
+    // Fetch version from API
+    fetch('/api/version')
+      .then(res => res.json())
+      .then(data => setVersion(data.version))
+      .catch(err => console.error('Failed to fetch version:', err));
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -91,6 +100,15 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   />
                 </svg>
               </a>
+
+              {/* Version badge */}
+              {version && (
+                <div className="hidden md:flex items-center px-2.5 py-1 bg-purple-50 dark:bg-purple-900/20 rounded-md">
+                  <span className="text-xs font-medium text-purple-700 dark:text-purple-300">
+                    {version}
+                  </span>
+                </div>
+              )}
 
               {/* Theme toggle */}
               <button

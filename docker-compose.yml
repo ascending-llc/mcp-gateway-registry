@@ -6,6 +6,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.registry
+      args:
+        BUILD_VERSION: ${BUILD_VERSION:-1.0.0}
     environment:
       - SECRET_KEY=${SECRET_KEY}
       - ADMIN_USER=${ADMIN_USER:-admin}

@@ -2610,10 +2610,26 @@ async def healthcheck_api(
       -H "Authorization: Bearer $JWT_TOKEN"
     ```
     """
+    from ..health.service import health_service
+
     logger.info(f"API healthcheck request from user '{user_context.get('username') if user_context else 'unknown'}'")
 
-    # Call the existing internal_healthcheck function
-    return await internal_healthcheck(request)
+    # Get health status for all servers using JWT authentication
+    try:
+        health_data = health_service.get_all_health_status()
+        logger.info(f"Retrieved health status for {len(health_data)} servers")
+
+        return JSONResponse(
+            status_code=200,
+            content=health_data
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to retrieve health status: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve health status: {str(e)}"
+        )
 
 
 @router.post("/servers/groups/add")

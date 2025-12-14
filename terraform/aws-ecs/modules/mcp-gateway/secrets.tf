@@ -76,6 +76,19 @@ resource "aws_secretsmanager_secret_version" "keycloak_m2m_client_secret" {
 }
 
 
+# Keycloak admin password secret (for Management API operations)
+resource "aws_secretsmanager_secret" "keycloak_admin_password" {
+  name_prefix = "${local.name_prefix}-keycloak-admin-password-"
+  description = "Keycloak admin password for Management API user/group operations"
+  tags        = local.common_tags
+}
+
+resource "aws_secretsmanager_secret_version" "keycloak_admin_password" {
+  secret_id     = aws_secretsmanager_secret.keycloak_admin_password.id
+  secret_string = var.keycloak_admin_password
+}
+
+
 # Embeddings API key secret (optional - only needed for LiteLLM provider)
 resource "aws_secretsmanager_secret" "embeddings_api_key" {
   name_prefix = "${local.name_prefix}-embeddings-api-key-"

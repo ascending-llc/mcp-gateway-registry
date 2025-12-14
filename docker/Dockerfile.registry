@@ -22,6 +22,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# Build argument for version (will be set at build time from git)
+ARG BUILD_VERSION="1.0.0"
+ENV BUILD_VERSION=$BUILD_VERSION
+
 RUN pip install uv && \
     uv venv .venv --python 3.12 && \
     . .venv/bin/activate && \
