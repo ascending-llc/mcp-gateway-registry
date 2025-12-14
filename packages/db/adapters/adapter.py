@@ -15,7 +15,7 @@ class VectorStoreAdapter(ABC):
     Design Pattern: Adapter Pattern
 
     Responsibilities:
-    1. Adapt different VectorStore implementations (Weaviate, Chroma)
+    1. Adapt different VectorStore implementations (Weaviate)
     2. Proxy standard VectorStore operations
     3. Extend with database-specific features (get_by_id, list_collections, etc.)
     4. Manage collections and connections
@@ -60,7 +60,7 @@ class VectorStoreAdapter(ABC):
             collection_name: Name of the collection
             
         Returns:
-            LangChain VectorStore instance (Chroma, WeaviateVectorStore, etc.)
+            LangChain VectorStore instance (WeaviateVectorStore, etc.)
         """
         pass
 

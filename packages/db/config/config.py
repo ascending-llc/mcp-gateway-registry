@@ -115,30 +115,6 @@ class WeaviateConfig(VectorStoreConfig):
         )
 
 
-@register_vector_store_config(VectorStoreType.CHROMA.value)
-class ChromaConfig(VectorStoreConfig):
-    """Chroma vector store configuration."""
-    persist_directory: str = Field(description="Persistence directory")
-    collection_name: str = Field(description="Collection name")
-    
-    @classmethod
-    def from_env(cls) -> "ChromaConfig":
-        """Create Chroma config from environment variables."""
-        persist_directory = os.getenv("CHROMA_PERSIST_DIRECTORY")
-        collection_name = os.getenv("CHROMA_COLLECTION_NAME")
-        
-        if not persist_directory:
-            raise ValueError("CHROMA_PERSIST_DIRECTORY environment variable must be set")
-        if not collection_name:
-            raise ValueError("CHROMA_COLLECTION_NAME environment variable must be set")
-        
-        return cls(
-            type="chroma",
-            persist_directory=persist_directory,
-            collection_name=collection_name
-        )
-
-
 @register_embedding_model_config(EmbeddingProvider.OPENAI.value)
 class OpenAIEmbeddingConfig(EmbeddingModelConfig):
     """OpenAI embedding model configuration."""
@@ -221,7 +197,7 @@ class BackendConfig(BaseModel):
         Create unified config from environment variables with validation.
         
         Required env vars:
-        - VECTOR_STORE_TYPE: weaviate | chroma
+        - VECTOR_STORE_TYPE: weaviate
         - EMBEDDING_PROVIDER: openai | aws_bedrock
         
         Raises:

@@ -5,7 +5,6 @@ from .config import (
     get_registered_vector_stores,
     get_registered_embedding_models,
     WeaviateConfig,
-    ChromaConfig,
     OpenAIEmbeddingConfig,
     BedrockEmbeddingConfig
 )
@@ -18,7 +17,6 @@ __all__ = [
     'get_registered_vector_stores',
     'get_registered_embedding_models',
     'WeaviateConfig',
-    'ChromaConfig',
     'OpenAIEmbeddingConfig',
     'BedrockEmbeddingConfig',
 ]

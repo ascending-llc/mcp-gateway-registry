@@ -4,7 +4,6 @@ from enum import Enum
 class VectorStoreType(str, Enum):
     """Supported vector store types."""
     WEAVIATE = "weaviate"
-    CHROMA = "chroma"
 
 
 class EmbeddingProvider(str, Enum):

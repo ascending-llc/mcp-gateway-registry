@@ -134,7 +134,6 @@ class Repository(Generic[T]):
             k: Number of results to return
             filters: Optional database-specific filter object
                 - Weaviate: weaviate.classes.query.Filter object
-                - Chroma: dict with Chroma filter syntax
         """
         try:
             docs = self.adapter.similarity_search(
@@ -183,7 +182,6 @@ class Repository(Generic[T]):
         Args:
             filters: Database-specific filter object
                 - Weaviate: weaviate.classes.query.Filter object
-                - Chroma: dict with Chroma filter syntax
             limit: Maximum number of results
         """
         try:
@@ -240,7 +238,6 @@ class Repository(Generic[T]):
         Args:
             filters: Database-specific filter object
                 - Weaviate: weaviate.classes.query.Filter object
-                - Chroma: dict with Chroma filter syntax
         """
         try:
             instances = self.filter(filters=filters, limit=1000)
