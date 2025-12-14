@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/github/license/ascending-llc/mcp-gateway-registry?style=flat)](https://github.com/ascending-llc/mcp-gateway-registry/blob/main/LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/ascending-llc/mcp-gateway-registry?style=flat&logo=github)](https://github.com/ascending-llc/mcp-gateway-registry/releases)
 
-[🚀 Get Running Now](#option-a-pre-built-images-instant-setup) | [Quick Start](docs/macos-setup-guide.md) | [Documentation](docs/) | [Enterprise Features](#enterprise-features) 
+[🚀 Quick Start](docs/macos-setup-guide.md) | [Documentation](docs/) | [Enterprise Features](#enterprise-features) 
 
 
 </div>
