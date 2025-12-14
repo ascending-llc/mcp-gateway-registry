@@ -125,13 +125,9 @@ class VectorStoreFactory:
         try:
             if config.vector_store_type == VectorStoreType.WEAVIATE:
                 importlib.import_module("langchain_weaviate")
-            elif config.vector_store_type == VectorStoreType.CHROMA:
-                importlib.import_module("langchain_chroma")
         except ImportError:
             if config.vector_store_type == VectorStoreType.WEAVIATE:
                 missing_packages.append("langchain_weaviate")
-            elif config.vector_store_type == VectorStoreType.CHROMA:
-                missing_packages.append("langchain_chroma")
 
         # Check embedding packages
         try:

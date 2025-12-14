@@ -1,6 +1,8 @@
 # Vector Database Interface
 
-Unified interface for vector databases (Weaviate, Chroma) with multiple embedding providers (OpenAI, AWS Bedrock).
+Unified interface for vector databases with multiple embedding providers (OpenAI, AWS Bedrock).
+
+This package is built on top of [LangChain Vector Stores](https://docs.langchain.com/oss/python/integrations/vectorstores), providing a unified abstraction layer that supports any LangChain-compatible vector store. Currently implemented with Weaviate, but can easily be extended to support other vector stores such as Pinecone, Qdrant, Milvus, FAISS, and more.
 
 ## Quick Start
 
@@ -38,7 +40,7 @@ db.close()
 
 **Required environment variables:**
 ```bash
-VECTOR_STORE_TYPE=weaviate     # weaviate | chroma
+VECTOR_STORE_TYPE=weaviate     # weaviate
 EMBEDDING_PROVIDER=aws_bedrock # openai | aws_bedrock
 ```
 
@@ -47,10 +49,6 @@ EMBEDDING_PROVIDER=aws_bedrock # openai | aws_bedrock
 # Weaviate (required)
 WEAVIATE_HOST=localhost
 WEAVIATE_PORT=8099            # Must be 1-65535
-
-# Chroma (with defaults)
-CHROMA_PERSIST_DIRECTORY=./chroma_db  # Default: ./chroma_db
-CHROMA_COLLECTION_NAME=Default        # Default: Default
 ```
 
 **Embedding-specific:**
@@ -69,7 +67,6 @@ OPENAI_MODEL=text-embedding-3-small  # Default: text-embedding-3-small
 from packages.db.enum.enums import VectorStoreType, EmbeddingProvider
 
 VectorStoreType.WEAVIATE      # "weaviate"
-VectorStoreType.CHROMA        # "chroma"
 
 EmbeddingProvider.OPENAI      # "openai"
 EmbeddingProvider.AWS_BEDROCK # "aws_bedrock"
@@ -96,7 +93,7 @@ mcp_tools.delete(tool_id)
 **Simple dict (auto-converted):**
 
 ```python
-# Works with both Weaviate and Chroma
+# Works with Weaviate
 filters = {"is_enabled": True}
 tools = mcp_tools.search("weather", filters=filters)
 
@@ -113,9 +110,6 @@ from weaviate.classes.query import Filter
 
 filters = Filter.by_property("is_enabled").equal(True) &
           Filter.by_property("points").greater_than(500)
-
-# Chroma  
-filters = {"$and": [{"is_enabled": True}, {"points": {"$gt": 500}}]}
 
 tools = mcp_tools.search("weather", filters=filters)
 ```
@@ -216,7 +210,7 @@ Repository (Business API)
     ↓
 VectorStoreAdapter (Proxy + Extension)
     ↓
-LangChain VectorStore (Chroma / WeaviateVectorStore)
+LangChain VectorStore (WeaviateVectorStore)
 ```
 
 **DatabaseClient**: Configuration, lifecycle, repository factory  
@@ -239,8 +233,7 @@ packages/
     │   ├── factory.py     # Adapter factory
     │   └── create/        # Creator functions
     ├── backends/
-    │   ├── weaviate_store.py  # WeaviateStore
-    │   └── chroma_store.py    # ChromaStore
+    │   └── weaviate_store.py  # WeaviateStore
     ├── config/            # Configuration classes
     └── enum/              # Enums and exceptions
 ```
@@ -267,12 +260,9 @@ try:
     tool_id = tools_repo.save(tool)
 
     # Search with filters
-    if db.get_info()['adapter_type'] == 'WeaviateStore':
-        from weaviate.classes.query import Filter
+    from weaviate.classes.query import Filter
 
-        filters = Filter.by_property("is_enabled").equal(True)
-    else:  # Chroma
-        filters = {"is_enabled": True}
+    filters = Filter.by_property("is_enabled").equal(True)
 
     results = tools_repo.search("weather forecast", filters=filters, k=5)
 
@@ -369,6 +359,25 @@ finally:
 
 ## Extending the System
 
+### Supported Vector Stores
+
+This package leverages [LangChain's vector store integrations](https://docs.langchain.com/oss/python/integrations/vectorstores), which means you can easily extend it to support any of the following vector stores:
+
+**Popular Options:**
+- **Weaviate** (currently implemented)
+- **Pinecone** - Managed vector database
+- **Qdrant** - Open-source vector search engine
+- **Milvus** - Scalable vector database
+- **FAISS** - Facebook AI Similarity Search
+- **PGVector** - PostgreSQL extension
+- **MongoDB Atlas** - Vector search in MongoDB
+- **Elasticsearch** - Full-text and vector search
+- **Astra DB** - Cassandra-based vector store
+- **Azure Cosmos DB** - NoSQL and Mongo vCore
+- **OpenSearch** - Amazon's search service
+
+See the [complete list of supported vector stores](https://docs.langchain.com/oss/python/integrations/vectorstores) in the LangChain documentation.
+
 ### Register New Vector Store
 
 3 steps to add a new vector store (e.g., Pinecone):
@@ -379,7 +388,6 @@ finally:
 # packages/db/enum/enums.py
 class VectorStoreType(str, Enum):
     WEAVIATE = "weaviate"
-    CHROMA = "chroma"
     PINECONE = "pinecone"  # ← Add new
 ```
 
