@@ -33,6 +33,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/callback",
             "/api/auth/providers",
             "/api/auth/login",
+            "/login",
         ]
         # note: admin
         self.internal_paths = [
@@ -62,11 +63,24 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
     def _is_public_path(self, path: str) -> bool:
         """Check if the path is a public path (excludes internal paths which require authentication)"""
+        # Normalize path (remove trailing slash for comparison, except for root)
+        normalized_path = path.rstrip('/') if path != '/' else path
+        
         for public_path in self.public_paths:
-            if public_path == "/" and path == "/":
+            # Normalize public path too
+            normalized_public = public_path.rstrip('/') if public_path != '/' else public_path
+            
+            # Exact match
+            if normalized_path == normalized_public:
+                logger.debug(f"Public path matched (exact): {path} == {public_path}")
                 return True
-            elif public_path != "/" and (path == public_path or path.startswith(public_path + "/")):
+            
+            # Prefix match (e.g., /static matches /static/css/style.css)
+            if normalized_public != '/' and normalized_path.startswith(normalized_public + '/'):
+                logger.debug(f"Public path matched (prefix): {path} starts with {public_path}")
                 return True
+        
+        logger.info(f"Path {path} is not public")
         return False
 
     def _is_skip_path(self, target_path: str, paths: list) -> bool:

@@ -31,3 +31,8 @@ class SearchType(Enum):
 #  NEAR_VECTOR = "near_vector"  # Semantic search using vector
 #  NEAR_IMAGE = "near_image"  # Image similarity search
 #  FETCH_OBJECTS = "fetch_objects"  # Simple object fetch with filters
+
+
+class RerankerProvider(str, Enum):
+    """Supported reranker providers."""
+    FLASHRANK = "flashrank"
