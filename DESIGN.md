@@ -11,10 +11,11 @@ Living design document for MongoDB integration
     - [Class Diagram](#class-diagram)
     - [Authentication](#authentication)
     - [API Endpoints](#api-endpoints)
-- [MongoDB Integration](#mongo-db-integration)
+- [MongoDB Integration](#mongo-db-integration-todo)
     - [Native Driver](#native-driver)
-    - [Object Data Modeler](#object-data-modeler)
-- [Additional Considerations](#future-considerations)
+    - [Object Document Mapper](#object-document-mapper)
+    - [Seeding and Migrations](#seeding-and-migrations)
+- [Additional Considerations](#additional-considerations)
     - [Agent Persistence](#agent-persistence)
 
 ## Introduction
@@ -67,7 +68,7 @@ classDiagram
 
     class ConfigLoader
     class ServerService {
-        init(self, repository)
+        init(self, storage_provider)
     }
 
     StorageFactory --> ServerRepository : returns chosen implementation
@@ -80,14 +81,13 @@ classDiagram
 ```  
 
 - API Router (`registry/api/server_routes.py`): Exposes HTTP endpoints for server operations. Validates requests through role-based access controls set in the `UserContext`
-- ServerService: (`registry/services/server_service.py`) 
+- ServerService (`registry/services/server_service.py`): Service class for business logic
 - ServerInterface: Abstract class for server storage providers 
-- FileRepository/MongoRepository: storage-specific server storage implementations
+- FileRepository/MongoRepository: storage-specific implementations
 
 ### Data Schema
 
-__Question__: Should the data model for MCP server be compatiable with those used in LibreChat? 
-
+__Question__: Should the Server data model be compatiable with those used in LibreChat? 
 
 ### Authorization 
 
@@ -95,6 +95,8 @@ Permissions checks are contained within the server API router. It uses RBAC help
 
 
 ### API Endpoints
+
+Endpoints should support the following operations: 
 - Admin can add/update/remove server configuration for all of the users
 - Admin can add/update/remove server configuration for different groups
 - User can add/update/remove their private server configuration
@@ -102,84 +104,22 @@ Permissions checks are contained within the server API router. It uses RBAC help
 
 ## Mongo DB Integration (TODO)
 
-Investigate Pymongo vs Beanie (recommended for FastAPI)
+Investigate Pymongo vs Beanie (recommended ODM for FastAPI)
 
 ### Native Driver
 
-### Object Data Modeler
+### Object Document Mapper
+
+### Seeding and Migrations
 
 ## Additional Considerations
 
 ### Agent Persistence
 
-Provide a plan for agent persistence similar to server persistence:
-- Model agent card as documents in MongoDB.
-- Add repository implementations for agents.
-- Preserve existing file-based agent storage as an option during migration.
+Provide a plan for agent persistence similar in MongoDB:
+
+TODO: Investigate LibreChat Agent schema & insert class diagram
 
 ### DB Metrics / Logging
 
-
 ## Etc. Notes
-
-`registry/api/server_routes.py`
-```python
-from ..services.server_service import server_service
- 
-@router.get("/servers")
-async def get_servers_json(
-        user_context: CurrentUser,
-        query: str | None = None,
-):
-    # Get servers based on user permissions (same logic as root route)
-    if user_context['is_admin']:
-        all_servers = server_service.get_all_servers()
-    else:
-        all_servers = server_service.get_all_servers_with_permissions(user_context['accessible_servers'])
-
-```
-
-`registry/services/server_service.py`
-```python
-from .db.factory import StorageFactory
-
-class ServerService: 
-    def __init__(self, storage_provider): 
-        self._storage_provider = storage_provider
-
-    def get_all_servers(self): 
-        return self._storage_provider.get_all_servers()
-
-    def get_all_servers_with_permissions(self, accessible_servers):
-        if accessible_servers is None: 
-            return self._storage_provider.get_all_servers()
-        else: 
-            all_servers = self._storage_provider.get_all_servers()
-            return _filter_services_by_user(all_servers)
-
-storage_provider = StorageFactory().get_storage_provider()
-server_service = ServerService(storage_provider)
-```
-
-`registry/services/db/factory.py`
-```python
-from ..core.config import settings
-
-class StorageFactory: 
-    def __init__(self, storage_provider): 
-        self._storage_provider = storage_provider
-
-    def get_storage_provider(self): 
-        # load env var from settings
-
-        # return correct provider instance
-
-    def _create_filesystem_provider(): 
-        
-    def _create_mongodb_providers(): 
-```
-
-
-
-
-
