@@ -34,7 +34,7 @@ class ExternalVectorSearchService(VectorSearchService):
         
         Checks adapter status and collection availability.
         """
-        if not self._client:
+        if not self._initialized:
             logger.error("Client not initialized")
             self._initialized = False
             raise Exception("DatabaseClient not initialized")

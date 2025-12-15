@@ -667,7 +667,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "scikit-learn", marker = "extra == 'embedded-search'", specifier = ">=1.3.0" },
-    { name = "sentence-transformers", marker = "extra == 'embedded-search'", specifier = ">=2.2.2" },
+    { name = "sentence-transformers", marker = "extra == 'embedded-search'", specifier = ">=3.0.0" },
     { name = "weaviate-client", specifier = ">=4.18.1" },
     { name = "websockets", specifier = ">=15.0.1" },
 ]
