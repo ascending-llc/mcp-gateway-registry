@@ -78,9 +78,11 @@ echo "Generated SECRET_KEY: $SECRET_KEY"
 nano .env
 ```
 
-### Configure Essential Settings
-In the `.env` file, make these changes:
+### Configure Authentication Provider
 
+__Note__: This guide documents the steps needed to use Microsoft Entra ID as the authentication provider. To configure an alternate provider, please reference either the [Keycloak integration](/docs/keycloak-integration.md) or [Cognito integration](/docs/cognito.md) guide.
+
+In the `.env` file, make the following changes:
 ```bash
 # Set authentication provider to Microsoft Entra ID
 AUTH_PROVIDER=entra
