@@ -1,232 +1,443 @@
-"""
-External HTTP-based vector search service.
-
-This implementation delegates vector search operations to an external MCP server via HTTP,
-allowing the main registry to avoid heavy dependencies like torch and sentence-transformers.
-Uses httpx for HTTP streamable protocol communication.
-"""
-
-import json
 import logging
 from typing import Dict, Any, Optional, List
 
-import httpx
-
+from packages.db import initialize_database
+from packages.shared.models import McpTool
 from .base import VectorSearchService
 
 logger = logging.getLogger(__name__)
 
 
 class ExternalVectorSearchService(VectorSearchService):
-    """Vector search service that uses an external HTTP MCP server."""
-    
-    def __init__(self, mcp_server_url: str):
+    """Vector search service that uses"""
+
+    def __init__(self):
+        """Initialize vector search service from environment variables."""
+        try:
+            self._client = initialize_database()
+            self._mcp_tools = self._client.for_model(McpTool)
+            self._initialized = True
+            logger.info(f"Vector search service initialized successfully")
+        except Exception as e:
+            self._client = None
+            self._mcp_tools = None
+            self._initialized = False
+            logger.error(f"Failed to initialize vector search service: {e}")
+
+    async def initialize(self):
         """
-        Initialize the external vector search service.
+        Initialize vector database and ensure MCPTool collection exists.
+        """
+        if not self._initialized:
+            logger.error("Model operations not initialized, skipping vector search setup")
+            return
+        logger.info("Vector search service initialized successfully")
+
+    async def add_or_update_service(
+            self,
+            service_path: str,
+            server_info: Dict[str, Any],
+            is_enabled: bool = False
+    ) -> Optional[Dict[str, int]]:
+        """
+        Add or update tools for a service with vector database.
+
+        Automatically removes existing tools and batch creates new ones.
+
+        Args:
+            service_path: Service path (e.g., /weather)
+            server_info: Server info with tool_list
+            is_enabled: Whether service is enabled
+
+        Returns:
+            {"indexed_tools": count, "failed": count} or None if unavailable
+        """
+        if not self._initialized:
+            logger.warning(f"Vector search not initialized, skipping '{service_path}'")
+            return None
+
+        tool_count = len(server_info.get("tool_list", []))
+        logger.info(f"Indexing '{service_path}': {tool_count} tools, enabled={is_enabled}")
+
+        try:
+            # Remove existing tools
+            deleted_count = await self.remove_service(service_path)
+            if deleted_count and deleted_count.get('deleted_tools', 0) > 0:
+                logger.info(f"Removed {deleted_count['deleted_tools']} old tools")
+
+            # Create tools from server info
+            tools = McpTool.create_tools_from_server_info(
+                service_path=service_path,
+                server_info=server_info,
+                is_enabled=is_enabled
+            )
+            # Bulk save
+            result = self._mcp_tools.bulk_save(tools)
+            logger.info(f"Indexed {result.successful}/{result.total} "
+                        f"tools for '{service_path}' "
+                        f""f"(success rate: {result.success_rate:.1f}%)")
+
+            if result.has_errors:
+                logger.warning(f"{result.failed} tools failed to index:")
+                for error in result.errors[:3]:  # Log first 3 errors
+                    logger.warning(f"   - {error.get('message', 'unknown')}")
+
+            return {
+                "indexed_tools": result.successful,
+                "failed_tools": result.failed
+            }
+        except Exception as e:
+            logger.error(f"Indexing failed for '{service_path}': {e}", exc_info=True)
+            return None
+
+    async def remove_service(self, service_path: str) -> Optional[Dict[str, int]]:
+        """
+        Remove all tools for a service.
+
+        Args:
+            service_path: Service path identifier
+
+        Returns:
+            {"deleted_tools": count} or None if service unavailable
+        """
+        if not self._initialized:
+            return None
+
+        try:
+            # Use simple dict filter (auto-converted by adapter)
+            filters = {"server_path": service_path}
+            deleted_count = self._mcp_tools.delete_by_filter(filters)
+            logger.info(f"Removed {deleted_count} tools for '{service_path}'")
+            return {"deleted_tools": deleted_count}
+        except Exception as e:
+            logger.error(f"Removal failed for '{service_path}': {e}")
+            return None
+
+    async def search(
+            self,
+            query: Optional[str] = None,
+            tags: Optional[List[str]] = None,
+            top_k: int = 10,
+            filters: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Search tools with semantic search.
+
+        Uses repository for data access with native filters.
+
+        Args:
+            query: Search text for semantic search
+            tags: Tag filters (applied in-memory)
+            top_k: Maximum results
+            filters: Field filters (dict format, converted to native)
+
+        Returns:
+            List of tool dictionaries with search metadata
+        """
+        if not self._initialized:
+            logger.warning("Vector search unavailable, returning empty results")
+            return []
+
+        logger.info(f"Search: query='{query}', tags={tags}, top_k={top_k}, filters={filters}")
+
+        try:
+            if query:
+                tools = self._mcp_tools.search(
+                    query=query,
+                    k=top_k * 2,  # Get more for tag filtering
+                    filters=filters
+                )
+            else:
+                # Metadata-only filter
+                if not filters:
+                    logger.warning("No query and no filters provided")
+                    return []
+                tools = self._mcp_tools.filter(
+                    filters=filters,
+                    limit=top_k * 2
+                )
+
+            # Apply tag filtering if needed (in-memory)
+            if tags:
+                filtered_tools = []
+                for tool in tools:
+                    tool_tags = tool.tags or []
+                    if any(tag in tool_tags for tag in tags):
+                        filtered_tools.append(tool)
+                tools = filtered_tools[:top_k]
+            else:
+                tools = tools[:top_k]
+
+            # Convert to result dicts
+            results = self._tools_to_results(tools)
+            logger.info(f"Found {len(results)} tools")
+            return results
+
+        except Exception as e:
+            logger.error(f"Search failed: {e}", exc_info=True)
+            return []
+
+    def _tools_to_results(self, tools: List[McpTool]) -> List[Dict[str, Any]]:
+        """
+        Convert MCPTool model instances to result dictionaries.
+
+        Extracts tool data and search metadata.
+
+        Args:
+            tools: List of MCPTool instances
+
+        Returns:
+            List of dictionaries with tool data and metadata
+        """
+        results = []
+
+        for tool in tools:
+            result = {
+                "tool_name": tool.tool_name,
+                "server_path": tool.server_path,
+                "server_name": tool.server_name,
+                "description": tool.description_main,
+                "description_args": tool.description_args,
+                "description_returns": tool.description_returns,
+                "tags": tool.tags or [],
+                "is_enabled": tool.is_enabled,
+                "entity_type": tool.entity_type or ["all"],
+            }
+
+            # Add basic metadata that might be available
+            if hasattr(tool, 'score') and tool.score is not None:
+                result['score'] = tool.score
+
+            results.append(result)
+
+        return results
+
+    def _agent_to_server_info(
+            self,
+            agent_card_dict: Dict[str, Any],
+            entity_path: str
+    ) -> Dict[str, Any]:
+        """
+        Convert AgentCard dictionary to server_info format for McpTool.
         
         Args:
-            mcp_server_url: URL of the external MCP vector search server (HTTP endpoint)
+            agent_card_dict: AgentCard data as dictionary
+            entity_path: Agent path
+            
+        Returns:
+            server_info dictionary compatible with add_or_update_service
         """
-        self.mcp_server_url = mcp_server_url.rstrip('/')
-        self._initialized = False
-        self._client: Optional[httpx.AsyncClient] = None
-        
-    async def _get_client(self) -> httpx.AsyncClient:
-        """Get or create HTTP client."""
-        if self._client is None:
-            self._client = httpx.AsyncClient(timeout=30.0)
-        return self._client
-        
-    async def initialize(self):
-        """Test connection to external HTTP vector search service."""
-        logger.info(f"Connecting to external vector search service at {self.mcp_server_url}")
-        
-        try:
-            client = await self._get_client()
-            
-            # Test connection by calling list_tools
-            response = await client.post(
-                self.mcp_server_url,
-                json={
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/list",
-                    "params": {}
-                },
-                headers={"Content-Type": "application/json"}
-            )
-            response.raise_for_status()
-            
-            result = response.json()
-            tools = result.get("result", {}).get("tools", [])
-            tool_names = [tool.get("name") for tool in tools]
-            
-            required_tools = ["index_document", "search_documents", "delete_document"]
-            missing_tools = [t for t in required_tools if t not in tool_names]
-            
-            if missing_tools:
-                logger.warning(f"External vector search service is missing tools: {missing_tools}")
-            
-            self._initialized = True
-            logger.info(f"Successfully connected to external vector search service. Available tools: {tool_names}")
-        except Exception as e:
-            # Log warning but don't fail - allow app to start for local development
-            logger.warning(f"⚠️  External vector search service not available at {self.mcp_server_url}: {e}")
-            logger.warning("⚠️  App will continue running but vector search features will be disabled")
-            logger.warning("💡 To enable vector search, ensure the external service is running or switch to embedded mode")
-            self._initialized = False
-    
-    async def add_or_update_service(self, service_path: str, server_info: Dict[str, Any], is_enabled: bool = False):
-        """Add or update a service via external HTTP vector search."""
-        if not self._initialized:
-            logger.debug(f"External service not available, skipping index for '{service_path}'")
-            return None
-            
-        logger.info(f"Indexing service '{service_path}' via external HTTP MCP")
-        
-        # Prepare document for indexing
-        document = {
-            "id": service_path,
-            "name": server_info.get("server_name", ""),
-            "description": server_info.get("description", ""),
-            "tags": server_info.get("tags", []),
-            "metadata": {
-                "is_enabled": is_enabled,
-                "full_server_info": server_info
-            }
-        }
-        
-        try:
-            client = await self._get_client()
-            response = await client.post(
-                self.mcp_server_url,
-                json={
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "index_document",
-                        "arguments": {
-                            "document": json.dumps(document)
-                        }
-                    }
-                },
-                headers={"Content-Type": "application/json"}
-            )
-            response.raise_for_status()
-            
-            result = response.json()
-            logger.info(f"Successfully indexed '{service_path}' via external service")
-            return result.get("result")
-        except Exception as e:
-            logger.warning(f"Failed to index service '{service_path}' via external service: {e}")
-            return None
-    
-    async def remove_service(self, service_path: str):
-        """Remove a service via external HTTP vector search."""
-        if not self._initialized:
-            logger.debug(f"External service not available, skipping delete for '{service_path}'")
-            return None
-            
-        logger.info(f"Removing service '{service_path}' via external HTTP MCP")
-        
-        try:
-            client = await self._get_client()
-            response = await client.post(
-                self.mcp_server_url,
-                json={
-                    "jsonrpc": "2.0",
-                    "id": 3,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "delete_document",
-                        "arguments": {
-                            "document_id": service_path
-                        }
-                    }
-                },
-                headers={"Content-Type": "application/json"}
-            )
-            response.raise_for_status()
-            
-            result = response.json()
-            logger.info(f"Successfully removed '{service_path}' via external service")
-            return result.get("result")
-        except Exception as e:
-            logger.warning(f"Failed to remove service '{service_path}' via external service: {e}")
-            return None
-    
-    async def search(
-        self,
-        query: Optional[str] = None,
-        tags: Optional[List[str]] = None,
-        top_k: int = 10,
-        filters: Optional[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
-        """Search for services via external HTTP vector search."""
-        if not self._initialized:
-            logger.warning("External service not available, returning empty search results")
-            return []
-            
-        logger.info(f"Searching via external HTTP MCP - query: '{query}', tags: {tags}, top_k={top_k}")
-        
-        try:
-            client = await self._get_client()
-            
-            search_args = {
-                "top_k": top_k,
-            }
-            
-            if query:
-                search_args["query"] = query
-            if tags:
-                search_args["tags"] = tags
-            if filters:
-                search_args["filters"] = json.dumps(filters)
-            
-            response = await client.post(
-                self.mcp_server_url,
-                json={
-                    "jsonrpc": "2.0",
-                    "id": 4,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "search_documents",
-                        "arguments": search_args
-                    }
-                },
-                headers={"Content-Type": "application/json"}
-            )
-            response.raise_for_status()
-            
-            result = response.json()
-            
-            # Parse result - MCP tools/call returns result with content array
-            mcp_result = result.get("result", {})
-            content = mcp_result.get("content", [])
-            
-            if content and len(content) > 0:
-                # First content item should have text with JSON results
-                text_content = content[0].get("text", "[]")
-                results = json.loads(text_content) if isinstance(text_content, str) else text_content
-            else:
-                results = []
-            
-            logger.info(f"External search returned {len(results)} results")
-            return results
-        except Exception as e:
-            logger.warning(f"Search via external service failed: {e}, returning empty results")
-            return []
+        skills = agent_card_dict.get("skills", [])
+        skills_text = ", ".join([
+            skill.get("name", "") if isinstance(skill, dict) else str(skill)
+            for skill in skills
+        ])
 
-    async def save_data(self):
-        # TODO: need to be implemented
-        pass
+        return {
+            "server_name": agent_card_dict.get("name", entity_path.strip("/")),
+            "description": agent_card_dict.get("description", ""),
+            "path": entity_path,
+            "tags": agent_card_dict.get("tags", []),
+            "entity_type": "a2a_agent",
+            "skills": skills,
+            "tool_list": [],  # Empty list, will create virtual tool in bulk_create_from_server_info
+            "is_enabled": agent_card_dict.get("is_enabled", False),
+        }
+
+    async def add_or_update_entity(
+            self,
+            entity_path: str,
+            entity_info: Dict[str, Any],
+            entity_type: str,
+            is_enabled: bool = False,
+    ) -> Optional[Dict[str, int]]:
+        """
+        Add or update an entity (agent or server) in the search index.
+        
+        Unified interface compatible with EmbeddedFaissService.
+        Routes entities to appropriate methods based on entity_type.
+        
+        Args:
+            entity_path: Entity path identifier
+            entity_info: Entity data dictionary
+            entity_type: Entity type ("a2a_agent" or "mcp_server")
+            is_enabled: Whether the entity is enabled
+            
+        Returns:
+            Result dictionary or None if unavailable
+        """
+        if entity_type == "a2a_agent":
+            # Convert AgentCard to server_info format
+            server_info = self._agent_to_server_info(entity_info, entity_path)
+            # Override is_enabled from parameter
+            server_info["is_enabled"] = is_enabled
+            return await self.add_or_update_service(entity_path, server_info, is_enabled)
+        elif entity_type == "mcp_server":
+            # Ensure entity_type is set in server_info
+            if "entity_type" not in entity_info:
+                entity_info["entity_type"] = "mcp_server"
+            return await self.add_or_update_service(entity_path, entity_info, is_enabled)
+        else:
+            logger.warning(f"Unknown entity_type '{entity_type}', skipping indexing")
+            return None
+
+    async def remove_entity(
+            self,
+            entity_path: str,
+    ) -> Optional[Dict[str, int]]:
+        """
+        Remove an entity (agent or server) from the search index.
+        
+        Unified interface compatible with EmbeddedFaissService.
+        Uses remove_service which works for both agents and servers.
+        
+        Args:
+            entity_path: Entity path identifier
+            
+        Returns:
+            Result dictionary or None if unavailable
+        """
+        return await self.remove_service(entity_path)
 
     async def cleanup(self):
-        """Cleanup resources - close HTTP client."""
-        logger.info("Cleaning up external vector search service")
-        if self._client:
-            await self._client.aclose()
-            self._client = None
+        """
+        Cleanup resources and close database client connection.
+        """
+        logger.info("Cleaning up vector search service")
+
+        if self._initialized:
+            try:
+                # Close the database client
+                self._client.close()
+                logger.info("Database connection closed")
+            except Exception as e:
+                logger.warning(f"Cleanup error: {e}")
+
+        self._client = None
+        self._mcp_tools = None
         self._initialized = False
-        logger.info("External vector search service cleanup complete")
+        logger.info("Vector search cleanup complete")
+
+    async def search_mixed(
+            self,
+            query: str,
+            entity_types: Optional[List[str]] = None,
+            max_results: int = 20,
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Search across multiple entity types: servers, tools, and agents.
+
+        Uses repository to search McpTool collection.
+
+        Args:
+            query: Natural language query text
+            entity_types: List of entity types to search
+                Options: ["mcp_server", "tool", "a2a_agent"]
+                Default: all types
+            max_results: Maximum results per entity type (default: 20)
+
+        Returns:
+            Dictionary with entity type keys and result lists
+        """
+        if not self._mcp_tools:
+            logger.warning("Vector search not initialized")
+            return {"servers": [], "tools": [], "agents": []}
+
+        if not query or not query.strip():
+            raise ValueError("Query text is required for search_mixed")
+
+        # Validate and normalize entity types
+        max_results = max(1, min(max_results, 50))
+        requested_types = set(entity_types or ["mcp_server", "tool", "a2a_agent"])
+        allowed_types = {"mcp_server", "tool", "a2a_agent"}
+        entity_filter = list(requested_types & allowed_types)
+
+        if not entity_filter:
+            entity_filter = list(allowed_types)
+
+        logger.info(
+            f"search_mixed: query='{query}', types={entity_filter}, "
+            f"max={max_results}"
+        )
+
+        results = {
+            "servers": [],
+            "tools": [],
+            "agents": []
+        }
+
+        try:
+            # Search using model operations
+            tools = self._mcp_tools.search(
+                query=query,
+                k=max_results * 3  # Get more results to filter
+            )
+
+            # Filter and categorize results
+            for tool in tools:
+                tool_entity_types = set(tool.entity_type or ["all"])
+
+                # Check if this tool matches any of the requested entity types
+                if not (tool_entity_types & set(entity_filter) or "all" in tool_entity_types):
+                    continue
+
+                # Calculate relevance score
+                relevance = 0.8  # Default
+                if hasattr(tool, 'score') and tool.score is not None:
+                    relevance = tool.score
+
+                match_context = (
+                    tool.content[:200]
+                    if tool.content
+                    else tool.description_main[:200]
+                )
+
+                # Build result dict
+                result = {
+                    "server_path": tool.server_path,
+                    "server_name": tool.server_name,
+                    "tool_name": tool.tool_name,
+                    "description": tool.description_main,
+                    "match_context": match_context,
+                    "relevance_score": relevance,
+                    "entity_type": tool.entity_type or ["all"],
+                }
+
+                if hasattr(tool, 'score') and tool.score is not None:
+                    result['score'] = tool.score
+
+                # Add to results based on entity types
+                if "tool" in entity_filter and ("tool" in tool_entity_types or "all" in tool_entity_types):
+                    results["tools"].append(result)
+
+                if "mcp_server" in entity_filter and ("mcp_server" in tool_entity_types or "all" in tool_entity_types):
+                    server_result = result.copy()
+                    server_result["path"] = tool.server_path
+                    server_result["description"] = tool.description_main[:100] if tool.description_main else ""
+                    server_result["tags"] = tool.tags or []
+                    server_result["is_enabled"] = tool.is_enabled
+                    results["servers"].append(server_result)
+
+                if "a2a_agent" in entity_filter and ("a2a_agent" in tool_entity_types or "all" in tool_entity_types):
+                    agent_result = result.copy()
+                    agent_result["path"] = tool.server_path
+                    agent_result["agent_name"] = tool.server_name
+                    agent_result["tags"] = tool.tags or []
+                    agent_result["is_enabled"] = tool.is_enabled
+                    results["agents"].append(agent_result)
+
+            # Sort and limit results
+            for key in ["tools", "servers", "agents"]:
+                results[key].sort(key=lambda x: x["relevance_score"], reverse=True)
+                results[key] = results[key][:max_results]
+
+            logger.info(
+                f"Found {len(results['tools'])} tools, "
+                f"{len(results['servers'])} servers, "
+                f"{len(results['agents'])} agents"
+            )
+            return results
+
+        except Exception as e:
+            logger.error(f"search_mixed failed: {e}", exc_info=True)
+            return {"servers": [], "tools": [], "agents": []}

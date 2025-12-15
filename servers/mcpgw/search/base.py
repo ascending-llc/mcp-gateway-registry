@@ -53,7 +53,7 @@ class VectorSearchService(ABC):
             - overall_similarity_score: Similarity score (if semantic search used)
         """
         pass
-    
+
     @abstractmethod
     async def check_availability(self) -> bool:
         """

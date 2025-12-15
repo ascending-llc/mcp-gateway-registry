@@ -39,6 +39,8 @@ dependencies = [
     "cisco-ai-mcp-scanner>=3.0.1",
     "awscli>=1.36.0",
     "boto3>=1.35.0",
+    "weaviate-client>=4.18.1",
+    "langchain-weaviate>=0.0.6",
 ]
 
 [project.optional-dependencies]
@@ -152,6 +154,12 @@ exclude_lines = [
 [tool.coverage.html]
 directory = "htmlcov"
 title = "MCP Registry Coverage Report"
+
+[tool.uv.workspace]
+members = [
+    "libraries/libraries",
+    "libraries",
+]
 
 [tool.uv]
 # Local-only project - never resolve from PyPI
