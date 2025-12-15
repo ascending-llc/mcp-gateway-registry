@@ -1,6 +1,36 @@
 # MCP Gateway Registry Helm Charts
 
-This directory contains Helm charts for deploying the MCP Gateway Registry stack.
+This directory contains Helm charts for deploying the MCP Gateway Registry stack on Kubernetes.
+
+## Prerequisites
+
+### EKS Cluster Setup
+
+For deploying on Amazon EKS, we recommend using the [AWS AI/ML on Amazon EKS](https://github.com/awslabs/ai-on-eks) blueprints to provision a production-ready EKS cluster with GPU support, autoscaling, and AI/ML optimizations.
+
+**Quick Start with AI on EKS:**
+
+```bash
+# Clone the AI on EKS repository
+git clone https://github.com/awslabs/ai-on-eks.git
+cd ai-on-eks
+
+# Until https://github.com/awslabs/ai-on-eks/pull/232 is merged, the custom stack can be used
+
+cd infra/custom
+./install.sh
+```
+
+Once your EKS cluster is provisioned, return to this directory to deploy the MCP Gateway Registry using the Helm charts.
+
+### Required Components
+
+- Kubernetes cluster (EKS, GKE, AKS, or self-managed)
+- `helm` CLI installed (v3.0+)
+- `kubectl` configured to access your cluster
+- Ingress controller (ALB, NGINX, or Traefik)
+- DNS configuration for your domain
+- SSL/TLS certificates (optional but recommended)
 
 ## Charts Overview
 
@@ -134,3 +164,45 @@ helm upgrade mcp-stack ./charts/mcp-gateway-registry-stack \
 ```
 
 Make sure your DNS is configured to point these subdomains to your Kubernetes ingress.
+
+## Deployment Options: Kubernetes vs AWS ECS
+
+This project supports two deployment methods:
+
+### 1. Kubernetes Deployment (This Directory)
+
+Deploy the MCP Gateway Registry on any Kubernetes cluster using Helm charts. Ideal for:
+- Multi-cloud deployments (AWS EKS, Google GKE, Azure AKS)
+- On-premises Kubernetes clusters
+- Organizations with existing Kubernetes infrastructure
+- Scenarios requiring portability and vendor neutrality
+
+**Location:** `/charts` directory (this location)
+
+**Tools:** Helm charts, Kubernetes manifests
+
+### 2. AWS ECS Deployment (Terraform)
+
+Deploy the MCP Gateway Registry on AWS ECS using Terraform for infrastructure-as-code. Ideal for:
+- AWS-native deployments with full AWS integration
+- Organizations using AWS Fargate for serverless containers
+- Teams preferring Terraform for infrastructure management
+- Deployments requiring tight AWS service integration (ALB, ECR, EFS, Secrets Manager)
+
+**Location:** `/terraform/aws-ecs` directory
+
+**Tools:** Terraform modules, AWS ECS task definitions, AWS Fargate
+
+### Choosing Between Kubernetes and ECS
+
+| Feature | Kubernetes (Helm) | AWS ECS (Terraform) |
+|---------|------------------|---------------------|
+| **Portability** | High - works on any K8s cluster | AWS-specific |
+| **Multi-cloud** | Yes | No (AWS only) |
+| **Complexity** | Moderate - requires K8s knowledge | Lower - managed by AWS |
+| **Customization** | High - full K8s ecosystem | Moderate - AWS services |
+| **Auto-scaling** | K8s HPA, Cluster Autoscaler | ECS Service Auto Scaling |
+| **Cost** | Depends on cluster costs | Pay-per-task (Fargate) |
+| **Tools** | kubectl, helm | AWS CLI, terraform |
+
+**Note:** The Helm charts and Terraform configurations are separate deployment methods. Choose the one that best fits your infrastructure and team expertise.
