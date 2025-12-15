@@ -314,16 +314,11 @@ class Repository(Generic[T]):
         """
         try:
             if reranker_type == RerankerProvider.FLASHRANK:
-                # Import FlashrankRerank lazily to avoid Pydantic issues
                 from langchain_community.document_compressors import FlashrankRerank
-                
-                # Rebuild Pydantic model to ensure all dependencies are resolved
                 try:
                     FlashrankRerank.model_rebuild()
-                except Exception:
-                    # model_rebuild() might not be needed in all versions
-                    pass
-                
+                except Exception as e:
+                    logger.error(f"Flashrank model rebuild failed: {e}")
                 return FlashrankRerank(
                     model=kwargs.get("model", "ms-marco-TinyBERT-L-2-v2"),
                     top_n=kwargs.get("top_k", 10),

@@ -53,6 +53,52 @@ class ExternalVectorSearchService(VectorSearchService):
             logger.error("Model operations not initialized, skipping vector search setup")
             return
         logger.info("Vector search service initialized successfully")
+    
+    def get_retriever(
+        self,
+        search_type: Optional[SearchType] = None,
+        enable_rerank: Optional[bool] = None,
+        top_k: int = 10
+    ):
+        """
+        Get a LangChain retriever (with optional rerank) for RAG applications.
+        
+        Similar to BedrockRerank usage:
+        - Creates base retriever
+        - Optionally wraps with ContextualCompressionRetriever for reranking
+        
+        Args:
+            search_type: Search type (uses default if None)
+            enable_rerank: Enable rerank (uses instance setting if None)
+            top_k: Number of results to return
+            
+        Returns:
+            BaseRetriever or ContextualCompressionRetriever
+
+        """
+        if not self._initialized:
+            raise Exception("Vector search service not initialized")
+        
+        use_rerank = enable_rerank if enable_rerank is not None else self.enable_rerank
+        use_search_type = search_type or self.search_type
+        
+        if use_rerank:
+            # Return compression retriever with rerank
+            return self._mcp_tools.get_compression_retriever(
+                reranker_type=RerankerProvider.FLASHRANK,
+                search_type=use_search_type,
+                search_kwargs={"k": top_k * 3},  # 3x candidates
+                reranker_kwargs={
+                    "top_k": top_k,
+                    "model": self.reranker_model
+                }
+            )
+        else:
+            # Return base retriever without rerank
+            return self._mcp_tools.get_retriever(
+                search_type=use_search_type,
+                k=top_k
+            )
 
     async def add_or_update_service(
             self,
@@ -133,34 +179,6 @@ class ExternalVectorSearchService(VectorSearchService):
             logger.error(f"Removal failed for '{service_path}': {e}")
             return None
 
-    def _get_search_params(self, top_k: int, search_type: Optional[SearchType] = None) -> Dict[str, Any]:
-        """
-        Get search parameters.
-        
-        Args:
-            top_k: Number of final results
-            search_type: Override default search type
-        """
-        use_search_type = search_type or self.search_type
-        
-        if self.enable_rerank:
-            # Limit candidate_k to 100 for performance
-            candidate_k = min(top_k * 3, 100)
-            return {
-                "search_type": use_search_type,
-                "k": top_k,
-                "candidate_k": candidate_k,
-                "use_rerank": True
-            }
-        else:
-            # Without rerank: direct search
-            return {
-                "search_type": use_search_type,
-                "k": top_k,
-                "candidate_k": top_k,
-                "use_rerank": False
-            }
-
     async def search(
             self,
             query: Optional[str] = None,
@@ -186,50 +204,44 @@ class ExternalVectorSearchService(VectorSearchService):
             logger.warning("Vector search unavailable, returning empty results")
             return []
 
+        use_search_type = search_type or self.search_type
         logger.info(f"Search: query='{query}', tags={tags}, top_k={top_k}, "
-            f"filters={filters}, search_type={search_type or self.search_type}")
+            f"filters={filters}, search_type={use_search_type}")
 
         try:
-            # Get search parameters
-            params = self._get_search_params(top_k, search_type)
-
-            # If tags filtering needed, get more candidates
-            if tags:
-                params["candidate_k"] = params["candidate_k"] * 2
-
-            if query:
-                # Use rerank search if enabled
-                if params["use_rerank"]:
-                    # For rerank: always use candidate_k for initial retrieval
-                    final_k = params["k"] * 2 if tags else params["k"]
-                    logger.info(f"Using rerank: type={params['search_type'].value}, "
-                        f"candidate_k={params['candidate_k']}, k={final_k}")
-                    tools = self._mcp_tools.search_with_rerank(
-                        query=query,
-                        search_type=params["search_type"],
-                        k=final_k,
-                        candidate_k=params["candidate_k"],
-                        filters=filters,
-                        reranker_type=RerankerProvider.FLASHRANK,
-                        reranker_kwargs={"model": self.reranker_model}
-                    )
-                else:
-                    # Regular search without rerank
-                    final_k = params["k"] * 2 if tags else params["k"]
-                    tools = self._mcp_tools.search(
-                        query=query,
-                        search_type=params["search_type"],
-                        k=final_k,
-                        filters=filters
-                    )
-            else:
+            if not query:
                 # Metadata-only filter
                 if not filters:
                     logger.warning("No query and no filters provided")
                     return []
                 tools = self._mcp_tools.filter(
                     filters=filters,
-                    limit=params["k"] * 2 if tags else params["k"]
+                    limit=top_k * 2 if tags else top_k
+                )
+            elif self.enable_rerank:
+                # Use rerank - Repository layer handles candidate_k automatically
+                candidate_k = min(top_k * 3, 100)
+                if tags:
+                    candidate_k = min(candidate_k * 2, 150)
+                
+                logger.info(f"Using rerank: type={use_search_type.value}, "
+                    f"candidate_k={candidate_k}, k={top_k * 2 if tags else top_k}")
+                tools = self._mcp_tools.search_with_rerank(
+                    query=query,
+                    search_type=use_search_type,
+                    k=top_k * 2 if tags else top_k,
+                    candidate_k=candidate_k,
+                    filters=filters,
+                    reranker_type=RerankerProvider.FLASHRANK,
+                    reranker_kwargs={"model": self.reranker_model}
+                )
+            else:
+                # Regular search without rerank
+                tools = self._mcp_tools.search(
+                    query=query,
+                    search_type=use_search_type,
+                    k=top_k * 2 if tags else top_k,
+                    filters=filters
                 )
 
             # Apply tag filtering if needed (in-memory)
@@ -245,8 +257,7 @@ class ExternalVectorSearchService(VectorSearchService):
 
             # Convert to result dicts
             results = self._tools_to_results(tools)
-            logger.info(f"Found {len(results)} tools "
-                f"(rerank={'ON' if params['use_rerank'] else 'OFF'})")
+            logger.info(f"Found {len(results)} tools (rerank={'ON' if self.enable_rerank else 'OFF'})")
             return results
 
         except Exception as e:
@@ -443,26 +454,29 @@ class ExternalVectorSearchService(VectorSearchService):
         logger.info(f"search_mixed: query='{query}', types={entity_filter}, "
             f"max={max_results}, search_type={search_type or self.search_type}")
 
-        # Get search parameters
-        # Use max_results directly, not multiplied by entity count
-        params = self._get_search_params(max_results * 2, search_type)
+        use_search_type = search_type or self.search_type
         results = {
             "servers": [],
             "tools": [],
             "agents": []
         }
+        
         try:
+            # Calculate search parameters
+            search_k = max_results * 2  # Get 2x for entity filtering
+            candidate_k = min(search_k * 3, 100) if self.enable_rerank else search_k
+            
             # Use rerank if enabled
-            if params["use_rerank"]:
+            if self.enable_rerank:
                 logger.info(
-                    f"Mixed search with rerank: type={params['search_type'].value}, "
-                    f"candidate_k={params['candidate_k']}, k={params['k']}"
+                    f"Mixed search with rerank: type={use_search_type.value}, "
+                    f"candidate_k={candidate_k}, k={search_k}"
                 )
                 tools = self._mcp_tools.search_with_rerank(
                     query=query,
-                    search_type=params["search_type"],
-                    k=params["k"],
-                    candidate_k=params["candidate_k"],
+                    search_type=use_search_type,
+                    k=search_k,
+                    candidate_k=candidate_k,
                     reranker_type=RerankerProvider.FLASHRANK,
                     reranker_kwargs={"model": self.reranker_model}
                 )
@@ -470,8 +484,8 @@ class ExternalVectorSearchService(VectorSearchService):
                 # Regular search without rerank
                 tools = self._mcp_tools.search(
                     query=query,
-                    search_type=params["search_type"],
-                    k=params["k"]
+                    search_type=use_search_type,
+                    k=search_k
                 )
 
             # Filter and categorize results
@@ -539,7 +553,7 @@ class ExternalVectorSearchService(VectorSearchService):
             logger.info(f"Found {len(results['tools'])} tools, "
                         f"{len(results['servers'])} servers, "
                         f"{len(results['agents'])} agents "
-                        f"(rerank={'ON' if params['use_rerank'] else 'OFF'})")
+                        f"(rerank={'ON' if self.enable_rerank else 'OFF'})")
             return results
 
         except Exception as e:
