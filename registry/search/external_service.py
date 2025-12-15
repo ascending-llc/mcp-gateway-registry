@@ -28,7 +28,7 @@ class ExternalVectorSearchService(VectorSearchService):
         """
         Initialize vector database and ensure MCPTool collection exists.
         """
-        if not self._mcp_tools:
+        if not self._initialized:
             logger.error("Model operations not initialized, skipping vector search setup")
             return
         logger.info("Vector search service initialized successfully")
