@@ -12,7 +12,7 @@ import logging
 import time
 from pathlib import Path
 from typing import Dict, Any, Optional, List
-
+from core.scopes import load_scopes_config, check_tool_access
 from .base import VectorSearchService
 
 logger = logging.getLogger(__name__)
@@ -203,9 +203,6 @@ class EmbeddedFaissService(VectorSearchService):
         Implements the full intelligent tool finder logic with FAISS semantic search,
         tag filtering, and scope-based access control.
         """
-        # Import scope checking here to avoid circular imports
-        from ..server import check_tool_access, load_scopes_config
-        
         # Check and reload data if needed
         await self._check_and_reload_if_needed()
         
