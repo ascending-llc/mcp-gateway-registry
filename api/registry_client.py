@@ -1360,6 +1360,72 @@ class RegistryClient:
         logger.info(f"Retrieved ratings for '{path}': {result.num_stars:.2f} stars ({len(result.rating_details)} ratings)")
         return result
 
+    def rate_server(
+        self,
+        path: str,
+        rating: int
+    ) -> RatingResponse:
+        """
+        Submit a rating for a server (1-5 stars).
+
+        Each user can only have one active rating. If user has already rated,
+        this updates their existing rating. System maintains a rotating buffer
+        of the last 100 ratings.
+
+        Args:
+            path: Server path (e.g., /cloudflare-docs)
+            rating: Rating value (1-5 stars)
+
+        Returns:
+            Rating response with success message and updated average rating
+
+        Raises:
+            requests.HTTPError: If rating fails (400 for invalid rating, 403 for unauthorized, 404 for not found)
+        """
+        logger.info(f"Rating server '{path}' with {rating} stars")
+
+        request_data = RatingRequest(rating=rating)
+
+        response = self._make_request(
+            method="POST",
+            endpoint=f"/api/servers{path}/rate",
+            data=request_data.model_dump()
+        )
+
+        result = RatingResponse(**response.json())
+        logger.info(f"Server '{path}' rated successfully. New average: {result.average_rating:.2f}")
+        return result
+
+    def get_server_rating(
+        self,
+        path: str
+    ) -> RatingInfoResponse:
+        """
+        Get rating information for a server.
+
+        Returns average rating and up to 100 most recent individual ratings
+        (maintained as rotating buffer).
+
+        Args:
+            path: Server path (e.g., /cloudflare-docs)
+
+        Returns:
+            Rating information with average and individual ratings
+
+        Raises:
+            requests.HTTPError: If retrieval fails (403 for unauthorized, 404 for not found)
+        """
+        logger.info(f"Getting ratings for server: {path}")
+
+        response = self._make_request(
+            method="GET",
+            endpoint=f"/api/servers{path}/rating"
+        )
+
+        result = RatingInfoResponse(**response.json())
+        logger.info(f"Retrieved ratings for '{path}': {result.num_stars:.2f} stars ({len(result.rating_details)} ratings)")
+        return result
+
     # Anthropic Registry API Methods (v0.1)
 
     def anthropic_list_servers(

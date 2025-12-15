@@ -12,10 +12,15 @@ import httpx
 from ..core.config import settings
 from ..auth.dependencies import web_auth, api_auth, enhanced_auth, nginx_proxied_auth
 from ..services.server_service import server_service
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class RatingRequest(BaseModel):
+    rating: int
 
 # Templates
 templates = Jinja2Templates(directory=settings.templates_dir)
@@ -114,74 +119,6 @@ async def read_root(
             "can_perform_action": can_perform_action  # Helper function for permission checks
         },
     )
-
-
-@router.get("/servers")
-async def get_servers_json(
-    query: str | None = None,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
-):
-    """Get servers data as JSON for React frontend and external API (supports both session cookies and Bearer tokens)."""
-    # CRITICAL DIAGNOSTIC: Log user_context received by endpoint
-    logger.debug(f"[GET_SERVERS_DEBUG] Received user_context: {user_context}")
-    logger.debug(f"[GET_SERVERS_DEBUG] user_context type: {type(user_context)}")
-    if user_context:
-        logger.debug(f"[GET_SERVERS_DEBUG] Username: {user_context.get('username', 'NOT PRESENT')}")
-        logger.debug(f"[GET_SERVERS_DEBUG] Scopes: {user_context.get('scopes', 'NOT PRESENT')}")
-        logger.debug(f"[GET_SERVERS_DEBUG] Auth method: {user_context.get('auth_method', 'NOT PRESENT')}")
-
-    service_data = []
-    search_query = query.lower() if query else ""
-
-    # Get servers based on user permissions (same logic as root route)
-    if user_context['is_admin']:
-        all_servers = server_service.get_all_servers()
-    else:
-        all_servers = server_service.get_all_servers_with_permissions(user_context['accessible_servers'])
-    
-    sorted_server_paths = sorted(
-        all_servers.keys(), 
-        key=lambda p: all_servers[p]["server_name"]
-    )
-    
-    # Filter services based on UI permissions (same logic as root route)
-    accessible_services = user_context.get('accessible_services', [])
-
-    for path in sorted_server_paths:
-        server_info = all_servers[path]
-        server_name = server_info["server_name"]
-        # Extract technical name from path (remove leading and trailing slashes)
-        technical_name = path.strip('/')
-
-        # Check if user can list this service using technical name
-        if 'all' not in accessible_services and technical_name not in accessible_services:
-            continue
-        
-        # Include description and tags in search
-        searchable_text = f"{server_name.lower()} {server_info.get('description', '').lower()} {' '.join(server_info.get('tags', []))}"
-        if not search_query or search_query in searchable_text:
-            # Get real health status from health service
-            from ..health.service import health_service
-            health_data = health_service._get_service_health_data(path)
-            
-            service_data.append(
-                {
-                    "display_name": server_name,
-                    "path": path,
-                    "description": server_info.get("description", ""),
-                    "proxy_pass_url": server_info.get("proxy_pass_url", ""),
-                    "is_enabled": server_service.is_service_enabled(path),
-                    "tags": server_info.get("tags", []),
-                    "num_tools": server_info.get("num_tools", 0),
-                    "num_stars": server_info.get("num_stars", 0),
-                    "is_python": server_info.get("is_python", False),
-                    "license": server_info.get("license", "N/A"),
-                    "health_status": health_data["status"],  
-                    "last_checked_iso": health_data["last_checked_iso"]
-                }
-            )
-    
-    return {"servers": service_data}
 
 
 @router.post("/toggle/{service_path:path}")
@@ -2587,6 +2524,9 @@ async def remove_service_api(
     )
 
 
+# IMPORTANT: Specific routes with path suffixes (/health, /rate, /rating, /toggle)
+# must come BEFORE catch-all /servers/ routes to prevent FastAPI from matching them incorrectly
+
 @router.get("/servers/health")
 async def healthcheck_api(
     request: Request,
@@ -2817,6 +2757,84 @@ async def list_groups_api(
     return await internal_list_groups(request, include_keycloak, include_scopes)
 
 
+@router.post("/servers/rate")
+async def rate_server(
+    path: str,
+    request: RatingRequest,
+    user_context: Annotated[dict, Depends(nginx_proxied_auth)],
+):
+    """Save integer ratings to server."""
+    if not path.startswith("/"):
+        path = "/" + path
+
+    server_info = server_service.get_server_info(path)
+    if not server_info:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Server not found at path '{path}'",
+        )
+
+    # For non-admin users, check if they have access to this specific server
+    if not user_context['is_admin']:
+        if not server_service.user_can_access_server_path(path, user_context['accessible_servers']):
+            logger.warning(
+                f"User {user_context['username']} attempted to rate server {path} without permission"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this server",
+            )
+
+    try:
+        avg_rating = server_service.update_rating(path, user_context["username"], request.rating)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error updating rating: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save rating",
+        )
+
+    return {
+        "message": "Rating added successfully",
+        "average_rating": avg_rating,
+    }
+
+
+@router.get("/servers/rating")
+async def get_server_rating(
+    path: str,
+    user_context: Annotated[dict, Depends(nginx_proxied_auth)],
+):
+    """Get server rating information."""
+    if not path.startswith("/"):
+        path = "/" + path
+
+    server_info = server_service.get_server_info(path)
+    if not server_info:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Server not found at path '{path}'",
+        )
+
+    # For non-admin users, check if they have access to this specific server
+    if not user_context['is_admin']:
+        if not server_service.user_can_access_server_path(path, user_context['accessible_servers']):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this server",
+            )
+    
+    return {
+        "num_stars": server_info.num_stars,
+        "rating_details": server_info.rating_details,
+    }
+
+
 @router.get("/servers/tools/{service_path:path}")
 async def get_service_tools_api(
     service_path: str,
@@ -2851,3 +2869,70 @@ async def get_service_tools_api(
 
     # Call the existing get_service_tools function
     return await get_service_tools(service_path=service_path, user_context=user_context)
+
+@router.get("/servers")
+async def get_servers_json(
+    query: str | None = None,
+    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+):
+    """Get servers data as JSON for React frontend and external API (supports both session cookies and Bearer tokens)."""
+    # CRITICAL DIAGNOSTIC: Log user_context received by endpoint
+    logger.debug(f"[GET_SERVERS_DEBUG] Received user_context: {user_context}")
+    logger.debug(f"[GET_SERVERS_DEBUG] user_context type: {type(user_context)}")
+    if user_context:
+        logger.debug(f"[GET_SERVERS_DEBUG] Username: {user_context.get('username', 'NOT PRESENT')}")
+        logger.debug(f"[GET_SERVERS_DEBUG] Scopes: {user_context.get('scopes', 'NOT PRESENT')}")
+        logger.debug(f"[GET_SERVERS_DEBUG] Auth method: {user_context.get('auth_method', 'NOT PRESENT')}")
+
+    service_data = []
+    search_query = query.lower() if query else ""
+
+    # Get servers based on user permissions (same logic as root route)
+    if user_context['is_admin']:
+        all_servers = server_service.get_all_servers()
+    else:
+        all_servers = server_service.get_all_servers_with_permissions(user_context['accessible_servers'])
+    
+    sorted_server_paths = sorted(
+        all_servers.keys(), 
+        key=lambda p: all_servers[p]["server_name"]
+    )
+    
+    # Filter services based on UI permissions (same logic as root route)
+    accessible_services = user_context.get('accessible_services', [])
+
+    for path in sorted_server_paths:
+        server_info = all_servers[path]
+        server_name = server_info["server_name"]
+        # Extract technical name from path (remove leading and trailing slashes)
+        technical_name = path.strip('/')
+
+        # Check if user can list this service using technical name
+        if 'all' not in accessible_services and technical_name not in accessible_services:
+            continue
+        
+        # Include description and tags in search
+        searchable_text = f"{server_name.lower()} {server_info.get('description', '').lower()} {' '.join(server_info.get('tags', []))}"
+        if not search_query or search_query in searchable_text:
+            # Get real health status from health service
+            from ..health.service import health_service
+            health_data = health_service._get_service_health_data(path)
+            
+            service_data.append(
+                {
+                    "display_name": server_name,
+                    "path": path,
+                    "description": server_info.get("description", ""),
+                    "proxy_pass_url": server_info.get("proxy_pass_url", ""),
+                    "is_enabled": server_service.is_service_enabled(path),
+                    "tags": server_info.get("tags", []),
+                    "num_tools": server_info.get("num_tools", 0),
+                    "num_stars": server_info.get("num_stars", 0),
+                    "is_python": server_info.get("is_python", False),
+                    "license": server_info.get("license", "N/A"),
+                    "health_status": health_data["status"],  
+                    "last_checked_iso": health_data["last_checked_iso"]
+                }
+            )
+    
+    return {"servers": service_data}

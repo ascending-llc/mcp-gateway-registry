@@ -21,6 +21,12 @@ Server Management:
     # Health check
     uv run python registry_management.py healthcheck
 
+    # Rate a server (1-5 stars)
+    uv run python registry_management.py server-rate --path /cloudflare-docs --rating 5
+
+    # Get server rating information
+    uv run python registry_management.py server-rating --path /cloudflare-docs
+
 Group Management:
     # Add server to groups
     uv run python registry_management.py add-to-groups --server my-server --groups group1,group2
@@ -744,6 +750,67 @@ def cmd_list_groups(args: argparse.Namespace) -> int:
 
     except Exception as e:
         logger.error(f"List groups failed: {e}")
+        return 1
+
+
+def cmd_server_rate(args: argparse.Namespace) -> int:
+    """
+    Rate a server (1-5 stars).
+
+    Args:
+        args: Command arguments with path and rating
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
+    try:
+        client = _create_client(args)
+        response: RatingResponse = client.rate_server(
+            path=args.path,
+            rating=args.rating
+        )
+
+        logger.info(f"✓ {response.message}")
+        logger.info(f"Average rating: {response.average_rating:.2f} stars")
+
+        return 0
+
+    except Exception as e:
+        logger.error(f"Failed to rate server: {e}")
+        return 1
+
+
+def cmd_server_rating(args: argparse.Namespace) -> int:
+    """
+    Get rating information for a server.
+
+    Args:
+        args: Command arguments with path
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
+    try:
+        client = _create_client(args)
+        response: RatingInfoResponse = client.get_server_rating(path=args.path)
+
+        logger.info(f"\nRating for server '{args.path}':")
+        logger.info(f"  Average: {response.num_stars:.2f} stars")
+        logger.info(f"  Total ratings: {len(response.rating_details)}")
+
+        if response.rating_details:
+            logger.info("\nIndividual ratings (most recent):")
+            # Show first 10 ratings
+            for detail in response.rating_details[:10]:
+                logger.info(f"  {detail.user}: {detail.rating} stars")
+
+            if len(response.rating_details) > 10:
+                logger.info(f"  ... and {len(response.rating_details) - 10} more")
+
+        return 0
+
+    except Exception as e:
+        logger.error(f"Failed to get ratings: {e}")
         return 1
 
 
@@ -1805,6 +1872,29 @@ Examples:
         help="Exclude scope information"
     )
 
+    # Server rate command
+    server_rate_parser = subparsers.add_parser("server-rate", help="Rate a server (1-5 stars)")
+    server_rate_parser.add_argument(
+        "--path",
+        required=True,
+        help="Server path (e.g., /cloudflare-docs)"
+    )
+    server_rate_parser.add_argument(
+        "--rating",
+        required=True,
+        type=int,
+        choices=[1, 2, 3, 4, 5],
+        help="Rating value (1-5 stars)"
+    )
+
+    # Server rating command
+    server_rating_parser = subparsers.add_parser("server-rating", help="Get rating information for a server")
+    server_rating_parser.add_argument(
+        "--path",
+        required=True,
+        help="Server path (e.g., /cloudflare-docs)"
+    )
+
     # Agent Management Commands
 
     # Agent register command
@@ -2123,6 +2213,8 @@ Examples:
         "create-group": cmd_create_group,
         "delete-group": cmd_delete_group,
         "list-groups": cmd_list_groups,
+        "server-rate": cmd_server_rate,
+        "server-rating": cmd_server_rating,
         "agent-register": cmd_agent_register,
         "agent-list": cmd_agent_list,
         "agent-get": cmd_agent_get,

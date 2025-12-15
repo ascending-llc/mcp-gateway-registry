@@ -458,6 +458,75 @@ class ServerService:
             logger.info("No service state changes detected after reload")
 
 
+    def update_rating(
+        self, 
+        path: str, 
+        username: str, 
+        rating: int,
+    ) -> float:
+        """
+        Log a user rating for a server. If the user has already rated, update their rating.
+
+        Args:
+            path: server path
+            username: The user who submitted rating
+            rating: integer between 1-5
+        
+        Return:
+            Updated average rating
+
+        Raises:
+            ValueError: If server not found
+        """
+        if path not in self.registered_servers:
+            logger.error(f"Cannot update server at path '{path}': not found")
+            raise ValueError(f"Server not found at path: {path}")
+
+        # Validate rating
+        if not isinstance(rating, int):
+            logger.error(f"Invalid rating type: {rating} (type={type(rating)})")
+            raise ValueError("Rating must be an integer")
+        if rating < 1 or rating > 5:
+            logger.error(f"Invalid rating value: {rating}. Must be between 1 and 5.")
+            raise ValueError("Rating must be between 1 and 5 (inclusive)")
+            
+        server_info = self.registered_servers[path]
+        
+        # Ensure rating_details is a list (should be by default from schema)
+        if "rating_details" not in server_info or server_info["rating_details"] is None:
+            server_info["rating_details"] = []
+        
+        # Check if this user has already rated; if so, update their rating
+        user_found = False
+        for entry in server_info["rating_details"]:
+            if entry.get("user") == username:
+                entry["rating"] = rating
+                user_found = True
+                break
+        # If no existing rating from this user, append a new one
+        if not user_found:
+            server_info["rating_details"].append({
+                "user": username,
+                "rating": rating,
+            })
+
+            # Maintain a perfect rotating buffer of MAX_RATINGS entries
+            MAX_RATINGS = 100
+            if len(server_info["rating_details"]) > MAX_RATINGS:
+                # Remove the oldest entry to maintain exactly MAX_RATINGS entries
+                server_info["rating_details"].pop(0)
+                logger.info(f"Removed oldest rating to maintain {MAX_RATINGS} entries limit for server at '{path}'")
+
+        # Compute average rating
+        all_ratings = [entry["rating"] for entry in server_info["rating_details"]]
+        server_info["num_stars"] = float(sum(all_ratings) / len(all_ratings))
+
+        # Save to file
+        self.save_server_to_file(server_info)
+
+        logger.info(f"Updated rating for server {path}: user {username} rated {rating}, new average: {server_info['num_stars']}")
+        return server_info["num_stars"]
+
     def remove_server(self, path: str) -> bool:
         """Remove a server from the registry and file system."""
         # Check if server exists

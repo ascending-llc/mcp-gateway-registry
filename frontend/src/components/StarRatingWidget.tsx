@@ -14,7 +14,8 @@ interface RatingInfoResponse {
 }
 
 interface StarRatingWidgetProps {
-  agentPath: string;
+  resourceType: 'agents' | 'servers';
+  path: string;
   initialRating?: number;
   initialCount?: number;
   authToken?: string | null;
@@ -24,7 +25,8 @@ interface StarRatingWidgetProps {
 
 
 const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
-  agentPath,
+  resourceType,
+  path,
   initialRating = 0,
   initialCount = 0,
   authToken,
@@ -47,7 +49,7 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
     if (authToken) {
       loadCurrentRating();
     }
-  }, [agentPath, authToken]);
+  }, [resourceType, path, authToken]);
 
 
   // Close dropdown when clicking outside
@@ -71,8 +73,12 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
   const loadCurrentRating = async () => {
     try {
       const headers = authToken ? { Authorization: `Bearer ${authToken}` } : undefined;
+      // Agents use path parameters, servers use query parameters
+      const url = resourceType === 'agents'
+        ? `/api/${resourceType}${path}/rating`
+        : `/api/${resourceType}/rating?path=${encodeURIComponent(path)}`;
       const response = await axios.get<RatingInfoResponse>(
-        `/api/agents${agentPath}/rating`,
+        url,
         headers ? { headers } : undefined
       );
 
@@ -96,17 +102,28 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
 
 
   const handleSubmitRating = async () => {
-    if (!selectedRating || !authToken) return;
+    console.log('handleSubmitRating called', { selectedRating, authToken: !!authToken });
+    if (!selectedRating || !authToken) {
+      console.log('Validation failed - no rating or token');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       const headers = { Authorization: `Bearer ${authToken}` };
+      // Agents use path parameters, servers use query parameters
+      const url = resourceType === 'agents'
+        ? `/api/${resourceType}${path}/rate`
+        : `/api/${resourceType}/rate?path=${encodeURIComponent(path)}`;
+      console.log('Submitting rating to:', url, { rating: selectedRating });
+
       const response = await axios.post(
-        `/api/agents${agentPath}/rate`,
+        url,
         { rating: selectedRating },
         { headers }
       );
 
+      console.log('Rating response:', response.data);
       const newAverageRating = response.data.average_rating;
       setAverageRating(newAverageRating);
       setCurrentUserRating(selectedRating);
@@ -130,12 +147,15 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
       }
 
       // Auto-close after 2 seconds
+      console.log('Setting timeout to close dialog...');
       setTimeout(() => {
+        console.log('Closing dialog now');
         setShowSuccess(false);
         setIsDropdownOpen(false);
       }, 2000);
     } catch (error: any) {
       console.error('Failed to submit rating:', error);
+      console.error('Error details:', error.response?.data);
       if (onShowToast) {
         onShowToast(
           error.response?.data?.detail || 'Failed to submit rating',
@@ -181,8 +201,8 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
       <button
         onClick={() => setIsDropdownOpen(!isDropdownOpen)}
         className="flex items-center gap-2 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 p-2 rounded-lg transition-colors duration-200"
-        title="Click to rate this agent"
-        aria-label="Rate this agent"
+        title={`Click to rate this ${resourceType.slice(0, -1)}`}
+        aria-label={`Rate this ${resourceType.slice(0, -1)}`}
         aria-expanded={isDropdownOpen}
         aria-haspopup="dialog"
       >
@@ -204,7 +224,7 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
         <div
           className="absolute top-full left-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 p-4"
           role="dialog"
-          aria-label="Agent rating form"
+          aria-label={`${resourceType.slice(0, -1)} rating form`}
         >
           {/* Success State */}
           {showSuccess ? (
@@ -248,7 +268,7 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
             // Rating Form
             <>
               <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
-                {currentUserRating ? 'Update your rating:' : 'Rate this agent:'}
+                {currentUserRating ? 'Update your rating:' : `Rate this ${resourceType.slice(0, -1)}:`}
               </h4>
               {currentUserRating && (
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">

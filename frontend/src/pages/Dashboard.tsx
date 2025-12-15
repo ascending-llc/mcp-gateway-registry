@@ -772,6 +772,7 @@ const Dashboard: React.FC = () => {
             onRefreshSuccess={refreshData}
             onShowToast={showToast}
             onServerUpdate={handleServerUpdate}
+            authToken={agentApiToken}
           />
         ))}
       </div>
@@ -824,6 +825,7 @@ const Dashboard: React.FC = () => {
                     onRefreshSuccess={refreshData}
                     onShowToast={showToast}
                     onServerUpdate={handleServerUpdate}
+                    authToken={agentApiToken}
                   />
                 ))}
               </div>
@@ -926,6 +928,7 @@ const Dashboard: React.FC = () => {
                         onRefreshSuccess={refreshData}
                         onShowToast={showToast}
                         onServerUpdate={handleServerUpdate}
+                        authToken={agentApiToken}
                       />
                     ))}
                   </div>

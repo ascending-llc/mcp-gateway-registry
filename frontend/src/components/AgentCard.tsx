@@ -343,7 +343,8 @@ const AgentCard: React.FC<AgentCardProps> = ({
         <div className="px-5 pb-4">
           <div className="grid grid-cols-2 gap-4">
             <StarRatingWidget
-              agentPath={agent.path}
+              resourceType="agents"
+              path={agent.path}
               initialRating={agent.rating || 0}
               initialCount={agent.rating_details?.length || 0}
               authToken={authToken}
