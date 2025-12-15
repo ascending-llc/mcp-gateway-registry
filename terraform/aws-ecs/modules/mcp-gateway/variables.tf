@@ -356,3 +356,39 @@ variable "session_cookie_domain" {
   default     = ""
 }
 
+# Security Scanning Configuration
+variable "security_scan_enabled" {
+  description = "Enable/disable security scanning for MCP servers during registration"
+  type        = bool
+  default     = true
+}
+
+variable "security_scan_on_registration" {
+  description = "Automatically scan servers when they are registered"
+  type        = bool
+  default     = true
+}
+
+variable "security_block_unsafe_servers" {
+  description = "Block (disable) servers that fail security scans"
+  type        = bool
+  default     = true
+}
+
+variable "security_analyzers" {
+  description = "Comma-separated list of analyzers to use for security scanning (available: yara, llm, api)"
+  type        = string
+  default     = "yara"
+}
+
+variable "security_scan_timeout" {
+  description = "Security scan timeout in seconds"
+  type        = number
+  default     = 60
+}
+
+variable "security_add_pending_tag" {
+  description = "Add 'security-pending' tag to servers that fail security scan"
+  type        = bool
+  default     = true
+}

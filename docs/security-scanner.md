@@ -10,31 +10,39 @@ The MCP Gateway Registry addresses this challenge by integrating automated secur
 
 ### Security Scanning Workflows
 
-The registry implements two complementary security scanning workflows:
+The registry implements multiple complementary security scanning workflows:
 
-1. **Automated Scanning During Server Addition** - Every new server is scanned before being made available to AI agents
-2. **Periodic Registry Scans** - Comprehensive security audits across all enabled servers in the registry
+1. **Automated Scanning During Server Registration** - Every new server is scanned before being made available to AI agents
+2. **Manual On-Demand Scans via API** - Administrators can trigger security scans for specific servers
+3. **Query Scan Results via API** - View detailed security scan results for any registered server
+4. **Periodic Registry Scans** - Comprehensive security audits across all enabled servers in the registry
 
 These workflows ensure continuous security monitoring throughout the MCP server lifecycle, from initial registration through ongoing operations.
 
-## Security Scanning During Server Addition
+## Security Scanning During Server Registration
 
 When adding a new MCP server to the registry, a security scan is automatically performed as part of the registration workflow. This pre-deployment scanning prevents vulnerable or malicious servers from being exposed to AI agents.
 
 ### Command Format
 
 ```bash
-./cli/service_mgmt.sh add <config-file> [analyzers]
+uv run python api/registry_management.py --token-file .oauth-tokens/ingress.json \
+  --registry-url http://localhost register --config <config-file>
 ```
 
 **Parameters:**
 - `<config-file>`: JSON configuration file containing server details
-- `[analyzers]`: Optional comma-separated list of analyzers to use (default: `yara`)
-  - `yara` - Fast pattern-based detection (no API key required)
-  - `llm` - AI-powered deep analysis (requires API key)
-  - `yara,llm` - Both analyzers for comprehensive coverage
+- Security scanning is automatically enabled by default (configured via environment variables)
 
-### Example: Adding Cloudflare Documentation Server
+**Environment Variables for Security Scanning:**
+- `SECURITY_SCAN_ENABLED=true` - Enable/disable security scanning (default: true)
+- `SECURITY_SCAN_ON_REGISTRATION=true` - Scan during registration (default: true)
+- `SECURITY_SCAN_BLOCK_UNSAFE_SERVERS=true` - Auto-disable unsafe servers (default: true)
+- `SECURITY_ANALYZERS=yara` - Comma-separated list of analyzers (default: yara)
+- `SECURITY_SCAN_TIMEOUT=60` - Scan timeout in seconds (default: 60)
+- `MCP_SCANNER_LLM_API_KEY=<key>` - API key for LLM analyzer (optional)
+
+### Example: Registering Cloudflare Documentation Server
 
 **Configuration File** (`cli/examples/cloudflare-docs-server-config.json`):
 
@@ -48,14 +56,18 @@ When adding a new MCP server to the registry, a security scan is automatically p
 }
 ```
 
-**Adding the Server with Security Scan:**
+**Registering the Server (Security Scan Automatic):**
 
 ```bash
-# Add with default YARA analyzer (fast, no API key required)
-./cli/service_mgmt.sh add cli/examples/cloudflare-docs-server-config.json
+# Register with automatic security scan (default YARA analyzer)
+uv run python api/registry_management.py --token-file .oauth-tokens/ingress.json \
+  --registry-url http://localhost register --config cli/examples/cloudflare-docs-server-config.json
 
-# Add with both YARA and LLM analyzers (comprehensive scan)
-./cli/service_mgmt.sh add cli/examples/cloudflare-docs-server-config.json yara,llm
+# To use LLM analyzer, set environment variable first
+export MCP_SCANNER_LLM_API_KEY=sk-your-api-key
+export SECURITY_ANALYZERS=yara,llm
+uv run python api/registry_management.py --token-file .oauth-tokens/ingress.json \
+  --registry-url http://localhost register --config cli/examples/cloudflare-docs-server-config.json
 ```
 
 ### Security Scan Results
@@ -161,6 +173,133 @@ WARNING: Server failed security scan - Review required before use
 *Servers that fail security scans are automatically added in disabled state with a `security-pending` tag, requiring administrator review before being enabled.*
 
 This workflow ensures that vulnerable servers never become accessible to AI agents without explicit administrator review and remediation.
+
+## Manual On-Demand Security Scans (API)
+
+Administrators can trigger manual security scans for specific servers using the REST API or CLI commands. This is useful for:
+- Re-scanning servers after updates or patches
+- On-demand security assessments
+- Validating security fixes
+- Regular compliance checks
+
+### API Endpoints
+
+#### Trigger Security Scan (Admin Only)
+
+**Endpoint:** `POST /api/servers/{path}/rescan`
+
+**Description:** Initiates a new security scan for the specified server and returns the results.
+
+**Authentication:** JWT Bearer token or session cookie
+
+**Authorization:** Requires admin privileges
+
+**Example using CLI:**
+
+```bash
+# Trigger security scan for a specific server
+uv run python api/registry_management.py --token-file .oauth-tokens/ingress.json \
+  --registry-url http://localhost rescan --path /cloudflare-docs
+```
+
+**Example Output:**
+
+```
+Security scan completed for server '/cloudflare-docs':
+  Status: SAFE
+  Scan timestamp: 2025-12-15T15:24:46.956393Z
+  Analyzers used: yara
+
+  Severity counts:
+    Critical: 0
+    High: 0
+    Medium: 0
+    Low: 0
+```
+
+**Example using curl:**
+
+```bash
+curl -X POST http://localhost/api/servers/cloudflare-docs/rescan \
+  -H "Authorization: Bearer $JWT_TOKEN"
+```
+
+#### Query Scan Results
+
+**Endpoint:** `GET /api/servers/{path}/security-scan`
+
+**Description:** Retrieves the latest security scan results for a server, including detailed threat analysis and tool-level findings.
+
+**Authentication:** JWT Bearer token or session cookie
+
+**Authorization:** Requires admin privileges or access to the server
+
+**Example using CLI:**
+
+```bash
+# Get security scan results
+uv run python api/registry_management.py --token-file .oauth-tokens/ingress.json \
+  --registry-url http://localhost security-scan --path /cloudflare-docs
+
+# Get results in JSON format
+uv run python api/registry_management.py --token-file .oauth-tokens/ingress.json \
+  --registry-url http://localhost security-scan --path /cloudflare-docs --json
+```
+
+**Example Output:**
+
+```
+Security scan results for server '/cloudflare-docs':
+
+  Analyzer: yara_analyzer
+    Findings: 2
+      - search_cloudflare_documentation: SAFE
+      - migrate_pages_to_workers_guide: SAFE
+
+  Total tools scanned: 2
+  Safe tools: 2
+```
+
+**Example using curl:**
+
+```bash
+curl -X GET http://localhost/api/servers/cloudflare-docs/security-scan \
+  -H "Authorization: Bearer $JWT_TOKEN"
+```
+
+### Python Client Library
+
+The registry includes a Python client library with built-in security scan support:
+
+```python
+from api.registry_client import RegistryClient
+
+# Initialize client
+client = RegistryClient(
+    registry_url="http://localhost",
+    token_file=".oauth-tokens/ingress.json"
+)
+
+# Trigger security scan
+scan_result = client.rescan_server(path="/cloudflare-docs")
+print(f"Scan Status: {'SAFE' if scan_result.is_safe else 'UNSAFE'}")
+print(f"Critical Issues: {scan_result.critical_issues}")
+
+# Get scan results
+results = client.get_security_scan(path="/cloudflare-docs")
+for analyzer_name, analyzer_data in results.analysis_results.items():
+    print(f"Analyzer: {analyzer_name}")
+    print(f"  Findings: {len(analyzer_data.get('findings', []))}")
+```
+
+### Scan Results Storage
+
+All security scan results are automatically saved to the `security_scans/` directory:
+
+- **Latest Scans:** `security_scans/<server-url>.json`
+- **Archived Scans:** `security_scans/YYYY-MM-DD/scan_<server-url>_YYYYMMDD_HHMMSS.json`
+
+The results can be queried via the API or accessed directly from the filesystem.
 
 ## Periodic Registry Scans
 
@@ -361,8 +500,17 @@ chmod 755 security_scans
 
 ## Additional Resources
 
+### Documentation
 - **Cisco AI Defence MCP Scanner:** https://github.com/cisco-ai-defense/mcp-scanner
-- **Service Management Script:** `cli/service_mgmt.sh`
-- **Security Scanner CLI:** `cli/mcp_security_scanner.py`
-- **Periodic Scan Script:** `cli/scan_all_servers.py`
 - **Example Report:** [scan_report_example.md](scan_report_example.md)
+
+### CLI Tools
+- **Registry Management CLI:** `api/registry_management.py` - Main CLI for server registration and security scanning
+- **Periodic Scan Script:** `cli/scan_all_servers.py` - Comprehensive registry-wide security audits
+
+### API Endpoints
+- **Trigger Scan:** `POST /api/servers/{path}/rescan` - Admin-only manual security scan
+- **Query Results:** `GET /api/servers/{path}/security-scan` - Retrieve scan results
+
+### Python Client
+- **Registry Client:** `api/registry_client.py` - Python library with `rescan_server()` and `get_security_scan()` methods

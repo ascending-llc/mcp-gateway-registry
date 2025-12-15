@@ -55,6 +55,15 @@ class Settings(BaseSettings):
     # Well-known discovery settings
     enable_wellknown_discovery: bool = True
     wellknown_cache_ttl: int = 300  # 5 minutes
+
+    # Security scanning settings
+    security_scan_enabled: bool = True
+    security_scan_on_registration: bool = True
+    security_block_unsafe_servers: bool = True
+    security_analyzers: str = "yara"  # Comma-separated: yara, llm, or yara,llm
+    security_scan_timeout: int = 60  # 1 minutes
+    security_add_pending_tag: bool = True
+    mcp_scanner_llm_api_key: str = ""  # Optional LLM API key for advanced analysis
     
     # Container paths - adjust for local development
     container_app_dir: Path = Path("/app")

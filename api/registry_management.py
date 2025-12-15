@@ -27,6 +27,12 @@ Server Management:
     # Get server rating information
     uv run python registry_management.py server-rating --path /cloudflare-docs
 
+    # Get security scan results for a server
+    uv run python registry_management.py security-scan --path /cloudflare-docs
+
+    # Trigger manual security scan (admin only)
+    uv run python registry_management.py rescan --path /cloudflare-docs
+
 Group Management:
     # Add server to groups
     uv run python registry_management.py add-to-groups --server my-server --groups group1,group2
@@ -811,6 +817,102 @@ def cmd_server_rating(args: argparse.Namespace) -> int:
 
     except Exception as e:
         logger.error(f"Failed to get ratings: {e}")
+        return 1
+
+
+def cmd_security_scan(args: argparse.Namespace) -> int:
+    """
+    Get security scan results for a server.
+
+    Args:
+        args: Command arguments with path and optional json flag
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
+    try:
+        client = _create_client(args)
+        response: SecurityScanResult = client.get_security_scan(path=args.path)
+
+        if args.json:
+            # Output raw JSON
+            print(json.dumps(response.model_dump(), indent=2, default=str))
+        else:
+            # Pretty print results
+            logger.info(f"\nSecurity scan results for server '{args.path}':")
+
+            # Display analysis results by analyzer
+            if response.analysis_results:
+                for analyzer_name, analyzer_data in response.analysis_results.items():
+                    logger.info(f"\n  Analyzer: {analyzer_name}")
+                    if isinstance(analyzer_data, dict) and 'findings' in analyzer_data:
+                        findings = analyzer_data['findings']
+                        logger.info(f"    Findings: {len(findings)}")
+                        for finding in findings[:5]:  # Show first 5
+                            severity = finding.get('severity', 'UNKNOWN')
+                            tool_name = finding.get('tool_name', 'unknown')
+                            logger.info(f"      - {tool_name}: {severity}")
+                        if len(findings) > 5:
+                            logger.info(f"      ... and {len(findings) - 5} more")
+
+            # Display tool results summary
+            if response.tool_results:
+                logger.info(f"\n  Total tools scanned: {len(response.tool_results)}")
+                safe_count = sum(1 for tool in response.tool_results if tool.get('is_safe', False))
+                unsafe_count = len(response.tool_results) - safe_count
+                logger.info(f"  Safe tools: {safe_count}")
+                if unsafe_count > 0:
+                    logger.info(f"  Unsafe tools: {unsafe_count}")
+                    logger.warning("\n  WARNING: Some tools flagged as potentially unsafe!")
+
+        return 0
+
+    except Exception as e:
+        logger.error(f"Failed to get security scan results: {e}")
+        return 1
+
+
+def cmd_rescan(args: argparse.Namespace) -> int:
+    """
+    Trigger manual security scan for a server (admin only).
+
+    Args:
+        args: Command arguments with path and optional json flag
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
+    try:
+        client = _create_client(args)
+        response: RescanResponse = client.rescan_server(path=args.path)
+
+        if args.json:
+            # Output raw JSON
+            print(json.dumps(response.model_dump(), indent=2, default=str))
+        else:
+            # Pretty print results
+            safety_status = "SAFE" if response.is_safe else "UNSAFE"
+            logger.info(f"\nSecurity scan completed for server '{args.path}':")
+            logger.info(f"  Status: {safety_status}")
+            logger.info(f"  Scan timestamp: {response.scan_timestamp}")
+            logger.info(f"  Analyzers used: {', '.join(response.analyzers_used)}")
+            logger.info(f"\n  Severity counts:")
+            logger.info(f"    Critical: {response.critical_issues}")
+            logger.info(f"    High: {response.high_severity}")
+            logger.info(f"    Medium: {response.medium_severity}")
+            logger.info(f"    Low: {response.low_severity}")
+
+            if response.scan_failed:
+                logger.error(f"\n  Scan failed: {response.error_message}")
+                return 1
+
+            if not response.is_safe:
+                logger.warning("\n  WARNING: Server flagged as potentially unsafe!")
+
+        return 0
+
+    except Exception as e:
+        logger.error(f"Failed to trigger security scan: {e}")
         return 1
 
 
@@ -1895,6 +1997,32 @@ Examples:
         help="Server path (e.g., /cloudflare-docs)"
     )
 
+    # Server security scan command
+    security_scan_parser = subparsers.add_parser("security-scan", help="Get security scan results for a server")
+    security_scan_parser.add_argument(
+        "--path",
+        required=True,
+        help="Server path (e.g., /cloudflare-docs)"
+    )
+    security_scan_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output raw JSON"
+    )
+
+    # Server rescan command
+    rescan_parser = subparsers.add_parser("rescan", help="Trigger manual security scan for a server (admin only)")
+    rescan_parser.add_argument(
+        "--path",
+        required=True,
+        help="Server path (e.g., /cloudflare-docs)"
+    )
+    rescan_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output raw JSON"
+    )
+
     # Agent Management Commands
 
     # Agent register command
@@ -2215,6 +2343,8 @@ Examples:
         "list-groups": cmd_list_groups,
         "server-rate": cmd_server_rate,
         "server-rating": cmd_server_rating,
+        "security-scan": cmd_security_scan,
+        "rescan": cmd_rescan,
         "agent-register": cmd_agent_register,
         "agent-list": cmd_agent_list,
         "agent-get": cmd_agent_get,

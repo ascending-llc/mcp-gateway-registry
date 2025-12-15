@@ -3,23 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@headlessui/react": "^1.7.17",
+    "@heroicons/react": "^2.0.18",
+    "@tailwindcss/forms": "^0.5.7",
     "@types/node": "^16.18.0",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",
+    "ajv": "8.14.0",
+    "autoprefixer": "^10.4.16",
+    "axios": "^1.12.0",
+    "clsx": "^2.0.0",
+    "postcss": "^8.4.47",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.1",
     "react-scripts": "5.0.1",
-    "typescript": "^4.9.5",
-    "axios": "^1.12.0",
-    "@heroicons/react": "^2.0.18",
-    "@headlessui/react": "^1.7.17",
-    "clsx": "^2.0.0",
     "tailwindcss": "^3.3.6",
-    "@tailwindcss/forms": "^0.5.7",
-    "autoprefixer": "^10.4.16",
-    "postcss": "^8.4.32",
-    "ajv": "8.14.0"
+    "typescript": "^4.9.5"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -45,5 +45,10 @@
       "last 1 safari version"
     ]
   },
-  "proxy": "http://localhost:7860"
-} 
+  "proxy": "http://localhost:7860",
+  "overrides": {
+    "nth-check": "^2.1.1",
+    "webpack-dev-server": "^5.2.1",
+    "resolve-url-loader": "^5.0.0"
+  }
+}

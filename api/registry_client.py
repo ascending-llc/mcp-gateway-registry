@@ -122,6 +122,30 @@ class ErrorResponse(BaseModel):
     request_id: Optional[str] = Field(None, description="Request ID")
 
 
+class SecurityScanResult(BaseModel):
+    """Security scan result model."""
+
+    analysis_results: Dict[str, Any] = Field(..., description="Analysis results by analyzer")
+    tool_results: List[Dict[str, Any]] = Field(..., description="Detailed tool scan results")
+
+
+class RescanResponse(BaseModel):
+    """Server rescan response model."""
+
+    server_url: str = Field(..., description="Server URL that was scanned")
+    server_path: str = Field(..., description="Server path")
+    scan_timestamp: str = Field(..., description="Scan timestamp")
+    is_safe: bool = Field(..., description="Whether server is safe")
+    critical_issues: int = Field(..., description="Number of critical issues")
+    high_severity: int = Field(..., description="Number of high severity issues")
+    medium_severity: int = Field(..., description="Number of medium severity issues")
+    low_severity: int = Field(..., description="Number of low severity issues")
+    analyzers_used: List[str] = Field(..., description="Analyzers used in scan")
+    scan_failed: bool = Field(..., description="Whether scan failed")
+    error_message: Optional[str] = Field(None, description="Error message if scan failed")
+    raw_output: Optional[Dict[str, Any]] = Field(None, description="Raw scan output")
+
+
 class GroupListResponse(BaseModel):
     """Group list response model."""
 
@@ -1424,6 +1448,73 @@ class RegistryClient:
 
         result = RatingInfoResponse(**response.json())
         logger.info(f"Retrieved ratings for '{path}': {result.num_stars:.2f} stars ({len(result.rating_details)} ratings)")
+        return result
+
+
+    def get_security_scan(
+        self,
+        path: str
+    ) -> SecurityScanResult:
+        """
+        Get security scan results for a server.
+
+        Returns the latest security scan results including threat analysis,
+        severity levels, and detailed findings for each tool.
+
+        Args:
+            path: Server path (e.g., /cloudflare-docs)
+
+        Returns:
+            Security scan results with analysis_results and tool_results
+
+        Raises:
+            requests.HTTPError: If retrieval fails (403 for unauthorized, 404 for not found)
+        """
+        logger.info(f"Getting security scan results for server: {path}")
+
+        response = self._make_request(
+            method="GET",
+            endpoint=f"/api/servers{path}/security-scan"
+        )
+
+        result = SecurityScanResult(**response.json())
+        logger.info(f"Retrieved security scan results for '{path}'")
+        return result
+
+
+    def rescan_server(
+        self,
+        path: str
+    ) -> RescanResponse:
+        """
+        Trigger a manual security scan for a server.
+
+        Initiates a new security scan for the specified server and returns
+        the results. This operation is admin-only.
+
+        Args:
+            path: Server path (e.g., /cloudflare-docs)
+
+        Returns:
+            Newly generated security scan results
+
+        Raises:
+            requests.HTTPError: If scan fails (403 for non-admin, 404 for not found, 500 for scan error)
+        """
+        logger.info(f"Triggering security scan for server: {path}")
+
+        response = self._make_request(
+            method="POST",
+            endpoint=f"/api/servers{path}/rescan"
+        )
+
+        result = RescanResponse(**response.json())
+        safety_status = "SAFE" if result.is_safe else "UNSAFE"
+        logger.info(
+            f"Security scan completed for '{path}': {safety_status} "
+            f"(Critical: {result.critical_issues}, High: {result.high_severity}, "
+            f"Medium: {result.medium_severity}, Low: {result.low_severity})"
+        )
         return result
 
     # Anthropic Registry API Methods (v0.1)

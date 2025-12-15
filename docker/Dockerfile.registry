@@ -45,7 +45,8 @@ RUN pip install uv && \
     "scikit-learn>=1.3.0" \
     "torch>=1.6.0" \
     "huggingface-hub[cli,hf_xet]>=0.31.1" \
-    "hf_xet>=0.1.0"
+    "hf_xet>=0.1.0" \
+    "cisco-ai-mcp-scanner==3.2.1"
 
 # Copy the application code
 COPY . /app/

@@ -388,6 +388,30 @@ module "ecs_service_registry" {
           value = var.session_cookie_domain
         },
         {
+          name  = "SECURITY_SCAN_ENABLED"
+          value = tostring(var.security_scan_enabled)
+        },
+        {
+          name  = "SECURITY_SCAN_ON_REGISTRATION"
+          value = tostring(var.security_scan_on_registration)
+        },
+        {
+          name  = "SECURITY_BLOCK_UNSAFE_SERVERS"
+          value = tostring(var.security_block_unsafe_servers)
+        },
+        {
+          name  = "SECURITY_ANALYZERS"
+          value = var.security_analyzers
+        },
+        {
+          name  = "SECURITY_SCAN_TIMEOUT"
+          value = tostring(var.security_scan_timeout)
+        },
+        {
+          name  = "SECURITY_ADD_PENDING_TAG"
+          value = tostring(var.security_add_pending_tag)
+        },
+        {
           name  = "KEYCLOAK_ADMIN"
           value = "admin"
         }
