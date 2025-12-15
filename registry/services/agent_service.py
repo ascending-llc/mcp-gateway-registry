@@ -382,60 +382,44 @@ class AgentService:
             path: Agent path
             username: The user who submitted rating
             rating: integer between 1-5
-        
+
         Return:
             Updated average rating
 
         Raises:
-            ValueError: If agent not found
+            ValueError: If agent not found or invalid rating
         """
+        from . import rating_service
+
         if path not in self.registered_agents:
             logger.error(f"Cannot update agent at path '{path}': not found")
             raise ValueError(f"Agent not found at path: {path}")
 
-        # Validate rating
-        if not isinstance(rating, int):
-            logger.error(f"Invalid rating type: {rating} (type={type(rating)})")
-            raise ValueError("Rating must be an integer")
-        if rating < 1 or rating > 5:
-            logger.error(f"Invalid rating value: {rating}. Must be between 1 and 5.")
-            raise ValueError("Rating must be between 1 and 5 (inclusive)")
-        
+        # Validate rating using shared service
+        rating_service.validate_rating(rating)
+
         # Get existing agent (Pydantic model)
         existing_agent = self.registered_agents[path]
 
         # Convert to dict for modification
         agent_dict = existing_agent.model_dump()
 
-        # Ensure rating_details is a list (should be by default from schema)
+        # Ensure rating_details is a list
         if "rating_details" not in agent_dict or agent_dict["rating_details"] is None:
             agent_dict["rating_details"] = []
 
-        # Check if this user has already rated; if so, update their rating
-        user_found = False
-        for entry in agent_dict["rating_details"]:
-            if entry.get("user") == username:
-                entry["rating"] = rating
-                user_found = True
-                break
+        # Update rating details using shared service
+        updated_details, is_new_rating = rating_service.update_rating_details(
+            agent_dict["rating_details"],
+            username,
+            rating
+        )
+        agent_dict["rating_details"] = updated_details
 
-        # If no existing rating from this user, append a new one
-        if not user_found:
-            agent_dict["rating_details"].append({
-                "user": username,
-                "rating": rating,
-            })
-
-            # Maintain a perfect rotating buffer of MAX_RATINGS entries
-            MAX_RATINGS = 100
-            if len(agent_dict["rating_details"]) > MAX_RATINGS:
-                # Remove the oldest entry to maintain exactly MAX_RATINGS entries
-                agent_dict["rating_details"].pop(0)
-                logger.info(f"Removed oldest rating to maintain {MAX_RATINGS} entries limit for agent at '{path}'")
-
-        # Compute average rating
-        all_ratings = [entry["rating"] for entry in agent_dict["rating_details"]]
-        agent_dict["num_stars"] = float(sum(all_ratings) / len(all_ratings))
+        # Calculate average rating using shared service
+        agent_dict["num_stars"] = rating_service.calculate_average_rating(
+            agent_dict["rating_details"]
+        )
 
         # Validate updated agent
         try:
@@ -446,12 +430,15 @@ class AgentService:
 
         # Save to disk
         if not _save_agent_to_disk(updated_agent, settings.agents_dir):
-            raise ValueError(f"Failed to save updated agent to disk")
+            raise ValueError("Failed to save updated agent to disk")
 
         # Update in-memory registry
         self.registered_agents[path] = updated_agent
 
-        logger.info(f"Agent '{updated_agent.name}' ({path}) updated with rating {rating} from user {username}")
+        logger.info(
+            f"Agent '{updated_agent.name}' ({path}) updated with rating {rating} "
+            f"from user {username}, new average: {agent_dict['num_stars']:.2f}"
+        )
 
         return agent_dict["num_stars"]
 

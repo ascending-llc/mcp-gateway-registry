@@ -2757,7 +2757,7 @@ async def list_groups_api(
     return await internal_list_groups(request, include_keycloak, include_scopes)
 
 
-@router.post("/servers/rate")
+@router.post("/servers/{path:path}/rate")
 async def rate_server(
     path: str,
     request: RatingRequest,
@@ -2805,7 +2805,7 @@ async def rate_server(
     }
 
 
-@router.get("/servers/rating")
+@router.get("/servers/{path:path}/rating")
 async def get_server_rating(
     path: str,
     user_context: Annotated[dict, Depends(nginx_proxied_auth)],
@@ -2828,10 +2828,10 @@ async def get_server_rating(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have access to this server",
             )
-    
+
     return {
-        "num_stars": server_info.num_stars,
-        "rating_details": server_info.rating_details,
+        "num_stars": server_info.get("num_stars", 0.0),
+        "rating_details": server_info.get("rating_details", []),
     }
 
 

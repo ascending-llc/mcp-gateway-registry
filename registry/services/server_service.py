@@ -459,9 +459,9 @@ class ServerService:
 
 
     def update_rating(
-        self, 
-        path: str, 
-        username: str, 
+        self,
+        path: str,
+        username: str,
         rating: int,
     ) -> float:
         """
@@ -471,60 +471,48 @@ class ServerService:
             path: server path
             username: The user who submitted rating
             rating: integer between 1-5
-        
+
         Return:
             Updated average rating
 
         Raises:
-            ValueError: If server not found
+            ValueError: If server not found or invalid rating
         """
+        from . import rating_service
+
         if path not in self.registered_servers:
             logger.error(f"Cannot update server at path '{path}': not found")
             raise ValueError(f"Server not found at path: {path}")
 
-        # Validate rating
-        if not isinstance(rating, int):
-            logger.error(f"Invalid rating type: {rating} (type={type(rating)})")
-            raise ValueError("Rating must be an integer")
-        if rating < 1 or rating > 5:
-            logger.error(f"Invalid rating value: {rating}. Must be between 1 and 5.")
-            raise ValueError("Rating must be between 1 and 5 (inclusive)")
-            
+        # Validate rating using shared service
+        rating_service.validate_rating(rating)
+
         server_info = self.registered_servers[path]
-        
-        # Ensure rating_details is a list (should be by default from schema)
+
+        # Ensure rating_details is a list
         if "rating_details" not in server_info or server_info["rating_details"] is None:
             server_info["rating_details"] = []
-        
-        # Check if this user has already rated; if so, update their rating
-        user_found = False
-        for entry in server_info["rating_details"]:
-            if entry.get("user") == username:
-                entry["rating"] = rating
-                user_found = True
-                break
-        # If no existing rating from this user, append a new one
-        if not user_found:
-            server_info["rating_details"].append({
-                "user": username,
-                "rating": rating,
-            })
 
-            # Maintain a perfect rotating buffer of MAX_RATINGS entries
-            MAX_RATINGS = 100
-            if len(server_info["rating_details"]) > MAX_RATINGS:
-                # Remove the oldest entry to maintain exactly MAX_RATINGS entries
-                server_info["rating_details"].pop(0)
-                logger.info(f"Removed oldest rating to maintain {MAX_RATINGS} entries limit for server at '{path}'")
+        # Update rating details using shared service
+        updated_details, is_new_rating = rating_service.update_rating_details(
+            server_info["rating_details"],
+            username,
+            rating
+        )
+        server_info["rating_details"] = updated_details
 
-        # Compute average rating
-        all_ratings = [entry["rating"] for entry in server_info["rating_details"]]
-        server_info["num_stars"] = float(sum(all_ratings) / len(all_ratings))
+        # Calculate average rating using shared service
+        server_info["num_stars"] = rating_service.calculate_average_rating(
+            server_info["rating_details"]
+        )
 
         # Save to file
         self.save_server_to_file(server_info)
 
-        logger.info(f"Updated rating for server {path}: user {username} rated {rating}, new average: {server_info['num_stars']}")
+        logger.info(
+            f"Updated rating for server {path}: user {username} rated {rating}, "
+            f"new average: {server_info['num_stars']:.2f}"
+        )
         return server_info["num_stars"]
 
     def remove_server(self, path: str) -> bool:
