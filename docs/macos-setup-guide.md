@@ -119,16 +119,21 @@ cp .docker-compose.override.yml.example .docker-compose.override.yml
 nano .docker-compose.override.yml
 ```
 
-### Disable Keycloak Authentication
+### Configure Docker Compose 
 
 ```yaml
-  # Uncomment the lines below
+  # Example: Disable Keycloak if using Entra ID
   keycloak:
     profiles:
       - disabled
     keycloak-db:
       profiles:
       - disabled
+  
+  # Example: Disable Frontend container if running Vite Server
+  # registry-frontend:
+  #  profiles:
+  #   - disabled 
 ```
 
 ## 4. Starting All Services
