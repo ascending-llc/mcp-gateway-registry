@@ -7,6 +7,8 @@ requires-python = ">=3.12"
 dependencies = [
     "dotenv>=0.9.9",
     "langchain-aws>=1.1.0",
+    "langchain-classic>=1.0.0",
+    "langchain-community>=0.4.1",
     "langchain-weaviate>=0.0.6",
     "pydantic>=2.12.4",
     "pytest>=9.0.1",
