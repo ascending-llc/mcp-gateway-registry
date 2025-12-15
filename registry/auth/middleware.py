@@ -1,0 +1,328 @@
+import base64
+import os
+import jwt
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from itsdangerous import SignatureExpired, BadSignature
+from starlette.middleware.base import BaseHTTPMiddleware
+from typing import Optional, Dict, Any
+import logging
+
+from registry.auth.dependencies import (map_cognito_groups_to_scopes, signer, get_ui_permissions_for_user,
+                                        get_user_accessible_servers, get_accessible_services_for_user,
+                                        get_accessible_agents_for_user, user_can_modify_servers,
+                                        user_has_wildcard_access)
+from registry.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+class UnifiedAuthMiddleware(BaseHTTPMiddleware):
+    """
+        A unified authentication middleware that encapsulates the functionality of `enhanced_auth` and `nginx_proxied_auth`.
+
+        It automatically attempts all authentication methods and stores the results in `request.state`.
+    """
+
+    def __init__(self, app, public_paths: Optional[list] = None):
+        super().__init__(app)
+        self.public_paths = public_paths or [
+            "/", "/health", "/docs", "/openapi.json",
+            "/static",
+
+            "/callback",
+            "/api/auth/providers",
+            "/api/auth/login",
+        ]
+        # note: admin
+        self.internal_paths = [
+            "/api/internal/",
+        ]
+        # note: jwt auth
+        self.servers_paths = [
+            "/api/servers/",
+        ]
+
+    async def dispatch(self, request: Request, call_next):
+        if self._is_public_path(request.url.path):
+            return await call_next(request)
+        try:
+            user_context = await self._authenticate(request)
+            request.state.user = user_context
+            request.state.is_authenticated = True
+            request.state.auth_source = user_context.get('auth_source', 'unknown')
+            logger.info(f"User {user_context.get('username')} is authenticated")
+            return await call_next(request)
+        except AuthenticationError as e:
+            logger.warning(f"Auth failed for {request.url.path}: {e}")
+            return JSONResponse(status_code=401, content={"detail": str(e)})
+        except Exception as e:
+            logger.error(f"Auth error for {request.url.path}: {e}")
+            return JSONResponse(status_code=500, content={"detail": "Authentication error"})
+
+    def _is_public_path(self, path: str) -> bool:
+        """Check if the path is a public path (excludes internal paths which require authentication)"""
+        for public_path in self.public_paths:
+            if public_path == "/" and path == "/":
+                return True
+            elif public_path != "/" and (path == public_path or path.startswith(public_path + "/")):
+                return True
+        return False
+
+    def _is_skip_path(self, target_path: str, paths: list) -> bool:
+        """Check if the path is an internal path that requires Basic authentication"""
+        for path in paths:
+            if target_path.startswith(path):
+                return True
+        return False
+
+    async def _authenticate(self, request: Request) -> Dict[str, Any]:
+        """
+        Unified authentication logic:
+            1. For internal paths: Use Basic authentication
+            2. For other paths:  then session cookies
+        """
+        # Check if this is an internal path
+        if self._is_skip_path(request.url.path, self.internal_paths):
+            # Use Basic authentication for internal endpoints
+            user_context = self._try_basic_auth(request)
+            if user_context:
+                logger.info(f"basic auth success: {user_context['username']}")
+                return user_context
+            raise AuthenticationError("Basic authentication required")
+        elif self._is_skip_path(request.url.path, self.servers_paths):
+            user_context = self._try_jwt_auth(request)
+            if user_context:
+                logger.info(f"jwt auth success: {user_context['username']}")
+                return user_context
+            raise AuthenticationError("token authentication required")
+        else:
+            user_context = self._try_session_auth(request)
+            if user_context:
+                logger.info(f"session auth success: {user_context['username']}")
+                return user_context
+            raise AuthenticationError("session auth required")
+
+    def _try_basic_auth(self, request: Request) -> Optional[Dict[str, Any]]:
+        """Basic authentication for internal endpoints"""
+        try:
+            # Get Authorization header
+            auth_header = request.headers.get("Authorization")
+            if not auth_header or not auth_header.startswith("Basic "):
+                return None
+
+            # Decode Basic Auth credentials
+            try:
+                encoded_credentials = auth_header.split(" ")[1]
+                decoded_credentials = base64.b64decode(encoded_credentials).decode("utf-8")
+                username, password = decoded_credentials.split(":", 1)
+            except (IndexError, ValueError, Exception) as e:
+                logger.debug(f"Basic auth decoding failed: {e}")
+                return None
+
+            # Verify admin credentials from environment
+            admin_user = os.environ.get("ADMIN_USER", "admin")
+            admin_password = os.environ.get("ADMIN_PASSWORD")
+
+            if not admin_password:
+                logger.error("ADMIN_PASSWORD environment variable not set")
+                return None
+
+            if username != admin_user or password != admin_password:
+                logger.debug(f"Basic auth failed: invalid credentials for {username}")
+                return None
+            # Return user context for admin user
+            return self._build_user_context(
+                username=username,
+                groups=['mcp-registry-admin'],
+                scopes=['mcp-registry-admin', 'mcp-servers-unrestricted/read', 'mcp-servers-unrestricted/execute'],
+                auth_method='basic',
+                provider='basic',
+                auth_source="basic_auth"
+            )
+
+        except Exception as e:
+            logger.debug(f"Basic auth failed: {e}")
+            return None
+
+    def _try_jwt_auth(self, request: Request) -> Optional[Dict[str, Any]]:
+        """JWT token authentication for /api/servers endpoints"""
+        try:
+            # Get Authorization header
+            auth_header = request.headers.get("Authorization")
+            if not auth_header or not auth_header.startswith("Bearer "):
+                logger.debug("Missing or invalid Authorization header for JWT auth")
+                return None
+            access_token = auth_header.split(" ")[1]
+            if not access_token:
+                logger.debug("Empty JWT token")
+                return None
+            # JWT validation parameters from auth_server/server.py
+            try:
+                unverified_header = jwt.get_unverified_header(access_token)
+                kid = unverified_header.get('kid')
+
+                # Check if this is our self-signed token
+                if kid and kid != settings.JWT_SELF_SIGNED_KID:
+                    logger.debug(f"JWT token has wrong kid: {kid}, expected: {settings.JWT_SELF_SIGNED_KID}")
+                    return None
+            except Exception as e:
+                logger.debug(f"Failed to decode JWT header: {e}")
+
+            # Validate and decode token
+            try:
+                claims = jwt.decode(
+                    access_token,
+                    settings.secret_key,
+                    algorithms=['HS256'],
+                    issuer=settings.JWT_ISSUER,
+                    audience=settings.JWT_AUDIENCE,
+                    options={
+                        "verify_exp": True,
+                        "verify_iat": True,
+                        "verify_iss": True,
+                        "verify_aud": True
+                    },
+                    leeway=30  # 30 second leeway for clock skew
+                )
+                logger.info(f"JWT claims: {claims}")
+            except jwt.ExpiredSignatureError:
+                logger.debug("JWT token has expired")
+                return None
+            except jwt.InvalidTokenError as e:
+                logger.debug(f"Invalid JWT token: {e}")
+                return None
+            except Exception as e:
+                logger.debug(f"JWT validation error: {e}")
+                return None
+
+            # Extract user information from claims
+            username = claims.get('sub', '')
+            if not username:
+                logger.debug("JWT token missing 'sub' claim")
+                return None
+
+            # Extract scopes from space-separated string
+            scope_string = claims.get('scope', '')
+            scopes = scope_string.split() if scope_string else []
+
+            # Verify we have at least some scopes
+            if not scopes:
+                logger.debug("JWT token has no scopes")
+                return None
+            groups = claims.get('groups', [])
+            # Optional: Verify client_id if present
+            client_id = claims.get('client_id')
+            if client_id and client_id != 'user-generated':
+                logger.debug(f"JWT token has unexpected client_id: {client_id}")
+
+            # Log token validation success with additional details
+            token_type = claims.get('token_type', 'unknown')
+            description = claims.get('description', '')
+            logger.info(f"JWT token validated for user: {username}, type: {token_type}, scopes: {scopes}")
+            if description:
+                logger.debug(f"Token description: {description}")
+
+            # Return user context similar to _try_basic_auth
+            return self._build_user_context(
+                username=username,
+                groups=groups,
+                scopes=scopes,
+                auth_method='jwt',
+                provider='jwt',
+                auth_source="jwt_auth"
+            )
+        except Exception as e:
+            logger.debug(f"JWT auth failed: {e}")
+            return None
+
+    def _try_session_auth(self, request: Request) -> Optional[Dict[str, Any]]:
+        """Session authentication (original enhanced_auth logic)"""
+        try:
+            session_cookie = request.cookies.get(settings.session_cookie_name)
+            if not session_cookie:
+                return None
+            session_data = self._parse_session_data(session_cookie)
+            if not session_data:
+                return None
+
+            username = session_data['username']
+            groups = session_data.get('groups', [])
+            auth_method = session_data.get('auth_method', 'traditional')
+
+            logger.info(f"Enhanced auth debug for {username}: groups={groups}, auth_method={auth_method}")
+
+            # Process permissions according to enhanced_auth logic
+            if auth_method == 'oauth2':
+                scopes = map_cognito_groups_to_scopes(groups)
+                logger.info(f"OAuth2 user {username} with groups {groups} mapped to scopes: {scopes}")
+                if not groups:
+                    logger.warning(f"OAuth2 user {username} has no groups!")
+            else:
+                # Traditional users dynamically mapped to admin
+                if not groups:
+                    groups = ['mcp-registry-admin']
+                scopes = map_cognito_groups_to_scopes(groups)
+                if not scopes:
+                    scopes = ['mcp-registry-admin', 'mcp-servers-unrestricted/read', 'mcp-servers-unrestricted/execute']
+                logger.info(f"Traditional user {username} with groups {groups} mapped to scopes: {scopes}")
+
+            return self._build_user_context(
+                username=username,
+                groups=groups,
+                scopes=scopes,
+                auth_method=auth_method,
+                provider=session_data.get('provider', 'local'),
+                auth_source=session_data.get('session_auth'),
+            )
+
+        except Exception as e:
+            logger.debug(f"session auth failed: {e}")
+            return None
+
+    def _parse_session_data(self, session_cookie: str) -> Optional[Dict[str, Any]]:
+        try:
+            data = signer.loads(session_cookie, max_age=settings.session_max_age_seconds)
+            if not data.get('username'):
+                return None
+            # Sets the default value for traditionally authenticated users (from the original get_user_session_data).
+            if data.get('auth_method') != 'oauth2':
+                data.setdefault('groups', ['mcp-registry-admin'])
+                data.setdefault('scopes', ['mcp-servers-unrestricted/read',
+                                           'mcp-servers-unrestricted/execute'])
+            return data
+
+        except (SignatureExpired, BadSignature, Exception):
+            return None
+
+    def _build_user_context(self, username: str, groups: list, scopes: list,
+                            auth_method: str, provider: str, auth_source: str = None) -> Dict[str, Any]:
+        """
+            Construct the complete user context (from the original enhanced_auth logic).
+        """
+        ui_permissions = get_ui_permissions_for_user(scopes)
+        accessible_servers = get_user_accessible_servers(scopes)
+        accessible_services = get_accessible_services_for_user(ui_permissions)
+        accessible_agents = get_accessible_agents_for_user(ui_permissions)
+        can_modify = user_can_modify_servers(groups, scopes)
+
+        user_context = {
+            'username': username,
+            'groups': groups,
+            'scopes': scopes,
+            'auth_method': auth_method,
+            'provider': provider,
+            'accessible_servers': accessible_servers,
+            'accessible_services': accessible_services,
+            'accessible_agents': accessible_agents,
+            'ui_permissions': ui_permissions,
+            'can_modify_servers': can_modify,
+            'is_admin': user_has_wildcard_access(scopes),
+            "auth_source": auth_source,
+        }
+        logger.debug(f"User context for {username}: {user_context}")
+        return user_context
+
+
+class AuthenticationError(Exception):
+    pass

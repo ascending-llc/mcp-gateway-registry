@@ -55,16 +55,23 @@ DEFAULT_TOKEN_LIFETIME_HOURS = 8
 
 # Rate limiting for token generation (simple in-memory counter)
 user_token_generation_counts = {}
-MAX_TOKENS_PER_USER_PER_HOUR = 10
+MAX_TOKENS_PER_USER_PER_HOUR = int(os.environ.get('MAX_TOKENS_PER_USER_PER_HOUR', '100'))
 
 # Load scopes configuration
 def load_scopes_config():
     """Load the scopes configuration from scopes.yml"""
     try:
-        scopes_file = Path(__file__).parent / "scopes.yml"
+        # Check for environment variable first (for EFS-mounted config)
+        scopes_path = os.environ.get('SCOPES_CONFIG_PATH')
+        if scopes_path:
+            scopes_file = Path(scopes_path)
+        else:
+            # Fall back to default location (baked into image)
+            scopes_file = Path(__file__).parent / "scopes.yml"
+
         with open(scopes_file, 'r') as f:
             config = yaml.safe_load(f)
-            logger.info(f"Loaded scopes configuration with {len(config.get('group_mappings', {}))} group mappings")
+            logger.info(f"Loaded scopes configuration from {scopes_file} with {len(config.get('group_mappings', {}))} group mappings")
             return config
     except Exception as e:
         logger.error(f"Failed to load scopes configuration: {e}")
@@ -1215,12 +1222,13 @@ async def generate_user_token(
     """
     try:
         # Note: No internal API key validation needed since registry already validates user session
-        
+
         # Extract user context
         user_context = request.user_context
         username = user_context.get('username')
         user_scopes = user_context.get('scopes', [])
-        
+        user_groups = user_context.get('groups', [])
+        logger.info(f"User context: {user_context}")
         if not username:
             raise HTTPException(
                 status_code=400,
@@ -1266,6 +1274,7 @@ async def generate_user_token(
             "aud": JWT_AUDIENCE,
             "sub": username,
             "scope": " ".join(requested_scopes),
+            "groups": user_groups,  # Include user groups from context
             "exp": expires_at,
             "iat": current_time,
             "jti": str(uuid.uuid4()),  # Unique token ID

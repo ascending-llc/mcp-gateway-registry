@@ -40,19 +40,19 @@ jobs:
 
     - name: 🔍 Check dependencies
       run: |
-        python scripts/test.py check
+        pip check
 
     - name: 🧪 Run unit tests
       run: |
-        python scripts/test.py unit
+        pytest tests/unit -v
 
     - name: 🔗 Run integration tests  
       run: |
-        python scripts/test.py integration
+        pytest tests/integration -v
 
     - name: 📊 Generate coverage report
       run: |
-        python scripts/test.py coverage
+        pytest --cov=registry --cov-report=xml --cov-report=html
 
     - name: 📤 Upload coverage to Codecov
       uses: codecov/codecov-action@v3

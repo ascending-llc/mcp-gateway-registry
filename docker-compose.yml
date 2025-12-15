@@ -48,6 +48,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.registry-frontend
+    environment:
+      - NGINX_BASE_PATH=${NGINX_BASE_PATH:-}
     ports:
       - "80:80"
       - "443:443"
@@ -60,8 +62,8 @@ services:
   # Metrics Collection Service
   metrics-service:
     build:
-      context: .
-      dockerfile: metrics-service/Dockerfile
+      context: metrics-service
+      dockerfile: Dockerfile
     environment:
       - METRICS_SERVICE_PORT=8890
       - METRICS_SERVICE_HOST=0.0.0.0
@@ -131,10 +133,8 @@ services:
   # Current Time MCP Server
   currenttime-server:
     build:
-      context: .
-      dockerfile: docker/Dockerfile.mcp-server
-      args:
-        SERVER_PATH: servers/currenttime
+      context: servers/currenttime
+      dockerfile: ../../docker/Dockerfile.mcp-server
     environment:
       - PORT=8000
       - MCP_TRANSPORT=streamable-http
@@ -145,10 +145,8 @@ services:
   # Financial Info MCP Server
   fininfo-server:
     build:
-      context: .
-      dockerfile: docker/Dockerfile.mcp-server
-      args:
-        SERVER_PATH: servers/fininfo
+      context: servers/fininfo
+      dockerfile: ../../docker/Dockerfile.mcp-server
     environment:
       - PORT=8001
       - SECRET_KEY=${SECRET_KEY}
@@ -181,10 +179,8 @@ services:
   # Real Server Fake Tools MCP Server
   realserverfaketools-server:
     build:
-      context: .
-      dockerfile: docker/Dockerfile.mcp-server
-      args:
-        SERVER_PATH: servers/realserverfaketools
+      context: servers/realserverfaketools
+      dockerfile: ../../docker/Dockerfile.mcp-server
     environment:
       - PORT=8002
     ports:

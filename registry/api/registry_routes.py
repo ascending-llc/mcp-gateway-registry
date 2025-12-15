@@ -12,9 +12,7 @@ import logging
 from typing import Annotated, Optional
 from urllib.parse import unquote
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-
-from ..auth.dependencies import nginx_proxied_auth
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from ..constants import REGISTRY_CONSTANTS
 from ..health.service import health_service
 from ..schemas.anthropic_schema import ErrorResponse, ServerList, ServerResponse
@@ -23,7 +21,6 @@ from ..services.transform_service import (
     transform_to_server_list,
     transform_to_server_response,
 )
-
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,11 +42,11 @@ router = APIRouter(
     description="Returns a paginated list of all registered MCP servers that the authenticated user can access.",
 )
 async def list_servers(
-    cursor: Annotated[Optional[str], Query(description="Pagination cursor")] = None,
-    limit: Annotated[
-        Optional[int], Query(description="Maximum number of items", ge=1, le=1000)
-    ] = None,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+        request: Request,
+        cursor: Annotated[Optional[str], Query(description="Pagination cursor")] = None,
+        limit: Annotated[
+            Optional[int], Query(description="Maximum number of items", ge=1, le=1000)
+        ] = None,
 ) -> ServerList:
     """
     List all MCP servers with pagination.
@@ -57,13 +54,16 @@ async def list_servers(
     This endpoint respects user permissions - users only see servers they have access to.
 
     Args:
+        request: Request object.
         cursor: Pagination cursor (opaque string from previous response)
         limit: Max results per page (default: 100, max: 1000)
-        user_context: Authenticated user context from enhanced_auth
 
     Returns:
         ServerList with servers and pagination metadata
     """
+    if not request.state.is_authenticated:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated")
+    user_context = request.state.user
     logger.info(
         f"{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION} API: Listing servers for user '{user_context['username']}' (cursor={cursor}, limit={limit})"
     )
@@ -115,8 +115,8 @@ async def list_servers(
     responses={404: {"model": ErrorResponse, "description": "Server not found"}},
 )
 async def list_server_versions(
-    serverName: str,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+        request: Request,
+        serverName: str,
 ) -> ServerList:
     """
     List all versions of a specific server.
@@ -124,8 +124,8 @@ async def list_server_versions(
     Currently, we only maintain one version per server, so this returns a single-item list.
 
     Args:
+        request: Request object.
         serverName: URL-encoded server name in reverse-DNS format (e.g., "io.mcpgateway%2Fexample-server")
-        user_context: Authenticated user context
 
     Returns:
         ServerList with single version
@@ -133,6 +133,10 @@ async def list_server_versions(
     Raises:
         HTTPException: 404 if server not found or user lacks access
     """
+    if not request.state.is_authenticated:
+        raise HTTPException(status_code=404, detail="not authenticated")
+    user_context = request.state.user
+
     # URL-decode the server name
     decoded_name = unquote(serverName)
     logger.info(
@@ -210,14 +214,15 @@ async def list_server_versions(
     },
 )
 async def get_server_version(
-    serverName: str,
-    version: str,
-    user_context: Annotated[dict, Depends(nginx_proxied_auth)] = None,
+        request: Request,
+        serverName: str,
+        version: str,
 ) -> ServerResponse:
     """
     Get detailed information about a specific server version.
 
     Args:
+        request: Request object.
         serverName: URL-encoded server name (e.g., "io.mcpgateway%2Fexample-server")
         version: Version string (e.g., "1.0.0" or "latest")
         user_context: Authenticated user context
@@ -228,6 +233,9 @@ async def get_server_version(
     Raises:
         HTTPException: 404 if server not found or user lacks access
     """
+    if not request.state.is_authenticated:
+        raise HTTPException(status_code=404, detail="not authenticated")
+    user_context = request.state.user
     # URL-decode parameters
     decoded_name = unquote(serverName)
     decoded_version = unquote(version)

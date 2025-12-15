@@ -29,8 +29,7 @@ class TestMainApplication:
         """Mock all services used in lifespan."""
         with patch('registry.main.server_service') as mock_server_service, \
              patch('registry.main.faiss_service') as mock_faiss_service, \
-             patch('registry.main.health_service') as mock_health_service, \
-             patch('registry.main.nginx_service') as mock_nginx_service:
+             patch('registry.main.health_service') as mock_health_service:
             
             # Configure mocks
             mock_server_service.load_servers_and_state = Mock()
@@ -42,13 +41,10 @@ class TestMainApplication:
             mock_health_service.initialize = AsyncMock()
             mock_health_service.shutdown = AsyncMock()
             
-            mock_nginx_service.generate_config = Mock()
-            
             yield {
                 'server_service': mock_server_service,
                 'faiss_service': mock_faiss_service,
-                'health_service': mock_health_service,
-                'nginx_service': mock_nginx_service
+                'health_service': mock_health_service
             }
 
     @pytest.mark.asyncio
@@ -61,7 +57,6 @@ class TestMainApplication:
             mock_services['server_service'].load_servers_and_state.assert_called_once()
             mock_services['faiss_service'].initialize.assert_called_once()
             mock_services['health_service'].initialize.assert_called_once()
-            mock_services['nginx_service'].generate_config.assert_called_once()
             
             # Verify log directory was created
             mock_settings.container_log_dir.mkdir.assert_called_once_with(parents=True, exist_ok=True)
@@ -142,8 +137,7 @@ class TestMainApplication:
         # Test basic health endpoint (should not require auth)
         with patch('registry.main.server_service'), \
              patch('registry.main.faiss_service'), \
-             patch('registry.main.health_service'), \
-             patch('registry.main.nginx_service'):
+             patch('registry.main.health_service'):
             
             response = client.get("/health")
             assert response.status_code == 200
@@ -164,29 +158,6 @@ class TestMainApplication:
         # We can't easily test specific paths without mocking dependencies,
         # but we can test that multiple routes exist (more than just /health)
         assert len(route_paths) > 1
-
-    @pytest.mark.asyncio
-    async def test_nginx_config_generation(self, mock_settings, mock_services):
-        """Test that Nginx configuration is generated with enabled servers."""
-        test_app = FastAPI()
-        
-        # Setup enabled services
-        enabled_services = ["service1", "service2"]
-        mock_services['server_service'].get_enabled_services.return_value = enabled_services
-        mock_services['server_service'].get_server_info.side_effect = lambda path: {"name": f"server_{path}"}
-        
-        async with lifespan(test_app):
-            pass
-        
-        # Verify nginx config was generated with correct servers
-        mock_services['nginx_service'].generate_config.assert_called_once()
-        call_args = mock_services['nginx_service'].generate_config.call_args[0][0]
-        
-        # Check that enabled servers were passed to nginx config
-        assert "service1" in call_args
-        assert "service2" in call_args
-        assert call_args["service1"]["name"] == "server_service1"
-        assert call_args["service2"]["name"] == "server_service2"
 
     def test_logging_configuration(self):
         """Test that logging is properly configured."""
