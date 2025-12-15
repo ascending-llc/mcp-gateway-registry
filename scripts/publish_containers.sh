@@ -39,11 +39,11 @@ PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
 declare -a COMPONENTS=(
     "registry:.:./docker/Dockerfile.registry"
     "auth-server:.:./docker/Dockerfile.auth"
-    "currenttime-server:.:./docker/Dockerfile.mcp-server"
-    "realserverfaketools-server:.:./docker/Dockerfile.mcp-server"
-    "fininfo-server:.:./docker/Dockerfile.mcp-server"
-    "mcpgw-server:.:./docker/Dockerfile.mcp-server"
-    "metrics-service:.:./metrics-service/Dockerfile"
+    "currenttime-server:servers/currenttime:./docker/Dockerfile.mcp-server"
+    "realserverfaketools-server:servers/realserverfaketools:./docker/Dockerfile.mcp-server"
+    "fininfo-server:servers/fininfo:./docker/Dockerfile.mcp-server"
+    "mcpgw-server:servers/mcpgw:./docker/Dockerfile.mcp-server"
+    "metrics-service:metrics-service:./metrics-service/Dockerfile"
 )
 
 # External images to mirror (pull from source and push to our registries)

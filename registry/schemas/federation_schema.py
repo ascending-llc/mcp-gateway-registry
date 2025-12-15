@@ -11,7 +11,7 @@ class AnthropicServerConfig(BaseModel):
 
 class AnthropicFederationConfig(BaseModel):
     """Anthropic federation configuration."""
-    enabled: bool = True
+    enabled: bool = False
     endpoint: str = "https://registry.modelcontextprotocol.io"
     sync_on_startup: bool = False
     servers: List[AnthropicServerConfig] = Field(default_factory=list)

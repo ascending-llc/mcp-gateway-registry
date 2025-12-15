@@ -19,7 +19,6 @@ from registry.core.config import Settings
 from registry.services.server_service import ServerService
 from registry.search.service import FaissService
 from registry.health.service import HealthMonitoringService
-from registry.core.nginx_service import NginxConfigService
 
 # Import test utilities
 from tests.fixtures.factories import (
@@ -77,7 +76,6 @@ def mock_settings(test_settings: Settings, monkeypatch):
     monkeypatch.setattr("registry.services.server_service.settings", test_settings)
     monkeypatch.setattr("registry.search.service.settings", test_settings)
     monkeypatch.setattr("registry.health.service.settings", test_settings)
-    monkeypatch.setattr("registry.core.nginx_service.settings", test_settings)
     return test_settings
 
 
@@ -103,13 +101,6 @@ def mock_faiss_service() -> Mock:
 def health_service() -> HealthMonitoringService:
     """Create a fresh health monitoring service for testing."""
     service = HealthMonitoringService()
-    return service
-
-
-@pytest.fixture
-def nginx_service(mock_settings: Settings) -> NginxConfigService:
-    """Create a fresh nginx service for testing."""
-    service = NginxConfigService()
     return service
 
 
