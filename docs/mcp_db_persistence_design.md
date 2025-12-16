@@ -85,8 +85,6 @@ classDiagram
 
 ### Data Schema
 
-__Question__: Should the Server data model be compatiable with those used in LibreChat? 
-
 ### Authorization 
 
 Permissions checks are contained within the server API router. It uses RBAC helpers found in `registry/auth/dependencies.py`
@@ -794,6 +792,352 @@ MongoDB integration provides a scalable, multi-tenant storage backend for MCP se
 
 ### Data Models
 
+#### Schema Generation Strategy
+
+**Problem:** The MCP server schema is already defined in Jarvis's TypeScript packages (`@librechat/data-schemas`). Duplicating this schema in Python would create maintenance burden and drift.
+
+**Solution:** 
+1. **Jarvis** publishes JSON schemas to GitHub Releases
+2. **mcp-gateway-registry** downloads JSON schemas and generates Python locally
+3. Generated Python code stored in `_generated/` (gitignored) - engineers run generation to browse schemas
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Jarvis Repository (ascending-llc/jarvis-api)                │
+│ ─────────────────────────────────────────────────────────── │
+│ packages/data-schemas/                                       │
+│   ├── src/                                                   │
+│   │   ├── types/                                             │
+│   │   │   ├── mcp.ts           (TypeScript types)           │
+│   │   │   └── token.ts         (TypeScript types)           │
+│   │   └── schema/                                            │
+│   │       ├── mcpServer.ts     (Mongoose schema)            │
+│   │       └── token.ts         (Mongoose schema)            │
+│   ├── scripts/                                               │
+│   │   └── publish-schemas.sh   (Generate & publish JSON)    │
+│   └── dist/                                                  │
+│       └── json-schemas/                                      │
+│           ├── MCPServerDocument.json  ← Published            │
+│           ├── MCPOptions.json         ← Published            │
+│           └── Token.json              ← Published            │
+└─────────────────────────────────────────────────────────────┘
+                          │
+                          │ GitHub Release
+                          │ https://github.com/.../releases/v0.0.31/
+                          ↓
+┌─────────────────────────────────────────────────────────────┐
+│ mcp-gateway-registry Repository                             │
+│ ─────────────────────────────────────────────────────────── │
+│ scripts/                                                     │
+│   └── generate_schemas.py     (Download & generate)         │
+│                                                              │
+│ registry/models/                                             │
+│   ├── __init__.py             (Exports from _generated)     │
+│   └── _generated/             (⚠️  .gitignored)             │
+│       ├── README.md           (Generation instructions)     │
+│       ├── .schema-version     (v0.0.31)                     │
+│       ├── mcpserver.py        (Generated - NOT in git)      │
+│       ├── mcpconfig.py        (Generated - NOT in git)      │
+│       └── token.py            (Generated - NOT in git)      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Source of Truth:**
+```
+Jarvis (ascending-llc/jarvis-api)
+└── packages/data-schemas/src/
+    ├── types/
+    │   ├── mcp.ts           # MCPServerDocument, MCPOptions types
+    │   └── token.ts         # IToken type
+    └── schema/
+        ├── mcpServer.ts     # Mongoose schema for MCP servers
+        └── token.ts         # Mongoose schema for tokens
+```
+
+**Published Artifacts (GitHub Releases):**
+```
+https://github.com/ascending-llc/jarvis-api/releases/download/v0.0.31/
+├── MCPServerDocument.json
+├── MCPOptions.json
+└── Token.json
+```
+
+---
+
+### Jarvis: Publishing JSON Schemas
+
+**Build Script:** `packages/data-schemas/scripts/publish-schemas.sh`
+
+```bash
+#!/bin/bash
+set -e
+
+echo "🔍 Generating JSON schemas from TypeScript..."
+
+# Ensure output directory exists
+mkdir -p dist/json-schemas
+
+# Generate JSON schema for MCPServerDocument
+npx typescript-json-schema \
+  --required \
+  --strictNullChecks \
+  --noExtraProps \
+  --out dist/json-schemas/MCPServerDocument.json \
+  src/types/mcp.ts MCPServerDocument
+
+# Generate JSON schema for MCPOptions
+npx typescript-json-schema \
+  --required \
+  --strictNullChecks \
+  --noExtraProps \
+  --out dist/json-schemas/MCPOptions.json \
+  src/types/mcp.ts MCPOptions
+
+# Generate JSON schema for Token
+npx typescript-json-schema \
+  --required \
+  --strictNullChecks \
+  --noExtraProps \
+  --out dist/json-schemas/Token.json \
+  src/types/token.ts IToken
+
+# Add metadata to schemas
+VERSION=$(node -p "require('./package.json').version")
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+for schema in dist/json-schemas/*.json; do
+  # Add generation metadata
+  jq ". + {\"x-generated\": {\"version\": \"$VERSION\", \"timestamp\": \"$TIMESTAMP\"}}" \
+    "$schema" > "$schema.tmp" && mv "$schema.tmp" "$schema"
+done
+
+echo "✅ JSON schemas generated at dist/json-schemas/"
+echo "   Version: $VERSION"
+echo "   Timestamp: $TIMESTAMP"
+```
+
+**Package Configuration:** `packages/data-schemas/package.json`
+
+```json
+{
+  "name": "@librechat/data-schemas",
+  "version": "0.0.31",
+  "scripts": {
+    "build": "npm run build:ts && npm run build:schemas",
+    "build:ts": "rollup -c",
+    "build:schemas": "bash scripts/publish-schemas.sh",
+    "prepublishOnly": "npm run build:schemas"
+  },
+  "files": [
+    "dist/json-schemas/*.json"
+  ],
+  "devDependencies": {
+    "typescript-json-schema": "^0.65.0",
+    "jq": "^1.7.0"
+  }
+}
+```
+
+**Published Schema URLs:**
+```
+https://github.com/ascending-llc/jarvis-api/releases/download/v0.0.31/MCPServerDocument.json
+https://github.com/ascending-llc/jarvis-api/releases/download/v0.0.31/MCPOptions.json
+https://github.com/ascending-llc/jarvis-api/releases/download/v0.0.31/Token.json
+```
+
+---
+
+### mcp-gateway-registry: Generating Python Schemas Locally
+
+**Key Design Decision:** Generated schemas are **NOT** committed to git. Engineers must run generation locally to browse schema definitions without switching repos.
+
+**Generation Script:** `scripts/generate_schemas.py`
+
+```python
+#!/usr/bin/env python3
+"""
+Generate Python Beanie models from Jarvis JSON schemas.
+
+Generated files are placed in registry/models/_generated/ (gitignored).
+Engineers run this script to browse schemas in their IDE without repo switching.
+
+Usage:
+    python scripts/generate_schemas.py [--version VERSION]
+    
+Example:
+    python scripts/generate_schemas.py --version v0.0.31
+    python scripts/generate_schemas.py  # Uses version from .schema-version
+"""
+
+import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
+from datetime import datetime
+import urllib.request
+
+# Configuration
+JARVIS_REPO = "ascending-llc/jarvis-api"
+SCHEMA_BASE_URL = f"https://github.com/{LIBRECHAT_REPO}/releases/download"
+OUTPUT_DIR = Path("registry/models/_generated")
+SCHEMA_VERSION_FILE = OUTPUT_DIR / ".schema-version"
+
+SCHEMAS = {
+    "MCPServerDocument": "mcpserver.py",
+    "MCPOptions": "mcpconfig.py",
+    "Token": "token.py",
+}
+
+
+def download_schema(schema_name: str, version: str) -> dict:
+  
+
+
+def generate_python_model(schema_data: dict, output_file: Path):
+
+    
+def create_package_files(version: str):
+```
+
+**Make executable & add to pyproject.toml:**
+
+```bash
+chmod +x scripts/generate_schemas.py
+```
+
+```toml
+[project.scripts]
+generate-schemas = "scripts.generate_schemas:main"
+
+[tool.poetry.dependencies]
+datamodel-code-generator = "^0.25.0"  # For schema generation
+```
+
+**Usage:**
+
+```bash
+# Install dependencies
+pip install datamodel-code-generator
+
+# Generate from specific Jarvis version
+python scripts/generate_schemas.py --version v0.0.31
+
+# Generate using version from .schema-version file
+python scripts/generate_schemas.py
+```
+
+**Generated Directory Structure (gitignored):**
+
+```
+registry/models/_generated/      # ⚠️  In .gitignore
+├── .schema-version              # "v0.0.31"
+├── README.md                    # DO NOT EDIT warning + instructions
+├── __init__.py                  # Exports
+├── mcpserver.py                 # ❌ NOT in git - generated locally
+├── mcpconfig.py                 # ❌ NOT in git - generated locally
+└── token.py                     # ❌ NOT in git - generated locally
+```
+
+**Using Generated Schemas:**
+
+```python
+# registry/models/__init__.py
+from ._generated import MCPServer, MCPConfig, OAuthConfig, Token
+
+__all__ = ["MCPServer", "MCPConfig", "OAuthConfig", "Token"]
+
+
+# In application code - engineers must generate locally to browse
+from registry.models import MCPServer, MCPConfig, Token
+
+server = MCPServer(
+    server_name="github",
+    config=MCPConfig(
+        title="GitHub",
+        type="stdio",
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-github"]
+    ),
+    author=ObjectId(user_id)
+)
+
+token = Token(
+    user_id=ObjectId(user_id),
+    type="oauth_access",
+    identifier="github_mcp_server",
+    token="gho_xxxxxxxxxxxxxxxxxxxx",
+    expires_at=datetime.now() + timedelta(hours=8)
+)
+```
+
+**Benefits of Gitignored Approach:**
+- ✅ No merge conflicts on generated code
+- ✅ Clean git history (no schema noise)
+- ✅ Engineers can still browse schemas in IDE (run generation locally)
+- ✅ No repo switching needed to understand schema
+- ✅ Jarvis publishes JSON once, each engineer generates when needed
+- ⚠️  Engineers must run generation script before development
+
+---
+
+### Workflow Summary
+
+**Jarvis Side:**
+1. Update TypeScript schemas in `data-schemas/src/types/` and `data-schemas/src/schema/`
+2. Run `npm run build:schemas` → generates JSON
+3. Push tag `v0.0.32` → GitHub Action publishes JSON to Release
+4. JSON schemas available at `https://github.com/ascending-llc/jarvis-api/releases/download/v0.0.32/*.json`
+
+**mcp-gateway-registry Side:**
+1. Run `python scripts/generate_schemas.py --version v0.0.32`
+2. Script downloads JSON from GitHub Release
+3. Generates Python Beanie models in `registry/models/_generated/`
+4. Engineers can browse schema code in IDE
+5. Generated files are NOT committed (gitignored)
+6. Each engineer runs generation locally when needed
+
+**Developer Experience:**
+```python
+# Engineers run generation locally first
+$ python scripts/generate_schemas.py --version v0.0.31
+
+# Then can browse schema in IDE
+from registry.models import MCPServer  # Cmd+Click works!
+
+# IDE shows (from generated file):
+class MCPServer(Document):
+    """MCP Server document (collection: mcpservers)"""
+    server_name: str
+    config: MCPConfig
+    author: ObjectId
+    # ... full schema visible
+```
+
+**Version Control Best Practices:**
+
+```gitignore
+# .gitignore
+# Ignore generated schemas (engineers generate locally)
+registry/models/_generated/
+!registry/models/_generated/README.md  # Keep instructions in git
+```
+
+```bash
+# First time setup for new engineers
+$ python scripts/generate_schemas.py --version v0.0.31
+✅ Generated in registry/models/_generated
+💡 Schemas are gitignored - each engineer runs generation locally
+
+# Verify schemas exist before running app
+$ python -c "from registry.models import MCPServer; print('✅ Schemas ready')"
+```
+
+
+---
+
 #### Design Decision: Connection State Management
 
 > **❓ Question:** Should we update `status` and `connection_state` in MongoDB every time a user connects to an MCP server?
@@ -821,147 +1165,74 @@ MongoDB integration provides a scalable, multi-tenant storage backend for MCP se
 >
 > This design avoids thousands of unnecessary database writes while still tracking meaningful events.
 
-#### 1. MCP Server Configuration Collection
+#### Generated Schema Structure
+
+The generated Python schemas from Jarvis's TypeScript definitions will include:
+
+**1. MCP Server Configuration Collection**
 
 **Collection Name**: `mcpservers`
 
-**Schema Definition**:
+**Generated from**: `packages/data-schemas/src/types/mcp.ts` (TypeScript → JSON → Python)
 
+**Key Models:**
+- `MCPServer(Document)` - Main Beanie document model (from `MCPServerDocument`)
+- `MCPConfig(BaseModel)` - Server configuration (from `MCPOptions`)
+- `OAuthConfig(BaseModel)` - OAuth authentication settings
+- `ApiKeyConfig(BaseModel)` - API key authentication settings
+- `StdioTransport(BaseModel)` - Stdio transport configuration
+- `WebSocketTransport(BaseModel)` - WebSocket transport configuration
+- `SSETransport(BaseModel)` - Server-Sent Events transport configuration
+- `StreamableHTTPTransport(BaseModel)` - HTTP transport configuration
+- `CustomUserVar(BaseModel)` - User variable definition
+- `StreamableHTTPTransport(BaseModel)` - HTTP transport configuration
+- `CustomUserVar(BaseModel)` - User variable definition
+
+**Schema Fields** (auto-generated to match TypeScript):
 ```python
-from beanie import Document, Indexed
-from pydantic import Field
-from typing import Optional, Dict, Any, List, Literal
-from datetime import datetime
-from bson import ObjectId
-
-class TransportConfig(BaseModel):
-    """Transport configuration (union type supporting multiple protocols)"""
-    type: Literal["stdio", "websocket", "sse", "http"]
-    
-    # Stdio options
-    command: Optional[str] = None
-    args: Optional[List[str]] = None
-    env: Optional[Dict[str, str]] = None
-    stderr: Optional[Literal["capture", "ignore"]] = None
-    
-    # WebSocket/SSE/HTTP options
-    url: Optional[str] = None
-    headers: Optional[Dict[str, str]] = None
-
-class OAuthConfig(BaseModel):
-    """OAuth provider configuration"""
-    authorization_url: Optional[str] = None
-    token_url: Optional[str] = None
-    client_id: Optional[str] = None
-    client_secret: Optional[str] = None  # Encrypted in production
-    scope: Optional[str] = None
-    redirect_uri: Optional[str] = None
-    token_exchange_method: Optional[Literal["POST", "GET"]] = "POST"
-    grant_types_supported: Optional[List[str]] = None
-    token_endpoint_auth_methods_supported: Optional[List[str]] = None
-    response_types_supported: Optional[List[str]] = None
-    code_challenge_methods_supported: Optional[List[str]] = None
-    skip_code_challenge_check: Optional[bool] = False
-    revocation_endpoint: Optional[str] = None
-    revocation_endpoint_auth_methods_supported: Optional[List[str]] = None
-
-class CustomVariable(BaseModel):
-    """User-defined custom variable schema"""
-    title: str
-    description: Optional[str] = None
-    required: Optional[bool] = False
-
-class ToolFunction(BaseModel):
-    """MCP tool function definition"""
-    type: str = "function"
-    function: Dict[str, Any]  # Contains name, description, parameters
-
 class MCPServer(Document):
-    """MCP Server configuration document"""
+    """Generated from MCPServerDocument (TypeScript)"""
     
-    # === Identification & Ownership ===
-    server_name: Indexed(str)  # Server identifier (required, indexed)
-    scope: Indexed(Literal["shared_app", "shared_user", "private_user"])  # Server scope
-    user_id: Indexed(Optional[ObjectId]) = None  # Owner user ID (null for shared servers)
-    organization_id: Optional[ObjectId] = None  # Optional org scope
+    server_name: Indexed(str)  # Maps to serverName
+    config: MCPConfig          # Nested configuration
+    author: Indexed(ObjectId)  # User who created this server
     
-    # === Base Configuration (from MCPOptions) ===
-    startup: bool = False  # Auto-start at startup
-    icon_path: Optional[str] = None  # Server icon path
-    timeout: int = 30000  # Connection timeout (ms)
-    init_timeout: int = 60000  # Init timeout (ms)
-    chat_menu: bool = True  # Show in chat menu
-    server_instructions: Optional[str] = None  # Server-specific instructions
-    
-    # === Transport Configuration ===
-    transport: TransportConfig
-    
-    # === OAuth Configuration ===
-    requires_oauth: Indexed(bool) = False  # OAuth requirement flag
-    oauth: Optional[OAuthConfig] = None
-    oauth_headers: Optional[Dict[str, str]] = None  # Custom OAuth headers
-    
-    # === Custom User Variables ===
-    custom_user_vars: Optional[Dict[str, CustomVariable]] = None
-    
-    # === Runtime Data (from ParsedServerConfig) ===
-    oauth_metadata: Optional[Dict[str, Any]] = None  # OAuth server metadata
-    capabilities: Optional[str] = None  # JSON string of capabilities
-    tools: Optional[str] = None  # JSON string of available tools
-    tool_functions: Optional[Dict[str, ToolFunction]] = None  # Parsed tool functions
-    init_duration: Optional[int] = None  # Last initialization time (ms)
-    
-    # === Status & Metadata ===
-    status: Indexed(Literal["active", "inactive", "error"]) = "active"
-    last_connected: Optional[datetime] = None  # Updated only on successful connection
-    last_error: Optional[datetime] = None  # Updated only when errors occur
-    error_message: Optional[str] = None
-    
-    # NOTE: connection_state is NOT persisted in MongoDB
-    # It's maintained in memory/Redis cache to avoid constant DB writes
-    # Use last_connected timestamp to determine recent connectivity
-    
-    # === Audit Fields ===
-    created_by: ObjectId  # Creator user ID
-    created_at: Indexed(datetime) = Field(default_factory=datetime.utcnow)
-    updated_at: Indexed(datetime) = Field(default_factory=datetime.utcnow)
-    version: int = 1  # Optimistic locking version
+    # Timestamps (auto-managed)
+    created_at: datetime       # Maps to createdAt
+    updated_at: datetime       # Maps to updatedAt
     
     class Settings:
         name = "mcpservers"
         indexes = [
-            [("server_name", 1), ("user_id", 1), ("scope", 1)],  # Composite index for lookups
-            [("status", 1), ("user_id", 1)],  # Active servers per user
-            [("requires_oauth", 1)],  # OAuth-enabled servers
-            [("created_at", -1)],  # Recent servers
+            [("serverName", 1)],
+            [("author", 1)],
+            [("updatedAt", -1), ("_id", 1)]
         ]
 ```
 
-#### 2. Token Storage Collection
+**Note:** The complete schema definition is generated automatically from TypeScript. Run `python scripts/generate_schemas.py` to generate and browse `registry/models/_generated/mcpserver.py`.
+
+**2. Token Storage Collection**
 
 **Collection Name**: `tokens`
 
-**Schema Definition**:
+**Generated from**: `packages/data-schemas/src/types/token.ts` (TypeScript → JSON → Python)
+
+**Schema Definition** (auto-generated):
 
 ```python
-from beanie import Document, Indexed
-from pydantic import Field
-from typing import Optional, Dict, Any, Literal
-from datetime import datetime
-from bson import ObjectId
-
 class Token(Document):
-    """OAuth and authentication token storage"""
+    """Generated from IToken (TypeScript)"""
     
-    user_id: Indexed(ObjectId)  # Reference to user
+    user_id: Indexed(ObjectId)  # Reference to user (maps to userId)
     email: Optional[str] = None  # Optional email
-    type: Indexed(str)  # Token type (e.g., "oauth_access", "oauth_refresh", "api_key")
-    identifier: Indexed(str)  # Token identifier/name (e.g., "github_mcp_server")
+    type: Optional[str] = None  # Token type (e.g., "oauth_access", "oauth_refresh")
+    identifier: Optional[str] = None  # Token identifier/name
     token: str  # The actual token value (required) - encrypted at rest
     
     # Timestamps
-    created_at: Indexed(datetime) = Field(default_factory=datetime.utcnow)
-    expires_at: Indexed(datetime)  # Expiration timestamp (required)
+    created_at: Indexed(datetime)  # Creation timestamp (maps to createdAt)
+    expires_at: Indexed(datetime)  # Expiration timestamp (maps to expiresAt)
     
     # Flexible metadata storage
     metadata: Optional[Dict[str, Any]] = None  # Can store any data structure
@@ -969,9 +1240,9 @@ class Token(Document):
     class Settings:
         name = "tokens"
         indexes = [
-            [("user_id", 1), ("type", 1)],  # Tokens by user and type
-            [("user_id", 1), ("identifier", 1)],  # Unique token per user/identifier
-            [("expires_at", 1)],  # TTL index for automatic cleanup
+            [("userId", 1), ("type", 1)],  # Tokens by user and type
+            [("userId", 1), ("identifier", 1)],  # Unique token per user/identifier
+            [("expiresAt", 1)],  # TTL index for automatic cleanup
             [("type", 1), ("identifier", 1)],  # Quick lookups by type/identifier
         ]
         
@@ -979,10 +1250,12 @@ class Token(Document):
     class Config:
         schema_extra = {
             "indexes": [
-                {"keys": [("expires_at", 1)], "expireAfterSeconds": 0}
+                {"keys": [("expiresAt", 1)], "expireAfterSeconds": 0}
             ]
         }
 ```
+
+**Note:** Token schema is shared with Jarvis. Run `python scripts/generate_schemas.py` to generate and browse `registry/models/_generated/token.py`.
 
 ### Storage Examples
 
@@ -1255,6 +1528,9 @@ from pathlib import Path
 import json
 from typing import Dict, Any, List
 
+# Import generated schemas (in version control!)
+from registry.models import MCPServer, MCPConfig
+
 async def seed_servers(admin_user_id: ObjectId, servers_dir: str = "registry/servers"):
     """
     Seed MongoDB with initial server configurations from JSON files.
@@ -1340,58 +1616,43 @@ def map_file_config_to_database(config: Dict[str, Any], server_name: str, admin_
     }
     
     Returns:
-        Dictionary ready to create MCPServer document
+        Dictionary ready to create MCPServer document (using generated schema)
     """
     
-    # Determine scope based on file location or naming convention
-    # Default to shared_app, but can be customized based on your needs
-    scope = config.get("scope", "shared_app")
-    
-    # Build the MongoDB document
-    mongo_doc = {
-        # === Identification & Ownership ===
-        "server_name": server_name,
-        "scope": scope,
-        "user_id": None if scope == "shared_app" else admin_user_id,
-        "organization_id": config.get("organization_id"),
-        
-        # === Base Configuration ===
+    # Build MCPConfig from file config
+    # This matches the generated MCPConfig schema from Jarvis
+    mcp_config = {
+        "title": config.get("title", server_name),
+        "description": config.get("description"),
         "startup": config.get("startup", False),
         "icon_path": config.get("icon_path"),
         "timeout": config.get("timeout", 30000),
         "init_timeout": config.get("init_timeout", 60000),
         "chat_menu": config.get("chat_menu", True),
         "server_instructions": config.get("server_instructions"),
-        
-        # === Transport Configuration ===
-        "transport": config.get("transport", {}),
-        
-        # === OAuth Configuration ===
         "requires_oauth": config.get("requires_oauth", False),
         "oauth": config.get("oauth"),
         "oauth_headers": config.get("oauth_headers"),
-        
-        # === Custom User Variables ===
+        "api_key": config.get("api_key"),
         "custom_user_vars": config.get("custom_user_vars"),
         
-        # === Runtime Data ===
-        "oauth_metadata": config.get("oauth_metadata"),
-        "capabilities": config.get("capabilities"),
-        "tools": config.get("tools"),
-        "tool_functions": config.get("tool_functions"),
-        "init_duration": config.get("init_duration"),
-        
-        # === Status & Metadata ===
-        "status": config.get("status", "active"),
-        "last_connected": None,
-        "last_error": None,
-        "error_message": None,
-        
-        # === Audit Fields ===
-        "created_by": admin_user_id,
+        # Transport configuration (flattened in MCPConfig)
+        "type": config.get("transport", {}).get("type"),
+        "command": config.get("transport", {}).get("command"),
+        "args": config.get("transport", {}).get("args"),
+        "env": config.get("transport", {}).get("env"),
+        "stderr": config.get("transport", {}).get("stderr"),
+        "url": config.get("transport", {}).get("url"),
+        "headers": config.get("transport", {}).get("headers"),
+    }
+    
+    # Build the MongoDB document matching generated MCPServer schema
+    mongo_doc = {
+        "server_name": server_name,  # Maps to serverName
+        "config": mcp_config,        # Nested MCPConfig
+        "author": admin_user_id,     # Creator user ID
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
-        "version": 1
     }
     
     # Remove None values to use schema defaults
@@ -1426,10 +1687,12 @@ from bson import ObjectId
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from registry.models import MCPServer, Token  # Import your Beanie models
+# Import generated schemas (committed to git)
+from registry.models import MCPServer, Token
+
 from registry.config import settings
 
-# Import the seeding functions (these will be in registry/utils/seeding.py)
+# Import the seeding functions
 from registry.utils.seeding import seed_servers, map_file_config_to_database
 
 
@@ -1861,80 +2124,131 @@ class AuditLog(Document):
 
 ### Shared Schema with jarvis-api
 
-Since both `mcp-gateway-registry` and `jarvis-api` share the same MongoDB instance, coordination is required:
+Since both `mcp-gateway-registry` and `jarvis-api` share the same MongoDB instance, schema coordination is achieved through **code generation** from the Jarvis TypeScript source.
 
 #### 1. Database Naming Convention
 
 ```
 Database: jarvis (shared)
 Collections:
-  - mcpservers (managed by both apps)
-  - tokens (managed by both apps)
+  - mcpservers (shared schema - generated from Jarvis TypeScript)
+  - tokens (mcp-gateway-registry specific)
   - users (managed by jarvis-api)
   - [other jarvis-api collections...]
 ```
 
-#### 2. Schema Versioning
+#### 2. Schema Versioning and Synchronization
 
+**TypeScript Source of Truth:**
 ```python
+# Generated Python models include version metadata
 class MCPServer(Document):
-    schema_version: str = "1.0.0"  # Track schema changes
-    
-    class Settings:
-        name = "mcpservers"
-        use_revision = True  # Beanie revision tracking
+    class Config:
+        json_schema_extra = {
+            "source": "MCPServerDocument",
+            "package": "@librechat/data-schemas",
+            "version": "0.0.31",  # Tracks Jarvis package version
+            "generated_at": "2025-12-16T12:00:00Z"
+        }
 ```
 
-#### 3. Migration Coordination
+**Keeping Schemas in Sync:**
 
-- Use Alembic or Beanie migrations with version control
-- Coordinate schema changes between both applications
-- Use feature flags to roll out schema changes gradually
+1. **Manual Regeneration**: Run `python scripts/generate_schemas.py --version v0.0.32` when Jarvis updates
+2. **Version Tracking**: `.schema-version` file tracks current Jarvis version
+3. **Version Validation**: Check schema version on application startup
 
 ```python
-# migrations/001_initial_schema.py
-async def upgrade():
-    """Create initial collections and indexes"""
-    # Ensure indexes exist
-    await MCPServer.get_motor_collection().create_indexes([
-        IndexModel([("server_name", 1), ("user_id", 1)], unique=True),
-        IndexModel([("scope", 1), ("status", 1)])
-    ])
+# registry/utils/schema_version.py
+from pathlib import Path
+from registry.models._generated import __version__ as schema_version
+
+def check_schema_compatibility():
+    """Verify schema version compatibility on startup"""
+    expected_version = "v0.0.31"  # From config or environment
     
-async def downgrade():
-    """Rollback migration"""
-    pass
+    if schema_version != expected_version:
+        raise RuntimeError(
+            f"Schema version mismatch! "
+            f"Expected {expected_version}, got {schema_version}. "
+            f"Run: python scripts/generate_schemas.py --version {expected_version}"
+        )
 ```
+
+#### 3. Schema Update Process
+
+**When Jarvis Updates:**
+1. Jarvis team pushes new tag (e.g., `v0.0.32`)
+2. GitHub Actions publishes JSON schemas to Release
+3. mcp-gateway-registry engineer runs generation script
+4. Review generated code changes
+5. Commit and deploy
+
+**Manual Update Steps:**
+```bash
+# 1. Generate new schemas from Jarvis release
+python scripts/generate_schemas.py --version v0.0.32
+
+# 2. Review changes in generated files
+git diff registry/models/_generated/
+
+# 3. Run tests to ensure compatibility
+pytest tests/
+
+# 4. Commit generated code
+git add registry/models/_generated/
+git commit -m "chore: update schemas to Jarvis v0.0.32"
+
+# 5. Deploy
+git push
+```
+
+**No Database Migrations Needed:**
+- Generated Python models are validated by Beanie on startup
+- Both apps use the same `mcpservers` collection
+- MongoDB's schema-less nature handles evolution gracefully
+- Breaking changes would be caught by Pydantic validation at runtime
 
 #### 4. Cross-Application References
 
 ```python
-# Token references can point to servers
-class Token(Document):
-    metadata: Optional[Dict[str, Any]] = {
-        "server_id": ObjectId("..."),  # Reference to MCPServer._id
-        "server_name": "github_server"
-    }
+# Both applications share the same MCPServer schema (via generated code)
+from registry.models import MCPServer
 
-# jarvis-api can query MCP servers
+# mcp-gateway-registry can query servers created by Jarvis
+async def get_user_available_servers(user_id: ObjectId):
+    """Get all MCP servers available to user"""
+    servers = await MCPServer.find({
+        "author": user_id  # Field name matches Jarvis
+    }).to_list()
+    
+    return servers
+
+# Jarvis (jarvis-api) can query MCP servers for tool discovery
 async def get_user_available_tools(user_id: ObjectId):
     """Get all tools available to user from MCP servers"""
     servers = await MCPServer.find({
-        "$or": [
-            {"scope": "shared_app"},
-            {"user_id": user_id, "scope": {"$in": ["shared_user", "private_user"]}}
-        ],
-        "status": "active"
+        "author": user_id,
+        "config.startup": True  # Auto-start servers
     }).to_list()
     
-    # Extract and combine all tool_functions
+    # Extract tools from server configs
     all_tools = []
     for server in servers:
-        if server.tool_functions:
-            all_tools.extend(server.tool_functions.values())
+        if server.config.type == "stdio":
+            # Parse tools from server
+            tools = await discover_mcp_tools(server)
+            all_tools.extend(tools)
     
     return all_tools
 ```
+
+**Key Compatibility Points:**
+- ✅ **Field Names**: `server_name`, `config`, `author` match exactly
+- ✅ **Collection Name**: Both use `mcpservers`
+- ✅ **Data Types**: ObjectId, datetime, nested objects are compatible
+- ✅ **Indexes**: Generated schema includes Jarvis's index definitions
+- ✅ **Validation**: Pydantic validation mirrors Zod validation rules
 #### 3. Structured Logging
 
 ```python
