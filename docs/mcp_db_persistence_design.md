@@ -823,7 +823,7 @@ MongoDB integration provides a scalable, multi-tenant storage backend for MCP se
 
 #### 1. MCP Server Configuration Collection
 
-**Collection Name**: `mcp_servers`
+**Collection Name**: `mcps`
 
 **Schema Definition**:
 
@@ -928,7 +928,7 @@ class MCPServer(Document):
     version: int = 1  # Optimistic locking version
     
     class Settings:
-        name = "mcp_servers"
+        name = "mcps"
         indexes = [
             [("server_name", 1), ("user_id", 1), ("scope", 1)],  # Composite index for lookups
             [("status", 1), ("user_id", 1)],  # Active servers per user
@@ -1246,280 +1246,423 @@ async def get_server_with_state(server_id: ObjectId) -> dict:
 
 ### Seeding Initial Data
 
+For initial deployment to customer environments, we seed the database with sample/default server configurations from JSON files. This is a **one-time operation** run by DevOps during deployment, not an automatic migration.
+
 ```python
 from bson import ObjectId
 from datetime import datetime
+from pathlib import Path
+import json
+from typing import Dict, Any, List
 
-async def seed_default_servers(admin_user_id: ObjectId):
-    """Seed sample MCP servers for testing and initial setup"""
+async def seed_servers(admin_user_id: ObjectId, servers_dir: str = "registry/servers"):
+    """
+    Seed MongoDB with initial server configurations from JSON files.
+    This is intended for initial deployment to customer environments.
+    
+    Args:
+        admin_user_id: ObjectId of the admin user creating these servers
+        servers_dir: Directory containing server JSON configuration files
+    
+    Returns:
+        List of created MCPServer documents
+    """
     
     # Check if servers already exist
-    existing = await MCPServer.find().count()
-    if existing > 0:
-        print(f"Database already has {existing} servers, skipping seed")
-        return
+    existing_count = await MCPServer.find().count()
+    if existing_count > 0:
+        print(f"⚠️  Database already has {existing_count} servers, skipping seeding")
+        print("   Use --force flag to seed anyway (will create duplicates)")
+        return []
     
-    print("Seeding default MCP servers...")
+    servers_path = Path(servers_dir)
+    if not servers_path.exists():
+        print(f"❌ Servers directory {servers_dir} not found")
+        return []
     
-    # Sample 1: GitHub MCP Server (stdio, OAuth-enabled)
-    github_server = MCPServer(
-        server_name="github",
-        scope="shared_app",
-        user_id=None,
-        organization_id=None,
-        
-        # Base configuration
-        startup=True,
-        icon_path="/icons/github.svg",
-        timeout=30000,
-        init_timeout=60000,
-        chat_menu=True,
-        server_instructions="Use this server to interact with GitHub repositories, issues, and pull requests.",
-        
-        # Transport: stdio
-        transport={
-            "type": "stdio",
-            "command": "npx",
-            "args": ["-y", "@modelcontextprotocol/server-github"],
-            "env": {
-                "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
-            },
-            "stderr": "capture"
-        },
-        
-        # OAuth configuration
-        requires_oauth=True,
-        oauth={
-            "authorization_url": "https://github.com/login/oauth/authorize",
-            "token_url": "https://github.com/login/oauth/access_token",
-            "client_id": "your_github_client_id",  # Replace with actual client ID
-            "client_secret": "encrypted_secret_placeholder",  # Should be encrypted
-            "scope": "repo read:user read:org",
-            "redirect_uri": "http://localhost:3000/oauth/callback",
-            "token_exchange_method": "POST",
-            "grant_types_supported": ["authorization_code", "refresh_token"],
-            "response_types_supported": ["code"],
-            "code_challenge_methods_supported": ["S256"]
-        },
-        oauth_headers={
-            "Accept": "application/json"
-        },
-        
-        # Custom user variables
-        custom_user_vars={
-            "GITHUB_TOKEN": {
-                "title": "GitHub Personal Access Token",
-                "description": "Your GitHub personal access token with repo and user permissions",
-                "required": True
-            }
-        },
-        
-        # Initial metadata
-        capabilities='{"tools": true, "resources": true, "prompts": false}',
-        tools='[{"name": "create_or_update_file", "description": "Create or update a file in a GitHub repository"}, {"name": "search_repositories", "description": "Search for GitHub repositories"}, {"name": "create_issue", "description": "Create a new issue in a repository"}, {"name": "create_pull_request", "description": "Create a new pull request"}]',
-        tool_functions={
-            "create_or_update_file": {
-                "type": "function",
-                "function": {
-                    "name": "create_or_update_file",
-                    "description": "Create or update a single file in a GitHub repository",
-                    "parameters": {
-                        "type": "object",
-                        "required": ["owner", "repo", "path", "content", "message"],
-                        "properties": {
-                            "owner": {"type": "string", "description": "Repository owner"},
-                            "repo": {"type": "string", "description": "Repository name"},
-                            "path": {"type": "string", "description": "Path where to create/update the file"},
-                            "content": {"type": "string", "description": "Content of the file"},
-                            "message": {"type": "string", "description": "Commit message"},
-                            "branch": {"type": "string", "description": "Branch to create/update the file on"}
-                        }
-                    }
-                }
-            },
-            "search_repositories": {
-                "type": "function",
-                "function": {
-                    "name": "search_repositories",
-                    "description": "Search for GitHub repositories",
-                    "parameters": {
-                        "type": "object",
-                        "required": ["query"],
-                        "properties": {
-                            "query": {"type": "string", "description": "Search query"},
-                            "page": {"type": "number", "description": "Page number"},
-                            "perPage": {"type": "number", "description": "Results per page"}
-                        }
-                    }
-                }
-            }
-        },
-        
-        # Status
-        status="active",
-        last_connected=None,
-        last_error=None,
-        error_message=None,
-        
-        # Audit
-        created_by=admin_user_id,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
-        version=1
-    )
+    print(f"🌱 Seeding servers from {servers_dir} to MongoDB...")
     
-    await github_server.insert()
-    print(f"✓ Created server: {github_server.server_name}")
+    seeded_servers = []
+    json_files = list(servers_path.glob("*.json"))
     
-    # Sample 2: Filesystem MCP Server (stdio, no OAuth)
-    filesystem_server = MCPServer(
-        server_name="filesystem",
-        scope="shared_app",
-        user_id=None,
-        organization_id=None,
-        
-        # Base configuration
-        startup=True,
-        icon_path="/icons/folder.svg",
-        timeout=15000,
-        init_timeout=30000,
-        chat_menu=True,
-        server_instructions="Use this server to read and write files on the local filesystem. Access is restricted to allowed directories.",
-        
-        # Transport: stdio
-        transport={
-            "type": "stdio",
-            "command": "npx",
-            "args": [
-                "-y",
-                "@modelcontextprotocol/server-filesystem",
-                "/tmp",
-                "/Users/Shared"
-            ],
-            "stderr": "capture"
-        },
-        
-        # No OAuth required
-        requires_oauth=False,
-        oauth=None,
-        oauth_headers=None,
-        
-        # No custom variables needed
-        custom_user_vars=None,
-        
-        # Initial metadata
-        capabilities='{"tools": true, "resources": true, "prompts": false}',
-        tools='[{"name": "read_file", "description": "Read the complete contents of a file"}, {"name": "read_multiple_files", "description": "Read multiple files simultaneously"}, {"name": "write_file", "description": "Create a new file or overwrite existing"}, {"name": "list_directory", "description": "Get detailed listing of directory contents"}, {"name": "move_file", "description": "Move or rename files and directories"}]',
-        tool_functions={
-            "read_file": {
-                "type": "function",
-                "function": {
-                    "name": "read_file",
-                    "description": "Read the complete contents of a file from the file system",
-                    "parameters": {
-                        "type": "object",
-                        "required": ["path"],
-                        "properties": {
-                            "path": {
-                                "type": "string",
-                                "description": "Path to the file to read"
-                            }
-                        }
-                    }
-                }
-            },
-            "write_file": {
-                "type": "function",
-                "function": {
-                    "name": "write_file",
-                    "description": "Create a new file or completely overwrite an existing file",
-                    "parameters": {
-                        "type": "object",
-                        "required": ["path", "content"],
-                        "properties": {
-                            "path": {
-                                "type": "string",
-                                "description": "Path where to write the file"
-                            },
-                            "content": {
-                                "type": "string",
-                                "description": "Content to write to the file"
-                            }
-                        }
-                    }
-                }
-            },
-            "list_directory": {
-                "type": "function",
-                "function": {
-                    "name": "list_directory",
-                    "description": "Get a detailed listing of all files and directories in a specified path",
-                    "parameters": {
-                        "type": "object",
-                        "required": ["path"],
-                        "properties": {
-                            "path": {
-                                "type": "string",
-                                "description": "Path to the directory to list"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        
-        # Status
-        status="active",
-        last_connected=None,
-        last_error=None,
-        error_message=None,
-        
-        # Audit
-        created_by=admin_user_id,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
-        version=1
-    )
+    if not json_files:
+        print("❌ No server JSON files found in directory")
+        return []
     
-    await filesystem_server.insert()
-    print(f"✓ Created server: {filesystem_server.server_name}")
+    print(f"📁 Found {len(json_files)} server configuration files")
     
-    print(f"\n✅ Successfully seeded {2} default MCP servers")
-    return [github_server, filesystem_server]
+    for json_file in json_files:
+        try:
+            # Read the JSON file
+            with open(json_file, 'r') as f:
+                server_config = json.load(f)
+            
+            # Extract server name from filename (e.g., "github.json" -> "github")
+            server_name = json_file.stem
+            
+            print(f"   ⏳ Processing: {server_name}")
+            
+            # Map file-based config to MongoDB schema
+            server_data = map_file_config_to_database(server_config, server_name, admin_user_id)
+            
+            # Create and insert the server document
+            server = MCPServer(**server_data)
+            await server.insert()
+            
+            seeded_servers.append(server)
+            print(f"   ✅ Seeded: {server.server_name}")
+            
+        except Exception as e:
+            print(f"   ❌ Failed to seed {json_file.name}: {e}")
+            continue
+    
+    print(f"\n🎉 Successfully seeded {len(seeded_servers)} servers to MongoDB")
+    return seeded_servers
 
 
-# Usage during application startup
-async def initialize_database():
-    """Initialize database with default data"""
+def map_file_config_to_database(config: Dict[str, Any], server_name: str, admin_user_id: ObjectId) -> Dict[str, Any]:
+    """
+    Map file-based server configuration to MongoDB schema.
     
-    # Get or create admin user ID
-    # In production, this should be your actual admin user
-    admin_user_id = ObjectId("000000000000000000000001")
+    File-based config structure (from registry/servers/*.json):
+    {
+      "transport": {...},
+      "oauth": {...},
+      "requires_oauth": bool,
+      "startup": bool,
+      "icon_path": str,
+      "timeout": int,
+      "init_timeout": int,
+      "chat_menu": bool,
+      "server_instructions": str,
+      "custom_user_vars": {...},
+      // ... other fields
+    }
     
-    # Run seed
-    await seed_default_servers(admin_user_id)
+    Returns:
+        Dictionary ready to create MCPServer document
+    """
+    
+    # Determine scope based on file location or naming convention
+    # Default to shared_app, but can be customized based on your needs
+    scope = config.get("scope", "shared_app")
+    
+    # Build the MongoDB document
+    mongo_doc = {
+        # === Identification & Ownership ===
+        "server_name": server_name,
+        "scope": scope,
+        "user_id": None if scope == "shared_app" else admin_user_id,
+        "organization_id": config.get("organization_id"),
+        
+        # === Base Configuration ===
+        "startup": config.get("startup", False),
+        "icon_path": config.get("icon_path"),
+        "timeout": config.get("timeout", 30000),
+        "init_timeout": config.get("init_timeout", 60000),
+        "chat_menu": config.get("chat_menu", True),
+        "server_instructions": config.get("server_instructions"),
+        
+        # === Transport Configuration ===
+        "transport": config.get("transport", {}),
+        
+        # === OAuth Configuration ===
+        "requires_oauth": config.get("requires_oauth", False),
+        "oauth": config.get("oauth"),
+        "oauth_headers": config.get("oauth_headers"),
+        
+        # === Custom User Variables ===
+        "custom_user_vars": config.get("custom_user_vars"),
+        
+        # === Runtime Data ===
+        "oauth_metadata": config.get("oauth_metadata"),
+        "capabilities": config.get("capabilities"),
+        "tools": config.get("tools"),
+        "tool_functions": config.get("tool_functions"),
+        "init_duration": config.get("init_duration"),
+        
+        # === Status & Metadata ===
+        "status": config.get("status", "active"),
+        "last_connected": None,
+        "last_error": None,
+        "error_message": None,
+        
+        # === Audit Fields ===
+        "created_by": admin_user_id,
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow(),
+        "version": 1
+    }
+    
+    # Remove None values to use schema defaults
+    return {k: v for k, v in mongo_doc.items() if v is not None}
 ```
 
-**Running the Seed Script:**
+**Standalone Seeding Script:**
+
+Create `scripts/seed_servers.py` for DevOps to run during initial deployment:
+
+```python
+"""
+Seed MongoDB with initial MCP server configurations.
+
+Usage:
+    python scripts/seed_servers.py --admin-user-id <user_id> [--servers-dir <path>] [--force]
+
+Example:
+    python scripts/seed_servers.py --admin-user-id 000000000000000000000001
+    python scripts/seed_servers.py --admin-user-id 507f1f77bcf86cd799439011 --servers-dir ./config/servers
+"""
+
+import asyncio
+import argparse
+import sys
+import os
+from pathlib import Path
+from motor.motor_asyncio import AsyncIOMotorClient
+from beanie import init_beanie
+from bson import ObjectId
+
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from registry.models import MCPServer, Token  # Import your Beanie models
+from registry.config import settings
+
+# Import the seeding functions (these will be in registry/utils/seeding.py)
+from registry.utils.seeding import seed_servers, map_file_config_to_database
+
+
+async def run_seeding(admin_user_id: str, servers_dir: str = "registry/servers", force: bool = False):
+    """Run the database seeding operation"""
+    
+    print("=" * 60)
+    print("🌱 MCP Server Database Seeding")
+    print("=" * 60)
+    print(f"MongoDB URI: {settings.MONGO_URI}")
+    print(f"Database: {settings.MONGO_DB_NAME}")
+    print(f"Admin User ID: {admin_user_id}")
+    print(f"Servers Directory: {servers_dir}")
+    print(f"Force Mode: {force}")
+    print("=" * 60)
+    
+    # Connect to MongoDB
+    client = AsyncIOMotorClient(settings.MONGO_URI)
+    database = client[settings.MONGO_DB_NAME]
+    
+    try:
+        # Initialize Beanie ODM
+        await init_beanie(database=database, document_models=[MCPServer, Token])
+        print("✅ Connected to MongoDB")
+        
+        # Convert admin_user_id string to ObjectId
+        admin_oid = ObjectId(admin_user_id)
+        
+        # Run seeding
+        servers = await seed_servers(
+            admin_user_id=admin_oid,
+            servers_dir=servers_dir,
+            force=force
+        )
+        
+        if servers:
+            print("\n" + "=" * 60)
+            print("✅ Seeding completed successfully!")
+            print(f"📊 Total servers seeded: {len(servers)}")
+            print("=" * 60)
+            return 0
+        else:
+            print("\n" + "=" * 60)
+            print("⚠️  No servers were seeded")
+            print("=" * 60)
+            return 1
+            
+    except Exception as e:
+        print(f"\n❌ Seeding failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+        
+    finally:
+        # Close connection
+        client.close()
+        print("\n🔌 MongoDB connection closed")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Seed MongoDB with initial MCP server configurations"
+    )
+    parser.add_argument(
+        "--admin-user-id",
+        required=True,
+        help="ObjectId of the admin user (24-character hex string)"
+    )
+    parser.add_argument(
+        "--servers-dir",
+        default="registry/servers",
+        help="Directory containing server JSON files (default: registry/servers)"
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force seeding even if servers already exist (may create duplicates)"
+    )
+    
+    args = parser.parse_args()
+    
+    # Validate admin_user_id format
+    try:
+        ObjectId(args.admin_user_id)
+    except Exception:
+        print(f"❌ Invalid admin-user-id: {args.admin_user_id}")
+        print("   Must be a 24-character hexadecimal string")
+        sys.exit(1)
+    
+    # Run seeding
+    exit_code = asyncio.run(run_seeding(
+        admin_user_id=args.admin_user_id,
+        servers_dir=args.servers_dir,
+        force=args.force
+    ))
+    
+    sys.exit(exit_code)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+**Add to pyproject.toml:**
+
+```toml
+[project.scripts]
+seed-servers = "scripts.seed_servers:main"
+```
+
+**Usage Examples:**
 
 ```bash
-# Create a standalone script: scripts/seed_db.py
-python scripts/seed_db.py
+# DevOps runs this during initial deployment
+python scripts/seed_servers.py --admin-user-id 507f1f77bcf86cd799439011
 
-# Or call during app startup in main.py
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Initialize MongoDB
-    await init_beanie(database=mongo_db, document_models=[MCPServer, Token])
-    
-    # Seed default servers (only runs if DB is empty)
-    if settings.SEED_DEFAULT_SERVERS:
-        await seed_default_servers(admin_user_id=settings.ADMIN_USER_ID)
-    
-    yield
-    
-    # Cleanup
-    mongo_client.close()
+# Or using the installed script (after pip install -e .)
+seed-servers --admin-user-id 507f1f77bcf86cd799439011
+
+# Custom servers directory
+seed-servers --admin-user-id 507f1f77bcf86cd799439011 --servers-dir ./config/production/servers
+
+# Force seeding (if you need to re-seed)
+seed-servers --admin-user-id 507f1f77bcf86cd799439011 --force
+```
+
+**Expected Output:**
+
+```
+============================================================
+🌱 MCP Server Database Seeding
+============================================================
+MongoDB URI: mongodb://localhost:27017
+Database: mcp_gateway
+Admin User ID: 507f1f77bcf86cd799439011
+Servers Directory: registry/servers
+Force Mode: False
+============================================================
+✅ Connected to MongoDB
+🌱 Seeding servers from registry/servers to MongoDB...
+📁 Found 5 server configuration files
+   ⏳ Processing: github
+   ✅ Seeded: github
+   ⏳ Processing: filesystem
+   ✅ Seeded: filesystem
+   ⏳ Processing: slack
+   ✅ Seeded: slack
+   ⏳ Processing: postgres
+   ✅ Seeded: postgres
+   ⏳ Processing: memory
+   ✅ Seeded: memory
+
+🎉 Successfully seeded 5 servers to MongoDB
+
+============================================================
+✅ Seeding completed successfully!
+📊 Total servers seeded: 5
+============================================================
+
+🔌 MongoDB connection closed
+```
+
+**Example File-Based Config (registry/servers/github.json):**
+
+```json
+{
+  "transport": {
+    "type": "stdio",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-github"],
+    "env": {
+      "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+    },
+    "stderr": "capture"
+  },
+  "requires_oauth": true,
+  "oauth": {
+    "authorization_url": "https://github.com/login/oauth/authorize",
+    "token_url": "https://github.com/login/oauth/access_token",
+    "client_id": "github_client_id",
+    "scope": "repo read:user"
+  },
+  "startup": true,
+  "icon_path": "/icons/github.svg",
+  "timeout": 30000,
+  "chat_menu": true,
+  "server_instructions": "Use this for GitHub operations",
+  "custom_user_vars": {
+    "GITHUB_TOKEN": {
+      "title": "GitHub Personal Access Token",
+      "description": "Your GitHub API token",
+      "required": true
+    }
+  }
+}
+```
+
+**DevOps Deployment Checklist:**
+
+1. ✅ Ensure MongoDB is running and accessible
+2. ✅ Set environment variables (`MONGO_URI`, `MONGO_DB_NAME`)
+3. ✅ Prepare server JSON files in `registry/servers/` directory
+4. ✅ Get or create admin user ObjectId
+5. ✅ Run seeding script: `seed-servers --admin-user-id <id>`
+6. ✅ Verify seeding success (check MongoDB collection)
+7. ✅ Start the application
+
+**Note:** The seeding script is idempotent - it will skip seeding if servers already exist unless `--force` is used.
+
+      "description": "Your GitHub API token",
+      "required": true
+    }
+  }
+}
+```
+
+**Migration Output:**
+
+```
+Migrating servers from registry/servers to MongoDB...
+Found 5 server configuration files
+Migrating server: github
+✓ Migrated server: github
+Migrating server: filesystem
+✓ Migrated server: filesystem
+Migrating server: slack
+✓ Migrated server: slack
+Migrating server: postgres
+✓ Migrated server: postgres
+Migrating server: memory
+✓ Migrated server: memory
+
+✅ Successfully migrated 5 servers to MongoDB
 ```
 
 ### Security Considerations
@@ -1725,7 +1868,7 @@ Since both `mcp-gateway-registry` and `jarvis-api` share the same MongoDB instan
 ```
 Database: jarvis (shared)
 Collections:
-  - mcp_servers (managed by both apps)
+  - mcps (managed by both apps)
   - tokens (managed by both apps)
   - users (managed by jarvis-api)
   - [other jarvis-api collections...]
@@ -1738,7 +1881,7 @@ class MCPServer(Document):
     schema_version: str = "1.0.0"  # Track schema changes
     
     class Settings:
-        name = "mcp_servers"
+        name = "mcps"
         use_revision = True  # Beanie revision tracking
 ```
 
