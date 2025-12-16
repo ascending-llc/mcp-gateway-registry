@@ -33,6 +33,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/callback",
             "/api/auth/providers",
             "/api/auth/login",
+            "/login",
             "/api/auth/config",
         ]
         # note: admin

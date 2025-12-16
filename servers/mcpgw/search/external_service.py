@@ -2,6 +2,7 @@ import logging
 import json
 from typing import List, Dict, Any, Optional
 from packages.db import initialize_database
+from packages.db.enum.enums import SearchType, RerankerProvider
 from packages.shared.models import McpTool
 from .base import VectorSearchService
 
@@ -10,18 +11,33 @@ logger = logging.getLogger(__name__)
 
 class ExternalVectorSearchService(VectorSearchService):
     """
-    External vector search using three-layer architecture.
-    
-    Supports both Weaviate and Chroma with native filter formats.
+    External vector search service with rerank support.
     """
 
-    def __init__(self):
-        """Initialize vector search service using DatabaseClient."""
+    def __init__(
+            self,
+            enable_rerank: bool = True,
+            search_type: SearchType = SearchType.NEAR_TEXT,
+            reranker_model: str = "ms-marco-TinyBERT-L-2-v2"
+    ):
+        """
+        Initialize vector search service with rerank support.
+        
+        Args:
+            enable_rerank: Enable reranking (default: True)
+            search_type: Default search type (NEAR_TEXT, BM25, HYBRID)
+            reranker_model: FlashRank model name
+        """
+        self.enable_rerank = enable_rerank
+        self.search_type = search_type
+        self.reranker_model = reranker_model
+        
         try:
             self._client = initialize_database()
             self._mcp_tools = self._client.for_model(McpTool)
             self._initialized = True
-            logger.info(f"Vector search service initialized successfully")
+            logger.info(f"Vector search service initialized: "
+                f"rerank={enable_rerank}, search_type={search_type.value}")
         except Exception as e:
             logger.error(f"Failed to initialize vector search: {e}")
             self._client = None
@@ -72,6 +88,52 @@ class ExternalVectorSearchService(VectorSearchService):
             logger.error(f"Initialization failed: {e}", exc_info=True)
             self._initialized = False
             raise Exception(f"Cannot initialize vector search: {e}")
+    
+    def get_retriever(
+        self,
+        search_type: Optional[SearchType] = None,
+        enable_rerank: Optional[bool] = None,
+        top_k: int = 10
+    ):
+        """
+        Get a LangChain retriever (with optional rerank) for RAG applications.
+        
+        Similar to BedrockRerank usage pattern:
+        - Creates base retriever
+        - Optionally wraps with ContextualCompressionRetriever for reranking
+        
+        Args:
+            search_type: Search type (uses default if None)
+            enable_rerank: Enable rerank (uses instance setting if None)
+            top_k: Number of results to return
+            
+        Returns:
+            BaseRetriever or ContextualCompressionRetriever
+
+        """
+        if not self._initialized:
+            raise Exception("Vector search service not initialized")
+        
+        use_rerank = enable_rerank if enable_rerank is not None else self.enable_rerank
+        use_search_type = search_type or self.search_type
+        
+        if use_rerank:
+            # Return compression retriever with rerank
+            return self._mcp_tools.get_compression_retriever(
+                reranker_type=RerankerProvider.FLASHRANK,
+                search_type=use_search_type,
+                search_kwargs={"k": top_k * 3},  # 3x candidates
+                reranker_kwargs={
+                    "top_k": top_k,
+                    "model": self.reranker_model
+                }
+            )
+        else:
+            # Return base retriever without rerank
+            return self._mcp_tools.get_retriever(
+                search_type=use_search_type,
+                k=top_k
+            )
 
     async def search_tools(
         self,
@@ -80,12 +142,12 @@ class ExternalVectorSearchService(VectorSearchService):
         user_scopes: Optional[List[str]] = None,
         top_k_services: int = 3,
         top_n_tools: int = 10,
-        search_type: str = "semantic"
+        search_type: Optional[SearchType] = None
     ) -> List[Dict[str, Any]]:
         """
-        Search for tools using Repository API.
+        Search for tools with optional reranking.
         
-        Uses native filters for optimal performance.
+        Uses repository API with rerank support for improved relevance.
 
         Args:
             query: Search query text
@@ -93,8 +155,10 @@ class ExternalVectorSearchService(VectorSearchService):
             user_scopes: User scopes for access control (not implemented)
             top_k_services: Max services (not used in new architecture)
             top_n_tools: Maximum number of tools to return
-            search_type: Type of search ("near_text", "bm25", "hybrid")
+            search_type: Search type (NEAR_TEXT, BM25, HYBRID), uses default if None
 
+        Returns:
+            List of formatted tool dictionaries
         """
         if not self._initialized:
             raise Exception("Vector search service not initialized")
@@ -102,21 +166,45 @@ class ExternalVectorSearchService(VectorSearchService):
         if not query and not tags:
             raise Exception("At least one of 'query' or 'tags' must be provided")
 
+        use_search_type = search_type or self.search_type
         logger.info(
-            f"Searching tools: query='{query}', tags={tags}, limit={top_n_tools}"
+            f"Searching tools: query='{query}', tags={tags}, limit={top_n_tools}, "
+            f"search_type={use_search_type}"
         )
+        
         try:
             filter_conditions = {"is_enabled": True}
-            if query:
-                tools = self._mcp_tools.search(
+            
+            if not query:
+                # Metadata-only filter
+                tools = self._mcp_tools.filter(
+                    filters=filter_conditions,
+                    limit=top_n_tools * 2 if tags else top_n_tools
+                )
+            elif self.enable_rerank:
+                # Use rerank - Repository layer handles logic automatically
+                candidate_k = min(top_n_tools * 3, 100)
+                if tags:
+                    candidate_k = min(candidate_k * 2, 150)
+                
+                logger.info(f"Using rerank: type={use_search_type.value}, "
+                    f"candidate_k={candidate_k}, k={top_n_tools * 2 if tags else top_n_tools}")
+                tools = self._mcp_tools.search_with_rerank(
                     query=query,
-                    k=top_n_tools * 2,  # Get more for tag filtering
-                    filters=filter_conditions  # Dict auto-converted
+                    search_type=use_search_type,
+                    k=top_n_tools * 2 if tags else top_n_tools,
+                    candidate_k=candidate_k,
+                    filters=filter_conditions,
+                    reranker_type=RerankerProvider.FLASHRANK,
+                    reranker_kwargs={"model": self.reranker_model}
                 )
             else:
-                tools = self._mcp_tools.filter(
-                    filters=filter_conditions,  # Dict auto-converted
-                    limit=top_n_tools * 2
+                # Regular search without rerank
+                tools = self._mcp_tools.search(
+                    query=query,
+                    search_type=use_search_type,
+                    k=top_n_tools * 2 if tags else top_n_tools,
+                    filters=filter_conditions
                 )
 
             # Apply tag filtering in-memory if needed
@@ -129,12 +217,11 @@ class ExternalVectorSearchService(VectorSearchService):
                 tools = filtered_tools[:top_n_tools]
             else:
                 tools = tools[:top_n_tools]
-
-            logger.info(f"Search returned {len(tools)} tools")
+            
+            logger.info(f"Search returned {len(tools)} tools (rerank={'ON' if self.enable_rerank else 'OFF'})")
 
             # Convert to mcpgw format
             formatted_tools = self._format_tools_for_mcpgw(tools)
-
             logger.info(f"Returning {len(formatted_tools)} formatted tools")
             return formatted_tools
 
@@ -146,6 +233,8 @@ class ExternalVectorSearchService(VectorSearchService):
     def _format_tools_for_mcpgw(self, tools: List[McpTool]) -> List[Dict[str, Any]]:
         """
         Convert MCPTool instances to mcpgw format.
+        
+        Handles both regular search and rerank scores.
         
         Args:
             tools: List of MCPTool model instances
@@ -161,6 +250,7 @@ class ExternalVectorSearchService(VectorSearchService):
             if isinstance(schema, str):
                 try:
                     schema = json.loads(schema)
+
                 except Exception as e:
                     logger.error(f"Failed to parse schema JSON: {e}")
                     schema = {}
@@ -183,15 +273,24 @@ class ExternalVectorSearchService(VectorSearchService):
                 "supported_transports": ["streamable-http"],
                 "auth_provider": None,
             }
+            logger.info(f"Formatted tool: {tool}")
 
             # Add search metadata if available
-            if hasattr(tool, '_score') and tool._score is not None:
-                formatted_tool["overall_similarity_score"] = tool._score
+            similarity_score = None
+            if hasattr(tool, 'score') and tool.score is not None:
+                # Rerank score (from FlashRank)
+                similarity_score = tool.score
+            elif hasattr(tool, '_score') and tool._score is not None:
+                # Vector search score
+                similarity_score = tool._score
+            elif hasattr(tool, '_certainty') and tool._certainty is not None:
+                # Weaviate certainty
+                similarity_score = tool._certainty
             elif hasattr(tool, '_distance') and tool._distance is not None:
                 # Convert distance to score (lower distance = higher score)
-                formatted_tool["overall_similarity_score"] = 1.0 - tool._distance
-            elif hasattr(tool, '_certainty') and tool._certainty is not None:
-                formatted_tool["overall_similarity_score"] = tool._certainty
+                similarity_score = 1.0 - min(tool._distance, 1.0)
+            if similarity_score is not None:
+                formatted_tool["overall_similarity_score"] = similarity_score
 
             formatted_tools.append(formatted_tool)
 
