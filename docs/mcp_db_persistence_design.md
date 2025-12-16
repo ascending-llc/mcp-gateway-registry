@@ -823,7 +823,7 @@ MongoDB integration provides a scalable, multi-tenant storage backend for MCP se
 
 #### 1. MCP Server Configuration Collection
 
-**Collection Name**: `mcps`
+**Collection Name**: `mcpservers`
 
 **Schema Definition**:
 
@@ -928,7 +928,7 @@ class MCPServer(Document):
     version: int = 1  # Optimistic locking version
     
     class Settings:
-        name = "mcps"
+        name = "mcpservers"
         indexes = [
             [("server_name", 1), ("user_id", 1), ("scope", 1)],  # Composite index for lookups
             [("status", 1), ("user_id", 1)],  # Active servers per user
@@ -1868,7 +1868,7 @@ Since both `mcp-gateway-registry` and `jarvis-api` share the same MongoDB instan
 ```
 Database: jarvis (shared)
 Collections:
-  - mcps (managed by both apps)
+  - mcpservers (managed by both apps)
   - tokens (managed by both apps)
   - users (managed by jarvis-api)
   - [other jarvis-api collections...]
@@ -1881,7 +1881,7 @@ class MCPServer(Document):
     schema_version: str = "1.0.0"  # Track schema changes
     
     class Settings:
-        name = "mcps"
+        name = "mcpservers"
         use_revision = True  # Beanie revision tracking
 ```
 
