@@ -58,22 +58,6 @@ class WeaviateStore(VectorStoreAdapter):
             embedding=self.embedding
         )
 
-    @DeprecationWarning
-    def get_vectorizer_config(self):
-        embedding_provider = self.config.get('embedding_provider', 'aws_bedrock')
-        if embedding_provider == EmbeddingProvider.AWS_BEDROCK:
-            vectorizer_config = wvc.Configure.Vectorizer.text2vec_aws(
-                region=self.embedding_config.get('region', 'us-east-1'),
-                model=self.embedding_config.get('model', 'amazon.titan-embed-text-v2:0')
-            )
-        elif embedding_provider == EmbeddingProvider.OPENAI.value:
-            vectorizer_config = wvc.Configure.Vectorizer.text2vec_openai(
-                model=self.embedding_config.get('model', 'text-embedding-3-small')
-            )
-        else:
-            vectorizer_config = wvc.Configure.Vectorizer.none()
-        return vectorizer_config
-
     def _ensure_collection_with_vectorizer(self, collection_name: str):
         """
         Ensure collection exists with vectorizer configuration for hybrid search.
