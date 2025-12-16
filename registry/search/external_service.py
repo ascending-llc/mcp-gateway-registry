@@ -2,6 +2,7 @@ import logging
 from typing import Dict, Any, Optional, List
 
 from packages.db import initialize_database
+from packages.db.enum.enums import SearchType, RerankerProvider
 from packages.shared.models import McpTool
 from .base import VectorSearchService
 
@@ -9,15 +10,35 @@ logger = logging.getLogger(__name__)
 
 
 class ExternalVectorSearchService(VectorSearchService):
-    """Vector search service that uses"""
+    """
+    Vector search service with rerank support.
+    """
 
-    def __init__(self):
-        """Initialize vector search service from environment variables."""
+    def __init__(
+            self,
+            enable_rerank: bool = True,
+            search_type: SearchType = SearchType.NEAR_TEXT,
+            reranker_model: str = "ms-marco-TinyBERT-L-2-v2"
+    ):
+        """
+        Initialize vector search service with rerank support.
+        
+        Args:
+            enable_rerank: Enable reranking (default: True)
+            search_type: Default search type (NEAR_TEXT, BM25, HYBRID)
+            reranker_model: FlashRank model name
+        """
+        self.enable_rerank = enable_rerank
+        self.search_type = search_type
+        self.reranker_model = reranker_model
+        
         try:
             self._client = initialize_database()
             self._mcp_tools = self._client.for_model(McpTool)
             self._initialized = True
-            logger.info(f"Vector search service initialized successfully")
+
+            logger.info(f"Vector search service initialized: "
+                f"rerank={enable_rerank}, search_type={search_type.value}")
         except Exception as e:
             self._client = None
             self._mcp_tools = None
@@ -32,6 +53,52 @@ class ExternalVectorSearchService(VectorSearchService):
             logger.error("Model operations not initialized, skipping vector search setup")
             return
         logger.info("Vector search service initialized successfully")
+    
+    def get_retriever(
+        self,
+        search_type: Optional[SearchType] = None,
+        enable_rerank: Optional[bool] = None,
+        top_k: int = 10
+    ):
+        """
+        Get a LangChain retriever (with optional rerank) for RAG applications.
+        
+        Similar to BedrockRerank usage:
+        - Creates base retriever
+        - Optionally wraps with ContextualCompressionRetriever for reranking
+        
+        Args:
+            search_type: Search type (uses default if None)
+            enable_rerank: Enable rerank (uses instance setting if None)
+            top_k: Number of results to return
+            
+        Returns:
+            BaseRetriever or ContextualCompressionRetriever
+
+        """
+        if not self._initialized:
+            raise Exception("Vector search service not initialized")
+        
+        use_rerank = enable_rerank if enable_rerank is not None else self.enable_rerank
+        use_search_type = search_type or self.search_type
+        
+        if use_rerank:
+            # Return compression retriever with rerank
+            return self._mcp_tools.get_compression_retriever(
+                reranker_type=RerankerProvider.FLASHRANK,
+                search_type=use_search_type,
+                search_kwargs={"k": top_k * 3},  # 3x candidates
+                reranker_kwargs={
+                    "top_k": top_k,
+                    "model": self.reranker_model
+                }
+            )
+        else:
+            # Return base retriever without rerank
+            return self._mcp_tools.get_retriever(
+                search_type=use_search_type,
+                k=top_k
+            )
 
     async def add_or_update_service(
             self,
@@ -75,7 +142,7 @@ class ExternalVectorSearchService(VectorSearchService):
             result = self._mcp_tools.bulk_save(tools)
             logger.info(f"Indexed {result.successful}/{result.total} "
                         f"tools for '{service_path}' "
-                        f""f"(success rate: {result.success_rate:.1f}%)")
+                        f"(success rate: {result.success_rate:.1f}%)")
 
             if result.has_errors:
                 logger.warning(f"{result.failed} tools failed to index:")
@@ -102,7 +169,6 @@ class ExternalVectorSearchService(VectorSearchService):
         """
         if not self._initialized:
             return None
-
         try:
             # Use simple dict filter (auto-converted by adapter)
             filters = {"server_path": service_path}
@@ -118,18 +184,18 @@ class ExternalVectorSearchService(VectorSearchService):
             query: Optional[str] = None,
             tags: Optional[List[str]] = None,
             top_k: int = 10,
-            filters: Optional[Dict[str, Any]] = None
+            filters: Optional[Dict[str, Any]] = None,
+            search_type: Optional[SearchType] = None
     ) -> List[Dict[str, Any]]:
         """
-        Search tools with semantic search.
-
-        Uses repository for data access with native filters.
+        Search tools with optional reranking.
 
         Args:
             query: Search text for semantic search
             tags: Tag filters (applied in-memory)
             top_k: Maximum results
             filters: Field filters (dict format, converted to native)
+            search_type: Override default search type (NEAR_TEXT, BM25, HYBRID)
 
         Returns:
             List of tool dictionaries with search metadata
@@ -138,23 +204,44 @@ class ExternalVectorSearchService(VectorSearchService):
             logger.warning("Vector search unavailable, returning empty results")
             return []
 
-        logger.info(f"Search: query='{query}', tags={tags}, top_k={top_k}, filters={filters}")
+        use_search_type = search_type or self.search_type
+        logger.info(f"Search: query='{query}', tags={tags}, top_k={top_k}, "
+            f"filters={filters}, search_type={use_search_type}")
 
         try:
-            if query:
-                tools = self._mcp_tools.search(
-                    query=query,
-                    k=top_k * 2,  # Get more for tag filtering
-                    filters=filters
-                )
-            else:
+            if not query:
                 # Metadata-only filter
                 if not filters:
                     logger.warning("No query and no filters provided")
                     return []
                 tools = self._mcp_tools.filter(
                     filters=filters,
-                    limit=top_k * 2
+                    limit=top_k * 2 if tags else top_k
+                )
+            elif self.enable_rerank:
+                # Use rerank - Repository layer handles candidate_k automatically
+                candidate_k = min(top_k * 3, 100)
+                if tags:
+                    candidate_k = min(candidate_k * 2, 150)
+                
+                logger.info(f"Using rerank: type={use_search_type.value}, "
+                    f"candidate_k={candidate_k}, k={top_k * 2 if tags else top_k}")
+                tools = self._mcp_tools.search_with_rerank(
+                    query=query,
+                    search_type=use_search_type,
+                    k=top_k * 2 if tags else top_k,
+                    candidate_k=candidate_k,
+                    filters=filters,
+                    reranker_type=RerankerProvider.FLASHRANK,
+                    reranker_kwargs={"model": self.reranker_model}
+                )
+            else:
+                # Regular search without rerank
+                tools = self._mcp_tools.search(
+                    query=query,
+                    search_type=use_search_type,
+                    k=top_k * 2 if tags else top_k,
+                    filters=filters
                 )
 
             # Apply tag filtering if needed (in-memory)
@@ -170,7 +257,7 @@ class ExternalVectorSearchService(VectorSearchService):
 
             # Convert to result dicts
             results = self._tools_to_results(tools)
-            logger.info(f"Found {len(results)} tools")
+            logger.info(f"Found {len(results)} tools (rerank={'ON' if self.enable_rerank else 'OFF'})")
             return results
 
         except Exception as e:
@@ -192,6 +279,12 @@ class ExternalVectorSearchService(VectorSearchService):
         results = []
 
         for tool in tools:
+            logger.info(f"Processing tool: {tool}")
+            # Calculate relevance score
+            relevance_score = 0.8  # Default score
+            if hasattr(tool, 'score') and tool.score is not None:
+                relevance_score = tool.score
+            
             result = {
                 "tool_name": tool.tool_name,
                 "server_path": tool.server_path,
@@ -202,9 +295,10 @@ class ExternalVectorSearchService(VectorSearchService):
                 "tags": tool.tags or [],
                 "is_enabled": tool.is_enabled,
                 "entity_type": tool.entity_type or ["all"],
+                "relevance_score": relevance_score,  # Always set relevance_score
             }
 
-            # Add basic metadata that might be available
+            # Add score field if available
             if hasattr(tool, 'score') and tool.score is not None:
                 result['score'] = tool.score
 
@@ -323,11 +417,12 @@ class ExternalVectorSearchService(VectorSearchService):
             query: str,
             entity_types: Optional[List[str]] = None,
             max_results: int = 20,
+            search_type: Optional[SearchType] = None
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
-        Search across multiple entity types: servers, tools, and agents.
+        Search across multiple entity types with rerank support.
 
-        Uses repository to search McpTool collection.
+        Searches servers, tools, and agents with improved relevance.
 
         Args:
             query: Natural language query text
@@ -335,6 +430,7 @@ class ExternalVectorSearchService(VectorSearchService):
                 Options: ["mcp_server", "tool", "a2a_agent"]
                 Default: all types
             max_results: Maximum results per entity type (default: 20)
+            search_type: Override default search type (NEAR_TEXT, BM25, HYBRID)
 
         Returns:
             Dictionary with entity type keys and result lists
@@ -355,23 +451,42 @@ class ExternalVectorSearchService(VectorSearchService):
         if not entity_filter:
             entity_filter = list(allowed_types)
 
-        logger.info(
-            f"search_mixed: query='{query}', types={entity_filter}, "
-            f"max={max_results}"
-        )
+        logger.info(f"search_mixed: query='{query}', types={entity_filter}, "
+            f"max={max_results}, search_type={search_type or self.search_type}")
 
+        use_search_type = search_type or self.search_type
         results = {
             "servers": [],
             "tools": [],
             "agents": []
         }
-
+        
         try:
-            # Search using model operations
-            tools = self._mcp_tools.search(
-                query=query,
-                k=max_results * 3  # Get more results to filter
-            )
+            # Calculate search parameters
+            search_k = max_results * 2  # Get 2x for entity filtering
+            candidate_k = min(search_k * 3, 100) if self.enable_rerank else search_k
+            
+            # Use rerank if enabled
+            if self.enable_rerank:
+                logger.info(
+                    f"Mixed search with rerank: type={use_search_type.value}, "
+                    f"candidate_k={candidate_k}, k={search_k}"
+                )
+                tools = self._mcp_tools.search_with_rerank(
+                    query=query,
+                    search_type=use_search_type,
+                    k=search_k,
+                    candidate_k=candidate_k,
+                    reranker_type=RerankerProvider.FLASHRANK,
+                    reranker_kwargs={"model": self.reranker_model}
+                )
+            else:
+                # Regular search without rerank
+                tools = self._mcp_tools.search(
+                    query=query,
+                    search_type=use_search_type,
+                    k=search_k
+                )
 
             # Filter and categorize results
             for tool in tools:
@@ -400,7 +515,7 @@ class ExternalVectorSearchService(VectorSearchService):
                     "description": tool.description_main,
                     "match_context": match_context,
                     "relevance_score": relevance,
-                    "entity_type": tool.entity_type or ["all"],
+                    "entity_type": tool.entity_type or ["all"]
                 }
 
                 if hasattr(tool, 'score') and tool.score is not None:
@@ -428,14 +543,17 @@ class ExternalVectorSearchService(VectorSearchService):
 
             # Sort and limit results
             for key in ["tools", "servers", "agents"]:
-                results[key].sort(key=lambda x: x["relevance_score"], reverse=True)
+                # Sort by relevance_score (with fallback to 0.0 for safety)
+                results[key].sort(
+                    key=lambda x: x.get("relevance_score", 0.0), 
+                    reverse=True
+                )
                 results[key] = results[key][:max_results]
 
-            logger.info(
-                f"Found {len(results['tools'])} tools, "
-                f"{len(results['servers'])} servers, "
-                f"{len(results['agents'])} agents"
-            )
+            logger.info(f"Found {len(results['tools'])} tools, "
+                        f"{len(results['servers'])} servers, "
+                        f"{len(results['agents'])} agents "
+                        f"(rerank={'ON' if self.enable_rerank else 'OFF'})")
             return results
 
         except Exception as e:

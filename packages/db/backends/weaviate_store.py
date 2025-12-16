@@ -1,9 +1,11 @@
+import logging
+
 from typing import Dict, Any, List, Optional
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
-import logging
+import weaviate.classes.config as wvc
 from ..adapters.adapter import VectorStoreAdapter
-from ..enum.enums import SearchType
+from ..enum.enums import SearchType, EmbeddingProvider
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +41,15 @@ class WeaviateStore(VectorStoreAdapter):
         """
         Create LangChain WeaviateVectorStore for collection.
         
+        Ensures collection exists with proper vectorizer configuration for hybrid search.
+        
         Returns:
             WeaviateVectorStore instance
         """
         from langchain_weaviate import WeaviateVectorStore
+
+        # Ensure collection exists with proper configuration
+        self._ensure_collection_with_vectorizer(collection_name)
 
         return WeaviateVectorStore(
             client=self._get_client(),
@@ -50,6 +57,39 @@ class WeaviateStore(VectorStoreAdapter):
             text_key='content',
             embedding=self.embedding
         )
+
+    def _ensure_collection_with_vectorizer(self, collection_name: str):
+        """
+        Ensure collection exists with vectorizer configuration for hybrid search.
+        """
+        client = self._get_client()
+
+        if client.collections.exists(collection_name):
+            logger.debug(f"Collection {collection_name} already exists")
+            return
+
+        # Create collection with vectorizer configuration
+        try:
+            logger.info(f"Creating collection {collection_name} with vectorizer configuration...")
+            client.collections.create(
+                name=collection_name,
+                vectorizer_config=wvc.Configure.Vectorizer.none(),  # Use external embeddings
+                properties=[
+                    wvc.Property(
+                        name="content",
+                        data_type=wvc.DataType.TEXT,
+                        description="Main searchable content"
+                    ),
+                ],
+            )
+            logger.info(f"Collection {collection_name} created successfully")
+        except Exception as e:
+            # If creation fails, collection might already exist (race condition)
+            if client.collections.exists(collection_name):
+                logger.warning(f"Collection {collection_name} was created by another process")
+            else:
+                logger.error(f"Failed to create collection {collection_name}: {e}")
+                raise
 
     def close(self):
         """Close Weaviate connection."""
@@ -246,10 +286,21 @@ class WeaviateStore(VectorStoreAdapter):
                       collection_name: Optional[str] = None,
                       **kwargs
                       ) -> List[Document]:
+        """
+        Hybrid search combining BM25 and vector search.
+        
+        For external embeddings, we need to provide the query vector manually.
+        """
         collection = self.get_collection(collection_name)
         try:
+            # Generate query vector using external embedding
+            query_vector = self.embedding.embed_query(query)
+
+            # Perform hybrid search with explicit vector
             response = collection.query.hybrid(
                 query=query,
+                vector=query_vector,  # Provide external embedding vector
+                alpha=alpha,  # 0=BM25 only, 1=vector only, 0.5=balanced
                 limit=k,
                 filters=filters,
                 **kwargs
@@ -257,8 +308,14 @@ class WeaviateStore(VectorStoreAdapter):
             docs = self.get_document_response(response)
             return docs
         except Exception as e:
-            logger.error(f"Hybrid text failed: {e}")
-            return []
+            logger.error(f"Hybrid search failed: {e}")
+            logger.info("Falling back to semantic search only...")
+            # Fallback to near_vector search if hybrid fails
+            try:
+                return self.near_text(query, k, filters=filters, collection_name=collection_name)
+            except Exception as fallback_error:
+                logger.error(f"Fallback search also failed: {fallback_error}")
+                return []
 
     def near_text(self,
                   query: str,
