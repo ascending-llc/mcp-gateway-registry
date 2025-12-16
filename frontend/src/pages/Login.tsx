@@ -51,8 +51,6 @@ const Login: React.FC = () => {
             setAuthServerUrl(response.data.auth_server_url || '');
         } catch (error) {
             console.error('Failed to fetch auth config:', error);
-            // Fallback to localhost for development
-            setAuthServerUrl('http://localhost:8888');
         }
     };
 
