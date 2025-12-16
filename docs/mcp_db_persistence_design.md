@@ -99,30 +99,66 @@ Endpoints should support the following operations:
 - Admin can add/update/remove server configuration for different groups
 - User can add/update/remove their private server configuration
 
+**ID Usage Convention:**
+- **URL path parameter**: `{server_id}` (e.g., `/api/v1/servers/{server_id}`) - uses MongoDB ObjectId
+- **Response body field**: `"id"` - returns the MongoDB ObjectId as a string
+- **No separate `server_id` field**: We use only `id` to avoid redundancy and follow REST conventions
+- **File-based compatibility**: When using file-based storage, `id` will be a generated UUID or hash of the `path` field
+  * MongoDB: `"id": "674e1a2b3c4d5e6f7a8b9c0d"` (24-char ObjectId)
+  * File-based: `"id": "uuid-v4-here"` or derived from path
+
 #### Server Management Endpoints
 
 **1. List Servers**
 ```http
-GET /api/v1/servers?scope={shared_app|shared_user|private_user}&status={active|inactive|error}
+GET /api/v1/servers?query={search_term}&scope={scope}&status={status}&page={page}&per_page={per_page}
 Authorization: Bearer <token>
+
+Query Parameters:
+- query (optional): Free-text search across server_name, description, tags
+  * Example: query=github searches all text fields
+  * Uses MongoDB text index or regex matching
+  
+- scope (optional): Exact filter by access level
+  * Values: shared_app, shared_user, private_user
+  * Example: scope=private_user shows only user's private servers
+  
+- status (optional): Exact filter by operational state
+  * Values: active, inactive, error
+  * Example: status=active shows only enabled servers
+  
+- page (optional): Page number for pagination (default: 1, min: 1)
+- per_page (optional): Items per page (default: 20, min: 1, max: 100)
 
 Response 200:
 {
   "servers": [
     {
       "id": "674e1a2b3c4d5e6f7a8b9c0d",
-      "server_name": "github_server",
+      "server_name": "GitHub Server",
+      "path": "/github",
+      "description": "GitHub integration server",
+      "proxy_pass_url": "http://localhost:3100",
+      "supported_transports": ["streamable-http"],
+      "auth_type": "oauth",
+      "tags": ["github", "git", "vcs"],
+      "num_tools": 15,
+      "num_stars": 250,
+      "is_python": false,
+      "license": "MIT",
+      "tool_list": [...],
       "scope": "shared_app",
-      "status": "active",
-      "transport": { "type": "stdio", ... },
-      "requires_oauth": true,
+      "user_id": null,
       "created_at": "2024-12-01T09:00:00Z",
       "updated_at": "2024-12-15T10:30:00Z"
     }
   ],
-  "total": 10,
-  "page": 1,
-  "per_page": 20
+  "pagination": {
+    "total": 145,
+    "page": 1,
+    "per_page": 20,
+    "total_pages": 8
+  }
 }
 ```
 
@@ -134,14 +170,64 @@ Authorization: Bearer <token>
 Response 200:
 {
   "id": "674e1a2b3c4d5e6f7a8b9c0d",
-  "server_name": "github_server",
+  "server_name": "GitHub Server",
+  "path": "/github",
+  "description": "GitHub integration server",
+  "proxy_pass_url": "http://localhost:3100",
+  "supported_transports": ["streamable-http"],
+  "auth_type": "oauth",
+  "auth_provider": "github",
+  "tags": ["github", "git", "vcs"],
+  "num_tools": 15,
+  "num_stars": 250,
+  "is_python": false,
+  "license": "MIT",
+  "tool_list": [
+    {
+      "name": "create_issue",
+      "description": "Create a GitHub issue",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": {"type": "string"},
+          "title": {"type": "string"}
+        },
+        "required": ["repo", "title"]
+      }
+    }
+  ],
   "scope": "shared_app",
   "user_id": null,
-  "transport": { "type": "stdio", "command": "npx", ... },
-  "oauth": { "authorization_url": "...", ... },
-  "tool_functions": { ... },
+  "organization_id": null,
+  "startup": true,
+  "icon_path": "/icons/github.svg",
+  "timeout": 30000,
+  "init_timeout": 60000,
+  "chat_menu": true,
+  "server_instructions": "Use this for GitHub operations",
+  "transport": {
+    "type": "stdio",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-github"],
+    "env": {
+      "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+    }
+  },
+  "requires_oauth": true,
+  "oauth": {
+    "authorization_url": "https://github.com/login/oauth/authorize",
+    "token_url": "https://github.com/login/oauth/access_token",
+    "client_id": "github_client_id",
+    "scope": "repo read:user"
+  },
+  "custom_user_vars": {
+    "GITHUB_TOKEN": {
+      "title": "GitHub Personal Access Token",
+      "description": "Your GitHub API token",
+      "required": true
+    }
+  },
   "status": "active",
-  "connection_state": "connected",  // Real-time from cache, not MongoDB
   "last_connected": "2024-12-15T10:30:00Z",
   "last_error": null,
   "error_message": null,
@@ -159,29 +245,45 @@ Content-Type: application/json
 
 Request:
 {
-  "server_name": "custom_server",
+  "server_name": "Custom Server",
+  "description": "My custom MCP server",
+  "path": "/custom",
+  "proxy_pass_url": "http://localhost:8080",
   "scope": "private_user",
+  "tags": ["custom", "api"],
+  "num_tools": 5,
+  "num_stars": 0,
+  "is_python": true,
+  "license": "MIT",
+  "auth_type": "bearer",
+  "auth_provider": "oauth2",
+  "supported_transports": ["streamable-http"],
   "transport": {
-    "type": "websocket",
-    "url": "wss://example.com/mcp"
+    "type": "stdio",
+    "command": "python",
+    "args": ["-m", "my_mcp_server"]
   },
-  "startup": true,
+  "startup": false,
   "chat_menu": true,
-  "requires_oauth": false,
-  "custom_user_vars": {
-    "API_KEY": {
-      "title": "API Key",
-      "description": "Your API key"
+  "tool_list": [
+    {
+      "name": "tool1",
+      "description": "First tool"
     }
-  }
+  ]
 }
 
 Response 201:
 {
   "id": "674e1a2b3c4d5e6f7a8b9c0e",
-  "server_name": "custom_server",
+  "server_name": "Custom Server",
+  "path": "/custom",
+  "description": "My custom MCP server",
+  "scope": "private_user",
   "status": "active",
-  "created_at": "2024-12-15T11:00:00Z"
+  "created_at": "2024-12-15T11:00:00Z",
+  "updated_at": "2024-12-15T11:00:00Z",
+  "version": 1
 }
 ```
 
@@ -193,24 +295,34 @@ Content-Type: application/json
 
 Request:
 {
-  "status": "inactive",
-  "timeout": 60000,
-  "version": 3  // Optimistic locking
+  "description": "Updated description",
+  "tags": ["github", "git", "vcs", "updated"],
+  "num_tools": 20,
+  "num_stars": 300,
+  "status": "active",
+  "version": 3
 }
 
 Response 200:
 {
   "id": "674e1a2b3c4d5e6f7a8b9c0d",
-  "server_name": "github_server",
-  "status": "inactive",
-  "version": 4,
-  "updated_at": "2024-12-15T11:30:00Z"
+  "server_name": "GitHub Server",
+  "path": "/github",
+  "description": "Updated description",
+  "tags": ["github", "git", "vcs", "updated"],
+  "num_tools": 20,
+  "num_stars": 300,
+  "status": "active",
+  "updated_at": "2024-12-15T11:30:00Z",
+  "version": 4
 }
 
 Response 409 (Conflict):
 {
   "error": "conflict",
-  "message": "Server was modified by another process"
+  "message": "Server was modified by another process",
+  "current_version": 4,
+  "provided_version": 3
 }
 ```
 
@@ -226,6 +338,12 @@ Response 403:
   "error": "forbidden",
   "message": "Cannot delete another user's private server"
 }
+
+Response 404:
+{
+  "error": "not_found",
+  "message": "Server not found"
+}
 ```
 
 **6. Toggle Server Status**
@@ -236,13 +354,17 @@ Content-Type: application/json
 
 Request:
 {
-  "enabled": false
+  "enabled": true
 }
 
 Response 200:
 {
   "id": "674e1a2b3c4d5e6f7a8b9c0d",
-  "status": "inactive"
+  "server_name": "GitHub Server",
+  "path": "/github",
+  "enabled": true,
+  "status": "active",
+  "updated_at": "2024-12-15T11:30:00Z"
 }
 ```
 
@@ -253,24 +375,43 @@ Authorization: Bearer <token>
 
 Response 200:
 {
-  "server_id": "674e1a2b3c4d5e6f7a8b9c0d",
-  "server_name": "github_server",
+  "id": "674e1a2b3c4d5e6f7a8b9c0d",
+  "server_name": "GitHub Server",
+  "path": "/github",
   "tools": [
     {
-      "type": "function",
-      "function": {
-        "name": "create_issue",
-        "description": "Create a GitHub issue",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "repo": { "type": "string" },
-            "title": { "type": "string" }
-          }
-        }
+      "name": "create_issue",
+      "description": "Create a GitHub issue",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": {"type": "string"},
+          "title": {"type": "string"},
+          "body": {"type": "string"}
+        },
+        "required": ["repo", "title"]
       }
     }
-  ]
+  ],
+  "num_tools": 15,
+  "cached": false
+}
+```
+
+**8. Refresh Server Health**
+```http
+POST /api/v1/servers/{server_id}/refresh
+Authorization: Bearer <token>
+
+Response 200:
+{
+  "id": "674e1a2b3c4d5e6f7a8b9c0d",
+  "server_name": "GitHub Server",
+  "path": "/github",
+  "status": "healthy",
+  "last_checked": "2024-12-15T11:45:00Z",
+  "response_time_ms": 125,
+  "num_tools": 15
 }
 ```
 
@@ -289,6 +430,7 @@ Request:
   "token": "gho_xxxxxxxxxxxxxxxxxxxx",
   "expires_at": "2024-12-15T18:00:00Z",
   "metadata": {
+    "server_id": "674e1a2b3c4d5e6f7a8b9c0d",
     "server_name": "github_server",
     "scope": "repo read:user",
     "refresh_token_id": "674e1a2b3c4d5e6f7a8b9c11"
@@ -307,17 +449,23 @@ Response 201:
 
 **2. Get Token**
 ```http
-GET /api/v1/tokens/{identifier}?type=oauth_access
+GET /api/v1/tokens/{token_id}
 Authorization: Bearer <token>
 
 Response 200:
 {
   "id": "674e1a2b3c4d5e6f7a8b9c10",
+  "user_id": "674e1a2b3c4d5e6f7a8b9c01",
   "type": "oauth_access",
   "identifier": "github_mcp_server",
-  "token": "gho_xxxxxxxxxxxxxxxxxxxx",  // Decrypted
+  "token": "gho_xxxxxxxxxxxxxxxxxxxx",
+  "created_at": "2024-12-15T10:00:00Z",
   "expires_at": "2024-12-15T18:00:00Z",
-  "metadata": { ... }
+  "metadata": {
+    "server_id": "674e1a2b3c4d5e6f7a8b9c0d",
+    "server_name": "github_server",
+    "scope": "repo read:user"
+  }
 }
 
 Response 404:
@@ -327,39 +475,16 @@ Response 404:
 }
 ```
 
-**3. Refresh OAuth Token**
+**3. List User Tokens**
 ```http
-POST /api/v1/tokens/{identifier}/refresh
-Authorization: Bearer <token>
-Content-Type: application/json
-
-Request:
-{
-  "new_access_token": "gho_newtoken",
-  "new_expires_at": "2024-12-15T19:00:00Z",
-  "new_refresh_token": "ghr_newrefresh"  // Optional
-}
-
-Response 200:
-{
-  "id": "674e1a2b3c4d5e6f7a8b9c10",
-  "token": "gho_newtoken",
-  "expires_at": "2024-12-15T19:00:00Z"
-}
-```
-
-**4. Delete Token**
-```http
-DELETE /api/v1/tokens/{identifier}
+GET /api/v1/tokens?type={type}&identifier={identifier}&page={page}&per_page={per_page}
 Authorization: Bearer <token>
 
-Response 204: No Content
-```
-
-**5. List User Tokens**
-```http
-GET /api/v1/tokens?type=oauth_access
-Authorization: Bearer <token>
+Query Parameters:
+- type (optional): Filter by token type (oauth_access, oauth_refresh, api_key)
+- identifier (optional): Filter by identifier
+- page (optional): Page number for pagination (default: 1, min: 1)
+- per_page (optional): Items per page (default: 50, min: 1, max: 100)
 
 Response 200:
 {
@@ -369,55 +494,178 @@ Response 200:
       "type": "oauth_access",
       "identifier": "github_mcp_server",
       "created_at": "2024-12-15T10:00:00Z",
-      "expires_at": "2024-12-15T18:00:00Z"
-      // token value not included for security
+      "expires_at": "2024-12-15T18:00:00Z",
+      "metadata": {
+        "server_name": "github_server"
+      }
     }
-  ]
+  ],
+  "pagination": {
+    "total": 23,
+    "page": 1,
+    "per_page": 50,
+    "total_pages": 1
+  }
+}
+```
+
+**4. Refresh OAuth Token**
+```http
+PUT /api/v1/tokens/{token_id}/refresh
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request:
+{
+  "new_access_token": "gho_newtoken",
+  "new_expires_at": "2024-12-15T19:00:00Z",
+  "new_refresh_token": "ghr_newrefresh"
+}
+
+Response 200:
+{
+  "id": "674e1a2b3c4d5e6f7a8b9c10",
+  "type": "oauth_access",
+  "identifier": "github_mcp_server",
+  "token": "gho_newtoken",
+  "expires_at": "2024-12-15T19:00:00Z",
+  "updated_at": "2024-12-15T11:00:00Z"
+}
+```
+
+**5. Delete Token**
+```http
+DELETE /api/v1/tokens/{token_id}
+Authorization: Bearer <token>
+
+Response 204: No Content
+
+Response 404:
+{
+  "error": "not_found",
+  "message": "Token not found"
+}
+```
+
+**6. Generate JWT Token**
+```http
+POST /api/v1/tokens/generate
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request:
+{
+  "requested_scopes": ["read:servers", "write:servers"],
+  "expires_in_hours": 8,
+  "description": "Token for automation"
+}
+
+Response 200:
+{
+  "success": true,
+  "tokens": {
+    "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refresh_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "expires_in": 28800,
+    "refresh_expires_in": 86400,
+    "token_type": "Bearer",
+    "scope": "read:servers write:servers"
+  }
 }
 ```
 
 #### Admin Endpoints
 
-**1. Get All Servers (Admin Only)**
+**Storage Backend Compatibility:**
+- ✅ **Both File & MongoDB**: Endpoints 1, 2, 4, 5, 6, 7 (basic CRUD, health, groups, audit)
+- ⚙️ **MongoDB-specific**: Endpoint 3 (statistics with aggregations)
+
+**1. Get All Servers**
 ```http
-GET /api/v1/admin/servers?user_id={user_id}&scope={scope}
+GET /api/v1/admin/servers?user_id={user_id}&scope={scope}&status={status}
 Authorization: Bearer <admin_token>
+
+Query Parameters:
+- user_id (optional): Filter by user ID
+- scope (optional): Filter by scope (shared_app, shared_user, private_user)
+- status (optional): Filter by status (active, inactive, error)
+- page (optional): Page number (default: 1)
+- per_page (optional): Items per page (default: 20, max: 100)
 
 Response 200:
 {
-  "servers": [ ... ],
+  "servers": [
+    {
+      "id": "674e1a2b3c4d5e6f7a8b9c0d",
+      "server_name": "GitHub Server",
+      "path": "/github",
+      "description": "GitHub integration server",
+      "scope": "shared_app",
+      "user_id": null,
+      "status": "active",
+      "num_tools": 15,
+      "tags": ["github", "git"],
+      "created_at": "2024-12-01T09:00:00Z",
+      "updated_at": "2024-12-15T10:30:00Z"
+    }
+  ],
   "total": 250,
-  "page": 1
+  "page": 1,
+  "per_page": 20,
+  "total_pages": 13
 }
 ```
 
-**2. Create Shared Server (Admin Only)**
+**2. Create Shared Server**
 ```http
-POST /api/v1/admin/servers/shared
+POST /api/v1/admin/servers
 Authorization: Bearer <admin_token>
 Content-Type: application/json
 
 Request:
 {
-  "server_name": "organization_github",
+  "server_name": "Organization GitHub",
   "scope": "shared_app",
-  "organization_id": "org123",
-  "transport": { ... },
-  "oauth": { ... }
+  "organization_id": "674e1a2b3c4d5e6f7a8b9c0f",
+  "path": "/org-github",
+  "description": "Organization-wide GitHub server",
+  "proxy_pass_url": "http://localhost:3100",
+  "transport": {
+    "type": "stdio",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-github"]
+  },
+  "requires_oauth": true,
+  "oauth": {
+    "authorization_url": "https://github.com/login/oauth/authorize",
+    "token_url": "https://github.com/login/oauth/access_token",
+    "client_id": "org_client_id",
+    "client_secret": "org_client_secret",
+    "scope": "repo read:org"
+  },
+  "startup": true,
+  "tags": ["github", "organization"]
 }
 
 Response 201:
 {
-  "id": "674e1a2b3c4d5e6f7a8b9c0f",
-  "server_name": "organization_github",
-  "scope": "shared_app"
+  "id": "674e1a2b3c4d5e6f7a8b9c10",
+  "server_name": "Organization GitHub",
+  "path": "/org-github",
+  "scope": "shared_app",
+  "status": "active",
+  "created_at": "2024-12-15T11:00:00Z",
+  "version": 1
 }
 ```
 
-**3. Get Server Statistics (Admin Only)**
+**3. Get Server Statistics (MongoDB-specific)**
 ```http
-GET /api/v1/admin/stats
+GET /api/v1/admin/servers/stats
 Authorization: Bearer <admin_token>
+
+Note: This endpoint uses MongoDB aggregation pipelines and is only available when using MongoDB storage backend.
+File-based storage will return a simplified version or 501 Not Implemented.
 
 Response 200:
 {
@@ -432,13 +680,95 @@ Response 200:
     "inactive": 15,
     "error": 5
   },
+  "servers_by_transport": {
+    "stdio": 180,
+    "websocket": 50,
+    "http": 20
+  },
   "total_tokens": 450,
   "tokens_by_type": {
     "oauth_access": 200,
     "oauth_refresh": 200,
     "api_key": 50
   },
-  "active_users": 120
+  "active_tokens": 380,
+  "expired_tokens": 70,
+  "active_users": 120,
+  "total_tools": 3250
+}
+```
+
+**4. Get Server Health Status**
+```http
+GET /api/v1/admin/servers/health
+Authorization: Bearer <admin_token>
+
+Note: Available for both file-based and MongoDB storage backends.
+
+Response 200:
+{
+  "services": [
+    {
+      "id": "674e1a2b3c4d5e6f7a8b9c0d",
+      "path": "/github",
+      "server_name": "GitHub Server",
+      "status": "healthy",
+      "last_checked": "2024-12-15T10:30:00Z",
+      "response_time_ms": 125,
+      "last_connected": "2024-12-15T10:25:00Z"
+    },
+    {
+      "id": "674e1a2b3c4d5e6f7a8b9c0e",
+      "path": "/filesystem",
+      "server_name": "Filesystem Server",
+      "status": "unhealthy",
+      "last_checked": "2024-12-15T10:29:00Z",
+      "error": "Connection timeout",
+      "last_error": "2024-12-15T10:29:00Z"
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "healthy": 8,
+    "unhealthy": 2,
+    "disabled": 0
+  }
+}
+
+**7. Audit Log**
+```http
+GET /api/v1/admin/audit?entity_type={type}&user_id={user_id}&action={action}
+Authorization: Bearer <admin_token>
+
+Query Parameters:
+- entity_type (optional): Filter by entity type (server, token)
+- user_id (optional): Filter by user ID
+- action (optional): Filter by action (create, update, delete)
+- start_date (optional): Start date (ISO 8601)
+- end_date (optional): End date (ISO 8601)
+- page (optional): Page number
+- per_page (optional): Items per page
+
+Response 200:
+{
+  "logs": [
+    {
+      "id": "674e1a2b3c4d5e6f7a8b9c20",
+      "action": "update",
+      "entity_type": "server",
+      "entity_id": "674e1a2b3c4d5e6f7a8b9c0d",
+      "user_id": "674e1a2b3c4d5e6f7a8b9c01",
+      "username": "admin",
+      "changes": {
+        "status": {"old": "inactive", "new": "active"},
+        "num_tools": {"old": 15, "new": 20}
+      },
+      "timestamp": "2024-12-15T11:30:00Z"
+    }
+  ],
+  "total": 1250,
+  "page": 1,
+  "per_page": 50
 }
 ```
 
