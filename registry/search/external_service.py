@@ -17,7 +17,7 @@ class ExternalVectorSearchService(VectorSearchService):
     def __init__(
             self,
             enable_rerank: bool = True,
-            search_type: SearchType = SearchType.NEAR_TEXT,
+            search_type: SearchType = SearchType.HYBRID,
             reranker_model: str = "ms-marco-TinyBERT-L-2-v2"
     ):
         """
@@ -31,14 +31,14 @@ class ExternalVectorSearchService(VectorSearchService):
         self.enable_rerank = enable_rerank
         self.search_type = search_type
         self.reranker_model = reranker_model
-        
+
         try:
             self._client = initialize_database()
             self._mcp_tools = self._client.for_model(McpTool)
             self._initialized = True
 
             logger.info(f"Vector search service initialized: "
-                f"rerank={enable_rerank}, search_type={search_type.value}")
+                        f"rerank={enable_rerank}, search_type={search_type.value}")
         except Exception as e:
             self._client = None
             self._mcp_tools = None
@@ -53,12 +53,12 @@ class ExternalVectorSearchService(VectorSearchService):
             logger.error("Model operations not initialized, skipping vector search setup")
             return
         logger.info("Vector search service initialized successfully")
-    
+
     def get_retriever(
-        self,
-        search_type: Optional[SearchType] = None,
-        enable_rerank: Optional[bool] = None,
-        top_k: int = 10
+            self,
+            search_type: Optional[SearchType] = None,
+            enable_rerank: Optional[bool] = None,
+            top_k: int = 10
     ):
         """
         Get a LangChain retriever (with optional rerank) for RAG applications.
@@ -78,10 +78,10 @@ class ExternalVectorSearchService(VectorSearchService):
         """
         if not self._initialized:
             raise Exception("Vector search service not initialized")
-        
+
         use_rerank = enable_rerank if enable_rerank is not None else self.enable_rerank
         use_search_type = search_type or self.search_type
-        
+
         if use_rerank:
             # Return compression retriever with rerank
             return self._mcp_tools.get_compression_retriever(
@@ -206,7 +206,7 @@ class ExternalVectorSearchService(VectorSearchService):
 
         use_search_type = search_type or self.search_type
         logger.info(f"Search: query='{query}', tags={tags}, top_k={top_k}, "
-            f"filters={filters}, search_type={use_search_type}")
+                    f"filters={filters}, search_type={use_search_type}")
 
         try:
             if not query:
@@ -223,9 +223,9 @@ class ExternalVectorSearchService(VectorSearchService):
                 candidate_k = min(top_k * 3, 100)
                 if tags:
                     candidate_k = min(candidate_k * 2, 150)
-                
+
                 logger.info(f"Using rerank: type={use_search_type.value}, "
-                    f"candidate_k={candidate_k}, k={top_k * 2 if tags else top_k}")
+                            f"candidate_k={candidate_k}, k={top_k * 2 if tags else top_k}")
                 tools = self._mcp_tools.search_with_rerank(
                     query=query,
                     search_type=use_search_type,
@@ -284,7 +284,7 @@ class ExternalVectorSearchService(VectorSearchService):
             relevance_score = 0.8  # Default score
             if hasattr(tool, 'score') and tool.score is not None:
                 relevance_score = tool.score
-            
+
             result = {
                 "tool_name": tool.tool_name,
                 "server_path": tool.server_path,
@@ -452,7 +452,7 @@ class ExternalVectorSearchService(VectorSearchService):
             entity_filter = list(allowed_types)
 
         logger.info(f"search_mixed: query='{query}', types={entity_filter}, "
-            f"max={max_results}, search_type={search_type or self.search_type}")
+                    f"max={max_results}, search_type={search_type or self.search_type}")
 
         use_search_type = search_type or self.search_type
         results = {
@@ -460,12 +460,12 @@ class ExternalVectorSearchService(VectorSearchService):
             "tools": [],
             "agents": []
         }
-        
+
         try:
             # Calculate search parameters
             search_k = max_results * 2  # Get 2x for entity filtering
             candidate_k = min(search_k * 3, 100) if self.enable_rerank else search_k
-            
+
             # Use rerank if enabled
             if self.enable_rerank:
                 logger.info(
@@ -496,17 +496,12 @@ class ExternalVectorSearchService(VectorSearchService):
                 if not (tool_entity_types & set(entity_filter) or "all" in tool_entity_types):
                     continue
 
-                # Calculate relevance score
-                relevance = 0.8  # Default
-                if hasattr(tool, 'score') and tool.score is not None:
-                    relevance = tool.score
-
                 match_context = (
                     tool.content[:200]
                     if tool.content
                     else tool.description_main[:200]
                 )
-
+                relevance_score = round(tool.relevance_score, 4)
                 # Build result dict
                 result = {
                     "server_path": tool.server_path,
@@ -514,13 +509,9 @@ class ExternalVectorSearchService(VectorSearchService):
                     "tool_name": tool.tool_name,
                     "description": tool.description_main,
                     "match_context": match_context,
-                    "relevance_score": relevance,
+                    "relevance_score": relevance_score,
                     "entity_type": tool.entity_type or ["all"]
                 }
-
-                if hasattr(tool, 'score') and tool.score is not None:
-                    result['score'] = tool.score
-
                 # Add to results based on entity types
                 if "tool" in entity_filter and ("tool" in tool_entity_types or "all" in tool_entity_types):
                     results["tools"].append(result)
@@ -545,8 +536,8 @@ class ExternalVectorSearchService(VectorSearchService):
             for key in ["tools", "servers", "agents"]:
                 # Sort by relevance_score (with fallback to 0.0 for safety)
                 results[key].sort(
-                    key=lambda x: x.get("relevance_score", 0.0), 
-                    reverse=True
+                    key=lambda x: x.get("relevance_score", 0.0),
+                    reverse=False
                 )
                 results[key] = results[key][:max_results]
 

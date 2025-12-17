@@ -32,7 +32,7 @@ class AdapterRetriever(BaseRetriever):
                                 ) -> list[Document]:
         try:
             if self.search_type == SearchType.NEAR_TEXT:
-                return self.adapter.similarity_search(
+                return self.adapter.near_text(
                     query=query,
                     collection_name=self.collection_name,
                     **self.search_kwargs
@@ -45,6 +45,12 @@ class AdapterRetriever(BaseRetriever):
                 )
             elif self.search_type == SearchType.HYBRID:
                 return self.adapter.hybrid_search(
+                    query=query,
+                    collection_name=self.collection_name,
+                    **self.search_kwargs
+                )
+            elif self.search_type == SearchType.SIMILARITY_STORE:
+                return self.adapter.similarity_search(
                     query=query,
                     collection_name=self.collection_name,
                     **self.search_kwargs
