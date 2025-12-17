@@ -537,7 +537,7 @@ class ExternalVectorSearchService(VectorSearchService):
                 # Sort by relevance_score (with fallback to 0.0 for safety)
                 results[key].sort(
                     key=lambda x: x.get("relevance_score", 0.0),
-                    reverse=False
+                    reverse=True
                 )
                 results[key] = results[key][:max_results]
 
