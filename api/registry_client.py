@@ -146,6 +146,30 @@ class RescanResponse(BaseModel):
     raw_output: Optional[Dict[str, Any]] = Field(None, description="Raw scan output")
 
 
+class AgentSecurityScanResponse(BaseModel):
+    """Agent security scan results response model."""
+
+    analysis_results: Dict[str, Any] = Field(default_factory=dict, description="Analysis results by analyzer")
+    scan_results: Dict[str, Any] = Field(default_factory=dict, description="Scan results and metadata")
+
+
+class AgentRescanResponse(BaseModel):
+    """Agent rescan response model."""
+
+    agent_path: str = Field(..., description="Agent path")
+    agent_url: str = Field(..., description="Agent URL that was scanned")
+    scan_timestamp: str = Field(..., description="Scan timestamp")
+    is_safe: bool = Field(..., description="Whether agent is safe")
+    critical_issues: int = Field(..., description="Number of critical issues")
+    high_severity: int = Field(..., description="Number of high severity issues")
+    medium_severity: int = Field(..., description="Number of medium severity issues")
+    low_severity: int = Field(..., description="Number of low severity issues")
+    analyzers_used: List[str] = Field(..., description="Analyzers used in scan")
+    scan_failed: bool = Field(..., description="Whether scan failed")
+    error_message: Optional[str] = Field(None, description="Error message if scan failed")
+    output_file: Optional[str] = Field(None, description="Path to scan output file")
+
+
 class GroupListResponse(BaseModel):
     """Group list response model."""
 
@@ -167,6 +191,18 @@ class AgentVisibility(str, Enum):
     PUBLIC = "public"
     PRIVATE = "private"
     GROUP_RESTRICTED = "group-restricted"
+
+
+class Provider(BaseModel):
+    """
+    A2A Agent Provider information.
+
+    Represents the service provider of an agent with organization name and website URL.
+    Per A2A specification, if provider is present, both organization and url are required.
+    """
+
+    organization: str = Field(..., description="Provider organization name")
+    url: str = Field(..., description="Provider website or documentation URL")
 
 
 class SecuritySchemeType(str, Enum):
@@ -257,7 +293,7 @@ class AgentRegistration(BaseModel):
 
     # Optional A2A fields
     preferred_transport: Optional[str] = Field("JSONRPC", alias="preferredTransport", description="Preferred transport protocol: JSONRPC, GRPC, HTTP+JSON")
-    provider: Optional[Dict[str, str]] = Field(None, description="Agent provider information {organization, url}")
+    provider: Optional[Provider] = Field(None, description="Agent provider information per A2A spec")
     icon_url: Optional[str] = Field(None, alias="iconUrl", description="Agent icon URL")
     documentation_url: Optional[str] = Field(None, alias="documentationUrl", description="Documentation URL")
     security_schemes: Dict[str, SecurityScheme] = Field(default_factory=dict, alias="securitySchemes", description="Supported authentication methods")
@@ -341,7 +377,7 @@ class AgentDetail(BaseModel):
 
     # Optional A2A fields
     preferred_transport: Optional[str] = Field("JSONRPC", alias="preferredTransport", description="Preferred transport protocol: JSONRPC, GRPC, HTTP+JSON")
-    provider: Optional[str] = Field(None, description="Agent provider/author")
+    provider: Optional[Provider] = Field(None, description="Agent provider information per A2A spec")
     icon_url: Optional[str] = Field(None, alias="iconUrl", description="Agent icon URL")
     documentation_url: Optional[str] = Field(None, alias="documentationUrl", description="Documentation URL")
     security_schemes: Dict[str, SecurityScheme] = Field(default_factory=dict, alias="securitySchemes", description="Supported authentication methods")
@@ -1382,6 +1418,75 @@ class RegistryClient:
 
         result = RatingInfoResponse(**response.json())
         logger.info(f"Retrieved ratings for '{path}': {result.num_stars:.2f} stars ({len(result.rating_details)} ratings)")
+        return result
+
+
+    def rescan_agent(
+        self,
+        path: str
+    ) -> AgentRescanResponse:
+        """
+        Trigger a manual security scan for an agent.
+
+        Initiates a new security scan for the specified agent and returns
+        the results. This endpoint is useful for re-scanning agents after
+        updates or for on-demand security assessments.
+
+        Args:
+            path: Agent path (e.g., /code-reviewer)
+
+        Returns:
+            Newly generated security scan results
+
+        Raises:
+            requests.HTTPError: If scan fails (403 for unauthorized, 404 for not found)
+        """
+        logger.info(f"Triggering security scan for agent: {path}")
+
+        response = self._make_request(
+            method="POST",
+            endpoint=f"/api/agents{path}/rescan"
+        )
+
+        result = AgentRescanResponse(**response.json())
+        logger.info(
+            f"Security scan completed for '{path}': "
+            f"Safe={result.is_safe}, Critical={result.critical_issues}, "
+            f"High={result.high_severity}, Medium={result.medium_severity}, "
+            f"Low={result.low_severity}"
+        )
+        return result
+
+
+    def get_agent_security_scan(
+        self,
+        path: str
+    ) -> AgentSecurityScanResponse:
+        """
+        Get security scan results for an agent.
+
+        Returns the latest security scan results including threat analysis,
+        severity levels, and detailed findings from YARA, specification
+        validation, and heuristic analyzers.
+
+        Args:
+            path: Agent path (e.g., /code-reviewer)
+
+        Returns:
+            Security scan results with analysis_results and scan_results
+
+        Raises:
+            requests.HTTPError: If retrieval fails (403 for unauthorized, 404 for not found)
+        """
+        logger.info(f"Getting security scan results for agent: {path}")
+
+        response = self._make_request(
+            method="GET",
+            endpoint=f"/api/agents{path}/security-scan"
+        )
+
+        result = AgentSecurityScanResponse(**response.json())
+        logger.info(f"Retrieved security scan results for '{path}'")
         return result
 
     def rate_server(

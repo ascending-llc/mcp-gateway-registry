@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     enable_wellknown_discovery: bool = True
     wellknown_cache_ttl: int = 300  # 5 minutes
 
-    # Security scanning settings
+    # Security scanning settings (MCP Servers)
     security_scan_enabled: bool = True
     security_scan_on_registration: bool = True
     security_block_unsafe_servers: bool = True
@@ -64,6 +64,15 @@ class Settings(BaseSettings):
     security_scan_timeout: int = 60  # 1 minutes
     security_add_pending_tag: bool = True
     mcp_scanner_llm_api_key: str = ""  # Optional LLM API key for advanced analysis
+
+    # Agent security scanning settings (A2A Agents)
+    agent_security_scan_enabled: bool = True
+    agent_security_scan_on_registration: bool = True
+    agent_security_block_unsafe_agents: bool = True
+    agent_security_analyzers: str = "yara,spec"  # Comma-separated: yara, spec, heuristic, llm, endpoint
+    agent_security_scan_timeout: int = 60  # 1 minute
+    agent_security_add_pending_tag: bool = True
+    a2a_scanner_llm_api_key: str = ""  # Optional Azure OpenAI API key for LLM-based analysis
     
     # Container paths - adjust for local development
     container_app_dir: Path = Path("/app")

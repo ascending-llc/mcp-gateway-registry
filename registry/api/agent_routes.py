@@ -45,6 +45,93 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+async def _perform_agent_security_scan_on_registration(
+    path: str,
+    agent_card: AgentCard,
+    agent_card_dict: dict,
+) -> bool:
+    """Perform security scan on newly registered agent.
+
+    Handles the complete security scan workflow including:
+    - Running the security scan with configured analyzers
+    - Adding security-pending tag if scan fails
+    - Disabling agent if configured and scan fails
+    - Updating FAISS with disabled state if agent disabled
+
+    All scan failures are non-fatal and will be logged but not raised.
+
+    Args:
+        path: Agent path (e.g., /code-reviewer)
+        agent_card: AgentCard Pydantic model instance
+        agent_card_dict: Agent card as dictionary for scanning
+
+    Returns:
+        bool: True if agent should remain enabled, False if disabled due to scan
+    """
+    from ..services.agent_scanner import agent_scanner_service
+    from ..search.service import faiss_service
+
+    scan_config = agent_scanner_service.get_scan_config()
+    if not (scan_config.enabled and scan_config.scan_on_registration):
+        return True  # Agent remains enabled
+
+    logger.info(f"Running A2A security scan for newly registered agent: {path}")
+
+    try:
+        # Run the security scan
+        scan_result = await agent_scanner_service.scan_agent(
+            agent_card=agent_card_dict,
+            agent_path=path,
+            analyzers=scan_config.analyzers,
+            api_key=scan_config.llm_api_key,
+            timeout=scan_config.scan_timeout_seconds,
+        )
+
+        # Handle unsafe agents
+        if not scan_result.is_safe:
+            logger.warning(
+                f"Agent {path} failed security scan. "
+                f"Critical: {scan_result.critical_issues}, High: {scan_result.high_severity}"
+            )
+
+            # Add security-pending tag if configured
+            if scan_config.add_security_pending_tag:
+                current_tags = agent_card.tags or []
+                if "security-pending" not in current_tags:
+                    current_tags.append("security-pending")
+                    agent_card.tags = current_tags
+                    # Update agent with new tags
+                    agent_info = agent_service.get_agent_info(path)
+                    if agent_info:
+                        updated_card = agent_info.model_dump()
+                        updated_card["tags"] = current_tags
+                        from ..schemas.agent_models import AgentCard as AgentCardModel
+
+                        agent_service.register_agent(AgentCardModel(**updated_card))
+                    logger.info(f"Added 'security-pending' tag to agent {path}")
+
+            # Disable agent if configured
+            if scan_config.block_unsafe_agents:
+                agent_service.toggle_agent(path, False)
+                logger.warning(f"Disabled agent {path} due to failed security scan")
+
+                # Update FAISS with disabled state
+                await faiss_service.add_or_update_entity(
+                    path, agent_card_dict, "a2a_agent", False
+                )
+                return False  # Agent disabled
+
+        else:
+            logger.info(f"Agent {path} passed security scan")
+
+        return True  # Agent remains enabled
+
+    except Exception as e:
+        logger.error(f"Failed to run security scan for agent {path}: {e}")
+        # Non-fatal error - agent is registered but not scanned
+        return True  # Agent remains enabled on scan error
+
+
 class RatingRequest(BaseModel):
     rating: int
 
@@ -293,6 +380,12 @@ async def register_agent(
     logger.info(
         f"New agent registered: '{request.name}' at path '{path}' "
         f"by user '{user_context['username']}'"
+    )
+
+    # Agent security scanning if enabled
+    agent_card_dict = agent_card.model_dump()
+    is_enabled = await _perform_agent_security_scan_on_registration(
+        path, agent_card, agent_card_dict
     )
 
     return JSONResponse(
@@ -1045,4 +1138,152 @@ async def discover_agents_semantic(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Semantic search failed",
+        )
+
+
+@router.get("/agents/{path:path}/security-scan")
+async def get_agent_security_scan(
+    path: str,
+    user_context: Annotated[dict, Depends(nginx_proxied_auth)],
+):
+    """
+    Get security scan results for an A2A agent.
+
+    Returns the latest security scan results for the specified agent,
+    including threat analysis, severity levels, and detailed findings
+    from YARA, specification validation, and heuristic analyzers.
+
+    **Authentication:** JWT Bearer token or session cookie
+    **Authorization:** Requires admin privileges or access to the agent
+
+    **Path Parameters:**
+    - `path` (required): Agent path (e.g., /code-reviewer)
+
+    **Response:**
+    Returns security scan results with analysis_results and findings.
+
+    **Example:**
+    ```bash
+    curl -X GET http://localhost/api/agents/code-reviewer/security-scan \\
+      --cookie-jar .cookies --cookie .cookies
+    ```
+    """
+    if not path.startswith("/"):
+        path = "/" + path
+
+    # Check if agent exists
+    agent_info = agent_service.get_agent_info(path)
+    if not agent_info:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent not found at path '{path}'",
+        )
+
+    # Check user permissions
+    if not user_context["is_admin"]:
+        # Check if user has access to this agent (similar to server access check)
+        # For now, allow all authenticated users to view agent scan results
+        # TODO: Implement agent-specific access control if needed
+        pass
+
+    # Get scan results
+    from ..services.agent_scanner import agent_scanner_service
+
+    scan_result = agent_scanner_service.get_scan_result(path)
+    if not scan_result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No security scan results found for agent '{path}'. "
+            "The agent may not have been scanned yet.",
+        )
+
+    return scan_result
+
+
+@router.post("/agents/{path:path}/rescan")
+async def rescan_agent(
+    path: str,
+    user_context: Annotated[dict, Depends(nginx_proxied_auth)],
+):
+    """
+    Trigger a manual security scan for an A2A agent.
+
+    Initiates a new security scan for the specified agent and returns
+    the results. This endpoint is useful for re-scanning agents after
+    updates or for on-demand security assessments.
+
+    **Authentication:** JWT Bearer token or session cookie
+    **Authorization:** Requires admin privileges
+
+    **Path Parameters:**
+    - `path` (required): Agent path (e.g., /code-reviewer)
+
+    **Response:**
+    Returns the newly generated security scan results.
+
+    **Example:**
+    ```bash
+    curl -X POST http://localhost/api/agents/code-reviewer/rescan \\
+      --cookie-jar .cookies --cookie .cookies
+    ```
+    """
+    # Only admins can trigger manual scans
+    if not user_context["is_admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can trigger security scans",
+        )
+
+    if not path.startswith("/"):
+        path = "/" + path
+
+    # Check if agent exists
+    agent_info = agent_service.get_agent_info(path)
+    if not agent_info:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent not found at path '{path}'",
+        )
+
+    # Get agent card from agent info
+    agent_card_dict = agent_info.model_dump()
+
+    logger.info(
+        f"Manual security scan requested by user '{user_context.get('username')}' "
+        f"for agent '{path}'"
+    )
+
+    try:
+        # Trigger security scan
+        from ..services.agent_scanner import agent_scanner_service
+
+        scan_result = await agent_scanner_service.scan_agent(
+            agent_card=agent_card_dict,
+            agent_path=path,
+            analyzers=None,  # Use default analyzers from config
+            api_key=None,  # Use default API key from config
+            timeout=None,  # Use default timeout from config
+        )
+
+        # Return the scan result data
+        return {
+            "agent_path": scan_result.agent_path,
+            "agent_url": scan_result.agent_url,
+            "scan_timestamp": scan_result.scan_timestamp,
+            "is_safe": scan_result.is_safe,
+            "critical_issues": scan_result.critical_issues,
+            "high_severity": scan_result.high_severity,
+            "medium_severity": scan_result.medium_severity,
+            "low_severity": scan_result.low_severity,
+            "analyzers_used": scan_result.analyzers_used,
+            "scan_failed": scan_result.scan_failed,
+            "error_message": scan_result.error_message,
+            "output_file": scan_result.output_file,
+        }
+
+    except Exception as e:
+        logger.error(f"Manual security scan failed for agent '{path}': {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Security scan failed: {str(e)}",
         )

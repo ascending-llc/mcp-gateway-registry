@@ -46,7 +46,7 @@ RUN pip install uv && \
     "torch>=1.6.0" \
     "huggingface-hub[cli,hf_xet]>=0.31.1" \
     "hf_xet>=0.1.0" \
-    "cisco-ai-mcp-scanner==3.2.1"
+    "cisco-ai-mcp-scanner==3.2.3"
 
 # Copy the application code
 COPY . /app/
@@ -65,7 +65,7 @@ RUN npm run build
 # Return to app directory
 WORKDIR /app
 
-# Install uv and setup Python environment
+# Install the registry package
 RUN . .venv/bin/activate && uv pip install -e .
 
 # Create logs directory

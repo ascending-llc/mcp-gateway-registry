@@ -39,7 +39,7 @@ dependencies = [
     "aiohttp>=3.8.0",
     "rich>=13.0.0",
     "requests>=2.31.0",
-    "cisco-ai-mcp-scanner>=3.0.1",
+    "cisco-ai-a2a-scanner @ git+https://github.com/cisco-ai-defense/a2a-scanner.git@main",
     "awscli>=1.36.0",
     "boto3>=1.35.0",
     "litellm>=1.50.0",

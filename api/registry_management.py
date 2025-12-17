@@ -186,6 +186,8 @@ from registry_client import (
     AgentSemanticDiscoveryResponse,
     RatingResponse,
     RatingInfoResponse,
+    AgentSecurityScanResponse,
+    AgentRescanResponse,
     AnthropicServerList,
     AnthropicServerResponse,
     M2MAccountRequest,
@@ -1094,7 +1096,7 @@ def cmd_agent_get(args: argparse.Namespace) -> int:
             "description": agent.description,
             "url": agent.url,
             "version": agent.version,
-            "provider": agent.provider,
+            "provider": agent.provider.model_dump() if agent.provider else None,
             "is_enabled": agent.is_enabled,
             "visibility": agent.visibility,
             "skills": [
@@ -1391,6 +1393,76 @@ def cmd_agent_rating(args: argparse.Namespace) -> int:
 
     except Exception as e:
         logger.error(f"Failed to get ratings: {e}")
+        return 1
+
+
+def cmd_agent_security_scan(args: argparse.Namespace) -> int:
+    """
+    Get security scan results for an agent.
+
+    Args:
+        args: Command arguments with path and optional json flag
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
+    try:
+        client = _create_client(args)
+        response: AgentSecurityScanResponse = client.get_agent_security_scan(path=args.path)
+
+        # Always output as JSON since the response structure is complex
+        print(json.dumps(response.model_dump(), indent=2, default=str))
+        return 0
+
+    except Exception as e:
+        logger.error(f"Failed to get security scan results: {e}")
+        return 1
+
+
+def cmd_agent_rescan(args: argparse.Namespace) -> int:
+    """
+    Trigger manual security scan for an agent (admin only).
+
+    Args:
+        args: Command arguments with path and optional json flag
+
+    Returns:
+        Exit code (0 for success, 1 for failure)
+    """
+    try:
+        client = _create_client(args)
+        response: AgentRescanResponse = client.rescan_agent(path=args.path)
+
+        if hasattr(args, 'json') and args.json:
+            # Output raw JSON
+            print(json.dumps(response.model_dump(), indent=2, default=str))
+        else:
+            # Pretty print results
+            safety_status = "SAFE" if response.is_safe else "UNSAFE"
+            logger.info(f"\nSecurity scan completed for agent '{args.path}':")
+            logger.info(f"  Status: {safety_status}")
+            logger.info(f"  Scan timestamp: {response.scan_timestamp}")
+            logger.info(f"  Analyzers used: {', '.join(response.analyzers_used)}")
+            logger.info(f"\n  Severity counts:")
+            logger.info(f"    Critical: {response.critical_issues}")
+            logger.info(f"    High: {response.high_severity}")
+            logger.info(f"    Medium: {response.medium_severity}")
+            logger.info(f"    Low: {response.low_severity}")
+
+            if response.output_file:
+                logger.info(f"\n  Output file: {response.output_file}")
+
+            if response.scan_failed:
+                logger.error(f"\n  Scan failed: {response.error_message}")
+                return 1
+
+            if not response.is_safe:
+                logger.warning("\n  WARNING: Agent flagged as potentially unsafe!")
+
+        return 0
+
+    except Exception as e:
+        logger.error(f"Failed to trigger security scan: {e}")
         return 1
 
 
@@ -2153,6 +2225,27 @@ Examples:
         help="Agent path (e.g., /code-reviewer)"
     )
 
+    # Agent security scan command
+    agent_security_scan_parser = subparsers.add_parser("agent-security-scan", help="Get security scan results for an agent")
+    agent_security_scan_parser.add_argument(
+        "--path",
+        required=True,
+        help="Agent path (e.g., /code-reviewer)"
+    )
+
+    # Agent rescan command
+    agent_rescan_parser = subparsers.add_parser("agent-rescan", help="Trigger manual security scan for an agent (admin only)")
+    agent_rescan_parser.add_argument(
+        "--path",
+        required=True,
+        help="Agent path (e.g., /code-reviewer)"
+    )
+    agent_rescan_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output raw JSON"
+    )
+
     # Anthropic Registry API Commands
 
     # Anthropic list servers command
@@ -2355,6 +2448,8 @@ Examples:
         "agent-search": cmd_agent_search,
         "agent-rate": cmd_agent_rate,
         "agent-rating": cmd_agent_rating,
+        "agent-security-scan": cmd_agent_security_scan,
+        "agent-rescan": cmd_agent_rescan,
         "anthropic-list": cmd_anthropic_list_servers,
         "anthropic-versions": cmd_anthropic_list_versions,
         "anthropic-get": cmd_anthropic_get_server,
