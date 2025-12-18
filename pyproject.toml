@@ -45,6 +45,7 @@ dependencies = [
     "langchain>=1.1.3",
     "flashrank>=0.2.10",
     "langchain-community>=0.4.1",
+    "async-lru>=2.0.5",
 ]
 
 [project.optional-dependencies]
@@ -163,6 +164,11 @@ title = "MCP Registry Coverage Report"
 members = [
     "libraries/libraries",
     "libraries",
+]
+
+[dependency-groups]
+dev = [
+    "pytest-asyncio>=1.3.0",
 ]
 
 [tool.uv]
