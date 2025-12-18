@@ -278,7 +278,7 @@ class Repository(Generic[T]):
     def get_compression_retriever(
             self,
                                   reranker_type: RerankerProvider,
-                                  search_type: SearchType = SearchType.NEAR_TEXT,
+                                  search_type: SearchType = SearchType.HYBRID,
                                   search_kwargs: Optional[dict] = None,
                                   reranker_kwargs: Optional[dict] = None,
     ) -> ContextualCompressionRetriever:
@@ -338,7 +338,7 @@ class Repository(Generic[T]):
             self,
             query: str,
             reranker_type: RerankerProvider = RerankerProvider.FLASHRANK,
-            search_type: SearchType = SearchType.NEAR_TEXT,
+            search_type: SearchType = SearchType.HYBRID,
             k: int = 10,
             candidate_k: int = 50,
             filters: Optional[Any] = None,

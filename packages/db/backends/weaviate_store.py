@@ -4,6 +4,8 @@ from typing import Dict, Any, List, Optional
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 import weaviate.classes.config as wvc
+from weaviate.collections.classes.grpc import MetadataQuery
+
 from ..adapters.adapter import VectorStoreAdapter
 from ..enum.enums import SearchType, EmbeddingProvider
 
@@ -37,6 +39,10 @@ class WeaviateStore(VectorStoreAdapter):
             )
         return self._client
 
+    def cosine_relevance_score_fn(self, distance: float) -> float:
+        """Normalize the distance to a score on a scale [0, 1]."""
+        return 1.0 - distance
+
     def _create_vector_store(self, collection_name: str) -> VectorStore:
         """
         Create LangChain WeaviateVectorStore for collection.
@@ -55,8 +61,24 @@ class WeaviateStore(VectorStoreAdapter):
             client=self._get_client(),
             index_name=collection_name,
             text_key='content',
-            embedding=self.embedding
+            embedding=self.embedding,
+            relevance_score_fn=self.cosine_relevance_score_fn,
         )
+
+    def get_vectorizer_config(self):
+        """
+            Get Vectorizer
+        Note: https://docs.weaviate.io/weaviate/configuration/modules#vectorizer-modules
+        """
+        embedding_provider = self.config.get('embedding_provider', 'aws_bedrock')
+        if embedding_provider == EmbeddingProvider.AWS_BEDROCK:
+            vectorizer_config = wvc.Configure.Vectorizer.text2vec_aws(
+                region=self.embedding_config.get('region', 'us-east-1'),
+                model=self.embedding_config.get('model', 'amazon.titan-embed-text-v2:0')
+            )
+        else:
+            vectorizer_config = wvc.Configure.Vectorizer.none()
+        return vectorizer_config
 
     def _ensure_collection_with_vectorizer(self, collection_name: str):
         """
@@ -73,7 +95,7 @@ class WeaviateStore(VectorStoreAdapter):
             logger.info(f"Creating collection {collection_name} with vectorizer configuration...")
             client.collections.create(
                 name=collection_name,
-                vectorizer_config=wvc.Configure.Vectorizer.none(),  # Use external embeddings
+                vectorizer_config=self.get_vectorizer_config(),
                 properties=[
                     wvc.Property(
                         name="content",
@@ -175,6 +197,21 @@ class WeaviateStore(VectorStoreAdapter):
 
         return parse_filters(filters)
 
+    def _normalize_filters(self, filters: Any):
+        """Convert dict filters to Weaviate Filter or return native object."""
+        if filters is None:
+            return None
+        if self._is_native_filter(filters):
+            return filters
+        if isinstance(filters, dict):
+            try:
+                return self._dict_to_native_filter(filters)
+            except Exception as error:
+                logger.error(f"Failed to convert dict filters: {error}")
+                return None
+        logger.warning(f"Unsupported filter type: {type(filters)}")
+        return None
+
     # ========================================
     # Extended features implementation
     # ========================================
@@ -246,9 +283,10 @@ class WeaviateStore(VectorStoreAdapter):
     ) -> List[Document]:
         """Implement Weaviate metadata filtering (filters already normalized)."""
         collection = self.get_collection(collection_name)
+        normalized_filters = self._normalize_filters(filters)
         try:
             response = collection.query.fetch_objects(
-                filters=filters,
+                filters=normalized_filters,
                 limit=limit
             )
             docs = self.get_document_response(response)
@@ -265,11 +303,12 @@ class WeaviateStore(VectorStoreAdapter):
                     **kwargs
                     ) -> List[Document]:
         collection = self.get_collection(collection_name)
+        normalized_filters = self._normalize_filters(filters)
         try:
             response = collection.query.bm25(
                 query=query,
                 limit=k,
-                filters=filters,
+                filters=normalized_filters,
                 **kwargs
             )
             docs = self.get_document_response(response)
@@ -292,6 +331,7 @@ class WeaviateStore(VectorStoreAdapter):
         For external embeddings, we need to provide the query vector manually.
         """
         collection = self.get_collection(collection_name)
+        normalized_filters = self._normalize_filters(filters)
         try:
             # Generate query vector using external embedding
             query_vector = self.embedding.embed_query(query)
@@ -302,7 +342,7 @@ class WeaviateStore(VectorStoreAdapter):
                 vector=query_vector,  # Provide external embedding vector
                 alpha=alpha,  # 0=BM25 only, 1=vector only, 0.5=balanced
                 limit=k,
-                filters=filters,
+                filters=normalized_filters,
                 **kwargs
             )
             docs = self.get_document_response(response)
@@ -324,12 +364,16 @@ class WeaviateStore(VectorStoreAdapter):
                   filters: Any = None,
                   collection_name: Optional[str] = None,
                   **kwargs) -> List[Document]:
+        """
+           Note:  A vectorizer needs to be configured before this function can be used.
+        """
         collection = self.get_collection(collection_name)
+        normalized_filters = self._normalize_filters(filters)
         try:
             response = collection.query.near_text(
                 query=query,
                 limit=k,
-                filters=filters,
+                filters=normalized_filters,
                 **kwargs
             )
             docs = self.get_document_response(response)

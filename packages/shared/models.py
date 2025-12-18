@@ -25,6 +25,7 @@ class McpTool:
             is_enabled: bool = True,
             content: str = "",
             id: str = "",
+            relevance_score: float = float("inf"),
     ):
         """
         Initialize MCP Tool instance.
@@ -57,6 +58,7 @@ class McpTool:
         self.tags = tags or []
         self.is_enabled = is_enabled
         self.content = content
+        self.relevance_score = relevance_score
 
     def to_document(self) -> Document:
         """
@@ -137,7 +139,8 @@ class McpTool:
             schema_json=metadata.get('schema_json', '{}'),
             tags=metadata.get('tags', []),
             is_enabled=metadata.get('is_enabled', True),
-            content=document.page_content
+            content=document.page_content,
+            relevance_score=metadata.get('relevance_score')
         )
 
     @classmethod
