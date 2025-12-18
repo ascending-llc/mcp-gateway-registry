@@ -34,3 +34,5 @@ spec:
           envFrom:
             - secretRef:
                 name: {{ .Values.app.envSecretName }}
+            - secretRef:
+                name: keycloak-client-secret
