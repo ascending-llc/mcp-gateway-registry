@@ -23,7 +23,8 @@ def create_weaviate_adapter(config: BackendConfig, embedding) -> VectorStoreAdap
                 "host": vector_store_config.host,
                 "port": vector_store_config.port,
                 "api_key": vector_store_config.api_key,
-                "collection_prefix": vector_store_config.collection_prefix
+                "collection_prefix": vector_store_config.collection_prefix,
+                "embedding_provider": config.embedding_provider
             },
             "embedding_config": config.get_embedding_model_config_dict()
         }
