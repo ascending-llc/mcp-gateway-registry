@@ -17,7 +17,7 @@ from httpx import AsyncClient
 from registry.main import app
 from registry.core.config import Settings
 from registry.services.server_service import ServerService
-from registry.search.service import FaissService
+from registry.search.base import VectorSearchService
 from registry.health.service import HealthMonitoringService
 
 # Import test utilities
@@ -89,10 +89,10 @@ def server_service(mock_settings: Settings) -> ServerService:
 @pytest.fixture
 def mock_faiss_service() -> Mock:
     """Create a mock FAISS service."""
-    mock_service = Mock(spec=FaissService)
+    mock_service = Mock(spec=VectorSearchService)
     mock_service.initialize = AsyncMock()
     mock_service.add_or_update_service = AsyncMock()
-    mock_service.search_services = AsyncMock(return_value=[])
+    mock_service.search = AsyncMock(return_value=[])
     mock_service.save_data = AsyncMock()
     return mock_service
 
