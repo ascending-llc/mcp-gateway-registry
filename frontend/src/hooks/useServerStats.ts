@@ -13,6 +13,7 @@ interface Server {
   rating?: number;
   status?: 'healthy' | 'healthy-auth-expired' | 'unhealthy' | 'unknown';
   num_tools?: number;
+  type: 'server' | 'agent';
 }
 
 interface ServerStats {
@@ -58,12 +59,19 @@ export const useServerStats = (): UseServerStatsReturn => {
       setLoading(true);
       setError(null);
       
-      // Call the servers API endpoint
-      const response = await axios.get('/api/servers');
+      // Fetch both servers and agents in parallel
+      const [serversResponse, agentsResponse] = await Promise.all([
+        axios.get('/api/servers'),
+        axios.get('/api/agents').catch(() => ({ data: { agents: [] } })) // Graceful fallback
+      ]);
       
       // The API returns {"servers": [...]} 
-      const responseData = response.data || {};
+      const responseData = serversResponse.data || {};
       const serversList = responseData.servers || [];
+      
+      // The agents API returns {"agents": [...]}
+      const agentsData = agentsResponse.data || {};
+      const agentsList = agentsData.agents || [];
       
       // Debug logging to see what servers are returned
       console.log('🔍 Server filtering debug info:');
@@ -72,6 +80,14 @@ export const useServerStats = (): UseServerStatsReturn => {
         name: s.display_name, 
         path: s.path, 
         enabled: s.is_enabled 
+      })));
+      
+      // Debug logging for agents
+      console.log(`📊 Total agents returned from API: ${agentsList.length}`);
+      console.log('📋 Agent list:', agentsList.map((a: any) => ({ 
+        name: a.name, 
+        path: a.path, 
+        enabled: a.is_enabled 
       })));
       
       // Transform server data from backend format to frontend format
@@ -90,7 +106,8 @@ export const useServerStats = (): UseServerStatsReturn => {
           usersCount: 0, // Not available in backend
           rating: serverInfo.num_stars || 0,
           status: mapHealthStatus(serverInfo.health_status || 'unknown'),
-          num_tools: serverInfo.num_tools || 0
+          num_tools: serverInfo.num_tools || 0,
+          type: 'server' as const,
         };
         
         // Debug log the transformed server
@@ -103,24 +120,51 @@ export const useServerStats = (): UseServerStatsReturn => {
         return transformed;
       });
       
-      setServers(transformedServers);
+      // Transform agent data from backend format to frontend format
+      const transformedAgents: Server[] = agentsList.map((agentInfo: any) => {
+        const transformed = {
+          name: agentInfo.name || 'Unknown Agent',
+          path: agentInfo.path,
+          description: agentInfo.description || '',
+          official: false, // Agents don't have official flag
+          enabled: agentInfo.is_enabled !== undefined ? agentInfo.is_enabled : false,
+          tags: agentInfo.tags || [],
+          last_checked_time: undefined, // Agents don't have health check timestamp
+          usersCount: 0,
+          rating: agentInfo.num_stars || 0,
+          status: 'unknown' as const, // Agents don't have health status yet
+          num_tools: agentInfo.num_skills || 0, // Use num_skills for agents
+          type: 'agent' as const,
+        };
+        
+        console.log(`🔄 Transformed agent ${transformed.name}:`, {
+          enabled: transformed.enabled,
+          num_skills: transformed.num_tools
+        });
+        
+        return transformed;
+      });
       
-      // Calculate stats
+      // Combine servers and agents
+      const allServices = [...transformedServers, ...transformedAgents];
+      setServers(allServices);
+      
+      // Calculate stats from combined list
       let total = 0;
       let enabled = 0;
       let disabled = 0;
       let withIssues = 0;
       
-      transformedServers.forEach((server) => {
+      allServices.forEach((service) => {
         total++;
-        if (server.enabled) {
+        if (service.enabled) {
           enabled++;
         } else {
           disabled++;
         }
         
-        // Check if server has issues (unhealthy status)
-        if (server.status === 'unhealthy') {
+        // Check if service has issues (unhealthy status)
+        if (service.status === 'unhealthy') {
           withIssues++;
         }
       });
@@ -132,11 +176,11 @@ export const useServerStats = (): UseServerStatsReturn => {
         withIssues,
       };
       
-      console.log('📈 Calculated stats:', newStats);
+      console.log('📈 Calculated stats (servers + agents):', newStats);
       setStats(newStats);
     } catch (err: any) {
-      console.error('Failed to fetch server data:', err);
-      setError(err.response?.data?.detail || 'Failed to fetch server data');
+      console.error('Failed to fetch server/agent data:', err);
+      setError(err.response?.data?.detail || 'Failed to fetch data');
       setServers([]);
       setStats({ total: 0, enabled: 0, disabled: 0, withIssues: 0 });
     } finally {
@@ -158,4 +202,4 @@ export const useServerStats = (): UseServerStatsReturn => {
     error,
     refreshData: fetchData,
   };
-}; 
+};
