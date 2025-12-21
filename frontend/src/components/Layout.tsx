@@ -12,6 +12,7 @@ import {
   MoonIcon
 } from '@heroicons/react/24/outline';
 import Sidebar from './Sidebar';
+import { useServerStats } from '../hooks/useServerStats';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import logo from '../assets/logo.png';
@@ -25,6 +26,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [version, setVersion] = useState<string | null>(null);
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { stats, activeFilter, setActiveFilter } = useServerStats();
 
   useEffect(() => {
     // Fetch version from API
@@ -199,14 +201,21 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
       <div className="flex h-screen pt-16">
         {/* Sidebar */}
-        <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+        <Sidebar 
+          sidebarOpen={sidebarOpen} 
+          setSidebarOpen={setSidebarOpen}
+          stats={stats}
+          activeFilter={activeFilter}
+          setActiveFilter={setActiveFilter}
+        />
+
 
         {/* Main content */}
         <main className={`flex-1 flex flex-col transition-all duration-300 ${
           sidebarOpen ? 'md:ml-64 lg:ml-72 xl:ml-80' : ''
         }`}>
           <div className="flex-1 flex flex-col px-4 sm:px-6 lg:px-8 py-4 md:py-8 overflow-hidden">
-            {children}
+            {React.cloneElement(children as React.ReactElement, { activeFilter })}
           </div>
         </main>
       </div>

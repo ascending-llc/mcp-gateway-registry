@@ -95,8 +95,12 @@ const normalizeAgentStatus = (status?: string | null): Agent['status'] => {
 const buildAgentAuthHeaders = (token?: string | null) =>
   token ? { Authorization: `Bearer ${token}` } : undefined;
 
-const Dashboard: React.FC = () => {
-  const { servers, activeFilter, loading, error, refreshData, setServers } = useServerStats();
+interface DashboardProps {
+  activeFilter?: string;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ activeFilter = 'all' }) => {
+  const { servers, loading, error, refreshData, setServers } = useServerStats();
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [committedQuery, setCommittedQuery] = useState('');
@@ -412,7 +416,7 @@ const Dashboard: React.FC = () => {
     }
 
     return filtered;
-  }, [agents, activeFilter, searchTerm]);
+  }, [internalAgents, activeFilter, searchTerm]);
 
   // Debug logging for filtering
   console.log('Dashboard filtering debug:');
