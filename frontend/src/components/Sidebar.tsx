@@ -70,21 +70,32 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen, stats, a
     return scopeMappings[scope] || 'Custom permission scope';
   };
 
-  const fetchAdminTokens = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const response = await axios.get('/api/admin/tokens');
-      if (response.data.success) {
-        setTokenData(response.data);
-        setShowTokenModal(true);
-      }
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to retrieve tokens');
-    } finally {
-      setLoading(false);
+const fetchAdminTokens = async () => {
+  setLoading(true);
+  setError('');
+  try {
+    const requestData = {
+      description: 'Generated via sidebar',
+      expires_in_hours: 8,
+    };
+    
+    const response = await axios.post('/api/tokens/generate', requestData, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (response.data.success) {
+      setTokenData(response.data);
+      setShowTokenModal(true);
     }
-  };
+  } catch (err: any) {
+    setError(err.response?.data?.detail || 'Failed to generate token');
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const handleCopyTokens = async () => {
     if (!tokenData) return;

@@ -151,20 +151,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                     <Menu.Item>
                       {({ active }) => (
                         <Link
-                          to="/generate-token"
-                          className={`${
-                            active ? 'bg-gray-100 dark:bg-gray-800' : ''
-                          } flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-100`}
-                        >
-                          <KeyIcon className="mr-3 h-4 w-4" />
-                          Generate Token
-                        </Link>
-                      )}
-                    </Menu.Item>
-                    
-                    <Menu.Item>
-                      {({ active }) => (
-                        <Link
                           to="/settings"
                           className={`${
                             active ? 'bg-gray-100 dark:bg-gray-800' : ''
