@@ -26,7 +26,9 @@ interface ServerStats {
 interface UseServerStatsReturn {
   stats: ServerStats;
   servers: Server[];
+  agents: Server[];
   setServers: React.Dispatch<React.SetStateAction<Server[]>>;
+  setAgents: React.Dispatch<React.SetStateAction<Server[]>>;
   activeFilter: string;
   setActiveFilter: (filter: string) => void;
   loading: boolean;
@@ -42,6 +44,7 @@ export const useServerStats = (): UseServerStatsReturn => {
     withIssues: 0,
   });
   const [servers, setServers] = useState<Server[]>([]);
+  const [agents, setAgents] = useState<Server[]>([]);
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -182,6 +185,7 @@ export const useServerStats = (): UseServerStatsReturn => {
       console.error('Failed to fetch server/agent data:', err);
       setError(err.response?.data?.detail || 'Failed to fetch data');
       setServers([]);
+      setAgents([]);
       setStats({ total: 0, enabled: 0, disabled: 0, withIssues: 0 });
     } finally {
       setLoading(false);
@@ -195,7 +199,9 @@ export const useServerStats = (): UseServerStatsReturn => {
   return {
     stats,
     servers,
+    agents,
     setServers,
+    setAgents,
     activeFilter,
     setActiveFilter,
     loading,

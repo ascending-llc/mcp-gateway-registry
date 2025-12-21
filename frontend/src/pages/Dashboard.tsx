@@ -130,8 +130,8 @@ const Dashboard: React.FC<DashboardProps> = ({ activeFilter = 'all' }) => {
   const [editLoading, setEditLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  // Agent state management
-  const [agents, setAgents] = useState<Agent[]>([]);
+  // Agent state management - using agents from useServerStats hook instead of separate fetch
+  // Keep these for backward compatibility and additional agent-specific state
   const [agentsLoading, setAgentsLoading] = useState(true);
   const [agentsError, setAgentsError] = useState<string | null>(null);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
@@ -193,91 +193,8 @@ const Dashboard: React.FC<DashboardProps> = ({ activeFilter = 'all' }) => {
     });
   }, [performAgentHealthCheck]);
 
-  // Fetch agents from the API
-  const fetchAgents = useCallback(async () => {
-    try {
-      setAgentsLoading(true);
-      setAgentsError(null);
-
-      // First, get JWT token
-      const tokenResponse = await axios.post('/api/tokens/generate', {
-        description: 'Dashboard agent fetch',
-        expires_in_hours: 1
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!tokenResponse.data.success) {
-        throw new Error('Failed to generate JWT token');
-      }
-
-      const jwtToken = tokenResponse.data.token_data.access_token;
-      setAgentApiToken(jwtToken);
-
-      // Fetch agents with JWT token
-      const response = await axios.get('/api/agents', {
-        headers: {
-          'Authorization': `Bearer ${jwtToken}`
-        }
-      });
-
-      const responseData = response.data || {};
-      const agentsList = responseData.agents || [];
-
-      console.log('Agent filtering debug info:');
-      console.log(`Total agents returned from API: ${agentsList.length}`);
-      console.log('Agent list:', agentsList.map((a: any) => ({
-        name: a.name,
-        path: a.path,
-        enabled: a.enabled
-      })));
-
-      // Transform agent data from API format to frontend format
-      const transformedAgents: Agent[] = agentsList.map((agentInfo: any) => {
-        console.log(`Processing agent ${agentInfo.name}:`, agentInfo);
-
-        const transformed = {
-          name: agentInfo.name || 'Unknown Agent',
-          path: agentInfo.path || '',
-          url: agentInfo.url || '',
-          description: agentInfo.description || '',
-          trust_level: agentInfo.trust_level || 'community',
-          enabled: agentInfo.is_enabled !== undefined ? agentInfo.is_enabled : false,
-          tags: agentInfo.tags || [],
-          rating: agentInfo.num_stars || 0,
-          status: normalizeAgentStatus(agentInfo.status),
-          last_checked_time: agentInfo.last_checked_time || null
-        };
-
-        console.log(`Transformed agent ${transformed.name}:`, {
-          enabled: transformed.enabled,
-          trust_level: transformed.trust_level,
-          rating: transformed.rating
-        });
-
-        return transformed;
-      });
-
-      setAgents(transformedAgents);
-      runInitialAgentHealthChecks(transformedAgents, jwtToken);
-    } catch (err: any) {
-      console.error('Failed to fetch agents:', err);
-      setAgentsError(err.response?.data?.detail || 'Failed to fetch agents');
-      setAgents([]);
-      setAgentApiToken(null);
-    } finally {
-      setAgentsLoading(false);
-    }
-  }, [runInitialAgentHealthChecks]);
-
-  // Fetch agents on component mount or when user changes
-  useEffect(() => {
-    if (user) {
-      fetchAgents();
-    }
-  }, [user, fetchAgents]);
+  // Note: Agents data now comes from useServerStats hook
+  // JWT token generation moved to after agents definition
 
   // External registry tags - can be configured via environment or constants
   // Default tags that identify servers from external registries
@@ -299,6 +216,25 @@ const Dashboard: React.FC<DashboardProps> = ({ activeFilter = 'all' }) => {
   }, [servers]);
 
   // Separate internal and external registry agents
+  // Transform Server[] to Agent[] for agents from useServerStats
+  const agents = useMemo(() => {
+    return agentsFromStats.map((a): Agent => ({
+      name: a.name,
+      path: a.path,
+      description: a.description,
+      enabled: a.enabled,
+      tags: a.tags,
+      rating: a.rating,
+      status: a.status,
+      last_checked_time: a.last_checked_time,
+      usersCount: a.usersCount,
+      url: '',  // Will be populated if needed
+      version: '',
+      visibility: 'public',
+      trust_level: 'community'
+    }));
+  }, [agentsFromStats]);
+
   const internalAgents = useMemo(() => {
     return agents.filter(a => {
       const agentTags = a.tags || [];
@@ -458,8 +394,7 @@ const Dashboard: React.FC<DashboardProps> = ({ activeFilter = 'all' }) => {
   const handleRefreshHealth = async () => {
     setRefreshing(true);
     try {
-      await refreshData();
-      await fetchAgents();
+      await refreshData(); // Refresh both servers and agents from useServerStats
     } finally {
       setRefreshing(false);
     }
@@ -878,7 +813,7 @@ const Dashboard: React.FC<DashboardProps> = ({ activeFilter = 'all' }) => {
                     onToggle={handleToggleAgent}
                     onEdit={handleEditAgent}
                     canModify={user?.can_modify_servers || false}
-                    onRefreshSuccess={fetchAgents}
+                    onRefreshSuccess={refreshData}
                     onShowToast={showToast}
                     onAgentUpdate={handleAgentUpdate}
                     authToken={agentApiToken}
@@ -959,7 +894,7 @@ const Dashboard: React.FC<DashboardProps> = ({ activeFilter = 'all' }) => {
                         onToggle={handleToggleAgent}
                         onEdit={handleEditAgent}
                         canModify={user?.can_modify_servers || false}
-                        onRefreshSuccess={fetchAgents}
+                        onRefreshSuccess={refreshData}
                         onShowToast={showToast}
                         onAgentUpdate={handleAgentUpdate}
                       />
