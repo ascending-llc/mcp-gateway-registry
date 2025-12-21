@@ -131,8 +131,7 @@ const Dashboard: React.FC<DashboardProps> = ({ activeFilter = 'all' }) => {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Agent state management - using agents from useServerStats hook instead of separate fetch
-  // Keep these for backward compatibility and additional agent-specific state
-  const [agentsLoading, setAgentsLoading] = useState(true);
+  // Agents loading state is now handled by the useServerStats hook's 'loading' state
   const [agentsError, setAgentsError] = useState<string | null>(null);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
   const [agentApiToken, setAgentApiToken] = useState<string | null>(null);
@@ -785,7 +784,7 @@ const Dashboard: React.FC<DashboardProps> = ({ activeFilter = 'all' }) => {
                 <div className="text-red-500 text-lg mb-2">Failed to load agents</div>
                 <p className="text-red-600 dark:text-red-400 text-sm">{agentsError}</p>
               </div>
-            ) : agentsLoading ? (
+            ) : loading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600"></div>
               </div>
@@ -940,7 +939,7 @@ const Dashboard: React.FC<DashboardProps> = ({ activeFilter = 'all' }) => {
   }
 
   // Show loading state
-  if (loading && agentsLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
