@@ -217,7 +217,7 @@ class TestFaissService:
             mock_file = Mock()
             mock_open.return_value.__enter__.return_value = mock_file
             
-            await faiss_service_instance.save_data()
+            await faiss_service_instance._save_data()
             
             mock_faiss.write_index.assert_called_once()
             mock_file.write.assert_called()
@@ -228,7 +228,7 @@ class TestFaissService:
         faiss_service_instance.faiss_index = None
         
         # Should return early without error
-        await faiss_service_instance.save_data()
+        await faiss_service_instance._save_data()
 
     @pytest.mark.asyncio
     async def test_save_data_exception(self, faiss_service_instance, mock_settings):
@@ -240,7 +240,7 @@ class TestFaissService:
             faiss_service_instance.faiss_index = mock_index
             
             # Should not raise exception
-            await faiss_service_instance.save_data()
+            await faiss_service_instance._save_data()
 
     @pytest.mark.asyncio
     async def test_add_or_update_service_not_initialized(self, faiss_service_instance):

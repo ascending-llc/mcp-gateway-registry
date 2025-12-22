@@ -150,8 +150,8 @@ class EmbeddedFaissService(VectorSearchService):
         self.faiss_index = faiss.IndexIDMap(faiss.IndexFlatL2(self.settings.embeddings_model_dimensions))
         self.metadata_store = {}
         self.next_id_counter = 0
-        
-    async def save_data(self):
+
+    async def _save_data(self):
         """Save FAISS index and metadata to disk."""
         if self.faiss_index is None:
             logger.error("FAISS index is not initialized. Cannot save.")
@@ -296,7 +296,7 @@ class EmbeddedFaissService(VectorSearchService):
                 "entity_type": server_info.get("entity_type", "mcp_server")
             }
             logger.debug(f"Updated faiss_metadata_store for '{service_path}'.")
-            await self.save_data()
+            await self._save_data()
         else:
             logger.debug(f"No changes to FAISS vector or enriched full_server_info for '{service_path}'. Skipping save.")
 
@@ -321,7 +321,7 @@ class EmbeddedFaissService(VectorSearchService):
             logger.info(f"Removed service '{service_path}' from FAISS metadata store")
 
             # Save the updated metadata
-            await self.save_data()
+            await self._save_data()
 
         except Exception as e:
             logger.error(f"Failed to remove service '{service_path}' from FAISS: {e}", exc_info=True)
@@ -423,7 +423,7 @@ class EmbeddedFaissService(VectorSearchService):
                 "full_agent_card": agent_card_dict,
             }
             logger.debug(f"Updated faiss_metadata_store for agent '{agent_path}'.")
-            await self.save_data()
+            await self._save_data()
         else:
             logger.debug(
                 f"No changes to FAISS vector or agent card for '{agent_path}'. Skipping save."
@@ -451,7 +451,7 @@ class EmbeddedFaissService(VectorSearchService):
             logger.info(f"Removed agent '{agent_path}' from FAISS metadata store")
 
             # Save the updated metadata
-            await self.save_data()
+            await self._save_data()
 
         except Exception as e:
             logger.error(
@@ -840,5 +840,5 @@ class EmbeddedFaissService(VectorSearchService):
     
     async def cleanup(self):
         """Save data and cleanup resources."""
-        await self.save_data()
+        await self._save_data()
         logger.info("Embedded FAISS service cleanup complete")
