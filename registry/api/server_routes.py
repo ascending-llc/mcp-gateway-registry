@@ -4,7 +4,7 @@ import os
 import json
 import asyncio
 from typing import Annotated
-from fastapi import (APIRouter, Request, Form, HTTPException, Cookie, status, Depends)
+from fastapi import (APIRouter, Request, Form, HTTPException, Cookie, status)
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
@@ -361,8 +361,8 @@ async def edit_server_form(
 
     # Check if user has modify_service permission for this specific service
     if not user_has_ui_permission_for_service('modify_service', service_name, user_context.get('ui_permissions', {})):
-        logger.warning(
-            f"User {user_context['username']} attempted to access edit form for {service_name} without modify_service permission")
+        logger.warning(f"User {user_context['username']} attempted to "
+                       f"access edit form for {service_name} without modify_service permission")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"You do not have permission to modify {service_name}"
@@ -656,8 +656,8 @@ async def refresh_service(
     # Check if user has health_check_service permission for this specific service
     if not user_has_ui_permission_for_service('health_check_service', service_name,
                                               user_context.get('ui_permissions', {})):
-        logger.warning(
-            f"User {user_context['username']} attempted to refresh service {service_name} without health_check_service permission")
+        logger.warning(f"User {user_context['username']} attempted to "
+                       f"refresh service {service_name} without health_check_service permission")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"You do not have permission to refresh {service_name}"
@@ -666,8 +666,8 @@ async def refresh_service(
     # For non-admin users, check if they have access to this specific server
     if not user_context['is_admin']:
         if not server_service.user_can_access_server_path(service_path, user_context['accessible_servers']):
-            logger.warning(
-                f"User {user_context['username']} attempted to refresh service {service_path} without access")
+            logger.warning(f"User {user_context['username']} attempted "
+                           f"to refresh service {service_path} without access")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have access to this server"
@@ -1117,8 +1117,7 @@ async def register_service_api(
 
         # Trigger async tasks for health check and FAISS sync
         asyncio.create_task(health_service.perform_immediate_health_check(path))
-        asyncio.create_task(faiss_service.save_data())
-
+        asyncio.create_task(faiss_service.add_or_update_service(path, server_entry, server_service.is_service_enabled(path)))
         return JSONResponse(
             status_code=201,
             content={
@@ -1184,8 +1183,8 @@ async def toggle_service_api(
     if not success:
         raise HTTPException(status_code=500, detail="Failed to toggle service")
 
-    logger.info(
-        f"Toggled '{server_info['server_name']}' ({path}) to {new_state} by user '{user_context.get('username')}'")
+    logger.info(f"Toggled '{server_info['server_name']}' "
+                f"({path}) to {new_state} by user '{user_context.get('username')}'")
 
     # If enabling, perform immediate health check
     status = "disabled"
