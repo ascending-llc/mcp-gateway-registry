@@ -301,9 +301,7 @@ class ExternalVectorSearchService(VectorSearchService):
             # Add score field if available
             if hasattr(tool, 'score') and tool.score is not None:
                 result['score'] = tool.score
-
             results.append(result)
-
         return results
 
     def _agent_to_server_info(
