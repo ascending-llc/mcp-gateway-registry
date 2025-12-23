@@ -120,7 +120,7 @@ const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-3xl w-full mx-4 max-h-[80vh] overflow-auto">
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-3xl w-full mx-4 max-h-[80vh]">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
             MCP Configuration for {server.name}
@@ -133,7 +133,7 @@ const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
           </button>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-4 overflow-auto max-h-[calc(80vh-100px)]">
           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
             <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
               How to use this configuration:

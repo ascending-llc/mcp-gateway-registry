@@ -799,8 +799,8 @@ const Dashboard: React.FC = () => {
               <div
                 className="grid"
                 style={{
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-                  gap: 'clamp(1.5rem, 3vw, 2.5rem)'
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                  gap: 'clamp(1.5rem, 1.5rem, 2.5rem)'
                 }}
               >
                 {filteredServers.map((server) => (
@@ -1126,7 +1126,7 @@ const Dashboard: React.FC = () => {
         </div>
 
         {/* Scrollable Content Area */}
-        <div className="flex-1 overflow-y-auto min-h-0 space-y-10">
+        <div className="flex-1 overflow-y-auto min-h-0 space-y-10 pr-4 sm:pr-6 lg:pr-8 -mr-4 sm:-mr-6 lg:-mr-8">
           {semanticSectionVisible ? (
             <>
               <SemanticSearchResults

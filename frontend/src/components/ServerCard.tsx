@@ -193,79 +193,81 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
           : 'bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600'
       }`}>
         {/* Header */}
-        <div className="p-5 pb-4">
-          <div className="flex items-start justify-between mb-4">
+        <div className="p-4 pb-3">
+          <div className="flex items-start justify-between mb-3">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-3">
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white truncate">
+              <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                <h3 className="text-base font-bold text-gray-900 dark:text-white truncate max-w-[160px]">
                   {server.name}
                 </h3>
                 {server.official && (
-                  <span className="px-2 py-0.5 text-xs font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded-full flex-shrink-0">
+                  <span className="px-1.5 py-0.5 text-[0.6rem] font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded-full flex-shrink-0 whitespace-nowrap">
                     OFFICIAL
                   </span>
                 )}
                 {isAnthropicServer && (
-                  <span className="px-2 py-0.5 text-xs font-semibold bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-700 dark:from-purple-900/30 dark:to-indigo-900/30 dark:text-purple-300 rounded-full flex-shrink-0 border border-purple-200 dark:border-purple-600">
+                  <span className="px-1.5 py-0.5 text-[0.6rem] font-semibold bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-700 dark:from-purple-900/30 dark:to-indigo-900/30 dark:text-purple-300 rounded-full flex-shrink-0 border border-purple-200 dark:border-purple-600 whitespace-nowrap">
                     ANTHROPIC
                   </span>
                 )}
                 {/* Check if this is an ASOR server */}
                 {server.tags?.includes('asor') && (
-                  <span className="px-2 py-0.5 text-xs font-semibold bg-gradient-to-r from-orange-100 to-red-100 text-orange-700 dark:from-orange-900/30 dark:to-red-900/30 dark:text-orange-300 rounded-full flex-shrink-0 border border-orange-200 dark:border-orange-600">
+                  <span className="px-1.5 py-0.5 text-[0.6rem] font-semibold bg-gradient-to-r from-orange-100 to-red-100 text-orange-700 dark:from-orange-900/30 dark:to-red-900/30 dark:text-orange-300 rounded-full flex-shrink-0 border border-orange-200 dark:border-orange-600 whitespace-nowrap">
                     ASOR
                   </span>
                 )}
                 {isSecurityPending && (
-                  <span className="px-2 py-0.5 text-xs font-semibold bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700 dark:from-amber-900/30 dark:to-orange-900/30 dark:text-amber-300 rounded-full flex-shrink-0 border border-amber-200 dark:border-amber-600">
+                  <span className="px-1.5 py-0.5 text-[0.6rem] font-semibold bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700 dark:from-amber-900/30 dark:to-orange-900/30 dark:text-amber-300 rounded-full flex-shrink-0 border border-amber-200 dark:border-amber-600 whitespace-nowrap">
                     SECURITY PENDING
                   </span>
                 )}
               </div>
               
-              <code className="text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/50 px-2 py-1 rounded font-mono">
+              <code className="text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800/50 px-1.5 py-0.5 rounded font-mono truncate block max-w-full">
                 {server.path}
               </code>
             </div>
 
-            {canModify && (
-              <button
-                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-all duration-200 flex-shrink-0"
-                onClick={() => onEdit?.(server)}
-                title="Edit server"
-              >
-                <PencilIcon className="h-4 w-4" />
-              </button>
-            )}
+            <div className="flex gap-1">
+              {canModify && (
+                <button
+                  className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-all duration-200 flex-shrink-0"
+                  onClick={() => onEdit?.(server)}
+                  title="Edit server"
+                >
+                  <PencilIcon className="h-3.5 w-3.5" />
+                </button>
+              )}
 
-            {/* Configuration Generator Button */}
-            <button
-              onClick={() => setShowConfig(true)}
-              className="p-2 text-gray-400 hover:text-green-600 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-700/50 rounded-lg transition-all duration-200 flex-shrink-0"
-              title="Copy mcp.json configuration"
-            >
-              <CogIcon className="h-4 w-4" />
-            </button>
+              {/* Configuration Generator Button */}
+              <button
+                onClick={() => setShowConfig(true)}
+                className="p-1.5 text-gray-400 hover:text-green-600 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-700/50 rounded-lg transition-all duration-200 flex-shrink-0"
+                title="Copy mcp.json configuration"
+              >
+                <CogIcon className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
 
           {/* Description */}
-          <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed line-clamp-2 mb-4">
+          <p className="text-gray-600 dark:text-gray-300 text-xs leading-relaxed line-clamp-2 mb-3">
             {server.description || 'No description available'}
           </p>
 
           {/* Tags */}
           {server.tags && server.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-4">
+            <div className="flex flex-wrap gap-1 mb-3 max-h-10 overflow-hidden">
               {server.tags.slice(0, 3).map((tag) => (
                 <span
                   key={tag}
-                  className="px-2 py-1 text-xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded"
+                  className="px-1.5 py-0.5 text-[0.6rem] font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded truncate max-w-[60px]"
                 >
                   #{tag}
                 </span>
               ))}
               {server.tags.length > 3 && (
-                <span className="px-2 py-1 text-xs font-medium bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded">
+                <span className="px-1.5 py-0.5 text-[0.6rem] font-medium bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded">
                   +{server.tags.length - 3}
                 </span>
               )}
@@ -274,41 +276,41 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
         </div>
 
         {/* Stats */}
-        <div className="px-5 pb-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-yellow-50 dark:bg-yellow-900/30 rounded">
-                <StarIcon className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+        <div className="px-4 pb-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex items-center gap-1.5">
+              <div className="p-1 bg-yellow-50 dark:bg-yellow-900/30 rounded">
+                <StarIcon className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400" />
               </div>
               <div>
-                <div className="text-sm font-semibold text-gray-900 dark:text-white">{server.rating || 0}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Rating</div>
+                <div className="text-xs font-semibold text-gray-900 dark:text-white">{server.rating || 0}</div>
+                <div className="text-[0.6rem] text-gray-500 dark:text-gray-400">Rating</div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               {(server.num_tools || 0) > 0 ? (
                 <button
                   onClick={handleViewTools}
                   disabled={loadingTools}
-                  className="flex items-center gap-2 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 disabled:opacity-50 hover:bg-blue-50 dark:hover:bg-blue-900/20 px-2 py-1 -mx-2 -my-1 rounded transition-all"
+                  className="flex items-center gap-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 disabled:opacity-50 hover:bg-blue-50 dark:hover:bg-blue-900/20 px-1.5 py-0.5 -mx-1.5 -my-0.5 rounded transition-all text-xs"
                   title="View tools"
                 >
-                  <div className="p-1.5 bg-blue-50 dark:bg-blue-900/30 rounded">
-                    <WrenchScrewdriverIcon className="h-4 w-4" />
+                  <div className="p-1 bg-blue-50 dark:bg-blue-900/30 rounded">
+                    <WrenchScrewdriverIcon className="h-3.5 w-3.5" />
                   </div>
                   <div>
-                    <div className="text-sm font-semibold">{server.num_tools}</div>
-                    <div className="text-xs">Tools</div>
+                    <div className="text-xs font-semibold">{server.num_tools}</div>
+                    <div className="text-[0.6rem]">Tools</div>
                   </div>
                 </button>
               ) : (
-                <div className="flex items-center gap-2 text-gray-400 dark:text-gray-500">
-                  <div className="p-1.5 bg-gray-50 dark:bg-gray-800 rounded">
-                    <WrenchScrewdriverIcon className="h-4 w-4" />
+                <div className="flex items-center gap-1.5 text-gray-400 dark:text-gray-500">
+                  <div className="p-1 bg-gray-50 dark:bg-gray-800 rounded">
+                    <WrenchScrewdriverIcon className="h-3.5 w-3.5" />
                   </div>
                   <div>
-                    <div className="text-sm font-semibold">{server.num_tools || 0}</div>
-                    <div className="text-xs">Tools</div>
+                    <div className="text-xs font-semibold">{server.num_tools || 0}</div>
+                    <div className="text-[0.6rem]">Tools</div>
                   </div>
                 </div>
               )}
@@ -317,25 +319,25 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
         </div>
 
         {/* Footer */}
-        <div className="mt-auto px-5 py-4 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/30 rounded-b-2xl">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+        <div className="mt-auto px-3 py-3 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/30 rounded-b-2xl">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-1">
+            <div className="flex items-center gap-2 flex-wrap justify-center">
               {/* Status Indicators */}
-              <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${
+              <div className="flex items-center gap-1">
+                <div className={`w-2.5 h-2.5 rounded-full ${
                   server.enabled 
                     ? 'bg-green-400 shadow-lg shadow-green-400/30' 
                     : 'bg-gray-300 dark:bg-gray-600'
                 }`} />
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
                   {server.enabled ? 'Enabled' : 'Disabled'}
                 </span>
               </div>
               
-              <div className="w-px h-4 bg-gray-200 dark:bg-gray-600" />
+              <div className="w-px h-3 bg-gray-200 dark:bg-gray-600" />
               
-              <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${
+              <div className="flex items-center gap-1">
+                <div className={`w-2.5 h-2.5 rounded-full ${
                   server.status === 'healthy' 
                     ? 'bg-emerald-400 shadow-lg shadow-emerald-400/30'
                     : server.status === 'healthy-auth-expired'
@@ -344,7 +346,7 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
                     ? 'bg-red-400 shadow-lg shadow-red-400/30'
                     : 'bg-amber-400 shadow-lg shadow-amber-400/30'
                 }`} />
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300 max-w-[80px] truncate">
                   {server.status === 'healthy' ? 'Healthy' : 
                    server.status === 'healthy-auth-expired' ? 'Healthy (Auth Expired)' :
                    server.status === 'unhealthy' ? 'Unhealthy' : 'Unknown'}
@@ -353,15 +355,15 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
             </div>
 
             {/* Controls */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               {/* Last Checked */}
               {(() => {
                 console.log(`🕐 ServerCard ${server.name}: last_checked_time =`, server.last_checked_time);
                 const timeText = formatTimeSince(server.last_checked_time);
                 console.log(`🕐 ServerCard ${server.name}: timeText =`, timeText);
                 return server.last_checked_time && timeText ? (
-                  <div className="text-xs text-gray-500 dark:text-gray-300 flex items-center gap-1.5">
-                    <ClockIcon className="h-3.5 w-3.5" />
+                  <div className="text-[0.6rem] text-gray-500 dark:text-gray-300 flex items-center gap-1 hidden md:flex">
+                    <ClockIcon className="h-3 w-3" />
                     <span>{timeText}</span>
                   </div>
                 ) : null;
@@ -371,10 +373,10 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
               <button
                 onClick={handleRefreshHealth}
                 disabled={loadingRefresh}
-                className="p-2.5 text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all duration-200 disabled:opacity-50"
+                className="p-1 text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all duration-200 disabled:opacity-50"
                 title="Refresh health status"
               >
-                <ArrowPathIcon className={`h-4 w-4 ${loadingRefresh ? 'animate-spin' : ''}`} />
+                <ArrowPathIcon className={`h-3 w-3 ${loadingRefresh ? 'animate-spin' : ''}`} />
               </button>
 
               {/* Toggle Switch */}
@@ -385,13 +387,13 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
                   onChange={(e) => onToggle(server.path, e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className={`relative w-12 h-6 rounded-full transition-colors duration-200 ease-in-out ${
+                <div className={`relative w-7 h-4 rounded-full transition-colors duration-200 ease-in-out ${
                   server.enabled 
                     ? 'bg-blue-600' 
                     : 'bg-gray-300 dark:bg-gray-600'
                 }`}>
-                  <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform duration-200 ease-in-out ${
-                    server.enabled ? 'translate-x-6' : 'translate-x-0'
+                  <div className={`absolute top-0.5 left-0 w-3 h-3 bg-white rounded-full transition-transform duration-200 ease-in-out ${
+                    server.enabled ? 'translate-x-4' : 'translate-x-0'
                   }`} />
                 </div>
               </label>
