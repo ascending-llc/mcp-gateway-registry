@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timezone
 
+from packages.shared.models import McpTool
 from ..core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -11,46 +12,47 @@ logger = logging.getLogger(__name__)
 
 class ServerService:
     """Service for managing server registration and state."""
-    
+
     def __init__(self):
         self.registered_servers: Dict[str, Dict[str, Any]] = {}
         self.service_state: Dict[str, bool] = {}  # enabled/disabled state
-        
+
     def load_servers_and_state(self):
         """Load server definitions and persisted state from disk."""
         logger.info(f"Loading server definitions from {settings.servers_dir}...")
-        
+
         # Create servers directory if it doesn't exist
         settings.servers_dir.mkdir(parents=True, exist_ok=True)
-        
+
         temp_servers = {}
         server_files = list(settings.servers_dir.glob("**/*.json"))
         logger.info(f"Found {len(server_files)} JSON files in {settings.servers_dir} and its subdirectories")
-        
+
         for file in server_files:
             logger.info(f"[DEBUG] - {file.relative_to(settings.servers_dir)}")
-        
+
         if not server_files:
             logger.warning(f"No server definition files found in {settings.servers_dir}. Initializing empty registry.")
             self.registered_servers = {}
-        
+
         for server_file in server_files:
             if server_file.name == settings.state_file_path.name:  # Skip the state file itself
                 continue
-                
+
             try:
                 with open(server_file, "r") as f:
                     server_info = json.load(f)
-                    
+
                     if (
-                        isinstance(server_info, dict)
-                        and "path" in server_info
-                        and "server_name" in server_info
+                            isinstance(server_info, dict)
+                            and "path" in server_info
+                            and "server_name" in server_info
                     ):
                         server_path = server_info["path"]
                         if server_path in temp_servers:
-                            logger.warning(f"Duplicate server path found in {server_file}: {server_path}. Overwriting previous definition.")
-                        
+                            logger.warning(f"Duplicate server path found in "
+                                           f"{server_file}: {server_path}. Overwriting previous definition.")
+
                         # Add default fields
                         server_info["description"] = server_info.get("description", "")
                         server_info["tags"] = server_info.get("tags", [])
@@ -60,7 +62,7 @@ class ServerService:
                         server_info["license"] = server_info.get("license", "N/A")
                         server_info["proxy_pass_url"] = server_info.get("proxy_pass_url", None)
                         server_info["tool_list"] = server_info.get("tool_list", [])
-                        
+
                         temp_servers[server_path] = server_info
                     else:
                         logger.warning(f"Invalid server entry format found in {server_file}. Skipping.")
@@ -70,24 +72,25 @@ class ServerService:
                 logger.error(f"Could not parse JSON from {server_file}: {e}.")
             except Exception as e:
                 logger.error(f"An unexpected error occurred loading {server_file}: {e}", exc_info=True)
-        
+
         self.registered_servers = temp_servers
         logger.info(f"Successfully loaded {len(self.registered_servers)} server definitions.")
-        
+
         # Load persisted service state
         self._load_service_state()
-        
+
     def _load_service_state(self):
         """Load persisted service state from disk."""
         logger.info(f"Attempting to load persisted state from {settings.state_file_path}...")
         loaded_state = {}
-        
+
         try:
             if settings.state_file_path.exists():
                 with open(settings.state_file_path, "r") as f:
                     loaded_state = json.load(f)
                 if not isinstance(loaded_state, dict):
-                    logger.warning(f"Invalid state format in {settings.state_file_path}. Expected a dictionary. Resetting state.")
+                    logger.warning(f"Invalid state format in {settings.state_file_path}. "
+                                   f"Expected a dictionary. Resetting state.")
                     loaded_state = {}
                 else:
                     logger.info("Successfully loaded persisted state.")
@@ -97,9 +100,10 @@ class ServerService:
             logger.error(f"Could not parse JSON from {settings.state_file_path}: {e}. Initializing empty state.")
             loaded_state = {}
         except Exception as e:
-            logger.error(f"Failed to read state file {settings.state_file_path}: {e}. Initializing empty state.", exc_info=True)
+            logger.error(f"Failed to read state file {settings.state_file_path}: {e}. Initializing empty state.",
+                         exc_info=True)
             loaded_state = {}
-        
+
         # Initialize service state
         self.service_state = {}
         for path in self.registered_servers.keys():
@@ -113,9 +117,9 @@ class ServerService:
                     # Try with trailing slash
                     value = loaded_state.get(path + '/', False)
             self.service_state[path] = value
-        
+
         logger.info(f"Initial service state loaded: {self.service_state}")
-        
+
     def save_service_state(self):
         """Persist service state to disk."""
         try:
@@ -124,27 +128,29 @@ class ServerService:
             logger.info(f"Persisted state to {settings.state_file_path}")
         except Exception as e:
             logger.error(f"ERROR: Failed to persist state to {settings.state_file_path}: {e}")
-            
+
     def save_server_to_file(self, server_info: Dict[str, Any]) -> bool:
         """Save server data to individual file."""
         try:
             # Create servers directory if it doesn't exist
             settings.servers_dir.mkdir(parents=True, exist_ok=True)
-            
+
             # Generate filename based on path
             path = server_info["path"]
             filename = self._path_to_filename(path)
             file_path = settings.servers_dir / filename
-            
+
             with open(file_path, "w") as f:
                 json.dump(server_info, f, indent=2)
-            
+
             logger.info(f"Successfully saved server '{server_info['server_name']}' to {file_path}")
             return True
         except Exception as e:
-            logger.error(f"Failed to save server '{server_info.get('server_name', 'UNKNOWN')}' data to {filename}: {e}", exc_info=True)
+            # Use server_info.get to safely get server name
+            server_name = server_info.get('server_name', 'UNKNOWN')
+            logger.error(f"Failed to save server '{server_name}' data to file: {e}", exc_info=True)
             return False
-            
+
     def _path_to_filename(self, path: str) -> str:
         """Convert a path to a safe filename."""
         # Remove leading slash and replace remaining slashes with underscores
@@ -153,46 +159,46 @@ class ServerService:
         if not normalized.endswith(".json"):
             normalized += ".json"
         return normalized
-        
+
     def register_server(self, server_info: Dict[str, Any]) -> bool:
         """Register a new server."""
         path = server_info["path"]
-        
+
         # Check if path already exists
         if path in self.registered_servers:
             logger.error(f"Service registration failed: path '{path}' already exists")
             return False
-            
+
         # Save to file
         if not self.save_server_to_file(server_info):
             return False
-            
+
         # Add to in-memory registry and default to disabled
         self.registered_servers[path] = server_info
         self.service_state[path] = False
-        
+
         # Persist state
         self.save_service_state()
-        
+
         logger.info(f"New service registered: '{server_info['server_name']}' at path '{path}'")
         return True
-        
+
     def update_server(self, path: str, server_info: Dict[str, Any]) -> bool:
         """Update an existing server."""
         if path not in self.registered_servers:
             logger.error(f"Cannot update server at path '{path}': not found")
             return False
-            
+
         # Ensure path is consistent
         server_info["path"] = path
-        
+
         # Save to file
         if not self.save_server_to_file(server_info):
             return False
-            
-                # Update in-memory registry
+
+            # Update in-memory registry
         self.registered_servers[path] = server_info
-        
+
         logger.info(f"Server '{server_info['server_name']}' ({path}) updated")
 
         # Update FAISS index with new server information
@@ -204,7 +210,8 @@ class ServerService:
             try:
                 asyncio.get_running_loop()
                 # We're in an async context, schedule the update
-                asyncio.create_task(faiss_service.add_or_update_service(path, server_info, self.is_service_enabled(path)))
+                asyncio.create_task(
+                    faiss_service.add_or_update_service(path, server_info, self.is_service_enabled(path)))
             except RuntimeError:
                 # No event loop running, we're in sync context - skip FAISS update
                 # This will be handled by the caller in async context
@@ -213,21 +220,21 @@ class ServerService:
         except Exception as e:
             logger.error(f"Failed to update FAISS index after server update: {e}")
         return True
-        
+
     def toggle_service(self, path: str, enabled: bool) -> bool:
         """Toggle service enabled/disabled state."""
         if path not in self.registered_servers:
             logger.error(f"Cannot toggle service at path '{path}': not found")
             return False
-            
+
         self.service_state[path] = enabled
         self.save_service_state()
-        
+
         server_name = self.registered_servers[path]["server_name"]
         logger.info(f"Toggled '{server_name}' ({path}) to {enabled}")
-        
+
         return True
-        
+
     def get_server_info(self, path: str) -> Optional[Dict[str, Any]]:
         """
         Get server information by path.
@@ -253,38 +260,108 @@ class ServerService:
             alternate_path = path + '/'
 
         return self.registered_servers.get(alternate_path)
+
+    def _get_servers_from_mcp_database(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Get all servers and tools from Weaviate database, grouped by server_path.
         
+        Returns:
+            Dict mapping server_path to server_info dict
+        """
+        if not settings.use_external_discovery:
+            return {}
+
+        try:
+            from packages.db import initialize_database
+            db = initialize_database()
+            tools_repo = db.for_model(McpTool)
+
+            # Query all tools from database
+            mcp_tools = tools_repo.filter(filters={}, limit=10000)
+            if not mcp_tools:
+                return {}
+
+            # Group tools by server_path
+            servers_from_db = {}
+            for tool in mcp_tools:
+                path = tool.server_path
+                if not path:
+                    continue
+
+                # Initialize server_info if not exists
+                if path not in servers_from_db:
+                    servers_from_db[path] = {
+                        "path": path,
+                        "server_name": tool.server_name or path.strip('/'),
+                        "description": "",
+                        "tags": tool.tags or [],
+                        "num_tools": 0,
+                        "num_stars": 0,
+                        "is_python": False,
+                        "license": "N/A",
+                        "proxy_pass_url": None,
+                        "tool_list": []
+                    }
+
+                # Build tool dictionary
+                schema = json.loads(tool.schema_json) if tool.schema_json else {}
+                tool_dict = {
+                    "name": tool.tool_name,
+                    "parsed_description": {
+                        "main": tool.description_main or "",
+                        "args": tool.description_args or "",
+                        "returns": tool.description_returns or "",
+                        "raises": tool.description_raises or ""
+                    },
+                    "schema": schema
+                }
+                servers_from_db[path]["tool_list"].append(tool_dict)
+
+            # Update tool count for each server
+            for server_info in servers_from_db.values():
+                server_info["num_tools"] = len(server_info["tool_list"])
+
+            db.close()
+            logger.info(f"servers_from_db:{servers_from_db}")
+            return servers_from_db
+
+        except Exception as e:
+            logger.error(f"Failed to get servers from database: {e}")
+            return {}
+
     def get_all_servers(self, include_federated: bool = True) -> Dict[str, Dict[str, Any]]:
         """
         Get all registered servers.
-
+        
+        In external mode, queries and appends server data from Weaviate database.
+        
         Args:
             include_federated: If True, include servers from federated registries
-
-        Returns:
-            Dict of all servers (local and federated if requested)
         """
         all_servers = self.registered_servers.copy()
 
-        # Add federated servers if requested
+        # External mode: append servers from database
+        if settings.use_external_discovery:
+            servers_from_db = self._get_servers_from_mcp_database()
+            for path, server_info in servers_from_db.items():
+                if path not in all_servers:
+                    all_servers[path] = server_info
+
+        # Append federated servers
         if include_federated:
             try:
                 from .federation_service import get_federation_service
                 federation_service = get_federation_service()
                 federated_servers = federation_service.get_federated_servers()
-
-                # Add federated servers with their paths as keys
                 for fed_server in federated_servers:
                     path = fed_server.get("path")
                     if path and path not in all_servers:
                         all_servers[path] = fed_server
-
-                logger.debug(f"Included {len(federated_servers)} federated servers")
             except Exception as e:
                 logger.error(f"Failed to get federated servers: {e}")
 
         return all_servers
-        
+
     def get_filtered_servers(self, accessible_servers: List[str]) -> Dict[str, Dict[str, Any]]:
         """
         Get servers filtered by user's accessible servers list.
@@ -298,31 +375,32 @@ class ServerService:
         if not accessible_servers:
             logger.debug("User has no accessible servers, returning empty dict")
             return {}
-        
+
         logger.info(f"DEBUG: get_filtered_servers called with accessible_servers: {accessible_servers}")
         logger.info(f"DEBUG: Available registered servers paths: {list(self.registered_servers.keys())}")
-        
+
         filtered_servers = {}
         for path, server_info in self.registered_servers.items():
             server_name = server_info.get("server_name", "")
             # Extract technical name from path (remove leading and trailing slashes)
             technical_name = path.strip('/')
-            logger.info(f"DEBUG: Checking server path='{path}', server_name='{server_name}', technical_name='{technical_name}' against accessible_servers")
-            
+            logger.info(
+                f"DEBUG: Checking server path='{path}', server_name='{server_name}', technical_name='{technical_name}' against accessible_servers")
+
             # Check if user has access to this server using technical name
             if technical_name in accessible_servers:
                 filtered_servers[path] = server_info
                 logger.info(f"DEBUG: ✓ User has access to server: {technical_name} ({server_name})")
             else:
                 logger.info(f"DEBUG: ✗ User does not have access to server: {technical_name} ({server_name})")
-        
+
         logger.info(f"Filtered {len(filtered_servers)} servers from {len(self.registered_servers)} total servers")
         return filtered_servers
 
     def get_all_servers_with_permissions(
-        self,
-        accessible_servers: Optional[List[str]] = None,
-        include_federated: bool = True
+            self,
+            accessible_servers: Optional[List[str]] = None,
+            include_federated: bool = True
     ) -> Dict[str, Dict[str, Any]]:
         """
         Get servers with optional filtering based on user permissions.
@@ -380,7 +458,7 @@ class ServerService:
         """Check if a service is enabled."""
         # Try exact match first
         result = self.service_state.get(path, None)
-        
+
         # If no exact match, try with/without trailing slash
         if result is None:
             if path.endswith('/'):
@@ -389,13 +467,14 @@ class ServerService:
             else:
                 # Try with trailing slash
                 result = self.service_state.get(path + '/', False)
-        
+
         if result is None:
             result = False
-            
-        logger.info(f"[SERVER_DEBUG] is_service_enabled({path}) -> service_state: {self.service_state}, result: {result}")
+
+        logger.info(
+            f"[SERVER_DEBUG] is_service_enabled({path}) -> service_state: {self.service_state}, result: {result}")
         return result
-        
+
     def get_enabled_services(self) -> List[str]:
         """Get list of enabled service paths."""
         return [path for path, enabled in self.service_state.items() if enabled]
@@ -403,20 +482,20 @@ class ServerService:
     def reload_state_from_disk(self):
         """Reload service state from disk (useful when state file is modified externally)."""
         logger.info("Reloading service state from disk...")
-        
+
         # Store previous state to detect changes
         previous_enabled_services = set(self.get_enabled_services())
-        
+
         self._load_service_state()
-        
+
         # Check if enabled services changed
         current_enabled_services = set(self.get_enabled_services())
-        
+
         if previous_enabled_services != current_enabled_services:
-            logger.info(f"Service state changes detected: {len(previous_enabled_services)} -> {len(current_enabled_services)} enabled services")
+            logger.info(
+                f"Service state changes detected: {len(previous_enabled_services)} -> {len(current_enabled_services)} enabled services")
         else:
             logger.info("No service state changes detected after reload")
-
 
     def remove_server(self, path: str) -> bool:
         """Remove a server from the registry and file system."""
