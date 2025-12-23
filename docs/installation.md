@@ -4,12 +4,16 @@ Complete installation instructions for the MCP Gateway & Registry on various pla
 
 ## Prerequisites
 
-- **Node.js 16+**: Required for building the React frontend
-- **Docker & Docker Compose**: Container runtime and orchestration
-- **Amazon Cognito**: Identity provider for authentication (see [Cognito Setup Guide](cognito.md))
+- **Node.js 16+**: Required for building the React frontend (not needed with `--prebuilt` flag)
+- **Container Runtime**: Choose one:
+  - **Docker & Docker Compose**: Standard container runtime
+  - **Podman & Podman Compose**: Rootless alternative (recommended for macOS)
+- **Amazon Cognito or Keycloak**: Identity provider for authentication (see [Cognito Setup Guide](cognito.md) or [Keycloak Integration](keycloak-integration.md))
 - **SSL Certificate**: Optional for HTTPS deployment in production
 
 ## Quick Start (5 Minutes)
+
+### Docker Installation (Default)
 
 ```bash
 # 1. Clone and setup
@@ -28,11 +32,44 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 sudo apt-get update && sudo apt-get install -y docker.io docker-compose
 
 # 5. Deploy
-./build_and_run.sh
+./build_and_run.sh --prebuilt
 
 # 6. Access registry
 open http://localhost:7860
 ```
+
+### Podman Installation (Rootless Alternative)
+
+**Recommended for macOS and rootless Linux environments**
+
+```bash
+# 1. Clone and setup
+git clone https://github.com/agentic-community/mcp-gateway-registry.git
+cd mcp-gateway-registry
+
+# 2. Install Podman (macOS)
+brew install podman-desktop
+# OR download from: https://podman-desktop.io/
+
+# 3. Initialize Podman machine (macOS)
+podman machine init
+podman machine start
+
+# 4. Configure environment
+cp .env.example .env
+# Edit .env with your credentials
+
+# 5. Deploy with Podman
+./build_and_run.sh --prebuilt --podman
+
+# 6. Access registry (note the different port for Podman)
+open http://localhost:8080
+```
+
+**Podman Port Mapping:**
+- Main interface: `http://localhost:8080` (HTTP) or `https://localhost:8443` (HTTPS)
+- Registry API: `http://localhost:7860` (unchanged)
+- All other internal services: unchanged ports
 
 ## Installation on Amazon EC2
 
@@ -99,6 +136,152 @@ open http://localhost:7860
    ```bash
    ./build_and_run.sh
    ```
+
+## Podman Installation (Rootless Containers)
+
+Podman is a daemonless container engine that provides rootless container execution, making it ideal for macOS and environments where Docker requires privileged access.
+
+### Benefits of Podman
+
+- ✅ **Rootless Execution**: No sudo or privileged ports required
+- ✅ **macOS Native**: Works seamlessly with Podman Desktop on macOS
+- ✅ **Security**: Enhanced container isolation without root privileges
+- ✅ **Compatibility**: Drop-in replacement for Docker with similar CLI commands
+
+### Installation on macOS
+
+**Option 1: Podman Desktop (Recommended)**
+
+```bash
+# Install via Homebrew
+brew install podman-desktop
+
+# Or download directly from:
+# https://podman-desktop.io/
+```
+
+**Option 2: Podman CLI Only**
+
+```bash
+# Install Podman
+brew install podman
+
+# Initialize Podman machine
+podman machine init --cpus 4 --memory 8192 --disk-size 50
+podman machine start
+
+# Verify installation
+podman --version
+podman compose version
+```
+
+### Installation on Linux
+
+```bash
+# Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install -y podman podman-compose
+
+# Fedora/RHEL
+sudo dnf install -y podman podman-compose
+
+# Arch Linux
+sudo pacman -S podman podman-compose
+
+# Verify installation
+podman --version
+podman compose version
+```
+
+### Deploying with Podman
+
+```bash
+# Navigate to repository
+cd mcp-gateway-registry
+
+# Configure environment
+cp .env.example .env
+nano .env  # Configure required values
+
+# Deploy with Podman (explicit)
+./build_and_run.sh --prebuilt --podman
+
+# Or let the script auto-detect (will use Podman if Docker not available)
+./build_and_run.sh --prebuilt
+```
+
+### Accessing Services with Podman
+
+**Important Port Differences:**
+
+Podman uses non-privileged host ports to avoid requiring root access:
+
+| Service | Docker Port | Podman Port | Description |
+|---------|-------------|-------------|-------------|
+| Main UI (HTTP) | `http://localhost` | `http://localhost:8080` | Web interface |
+| Main UI (HTTPS) | `https://localhost` | `https://localhost:8443` | Secure web interface |
+| Registry API | `http://localhost:7860` | `http://localhost:7860` | API endpoint (unchanged) |
+| Auth Server | `http://localhost:8888` | `http://localhost:8888` | Auth service (unchanged) |
+| Keycloak | `http://localhost:8080` | `http://localhost:18080` | IdP (Podman uses 18080 because 8080 is used by the Registry UI) |
+| Prometheus | `http://localhost:9090` | `http://localhost:9090` | Metrics (unchanged) |
+| Grafana | `http://localhost:3000` | `http://localhost:3000` | Dashboards (unchanged) |
+
+**Access the registry:**
+```bash
+# With Podman
+open http://localhost:8080
+
+# With Docker
+open http://localhost
+```
+
+### Podman-Specific Configuration
+
+The deployment uses `docker-compose.podman.yml` when using Podman, which:
+
+1. **Remaps privileged ports**: Maps container ports 80→8080 and 443→8443 on the host
+2. **Adds SELinux labels**: Adds `:z` mount options for SELinux compatibility (Linux)
+3. **Maintains compatibility**: All internal service-to-service communication unchanged
+
+### Troubleshooting Podman
+
+**Issue: Permission denied on volume mounts**
+
+```bash
+# Ensure directories exist with proper permissions
+mkdir -p ${HOME}/mcp-gateway/{servers,agents,models,logs,security_scans,auth_server,ssl}
+chmod -R 755 ${HOME}/mcp-gateway
+```
+
+**Issue: Podman machine not starting (macOS)**
+
+```bash
+# Reset Podman machine
+podman machine stop
+podman machine rm
+podman machine init --cpus 4 --memory 8192 --disk-size 50
+podman machine start
+```
+
+**Issue: Port conflicts**
+
+```bash
+# Check what's using ports 8080 or 8443
+lsof -i :8080
+lsof -i :8443
+
+# Stop conflicting services or use different ports by editing docker-compose.podman.yml
+```
+
+**Issue: Podman compose command not found**
+
+```bash
+# Install podman-compose separately
+pip install podman-compose
+
+# Or use podman-compose wrapper
+brew install podman-compose
+```
 
 ### HTTPS Configuration
 

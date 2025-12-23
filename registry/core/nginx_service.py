@@ -167,6 +167,83 @@ class NginxConfigService:
                 
             with open(self.nginx_template_path, "r") as f:
                 template_content = f.read()
+
+            # Local-dev / Podman compatibility:
+            # The default nginx templates protect `/api/` via `auth_request /validate` (JWT validation).
+            # The React dashboard, however, uses cookie-based session auth for `/api/servers` and
+            # `/api/tokens/generate`. When auth_request is enabled but Keycloak/Cognito isn't fully
+            # configured, nginx returns 403/500 and the UI cannot load.
+            #
+            # Set NGINX_DISABLE_API_AUTH_REQUEST=true to bypass `auth_request` for `/api/` and rely
+            # on FastAPI's own auth (session cookie or bearer token validation inside the app).
+            import os
+            if os.environ.get("NGINX_DISABLE_API_AUTH_REQUEST", "false").lower() in ("1", "true", "yes", "on"):
+                protected_api_block = """    # Protected API endpoints - require authentication
+    location /api/ {
+        # Authenticate request via auth server (validates JWT Bearer tokens)
+        auth_request /validate;
+
+        # Capture auth server response headers
+        auth_request_set $auth_user $upstream_http_x_user;
+        auth_request_set $auth_username $upstream_http_x_username;
+        auth_request_set $auth_client_id $upstream_http_x_client_id;
+        auth_request_set $auth_scopes $upstream_http_x_scopes;
+        auth_request_set $auth_method $upstream_http_x_auth_method;
+
+        # Proxy to FastAPI service
+        proxy_pass http://127.0.0.1:7860/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Forward validated auth context to FastAPI
+        proxy_set_header X-User $auth_user;
+        proxy_set_header X-Username $auth_username;
+        proxy_set_header X-Client-Id $auth_client_id;
+        proxy_set_header X-Scopes $auth_scopes;
+        proxy_set_header X-Auth-Method $auth_method;
+
+        # Pass through original Authorization header
+        proxy_set_header Authorization $http_authorization;
+
+        # Pass all request headers
+        proxy_pass_request_headers on;
+
+        # Timeouts
+        proxy_connect_timeout 10s;
+        proxy_send_timeout 30s;
+        proxy_read_timeout 30s;
+    }"""
+
+                unprotected_api_block = """    # API endpoints - FastAPI handles authentication (session cookie / bearer)
+    location /api/ {
+        # Proxy to FastAPI service
+        proxy_pass http://127.0.0.1:7860/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Pass through original Authorization header (if present)
+        proxy_set_header Authorization $http_authorization;
+
+        # Pass all request headers and cookies
+        proxy_pass_request_headers on;
+
+        # Timeouts
+        proxy_connect_timeout 10s;
+        proxy_send_timeout 30s;
+        proxy_read_timeout 30s;
+    }"""
+
+                if protected_api_block in template_content:
+                    template_content = template_content.replace(protected_api_block, unprotected_api_block)
+                    logger.warning("NGINX_DISABLE_API_AUTH_REQUEST enabled: bypassing auth_request for /api/")
+                else:
+                    logger.warning("NGINX_DISABLE_API_AUTH_REQUEST enabled but could not find /api/ auth_request block in template")
             
             # Get health service to check server health
             from ..health.service import health_service

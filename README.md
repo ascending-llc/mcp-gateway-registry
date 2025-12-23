@@ -361,6 +361,10 @@ flowchart TB
 ## Quick Start
 
 > **📱 Running on macOS?** See our [macOS Setup Guide](docs/macos-setup-guide.md) for platform-specific instructions and optimizations.
+> 
+> **🐋 Using Podman?** This project supports both Docker and Podman. Use the `--podman` flag for rootless container deployment.
+> 
+> **⚠️ Apple Silicon (M1/M2/M3)?** Don't use `--prebuilt` with Podman on ARM64. See [Podman on Apple Silicon Guide](docs/podman-apple-silicon.md).
 
 ### Option A: Pre-built Images (Instant Setup)
 
@@ -386,9 +390,21 @@ export DOCKERHUB_ORG=mcpgateway
 ```
 
 **Step 4: Deploy with pre-built images**
+
+**With Docker (default):**
 ```bash
 ./build_and_run.sh --prebuilt
 ```
+
+**With Podman (rootless, macOS friendly):**
+```bash
+./build_and_run.sh --prebuilt --podman
+```
+
+> **📍 Port Differences:**
+> - **Docker**: Services run on privileged ports (`http://localhost`, `https://localhost`)
+> - **Podman**: Services run on non-privileged ports (`http://localhost:8080`, `https://localhost:8443`)
+> - All internal service ports remain the same (Registry: 7860, Auth: 8888, etc.)
 
 For detailed information about all Docker images used with `--prebuilt`, see [Pre-built Images Documentation](docs/prebuilt-images.md).
 
@@ -429,7 +445,53 @@ Complete: **[Testing with mcp_client.py and agent.py](docs/complete-setup-guide.
 
 **Benefits:** No build time • No Node.js required • No frontend compilation • Consistent tested images
 
-### Option B: Build from Source
+### Option B: Podman (Rootless Container Deployment)
+
+**Perfect for macOS and rootless Linux environments**
+
+Podman provides rootless container execution without requiring privileged ports, making it ideal for:
+- **macOS** users with Podman Desktop
+- **Linux** users preferring rootless containers
+- **Development** environments where Docker daemon isn't available
+
+**Quick Podman Setup (macOS):**
+
+```bash
+# Install Podman Desktop
+brew install podman-desktop
+# OR download from: https://podman-desktop.io/
+
+# Initialize Podman machine
+podman machine init
+podman machine start
+
+# Verify installation
+podman --version
+podman compose version
+```
+
+**Deploy with Podman:**
+```bash
+# Auto-detect (will use Podman if Docker not available)
+./build_and_run.sh --prebuilt
+
+# Explicit Podman mode
+./build_and_run.sh --prebuilt --podman
+
+# Access registry at non-privileged ports
+open http://localhost:8080
+```
+
+**Key Differences:**
+- ✅ No root/sudo required
+- ✅ Works on macOS without privileged port access
+- ✅ HTTP port: `8080` (instead of `80`)
+- ✅ HTTPS port: `8443` (instead of `443`)
+- ✅ All other service ports unchanged
+
+For detailed Podman setup instructions, see [Installation Guide](docs/installation.md#podman-installation) and [macOS Setup Guide](docs/macos-setup-guide.md#podman-deployment).
+
+### Option C: Build from Source
 
 **New to MCP Gateway?** Start with our [Complete Setup Guide](docs/complete-setup-guide.md) for detailed step-by-step instructions from scratch on AWS EC2.
 
