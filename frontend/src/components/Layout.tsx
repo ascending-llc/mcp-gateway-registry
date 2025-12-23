@@ -14,7 +14,7 @@ import {
 import Sidebar from './Sidebar';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import logo from '../assets/logo.png';
+import logo from '../assets/logo.svg';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -58,11 +58,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <Link to="/" className="flex items-center hover:opacity-80 transition-opacity">
                   <img
                     src={logo}
-                    alt="MCP Servers & A2A Agents Registry Logo"
-                    className="h-8 w-8 dark:brightness-0 dark:invert"
+                    alt="Registry Gateway Logo"
+                    className="h-8 w-8"
                   />
                   <span className="ml-2 text-xl font-bold text-gray-900 dark:text-white">
-                    MCP Servers & A2A Agents Registry
+                    Registry Gateway
                   </span>
                 </Link>
               </div>
