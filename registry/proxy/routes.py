@@ -111,16 +111,20 @@ async def proxy_to_mcp_server(
     
     # Get request body
     body = await request.body()
-
+    
     try:
-        # Check if this is SSE/streaming
-        is_streaming = (
-            transport_type == "sse" or 
-            request.headers.get("accept") == "text/event-stream"
-        )
+        # Check if client accepts SSE/streaming
+        accept_header = request.headers.get("accept", "")
+        client_accepts_sse = "text/event-stream" in accept_header
         
-        if is_streaming:
+        logger.info(f"Accept header: {accept_header}")
+        logger.info(f"Client accepts SSE: {client_accepts_sse}")
+        logger.info(f"Transport type: {transport_type}")
+        
+        # Always use streaming mode if client accepts SSE
+        if client_accepts_sse:
             # Stream response for SSE
+            logger.info(f"Using SSE streaming mode")
             async def stream_generator():
                 async with proxy_client.stream(
                     request.method,
@@ -138,12 +142,19 @@ async def proxy_to_mcp_server(
             )
         else:
             # Regular HTTP request
+            logger.info(f"Using regular HTTP mode")
             response = await proxy_client.request(
                 method=request.method,
                 url=target_url,
                 headers=headers,
                 content=body
             )
+            
+            try:
+                content_str = response.content.decode('utf-8')
+                logger.info(f"Response body: {content_str[:1000]}")
+            except:
+                logger.info(f"Response body: [binary data]")
             
             return Response(
                 content=response.content,
@@ -196,7 +207,7 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
     NOTE: This must be registered LAST in main.py so other routes take precedence.
     """
     path = f"/{full_path}"
-    
+       
     # Find matching MCP server
     match = find_matching_mcp_server(path)
     if match is None:
