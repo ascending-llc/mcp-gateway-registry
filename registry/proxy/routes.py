@@ -51,7 +51,7 @@ async def validate_auth(request: Request) -> Dict[str, Any]:
     
     try:
         response = await proxy_client.get(
-            f"{settings.AUTH_SERVER_URL}/validate",
+            f"{settings.auth_server_url}/validate",
             headers=validation_headers,
             cookies=request.cookies,
             timeout=10.0
@@ -111,7 +111,7 @@ async def proxy_to_mcp_server(
     
     # Get request body
     body = await request.body()
-    
+
     try:
         # Check if this is SSE/streaming
         is_streaming = (
