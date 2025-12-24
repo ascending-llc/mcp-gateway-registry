@@ -167,6 +167,7 @@ services:
       - REGISTRY_USERNAME=${ADMIN_USER:-admin}
       - REGISTRY_PASSWORD=${ADMIN_PASSWORD}
       - JWT_SECRET_KEY=${SECRET_KEY}
+      - WEAVIATE_HOST=weaviate
     volumes:
       - ${APP_HOME}/mcp-gateway/servers:/app/registry/servers
       - ${APP_HOME}/mcp-gateway/models:/app/registry/models
@@ -176,6 +177,8 @@ services:
     #    depends_on:
     #      - registry
     restart: unless-stopped
+    env_file:
+      - .env
 
   # Real Server Fake Tools MCP Server
   realserverfaketools-server:
