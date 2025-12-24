@@ -166,6 +166,7 @@ services:
       - REGISTRY_BASE_URL=http://mcpgateway-registry:7860
       - REGISTRY_USERNAME=${ADMIN_USER:-admin}
       - REGISTRY_PASSWORD=${ADMIN_PASSWORD}
+      - JWT_SECRET_KEY=${SECRET_KEY}
     volumes:
       - ${APP_HOME}/mcp-gateway/servers:/app/registry/servers
       - ${APP_HOME}/mcp-gateway/models:/app/registry/models
