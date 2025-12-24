@@ -201,23 +201,23 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
                   {server.name}
                 </h3>
                 {server.official && (
-                  <span className="px-1.5 py-0.5 text-[0.6rem] font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded-full flex-shrink-0 whitespace-nowrap">
+                  <span className="px-1.5 py-0.5 text-xs font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded-full flex-shrink-0 whitespace-nowrap">
                     OFFICIAL
                   </span>
                 )}
                 {isAnthropicServer && (
-                  <span className="px-1.5 py-0.5 text-[0.6rem] font-semibold bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-700 dark:from-purple-900/30 dark:to-indigo-900/30 dark:text-purple-300 rounded-full flex-shrink-0 border border-purple-200 dark:border-purple-600 whitespace-nowrap">
+                  <span className="px-1.5 py-0.5 text-xs font-semibold bg-gradient-to-r from-purple-100 to-indigo-100 text-purple-700 dark:from-purple-900/30 dark:to-indigo-900/30 dark:text-purple-300 rounded-full flex-shrink-0 border border-purple-200 dark:border-purple-600 whitespace-nowrap">
                     ANTHROPIC
                   </span>
                 )}
                 {/* Check if this is an ASOR server */}
                 {server.tags?.includes('asor') && (
-                  <span className="px-1.5 py-0.5 text-[0.6rem] font-semibold bg-gradient-to-r from-orange-100 to-red-100 text-orange-700 dark:from-orange-900/30 dark:to-red-900/30 dark:text-orange-300 rounded-full flex-shrink-0 border border-orange-200 dark:border-orange-600 whitespace-nowrap">
+                  <span className="px-1.5 py-0.5 text-xs font-semibold bg-gradient-to-r from-orange-100 to-red-100 text-orange-700 dark:from-orange-900/30 dark:to-red-900/30 dark:text-orange-300 rounded-full flex-shrink-0 border border-orange-200 dark:border-orange-600 whitespace-nowrap">
                     ASOR
                   </span>
                 )}
                 {isSecurityPending && (
-                  <span className="px-1.5 py-0.5 text-[0.6rem] font-semibold bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700 dark:from-amber-900/30 dark:to-orange-900/30 dark:text-amber-300 rounded-full flex-shrink-0 border border-amber-200 dark:border-amber-600 whitespace-nowrap">
+                  <span className="px-1.5 py-0.5 text-xs font-semibold bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700 dark:from-amber-900/30 dark:to-orange-900/30 dark:text-amber-300 rounded-full flex-shrink-0 border border-amber-200 dark:border-amber-600 whitespace-nowrap">
                     SECURITY PENDING
                   </span>
                 )}
@@ -261,13 +261,13 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
               {server.tags.slice(0, 3).map((tag) => (
                 <span
                   key={tag}
-                  className="px-1.5 py-0.5 text-[0.6rem] font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded truncate max-w-[60px]"
+                  className="px-1.5 py-0.5 text-xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded truncate max-w-[100px]"
                 >
                   #{tag}
                 </span>
               ))}
               {server.tags.length > 3 && (
-                <span className="px-1.5 py-0.5 text-[0.6rem] font-medium bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded">
+                <span className="px-1.5 py-0.5 text-xs font-medium bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded">
                   +{server.tags.length - 3}
                 </span>
               )}
@@ -284,7 +284,7 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
               </div>
               <div>
                 <div className="text-xs font-semibold text-gray-900 dark:text-white">{server.rating || 0}</div>
-                <div className="text-[0.6rem] text-gray-500 dark:text-gray-400">Rating</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">Rating</div>
               </div>
             </div>
             <div className="flex items-center gap-1.5">
@@ -300,7 +300,7 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
                   </div>
                   <div>
                     <div className="text-xs font-semibold">{server.num_tools}</div>
-                    <div className="text-[0.6rem]">Tools</div>
+                    <div className="text-xs">Tools</div>
                   </div>
                 </button>
               ) : (
@@ -310,7 +310,7 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
                   </div>
                   <div>
                     <div className="text-xs font-semibold">{server.num_tools || 0}</div>
-                    <div className="text-[0.6rem]">Tools</div>
+                    <div className="text-xs">Tools</div>
                   </div>
                 </div>
               )}
@@ -362,7 +362,7 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
                 const timeText = formatTimeSince(server.last_checked_time);
                 console.log(`🕐 ServerCard ${server.name}: timeText =`, timeText);
                 return server.last_checked_time && timeText ? (
-                  <div className="text-[0.6rem] text-gray-500 dark:text-gray-300 flex items-center gap-1 hidden md:flex">
+                  <div className="text-xs text-gray-500 dark:text-gray-300 flex items-center gap-1 hidden md:flex">
                     <ClockIcon className="h-3 w-3" />
                     <span>{timeText}</span>
                   </div>
@@ -373,7 +373,7 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
               <button
                 onClick={handleRefreshHealth}
                 disabled={loadingRefresh}
-                className="p-1 text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all duration-200 disabled:opacity-50"
+                className="text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all duration-200 disabled:opacity-50"
                 title="Refresh health status"
               >
                 <ArrowPathIcon className={`h-3 w-3 ${loadingRefresh ? 'animate-spin' : ''}`} />
