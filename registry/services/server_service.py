@@ -1,10 +1,6 @@
 import json
 import logging
-from pathlib import Path
 from typing import Dict, List, Any, Optional
-from datetime import datetime, timezone
-
-from packages.shared.models import McpTool
 from ..core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -261,74 +257,6 @@ class ServerService:
 
         return self.registered_servers.get(alternate_path)
 
-    def _get_servers_from_mcp_database(self) -> Dict[str, Dict[str, Any]]:
-        """
-        Get all servers and tools from Weaviate database, grouped by server_path.
-        
-        Returns:
-            Dict mapping server_path to server_info dict
-        """
-        if not settings.use_external_discovery:
-            return {}
-
-        try:
-            from packages.db import initialize_database
-            db = initialize_database()
-            tools_repo = db.for_model(McpTool)
-
-            # Query all tools from database
-            mcp_tools = tools_repo.filter(filters={}, limit=10000)
-            if not mcp_tools:
-                return {}
-
-            # Group tools by server_path
-            servers_from_db = {}
-            for tool in mcp_tools:
-                path = tool.server_path
-                if not path:
-                    continue
-
-                # Initialize server_info if not exists
-                if path not in servers_from_db:
-                    servers_from_db[path] = {
-                        "path": path,
-                        "server_name": tool.server_name or path.strip('/'),
-                        "description": "",
-                        "tags": tool.tags or [],
-                        "num_tools": 0,
-                        "num_stars": 0,
-                        "is_python": False,
-                        "license": "N/A",
-                        "proxy_pass_url": None,
-                        "tool_list": []
-                    }
-
-                # Build tool dictionary
-                schema = json.loads(tool.schema_json) if tool.schema_json else {}
-                tool_dict = {
-                    "name": tool.tool_name,
-                    "parsed_description": {
-                        "main": tool.description_main or "",
-                        "args": tool.description_args or "",
-                        "returns": tool.description_returns or "",
-                        "raises": tool.description_raises or ""
-                    },
-                    "schema": schema
-                }
-                servers_from_db[path]["tool_list"].append(tool_dict)
-
-            # Update tool count for each server
-            for server_info in servers_from_db.values():
-                server_info["num_tools"] = len(server_info["tool_list"])
-
-            db.close()
-            logger.info(f"servers_from_db:{servers_from_db}")
-            return servers_from_db
-
-        except Exception as e:
-            logger.error(f"Failed to get servers from database: {e}")
-            return {}
-
     def get_all_servers(self, include_federated: bool = True) -> Dict[str, Dict[str, Any]]:
         """
         Get all registered servers.
@@ -339,14 +267,6 @@ class ServerService:
             include_federated: If True, include servers from federated registries
         """
         all_servers = self.registered_servers.copy()
-
-        # External mode: append servers from database
-        if settings.use_external_discovery:
-            servers_from_db = self._get_servers_from_mcp_database()
-            for path, server_info in servers_from_db.items():
-                if path not in all_servers:
-                    all_servers[path] = server_info
-
         # Append federated servers
         if include_federated:
             try:
@@ -535,4 +455,4 @@ class ServerService:
 
 
 # Global service instance
-server_service = ServerService() 
+server_service = ServerService()
