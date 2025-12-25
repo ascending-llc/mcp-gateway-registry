@@ -169,6 +169,11 @@ members = [
     "libraries",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest-asyncio>=1.3.0",
+]
+
 [tool.uv]
 # Local-only project - never resolve from PyPI
 package = false
