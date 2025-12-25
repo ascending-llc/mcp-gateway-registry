@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 # Add project root to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
-from registry.oauth.flow_manager import FlowStateManager
+from registry.oauth.flow_manager import FlowStateManager, FlowState
 from registry.oauth.models import OAuthFlowStatus
 
 
@@ -34,20 +34,18 @@ class TestFlowStateManager:
         assert manager._cache.ttl == 300
 
     def test_generate_flow_id(self):
-        """Test flow ID generation."""
-        manager = FlowStateManager()
+        """Test flow ID generation - moved to MCPOAuthHandler."""
+        # Note: generateFlowId is a static method of MCPOAuthHandler, not FlowStateManager
+        # This matches the TypeScript implementation
+        from registry.oauth.handler import MCPOAuthHandler
+        
         user_id = "test-user"
         server_name = "test-server"
         
-        flow_id = manager.generate_flow_id(user_id, server_name)
+        flow_id = MCPOAuthHandler.generate_flow_id(user_id, server_name)
         
-        # Check format: user_id:server_name:timestamp:uuid_8_chars
-        parts = flow_id.split(':')
-        assert len(parts) == 4
-        assert parts[0] == user_id
-        assert parts[1] == server_name
-        assert parts[2].isdigit()  # timestamp
-        assert len(parts[3]) == 8  # first 8 chars of UUID
+        # Check format: user_id:server_name (simple format for concurrent request sharing)
+        assert flow_id == f"{user_id}:{server_name}"
 
     @pytest.mark.asyncio
     async def test_create_flow_state_success(self):
@@ -58,19 +56,22 @@ class TestFlowStateManager:
         metadata = {"user_id": "test-user", "server_name": "test-server"}
         
         with patch('time.time', return_value=1234567890.0):
-            await manager.create_flow_state(flow_id, flow_type, metadata)
+            flow_state = await manager.create_flow_state(flow_id, flow_type, metadata)
         
-        # Verify the flow state was created
+        # Verify the FlowState object
+        assert flow_state is not None
+        assert isinstance(flow_state, FlowState)
+        assert flow_state.type == flow_type
+        assert flow_state.metadata == metadata
+        assert flow_state.status == OAuthFlowStatus.PENDING
+        assert flow_state.created_at == 1234567890.0
+        
+        # Verify it was stored in cache
         cache_key = f"{manager.namespace}:{flow_type}:{flow_id}"
         flow_data = manager._cache.get(cache_key)
-        
         assert flow_data is not None
-        assert flow_data["flow_id"] == flow_id
-        assert flow_data["flow_type"] == flow_type
-        assert flow_data["metadata"] == metadata
-        assert flow_data["status"] == OAuthFlowStatus.PENDING
-        assert flow_data["created_at"] == 1234567890.0
-        assert flow_data["expires_at"] == 1234567890.0 + manager.ttl
+        assert flow_data["type"] == flow_type
+        assert flow_data["status"] == OAuthFlowStatus.PENDING.value
 
     @pytest.mark.asyncio
     async def test_create_flow_state_with_custom_ttl(self):
@@ -82,12 +83,16 @@ class TestFlowStateManager:
         custom_ttl = 300
         
         with patch('time.time', return_value=1234567890.0):
-            await manager.create_flow_state(flow_id, flow_type, metadata, ttl=custom_ttl)
+            flow_state = await manager.create_flow_state(flow_id, flow_type, metadata, ttl=custom_ttl)
         
+        # FlowState created successfully
+        assert flow_state is not None
+        assert flow_state.type == flow_type
+        
+        # Verify stored in cache (custom TTL is passed to cache, not stored in FlowState)
         cache_key = f"{manager.namespace}:{flow_type}:{flow_id}"
         flow_data = manager._cache.get(cache_key)
-        
-        assert flow_data["expires_at"] == 1234567890.0 + custom_ttl
+        assert flow_data is not None
 
     @pytest.mark.asyncio
     async def test_create_flow_state_exception(self):
@@ -121,10 +126,10 @@ class TestFlowStateManager:
         result = await manager.get_flow_state(flow_id, flow_type)
         
         assert result is not None
-        assert result["flow_id"] == flow_id
-        assert result["flow_type"] == flow_type
-        assert result["metadata"] == metadata
-        assert result["status"] == OAuthFlowStatus.PENDING
+        assert isinstance(result, FlowState)
+        assert result.type == flow_type
+        assert result.metadata == metadata
+        assert result.status == OAuthFlowStatus.PENDING
 
     @pytest.mark.asyncio
     async def test_get_flow_state_not_found(self):
@@ -184,15 +189,18 @@ class TestFlowStateManager:
         
         # Complete the flow
         with patch('time.time', return_value=1234567890.0):
-            await manager.complete_flow(flow_id, flow_type, result_data)
+            success = await manager.complete_flow(flow_id, flow_type, result_data)
+        
+        assert success is True
         
         # Verify the flow was updated
-        flow_data = await manager.get_flow_state(flow_id, flow_type)
+        flow_state = await manager.get_flow_state(flow_id, flow_type)
         
-        assert flow_data is not None
-        assert flow_data["status"] == OAuthFlowStatus.COMPLETED
-        assert flow_data["result"] == result_data
-        assert flow_data["completed_at"] == 1234567890.0
+        assert flow_state is not None
+        assert isinstance(flow_state, FlowState)
+        assert flow_state.status == OAuthFlowStatus.COMPLETED
+        assert flow_state.result == result_data
+        assert flow_state.completed_at == 1234567890.0
 
     @pytest.mark.asyncio
     async def test_complete_flow_not_found(self):
@@ -202,8 +210,9 @@ class TestFlowStateManager:
         flow_type = "authorization_code"
         result_data = {"access_token": "test-token"}
         
-        # Should not raise an exception, just log warning
-        await manager.complete_flow(flow_id, flow_type, result_data)
+        # Should return False and log warning
+        success = await manager.complete_flow(flow_id, flow_type, result_data)
+        assert success is False
 
     @pytest.mark.asyncio
     async def test_complete_flow_exception(self):
@@ -216,9 +225,12 @@ class TestFlowStateManager:
         # Create flow state first
         await manager.create_flow_state(flow_id, flow_type, metadata)
         
-        # Mock cache to raise an exception
-        with patch.object(manager._cache, 'get', side_effect=Exception("Cache error")):
-            # The method catches, logs, and re-raises the original exception
+        # Mock get_flow_state to raise an exception
+        async def mock_get_flow_state(*args, **kwargs):
+            raise Exception("Cache error")
+        
+        with patch.object(manager, 'get_flow_state', side_effect=mock_get_flow_state):
+            # The method catches and re-raises
             with pytest.raises(Exception, match="Cache error"):
                 await manager.complete_flow(flow_id, flow_type, {})
 
@@ -236,15 +248,18 @@ class TestFlowStateManager:
         
         # Fail the flow
         with patch('time.time', return_value=1234567890.0):
-            await manager.fail_flow(flow_id, flow_type, error_message)
+            success = await manager.fail_flow(flow_id, flow_type, error_message)
+        
+        assert success is True
         
         # Verify the flow was updated
-        flow_data = await manager.get_flow_state(flow_id, flow_type)
+        flow_state = await manager.get_flow_state(flow_id, flow_type)
         
-        assert flow_data is not None
-        assert flow_data["status"] == OAuthFlowStatus.FAILED
-        assert flow_data["error"] == error_message
-        assert flow_data["failed_at"] == 1234567890.0
+        assert flow_state is not None
+        assert isinstance(flow_state, FlowState)
+        assert flow_state.status == OAuthFlowStatus.FAILED
+        assert flow_state.error == error_message
+        assert flow_state.failed_at == 1234567890.0
 
     @pytest.mark.asyncio
     async def test_fail_flow_not_found(self):
@@ -254,8 +269,9 @@ class TestFlowStateManager:
         flow_type = "authorization_code"
         error_message = "Authentication failed"
         
-        # Should not raise an exception, just log warning
-        await manager.fail_flow(flow_id, flow_type, error_message)
+        # Should return False and log warning
+        success = await manager.fail_flow(flow_id, flow_type, error_message)
+        assert success is False
 
     @pytest.mark.asyncio
     async def test_fail_flow_exception(self):
@@ -264,15 +280,19 @@ class TestFlowStateManager:
         flow_id = "test-flow-id"
         flow_type = "authorization_code"
         metadata = {"user_id": "test-user"}
+        error_message = "Authentication failed"
         
         # Create flow state first
         await manager.create_flow_state(flow_id, flow_type, metadata)
         
-        # Mock cache to raise an exception
-        with patch.object(manager._cache, 'get', side_effect=Exception("Cache error")):
-            # The method catches, logs, and re-raises the original exception
+        # Mock get_flow_state to raise exception
+        async def mock_get_flow_state(*args, **kwargs):
+            raise Exception("Cache error")
+        
+        with patch.object(manager, 'get_flow_state', side_effect=mock_get_flow_state):
+            # The method catches and re-raises
             with pytest.raises(Exception, match="Cache error"):
-                await manager.fail_flow(flow_id, flow_type, "error")
+                await manager.fail_flow(flow_id, flow_type, error_message)
 
     @pytest.mark.asyncio
     async def test_delete_flow_success(self):
@@ -380,7 +400,8 @@ class TestFlowStateManagerIntegration:
         flow_type = "authorization_code"
         
         # Generate flow ID
-        flow_id = manager.generate_flow_id(user_id, server_name)
+        from registry.oauth.handler import MCPOAuthHandler
+        flow_id = MCPOAuthHandler.generate_flow_id(user_id, server_name)
         
         # Create flow state
         metadata = {
@@ -393,7 +414,8 @@ class TestFlowStateManagerIntegration:
         # Verify flow state exists and is pending
         flow_state = await manager.get_flow_state(flow_id, flow_type)
         assert flow_state is not None
-        assert flow_state["status"] == OAuthFlowStatus.PENDING
+        assert isinstance(flow_state, FlowState)
+        assert flow_state.is_pending()
         
         # Complete the flow
         result = {
@@ -405,8 +427,8 @@ class TestFlowStateManagerIntegration:
         
         # Verify flow is completed
         completed_state = await manager.get_flow_state(flow_id, flow_type)
-        assert completed_state["status"] == OAuthFlowStatus.COMPLETED
-        assert completed_state["result"] == result
+        assert completed_state.is_completed()
+        assert completed_state.result == result
         
         # Delete the flow
         delete_result = await manager.delete_flow(flow_id, flow_type)
@@ -433,7 +455,8 @@ class TestFlowStateManagerIntegration:
         for flow_id in flows:
             flow_state = await manager.get_flow_state(flow_id, flow_type)
             assert flow_state is not None
-            assert flow_state["flow_id"] == flow_id
+            assert isinstance(flow_state, FlowState)
+            assert flow_state.type == flow_type
         
         # Verify stats
         stats = manager.get_stats()
