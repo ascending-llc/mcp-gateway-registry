@@ -43,6 +43,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         # note: jwt auth
         self.servers_paths = [
             "/api/servers/",
+            "/proxy/",
         ]
 
     async def dispatch(self, request: Request, call_next):

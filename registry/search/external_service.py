@@ -280,11 +280,7 @@ class ExternalVectorSearchService(VectorSearchService):
 
         for tool in tools:
             logger.info(f"Processing tool: {tool}")
-            # Calculate relevance score
-            relevance_score = 0.8  # Default score
-            if hasattr(tool, 'score') and tool.score is not None:
-                relevance_score = tool.score
-
+            relevance_score = round(tool.relevance_score, 4)
             result = {
                 "tool_name": tool.tool_name,
                 "server_path": tool.server_path,
