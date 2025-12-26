@@ -8,7 +8,7 @@ This package is built on top of [LangChain Vector Stores](https://docs.langchain
 
 ```python
 from packages.vector import initialize_database
-from packages.shared.models import McpTool
+from packages.models import McpTool
 
 # Initialize
 db = initialize_database()
@@ -244,7 +244,7 @@ packages/
 
 ```python
 from packages.vector import initialize_database
-from packages.shared.models import McpTool
+from packages.models import McpTool
 
 db = initialize_database()
 
