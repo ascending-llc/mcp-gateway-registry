@@ -262,7 +262,7 @@ class ExternalVectorSearchService(VectorSearchService):
             }
 
             # Build result dict
-            similarity_score = round(tool.relevance_score, 4)
+            similarity_score = round(float(tool.relevance_score), 4)
             formatted_tool = {
                 "tool_name": tool.tool_name,
                 "tool_parsed_description": parsed_description,
