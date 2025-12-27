@@ -1,6 +1,6 @@
 from db import initialize_database
 import dotenv
-from shared import McpTool
+from models import McpTool
 from weaviate.classes.query import Filter
 
 dotenv.load_dotenv()

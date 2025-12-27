@@ -1,9 +1,9 @@
 import logging
 from typing import Dict, Any, Optional, List
 
-from packages.db import initialize_database
-from packages.db.enum.enums import SearchType, RerankerProvider
-from packages.shared.models import McpTool
+from packages.vector import initialize_database
+from packages.vector.enum.enums import SearchType, RerankerProvider
+from packages.models.mcp_tool import McpTool
 from .base import VectorSearchService
 
 logger = logging.getLogger(__name__)
