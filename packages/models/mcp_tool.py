@@ -1,3 +1,14 @@
+"""
+MCP Tool Model
+
+⚠️  DEPRECATION NOTICE:
+This file will be deprecated and replaced by auto-generated models in _generated/
+specifically the mcpServers model generated from JSON schemas.
+
+This legacy model is kept for backward compatibility during migration.
+New code should use the generated models from _generated/ folder.
+"""
+
 import json
 import uuid
 from typing import List, Dict, Any

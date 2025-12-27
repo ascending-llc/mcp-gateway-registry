@@ -5,6 +5,7 @@ __pycache__/
 
 # Models
 .models/
+_generated/
 
 # C extensions
 *.so

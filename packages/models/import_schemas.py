@@ -59,7 +59,8 @@ class BeanieModelGenerator:
     def __init__(self, output_dir: str, github_repo: str = "ascending-llc/jarvis-api",
                  github_token: Optional[str] = None):
         self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.generated_dir = self.output_dir / '_generated'
+        self.generated_dir.mkdir(parents=True, exist_ok=True)
         self.github_repo = github_repo
         self.github_token = github_token
         self.imported_types = set()
@@ -149,8 +150,12 @@ class BeanieModelGenerator:
         except Exception:
             raise
 
-    def generate_model(self, schema: Dict[str, Any]) -> str:
-        """Generate Python Beanie model code from JSON schema"""
+    def generate_model(self, schema: Dict[str, Any]) -> tuple[str, str]:
+        """Generate Python Beanie model code from JSON schema
+        
+        Returns:
+            tuple: (model_code, class_name)
+        """
         self.imported_types = set()
 
         title = schema.get('title', 'Document')
@@ -207,7 +212,7 @@ class BeanieModelGenerator:
 
         imports = self._generate_imports(has_timestamps)
 
-        return imports + '\n\n' + '\n'.join(lines)
+        return imports + '\n\n' + '\n'.join(lines), title
 
     def _collect_field_indexes(self, properties: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Collect field-level index definitions from x-index and x-unique"""
@@ -289,7 +294,7 @@ class BeanieModelGenerator:
                 field_attrs.append(f'max_length={field_def["maxLength"]}')
             if 'pattern' in field_def and field_type != 'PydanticObjectId' and not field_type.startswith('Link'):
                 pattern = field_def['pattern'].replace('\\', '\\\\')
-                field_attrs.append(f'regex=r"{pattern}"')
+                field_attrs.append(f'pattern=r"{pattern}"')
 
         if field_attrs:
             field_call = f'Field({", ".join(field_attrs)})'
@@ -419,9 +424,9 @@ class BeanieModelGenerator:
         return '\n'.join(imports)
 
     def save_model(self, model_code: str, filename: str) -> Path:
-        """Save generated model to file"""
+        """Save generated model to file in _generated directory"""
         module_name = Path(filename).stem
-        py_file = self.output_dir / f'{module_name}.py'
+        py_file = self.generated_dir / f'{module_name}.py'
 
         with open(py_file, 'w', encoding='utf-8') as f:
             f.write(model_code)
@@ -429,13 +434,13 @@ class BeanieModelGenerator:
         return py_file
 
     def generate_init_file(self, model_names: List[str]):
-        """Generate __init__.py to export all models"""
-        init_file = self.output_dir / '__init__.py'
-
+        """Generate __init__.py files - one in _generated and one in parent"""
+        # Generate _generated/__init__.py
+        generated_init = self.generated_dir / '__init__.py'
         lines = ['"""']
-        lines.append('Beanie ODM Models')
+        lines.append('Auto-generated Beanie ODM Models')
         lines.append('')
-        lines.append('Auto-generated from JSON schemas')
+        lines.append('⚠️  DO NOT EDIT - This directory is auto-generated')
         lines.append(f'Generated at: {datetime.now(timezone.utc).isoformat()}')
         lines.append('"""')
         lines.append('')
@@ -445,7 +450,6 @@ class BeanieModelGenerator:
             class_name = ''.join(word.capitalize() for word in module.replace('_', ' ').split())
             if not class_name:
                 class_name = 'Document'
-
             lines.append(f'from .{module} import {class_name}')
 
         lines.append('')
@@ -459,10 +463,123 @@ class BeanieModelGenerator:
         lines.append(']')
         lines.append('')
 
-        with open(init_file, 'w', encoding='utf-8') as f:
+        with open(generated_init, 'w', encoding='utf-8') as f:
             f.write('\n'.join(lines))
 
-        return init_file
+        # Generate parent __init__.py that exports from _generated
+        parent_init = self.output_dir / '__init__.py'
+        parent_lines = ['"""']
+        parent_lines.append('Beanie ODM Models')
+        parent_lines.append('')
+        parent_lines.append('Exports auto-generated models from _generated/')
+        parent_lines.append('"""')
+        parent_lines.append('')
+        parent_lines.append('from ._generated import (')
+        
+        for model_name in model_names:
+            module = Path(model_name).stem
+            class_name = ''.join(word.capitalize() for word in module.replace('_', ' ').split())
+            if not class_name:
+                class_name = 'Document'
+            parent_lines.append(f'    {class_name},')
+        
+        parent_lines.append(')')
+        parent_lines.append('')
+        parent_lines.append('__all__ = [')
+        for model_name in model_names:
+            module = Path(model_name).stem
+            class_name = ''.join(word.capitalize() for word in module.replace('_', ' ').split())
+            if not class_name:
+                class_name = 'Document'
+            parent_lines.append(f'    "{class_name}",')
+        parent_lines.append(']')
+        parent_lines.append('')
+
+        with open(parent_init, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(parent_lines))
+
+        return generated_init
+
+    def generate_init_file(self, models_info: List[tuple[str, str]]):
+        """Generate __init__.py in _generated directory only
+        
+        Args:
+            models_info: List of (filename, class_name) tuples
+        """
+        # Generate _generated/__init__.py
+        generated_init = self.generated_dir / '__init__.py'
+        lines = ['"""']
+        lines.append('Auto-generated Beanie ODM Models')
+        lines.append('')
+        lines.append('⚠️  DO NOT EDIT - This directory is auto-generated')
+        lines.append(f'Generated at: {datetime.now(timezone.utc).isoformat()}')
+        lines.append('"""')
+        lines.append('')
+
+        for filename, class_name in models_info:
+            module = Path(filename).stem
+            lines.append(f'from .{module} import {class_name}')
+
+        lines.append('')
+        lines.append('__all__ = [')
+        for filename, class_name in models_info:
+            lines.append(f'    "{class_name}",')
+        lines.append(']')
+        lines.append('')
+
+        with open(generated_init, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(lines))
+
+        return generated_init
+
+    def generate_readme(self, version: str, files: List[str], repo: str):
+        """Generate README.md in _generated directory with generation instructions"""
+        readme_file = self.generated_dir / 'README.md'
+        
+        lines = ['# Auto-Generated Models']
+        lines.append('')
+        lines.append('⚠️  **DO NOT EDIT FILES IN THIS DIRECTORY**')
+        lines.append('')
+        lines.append('This directory contains auto-generated Beanie ODM models from JSON schemas.')
+        lines.append('')
+        lines.append('## Generation Info')
+        lines.append('')
+        lines.append(f'- **Repository**: {repo}')
+        lines.append(f'- **Version**: {version}')
+        lines.append(f'- **Generated at**: {datetime.now(timezone.utc).isoformat()}')
+        lines.append(f'- **Files**: {len(files)}')
+        lines.append('')
+        lines.append('## Regenerate Models')
+        lines.append('')
+        lines.append('To regenerate these models, run:')
+        lines.append('')
+        lines.append('```bash')
+        lines.append(f'uv run import-schemas --tag {version} \\')
+        lines.append(f'  --files {" ".join(files)} \\')
+        lines.append('  --output-dir ./models \\')
+        lines.append('  --token $(gh auth token)')
+        lines.append('```')
+        lines.append('')
+        lines.append('## Files Generated')
+        lines.append('')
+        for f in files:
+            module = Path(f).stem
+            lines.append(f'- `{module}.py`')
+        lines.append('')
+        
+        with open(readme_file, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(lines))
+        
+        return readme_file
+
+    def save_schema_version(self, version: str):
+        """Save schema version to .schema-version file"""
+        version_file = self.generated_dir / '.schema-version'
+        
+        with open(version_file, 'w', encoding='utf-8') as f:
+            f.write(f'{version}\n')
+        
+        return version_file
 
 
 def main():
@@ -554,6 +671,7 @@ GitHub Release URL format:
 
     generated_files = []
     failed_files = []
+    models_info = []  # List of (filename, class_name) tuples
 
     if args.mode == 'local':
         print(f"Input directory: {args.input_dir}")
@@ -564,10 +682,11 @@ GitHub Release URL format:
             try:
                 print(f"Processing: {filename}")
                 schema = generator.load_local_schema(args.input_dir, filename)
-                model_code = generator.generate_model(schema)
+                model_code, class_name = generator.generate_model(schema)
                 py_file = generator.save_model(model_code, filename)
                 generated_files.append(py_file)
-                print(f"  Generated: {py_file.name}")
+                models_info.append((filename, class_name))
+                print(f"  Generated: {py_file.name} ({class_name})")
             except Exception as e:
                 print(f"  Error: {e}")
                 failed_files.append((filename, str(e)))
@@ -582,18 +701,28 @@ GitHub Release URL format:
             try:
                 print(f"Downloading: {filename}")
                 schema = generator.download_schema(args.tag, filename)
-                model_code = generator.generate_model(schema)
+                model_code, class_name = generator.generate_model(schema)
                 py_file = generator.save_model(model_code, filename)
                 generated_files.append(py_file)
-                print(f"  Generated: {py_file.name}")
+                models_info.append((filename, class_name))
+                print(f"  Generated: {py_file.name} ({class_name})")
             except Exception as e:
                 print(f"  Error: {e}")
                 failed_files.append((filename, str(e)))
 
     print("\n" + "=" * 70)
     if generated_files:
-        generator.generate_init_file([f.name for f in generated_files])
-        print(f"Successfully generated {len(generated_files)} model(s)")
+        generator.generate_init_file(models_info)
+        
+        # Generate README and version file for remote mode
+        if args.mode == 'remote':
+            generator.generate_readme(args.tag, args.files, args.repo)
+            generator.save_schema_version(args.tag)
+            print(f"Successfully generated {len(generated_files)} model(s) in _generated/")
+            print(f"Schema version: {args.tag}")
+        else:
+            print(f"Successfully generated {len(generated_files)} model(s) in _generated/")
+        
         if failed_files:
             print(f"Failed: {len(failed_files)} file(s)")
             for filename, error in failed_files:
