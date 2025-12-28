@@ -7,8 +7,8 @@ This package is built on top of [LangChain Vector Stores](https://docs.langchain
 ## Quick Start
 
 ```python
-from packages.db import initialize_database
-from packages.shared.models import McpTool
+from packages.vector import initialize_database
+from packages.models import McpTool
 
 # Initialize
 db = initialize_database()
@@ -64,7 +64,7 @@ OPENAI_MODEL=text-embedding-3-small  # Default: text-embedding-3-small
 
 **Enums:**
 ```python
-from packages.db.enum.enums import VectorStoreType, EmbeddingProvider
+from packages.vector.enum.enums import VectorStoreType, EmbeddingProvider
 
 VectorStoreType.WEAVIATE      # "weaviate"
 
@@ -243,8 +243,8 @@ packages/
 ### Repository API
 
 ```python
-from packages.db import initialize_database
-from packages.shared.models import McpTool
+from packages.vector import initialize_database
+from packages.models import McpTool
 
 db = initialize_database()
 
@@ -385,7 +385,7 @@ See the [complete list of supported vector stores](https://docs.langchain.com/os
 **1. Add enum:**
 
 ```python
-# packages/db/enum/enums.py
+# packages/vector/enum/enums.py
 class VectorStoreType(str, Enum):
     WEAVIATE = "weaviate"
     PINECONE = "pinecone"  # ← Add new
@@ -394,7 +394,7 @@ class VectorStoreType(str, Enum):
 **2. Create adapter:**
 
 ```python
-# packages/db/backends/pinecone_store.py
+# packages/vector/backends/pinecone_store.py
 from langchain_core.vectorstores import VectorStore
 from ..adapters.adapter import VectorStoreAdapter
 
@@ -423,7 +423,7 @@ class PineconeStore(VectorStoreAdapter):
 **3. Register creator:**
 
 ```python
-# packages/db/adapters/create/vector_store.py
+# packages/vector/adapters/create/vector_store.py
 @register_vector_store_creator(VectorStoreType.PINECONE.value)
 def create_pinecone_adapter(config: BackendConfig, embedding) -> VectorStoreAdapter:
     return PineconeStore(
@@ -444,7 +444,7 @@ Similar 3-step process:
 **1. Add enum:**
 
 ```python
-# packages/db/enum/enums.py
+# packages/vector/enum/enums.py
 class EmbeddingProvider(str, Enum):
     OPENAI = "openai"
     AWS_BEDROCK = "aws_bedrock"
@@ -454,7 +454,7 @@ class EmbeddingProvider(str, Enum):
 **2. Create config:**
 
 ```python
-# packages/db/config/config.py
+# packages/vector/config/config.py
 @register_embedding_model_config(EmbeddingProvider.COHERE.value)
 class CohereEmbeddingConfig(EmbeddingModelConfig):
     api_key: str
@@ -472,7 +472,7 @@ class CohereEmbeddingConfig(EmbeddingModelConfig):
 **3. Register creator:**
 
 ```python
-# packages/db/adapters/create/embedding.py
+# packages/vector/adapters/create/embedding.py
 @register_embedding_creator(EmbeddingProvider.COHERE.value)
 def create_cohere_embedding(config: BackendConfig):
     from langchain_cohere import CohereEmbeddings

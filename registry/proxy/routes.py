@@ -8,6 +8,7 @@ import httpx
 from typing import Dict, Any, Optional
 from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
+from starlette.background import BackgroundTask
 
 from registry.services.server_service import server_service
 from registry.health.service import health_service
@@ -51,7 +52,7 @@ async def validate_auth(request: Request) -> Dict[str, Any]:
     
     try:
         response = await proxy_client.get(
-            f"{settings.AUTH_SERVER_URL}/validate",
+            f"{settings.auth_server_url}/validate",
             headers=validation_headers,
             cookies=request.cookies,
             timeout=10.0
@@ -108,42 +109,84 @@ async def proxy_to_mcp_server(
     
     # Remove host header to avoid conflicts
     headers.pop("host", None)
-    
-    # Get request body
+
     body = await request.body()
     
     try:
-        # Check if this is SSE/streaming
-        is_streaming = (
-            transport_type == "sse" or 
-            request.headers.get("accept") == "text/event-stream"
-        )
+        accept_header = request.headers.get("accept", "")
+        client_accepts_sse = "text/event-stream" in accept_header
         
-        if is_streaming:
-            # Stream response for SSE
-            async def stream_generator():
-                async with proxy_client.stream(
+        logger.info(f"Accept header: {accept_header}")
+        logger.info(f"Client accepts SSE: {client_accepts_sse}")
+        logger.info(f"Transport type: {transport_type}")
+        
+        # Always use streaming mode if client accepts SSE
+        if client_accepts_sse:
+            logger.info(f"Using SSE streaming mode")
+            
+            # We need to peek at response to get headers before starting the stream
+            # Open the stream context but keep it alive
+            stream_manager = {"response": None, "context": None}
+            
+            async def setup_stream():
+                """Initialize stream and capture headers"""
+                stream_manager["context"] = proxy_client.stream(
                     request.method,
                     target_url,
                     headers=headers,
                     content=body
-                ) as response:
-                    async for chunk in response.aiter_bytes():
+                )
+                stream_manager["response"] = await stream_manager["context"].__aenter__()
+                return stream_manager["response"]
+            
+            async def cleanup_stream():
+                """Clean up stream when done"""
+                if stream_manager["context"] and stream_manager["response"]:
+                    await stream_manager["context"].__aexit__(None, None, None)
+            
+            backend_response = await setup_stream()
+            
+            # Build response headers from backend
+            response_headers = {
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no"
+            }
+            
+            # Forward important MCP headers, this is the standard MCP session header
+            if "mcp-session-id" in backend_response.headers:
+                session_id = backend_response.headers["mcp-session-id"]
+                response_headers["Mcp-Session-Id"] = session_id
+                logger.info(f"Forwarding Mcp-Session-Id: {session_id}")
+            
+            # Generator that streams from already-opened response
+            async def stream_content():
+                try:
+                    async for chunk in backend_response.aiter_bytes():
                         yield chunk
+                finally:
+                    await cleanup_stream()
             
             return StreamingResponse(
-                stream_generator(),
+                stream_content(),
+                status_code=backend_response.status_code,
                 media_type="text/event-stream",
-                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+                headers=response_headers
             )
         else:
             # Regular HTTP request
+            logger.info(f"Using regular HTTP mode")
             response = await proxy_client.request(
                 method=request.method,
                 url=target_url,
                 headers=headers,
                 content=body
             )
+            
+            try:
+                content_str = response.content.decode('utf-8')
+                logger.info(f"Response body: {content_str[:1000]}")
+            except:
+                logger.info(f"Response body: [binary data]")
             
             return Response(
                 content=response.content,
@@ -196,7 +239,7 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
     NOTE: This must be registered LAST in main.py so other routes take precedence.
     """
     path = f"/{full_path}"
-    
+       
     # Find matching MCP server
     match = find_matching_mcp_server(path)
     if match is None:

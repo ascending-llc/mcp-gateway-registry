@@ -1,9 +1,9 @@
 import logging
 import json
 from typing import List, Dict, Any, Optional
-from packages.db import initialize_database
-from packages.db.enum.enums import SearchType, RerankerProvider
-from packages.shared.models import McpTool
+from packages.vector import initialize_database
+from packages.vector.enum.enums import SearchType, RerankerProvider
+from packages.models.mcp_tool import McpTool
 from .base import VectorSearchService
 
 logger = logging.getLogger(__name__)
@@ -262,7 +262,7 @@ class ExternalVectorSearchService(VectorSearchService):
             }
 
             # Build result dict
-            similarity_score = round(tool.relevance_score, 4)
+            similarity_score = round(float(tool.relevance_score), 4)
             formatted_tool = {
                 "tool_name": tool.tool_name,
                 "tool_parsed_description": parsed_description,

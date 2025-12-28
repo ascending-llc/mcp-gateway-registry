@@ -14,7 +14,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-from packages.shared.enums import ToolDiscoveryMode
+from packages.models.enums import ToolDiscoveryMode
 from .base import VectorSearchService
 from config import settings
 

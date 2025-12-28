@@ -1,9 +1,9 @@
 import logging
 from typing import Dict, Any, Optional, List
 
-from packages.db import initialize_database
-from packages.db.enum.enums import SearchType, RerankerProvider
-from packages.shared.models import McpTool
+from packages.vector import initialize_database
+from packages.vector.enum.enums import SearchType, RerankerProvider
+from packages.models.mcp_tool import McpTool
 from .base import VectorSearchService
 
 logger = logging.getLogger(__name__)
@@ -280,11 +280,7 @@ class ExternalVectorSearchService(VectorSearchService):
 
         for tool in tools:
             logger.info(f"Processing tool: {tool}")
-            # Calculate relevance score
-            relevance_score = 0.8  # Default score
-            if hasattr(tool, 'score') and tool.score is not None:
-                relevance_score = tool.score
-
+            relevance_score = round(tool.relevance_score, 4)
             result = {
                 "tool_name": tool.tool_name,
                 "server_path": tool.server_path,

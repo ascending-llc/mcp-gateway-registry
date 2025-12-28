@@ -60,7 +60,8 @@ class BeanieModelGenerator:
     def __init__(self, output_dir: str, github_repo: str = "ascending-llc/jarvis-api",
                  github_token: Optional[str] = None):
         self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.generated_dir = self.output_dir / '_generated'
+        self.generated_dir.mkdir(parents=True, exist_ok=True)
         self.github_repo = github_repo
         self.github_token = github_token
         self.imported_types = set()
@@ -151,8 +152,12 @@ class BeanieModelGenerator:
         except Exception:
             raise
 
-    def generate_model(self, schema: Dict[str, Any]) -> str:
-        """Generate Python Beanie model code from JSON schema"""
+    def generate_model(self, schema: Dict[str, Any]) -> tuple[str, str]:
+        """Generate Python Beanie model code from JSON schema
+
+        Returns:
+            tuple: (model_code, class_name)
+        """
         self.imported_types = set()
         self.nested_models = []  # Reset nested models
 
@@ -166,11 +171,11 @@ class BeanieModelGenerator:
         field_level_indexes = self._collect_field_indexes(properties)
 
         lines = []
-        
+
         # Generate nested models first
         for field_name, field_def in properties.items():
             self._extract_nested_models(field_name, field_def, title)
-        
+
         # Add nested model definitions in reverse order (so dependencies come first)
         # This ensures that nested models referenced by other nested models are defined first
         if self.nested_models:
@@ -178,7 +183,7 @@ class BeanieModelGenerator:
                 lines.extend(nested_model)
                 lines.append('')
                 lines.append('')
-        
+
         # Generate main model
         lines.append(f'class {title}(Document):')
         lines.append('    """')
@@ -224,19 +229,19 @@ class BeanieModelGenerator:
 
         imports = self._generate_imports(has_timestamps)
 
-        return imports + '\n\n' + '\n'.join(lines)
+        return imports + '\n\n' + '\n'.join(lines), title
 
     def _extract_nested_models(self, field_name: str, field_def: Dict[str, Any], parent_name: str):
         """
         Extract nested model definitions from field definitions
-        
+
         Args:
             field_name: Name of the field
             field_def: Field definition from JSON schema
             parent_name: Name of the parent model
         """
         json_type = field_def.get('type')
-        
+
         # Handle array with nested object
         if json_type == 'array':
             items = field_def.get('items', {})
@@ -251,10 +256,10 @@ class BeanieModelGenerator:
                     else:
                         # Generate class name from field name
                         nested_class_name = self._field_name_to_class_name(field_name)
-                    
+
                     nested_model = self._generate_nested_model(nested_class_name, properties, items.get('required', []))
                     self.nested_models.append(nested_model)
-        
+
         # Handle nested object
         elif json_type == 'object':
             properties = field_def.get('properties')
@@ -267,18 +272,18 @@ class BeanieModelGenerator:
                 else:
                     # Generate class name from field name
                     nested_class_name = self._field_name_to_class_name(field_name)
-                
+
                 nested_model = self._generate_nested_model(nested_class_name, properties, field_def.get('required', []))
                 self.nested_models.append(nested_model)
-                
+
                 # Recursively extract nested models from sub-properties
                 for sub_field_name, sub_field_def in properties.items():
                     self._extract_nested_models(sub_field_name, sub_field_def, nested_class_name)
-    
+
     def _field_name_to_class_name(self, field_name: str) -> str:
         """
         Convert field name to class name
-        
+
         Examples:
             backupCodes -> BackupCode
             refreshToken -> RefreshToken
@@ -287,53 +292,53 @@ class BeanieModelGenerator:
         # Remove trailing 's' for plural forms
         if field_name.endswith('s') and len(field_name) > 1:
             field_name = field_name[:-1]
-        
+
         # Convert camelCase to PascalCase
         if field_name and field_name[0].islower():
             field_name = field_name[0].upper() + field_name[1:]
-        
+
         return field_name
-    
+
     def _generate_nested_model(self, class_name: str, properties: Dict[str, Any], required_fields: List[str]) -> List[str]:
         """
         Generate a nested Pydantic BaseModel class
-        
+
         Args:
             class_name: Name of the nested class
             properties: Field properties
             required_fields: List of required field names (from 'required' array)
-            
+
         Returns:
             List of code lines for the nested model
         """
         lines = []
         lines.append(f'class {class_name}(BaseModel):')
         lines.append(f'    """Nested model for {class_name}"""')
-        
+
         # Collect fields marked with x-required
         x_required_fields = [name for name, defn in properties.items() if defn.get('x-required')]
         all_required = list(set(required_fields + x_required_fields))
-        
+
         field_lines = []
         for field_name, field_def in properties.items():
             field_line = self._generate_field(field_name, field_def, field_name in all_required)
             if field_line:
                 field_lines.append(field_line)
-        
+
         if not field_lines:
             field_lines.append('    pass')
-        
+
         lines.extend(field_lines)
-        
+
         # Mark that we need to import BaseModel
         self.imported_types.add('BaseModel')
-        
+
         return lines
-    
+
     def _normalize_model_reference(self, ref_name: str) -> str:
         """
         Normalize model reference name to match actual class names.
-        
+
         Handles various naming conventions in x-ref:
         - "user" / "User" → "IUser"
         - "AccessRole" → "IAccessRole"
@@ -348,18 +353,18 @@ class BeanieModelGenerator:
             'AclEntry': 'IAclEntry',
             'Group': 'IGroup',
         }
-        
+
         # Check if there's a direct mapping
         if ref_name in ref_mappings:
             return ref_mappings[ref_name]
-        
+
         # If the reference already starts with "I" and is capitalized, keep it
         if ref_name.startswith('I') and len(ref_name) > 1 and ref_name[1].isupper():
             return ref_name
-        
+
         # Otherwise, return as-is (for models like Token, Session, etc.)
         return ref_name
-    
+
     def _collect_field_indexes(self, properties: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Collect field-level index definitions from x-index, x-unique, and x-sparse"""
         field_indexes = []
@@ -369,16 +374,16 @@ class BeanieModelGenerator:
             has_unique = field_def.get('x-unique', False)
             has_index = field_def.get('x-index', False)
             has_sparse = field_def.get('x-sparse', False)
-            
+
             if has_unique or has_index:
                 index_def = {'fields': {field_name: 1}}
-                
+
                 # Add options if present
                 if has_unique:
                     index_def['unique'] = True
                 if has_sparse:
                     index_def['sparse'] = True
-                
+
                 field_indexes.append(index_def)
 
         return field_indexes
@@ -388,7 +393,7 @@ class BeanieModelGenerator:
         field_type = self._get_python_type(field_def, field_name)
         field_attrs = []
         comments = []
-        
+
         # Handle auto-generated fields (like timestamps)
         if field_def.get('x-auto-generated'):
             field_type = f'Optional[{field_type}]'
@@ -456,8 +461,6 @@ class BeanieModelGenerator:
             if 'maxLength' in field_def:
                 field_attrs.append(f'max_length={field_def["maxLength"]}')
             if 'pattern' in field_def and field_type != 'PydanticObjectId' and not field_type.startswith('Link'):
-                # JSON already has escaped backslashes (\\S -> \S in Python raw string)
-                # Don't double-escape when using raw strings
                 pattern = field_def['pattern']
                 field_attrs.append(f'pattern=r"{pattern}"')
 
@@ -475,7 +478,7 @@ class BeanieModelGenerator:
     def _get_python_type(self, field_def: Dict[str, Any], field_name: str = '') -> str:
         """Convert JSON Schema type to Python type"""
         json_type = field_def.get('type')
-        
+
         # Handle enum values as Literal types
         if 'enum' in field_def:
             enum_values = field_def['enum']
@@ -563,11 +566,11 @@ class BeanieModelGenerator:
     def _generate_index(self, index_def: Dict[str, Any]) -> str:
         """
         Generate index definition for Settings.indexes
-        
+
         Rules (Updated to fix Beanie/PyMongo compatibility):
         - No options → list: [("field1", 1), ("field2", -1)]
         - With options → IndexModel: IndexModel([("field", 1)], unique=True)
-        
+
         Note: Beanie's _validate method passes the value directly to IndexModel(),
         so we cannot use tuple format like ([...], {...}) as it gets interpreted
         as keys instead of being unpacked.
@@ -589,7 +592,7 @@ class BeanieModelGenerator:
             options.append('sparse=True')
         if 'expireAfterSeconds' in index_def:
             options.append(f'expireAfterSeconds={index_def["expireAfterSeconds"]}')
-        
+
         # Handle partialFilterExpression
         if 'x-partialFilterExpression' in index_def:
             filter_expr = index_def['x-partialFilterExpression']
@@ -607,20 +610,20 @@ class BeanieModelGenerator:
         else:
             # No options → list
             return f'[{", ".join(field_list)}]'
-    
+
     def _convert_filter_expression(self, filter_expr: str) -> Optional[str]:
         """Convert MongoDB filter expression from JS format to Python dict format"""
         try:
             # Simple conversion for common patterns
             # idOnTheSource: { $exists: true } -> {"idOnTheSource": {"$exists": True}}
-            
+
             # Extract field name and operator
             match = re.search(r'(\w+):\s*\{\s*\$(\w+):\s*(\w+)\s*\}', filter_expr)
             if match:
                 field_name = match.group(1)
                 operator = match.group(2)
                 value = match.group(3)
-                
+
                 # Convert JS boolean to Python boolean
                 if value == 'true':
                     py_value = 'True'
@@ -628,9 +631,9 @@ class BeanieModelGenerator:
                     py_value = 'False'
                 else:
                     py_value = value
-                
+
                 return f'{{"{field_name}": {{"${operator}": {py_value}}}}}'
-            
+
             return None
         except Exception:
             return None
@@ -674,7 +677,7 @@ class BeanieModelGenerator:
             beanie_imports.append('Link')
 
         imports.append(f'from beanie import {", ".join(beanie_imports)}')
-        
+
         # Add IndexModel import if needed
         if 'IndexModel' in self.imported_types:
             imports.append('from pymongo import IndexModel')
@@ -682,9 +685,9 @@ class BeanieModelGenerator:
         return '\n'.join(imports)
 
     def save_model(self, model_code: str, filename: str) -> Path:
-        """Save generated model to file"""
+        """Save generated model to file in _generated directory"""
         module_name = Path(filename).stem
-        py_file = self.output_dir / f'{module_name}.py'
+        py_file = self.generated_dir / f'{module_name}.py'
 
         with open(py_file, 'w', encoding='utf-8') as f:
             f.write(model_code)
@@ -694,16 +697,16 @@ class BeanieModelGenerator:
     def generate_init_file(self, model_info: List[tuple]):
         """
         Generate __init__.py to export all models
-        
+
         Args:
             model_info: List of tuples (module_name, class_name) for each model
         """
         init_file = self.output_dir / '__init__.py'
 
         lines = ['"""']
-        lines.append('Beanie ODM Models')
+        lines.append('Auto-generated Beanie ODM Models')
         lines.append('')
-        lines.append('Auto-generated from JSON schemas')
+        lines.append('⚠️  DO NOT EDIT - This directory is auto-generated')
         lines.append(f'Generated at: {datetime.now(timezone.utc).isoformat()}')
         lines.append('"""')
         lines.append('')
@@ -718,10 +721,123 @@ class BeanieModelGenerator:
         lines.append(']')
         lines.append('')
 
-        with open(init_file, 'w', encoding='utf-8') as f:
+        with open(generated_init, 'w', encoding='utf-8') as f:
             f.write('\n'.join(lines))
 
-        return init_file
+        # Generate parent __init__.py that exports from _generated
+        parent_init = self.output_dir / '__init__.py'
+        parent_lines = ['"""']
+        parent_lines.append('Beanie ODM Models')
+        parent_lines.append('')
+        parent_lines.append('Exports auto-generated models from _generated/')
+        parent_lines.append('"""')
+        parent_lines.append('')
+        parent_lines.append('from ._generated import (')
+
+        for model_name in model_names:
+            module = Path(model_name).stem
+            class_name = ''.join(word.capitalize() for word in module.replace('_', ' ').split())
+            if not class_name:
+                class_name = 'Document'
+            parent_lines.append(f'    {class_name},')
+
+        parent_lines.append(')')
+        parent_lines.append('')
+        parent_lines.append('__all__ = [')
+        for model_name in model_names:
+            module = Path(model_name).stem
+            class_name = ''.join(word.capitalize() for word in module.replace('_', ' ').split())
+            if not class_name:
+                class_name = 'Document'
+            parent_lines.append(f'    "{class_name}",')
+        parent_lines.append(']')
+        parent_lines.append('')
+
+        with open(parent_init, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(parent_lines))
+
+        return generated_init
+
+    def generate_init_file(self, models_info: List[tuple[str, str]]):
+        """Generate __init__.py in _generated directory only
+
+        Args:
+            models_info: List of (filename, class_name) tuples
+        """
+        # Generate _generated/__init__.py
+        generated_init = self.generated_dir / '__init__.py'
+        lines = ['"""']
+        lines.append('Auto-generated Beanie ODM Models')
+        lines.append('')
+        lines.append('⚠️  DO NOT EDIT - This directory is auto-generated')
+        lines.append(f'Generated at: {datetime.now(timezone.utc).isoformat()}')
+        lines.append('"""')
+        lines.append('')
+
+        for filename, class_name in models_info:
+            module = Path(filename).stem
+            lines.append(f'from .{module} import {class_name}')
+
+        lines.append('')
+        lines.append('__all__ = [')
+        for filename, class_name in models_info:
+            lines.append(f'    "{class_name}",')
+        lines.append(']')
+        lines.append('')
+
+        with open(generated_init, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(lines))
+
+        return generated_init
+
+    def generate_readme(self, version: str, files: List[str], repo: str):
+        """Generate README.md in _generated directory with generation instructions"""
+        readme_file = self.generated_dir / 'README.md'
+
+        lines = ['# Auto-Generated Models']
+        lines.append('')
+        lines.append('⚠️  **DO NOT EDIT FILES IN THIS DIRECTORY**')
+        lines.append('')
+        lines.append('This directory contains auto-generated Beanie ODM models from JSON schemas.')
+        lines.append('')
+        lines.append('## Generation Info')
+        lines.append('')
+        lines.append(f'- **Repository**: {repo}')
+        lines.append(f'- **Version**: {version}')
+        lines.append(f'- **Generated at**: {datetime.now(timezone.utc).isoformat()}')
+        lines.append(f'- **Files**: {len(files)}')
+        lines.append('')
+        lines.append('## Regenerate Models')
+        lines.append('')
+        lines.append('To regenerate these models, run:')
+        lines.append('')
+        lines.append('```bash')
+        lines.append(f'uv run import-schemas --tag {version} \\')
+        lines.append(f'  --files {" ".join(files)} \\')
+        lines.append('  --output-dir ./models \\')
+        lines.append('  --token $(gh auth token)')
+        lines.append('```')
+        lines.append('')
+        lines.append('## Files Generated')
+        lines.append('')
+        for f in files:
+            module = Path(f).stem
+            lines.append(f'- `{module}.py`')
+        lines.append('')
+
+        with open(readme_file, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(lines))
+
+        return readme_file
+
+    def save_schema_version(self, version: str):
+        """Save schema version to .schema-version file"""
+        version_file = self.generated_dir / '.schema-version'
+
+        with open(version_file, 'w', encoding='utf-8') as f:
+            f.write(f'{version}\n')
+
+        return version_file
 
 
 def main():
@@ -814,6 +930,7 @@ GitHub Release URL format:
     generated_files = []
     model_info = []  # List of (module_name, class_name) tuples
     failed_files = []
+    models_info = []  # List of (filename, class_name) tuples
 
     if args.mode == 'local':
         print(f"Input directory: {args.input_dir}")
@@ -824,15 +941,15 @@ GitHub Release URL format:
             try:
                 print(f"Processing: {filename}")
                 schema = generator.load_local_schema(args.input_dir, filename)
-                model_code = generator.generate_model(schema)
+                model_code, class_name = generator.generate_model(schema)
                 py_file = generator.save_model(model_code, filename)
                 generated_files.append(py_file)
-                
+
                 # Extract class name from schema title
                 class_name = schema.get('title', 'Document')
                 module_name = py_file.stem
                 model_info.append((module_name, class_name))
-                
+
                 print(f"  Generated: {py_file.name} (class: {class_name})")
             except Exception as e:
                 print(f"  Error: {e}")
@@ -848,15 +965,15 @@ GitHub Release URL format:
             try:
                 print(f"Downloading: {filename}")
                 schema = generator.download_schema(args.tag, filename)
-                model_code = generator.generate_model(schema)
+                model_code, class_name = generator.generate_model(schema)
                 py_file = generator.save_model(model_code, filename)
                 generated_files.append(py_file)
-                
+
                 # Extract class name from schema title
                 class_name = schema.get('title', 'Document')
                 module_name = py_file.stem
                 model_info.append((module_name, class_name))
-                
+
                 print(f"  Generated: {py_file.name} (class: {class_name})")
             except Exception as e:
                 print(f"  Error: {e}")
@@ -864,8 +981,17 @@ GitHub Release URL format:
 
     print("\n" + "=" * 70)
     if generated_files:
-        generator.generate_init_file(model_info)
-        print(f"Successfully generated {len(generated_files)} model(s)")
+        generator.generate_init_file(models_info)
+
+        # Generate README and version file for remote mode
+        if args.mode == 'remote':
+            generator.generate_readme(args.tag, args.files, args.repo)
+            generator.save_schema_version(args.tag)
+            print(f"Successfully generated {len(generated_files)} model(s) in _generated/")
+            print(f"Schema version: {args.tag}")
+        else:
+            print(f"Successfully generated {len(generated_files)} model(s) in _generated/")
+
         if failed_files:
             print(f"Failed: {len(failed_files)} file(s)")
             for filename, error in failed_files:
