@@ -35,6 +35,7 @@ Features:
 """
 
 import json
+import re
 import sys
 import urllib.request
 import urllib.error
@@ -63,6 +64,7 @@ class BeanieModelGenerator:
         self.github_repo = github_repo
         self.github_token = github_token
         self.imported_types = set()
+        self.nested_models = []  # Store nested model definitions
 
     def load_local_schema(self, input_dir: str, filename: str) -> Dict[str, Any]:
         """
@@ -152,9 +154,10 @@ class BeanieModelGenerator:
     def generate_model(self, schema: Dict[str, Any]) -> str:
         """Generate Python Beanie model code from JSON schema"""
         self.imported_types = set()
+        self.nested_models = []  # Reset nested models
 
         title = schema.get('title', 'Document')
-        collection_name = schema.get('x-collection', title.lower() + 's')
+        collection_name = schema.get('x-collection', title.lower())
         properties = schema.get('properties', {})
         required_fields = schema.get('required', [])
         indexes = schema.get('x-indexes', [])
@@ -163,6 +166,20 @@ class BeanieModelGenerator:
         field_level_indexes = self._collect_field_indexes(properties)
 
         lines = []
+        
+        # Generate nested models first
+        for field_name, field_def in properties.items():
+            self._extract_nested_models(field_name, field_def, title)
+        
+        # Add nested model definitions in reverse order (so dependencies come first)
+        # This ensures that nested models referenced by other nested models are defined first
+        if self.nested_models:
+            for nested_model in reversed(self.nested_models):
+                lines.extend(nested_model)
+                lines.append('')
+                lines.append('')
+        
+        # Generate main model
         lines.append(f'class {title}(Document):')
         lines.append('    """')
         lines.append(f'    {title} Model')
@@ -209,78 +226,229 @@ class BeanieModelGenerator:
 
         return imports + '\n\n' + '\n'.join(lines)
 
+    def _extract_nested_models(self, field_name: str, field_def: Dict[str, Any], parent_name: str):
+        """
+        Extract nested model definitions from field definitions
+        
+        Args:
+            field_name: Name of the field
+            field_def: Field definition from JSON schema
+            parent_name: Name of the parent model
+        """
+        json_type = field_def.get('type')
+        
+        # Handle array with nested object
+        if json_type == 'array':
+            items = field_def.get('items', {})
+            if items.get('type') == 'object':
+                properties = items.get('properties')
+                if properties:
+                    # Generate nested model class
+                    schema_ref = items.get('x-schema-ref')
+                    if schema_ref:
+                        # Use the schema reference name
+                        nested_class_name = schema_ref.replace('Schema', '')
+                    else:
+                        # Generate class name from field name
+                        nested_class_name = self._field_name_to_class_name(field_name)
+                    
+                    nested_model = self._generate_nested_model(nested_class_name, properties, items.get('required', []))
+                    self.nested_models.append(nested_model)
+        
+        # Handle nested object
+        elif json_type == 'object':
+            properties = field_def.get('properties')
+            if properties:
+                # Check if this nested object has x-schema-ref (like AuthSchema)
+                schema_ref = field_def.get('x-schema-ref')
+                if schema_ref:
+                    # Use the schema reference name
+                    nested_class_name = schema_ref.replace('Schema', '')
+                else:
+                    # Generate class name from field name
+                    nested_class_name = self._field_name_to_class_name(field_name)
+                
+                nested_model = self._generate_nested_model(nested_class_name, properties, field_def.get('required', []))
+                self.nested_models.append(nested_model)
+                
+                # Recursively extract nested models from sub-properties
+                for sub_field_name, sub_field_def in properties.items():
+                    self._extract_nested_models(sub_field_name, sub_field_def, nested_class_name)
+    
+    def _field_name_to_class_name(self, field_name: str) -> str:
+        """
+        Convert field name to class name
+        
+        Examples:
+            backupCodes -> BackupCode
+            refreshToken -> RefreshToken
+            personalization -> Personalization
+        """
+        # Remove trailing 's' for plural forms
+        if field_name.endswith('s') and len(field_name) > 1:
+            field_name = field_name[:-1]
+        
+        # Convert camelCase to PascalCase
+        if field_name and field_name[0].islower():
+            field_name = field_name[0].upper() + field_name[1:]
+        
+        return field_name
+    
+    def _generate_nested_model(self, class_name: str, properties: Dict[str, Any], required_fields: List[str]) -> List[str]:
+        """
+        Generate a nested Pydantic BaseModel class
+        
+        Args:
+            class_name: Name of the nested class
+            properties: Field properties
+            required_fields: List of required field names (from 'required' array)
+            
+        Returns:
+            List of code lines for the nested model
+        """
+        lines = []
+        lines.append(f'class {class_name}(BaseModel):')
+        lines.append(f'    """Nested model for {class_name}"""')
+        
+        # Collect fields marked with x-required
+        x_required_fields = [name for name, defn in properties.items() if defn.get('x-required')]
+        all_required = list(set(required_fields + x_required_fields))
+        
+        field_lines = []
+        for field_name, field_def in properties.items():
+            field_line = self._generate_field(field_name, field_def, field_name in all_required)
+            if field_line:
+                field_lines.append(field_line)
+        
+        if not field_lines:
+            field_lines.append('    pass')
+        
+        lines.extend(field_lines)
+        
+        # Mark that we need to import BaseModel
+        self.imported_types.add('BaseModel')
+        
+        return lines
+    
+    def _normalize_model_reference(self, ref_name: str) -> str:
+        """
+        Normalize model reference name to match actual class names.
+        
+        Handles various naming conventions in x-ref:
+        - "user" / "User" → "IUser"
+        - "AccessRole" → "IAccessRole"
+        - "Token" → "Token" (unchanged)
+        - etc.
+        """
+        # Common mappings for models with "I" prefix
+        ref_mappings = {
+            'user': 'IUser',
+            'User': 'IUser',
+            'AccessRole': 'IAccessRole',
+            'AclEntry': 'IAclEntry',
+            'Group': 'IGroup',
+        }
+        
+        # Check if there's a direct mapping
+        if ref_name in ref_mappings:
+            return ref_mappings[ref_name]
+        
+        # If the reference already starts with "I" and is capitalized, keep it
+        if ref_name.startswith('I') and len(ref_name) > 1 and ref_name[1].isupper():
+            return ref_name
+        
+        # Otherwise, return as-is (for models like Token, Session, etc.)
+        return ref_name
+    
     def _collect_field_indexes(self, properties: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Collect field-level index definitions from x-index and x-unique"""
+        """Collect field-level index definitions from x-index, x-unique, and x-sparse"""
         field_indexes = []
 
         for field_name, field_def in properties.items():
-            if field_def.get('x-unique'):
-                field_indexes.append({
-                    'fields': {field_name: 1},
-                    'unique': True
-                })
-            elif field_def.get('x-index'):
-                field_indexes.append({
-                    'fields': {field_name: 1}
-                })
+            # Check if field has index-related properties
+            has_unique = field_def.get('x-unique', False)
+            has_index = field_def.get('x-index', False)
+            has_sparse = field_def.get('x-sparse', False)
+            
+            if has_unique or has_index:
+                index_def = {'fields': {field_name: 1}}
+                
+                # Add options if present
+                if has_unique:
+                    index_def['unique'] = True
+                if has_sparse:
+                    index_def['sparse'] = True
+                
+                field_indexes.append(index_def)
 
         return field_indexes
 
     def _generate_field(self, field_name: str, field_def: Dict[str, Any], is_required: bool) -> str:
         """Generate a single field definition"""
-        field_type = self._get_python_type(field_def)
+        field_type = self._get_python_type(field_def, field_name)
         field_attrs = []
         comments = []
+        
+        # Handle auto-generated fields (like timestamps)
+        if field_def.get('x-auto-generated'):
+            field_type = f'Optional[{field_type}]'
+            field_attrs.append('default=None')
+            comments.append('auto-generated by Beanie')
 
         # Handle reference fields - use Link type for better Beanie integration
         ref_model = field_def.get('x-ref')
         if ref_model and field_type == 'PydanticObjectId':
+            # Normalize the reference name to match actual class names
+            normalized_ref = self._normalize_model_reference(ref_model)
             # Use Link type for references
-            field_type = f'Link["{ref_model}"]'
+            field_type = f'Link["{normalized_ref}"]'
             self.imported_types.add('Link')
-            comments.append(f'references {ref_model} collection')
+            comments.append(f'references {normalized_ref} collection')
         elif ref_model:
-            comments.append(f'ref: {ref_model}')
+            normalized_ref = self._normalize_model_reference(ref_model)
+            comments.append(f'ref: {normalized_ref}')
 
-        if 'default' in field_def:
-            default_val = self._format_default(field_def['default'])
-            if not is_required:
-                field_type = f'Optional[{field_type}]'
-            field_attrs.append(f'default={default_val}')
-        elif 'x-default-expression' in field_def:
-            expr = field_def['x-default-expression']
-            if 'Date.now' in expr:
-                # Handle Date.now() - can be converted to Python
-                field_attrs.append('default_factory=lambda: datetime.now(timezone.utc)')
-                self.imported_types.add('datetime')
-                self.imported_types.add('timezone')
-            else:
-                # For other expressions (like SystemRoles.USER, enums, constants)
-                # Try to generate a reasonable placeholder or keep as required field
-
-                # Strategy 1: If it looks like an enum/constant (has dots), suggest a placeholder
-                if '.' in expr:
-                    # Extract the last part as hint: SystemRoles.USER -> USER
-                    parts = expr.split('.')
-                    hint = parts[-1] if len(parts) > 1 else 'unknown'
-
-                    # Generate a placeholder string default
-                    field_attrs.append(f'default="{hint}"')
-                    comments.append(f'TODO: Verify default value. Original: {expr}')
+        # Skip default handling if already handled by x-auto-generated
+        if not field_def.get('x-auto-generated'):
+            if 'default' in field_def:
+                default_val = self._format_default(field_def['default'])
+                if not is_required:
+                    field_type = f'Optional[{field_type}]'
+                field_attrs.append(f'default={default_val}')
+            elif 'x-default-expression' in field_def:
+                expr = field_def['x-default-expression']
+                if 'Date.now' in expr:
+                    # Handle Date.now() - can be converted to Python
+                    field_attrs.append('default_factory=lambda: datetime.now(timezone.utc)')
+                    self.imported_types.add('datetime')
+                    self.imported_types.add('timezone')
                 else:
-                    # Strategy 2: For simple expressions, mark as required but add clear note
-                    if not is_required:
-                        field_type = f'Optional[{field_type}]'
-                        field_attrs.append('default=None')
+                    # For other expressions (like SystemRoles.USER, enums, constants)
+                    # Try to generate a reasonable placeholder or keep as required field
+
+                    # Strategy 1: If it looks like an enum/constant (has dots), suggest a placeholder
+                    if '.' in expr:
+                        # Extract the last part as hint: SystemRoles.USER -> USER
+                        parts = expr.split('.')
+                        hint = parts[-1] if len(parts) > 1 else 'unknown'
+
+                        # Generate a placeholder string default
+                        field_attrs.append(f'default="{hint}"')
+                        comments.append(f'TODO: Verify default value. Original: {expr}')
                     else:
-                        field_attrs.append('...')
-                    comments.append(f'DB default: {expr}')
-        else:
-            if not is_required:
-                field_type = f'Optional[{field_type}]'
-                field_attrs.append('default=None')
+                        # Strategy 2: For simple expressions, mark as required but add clear note
+                        if not is_required:
+                            field_type = f'Optional[{field_type}]'
+                            field_attrs.append('default=None')
+                        else:
+                            field_attrs.append('...')
+                        comments.append(f'DB default: {expr}')
             else:
-                field_attrs.append('...')
+                if not is_required:
+                    field_type = f'Optional[{field_type}]'
+                    field_attrs.append('default=None')
+                else:
+                    field_attrs.append('...')
 
         if field_def.get('type') == 'string':
             if 'minLength' in field_def:
@@ -288,8 +456,10 @@ class BeanieModelGenerator:
             if 'maxLength' in field_def:
                 field_attrs.append(f'max_length={field_def["maxLength"]}')
             if 'pattern' in field_def and field_type != 'PydanticObjectId' and not field_type.startswith('Link'):
-                pattern = field_def['pattern'].replace('\\', '\\\\')
-                field_attrs.append(f'regex=r"{pattern}"')
+                # JSON already has escaped backslashes (\\S -> \S in Python raw string)
+                # Don't double-escape when using raw strings
+                pattern = field_def['pattern']
+                field_attrs.append(f'pattern=r"{pattern}"')
 
         if field_attrs:
             field_call = f'Field({", ".join(field_attrs)})'
@@ -302,9 +472,18 @@ class BeanieModelGenerator:
 
         return result
 
-    def _get_python_type(self, field_def: Dict[str, Any]) -> str:
+    def _get_python_type(self, field_def: Dict[str, Any], field_name: str = '') -> str:
         """Convert JSON Schema type to Python type"""
         json_type = field_def.get('type')
+        
+        # Handle enum values as Literal types
+        if 'enum' in field_def:
+            enum_values = field_def['enum']
+            if enum_values:
+                self.imported_types.add('Literal')
+                # Format enum values for Literal type
+                formatted_values = ', '.join(f'"{v}"' for v in enum_values)
+                return f'Literal[{formatted_values}]'
 
         if field_def.get('pattern') == '^[0-9a-fA-F]{24}$':
             self.imported_types.add('PydanticObjectId')
@@ -318,14 +497,40 @@ class BeanieModelGenerator:
             self.imported_types.add('List')
             items = field_def.get('items', {})
             if items:
-                item_type = self._get_python_type(items)
-                return f'List[{item_type}]'
+                # Check if items has properties (nested model)
+                if items.get('type') == 'object' and items.get('properties'):
+                    # Use the nested model class name
+                    schema_ref = items.get('x-schema-ref')
+                    if schema_ref:
+                        nested_class_name = schema_ref.replace('Schema', '')
+                    else:
+                        nested_class_name = self._field_name_to_class_name(field_name)
+                    return f'List[{nested_class_name}]'
+                else:
+                    item_type = self._get_python_type(items, field_name)
+                    return f'List[{item_type}]'
             else:
                 return 'List[Any]'
 
-        if json_type == 'object' or field_def.get('x-mixed'):
-            self.imported_types.add('Dict')
-            return 'Dict[str, Any]'
+        # Handle nested objects with properties (structured sub-documents)
+        if json_type == 'object':
+            properties = field_def.get('properties')
+            if properties:
+                # Check if this nested object has x-schema-ref (like AuthSchema)
+                schema_ref = field_def.get('x-schema-ref')
+                if schema_ref:
+                    # Use the schema reference name
+                    nested_class_name = schema_ref.replace('Schema', '')
+                else:
+                    # Use the nested model class name
+                    nested_class_name = self._field_name_to_class_name(field_name)
+                return nested_class_name
+            elif field_def.get('x-mixed'):
+                self.imported_types.add('Dict')
+                return 'Dict[str, Any]'
+            else:
+                self.imported_types.add('Dict')
+                return 'Dict[str, Any]'
 
         if 'additionalProperties' in field_def:
             self.imported_types.add('Dict')
@@ -356,7 +561,17 @@ class BeanieModelGenerator:
             return repr(value)
 
     def _generate_index(self, index_def: Dict[str, Any]) -> str:
-        """Generate index definition for Settings.indexes"""
+        """
+        Generate index definition for Settings.indexes
+        
+        Rules (Updated to fix Beanie/PyMongo compatibility):
+        - No options → list: [("field1", 1), ("field2", -1)]
+        - With options → IndexModel: IndexModel([("field", 1)], unique=True)
+        
+        Note: Beanie's _validate method passes the value directly to IndexModel(),
+        so we cannot use tuple format like ([...], {...}) as it gets interpreted
+        as keys instead of being unpacked.
+        """
         fields = index_def.get('fields', {})
 
         field_list = []
@@ -366,20 +581,59 @@ class BeanieModelGenerator:
         if not field_list:
             return ''
 
-        index_str = f'[{", ".join(field_list)}]'
-
+        # Check if there are any options
         options = []
         if index_def.get('unique'):
-            options.append('"unique": True')
+            options.append('unique=True')
         if index_def.get('sparse'):
-            options.append('"sparse": True')
+            options.append('sparse=True')
         if 'expireAfterSeconds' in index_def:
-            options.append(f'"expireAfterSeconds": {index_def["expireAfterSeconds"]}')
+            options.append(f'expireAfterSeconds={index_def["expireAfterSeconds"]}')
+        
+        # Handle partialFilterExpression
+        if 'x-partialFilterExpression' in index_def:
+            filter_expr = index_def['x-partialFilterExpression']
+            python_filter = self._convert_filter_expression(filter_expr)
+            if python_filter:
+                options.append(f'partialFilterExpression={python_filter}')
 
-        if options:
-            index_str = f'([{", ".join(field_list)}], {{{", ".join(options)}}})'
+        has_options = len(options) > 0
 
-        return index_str
+        # Apply formatting rules
+        if has_options:
+            # With options → IndexModel object
+            self.imported_types.add('IndexModel')
+            return f'IndexModel([{", ".join(field_list)}], {", ".join(options)})'
+        else:
+            # No options → list
+            return f'[{", ".join(field_list)}]'
+    
+    def _convert_filter_expression(self, filter_expr: str) -> Optional[str]:
+        """Convert MongoDB filter expression from JS format to Python dict format"""
+        try:
+            # Simple conversion for common patterns
+            # idOnTheSource: { $exists: true } -> {"idOnTheSource": {"$exists": True}}
+            
+            # Extract field name and operator
+            match = re.search(r'(\w+):\s*\{\s*\$(\w+):\s*(\w+)\s*\}', filter_expr)
+            if match:
+                field_name = match.group(1)
+                operator = match.group(2)
+                value = match.group(3)
+                
+                # Convert JS boolean to Python boolean
+                if value == 'true':
+                    py_value = 'True'
+                elif value == 'false':
+                    py_value = 'False'
+                else:
+                    py_value = value
+                
+                return f'{{"{field_name}": {{"${operator}": {py_value}}}}}'
+            
+            return None
+        except Exception:
+            return None
 
     def _generate_imports(self, has_timestamps: bool) -> str:
         """Generate import statements based on used types"""
@@ -399,14 +653,19 @@ class BeanieModelGenerator:
             typing_imports.append('List')
         if 'Dict' in self.imported_types:
             typing_imports.append('Dict')
+        if 'Literal' in self.imported_types:
+            typing_imports.append('Literal')
         typing_imports.append('Optional')
         typing_imports.append('Any')
 
         if typing_imports:
             imports.append(f'from typing import {", ".join(sorted(typing_imports))}')
 
-        # Field is from pydantic, not beanie
-        imports.append('from pydantic import Field')
+        # Pydantic imports
+        pydantic_imports = ['Field']
+        if 'BaseModel' in self.imported_types:
+            pydantic_imports.append('BaseModel')
+        imports.append(f'from pydantic import {", ".join(pydantic_imports)}')
 
         beanie_imports = ['Document']
         if 'PydanticObjectId' in self.imported_types:
@@ -415,6 +674,10 @@ class BeanieModelGenerator:
             beanie_imports.append('Link')
 
         imports.append(f'from beanie import {", ".join(beanie_imports)}')
+        
+        # Add IndexModel import if needed
+        if 'IndexModel' in self.imported_types:
+            imports.append('from pymongo import IndexModel')
 
         return '\n'.join(imports)
 
@@ -428,8 +691,13 @@ class BeanieModelGenerator:
 
         return py_file
 
-    def generate_init_file(self, model_names: List[str]):
-        """Generate __init__.py to export all models"""
+    def generate_init_file(self, model_info: List[tuple]):
+        """
+        Generate __init__.py to export all models
+        
+        Args:
+            model_info: List of tuples (module_name, class_name) for each model
+        """
         init_file = self.output_dir / '__init__.py'
 
         lines = ['"""']
@@ -440,21 +708,12 @@ class BeanieModelGenerator:
         lines.append('"""')
         lines.append('')
 
-        for model_name in model_names:
-            module = Path(model_name).stem
-            class_name = ''.join(word.capitalize() for word in module.replace('_', ' ').split())
-            if not class_name:
-                class_name = 'Document'
-
-            lines.append(f'from .{module} import {class_name}')
+        for module_name, class_name in model_info:
+            lines.append(f'from .{module_name} import {class_name}')
 
         lines.append('')
         lines.append('__all__ = [')
-        for model_name in model_names:
-            module = Path(model_name).stem
-            class_name = ''.join(word.capitalize() for word in module.replace('_', ' ').split())
-            if not class_name:
-                class_name = 'Document'
+        for module_name, class_name in model_info:
             lines.append(f'    "{class_name}",')
         lines.append(']')
         lines.append('')
@@ -553,6 +812,7 @@ GitHub Release URL format:
     )
 
     generated_files = []
+    model_info = []  # List of (module_name, class_name) tuples
     failed_files = []
 
     if args.mode == 'local':
@@ -567,7 +827,13 @@ GitHub Release URL format:
                 model_code = generator.generate_model(schema)
                 py_file = generator.save_model(model_code, filename)
                 generated_files.append(py_file)
-                print(f"  Generated: {py_file.name}")
+                
+                # Extract class name from schema title
+                class_name = schema.get('title', 'Document')
+                module_name = py_file.stem
+                model_info.append((module_name, class_name))
+                
+                print(f"  Generated: {py_file.name} (class: {class_name})")
             except Exception as e:
                 print(f"  Error: {e}")
                 failed_files.append((filename, str(e)))
@@ -585,14 +851,20 @@ GitHub Release URL format:
                 model_code = generator.generate_model(schema)
                 py_file = generator.save_model(model_code, filename)
                 generated_files.append(py_file)
-                print(f"  Generated: {py_file.name}")
+                
+                # Extract class name from schema title
+                class_name = schema.get('title', 'Document')
+                module_name = py_file.stem
+                model_info.append((module_name, class_name))
+                
+                print(f"  Generated: {py_file.name} (class: {class_name})")
             except Exception as e:
                 print(f"  Error: {e}")
                 failed_files.append((filename, str(e)))
 
     print("\n" + "=" * 70)
     if generated_files:
-        generator.generate_init_file([f.name for f in generated_files])
+        generator.generate_init_file(model_info)
         print(f"Successfully generated {len(generated_files)} model(s)")
         if failed_files:
             print(f"Failed: {len(failed_files)} file(s)")

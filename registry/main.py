@@ -21,6 +21,7 @@ from registry.auth.middleware import UnifiedAuthMiddleware
 # Import domain routers
 from registry.auth.routes import router as auth_router
 from registry.api.server_routes import router as servers_router
+from registry.api.server_routes_v1 import router as servers_router_v1
 from registry.api.internal_routes import router as internal_router
 from registry.api.search_routes import router as search_router
 from registry.api.wellknown_routes import router as wellknown_router
@@ -41,10 +42,15 @@ from registry.services.federation_service import get_federation_service
 # Import core configuration
 from registry.core.config import settings
 
+# Import MongoDB connection management
+from packages.db.mongodb import init_mongodb, close_mongodb
+
 
 # Configure logging with file and console handlers
 def setup_logging():
     """Configure logging to write to both file and console."""
+    import sys
+    
     # Ensure log directory exists
     log_dir = settings.log_dir
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -69,15 +75,21 @@ def setup_logging():
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
 
-    # File handler
-    file_handler = logging.FileHandler(log_file)
+    # File handler with UTF-8 encoding to handle emojis
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
     file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(file_formatter)
 
-    # Console handler
-    console_handler = logging.StreamHandler()
+    # Console handler with UTF-8 encoding to handle emojis on Windows
+    console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(console_formatter)
+    # Force UTF-8 encoding for console output on Windows
+    if hasattr(sys.stdout, 'reconfigure'):
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+        except Exception:
+            pass  # Silently ignore if reconfigure fails
 
     # Add handlers to root logger
     root_logger.addHandler(file_handler)
@@ -98,6 +110,11 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Starting MCP Gateway Registry...")
 
     try:
+        # Initialize MongoDB connection first
+        logger.info("🗄️  Initializing MongoDB connection...")
+        await init_mongodb()
+        logger.info("✅ MongoDB connection established")
+        
         # Initialize services in order
         logger.info("📚 Loading server definitions and state...")
         server_service.load_servers_and_state()
@@ -176,6 +193,11 @@ async def lifespan(app: FastAPI):
         # Shutdown services gracefully
         await health_service.shutdown()
         await shutdown_proxy_client()
+        
+        # Close MongoDB connection
+        logger.info("🗄️  Closing MongoDB connection...")
+        await close_mongodb()
+        
         logger.info("✅ Shutdown completed successfully!")
     except Exception as e:
         logger.error(f"❌ Error during shutdown: {e}", exc_info=True)
@@ -205,6 +227,7 @@ app.add_middleware(
 # Register API routers with /api prefix
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(servers_router, prefix="/api", tags=["Server Management"])
+app.include_router(servers_router_v1, prefix="/api", tags=["Server Management V1"])
 app.include_router(internal_router, prefix="/api", tags=["Server Management[internal]"])
 app.include_router(agent_router, prefix="/api", tags=["Agent Management"])
 app.include_router(search_router, prefix="/api/search", tags=["Semantic Search"])
