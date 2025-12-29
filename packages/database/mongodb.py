@@ -41,10 +41,10 @@ class MongoDB:
         # Get MongoDB configuration from environment variables
         if mongodb_url is None:
             # Build connection URL from individual components
-            mongo_host = os.getenv("MONGODB_HOST", "14.103.162.100")
+            mongo_host = os.getenv("MONGODB_HOST", "localhost")
             mongo_port = os.getenv("MONGODB_PORT", "27017")
-            mongo_username = os.getenv("MONGODB_USERNAME", "admin")
-            mongo_password = os.getenv("MONGODB_PASSWORD", "github.com@123")
+            mongo_username = os.getenv("MONGODB_USERNAME", "")
+            mongo_password = os.getenv("MONGODB_PASSWORD", "")
 
             # Build connection string with authentication if credentials provided
             if mongo_username and mongo_password:
