@@ -61,6 +61,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    profiles:
+      - full
 
   # Registry Frontend
   registry-frontend:
@@ -77,6 +79,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    profiles:
+      - full
   
   # Metrics Collection Service
   metrics-service:
@@ -109,6 +113,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    profiles:
+      - full
+      - dev
 
   # Auth service (separate and scalable)
   auth-server:
@@ -148,6 +155,9 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    profiles:
+      - full
+      - dev
 
   # Current Time MCP Server
   currenttime-server:
@@ -160,6 +170,9 @@ services:
     ports:
       - "8000:8000"
     restart: unless-stopped
+    profiles:
+      - full
+      - dev
 
   # Financial Info MCP Server
   fininfo-server:
@@ -174,6 +187,8 @@ services:
     ports:
       - "8001:8001"
     restart: unless-stopped
+    profiles:
+      - full
 
   # MCP Gateway Server
   mcpgw-server:
@@ -198,6 +213,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    profiles:
+      - full
 
   # Real Server Fake Tools MCP Server
   realserverfaketools-server:
@@ -226,6 +243,9 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+    profiles:
+      - full
+      - dev
 
   # Atlassian MCP Server
   atlassian-server:
@@ -240,6 +260,8 @@ services:
       - $HOME/.mcp-atlassian:/home/app/.mcp-atlassian
     command: --transport streamable-http --port 8005
     restart: unless-stopped
+    profiles:
+      - full
 
   # SQLite container for metrics database
   metrics-db:
@@ -253,6 +275,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    profiles:
+      - full
+      - dev
 
   # Prometheus for metrics collection
   prometheus:
@@ -270,6 +295,8 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     restart: unless-stopped
+    profiles:
+      - full
 
   # Grafana for metrics visualization
   grafana:
@@ -286,6 +313,8 @@ services:
     depends_on:
       - prometheus
     restart: unless-stopped
+    profiles:
+      - full
 
   # PostgreSQL database for Keycloak
   keycloak-db:
