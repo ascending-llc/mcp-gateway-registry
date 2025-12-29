@@ -295,7 +295,14 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                                            'mcp-servers-unrestricted/execute'])
             return data
 
-        except (SignatureExpired, BadSignature, Exception):
+        except SignatureExpired as e:
+            logger.warning(f"Session cookie expired: {e}")
+            return None
+        except BadSignature as e:
+            logger.warning(f"Session cookie has invalid signature (likely from different server): {e}")
+            return None
+        except Exception as e:
+            logger.warning(f"Session cookie parse error: {e}")
             return None
 
     def _build_user_context(self, username: str, groups: list, scopes: list,

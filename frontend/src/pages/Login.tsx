@@ -160,12 +160,10 @@ const Login: React.FC = () => {
   };
 
   const handleOAuthLogin = (provider: string) => {
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const basePath = getBasePath();
     const currentOrigin = window.location.origin;
     const redirectUri = encodeURIComponent(currentOrigin + (basePath || '/'));
 
-    // Use the auth server URL from config, fallback to localhost if not loaded yet
     const authUrl = authServerUrl || 'http://localhost:8888';
     window.location.href = `${authUrl}/oauth2/login/${provider}?redirect_uri=${redirectUri}`;
   };

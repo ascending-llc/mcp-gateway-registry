@@ -417,6 +417,64 @@ class ServerService:
         else:
             logger.info("No service state changes detected after reload")
 
+
+    def update_rating(
+        self,
+        path: str,
+        username: str,
+        rating: int,
+    ) -> float:
+        """
+        Log a user rating for a server. If the user has already rated, update their rating.
+
+        Args:
+            path: server path
+            username: The user who submitted rating
+            rating: integer between 1-5
+
+        Return:
+            Updated average rating
+
+        Raises:
+            ValueError: If server not found or invalid rating
+        """
+        from . import rating_service
+
+        if path not in self.registered_servers:
+            logger.error(f"Cannot update server at path '{path}': not found")
+            raise ValueError(f"Server not found at path: {path}")
+
+        # Validate rating using shared service
+        rating_service.validate_rating(rating)
+
+        server_info = self.registered_servers[path]
+
+        # Ensure rating_details is a list
+        if "rating_details" not in server_info or server_info["rating_details"] is None:
+            server_info["rating_details"] = []
+
+        # Update rating details using shared service
+        updated_details, is_new_rating = rating_service.update_rating_details(
+            server_info["rating_details"],
+            username,
+            rating
+        )
+        server_info["rating_details"] = updated_details
+
+        # Calculate average rating using shared service
+        server_info["num_stars"] = rating_service.calculate_average_rating(
+            server_info["rating_details"]
+        )
+
+        # Save to file
+        self.save_server_to_file(server_info)
+
+        logger.info(
+            f"Updated rating for server {path}: user {username} rated {rating}, "
+            f"new average: {server_info['num_stars']:.2f}"
+        )
+        return server_info["num_stars"]
+
     def remove_server(self, path: str) -> bool:
         """Remove a server from the registry and file system."""
         # Check if server exists

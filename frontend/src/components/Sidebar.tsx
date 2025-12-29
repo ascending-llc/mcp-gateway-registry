@@ -20,10 +20,18 @@ import axios from 'axios';
 interface SidebarProps {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
+  stats: {
+    total: number;
+    enabled: number;
+    disabled: number;
+    withIssues: number;
+  };
+  activeFilter: string;
+  setActiveFilter: (filter: string) => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
-  const { stats, activeFilter, setActiveFilter } = useServer();
+  const { stats, agentStats, viewMode, setViewMode, activeFilter, setActiveFilter } = useServer();
   const { user } = useAuth();
   const location = useLocation();
   const [showScopes, setShowScopes] = useState(false);
@@ -34,7 +42,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
   const [error, setError] = useState<string>('');
 
   const filters = [
-    { key: 'all', label: 'All Services', count: 'total' },
+    { key: 'all', label: 'All', count: 'total' },
     { key: 'enabled', label: 'Enabled', count: 'enabled' },
     { key: 'disabled', label: 'Disabled', count: 'disabled' },
     { key: 'unhealthy', label: 'With Issues', count: 'withIssues' },
@@ -62,21 +70,32 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
     return scopeMappings[scope] || 'Custom permission scope';
   };
 
-  const fetchAdminTokens = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const response = await axios.get('/api/admin/tokens');
-      if (response.data.success) {
-        setTokenData(response.data);
-        setShowTokenModal(true);
-      }
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to retrieve tokens');
-    } finally {
-      setLoading(false);
+const fetchAdminTokens = async () => {
+  setLoading(true);
+  setError('');
+  try {
+    const requestData = {
+      description: 'Generated via sidebar',
+      expires_in_hours: 8,
+    };
+    
+    const response = await axios.post('/api/tokens/generate', requestData, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (response.data.success) {
+      setTokenData(response.data);
+      setShowTokenModal(true);
     }
-  };
+  } catch (err: any) {
+    setError(err.response?.data?.detail || 'Failed to generate token');
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const handleCopyTokens = async () => {
     if (!tokenData) return;
@@ -294,29 +313,41 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
           <div className="flex-1 p-4 md:p-6">
             <div className="flex items-center space-x-2 mb-4">
               <FunnelIcon className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-              <h3 className="text-sm font-medium text-gray-900 dark:text-white">Filter Services</h3>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-white">Filter by Status</h3>
             </div>
             
             <div className="space-y-2">
-              {filters.map((filter) => (
-                <button
-                  key={filter.key}
-                  onClick={() => setActiveFilter(filter.key)}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
-                    activeFilter === filter.key
-                      ? 'bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 border border-primary-200 dark:border-primary-800'
-                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-                  }`}
-                  tabIndex={0}
-                >
-                  <div className="flex items-center justify-between">
-                    <span>{filter.label}</span>
-                    <span className="text-xs bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded-full">
-                      {stats[filter.count as keyof typeof stats]}
-                    </span>
-                  </div>
-                </button>
-              ))}
+              {filters.map((filter) => {
+                // Calculate count based on view mode
+                let count = 0;
+                if (viewMode === 'all') {
+                  count = stats[filter.count as keyof typeof stats] + agentStats[filter.count as keyof typeof agentStats];
+                } else if (viewMode === 'servers') {
+                  count = stats[filter.count as keyof typeof stats];
+                } else {
+                  count = agentStats[filter.count as keyof typeof agentStats];
+                }
+                
+                return (
+                  <button
+                    key={filter.key}
+                    onClick={() => setActiveFilter(filter.key)}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                      activeFilter === filter.key
+                        ? 'bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 border border-primary-200 dark:border-primary-800'
+                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                    }`}
+                    tabIndex={0}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span>{filter.label}</span>
+                      <span className="text-xs bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded-full">
+                        {count}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -324,10 +355,10 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
           <div className="border-t border-gray-200 dark:border-gray-700 p-4 md:p-6">
             <div className="flex items-center space-x-2 mb-4">
               <ChartBarIcon className="h-5 w-5 text-gray-500" />
-              <h3 className="text-sm font-medium text-gray-900 dark:text-white">Statistics</h3>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-white">Server Statistics</h3>
             </div>
             
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 mb-6">
               <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                 <div className="text-xl font-semibold text-gray-900 dark:text-white">{stats.total}</div>
                 <div className="text-xs text-gray-500 dark:text-gray-300">Total</div>
@@ -342,6 +373,30 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
               </div>
               <div className="text-center p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
                 <div className="text-xl font-semibold text-red-600 dark:text-red-400">{stats.withIssues}</div>
+                <div className="text-xs text-red-600 dark:text-red-400">Issues</div>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 mb-4">
+              <ChartBarIcon className="h-5 w-5 text-gray-500" />
+              <h3 className="text-sm font-medium text-gray-900 dark:text-white">Agent Statistics</h3>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <div className="text-xl font-semibold text-gray-900 dark:text-white">{agentStats.total}</div>
+                <div className="text-xs text-gray-500 dark:text-gray-300">Total</div>
+              </div>
+              <div className="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                <div className="text-xl font-semibold text-green-600 dark:text-green-400">{agentStats.enabled}</div>
+                <div className="text-xs text-green-600 dark:text-green-400">Enabled</div>
+              </div>
+              <div className="text-center p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <div className="text-xl font-semibold text-gray-500 dark:text-gray-300">{agentStats.disabled}</div>
+                <div className="text-xs text-gray-500 dark:text-gray-300">Disabled</div>
+              </div>
+              <div className="text-center p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                <div className="text-xl font-semibold text-red-600 dark:text-red-400">{agentStats.withIssues}</div>
                 <div className="text-xs text-red-600 dark:text-red-400">Issues</div>
               </div>
             </div>

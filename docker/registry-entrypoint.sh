@@ -97,6 +97,12 @@ EOF
     backend)
         echo "Starting MCP Registry Service..."
 
+        if [ -n "${BUILD_VERSION}" ]; then
+            echo "Using BUILD_VERSION from environment: $BUILD_VERSION"
+        else
+            echo "BUILD_VERSION not set, will use default version"
+        fi
+
         # Validate required environment variables
         if [ -z "${SECRET_KEY:-}" ]; then
             echo "ERROR: SECRET_KEY environment variable is not set."

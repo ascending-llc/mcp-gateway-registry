@@ -10,21 +10,23 @@
     "ajv": "8.14.0",
     "autoprefixer": "^10.4.16",
     "patch-package": "^8.0.1",
-    "postcss": "^8.4.32",
+    "@heroicons/react": "^2.0.18",
+    "@headlessui/react": "^1.7.17",
+    "axios": "^1.12.0",
+    "clsx": "^2.0.0",
+    "postcss": "^8.4.47",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.1",
-    "typescript": "^4.9.5",
-    "axios": "^1.12.0",
-    "@heroicons/react": "^2.0.18",
-    "@headlessui/react": "^1.7.17",
-    "clsx": "^2.0.0",
-    "tailwindcss": "^3.3.6"
+    "react-scripts": "5.0.1",
+    "tailwindcss": "^3.3.6",
+    "typescript": "^4.9.5"
   },
   "scripts": {
     "start": "vite",
     "build": "vite build",
-    "serve": "vite preview"
+    "serve": "vite preview",
+    "rebuild:package-lock": "rm -rf node_modules package-lock.json && npm install"
   },
 
   "browserslist": {
@@ -49,5 +51,10 @@
     "eslint-plugin-react-refresh": "^0.4.9",
     "globals": "^15.9.0",
     "typescript-eslint": "^8.0.1"
+  },
+  "overrides": {
+    "nth-check": "^2.1.1",
+    "webpack-dev-server": "^5.2.1",
+    "resolve-url-loader": "^5.0.0"
   }
 }
