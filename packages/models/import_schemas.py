@@ -774,13 +774,16 @@ class BeanieModelGenerator:
         lines.append('"""')
         lines.append('')
 
-        for filename, class_name in models_info:
+        # Sort models_info by class name for consistent output
+        sorted_models = sorted(models_info, key=lambda x: x[1])
+
+        for filename, class_name in sorted_models:
             module = Path(filename).stem
             lines.append(f'from .{module} import {class_name}')
 
         lines.append('')
         lines.append('__all__ = [')
-        for filename, class_name in models_info:
+        for filename, class_name in sorted_models:
             lines.append(f'    "{class_name}",')
         lines.append(']')
         lines.append('')
@@ -981,7 +984,7 @@ GitHub Release URL format:
 
     print("\n" + "=" * 70)
     if generated_files:
-        generator.generate_init_file(models_info)
+        generator.generate_init_file(model_info)
 
         # Generate README and version file for remote mode
         if args.mode == 'remote':

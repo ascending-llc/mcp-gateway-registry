@@ -43,7 +43,7 @@ from registry.services.federation_service import get_federation_service
 from registry.core.config import settings
 
 # Import MongoDB connection management
-from packages.db.mongodb import init_mongodb, close_mongodb
+from packages.database.mongodb import init_mongodb, close_mongodb
 
 
 # Configure logging with file and console handlers
