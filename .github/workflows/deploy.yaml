@@ -180,6 +180,12 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Determine BUILD_VERSION
+        id: version
+        run: |
+          echo "version=${GITHUB_SHA:0:8}" >> $GITHUB_OUTPUT
+          echo "Using BUILD_VERSION: ${GITHUB_SHA:0:8}"
+
       - name: Build and push mcp-gateway registry image
         uses: docker/build-push-action@v6
         with:
@@ -188,6 +194,7 @@ jobs:
           file: docker/Dockerfile.registry
           build-args: |
             TOOL_DISCOVERY_MODE=external
+            BUILD_VERSION=${{ steps.version.outputs.version }}
           push: true
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/jarvis/registry:latest
