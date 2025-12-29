@@ -13,6 +13,7 @@ import {
   CogIcon
 } from '@heroicons/react/24/outline';
 import ServerConfigModal from './ServerConfigModal';
+import StarRatingWidget from './StarRatingWidget';
 
 export interface Server {
   name: string;
@@ -23,7 +24,8 @@ export interface Server {
   tags?: string[];
   last_checked_time?: string;
   usersCount?: number;
-  rating?: number;
+  num_stars?: number;  // Average rating from backend
+  rating_details?: Array<{ user: string; rating: number }>;
   status?: 'healthy' | 'healthy-auth-expired' | 'unhealthy' | 'unknown';
   num_tools?: number;
 }
@@ -36,7 +38,7 @@ interface ServerCardProps {
   onRefreshSuccess?: () => void;
   onShowToast?: (message: string, type: 'success' | 'error') => void;
   onServerUpdate?: (path: string, updates: Partial<Server>) => void;
-
+  authToken?: string | null;
 }
 
 interface Tool {
@@ -88,7 +90,7 @@ const formatTimeSince = (timestamp: string | null | undefined): string | null =>
   }
 };
 
-const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canModify, onRefreshSuccess, onShowToast, onServerUpdate }) => {
+const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canModify, onRefreshSuccess, onShowToast, onServerUpdate, authToken }) => {
   const [tools, setTools] = useState<Tool[]>([]);
   const [loadingTools, setLoadingTools] = useState(false);
   const [showTools, setShowTools] = useState(false);
@@ -278,15 +280,20 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, onToggle, onEdit, canMo
         {/* Stats */}
         <div className="px-4 pb-3">
           <div className="grid grid-cols-2 gap-2">
-            <div className="flex items-center gap-1.5">
-              <div className="p-1 bg-yellow-50 dark:bg-yellow-900/30 rounded">
-                <StarIcon className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-400" />
-              </div>
-              <div>
-                <div className="text-xs font-semibold text-gray-900 dark:text-white">{server.rating || 0}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Rating</div>
-              </div>
-            </div>
+            <StarRatingWidget
+              resourceType="servers"
+              path={server.path}
+              initialRating={server.num_stars || 0}
+              initialCount={server.rating_details?.length || 0}
+              authToken={authToken}
+              onShowToast={onShowToast}
+              onRatingUpdate={(newRating) => {
+                // Update local server rating when user submits rating
+                if (onServerUpdate) {
+                  onServerUpdate(server.path, { num_stars: newRating });
+                }
+              }}
+            />
             <div className="flex items-center gap-1.5">
               {(server.num_tools || 0) > 0 ? (
                 <button

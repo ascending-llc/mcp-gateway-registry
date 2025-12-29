@@ -11,6 +11,21 @@ from auth.middleware import AuthMiddleware
 from config import parse_arguments, settings
 from tools import auth_tools, service_mgmt, scopes_mgmt, search_tools
 
+# Import embeddings client from registry
+import sys
+from pathlib import Path
+
+# Add registry to path - works in both Docker and local dev
+registry_path_docker = Path("/app/registry")
+registry_path_local = Path(__file__).parent.parent.parent / "registry"
+
+if registry_path_docker.exists():
+    sys.path.insert(0, str(registry_path_docker))
+elif registry_path_local.exists():
+    sys.path.insert(0, str(registry_path_local))
+else:
+    raise ImportError("Cannot find registry module. Ensure registry directory is accessible.")
+
 # Configure logging
 logger = logging.getLogger(__name__)
 

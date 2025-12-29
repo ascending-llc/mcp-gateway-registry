@@ -194,12 +194,17 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 cookies.txt
+.cookies
 
 # Scratchpad for temporary notes and planning
 .scratchpad/
 
 # Roo IDE files
 .roo/
+
+# Kiro files
+.kiro
+.kiro/
 
 # OAuth tokens and credentials - never commit these!
 .oauth-tokens/

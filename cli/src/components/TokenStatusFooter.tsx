@@ -10,6 +10,7 @@ interface TokenStatusFooterProps {
   inputTokens?: number;
   outputTokens?: number;
   cost?: number;
+  registryVersion?: string;
 }
 
 export function TokenStatusFooter({
@@ -21,7 +22,8 @@ export function TokenStatusFooter({
   model,
   inputTokens,
   outputTokens,
-  cost
+  cost,
+  registryVersion
 }: TokenStatusFooterProps) {
   const formatTime = (seconds: number): string => {
     if (seconds < 0) return "expired";
@@ -94,6 +96,12 @@ export function TokenStatusFooter({
         <Text>
           <Text color="gray"> | Cost: </Text>
           <Text color="cyan">{formatCost(cost)}</Text>
+        </Text>
+      )}
+      {registryVersion && (
+        <Text>
+          <Text color="gray"> | Registry: </Text>
+          <Text color="magenta">{registryVersion}</Text>
         </Text>
       )}
     </Box>

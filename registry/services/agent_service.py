@@ -369,6 +369,78 @@ class AgentService:
         """
         return list(self.registered_agents.values())
 
+    def update_rating(
+        self,
+        path: str,
+        username: str,
+        rating: int,
+    ) -> float:
+        """
+        Log a user rating for an agent. If the user has already rated, update their rating.
+
+        Args:
+            path: Agent path
+            username: The user who submitted rating
+            rating: integer between 1-5
+
+        Return:
+            Updated average rating
+
+        Raises:
+            ValueError: If agent not found or invalid rating
+        """
+        from . import rating_service
+
+        if path not in self.registered_agents:
+            logger.error(f"Cannot update agent at path '{path}': not found")
+            raise ValueError(f"Agent not found at path: {path}")
+
+        # Validate rating using shared service
+        rating_service.validate_rating(rating)
+
+        # Get existing agent (Pydantic model)
+        existing_agent = self.registered_agents[path]
+
+        # Convert to dict for modification
+        agent_dict = existing_agent.model_dump()
+
+        # Ensure rating_details is a list
+        if "rating_details" not in agent_dict or agent_dict["rating_details"] is None:
+            agent_dict["rating_details"] = []
+
+        # Update rating details using shared service
+        updated_details, is_new_rating = rating_service.update_rating_details(
+            agent_dict["rating_details"],
+            username,
+            rating
+        )
+        agent_dict["rating_details"] = updated_details
+
+        # Calculate average rating using shared service
+        agent_dict["num_stars"] = rating_service.calculate_average_rating(
+            agent_dict["rating_details"]
+        )
+
+        # Validate updated agent
+        try:
+            updated_agent = AgentCard(**agent_dict)
+        except Exception as e:
+            logger.error(f"Failed to validate updated agent: {e}")
+            raise ValueError(f"Invalid agent update: {e}")
+
+        # Save to disk
+        if not _save_agent_to_disk(updated_agent, settings.agents_dir):
+            raise ValueError("Failed to save updated agent to disk")
+
+        # Update in-memory registry
+        self.registered_agents[path] = updated_agent
+
+        logger.info(
+            f"Agent '{updated_agent.name}' ({path}) updated with rating {rating} "
+            f"from user {username}, new average: {agent_dict['num_stars']:.2f}"
+        )
+
+        return agent_dict["num_stars"]
 
     def update_agent(
         self,

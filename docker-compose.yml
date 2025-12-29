@@ -8,6 +8,7 @@ services:
       dockerfile: docker/Dockerfile.registry
       args:
         TOOL_DISCOVERY_MODE: ${TOOL_DISCOVERY_MODE:-embedded}
+        BUILD_VERSION: ${BUILD_VERSION:-1.0.0}
     environment:
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
@@ -24,13 +25,31 @@ services:
       - EXTERNAL_REGISTRY_TAGS=${EXTERNAL_REGISTRY_TAGS:-anthropic-registry,workday-asor}
       - ASOR_ACCESS_TOKEN=${ASOR_ACCESS_TOKEN}
       - ASOR_CLIENT_CREDENTIALS=${ASOR_CLIENT_CREDENTIALS}
+      # Security Scanning Configuration
+      - SECURITY_SCAN_ENABLED=${SECURITY_SCAN_ENABLED:-true}
+      - SECURITY_SCAN_ON_REGISTRATION=${SECURITY_SCAN_ON_REGISTRATION:-true}
+      - SECURITY_BLOCK_UNSAFE_SERVERS=${SECURITY_BLOCK_UNSAFE_SERVERS:-true}
+      - SECURITY_ANALYZERS=${SECURITY_ANALYZERS:-yara}
+      - SECURITY_SCAN_TIMEOUT=${SECURITY_SCAN_TIMEOUT:-60}
+      - SECURITY_ADD_PENDING_TAG=${SECURITY_ADD_PENDING_TAG:-true}
+      - MCP_SCANNER_LLM_API_KEY=${MCP_SCANNER_LLM_API_KEY}
+      # Embeddings Configuration
+      # - EMBEDDINGS_PROVIDER=${EMBEDDINGS_PROVIDER:-sentence-transformers}
+      # - EMBEDDINGS_MODEL_NAME=${EMBEDDINGS_MODEL_NAME:-all-MiniLM-L6-v2}
+      # - EMBEDDINGS_MODEL_DIMENSIONS=${EMBEDDINGS_MODEL_DIMENSIONS:-384}
+      # - EMBEDDINGS_API_KEY=${EMBEDDINGS_API_KEY}
+      # - EMBEDDINGS_API_BASE=${EMBEDDINGS_API_BASE}
+      # - EMBEDDINGS_AWS_REGION=${EMBEDDINGS_AWS_REGION:-us-east-1}
     ports:
       - "7860:7860"
     volumes:
       - ${APP_HOME}/mcp-gateway/servers:/app/registry/servers
+      - ${APP_HOME}/mcp-gateway/agents:/app/registry/agents
       - ${APP_HOME}/mcp-gateway/models:/app/registry/models
       - ${APP_HOME}/mcp-gateway/logs:/app/logs
+      - ${APP_HOME}/mcp-gateway/security_scans:/app/security_scans
       - ${APP_HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
+      - ${APP_HOME}/mcp-gateway/federation.json:/app/config/federation.json
       - ${APP_HOME}/mcp-gateway/ssl:/etc/ssl:ro
     depends_on:
       auth-server:

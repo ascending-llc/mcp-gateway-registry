@@ -1,7 +1,17 @@
 #!/bin/bash
 
+# DEPRECATED: This script is deprecated in favor of the Registry Management API
+# Use: uv run python api/registry_management.py OR cli/registry_cli_wrapper.py
+# See: api/README.md for documentation
+#
 # Service Management Script for MCP Gateway Registry
 # Usage: ./cli/service_mgmt.sh {add|delete|monitor|test|add-to-groups|remove-from-groups|create-group|delete-group|list-groups} [args...]
+
+echo "WARNING: This script is DEPRECATED. Please use the Registry Management API instead:"
+echo "  uv run python api/registry_management.py --help"
+echo "  OR cli/registry_cli_wrapper.py --help"
+echo "See api/README.md for full documentation."
+echo ""
 
 set -e
 

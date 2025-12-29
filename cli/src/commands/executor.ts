@@ -3,8 +3,58 @@ import {resolveTaskCommand} from "../chat/taskInterpreter.js";
 import {executeMcpCommand, formatMcpResult} from "../runtime/mcp.js";
 import {runScriptTaskToString} from "../runtime/script.js";
 import type {TaskContext} from "../tasks/types.js";
+import {spawn} from "node:child_process";
+import {REGISTRY_CLI_WRAPPER, REPO_ROOT} from "../paths.js";
 
 export interface CommandExecutionContext extends TaskContext {}
+
+// Helper function to call the registry CLI wrapper
+async function callRegistryWrapper(args: string[], context: CommandExecutionContext): Promise<{stdout: string; stderr: string; exitCode: number}> {
+  const baseArgs = [
+    "run",
+    "python",
+    REGISTRY_CLI_WRAPPER,
+    "--base-url",
+    context.gatewayBaseUrl,
+    ...args
+  ];
+
+  // Use backendToken if available, otherwise fall back to gatewayToken
+  const token = context.backendToken || context.gatewayToken;
+
+  const env = token
+    ? {...process.env, GATEWAY_TOKEN: token}
+    : process.env;
+
+  return new Promise((resolve) => {
+    const child = spawn("uv", baseArgs, {
+      cwd: REPO_ROOT,
+      env: env as NodeJS.ProcessEnv,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout?.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on("close", (code) => {
+      resolve({stdout, stderr, exitCode: code ?? -1});
+    });
+    child.on("error", (error) => {
+      resolve({
+        stdout,
+        stderr: `${stderr}\nFailed to start process: ${(error as Error).message}`,
+        exitCode: -1
+      });
+    });
+  });
+}
 
 export async function executeSlashCommand(
   input: string,
@@ -68,62 +118,56 @@ async function executeMcp(command: "ping" | "list" | "init", context: CommandExe
 }
 
 async function executeServers(context: CommandExecutionContext) {
-  // Call list_services to get all registered MCP servers
-  const {handshake, response} = await executeMcpCommand(
-    "call",
-    context.gatewayUrl,
-    context.gatewayToken,
-    context.backendToken,
-    {
-      tool: "list_services",
-      args: {}
-    }
-  );
+  // Use the registry client to list servers instead of MCP call
+  const result = await callRegistryWrapper(["anthropic", "list", "--limit", "1000"], context);
 
-  // Format as compact summary to avoid terminal lag from massive JSON
-  const lines: string[] = [];
-
-  try {
-    const content = (response as any).content;
-    if (!content || !Array.isArray(content) || content.length === 0) {
-      lines.push("No response content");
-      return {lines};
-    }
-
-    const textContent = content[0].text;
-    const data = JSON.parse(textContent);
-
-    if (data && data.services && Array.isArray(data.services)) {
-      lines.push(`Found ${data.services.length} MCP servers:\n`);
-
-      data.services.forEach((service: any, index: number) => {
-        lines.push(`${index + 1}. ${service.server_name || 'Unknown'}`);
-        lines.push(`   Path: ${service.path || 'N/A'}`);
-        lines.push(`   Status: ${service.health_status || 'unknown'} ${service.is_enabled ? '(enabled)' : '(disabled)'}`);
-        if (service.description) {
-          // Truncate long descriptions
-          const desc = service.description.length > 80
-            ? service.description.substring(0, 80) + '...'
-            : service.description;
-          lines.push(`   Description: ${desc}`);
-        }
-        if (service.tags && service.tags.length > 0) {
-          lines.push(`   Tags: ${service.tags.slice(0, 5).join(', ')}${service.tags.length > 5 ? '...' : ''}`);
-        }
-        lines.push(`   Tools: ${service.num_tools || 0}`);
-        lines.push('');
-      });
-
-      lines.push(`Total: ${data.total_count || data.services.length} servers\n`);
-      lines.push('Tip: Ask "tell me more about server X" for detailed info');
-    } else {
-      lines.push("No servers found");
-    }
-  } catch (error) {
-    lines.push(`Error formatting server list: ${(error as Error).message}`);
+  if (result.exitCode !== 0) {
+    return {
+      lines: [`Error listing servers:`, result.stderr || result.stdout],
+      isError: true
+    };
   }
 
-  return {lines};
+  try {
+    const data = JSON.parse(result.stdout);
+    const servers = data.servers || [];
+
+    if (servers.length === 0) {
+      return {lines: ["No servers found."]};
+    }
+
+    const lines: string[] = [`Found ${servers.length} MCP servers:\n`];
+
+    servers.forEach((serverResponse: any, index: number) => {
+      const server = serverResponse.server || serverResponse;
+      const meta = server._meta || server.meta || {};
+      const internalMeta = meta['io.mcpgateway/internal'] || {};
+
+      lines.push(`${index + 1}. ${server.name || 'Unknown'}`);
+      lines.push(`   Path: ${internalMeta.path || 'N/A'}`);
+      lines.push(`   Status: ${internalMeta.is_enabled ? 'enabled' : 'disabled'}`);
+      if (server.description) {
+        const desc = server.description.length > 80
+          ? server.description.substring(0, 80) + '...'
+          : server.description;
+        lines.push(`   Description: ${desc}`);
+      }
+      if (server.tags && server.tags.length > 0) {
+        lines.push(`   Tags: ${server.tags.slice(0, 5).join(', ')}${server.tags.length > 5 ? '...' : ''}`);
+      }
+      if (server.tools && server.tools.length > 0) {
+        lines.push(`   Tools: ${server.tools.length}`);
+      }
+      lines.push('');
+    });
+
+    lines.push(`Total: ${servers.length} servers\n`);
+    lines.push('Tip: Ask "tell me more about server X" for detailed info');
+
+    return {lines};
+  } catch (error) {
+    return {lines: [`Error parsing server list: ${(error as Error).message}`], isError: true};
+  }
 }
 
 async function executeCall(parsed: CallCommand, context: CommandExecutionContext) {
@@ -188,156 +232,62 @@ async function executeAgents(parsed: AgentsCommand, context: CommandExecutionCon
 }
 
 async function executeAgentsList(context: CommandExecutionContext) {
-  try {
-    const response = await fetch(`${context.gatewayUrl}/api/agents`, {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${context.gatewayToken}`,
-        "Content-Type": "application/json"
-      }
-    });
+  const result = await callRegistryWrapper(["agent", "list"], context);
 
-    if (!response.ok) {
-      return {lines: [`Error: ${response.status} - Failed to list agents`], isError: true};
-    }
-
-    const data = await response.json() as any;
-    const agents = Array.isArray(data.agents) ? data.agents : (data.agents && typeof data.agents === "object" ? Object.values(data.agents) : []);
-
-    if (!Array.isArray(agents) || agents.length === 0) {
-      return {lines: ["No agents found."]};
-    }
-
-    const lines: string[] = [`Found ${agents.length} agent(s):\n`];
-    agents.forEach((agent: any, index: number) => {
-      lines.push(`${index + 1}. ${agent.name || "Unknown"}`);
-      lines.push(`   Path: ${agent.path || "N/A"}`);
-      if (agent.description) {
-        const desc = agent.description.length > 80
-          ? agent.description.substring(0, 80) + "..."
-          : agent.description;
-        lines.push(`   Description: ${desc}`);
-      }
-      lines.push(`   Status: ${agent.enabled ? "enabled" : "disabled"}`);
-      if (agent.tags && Array.isArray(agent.tags) && agent.tags.length > 0) {
-        lines.push(`   Tags: ${agent.tags.slice(0, 5).join(", ")}${agent.tags.length > 5 ? "..." : ""}`);
-      }
-      lines.push("");
-    });
-
-    return {lines};
-  } catch (error) {
-    return {lines: [`Error listing agents: ${(error as Error).message}`], isError: true};
+  if (result.exitCode !== 0) {
+    return {
+      lines: [`Error listing agents:`, result.stderr || result.stdout],
+      isError: true
+    };
   }
+
+  return {lines: [result.stdout]};
 }
 
 async function executeAgentsGet(agentPath: string, context: CommandExecutionContext) {
-  try {
-    const response = await fetch(`${context.gatewayUrl}/api/agents${agentPath}`, {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${context.gatewayToken}`,
-        "Content-Type": "application/json"
-      }
-    });
+  const result = await callRegistryWrapper(["agent", "get", agentPath], context);
 
-    if (!response.ok) {
-      return {lines: [`Error: ${response.status} - Agent not found or access denied`], isError: true};
-    }
-
-    const agent = await response.json() as any;
-    const lines: string[] = [];
-
-    lines.push(`${agent.name || "Unknown"} (${agent.path || agentPath})`);
-    lines.push(`Description: ${agent.description || "N/A"}`);
-    if (agent.url) lines.push(`URL: ${agent.url}`);
-    if (agent.version) lines.push(`Version: ${agent.version}`);
-
-    if (agent.skills && Array.isArray(agent.skills) && agent.skills.length > 0) {
-      lines.push("\nSkills:");
-      agent.skills.forEach((skill: any, index: number) => {
-        lines.push(`  ${index + 1}. ${skill.name || skill.id || "Unknown"}`);
-        if (skill.description) {
-          lines.push(`     ${skill.description}`);
-        }
-      });
-    }
-
-    if (agent.tags && Array.isArray(agent.tags) && agent.tags.length > 0) {
-      lines.push(`\nTags: ${agent.tags.join(", ")}`);
-    }
-
-    lines.push(`\nVisibility: ${agent.visibility || "N/A"}`);
-    lines.push(`Trust Level: ${agent.trust_level || "N/A"}`);
-    lines.push(`Status: ${agent.enabled ? "enabled" : "disabled"}`);
-
-    return {lines};
-  } catch (error) {
-    return {lines: [`Error fetching agent: ${(error as Error).message}`], isError: true};
+  if (result.exitCode !== 0) {
+    return {
+      lines: [`Error getting agent:`, result.stderr || result.stdout],
+      isError: true
+    };
   }
+
+  return {lines: [result.stdout]};
 }
 
 async function executeAgentsSearch(query: string, context: CommandExecutionContext) {
-  try {
-    const response = await fetch(`${context.gatewayUrl}/api/agents?search=${encodeURIComponent(query)}`, {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${context.gatewayToken}`,
-        "Content-Type": "application/json"
-      }
-    });
+  const result = await callRegistryWrapper(["agent", "search", query], context);
 
-    if (!response.ok) {
-      return {lines: [`Error: ${response.status} - Search failed`], isError: true};
-    }
-
-    const data = await response.json() as any;
-    const agents = Array.isArray(data.agents) ? data.agents : (data.agents && typeof data.agents === "object" ? Object.values(data.agents) : []);
-
-    if (!Array.isArray(agents) || agents.length === 0) {
-      return {lines: [`No agents found matching: "${query}"`]};
-    }
-
-    const lines: string[] = [`Found ${agents.length} agent(s) matching "${query}":\n`];
-    agents.forEach((agent: any, index: number) => {
-      lines.push(`${index + 1}. ${agent.name || "Unknown"}`);
-      lines.push(`   Path: ${agent.path || "N/A"}`);
-      if (agent.description) {
-        const desc = agent.description.length > 80
-          ? agent.description.substring(0, 80) + "..."
-          : agent.description;
-        lines.push(`   ${desc}`);
-      }
-      lines.push("");
-    });
-
-    return {lines};
-  } catch (error) {
-    return {lines: [`Error searching agents: ${(error as Error).message}`], isError: true};
+  if (result.exitCode !== 0) {
+    return {
+      lines: [`Error searching agents:`, result.stderr || result.stdout],
+      isError: true
+    };
   }
+
+  return {lines: [result.stdout]};
 }
 
 async function executeAgentsTest(agentPath: string, context: CommandExecutionContext) {
+  const result = await callRegistryWrapper(["agent", "get", agentPath], context);
+
+  if (result.exitCode !== 0) {
+    return {
+      lines: [`Error testing agent:`, result.stderr || result.stdout],
+      isError: true
+    };
+  }
+
   try {
-    const response = await fetch(`${context.gatewayUrl}/api/agents${agentPath}`, {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${context.gatewayToken}`,
-        "Content-Type": "application/json"
-      }
-    });
-
-    if (!response.ok) {
-      return {lines: [`Error: ${response.status} - Agent not found or access denied`], isError: true};
-    }
-
-    const agent = await response.json() as any;
+    const agent = JSON.parse(result.stdout);
     const lines: string[] = [];
 
     lines.push(`Testing agent: ${agent.name || agentPath}`);
     lines.push(`✓ Agent registered`);
     lines.push(`✓ Endpoint accessible`);
-    if (agent.enabled) {
+    if (agent.is_enabled) {
       lines.push(`✓ Agent enabled`);
     } else {
       lines.push(`⚠ Agent is disabled`);
@@ -345,28 +295,25 @@ async function executeAgentsTest(agentPath: string, context: CommandExecutionCon
 
     return {lines};
   } catch (error) {
-    return {lines: [`Error testing agent: ${(error as Error).message}`], isError: true};
+    return {lines: [`Error parsing agent data: ${(error as Error).message}`], isError: true};
   }
 }
 
 async function executeAgentsTestAll(context: CommandExecutionContext) {
+  const result = await callRegistryWrapper(["agent", "list"], context);
+
+  if (result.exitCode !== 0) {
+    return {
+      lines: [`Error testing agents:`, result.stderr || result.stdout],
+      isError: true
+    };
+  }
+
   try {
-    const response = await fetch(`${context.gatewayUrl}/api/agents`, {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${context.gatewayToken}`,
-        "Content-Type": "application/json"
-      }
-    });
+    const data = JSON.parse(result.stdout);
+    const agents = Array.isArray(data.agents) ? data.agents : [];
 
-    if (!response.ok) {
-      return {lines: [`Error: ${response.status} - Failed to list agents`], isError: true};
-    }
-
-    const data = await response.json() as any;
-    const agents = Array.isArray(data.agents) ? data.agents : (data.agents && typeof data.agents === "object" ? Object.values(data.agents) : []);
-
-    if (!Array.isArray(agents) || agents.length === 0) {
+    if (agents.length === 0) {
       return {lines: ["No agents to test."]};
     }
 
@@ -375,7 +322,7 @@ async function executeAgentsTestAll(context: CommandExecutionContext) {
     let unhealthy = 0;
 
     agents.forEach((agent: any) => {
-      if (agent.enabled) {
+      if (agent.is_enabled) {
         lines.push(`✓ ${agent.name || agent.path} - operational`);
         healthy++;
       } else {
@@ -392,7 +339,7 @@ async function executeAgentsTestAll(context: CommandExecutionContext) {
 
     return {lines};
   } catch (error) {
-    return {lines: [`Error testing agents: ${(error as Error).message}`], isError: true};
+    return {lines: [`Error parsing agent data: ${(error as Error).message}`], isError: true};
   }
 }
 
