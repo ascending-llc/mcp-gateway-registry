@@ -79,11 +79,17 @@ def _get_docker_image_version() -> str:
 
 def get_version() -> str:
     """
-    Get application version from Docker image tag.
+    Get application version from environment or Docker image tag.
 
     Returns:
-        Version string from Docker image tag, or DEFAULT_VERSION if not available
+        Version string from BUILD_VERSION env var, Docker image tag, or DEFAULT_VERSION
     """
+    # First, check BUILD_VERSION environment variable
+    build_version = os.getenv('BUILD_VERSION')
+    if build_version:
+        logger.info(f"Version from BUILD_VERSION env: {build_version}")
+        return build_version
+    
     # Get version from Docker image tag
     docker_version = _get_docker_image_version()
     if docker_version:

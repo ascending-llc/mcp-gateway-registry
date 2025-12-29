@@ -11,6 +11,7 @@ import {
   SunIcon,
   MoonIcon
 } from '@heroicons/react/24/outline';
+import axios from 'axios';
 import Sidebar from './Sidebar';
 import { useServer } from '../contexts/ServerContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -30,9 +31,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   useEffect(() => {
     // Fetch version from API
-    fetch('/api/version')
-      .then(res => res.json())
-      .then(data => setVersion(data.version))
+    axios.get('/api/version')
+      .then(res => setVersion(res.data.version))
       .catch(err => console.error('Failed to fetch version:', err));
   }, []);
 
