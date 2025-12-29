@@ -97,40 +97,10 @@ EOF
     backend)
         echo "Starting MCP Registry Service..."
 
-        # Auto-detect version from Docker image tag if BUILD_VERSION not set
-        if [ -z "${BUILD_VERSION}" ]; then
-            echo "Attempting to detect version from container image..."
-            
-            # Try to get image info from /proc/self/cgroup (works in most container runtimes)
-            if [ -f /proc/self/cgroup ]; then
-                CONTAINER_ID=$(cat /proc/self/cgroup | grep -o -E '[0-9a-f]{64}' | head -n 1)
-                if [ -n "$CONTAINER_ID" ]; then
-                    echo "Detected container ID: ${CONTAINER_ID:0:12}"
-                fi
-            fi
-            
-            # Try docker inspect if docker CLI is available
-            if command -v docker &> /dev/null && [ -n "$CONTAINER_ID" ]; then
-                IMAGE_TAG=$(docker inspect --format='{{.Config.Image}}' "$CONTAINER_ID" 2>/dev/null || echo "")
-                if [ -n "$IMAGE_TAG" ] && [[ "$IMAGE_TAG" == *":"* ]]; then
-                    VERSION_TAG="${IMAGE_TAG##*:}"
-                    # Skip generic tags
-                    if [[ ! "$VERSION_TAG" =~ ^(latest|dev|main|master|develop)$ ]]; then
-                        export BUILD_VERSION="$VERSION_TAG"
-                        echo "Detected version from image tag: $BUILD_VERSION"
-                    fi
-                fi
-            fi
-            
-            # Fallback: check if version was baked into the image at build time
-            if [ -z "$BUILD_VERSION" ] && [ -n "${IMAGE_VERSION:-}" ]; then
-                export BUILD_VERSION="$IMAGE_VERSION"
-                echo "Using IMAGE_VERSION: $BUILD_VERSION"
-            fi
-            
-            if [ -z "$BUILD_VERSION" ]; then
-                echo "Could not auto-detect version, will use default"
-            fi
+        if [ -n "${BUILD_VERSION}" ]; then
+            echo "Using BUILD_VERSION from environment: $BUILD_VERSION"
+        else
+            echo "BUILD_VERSION not set, will use default version"
         fi
 
         # Validate required environment variables
