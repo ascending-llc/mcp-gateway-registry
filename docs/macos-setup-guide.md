@@ -171,7 +171,13 @@ nano .docker-compose.override.yml
 ### Start Services with Docker Compose
 
 ```bash
-docker-compose up -d
+docker-compose --profile full up -d
+```
+
+### Start everything but frontend and registry
+
+```bash
+docker-compose --profile dev up -d
 ```
 
 **Important macOS Docker Volume Sharing**: On macOS, Docker Desktop only shares certain directories by default (like `/Users`, `/tmp`, `/private`). The `/opt` and `/var/log` directories we need are NOT shared by default, so we must create them with proper ownership for Docker containers to access them.
