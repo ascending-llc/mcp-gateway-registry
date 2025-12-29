@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   DEFAULT_IMPORT_LIST,
   IMPORT_ANTHROPIC_SCRIPT,
+  REGISTRY_CLI_WRAPPER,
   SERVICE_MANAGEMENT_SCRIPT,
   TEST_ANTHROPIC_SCRIPT,
   USER_MANAGEMENT_SCRIPT
@@ -22,6 +23,37 @@ const buildUvPythonCommand = (scriptPath: string, args: string[], env?: Record<s
   args: ["run", "python", scriptPath, ...args],
   env
 });
+
+// Build command for Registry Management API wrapper
+const buildRegistryCommand = (args: string[], context: TaskContext): ScriptCommand => {
+  const baseArgs = [
+    "run",
+    "python",
+    REGISTRY_CLI_WRAPPER,
+    "--base-url",
+    context.gatewayBaseUrl
+  ];
+
+  // Add token from context if available (backend token takes precedence)
+  if (context.backendToken) {
+    // Token is already a string, pass it as environment variable
+    // since the wrapper can read from GATEWAY_TOKEN env var
+    return {
+      command: "uv",
+      args: [...baseArgs, ...args],
+      env: {
+        ...process.env,
+        GATEWAY_TOKEN: context.backendToken
+      }
+    };
+  }
+
+  return {
+    command: "uv",
+    args: [...baseArgs, ...args],
+    env: process.env as Record<string, string>
+  };
+};
 
 const computeGatewayEnv = (context: TaskContext): Record<string, string> => ({
   ...process.env,
@@ -45,10 +77,9 @@ const serviceTasks: ScriptTask[] = [
       if (!configPath) {
         throw new Error("Config file path is required.");
       }
-      return buildBashCommand(
-        SERVICE_MANAGEMENT_SCRIPT,
-        ["add", configPath],
-        computeGatewayEnv(context)
+      return buildRegistryCommand(
+        ["service", "add", configPath],
+        context
       );
     }
   },
@@ -74,10 +105,9 @@ const serviceTasks: ScriptTask[] = [
       if (!servicePath || !serviceName) {
         throw new Error("Service path and name are required.");
       }
-      return buildBashCommand(
-        SERVICE_MANAGEMENT_SCRIPT,
-        ["delete", servicePath, serviceName],
-        computeGatewayEnv(context)
+      return buildRegistryCommand(
+        ["service", "delete", servicePath],
+        context
       );
     }
   },
@@ -94,110 +124,27 @@ const serviceTasks: ScriptTask[] = [
       }
     ],
     build(values, context) {
-      const configPath = trim(values.configPath);
-      const args = configPath ? ["monitor", configPath] : ["monitor"];
-      return buildBashCommand(
-        SERVICE_MANAGEMENT_SCRIPT,
-        args,
-        computeGatewayEnv(context)
-      );
-    }
-  },
-  {
-    key: "service-test",
-    label: "Test service searchability",
-    description: "Runs the intelligent_tool_finder smoke tests against a config.",
-    fields: [
-      {
-        name: "configPath",
-        label: "Config file path",
-        placeholder: "cli/examples/server-config.json"
-      }
-    ],
-    build(values, context) {
-      const configPath = trim(values.configPath);
-      if (!configPath) {
-        throw new Error("Config file path is required.");
-      }
-      return buildBashCommand(
-        SERVICE_MANAGEMENT_SCRIPT,
-        ["test", configPath],
-        computeGatewayEnv(context)
-      );
-    }
-  },
-  {
-    key: "service-add-groups",
-    label: "Add server to groups",
-    description: "Add a server to one or more scopes groups (comma-separated).",
-    fields: [
-      {
-        name: "serverName",
-        label: "Server name",
-        placeholder: "example-server"
-      },
-      {
-        name: "groups",
-        label: "Groups (comma separated)",
-        placeholder: "mcp-servers-restricted/read,mcp-servers-restricted/execute"
-      }
-    ],
-    build(values, context) {
-      const serverName = trim(values.serverName);
-      const groups = trim(values.groups);
-      if (!serverName || !groups) {
-        throw new Error("Server name and groups are required.");
-      }
-      return buildBashCommand(
-        SERVICE_MANAGEMENT_SCRIPT,
-        ["add-to-groups", serverName, groups],
-        computeGatewayEnv(context)
-      );
-    }
-  },
-  {
-    key: "service-remove-groups",
-    label: "Remove server from groups",
-    description: "Remove a server from scopes groups.",
-    fields: [
-      {
-        name: "serverName",
-        label: "Server name",
-        placeholder: "example-server"
-      },
-      {
-        name: "groups",
-        label: "Groups (comma separated)",
-        placeholder: "mcp-servers-restricted/read,mcp-servers-restricted/execute"
-      }
-    ],
-    build(values, context) {
-      const serverName = trim(values.serverName);
-      const groups = trim(values.groups);
-      if (!serverName || !groups) {
-        throw new Error("Server name and groups are required.");
-      }
-      return buildBashCommand(
-        SERVICE_MANAGEMENT_SCRIPT,
-        ["remove-from-groups", serverName, groups],
-        computeGatewayEnv(context)
+      // Monitor is essentially list with detailed output
+      return buildRegistryCommand(
+        ["service", "list"],
+        context
       );
     }
   },
   {
     key: "service-create-group",
     label: "Create group",
-    description: "Create a Keycloak/scopes.yml group for MCP servers.",
+    description: "Create a Keycloak group for MCP servers.",
     fields: [
       {
         name: "groupName",
         label: "Group name",
-        placeholder: "mcp-servers-team-x/read"
+        placeholder: "mcp-servers-team-x"
       },
       {
         name: "description",
         label: "Description",
-        placeholder: "Team X read access",
+        placeholder: "Team X access",
         optional: true
       }
     ],
@@ -208,24 +155,20 @@ const serviceTasks: ScriptTask[] = [
       }
       const description = trim(values.description);
       const args = description
-        ? ["create-group", groupName, description]
-        : ["create-group", groupName];
-      return buildBashCommand(
-        SERVICE_MANAGEMENT_SCRIPT,
-        args,
-        computeGatewayEnv(context)
-      );
+        ? ["group", "create", "--name", groupName, "--description", description]
+        : ["group", "create", "--name", groupName];
+      return buildRegistryCommand(args, context);
     }
   },
   {
     key: "service-delete-group",
     label: "Delete group",
-    description: "Delete a Keycloak/scopes.yml group.",
+    description: "Delete a Keycloak group.",
     fields: [
       {
         name: "groupName",
         label: "Group name",
-        placeholder: "mcp-servers-team-x/read"
+        placeholder: "mcp-servers-team-x"
       }
     ],
     build(values, context) {
@@ -233,23 +176,21 @@ const serviceTasks: ScriptTask[] = [
       if (!groupName) {
         throw new Error("Group name is required.");
       }
-      return buildBashCommand(
-        SERVICE_MANAGEMENT_SCRIPT,
-        ["delete-group", groupName],
-        computeGatewayEnv(context)
+      return buildRegistryCommand(
+        ["group", "delete", "--name", groupName],
+        context
       );
     }
   },
   {
     key: "service-list-groups",
     label: "List groups",
-    description: "List Keycloak groups and synchronization status.",
+    description: "List Keycloak groups.",
     fields: [],
     build(_values, context) {
-      return buildBashCommand(
-        SERVICE_MANAGEMENT_SCRIPT,
-        ["list-groups"],
-        computeGatewayEnv(context)
+      return buildRegistryCommand(
+        ["group", "list"],
+        context
       );
     }
   }
@@ -333,7 +274,7 @@ const userTasks: ScriptTask[] = [
         optional: true
       }
     ],
-    build(values) {
+    build(values, context) {
       const name = trim(values.name);
       const groups = trim(values.groups);
       const description = trim(values.description);
@@ -341,6 +282,7 @@ const userTasks: ScriptTask[] = [
         throw new Error("Name and groups are required.");
       }
       const args = [
+        "user",
         "create-m2m",
         "--name",
         name,
@@ -350,7 +292,7 @@ const userTasks: ScriptTask[] = [
       if (description) {
         args.push("--description", description);
       }
-      return buildBashCommand(USER_MANAGEMENT_SCRIPT, args);
+      return buildRegistryCommand(args, context);
     }
   },
   {
@@ -374,7 +316,7 @@ const userTasks: ScriptTask[] = [
         optional: true
       }
     ],
-    build(values) {
+    build(values, context) {
       const username = trim(values.username);
       const email = trim(values.email);
       const firstName = trim(values.firstName);
@@ -385,14 +327,15 @@ const userTasks: ScriptTask[] = [
         throw new Error("Username, email, first name, last name, and groups are required.");
       }
       const args = [
+        "user",
         "create-human",
         "--username",
         username,
         "--email",
         email,
-        "--firstname",
+        "--first-name",
         firstName,
-        "--lastname",
+        "--last-name",
         lastName,
         "--groups",
         groups
@@ -400,7 +343,7 @@ const userTasks: ScriptTask[] = [
       if (password) {
         args.push("--password", password);
       }
-      return buildBashCommand(USER_MANAGEMENT_SCRIPT, args);
+      return buildRegistryCommand(args, context);
     }
   },
   {
@@ -414,12 +357,12 @@ const userTasks: ScriptTask[] = [
         placeholder: "agent-finance-bot"
       }
     ],
-    build(values) {
+    build(values, context) {
       const username = trim(values.username);
       if (!username) {
         throw new Error("Username is required.");
       }
-      return buildBashCommand(USER_MANAGEMENT_SCRIPT, ["delete-user", "--username", username]);
+      return buildRegistryCommand(["user", "delete", "--username", username], context);
     }
   },
   {
@@ -427,8 +370,8 @@ const userTasks: ScriptTask[] = [
     label: "List users",
     description: "List all users in the Keycloak realm.",
     fields: [],
-    build() {
-      return buildBashCommand(USER_MANAGEMENT_SCRIPT, ["list-users"]);
+    build(_values, context) {
+      return buildRegistryCommand(["user", "list"], context);
     }
   },
   {
@@ -436,8 +379,8 @@ const userTasks: ScriptTask[] = [
     label: "List groups",
     description: "List all groups in Keycloak.",
     fields: [],
-    build() {
-      return buildBashCommand(USER_MANAGEMENT_SCRIPT, ["list-groups"]);
+    build(_values, context) {
+      return buildRegistryCommand(["group", "list"], context);
     }
   }
 ];
@@ -461,17 +404,17 @@ const diagnosticTasks: ScriptTask[] = [
         defaultValue: "http://localhost"
       }
     ],
-    build(values) {
+    build(values, context) {
       const tokenFile = trim(values.tokenFile);
       const baseUrl = trim(values.baseUrl);
       if (!tokenFile) {
         throw new Error("Token file path is required.");
       }
-      const args = ["--token-file", tokenFile];
+      const args = ["anthropic", "list", "--limit", "100"];
       if (baseUrl) {
         args.push("--base-url", baseUrl);
       }
-      return buildUvPythonCommand(TEST_ANTHROPIC_SCRIPT, args);
+      return buildRegistryCommand(args, context);
     }
   },
   {
@@ -503,7 +446,7 @@ const diagnosticTasks: ScriptTask[] = [
         defaultValue: "http://localhost"
       }
     ],
-    build(values) {
+    build(values, context) {
       const tokenFile = trim(values.tokenFile);
       const testName = trim(values.testName);
       const serverName = trim(values.serverName);
@@ -511,14 +454,21 @@ const diagnosticTasks: ScriptTask[] = [
       if (!tokenFile || !testName) {
         throw new Error("Token file and test name are required.");
       }
-      const args = ["--token-file", tokenFile, "--test", testName];
-      if (serverName) {
-        args.push("--server-name", serverName);
+
+      // Map test name to Anthropic API command
+      if (testName === "get-server" && serverName) {
+        const args = ["anthropic", "get", serverName];
+        if (baseUrl) {
+          args.push("--base-url", baseUrl);
+        }
+        return buildRegistryCommand(args, context);
+      } else {
+        const args = ["anthropic", "list", "--limit", "100"];
+        if (baseUrl) {
+          args.push("--base-url", baseUrl);
+        }
+        return buildRegistryCommand(args, context);
       }
-      if (baseUrl) {
-        args.push("--base-url", baseUrl);
-      }
-      return buildUvPythonCommand(TEST_ANTHROPIC_SCRIPT, args);
     }
   }
 ];

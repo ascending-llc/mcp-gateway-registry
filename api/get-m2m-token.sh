@@ -6,6 +6,7 @@
 # Options:
 #   --aws-region REGION      AWS region (overrides AWS_REGION env var)
 #   --keycloak-url URL       Keycloak base URL (overrides KEYCLOAK_URL env var)
+#   --output-file FILE       Save token to file instead of printing to stdout
 #   --help                   Show this help message
 #
 # Environment variables (used if command-line options not provided):
@@ -16,8 +17,8 @@
 # 1. First checks SSM Parameter Store for cached token
 # 2. Validates token expiration (with 60 second buffer)
 # 3. Only fetches new token from Keycloak if needed
-# 4. Stores new tokens in SSM (but NOT in local files)
-# 5. Outputs the token to stdout for consumption by other scripts
+# 4. Stores new tokens in SSM (but NOT in local files by default)
+# 5. Outputs the token to stdout (or saves to file if --output-file is specified)
 
 set -e
 
@@ -36,6 +37,7 @@ NC='\033[0m'
 CLIENT_NAME=""
 CLI_AWS_REGION=""
 CLI_KEYCLOAK_URL=""
+OUTPUT_FILE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -47,12 +49,17 @@ while [[ $# -gt 0 ]]; do
             CLI_KEYCLOAK_URL="$2"
             shift 2
             ;;
+        --output-file)
+            OUTPUT_FILE="$2"
+            shift 2
+            ;;
         --help)
             echo "Usage: $0 [OPTIONS] [client-name]"
             echo ""
             echo "Options:"
             echo "  --aws-region REGION      AWS region (overrides AWS_REGION env var)"
             echo "  --keycloak-url URL       Keycloak base URL (overrides KEYCLOAK_URL env var)"
+            echo "  --output-file FILE       Save token to file instead of printing to stdout"
             echo "  --help                   Show this help message"
             echo ""
             echo "Environment variables:"
@@ -310,7 +317,14 @@ echo "  Client: $CLIENT_NAME" >&2
 echo "  Expires in: ${EXPIRES_IN} seconds" >&2
 echo "  Expires at: $(date -d @${EXPIRES_AT} 2>/dev/null || date -r ${EXPIRES_AT} 2>/dev/null || echo $EXPIRES_AT)" >&2
 echo "  SSM location: $SSM_TOKEN_PARAM" >&2
-echo "" >&2
 
-# Output the token to stdout for consumption by other scripts
-echo "$ACCESS_TOKEN"
+# Output the token to stdout or save to file
+if [ -n "$OUTPUT_FILE" ]; then
+    echo "$ACCESS_TOKEN" > "$OUTPUT_FILE"
+    echo "  Token saved to: $OUTPUT_FILE" >&2
+    echo "" >&2
+else
+    echo "" >&2
+    # Output the token to stdout for consumption by other scripts
+    echo "$ACCESS_TOKEN"
+fi

@@ -1,6 +1,16 @@
 #!/bin/bash
+# DEPRECATED: This script is deprecated in favor of the Registry Management API
+# Use: uv run python api/registry_management.py OR cli/registry_cli_wrapper.py
+# See: api/README.md for documentation
+#
 # User Management Script for MCP Gateway Registry
 # This script manages both M2M (machine-to-machine) service accounts and human users
+
+echo "WARNING: This script is DEPRECATED. Please use the Registry Management API instead:"
+echo "  uv run python api/registry_management.py --help"
+echo "  OR cli/registry_cli_wrapper.py --help"
+echo "See api/README.md for full documentation."
+echo ""
 
 set -e
 

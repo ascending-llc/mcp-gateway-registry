@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
 """
+DEPRECATED: This script is deprecated in favor of the Registry Management API.
+
+Use instead:
+    uv run python api/registry_management.py anthropic-list --help
+    uv run python api/registry_management.py anthropic-get --help
+
+See api/README.md for full documentation.
+
 Test Anthropic MCP Registry API.
 
 This script tests the Anthropic MCP Registry API endpoints using JWT tokens
@@ -14,6 +22,15 @@ Usage:
 Note: Tokens have a short lifetime for security. If your token expires, generate a new one
 from the UI or ask your administrator to increase the access token timeout in Keycloak.
 """
+
+print("=" * 80)
+print("WARNING: This script is DEPRECATED.")
+print("Please use the Registry Management API instead:")
+print("  uv run python api/registry_management.py anthropic-list --help")
+print("  uv run python api/registry_management.py anthropic-get --help")
+print("See api/README.md for full documentation.")
+print("=" * 80)
+print()
 
 import argparse
 import base64

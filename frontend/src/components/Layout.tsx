@@ -1,4 +1,4 @@
-import React, { useState, Fragment } from 'react';
+import React, { useState, useEffect, Fragment } from 'react';
 import { Menu, Transition } from '@headlessui/react';
 import { Link } from 'react-router-dom';
 import { 
@@ -11,7 +11,9 @@ import {
   SunIcon,
   MoonIcon
 } from '@heroicons/react/24/outline';
+import axios from 'axios';
 import Sidebar from './Sidebar';
+import { useServer } from '../contexts/ServerContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import logo from '../assets/logo.svg';
@@ -22,8 +24,17 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [version, setVersion] = useState<string | null>(null);
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { stats, activeFilter, setActiveFilter } = useServer();
+
+  useEffect(() => {
+    // Fetch version from API
+    axios.get('/api/version')
+      .then(res => setVersion(res.data.version))
+      .catch(err => console.error('Failed to fetch version:', err));
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -92,6 +103,15 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </svg>
               </a> */}
 
+              {/* Version badge */}
+              {version && (
+                <div className="hidden md:flex items-center px-2.5 py-1 bg-purple-50 dark:bg-purple-900/20 rounded-md">
+                  <span className="text-xs font-medium text-purple-700 dark:text-purple-300">
+                    {version}
+                  </span>
+                </div>
+              )}
+
               {/* Theme toggle */}
               <button
                 onClick={toggleTheme}
@@ -131,20 +151,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                     <Menu.Item>
                       {({ active }) => (
                         <Link
-                          to="/generate-token"
-                          className={`${
-                            active ? 'bg-gray-100 dark:bg-gray-800' : ''
-                          } flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-100`}
-                        >
-                          <KeyIcon className="mr-3 h-4 w-4" />
-                          Generate Token
-                        </Link>
-                      )}
-                    </Menu.Item>
-                    
-                    <Menu.Item>
-                      {({ active }) => (
-                        <Link
                           to="/settings"
                           className={`${
                             active ? 'bg-gray-100 dark:bg-gray-800' : ''
@@ -181,14 +187,21 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
       <div className="flex h-screen pt-16">
         {/* Sidebar */}
-        <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+        <Sidebar 
+          sidebarOpen={sidebarOpen} 
+          setSidebarOpen={setSidebarOpen}
+          stats={stats}
+          activeFilter={activeFilter}
+          setActiveFilter={setActiveFilter}
+        />
+
 
         {/* Main content */}
         <main className={`flex-1 flex flex-col transition-all duration-300 ${
           sidebarOpen ? 'md:ml-64 lg:ml-72 xl:ml-80' : ''
         }`}>
           <div className="flex-1 flex flex-col px-4 sm:px-6 lg:px-8 py-4 md:py-8 overflow-hidden">
-            {children}
+            {React.cloneElement(children as React.ReactElement, { activeFilter })}
           </div>
         </main>
       </div>
