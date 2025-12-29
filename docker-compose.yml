@@ -8,7 +8,6 @@ services:
       dockerfile: docker/Dockerfile.registry
       args:
         TOOL_DISCOVERY_MODE: ${TOOL_DISCOVERY_MODE:-embedded}
-        BUILD_VERSION: ${BUILD_VERSION:-1.0.0}
     environment:
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
