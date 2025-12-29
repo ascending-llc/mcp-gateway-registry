@@ -3,10 +3,9 @@
 Scan all enabled MCP servers for security vulnerabilities.
 
 This script:
-1. Loads ingress token from .oauth-tokens/ingress.json
-2. Calls the registry API to get a list of all servers
-3. Filters for enabled servers
-4. Runs security scans on each enabled server using service_mgmt.sh
+1. Uses the Registry Management API client to get a list of all servers
+2. Filters for enabled servers
+3. Runs security scans on each enabled server using mcp_security_scanner.py
 
 Usage:
     uv run python cli/scan_all_servers.py
@@ -16,7 +15,6 @@ Usage:
 """
 
 import argparse
-import base64
 import json
 import logging
 import subprocess
@@ -25,7 +23,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-import requests
+# Add project root to path to import registry client
+SCRIPT_DIR = Path(__file__).parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+sys.path.insert(0, str(PROJECT_ROOT / "api"))
+
+from registry_client import RegistryClient
 
 
 # Configure logging
@@ -37,196 +40,9 @@ logger = logging.getLogger(__name__)
 
 
 # Constants
-SCRIPT_DIR = Path(__file__).parent
-PROJECT_ROOT = SCRIPT_DIR.parent
 DEFAULT_TOKEN_FILE = PROJECT_ROOT / ".oauth-tokens" / "ingress.json"
 DEFAULT_BASE_URL = "http://localhost"
 DEFAULT_ANALYZERS = "yara"
-GENERATE_CREDS_SCRIPT = PROJECT_ROOT / "credentials-provider" / "generate_creds.sh"
-
-
-def _check_token_expiration(
-    access_token: str
-) -> None:
-    """Check if JWT token is expired and exit with instructions if so.
-
-    Args:
-        access_token: JWT access token to check
-
-    Raises:
-        SystemExit: If token is expired or will expire soon
-    """
-    try:
-        # Decode JWT payload (without verification, just to check expiry)
-        parts = access_token.split('.')
-        if len(parts) != 3:
-            logger.warning("Invalid JWT format, cannot check expiration")
-            return
-
-        # Decode payload
-        payload = parts[1]
-        # Add padding if needed
-        padding = len(payload) % 4
-        if padding:
-            payload += '=' * (4 - padding)
-
-        decoded = base64.urlsafe_b64decode(payload)
-        token_data = json.loads(decoded)
-
-        # Check expiration
-        exp = token_data.get('exp')
-        if not exp:
-            logger.warning("Token does not have expiration field")
-            return
-
-        exp_dt = datetime.fromtimestamp(exp, tz=timezone.utc)
-        now = datetime.now(timezone.utc)
-        time_until_expiry = exp_dt - now
-
-        if time_until_expiry.total_seconds() < 0:
-            # Token is expired
-            logger.error("=" * 80)
-            logger.error("TOKEN EXPIRED")
-            logger.error("=" * 80)
-            logger.error(f"Token expired at: {exp_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
-            logger.error(f"Current time is: {now.strftime('%Y-%m-%d %H:%M:%S UTC')}")
-            logger.error(f"Token expired {abs(time_until_expiry.total_seconds())} seconds ago")
-            logger.error("")
-            logger.error("Please regenerate your token:")
-            logger.error(f"  {GENERATE_CREDS_SCRIPT}")
-            logger.error("=" * 80)
-            sys.exit(1)
-
-        elif time_until_expiry.total_seconds() < 60:
-            # Token will expire in less than 60 seconds
-            logger.warning("=" * 80)
-            logger.warning("TOKEN EXPIRING SOON")
-            logger.warning("=" * 80)
-            logger.warning(f"Token will expire in {time_until_expiry.total_seconds():.0f} seconds")
-            logger.warning(f"Expiration time: {exp_dt.strftime('%Y-%m-%d %H:%M:%S UTC')}")
-            logger.warning("")
-            logger.warning("Consider regenerating your token:")
-            logger.warning(f"  {GENERATE_CREDS_SCRIPT}")
-            logger.warning("=" * 80)
-            logger.warning("")
-
-        else:
-            # Token is valid
-            logger.info(f"Token is valid until {exp_dt.strftime('%Y-%m-%d %H:%M:%S UTC')} ({time_until_expiry.total_seconds():.0f} seconds remaining)")
-
-    except Exception as e:
-        logger.warning(f"Could not check token expiration: {e}")
-        return
-
-
-def _load_token_from_file(
-    token_file: Path
-) -> str:
-    """Load access token from JSON file and check expiration.
-
-    Args:
-        token_file: Path to token file
-
-    Returns:
-        Access token string
-
-    Raises:
-        FileNotFoundError: If token file doesn't exist
-        ValueError: If token file format is invalid
-        SystemExit: If token is expired
-    """
-    if not token_file.exists():
-        raise FileNotFoundError(
-            f"Token file not found: {token_file}\n"
-            "Please generate credentials first:\n"
-            f"  {GENERATE_CREDS_SCRIPT}"
-        )
-
-    with open(token_file, 'r') as f:
-        token_data = json.load(f)
-
-    access_token = token_data.get("access_token")
-    if not access_token:
-        raise ValueError(f"No access_token found in {token_file}")
-
-    logger.info(f"Loaded token from: {token_file}")
-
-    # Check token expiration
-    _check_token_expiration(access_token)
-
-    return access_token
-
-
-def _get_server_list(
-    base_url: str,
-    access_token: str,
-    limit: int = 1000
-) -> List[Dict[str, Any]]:
-    """Get list of all servers from registry API.
-
-    Args:
-        base_url: Base URL of the registry
-        access_token: JWT access token
-        limit: Maximum number of servers to retrieve
-
-    Returns:
-        List of server objects
-
-    Raises:
-        requests.HTTPError: If API request fails
-    """
-    api_url = f"{base_url}/v0.1/servers"
-    params = {"limit": limit}
-    headers = {
-        "X-Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
-    }
-
-    logger.info(f"Fetching server list from: {api_url}")
-
-    response = requests.get(
-        api_url,
-        params=params,
-        headers=headers,
-        timeout=30
-    )
-    response.raise_for_status()
-
-    data = response.json()
-
-    # Print full API response for debugging
-    logger.debug("Full API Response:")
-    logger.debug(json.dumps(data, indent=2))
-
-    servers = data.get("servers", [])
-
-    logger.info(f"Retrieved {len(servers)} servers from registry")
-    return servers
-
-
-def _filter_enabled_servers(
-    servers: List[Dict[str, Any]]
-) -> List[Dict[str, Any]]:
-    """Filter for only enabled servers.
-
-    Args:
-        servers: List of server objects from API
-
-    Returns:
-        List of enabled server objects
-    """
-    enabled_servers = []
-
-    for server_obj in servers:
-        server = server_obj.get("server", {})
-        meta = server.get("_meta", {}).get("io.mcpgateway/internal", {})
-
-        is_enabled = meta.get("is_enabled", False)
-        if is_enabled:
-            enabled_servers.append(server)
-
-    logger.info(f"Found {len(enabled_servers)} enabled servers")
-    return enabled_servers
 
 
 def _run_security_scan(
@@ -235,7 +51,7 @@ def _run_security_scan(
     api_key: Optional[str] = None,
     access_token: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Run security scan on a server using service_mgmt.sh.
+    """Run security scan on a server using mcp_security_scanner.py directly.
 
     Args:
         server_url: URL of the MCP server to scan
@@ -253,37 +69,42 @@ def _run_security_scan(
         - low_severity: int
         - is_safe: bool
     """
-    service_mgmt_script = SCRIPT_DIR / "service_mgmt.sh"
+    scanner_script = SCRIPT_DIR / "mcp_security_scanner.py"
 
-    if not service_mgmt_script.exists():
-        logger.error(f"service_mgmt.sh not found at: {service_mgmt_script}")
-        return False
+    if not scanner_script.exists():
+        logger.error(f"mcp_security_scanner.py not found at: {scanner_script}")
+        return {
+            "success": False,
+            "scan_output_file": None,
+            "critical_issues": 0,
+            "high_severity": 0,
+            "medium_severity": 0,
+            "low_severity": 0,
+            "is_safe": False,
+            "error_message": "Scanner script not found"
+        }
 
     cmd = [
-        str(service_mgmt_script),
-        "scan",
-        server_url,
-        analyzers
+        "uv", "run", "python",
+        str(scanner_script),
+        "--server-url", server_url,
+        "--analyzers", analyzers
     ]
 
     if api_key:
-        cmd.append(api_key)
-    else:
-        # Add empty string placeholder if we need to add headers next
-        if access_token:
-            cmd.append("")
+        cmd.extend(["--api-key", api_key])
 
     # Add headers with authorization token if provided
     if access_token:
         headers_json = json.dumps({"X-Authorization": f"Bearer {access_token}"})
-        cmd.append(headers_json)
+        cmd.extend(["--headers", headers_json])
 
     # Log command with masked token for security
     cmd_for_log = cmd.copy()
-    if access_token and len(cmd_for_log) > 0:
-        # Replace the last element (headers JSON) with masked version
+    if access_token and "--headers" in cmd_for_log:
+        header_idx = cmd_for_log.index("--headers") + 1
         headers_masked = json.dumps({"X-Authorization": f"Bearer {access_token[:20]}...{access_token[-10:]}"})
-        cmd_for_log[-1] = headers_masked
+        cmd_for_log[header_idx] = headers_masked
     logger.info(f"Running: {' '.join(cmd_for_log)}")
 
     try:
@@ -291,7 +112,8 @@ def _run_security_scan(
             cmd,
             capture_output=True,
             text=True,
-            check=False
+            check=False,
+            cwd=str(PROJECT_ROOT)
         )
 
         # Log output
@@ -538,8 +360,7 @@ def _generate_markdown_report(
 
 def _scan_all_servers(
     base_url: str,
-    token: Optional[str] = None,
-    token_file: Optional[Path] = None,
+    token_file: Path,
     analyzers: str = DEFAULT_ANALYZERS,
     api_key: Optional[str] = None
 ) -> Dict[str, Any]:
@@ -547,8 +368,7 @@ def _scan_all_servers(
 
     Args:
         base_url: Base URL of the registry
-        token: Access token string (takes precedence over token_file)
-        token_file: Path to token file (default: .oauth-tokens/ingress.json)
+        token_file: Path to token file
         analyzers: Comma-separated list of analyzers
         api_key: Optional API key for LLM analyzer
 
@@ -559,35 +379,58 @@ def _scan_all_servers(
     logger.info("Scan All MCP Servers - Security Vulnerability Scanner")
     logger.info("=" * 80)
 
-    # Load token - priority: --token > --token-file > default token file
+    # Load access token from file
     try:
-        if token:
-            logger.info("Using token provided via --token argument")
-            access_token = token
-            # Still check expiration
-            _check_token_expiration(access_token)
-        else:
-            # Use token file (either provided or default)
-            if token_file is None:
-                token_file = DEFAULT_TOKEN_FILE
-            access_token = _load_token_from_file(token_file)
+        with open(token_file, 'r') as f:
+            token_data = json.load(f)
+            access_token = token_data.get("access_token")
+            if not access_token:
+                raise ValueError(f"No access_token found in {token_file}")
+        logger.info(f"Loaded token from: {token_file}")
     except Exception as e:
         logger.error(f"Failed to load token: {e}")
         sys.exit(1)
 
-    # Get server list
+    # Create registry client
     try:
-        servers = _get_server_list(base_url, access_token)
+        client = RegistryClient(
+            registry_url=base_url,
+            token=access_token
+        )
+        logger.info(f"Connected to registry at: {base_url}")
+    except Exception as e:
+        logger.error(f"Failed to create registry client: {e}")
+        sys.exit(1)
+
+    # Get server list using the Anthropic Registry API (v0.1)
+    try:
+        servers_response = client.anthropic_list_servers(limit=1000)
+        servers = servers_response.servers if hasattr(servers_response, 'servers') else []
+        logger.info(f"Retrieved {len(servers)} servers from registry using Anthropic API v0.1")
     except Exception as e:
         logger.error(f"Failed to get server list: {e}")
         sys.exit(1)
 
-    # Filter enabled servers
-    enabled_servers = _filter_enabled_servers(servers)
+    # Filter enabled servers (using Pydantic attribute access)
+    enabled_servers = []
+    for server_response in servers:
+        # AnthropicServerResponse has a .server attribute of type AnthropicServerDetail
+        server = server_response.server
+
+        # Access meta attribute (Optional[Dict[str, Any]])
+        # The meta field has alias "_meta" but is accessed via .meta attribute
+        if server.meta and "io.mcpgateway/internal" in server.meta:
+            internal_meta = server.meta["io.mcpgateway/internal"]
+            is_enabled = internal_meta.get("is_enabled", False)
+
+            if is_enabled:
+                enabled_servers.append(server)
+
+    logger.info(f"Found {len(enabled_servers)} enabled servers")
 
     if not enabled_servers:
         logger.warning("No enabled servers found to scan")
-        return {"total": 0, "passed": 0, "failed": 0}
+        return {"stats": {"total": 0, "passed": 0, "failed": 0}, "scan_results": [], "scan_timestamp": "", "analyzers": analyzers}
 
     # Scan each server
     stats = {
@@ -605,12 +448,17 @@ def _scan_all_servers(
     logger.info("=" * 80)
     logger.info("")
 
-    for idx, server in enumerate(enabled_servers, 1):
-        server_name = server.get("name", "unknown")
+    # Note: access_token already loaded above for RegistryClient
 
-        # Get the path from metadata - this is what we use with the gateway
-        meta = server.get("_meta", {}).get("io.mcpgateway/internal", {})
-        server_path = meta.get("path")
+    for idx, server in enumerate(enabled_servers, 1):
+        # Server is AnthropicServerDetail with direct attribute access
+        server_name = server.name
+
+        # Get the path from metadata (meta is Optional[Dict])
+        server_path = None
+        if server.meta and "io.mcpgateway/internal" in server.meta:
+            internal_meta = server.meta["io.mcpgateway/internal"]
+            server_path = internal_meta.get("path")
 
         if not server_path:
             logger.warning(f"[{idx}/{stats['total']}] {server_name}: No path found in metadata, skipping")
@@ -629,7 +477,6 @@ def _scan_all_servers(
             continue
 
         # Construct the gateway proxy URL using the path and base_url
-        # Ensure path ends with / before adding mcp
         if not server_path.endswith('/'):
             server_path = server_path + '/'
         server_url = f"{base_url}{server_path}mcp"
@@ -674,13 +521,16 @@ Examples:
     uv run python cli/scan_all_servers.py --analyzers yara,llm
 
     # Use specific base URL
-    uv run python cli/scan_all_servers.py --base-url http://localhost:7860
-
-    # Provide token directly via command line
-    uv run python cli/scan_all_servers.py --token "eyJhbGci..."
+    uv run python cli/scan_all_servers.py --base-url http://localhost
 
     # Use custom token file
     uv run python cli/scan_all_servers.py --token-file .oauth-tokens/custom.json
+
+    # Production example
+    uv run python cli/scan_all_servers.py \\
+        --base-url https://registry.us-east-1.example.com \\
+        --token-file api/.token \\
+        --analyzers yara,llm
 """
     )
 
@@ -688,10 +538,6 @@ Examples:
         "--base-url",
         default=DEFAULT_BASE_URL,
         help=f"Registry base URL (default: {DEFAULT_BASE_URL})"
-    )
-    parser.add_argument(
-        "--token",
-        help="Access token string (takes precedence over --token-file)"
     )
     parser.add_argument(
         "--token-file",
@@ -723,7 +569,6 @@ Examples:
     # Run scans
     results = _scan_all_servers(
         base_url=args.base_url,
-        token=args.token,
         token_file=args.token_file,
         analyzers=args.analyzers,
         api_key=args.api_key

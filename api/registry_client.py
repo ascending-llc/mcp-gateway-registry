@@ -35,6 +35,7 @@ class HealthStatus(str, Enum):
     HEALTHY = "healthy"
     UNHEALTHY = "unhealthy"
     UNKNOWN = "unknown"
+    DISABLED = "disabled"
 
 
 class ServiceRegistration(BaseModel):
@@ -121,6 +122,54 @@ class ErrorResponse(BaseModel):
     request_id: Optional[str] = Field(None, description="Request ID")
 
 
+class SecurityScanResult(BaseModel):
+    """Security scan result model."""
+
+    analysis_results: Dict[str, Any] = Field(..., description="Analysis results by analyzer")
+    tool_results: List[Dict[str, Any]] = Field(..., description="Detailed tool scan results")
+
+
+class RescanResponse(BaseModel):
+    """Server rescan response model."""
+
+    server_url: str = Field(..., description="Server URL that was scanned")
+    server_path: str = Field(..., description="Server path")
+    scan_timestamp: str = Field(..., description="Scan timestamp")
+    is_safe: bool = Field(..., description="Whether server is safe")
+    critical_issues: int = Field(..., description="Number of critical issues")
+    high_severity: int = Field(..., description="Number of high severity issues")
+    medium_severity: int = Field(..., description="Number of medium severity issues")
+    low_severity: int = Field(..., description="Number of low severity issues")
+    analyzers_used: List[str] = Field(..., description="Analyzers used in scan")
+    scan_failed: bool = Field(..., description="Whether scan failed")
+    error_message: Optional[str] = Field(None, description="Error message if scan failed")
+    raw_output: Optional[Dict[str, Any]] = Field(None, description="Raw scan output")
+
+
+class AgentSecurityScanResponse(BaseModel):
+    """Agent security scan results response model."""
+
+    analysis_results: Dict[str, Any] = Field(default_factory=dict, description="Analysis results by analyzer")
+    scan_results: Dict[str, Any] = Field(default_factory=dict, description="Scan results and metadata")
+
+
+class AgentRescanResponse(BaseModel):
+    """Agent rescan response model."""
+
+    agent_path: str = Field(..., description="Agent path")
+    agent_url: str = Field(..., description="Agent URL that was scanned")
+    scan_timestamp: str = Field(..., description="Scan timestamp")
+    is_safe: bool = Field(..., description="Whether agent is safe")
+    critical_issues: int = Field(..., description="Number of critical issues")
+    high_severity: int = Field(..., description="Number of high severity issues")
+    medium_severity: int = Field(..., description="Number of medium severity issues")
+    low_severity: int = Field(..., description="Number of low severity issues")
+    analyzers_used: List[str] = Field(..., description="Analyzers used in scan")
+    scan_failed: bool = Field(..., description="Whether scan failed")
+    error_message: Optional[str] = Field(None, description="Error message if scan failed")
+    output_file: Optional[str] = Field(None, description="Path to scan output file")
+
+
 class GroupListResponse(BaseModel):
     """Group list response model."""
 
@@ -142,6 +191,18 @@ class AgentVisibility(str, Enum):
     PUBLIC = "public"
     PRIVATE = "private"
     GROUP_RESTRICTED = "group-restricted"
+
+
+class Provider(BaseModel):
+    """
+    A2A Agent Provider information.
+
+    Represents the service provider of an agent with organization name and website URL.
+    Per A2A specification, if provider is present, both organization and url are required.
+    """
+
+    organization: str = Field(..., description="Provider organization name")
+    url: str = Field(..., description="Provider website or documentation URL")
 
 
 class SecuritySchemeType(str, Enum):
@@ -232,7 +293,7 @@ class AgentRegistration(BaseModel):
 
     # Optional A2A fields
     preferred_transport: Optional[str] = Field("JSONRPC", alias="preferredTransport", description="Preferred transport protocol: JSONRPC, GRPC, HTTP+JSON")
-    provider: Optional[Dict[str, str]] = Field(None, description="Agent provider information {organization, url}")
+    provider: Optional[Provider] = Field(None, description="Agent provider information per A2A spec")
     icon_url: Optional[str] = Field(None, alias="iconUrl", description="Agent icon URL")
     documentation_url: Optional[str] = Field(None, alias="documentationUrl", description="Documentation URL")
     security_schemes: Dict[str, SecurityScheme] = Field(default_factory=dict, alias="securitySchemes", description="Supported authentication methods")
@@ -316,7 +377,7 @@ class AgentDetail(BaseModel):
 
     # Optional A2A fields
     preferred_transport: Optional[str] = Field("JSONRPC", alias="preferredTransport", description="Preferred transport protocol: JSONRPC, GRPC, HTTP+JSON")
-    provider: Optional[str] = Field(None, description="Agent provider/author")
+    provider: Optional[Provider] = Field(None, description="Agent provider information per A2A spec")
     icon_url: Optional[str] = Field(None, alias="iconUrl", description="Agent icon URL")
     documentation_url: Optional[str] = Field(None, alias="documentationUrl", description="Documentation URL")
     security_schemes: Dict[str, SecurityScheme] = Field(default_factory=dict, alias="securitySchemes", description="Supported authentication methods")
@@ -355,7 +416,7 @@ class AgentListItem(BaseModel):
     tags: List[str] = Field(default_factory=list, description="Categorization tags")
     skills: List[str] = Field(default_factory=list, description="Skill names")
     num_skills: int = Field(default=0, alias="numSkills", description="Number of skills")
-    num_stars: int = Field(default=0, alias="numStars", description="Community rating")
+    num_stars: float = Field(default=0.0, alias="numStars", description="Average community rating (0.0-5.0)")
     is_enabled: bool = Field(default=False, alias="isEnabled", description="Whether agent is enabled")
     provider: Optional[str] = Field(None, description="Agent provider")
     streaming: bool = Field(default=False, description="Supports streaming")
@@ -415,6 +476,33 @@ class AgentSemanticDiscoveryResponse(BaseModel):
     """Agent semantic discovery response model."""
 
     agents: List[SemanticDiscoveredAgent] = Field(..., description="Semantically discovered agents")
+
+
+class RatingDetail(BaseModel):
+    """Individual rating detail."""
+
+    user: str = Field(..., description="Username who submitted the rating")
+    rating: int = Field(..., ge=1, le=5, description="Rating value (1-5 stars)")
+
+
+class RatingRequest(BaseModel):
+    """Rating submission request."""
+
+    rating: int = Field(..., ge=1, le=5, description="Rating value (1-5 stars)")
+
+
+class RatingResponse(BaseModel):
+    """Rating submission response."""
+
+    message: str = Field(..., description="Success message")
+    average_rating: float = Field(..., ge=1.0, le=5.0, description="Updated average rating")
+
+
+class RatingInfoResponse(BaseModel):
+    """Rating information response."""
+
+    num_stars: float = Field(..., ge=0.0, le=5.0, description="Average rating (0.0 if no ratings)")
+    rating_details: List[RatingDetail] = Field(..., description="Individual ratings (max 100)")
 
 
 # Anthropic Registry API Models (v0.1)
@@ -518,6 +606,92 @@ class AnthropicErrorResponse(BaseModel):
     error: str = Field(..., description="Error message")
 
 
+# Management API Models (IAM/User Management)
+
+
+class M2MAccountRequest(BaseModel):
+    """Request model for creating M2M service account."""
+
+    name: str = Field(..., min_length=1, description="Service account name/client ID")
+    groups: List[str] = Field(..., min_length=1, description="List of group names")
+    description: Optional[str] = Field(None, description="Account description")
+
+
+class HumanUserRequest(BaseModel):
+    """Request model for creating human user account."""
+
+    username: str = Field(..., min_length=1, description="Username")
+    email: str = Field(..., description="Email address")
+    first_name: str = Field(..., min_length=1, description="First name")
+    last_name: str = Field(..., min_length=1, description="Last name")
+    groups: List[str] = Field(..., min_length=1, description="List of group names")
+    password: Optional[str] = Field(None, description="Initial password")
+
+
+class KeycloakUserSummary(BaseModel):
+    """Keycloak user summary model."""
+
+    id: str = Field(..., description="User ID")
+    username: str = Field(..., description="Username")
+    email: Optional[str] = Field(None, description="Email address")
+    firstName: Optional[str] = Field(None, description="First name")
+    lastName: Optional[str] = Field(None, description="Last name")
+    enabled: bool = Field(True, description="Whether user is enabled")
+    groups: List[str] = Field(default_factory=list, description="User groups")
+
+
+class UserListResponse(BaseModel):
+    """Response model for list users endpoint."""
+
+    users: List[KeycloakUserSummary] = Field(default_factory=list, description="List of users")
+    total: int = Field(..., description="Total number of users")
+
+
+class UserDeleteResponse(BaseModel):
+    """Response model for delete user endpoint."""
+
+    username: str = Field(..., description="Deleted username")
+    deleted: bool = Field(True, description="Deletion status")
+
+
+class M2MAccountResponse(BaseModel):
+    """Response model for M2M account creation."""
+
+    client_id: str = Field(..., description="Client ID")
+    client_secret: str = Field(..., description="Client secret")
+    groups: List[str] = Field(default_factory=list, description="Assigned groups")
+
+
+class GroupCreateRequest(BaseModel):
+    """Request model for creating a Keycloak group."""
+
+    name: str = Field(..., min_length=1, description="Group name")
+    description: Optional[str] = Field(None, description="Group description")
+
+
+class KeycloakGroupSummary(BaseModel):
+    """Keycloak group summary model."""
+
+    id: str = Field(..., description="Group ID")
+    name: str = Field(..., description="Group name")
+    path: str = Field(..., description="Group path")
+    attributes: Optional[Dict[str, Any]] = Field(None, description="Group attributes")
+
+
+class GroupListResponse(BaseModel):
+    """Response model for list groups endpoint."""
+
+    groups: List[KeycloakGroupSummary] = Field(default_factory=list, description="List of groups")
+    total: int = Field(..., description="Total number of groups")
+
+
+class GroupDeleteResponse(BaseModel):
+    """Response model for delete group endpoint."""
+
+    name: str = Field(..., description="Deleted group name")
+    deleted: bool = Field(True, description="Deletion status")
+
+
 class RegistryClient:
     """
     MCP Gateway Registry API client.
@@ -526,6 +700,7 @@ class RegistryClient:
     - Server Management: registration, removal, toggling, health checks
     - Group Management: create, delete, list groups
     - Agent Management: register, update, delete, discover agents (A2A)
+    - Management API: IAM/user management, M2M accounts, user CRUD operations
 
     Authentication is handled via JWT tokens passed to the constructor.
     """
@@ -588,9 +763,9 @@ class RegistryClient:
         logger.debug(f"{method} {url}")
 
         # Determine content type based on endpoint
-        # Agent registration uses JSON, server registration uses form data
-        if endpoint == "/api/agents/register":
-            # Send as JSON for agent registration
+        # Agent and Management API endpoints use JSON, server registration uses form data
+        if endpoint.startswith("/api/agents") or endpoint.startswith("/api/management"):
+            # Send as JSON for agent and management endpoints
             response = requests.request(
                 method=method,
                 url=url,
@@ -716,9 +891,17 @@ class RegistryClient:
             endpoint="/api/servers"
         )
 
-        result = ServerListResponse(**response.json())
-        logger.info(f"Retrieved {len(result.servers)} services")
-        return result
+        response_data = response.json()
+        logger.debug(f"Raw API response: {json.dumps(response_data, indent=2, default=str)}")
+
+        try:
+            result = ServerListResponse(**response_data)
+            logger.info(f"Retrieved {len(result.servers)} services")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to parse server list response: {e}")
+            logger.error(f"Raw response data: {json.dumps(response_data, indent=2, default=str)}")
+            raise
 
     def healthcheck(self) -> Dict[str, Any]:
         """
@@ -1169,6 +1352,276 @@ class RegistryClient:
         logger.info(f"Discovered {len(result.agents)} agents via semantic search")
         return result
 
+
+    def rate_agent(
+        self,
+        path: str,
+        rating: int
+    ) -> RatingResponse:
+        """
+        Submit a rating for an agent (1-5 stars).
+
+        Each user can only have one active rating. If user has already rated,
+        this updates their existing rating. System maintains a rotating buffer
+        of the last 100 ratings.
+
+        Args:
+            path: Agent path (e.g., /code-reviewer)
+            rating: Rating value (1-5 stars)
+
+        Returns:
+            Rating response with success message and updated average rating
+
+        Raises:
+            requests.HTTPError: If rating fails (400 for invalid rating, 403 for unauthorized, 404 for not found)
+        """
+        logger.info(f"Rating agent '{path}' with {rating} stars")
+
+        request_data = RatingRequest(rating=rating)
+
+        response = self._make_request(
+            method="POST",
+            endpoint=f"/api/agents{path}/rate",
+            data=request_data.model_dump()
+        )
+
+        result = RatingResponse(**response.json())
+        logger.info(f"Agent '{path}' rated successfully. New average: {result.average_rating:.2f}")
+        return result
+
+
+    def get_agent_rating(
+        self,
+        path: str
+    ) -> RatingInfoResponse:
+        """
+        Get rating information for an agent.
+
+        Returns average rating and up to 100 most recent individual ratings
+        (maintained as rotating buffer).
+
+        Args:
+            path: Agent path (e.g., /code-reviewer)
+
+        Returns:
+            Rating information with average and individual ratings
+
+        Raises:
+            requests.HTTPError: If retrieval fails (403 for unauthorized, 404 for not found)
+        """
+        logger.info(f"Getting ratings for agent: {path}")
+
+        response = self._make_request(
+            method="GET",
+            endpoint=f"/api/agents{path}/rating"
+        )
+
+        result = RatingInfoResponse(**response.json())
+        logger.info(f"Retrieved ratings for '{path}': {result.num_stars:.2f} stars ({len(result.rating_details)} ratings)")
+        return result
+
+
+    def rescan_agent(
+        self,
+        path: str
+    ) -> AgentRescanResponse:
+        """
+        Trigger a manual security scan for an agent.
+
+        Initiates a new security scan for the specified agent and returns
+        the results. This endpoint is useful for re-scanning agents after
+        updates or for on-demand security assessments.
+
+        Args:
+            path: Agent path (e.g., /code-reviewer)
+
+        Returns:
+            Newly generated security scan results
+
+        Raises:
+            requests.HTTPError: If scan fails (403 for unauthorized, 404 for not found)
+        """
+        logger.info(f"Triggering security scan for agent: {path}")
+
+        response = self._make_request(
+            method="POST",
+            endpoint=f"/api/agents{path}/rescan"
+        )
+
+        result = AgentRescanResponse(**response.json())
+        logger.info(
+            f"Security scan completed for '{path}': "
+            f"Safe={result.is_safe}, Critical={result.critical_issues}, "
+            f"High={result.high_severity}, Medium={result.medium_severity}, "
+            f"Low={result.low_severity}"
+        )
+        return result
+
+
+    def get_agent_security_scan(
+        self,
+        path: str
+    ) -> AgentSecurityScanResponse:
+        """
+        Get security scan results for an agent.
+
+        Returns the latest security scan results including threat analysis,
+        severity levels, and detailed findings from YARA, specification
+        validation, and heuristic analyzers.
+
+        Args:
+            path: Agent path (e.g., /code-reviewer)
+
+        Returns:
+            Security scan results with analysis_results and scan_results
+
+        Raises:
+            requests.HTTPError: If retrieval fails (403 for unauthorized, 404 for not found)
+        """
+        logger.info(f"Getting security scan results for agent: {path}")
+
+        response = self._make_request(
+            method="GET",
+            endpoint=f"/api/agents{path}/security-scan"
+        )
+
+        result = AgentSecurityScanResponse(**response.json())
+        logger.info(f"Retrieved security scan results for '{path}'")
+        return result
+
+    def rate_server(
+        self,
+        path: str,
+        rating: int
+    ) -> RatingResponse:
+        """
+        Submit a rating for a server (1-5 stars).
+
+        Each user can only have one active rating. If user has already rated,
+        this updates their existing rating. System maintains a rotating buffer
+        of the last 100 ratings.
+
+        Args:
+            path: Server path (e.g., /cloudflare-docs)
+            rating: Rating value (1-5 stars)
+
+        Returns:
+            Rating response with success message and updated average rating
+
+        Raises:
+            requests.HTTPError: If rating fails (400 for invalid rating, 403 for unauthorized, 404 for not found)
+        """
+        logger.info(f"Rating server '{path}' with {rating} stars")
+
+        request_data = RatingRequest(rating=rating)
+
+        response = self._make_request(
+            method="POST",
+            endpoint=f"/api/servers{path}/rate",
+            data=request_data.model_dump()
+        )
+
+        result = RatingResponse(**response.json())
+        logger.info(f"Server '{path}' rated successfully. New average: {result.average_rating:.2f}")
+        return result
+
+    def get_server_rating(
+        self,
+        path: str
+    ) -> RatingInfoResponse:
+        """
+        Get rating information for a server.
+
+        Returns average rating and up to 100 most recent individual ratings
+        (maintained as rotating buffer).
+
+        Args:
+            path: Server path (e.g., /cloudflare-docs)
+
+        Returns:
+            Rating information with average and individual ratings
+
+        Raises:
+            requests.HTTPError: If retrieval fails (403 for unauthorized, 404 for not found)
+        """
+        logger.info(f"Getting ratings for server: {path}")
+
+        response = self._make_request(
+            method="GET",
+            endpoint=f"/api/servers{path}/rating"
+        )
+
+        result = RatingInfoResponse(**response.json())
+        logger.info(f"Retrieved ratings for '{path}': {result.num_stars:.2f} stars ({len(result.rating_details)} ratings)")
+        return result
+
+
+    def get_security_scan(
+        self,
+        path: str
+    ) -> SecurityScanResult:
+        """
+        Get security scan results for a server.
+
+        Returns the latest security scan results including threat analysis,
+        severity levels, and detailed findings for each tool.
+
+        Args:
+            path: Server path (e.g., /cloudflare-docs)
+
+        Returns:
+            Security scan results with analysis_results and tool_results
+
+        Raises:
+            requests.HTTPError: If retrieval fails (403 for unauthorized, 404 for not found)
+        """
+        logger.info(f"Getting security scan results for server: {path}")
+
+        response = self._make_request(
+            method="GET",
+            endpoint=f"/api/servers{path}/security-scan"
+        )
+
+        result = SecurityScanResult(**response.json())
+        logger.info(f"Retrieved security scan results for '{path}'")
+        return result
+
+
+    def rescan_server(
+        self,
+        path: str
+    ) -> RescanResponse:
+        """
+        Trigger a manual security scan for a server.
+
+        Initiates a new security scan for the specified server and returns
+        the results. This operation is admin-only.
+
+        Args:
+            path: Server path (e.g., /cloudflare-docs)
+
+        Returns:
+            Newly generated security scan results
+
+        Raises:
+            requests.HTTPError: If scan fails (403 for non-admin, 404 for not found, 500 for scan error)
+        """
+        logger.info(f"Triggering security scan for server: {path}")
+
+        response = self._make_request(
+            method="POST",
+            endpoint=f"/api/servers{path}/rescan"
+        )
+
+        result = RescanResponse(**response.json())
+        safety_status = "SAFE" if result.is_safe else "UNSAFE"
+        logger.info(
+            f"Security scan completed for '{path}': {safety_status} "
+            f"(Critical: {result.critical_issues}, High: {result.high_severity}, "
+            f"Medium: {result.medium_severity}, Low: {result.low_severity})"
+        )
+        return result
+
     # Anthropic Registry API Methods (v0.1)
 
     def anthropic_list_servers(
@@ -1278,4 +1731,266 @@ class RegistryClient:
 
         result = AnthropicServerResponse(**response.json())
         logger.info(f"Retrieved server details for {server_name} v{version}")
+        return result
+
+
+    # Management API Methods (IAM/User Management)
+
+
+    def list_users(
+        self,
+        search: Optional[str] = None,
+        limit: int = 500
+    ) -> UserListResponse:
+        """
+        List Keycloak users (admin only).
+
+        Args:
+            search: Optional search string to filter users
+            limit: Maximum number of results (default: 500)
+
+        Returns:
+            UserListResponse with list of users
+
+        Raises:
+            requests.HTTPError: If not authorized (403) or request fails
+        """
+        logger.info("Listing Keycloak users")
+
+        params = {}
+        if search:
+            params["search"] = search
+        if limit != 500:
+            params["limit"] = limit
+
+        response = self._make_request(
+            method="GET",
+            endpoint="/api/management/iam/users",
+            params=params
+        )
+
+        try:
+            response_data = response.json()
+            logger.debug(f"Raw API response: {json.dumps(response_data, indent=2, default=str)}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to decode JSON response: {e}")
+            logger.error(f"Raw response text: {response.text}")
+            logger.error(f"Response status code: {response.status_code}")
+            logger.error(f"Response headers: {dict(response.headers)}")
+            raise
+
+        try:
+            result = UserListResponse(**response_data)
+            logger.info(f"Retrieved {result.total} users")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to parse user list response: {e}")
+            logger.error(f"Raw response data: {json.dumps(response_data, indent=2, default=str)}")
+            raise
+
+
+    def create_m2m_account(
+        self,
+        name: str,
+        groups: List[str],
+        description: Optional[str] = None
+    ) -> M2MAccountResponse:
+        """
+        Create a machine-to-machine service account.
+
+        Args:
+            name: Service account name/client ID
+            groups: List of group names for access control
+            description: Optional account description
+
+        Returns:
+            M2MAccountResponse with client credentials
+
+        Raises:
+            requests.HTTPError: If not authorized (403), already exists (400), or request fails
+        """
+        logger.info(f"Creating M2M service account: {name}")
+
+        data = {
+            "name": name,
+            "groups": groups
+        }
+        if description:
+            data["description"] = description
+
+        response = self._make_request(
+            method="POST",
+            endpoint="/api/management/iam/users/m2m",
+            data=data
+        )
+
+        result = M2MAccountResponse(**response.json())
+        logger.info(f"M2M account created successfully: {name}")
+        return result
+
+
+    def create_human_user(
+        self,
+        username: str,
+        email: str,
+        first_name: str,
+        last_name: str,
+        groups: List[str],
+        password: Optional[str] = None
+    ) -> KeycloakUserSummary:
+        """
+        Create a human user account in Keycloak.
+
+        Args:
+            username: Username
+            email: Email address
+            first_name: First name
+            last_name: Last name
+            groups: List of group names
+            password: Optional initial password
+
+        Returns:
+            KeycloakUserSummary with created user details
+
+        Raises:
+            requests.HTTPError: If not authorized (403), already exists (400), or request fails
+        """
+        logger.info(f"Creating human user: {username}")
+
+        data = {
+            "username": username,
+            "email": email,
+            "firstname": first_name,
+            "lastname": last_name,
+            "groups": groups
+        }
+        if password:
+            data["password"] = password
+
+        response = self._make_request(
+            method="POST",
+            endpoint="/api/management/iam/users/human",
+            data=data
+        )
+
+        result = KeycloakUserSummary(**response.json())
+        logger.info(f"User created successfully: {username}")
+        return result
+
+
+    def delete_user(
+        self,
+        username: str
+    ) -> UserDeleteResponse:
+        """
+        Delete a user by username.
+
+        Args:
+            username: Username to delete
+
+        Returns:
+            UserDeleteResponse confirming deletion
+
+        Raises:
+            requests.HTTPError: If not authorized (403), not found (400/404), or request fails
+        """
+        logger.info(f"Deleting user: {username}")
+
+        response = self._make_request(
+            method="DELETE",
+            endpoint=f"/api/management/iam/users/{username}"
+        )
+
+        result = UserDeleteResponse(**response.json())
+        logger.info(f"User deleted successfully: {username}")
+        return result
+
+
+    def list_keycloak_iam_groups(self) -> GroupListResponse:
+        """
+        List Keycloak IAM groups (admin only).
+
+        This is different from list_groups() which returns groups with server associations.
+        This method returns raw Keycloak group data without scopes.
+
+        Returns:
+            GroupListResponse with list of groups
+
+        Raises:
+            requests.HTTPError: If not authorized (403) or request fails
+        """
+        logger.info("Listing Keycloak IAM groups")
+
+        response = self._make_request(
+            method="GET",
+            endpoint="/api/management/iam/groups"
+        )
+
+        result = GroupListResponse(**response.json())
+        logger.info(f"Retrieved {result.total} Keycloak groups")
+        return result
+
+
+    def create_keycloak_group(
+        self,
+        name: str,
+        description: Optional[str] = None
+    ) -> KeycloakGroupSummary:
+        """
+        Create a new Keycloak group (admin only).
+
+        Args:
+            name: Group name
+            description: Optional group description
+
+        Returns:
+            KeycloakGroupSummary with created group details
+
+        Raises:
+            requests.HTTPError: If not authorized (403), already exists (400), or request fails
+        """
+        logger.info(f"Creating Keycloak group: {name}")
+
+        data = {
+            "name": name
+        }
+        if description:
+            data["description"] = description
+
+        response = self._make_request(
+            method="POST",
+            endpoint="/api/management/iam/groups",
+            data=data
+        )
+
+        result = KeycloakGroupSummary(**response.json())
+        logger.info(f"Group created successfully: {name}")
+        return result
+
+
+    def delete_keycloak_group(
+        self,
+        name: str
+    ) -> GroupDeleteResponse:
+        """
+        Delete a Keycloak group by name (admin only).
+
+        Args:
+            name: Group name to delete
+
+        Returns:
+            GroupDeleteResponse confirming deletion
+
+        Raises:
+            requests.HTTPError: If not authorized (403), not found (404), or request fails
+        """
+        logger.info(f"Deleting Keycloak group: {name}")
+
+        response = self._make_request(
+            method="DELETE",
+            endpoint=f"/api/management/iam/groups/{name}"
+        )
+
+        result = GroupDeleteResponse(**response.json())
+        logger.info(f"Group deleted successfully: {name}")
         return result

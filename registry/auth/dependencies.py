@@ -121,10 +121,10 @@ def get_user_session_data(
 
         # Set defaults for traditional auth users
         if data.get('auth_method') != 'oauth2':
-            # Traditional users get admin privileges
-            data.setdefault('groups', ['mcp-registry-admin'])
-            data.setdefault('scopes', ['mcp-servers-unrestricted/read', 'mcp-servers-unrestricted/execute'])
-
+            # Traditional users get admin privileges via registry-admins group
+            data.setdefault('groups', ['registry-admins'])
+            data.setdefault('scopes', ['registry-admins'])
+        
         logger.debug(f"Session data extracted for user: {data.get('username')}")
         return data
 
@@ -486,14 +486,14 @@ def enhanced_auth(
             logger.warning(
                 f"OAuth2 user {username} has no groups! This user may not have proper group assignments in Cognito.")
     else:
-        # Traditional users dynamically map to admin
+        # Traditional users dynamically map to admin via registry-admins group
         if not groups:
-            groups = ['mcp-registry-admin']
+            groups = ['registry-admins']
         # Map traditional admin groups to scopes dynamically
         scopes = map_cognito_groups_to_scopes(groups)
         if not scopes:
             # Fallback for traditional users if no mapping exists
-            scopes = ['mcp-registry-admin', 'mcp-servers-unrestricted/read', 'mcp-servers-unrestricted/execute']
+            scopes = ['registry-admins']
         logger.info(f"Traditional user {username} with groups {groups} mapped to scopes: {scopes}")
 
     # Get UI permissions
@@ -531,12 +531,12 @@ def enhanced_auth(
 
 # @DeprecationWarning
 def nginx_proxied_auth(
-        request: Request,
-        session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
-        x_user: Annotated[str | None, Header(alias="X-User")] = None,
-        x_username: Annotated[str | None, Header(alias="X-Username")] = None,
-        x_scopes: Annotated[str | None, Header(alias="X-Scopes")] = None,
-        x_auth_method: Annotated[str | None, Header(alias="X-Auth-Method")] = None,
+    request: Request,
+    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name, include_in_schema=False)] = None,
+    x_user: Annotated[str | None, Header(alias="X-User", include_in_schema=False)] = None,
+    x_username: Annotated[str | None, Header(alias="X-Username", include_in_schema=False)] = None,
+    x_scopes: Annotated[str | None, Header(alias="X-Scopes", include_in_schema=False)] = None,
+    x_auth_method: Annotated[str | None, Header(alias="X-Auth-Method", include_in_schema=False)] = None,
 ) -> Dict[str, Any]:
     """
     Authentication dependency that works with both nginx-proxied requests and direct requests.
@@ -656,6 +656,14 @@ def create_session_cookie(username: str, auth_method: str = "traditional", provi
         "provider": provider,
         "groups": groups or []
     }
+
+    # For traditional (local) auth users, include groups and scopes in the session cookie
+    # This ensures the auth server can validate access without needing to query external systems
+    # Use registry-admins group which has wildcard access to all servers and agents
+    if auth_method == "traditional":
+        session_data["groups"] = ["registry-admins"]
+        session_data["scopes"] = ["registry-admins"]
+
     return signer.dumps(session_data)
 
 

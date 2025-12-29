@@ -1762,14 +1762,41 @@ async def oauth2_callback(
         response = RedirectResponse(url=redirect_url, status_code=302)
         
         # Set registry-compatible session cookie
-        response.set_cookie(
-            key="mcp_gateway_session",  # Same as registry SESSION_COOKIE_NAME
-            value=registry_session,
-            max_age=OAUTH2_CONFIG.get("session", {}).get("max_age_seconds", 28800),
-            httponly=OAUTH2_CONFIG.get("session", {}).get("httponly", True),
-            samesite=OAUTH2_CONFIG.get("session", {}).get("samesite", "lax"),
-            secure=OAUTH2_CONFIG.get("session", {}).get("secure", False)
-        )
+        # Check if HTTPS is terminated at load balancer (x-forwarded-proto header)
+        x_forwarded_proto = request.headers.get("x-forwarded-proto", "")
+        is_https = x_forwarded_proto == "https" or request.url.scheme == "https"
+
+        # Only set secure=True if the original request was HTTPS
+        cookie_secure_config = OAUTH2_CONFIG.get("session", {}).get("secure", False)
+        cookie_secure = cookie_secure_config and is_https
+        cookie_samesite = OAUTH2_CONFIG.get("session", {}).get("samesite", "lax")
+        cookie_domain = OAUTH2_CONFIG.get("session", {}).get("domain", "")
+
+        # Handle domain configuration - only use explicitly configured values
+        # Empty string or placeholder means no domain attribute (exact host only)
+        if not cookie_domain or cookie_domain == "${SESSION_COOKIE_DOMAIN}":
+            cookie_domain = None
+            logger.info(f"No cookie domain configured - cookie will be set for exact host only")
+        else:
+            logger.info(f"Using explicitly configured cookie domain: {cookie_domain}")
+
+        logger.info(f"Auth server setting session cookie: secure={cookie_secure} (config={cookie_secure_config}, is_https={is_https}), samesite={cookie_samesite}, domain={cookie_domain or 'not set'}, x-forwarded-proto={x_forwarded_proto}, request_scheme={request.url.scheme}")
+
+        cookie_params = {
+            "key": "mcp_gateway_session",  # Same as registry SESSION_COOKIE_NAME
+            "value": registry_session,
+            "max_age": OAUTH2_CONFIG.get("session", {}).get("max_age_seconds", 28800),
+            "httponly": OAUTH2_CONFIG.get("session", {}).get("httponly", True),
+            "samesite": cookie_samesite,
+            "secure": cookie_secure,
+            "path": "/"  # Ensure cookie is sent for all paths
+        }
+
+        # Only set domain if configured or inferred (for cross-subdomain cookies)
+        if cookie_domain:
+            cookie_params["domain"] = cookie_domain
+
+        response.set_cookie(**cookie_params)
         
         # Clear temporary OAuth2 session
         response.delete_cookie("oauth2_temp_session")

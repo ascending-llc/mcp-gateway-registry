@@ -4,9 +4,10 @@ import os
 import json
 import asyncio
 from typing import Annotated
-from fastapi import (APIRouter, Request, Form, HTTPException, Cookie, status)
+from fastapi import (APIRouter, Request, Form, HTTPException, Cookie, status, Depends)
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
 from .internal_routes import (internal_list_groups, internal_healthcheck, internal_add_server_to_groups,
                               internal_remove_server_from_groups, internal_create_group, internal_delete_group)
@@ -18,13 +19,102 @@ from ..search.service import faiss_service
 from ..auth.dependencies import CurrentUser
 from ..health.service import health_service
 from ..utils.scopes_manager import remove_server_scopes
+from ..services.security_scanner import security_scanner_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+
+class RatingRequest(BaseModel):
+    rating: int
+
 # Templates
 templates = Jinja2Templates(directory=settings.templates_dir)
+
+
+async def _perform_security_scan_on_registration(
+    path: str,
+    proxy_pass_url: str,
+    server_entry: dict,
+    headers_list: list | None = None,
+) -> None:
+    """Perform security scan on newly registered server.
+
+    Handles the complete security scan workflow including:
+    - Running the security scan with configured analyzers
+    - Adding security-pending tag if scan fails
+    - Disabling server if configured and scan fails
+    - Updating FAISS and regenerating Nginx config if server disabled
+
+    All scan failures are non-fatal and will be logged but not raised.
+
+    Args:
+        path: Server path (e.g., /mcpgw)
+        proxy_pass_url: URL to scan
+        server_entry: Server metadata dictionary
+        headers_list: Optional headers for authenticated endpoints
+    """
+    scan_config = security_scanner_service.get_scan_config()
+    if not (scan_config.enabled and scan_config.scan_on_registration):
+        return
+
+    logger.info(f"Running security scan for newly registered server: {path}")
+
+    try:
+        # Prepare headers if needed (for authenticated endpoints)
+        headers_json = None
+        if headers_list:
+            headers_json = json.dumps(headers_list)
+
+        # Run the security scan
+        scan_result = await security_scanner_service.scan_server(
+            server_url=proxy_pass_url,
+            analyzers=scan_config.analyzers,
+            api_key=scan_config.llm_api_key,
+            headers=headers_json,
+            timeout=scan_config.scan_timeout_seconds,
+        )
+
+        # Handle unsafe servers
+        if not scan_result.is_safe:
+            logger.warning(
+                f"Server {path} failed security scan. "
+                f"Critical: {scan_result.critical_issues}, High: {scan_result.high_severity}"
+            )
+
+            # Add security-pending tag if configured
+            if scan_config.add_security_pending_tag:
+                current_tags = server_entry.get("tags", [])
+                if "security-pending" not in current_tags:
+                    current_tags.append("security-pending")
+                    server_entry["tags"] = current_tags
+                    server_service.update_server(path, server_entry)
+                    logger.info(f"Added 'security-pending' tag to {path}")
+
+            # Disable server if configured
+            if scan_config.block_unsafe_servers:
+                from ..search.service import faiss_service
+                from ..core.nginx_service import nginx_service
+
+                server_service.toggle_service(path, False)
+                logger.warning(f"Disabled server {path} due to failed security scan")
+
+                # Update FAISS with disabled state
+                await faiss_service.add_or_update_service(path, server_entry, False)
+
+                # Regenerate Nginx config to remove disabled server
+                enabled_servers = {
+                    server_path: server_service.get_server_info(server_path)
+                    for server_path in server_service.get_enabled_services()
+                }
+                await nginx_service.generate_config_async(enabled_servers)
+        else:
+            logger.info(f"Server {path} passed security scan")
+
+    except Exception as e:
+        logger.error(f"Security scan failed for {path}: {e}")
+        # Non-fatal error - server is registered but scan failed
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -42,7 +132,9 @@ async def read_root(
         # Get user context
         user_context = CurrentUser
     except HTTPException as e:
-        logger.info(f"Authentication failed at root route: {e.detail}, redirecting to login")
+        logger.info(
+            f"Authentication failed at root route: {e.detail}, redirecting to login"
+        )
         return RedirectResponse(url="/login", status_code=302)
 
     # Helper function for templates
@@ -54,10 +146,12 @@ async def read_root(
     search_query = query.lower() if query else ""
 
     # Get servers based on user permissions
-    if user_context['is_admin']:
+    if user_context["is_admin"]:
         # Admin users see all servers
         all_servers = server_service.get_all_servers()
-        logger.info(f"Admin user {user_context['username']} accessing all {len(all_servers)} servers")
+        logger.info(
+            f"Admin user {user_context['username']} accessing all {len(all_servers)} servers"
+        )
     else:
         # Filtered users see only accessible servers
         all_servers = server_service.get_all_servers_with_permissions(user_context['accessible_servers'])
@@ -80,8 +174,10 @@ async def read_root(
         server_name = server_info["server_name"]
 
         # Check if user can list this service
-        if 'all' not in accessible_services and server_name not in accessible_services:
-            logger.debug(f"Filtering out service '{server_name}' - user doesn't have list_service permission")
+        if "all" not in accessible_services and server_name not in accessible_services:
+            logger.debug(
+                f"Filtering out service '{server_name}' - user doesn't have list_service permission"
+            )
             continue
 
         # Include description and tags in search
@@ -89,6 +185,7 @@ async def read_root(
         if not search_query or search_query in searchable_text:
             # Get real health status from health service
             from ..health.service import health_service
+
             health_data = health_service._get_service_health_data(path)
 
             service_data.append(
@@ -115,7 +212,7 @@ async def read_root(
             "services": service_data,
             "username": user_context['username'],
             "user_context": user_context,  # Pass full user context to template
-            "can_perform_action": can_perform_action  # Helper function for permission checks
+            "can_perform_action": can_perform_action,  # Helper function for permission checks
         },
     )
 
@@ -130,15 +227,21 @@ async def get_servers_json(
     logger.debug(f"[GET_SERVERS_DEBUG] Received user_context: {user_context}")
     logger.debug(f"[GET_SERVERS_DEBUG] user_context type: {type(user_context)}")
     if user_context:
-        logger.debug(f"[GET_SERVERS_DEBUG] Username: {user_context.get('username', 'NOT PRESENT')}")
-        logger.debug(f"[GET_SERVERS_DEBUG] Scopes: {user_context.get('scopes', 'NOT PRESENT')}")
-        logger.debug(f"[GET_SERVERS_DEBUG] Auth method: {user_context.get('auth_method', 'NOT PRESENT')}")
+        logger.debug(
+            f"[GET_SERVERS_DEBUG] Username: {user_context.get('username', 'NOT PRESENT')}"
+        )
+        logger.debug(
+            f"[GET_SERVERS_DEBUG] Scopes: {user_context.get('scopes', 'NOT PRESENT')}"
+        )
+        logger.debug(
+            f"[GET_SERVERS_DEBUG] Auth method: {user_context.get('auth_method', 'NOT PRESENT')}"
+        )
 
     service_data = []
     search_query = query.lower() if query else ""
 
     # Get servers based on user permissions (same logic as root route)
-    if user_context['is_admin']:
+    if user_context["is_admin"]:
         all_servers = server_service.get_all_servers()
     else:
         all_servers = server_service.get_all_servers_with_permissions(user_context['accessible_servers'])
@@ -149,16 +252,19 @@ async def get_servers_json(
     )
 
     # Filter services based on UI permissions (same logic as root route)
-    accessible_services = user_context.get('accessible_services', [])
+    accessible_services = user_context.get("accessible_services", [])
 
     for path in sorted_server_paths:
         server_info = all_servers[path]
         server_name = server_info["server_name"]
         # Extract technical name from path (remove leading and trailing slashes)
-        technical_name = path.strip('/')
+        technical_name = path.strip("/")
 
         # Check if user can list this service using technical name
-        if 'all' not in accessible_services and technical_name not in accessible_services:
+        if (
+            "all" not in accessible_services
+            and technical_name not in accessible_services
+        ):
             continue
 
         # Include description and tags in search
@@ -166,6 +272,7 @@ async def get_servers_json(
         if not search_query or search_query in searchable_text:
             # Get real health status from health service
             from ..health.service import health_service
+
             health_data = health_service._get_service_health_data(path)
 
             service_data.append(
@@ -213,9 +320,13 @@ async def toggle_service_route(
         )
 
     # For non-admin users, check if they have access to this specific server
-    if not user_context['is_admin']:
-        if not server_service.user_can_access_server_path(service_path, user_context['accessible_servers']):
-            logger.warning(f"User {user_context['username']} attempted to toggle service {service_path} without access")
+    if not user_context["is_admin"]:
+        if not server_service.user_can_access_server_path(
+            service_path, user_context["accessible_servers"]
+        ):
+            logger.warning(
+                f"User {user_context['username']} attempted to toggle service {service_path} without access"
+            )
             raise HTTPException(
                 status_code=403,
                 detail="You do not have access to this server"
@@ -228,17 +339,26 @@ async def toggle_service_route(
         raise HTTPException(status_code=500, detail="Failed to toggle service")
 
     server_name = server_info["server_name"]
-    logger.info(f"Toggled '{server_name}' ({service_path}) to {new_state} by user '{user_context['username']}'")
+    logger.info(
+        f"Toggled '{server_name}' ({service_path}) to {new_state} by user '{user_context['username']}'"
+    )
 
     # If enabling, perform immediate health check
     status = "disabled"
     last_checked_iso = None
     if new_state:
-        logger.info(f"Performing immediate health check for {service_path} upon toggle ON...")
+        logger.info(
+            f"Performing immediate health check for {service_path} upon toggle ON..."
+        )
         try:
-            status, last_checked_dt = await health_service.perform_immediate_health_check(service_path)
+            (
+                status,
+                last_checked_dt,
+            ) = await health_service.perform_immediate_health_check(service_path)
             last_checked_iso = last_checked_dt.isoformat() if last_checked_dt else None
-            logger.info(f"Immediate health check for {service_path} completed. Status: {status}")
+            logger.info(
+                f"Immediate health check for {service_path} completed. Status: {status}"
+            )
         except Exception as e:
             logger.error(f"ERROR during immediate health check for {service_path}: {e}")
             status = f"error: immediate check failed ({type(e).__name__})"
@@ -261,8 +381,8 @@ async def toggle_service_route(
             "new_enabled_state": new_state,
             "status": status,
             "last_checked_iso": last_checked_iso,
-            "num_tools": server_info.get("num_tools", 0)
-        }
+            "num_tools": server_info.get("num_tools", 0),
+        },
     )
 
 
@@ -313,7 +433,7 @@ async def register_service(
         "num_stars": num_stars,
         "is_python": is_python,
         "license": license_str,
-        "tool_list": []
+        "tool_list": [],
     }
 
     # Register the server
@@ -322,7 +442,9 @@ async def register_service(
     if not success:
         return JSONResponse(
             status_code=400,
-            content={"error": f"Service with path '{path}' already exists or failed to save"},
+            content={
+                "error": f"Service with path '{path}' already exists or failed to save"
+            },
         )
 
     # Add to FAISS index with current enabled state
@@ -331,6 +453,8 @@ async def register_service(
 
     # Broadcast health status update to WebSocket clients
     await health_service.broadcast_health_update(path)
+
+    await _perform_security_scan_on_registration(path, proxy_pass_url, server_entry)
 
     logger.info(f"New service registered: '{name}' at path '{path}' by user '{user_context['username']}'")
 
@@ -494,8 +618,8 @@ async def get_server_details(
         service_path = '/' + service_path
 
     # Special case: if path is 'all' or '/all', return details for all accessible servers
-    if service_path == '/all':
-        if user_context['is_admin']:
+    if service_path == "/all":
+        if user_context["is_admin"]:
             return server_service.get_all_servers()
         else:
             return server_service.get_all_servers_with_permissions(user_context['accessible_servers'])
@@ -719,17 +843,17 @@ async def generate_user_token(
 ):
     """
     Generate a JWT token for the authenticated user.
-    
+
     Request body should contain:
     {
         "requested_scopes": ["scope1", "scope2"],  // Optional, defaults to user's current scopes
         "expires_in_hours": 8,                     // Optional, defaults to 8 hours
         "description": "Token for automation"      // Optional description
     }
-    
+
     Returns:
         Generated JWT token with expiration info
-        
+
     Raises:
         HTTPException: If request fails or user lacks permissions
     """
@@ -750,17 +874,20 @@ async def generate_user_token(
         description = body.get("description", "")
 
         # Validate expires_in_hours
-        if not isinstance(expires_in_hours, int) or expires_in_hours <= 0 or expires_in_hours > 24:
+        if (
+            not isinstance(expires_in_hours, int)
+            or expires_in_hours <= 0
+            or expires_in_hours > 24
+        ):
             raise HTTPException(
                 status_code=400,
-                detail="expires_in_hours must be an integer between 1 and 24"
+                detail="expires_in_hours must be an integer between 1 and 24",
             )
 
         # Validate requested_scopes
         if requested_scopes and not isinstance(requested_scopes, list):
             raise HTTPException(
-                status_code=400,
-                detail="requested_scopes must be a list of strings"
+                status_code=400, detail="requested_scopes must be a list of strings"
             )
 
         # Prepare request to auth server
@@ -768,11 +895,11 @@ async def generate_user_token(
             "user_context": {
                 "username": user_context["username"],
                 "scopes": user_context["scopes"],
-                "groups": user_context["groups"]
+                "groups": user_context["groups"],
             },
             "requested_scopes": requested_scopes,
             "expires_in_hours": expires_in_hours,
-            "description": description
+            "description": description,
         }
 
         # Call auth server internal API (no authentication needed since both are trusted internal services)
@@ -786,12 +913,14 @@ async def generate_user_token(
                 f"{auth_server_url}/internal/tokens",
                 json=auth_request,
                 headers=headers,
-                timeout=10.0
+                timeout=10.0,
             )
 
             if response.status_code == 200:
                 token_data = response.json()
-                logger.info(f"Successfully generated token for user '{user_context['username']}'")
+                logger.info(
+                    f"Successfully generated token for user '{user_context['username']}'"
+                )
 
                 # Format response to match expected structure (including refresh token)
                 formatted_response = {
@@ -802,15 +931,16 @@ async def generate_user_token(
                         "expires_in": token_data.get("expires_in"),
                         "refresh_expires_in": token_data.get("refresh_expires_in"),
                         "token_type": token_data.get("token_type", "Bearer"),
-                        "scope": token_data.get("scope", "")
+                        "scope": token_data.get("scope", ""),
                     },
-                    "keycloak_url": getattr(settings, 'keycloak_url', None) or "http://keycloak:8080",
-                    "realm": getattr(settings, 'keycloak_realm', None) or "mcp-gateway",
+                    "keycloak_url": getattr(settings, "keycloak_url", None)
+                    or "http://keycloak:8080",
+                    "realm": getattr(settings, "keycloak_realm", None) or "mcp-gateway",
                     "client_id": "user-generated",
                     # Legacy fields for backward compatibility
                     "token_data": token_data,
                     "user_scopes": user_context["scopes"],
-                    "requested_scopes": requested_scopes or user_context["scopes"]
+                    "requested_scopes": requested_scopes or user_context["scopes"],
                 }
 
                 return formatted_response
@@ -825,17 +955,16 @@ async def generate_user_token(
                 logger.warning(f"Auth server returned error {response.status_code}: {error_detail}")
                 raise HTTPException(
                     status_code=response.status_code,
-                    detail=f"Token generation failed: {error_detail}"
+                    detail=f"Token generation failed: {error_detail}",
                 )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error generating token for user '{user_context['username']}': {e}")
-        raise HTTPException(
-            status_code=500,
-            detail="Internal error generating token"
+        logger.error(
+            f"Unexpected error generating token for user '{user_context['username']}': {e}"
         )
+        raise HTTPException(status_code=500, detail="Internal error generating token")
 
 
 @router.get("/admin/tokens")
@@ -860,14 +989,11 @@ async def get_admin_tokens(
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This endpoint is only available to admin users"
+            detail="This endpoint is only available to admin users",
         )
 
     try:
-        from ..utils.keycloak_manager import (
-            KEYCLOAK_ADMIN_URL,
-            KEYCLOAK_REALM
-        )
+        from ..utils.keycloak_manager import KEYCLOAK_ADMIN_URL, KEYCLOAK_REALM
 
         # Get M2M client credentials from environment
         m2m_client_id = os.getenv("KEYCLOAK_M2M_CLIENT_ID", "mcp-gateway-m2m")
@@ -875,8 +1001,7 @@ async def get_admin_tokens(
 
         if not m2m_client_secret:
             raise HTTPException(
-                status_code=500,
-                detail="Keycloak M2M client secret not configured"
+                status_code=500, detail="Keycloak M2M client secret not configured"
             )
 
         # Get tokens from Keycloak mcp-gateway realm using M2M client_credentials
@@ -885,12 +1010,10 @@ async def get_admin_tokens(
         data = {
             "grant_type": "client_credentials",
             "client_id": m2m_client_id,
-            "client_secret": m2m_client_secret
+            "client_secret": m2m_client_secret,
         }
 
-        headers = {
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(token_url, data=data, headers=headers)
@@ -918,7 +1041,7 @@ async def get_admin_tokens(
                 },
                 "keycloak_url": KEYCLOAK_ADMIN_URL,
                 "realm": KEYCLOAK_REALM,
-                "client_id": m2m_client_id
+                "client_id": m2m_client_id,
             }
 
     except httpx.HTTPStatusError as e:
@@ -927,13 +1050,12 @@ async def get_admin_tokens(
         )
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to authenticate with Keycloak: HTTP {e.response.status_code}"
+            detail=f"Failed to authenticate with Keycloak: HTTP {e.response.status_code}",
         )
     except Exception as e:
         logger.error(f"Unexpected error retrieving Keycloak tokens: {e}")
         raise HTTPException(
-            status_code=500,
-            detail="Internal error retrieving Keycloak tokens"
+            status_code=500, detail="Internal error retrieving Keycloak tokens"
         )
 
 
@@ -1020,15 +1142,17 @@ async def register_service_api(
       -F "proxy_pass_url=http://localhost:8000"
     ```
     """
-    logger.info(f"API register service request from user '{user_context.get('username')}' for service '{name}'")
+    logger.info(
+        f"API register service request from user '{user_context.get('username')}' for service '{name}'"
+    )
 
     # Validate path format
-    if not path.startswith('/'):
-        path = '/' + path
+    if not path.startswith("/"):
+        path = "/" + path
     logger.warning(f"SERVERS REGISTER: Validated path: {path}")
 
     # Process tags
-    tag_list = [tag.strip() for tag in tags.split(',') if tag.strip()] if tags else []
+    tag_list = [tag.strip() for tag in tags.split(",") if tag.strip()] if tags else []
 
     # Process supported_transports
     if supported_transports:
@@ -1038,7 +1162,9 @@ async def register_service_api(
                                                                                                              supported_transports.split(
                                                                                                                  ',')]
         except Exception as e:
-            logger.warning(f"SERVERS REGISTER: Failed to parse supported_transports, using default: {e}")
+            logger.warning(
+                f"SERVERS REGISTER: Failed to parse supported_transports, using default: {e}"
+            )
             transports_list = ["streamable-http"]
     else:
         transports_list = ["streamable-http"]
@@ -1055,7 +1181,11 @@ async def register_service_api(
     tool_list = []
     if tool_list_json:
         try:
-            tool_list = json.loads(tool_list_json) if isinstance(tool_list_json, str) else tool_list_json
+            tool_list = (
+                json.loads(tool_list_json)
+                if isinstance(tool_list_json, str)
+                else tool_list_json
+            )
         except Exception as e:
             logger.warning(f"SERVERS REGISTER: Failed to parse tool_list_json: {e}")
 
@@ -1072,7 +1202,7 @@ async def register_service_api(
         "num_stars": num_stars,
         "is_python": is_python,
         "license": license_str,
-        "tool_list": tool_list
+        "tool_list": tool_list,
     }
 
     # Add optional fields if provided
@@ -1084,20 +1214,24 @@ async def register_service_api(
     # Check if server exists and handle overwrite logic
     existing_server = server_service.get_server_info(path)
     if existing_server and not overwrite:
-        logger.warning(f"SERVERS REGISTER: Server exists and overwrite=False for path {path}")
+        logger.warning(
+            f"SERVERS REGISTER: Server exists and overwrite=False for path {path}"
+        )
         return JSONResponse(
             status_code=409,
             content={
                 "error": "Service registration failed",
                 "reason": f"A service with path '{path}' already exists",
-                "detail": "Use overwrite=true to replace existing service"
-            }
+                "detail": "Use overwrite=true to replace existing service",
+            },
         )
 
     try:
         # Register service (use update_server if overwriting, otherwise register_server)
         if existing_server and overwrite:
-            logger.info(f"Overwriting existing server at path {path} by user {user_context.get('username')}")
+            logger.info(
+                f"Overwriting existing server at path {path} by user {user_context.get('username')}"
+            )
             success = server_service.update_server(path, server_entry)
         else:
             success = server_service.register_server(server_entry)
@@ -1109,11 +1243,18 @@ async def register_service_api(
                 content={
                     "error": "Service registration failed",
                     "reason": f"Failed to register service at path '{path}'",
-                    "detail": "Check server logs for more information"
-                }
+                    "detail": "Check server logs for more information",
+                },
             )
 
-        logger.info(f"Service registered successfully via API: {path} by user {user_context.get('username')}")
+        logger.info(
+            f"Service registered successfully via API: {path} by user {user_context.get('username')}"
+        )
+
+        # Security scanning if enabled
+        await _perform_security_scan_on_registration(
+            path, proxy_pass_url, server_entry, headers_list
+        )
 
         # Trigger async tasks for health check and FAISS sync
         asyncio.create_task(health_service.perform_immediate_health_check(path))
@@ -1123,15 +1264,14 @@ async def register_service_api(
             content={
                 "path": path,
                 "name": name,
-                "message": f"Service '{name}' registered successfully at path '{path}'"
-            }
+                "message": f"Service '{name}' registered successfully at path '{path}'",
+            },
         )
 
     except Exception as e:
         logger.error(f"Service registration failed for {path}: {e}", exc_info=True)
         raise HTTPException(
-            status_code=500,
-            detail=f"Service registration failed: {str(e)}"
+            status_code=500, detail=f"Service registration failed: {str(e)}"
         )
 
 
@@ -1169,8 +1309,8 @@ async def toggle_service_api(
         f"API toggle service request from user '{user_context.get('username')}' for path '{path}' to {new_state}")
 
     # Normalize path
-    if not path.startswith('/'):
-        path = '/' + path
+    if not path.startswith("/"):
+        path = "/" + path
 
     # Check if server exists
     server_info = server_service.get_server_info(path)
@@ -1192,9 +1332,14 @@ async def toggle_service_api(
     if new_state:
         logger.info(f"Performing immediate health check for {path} upon toggle ON...")
         try:
-            status, last_checked_dt = await health_service.perform_immediate_health_check(path)
+            (
+                status,
+                last_checked_dt,
+            ) = await health_service.perform_immediate_health_check(path)
             last_checked_iso = last_checked_dt.isoformat() if last_checked_dt else None
-            logger.info(f"Immediate health check for {path} completed. Status: {status}")
+            logger.info(
+                f"Immediate health check for {path} completed. Status: {status}"
+            )
         except Exception as e:
             logger.error(f"ERROR during immediate health check for {path}: {e}")
             status = f"error: immediate check failed ({type(e).__name__})"
@@ -1217,8 +1362,8 @@ async def toggle_service_api(
             "new_enabled_state": new_state,
             "status": status,
             "last_checked_iso": last_checked_iso,
-            "num_tools": server_info.get("num_tools", 0)
-        }
+            "num_tools": server_info.get("num_tools", 0),
+        },
     )
 
 
@@ -1252,8 +1397,8 @@ async def remove_service_api(
     logger.info(f"API remove service request from user '{user_context.get('username')}' for path '{path}'")
 
     # Normalize path
-    if not path.startswith('/'):
-        path = '/' + path
+    if not path.startswith("/"):
+        path = "/" + path
 
     # Check if server exists
     server_info = server_service.get_server_info(path)
@@ -1264,7 +1409,7 @@ async def remove_service_api(
             content={
                 "error": "Service not found",
                 "reason": f"No service registered at path '{path}'",
-                "suggestion": "Check the service path and ensure it is registered"
+                "suggestion": "Check the service path and ensure it is registered",
             },
         )
 
@@ -1278,11 +1423,13 @@ async def remove_service_api(
             content={
                 "error": "Service removal failed",
                 "reason": f"Failed to remove service at path '{path}'",
-                "suggestion": "Check server logs for detailed error information"
+                "suggestion": "Check server logs for detailed error information",
             },
         )
 
-    logger.info(f"Service removed successfully: {path} by user {user_context.get('username')}")
+    logger.info(
+        f"Service removed successfully: {path} by user {user_context.get('username')}"
+    )
 
     # Remove from FAISS index
     await faiss_service.remove_service(path)
@@ -1299,12 +1446,12 @@ async def remove_service_api(
 
     return JSONResponse(
         status_code=200,
-        content={
-            "message": "Service removed successfully",
-            "path": path
-        }
+        content={"message": "Service removed successfully", "path": path},
     )
 
+
+# IMPORTANT: Specific routes with path suffixes (/health, /rate, /rating, /toggle)
+# must come BEFORE catch-all /servers/ routes to prevent FastAPI from matching them incorrectly
 
 @router.get("/servers/health")
 async def healthcheck_api(
@@ -1329,10 +1476,28 @@ async def healthcheck_api(
       -H "Authorization: Bearer $JWT_TOKEN"
     ```
     """
-    logger.info(f"API healthcheck request from user '{user_context.get('username') if user_context else 'unknown'}'")
+    from ..health.service import health_service
 
-    # Call the existing internal_healthcheck function
-    return await internal_healthcheck(request)
+    logger.info(
+        f"API healthcheck request from user '{user_context.get('username') if user_context else 'unknown'}'"
+    )
+
+    # Get health status for all servers using JWT authentication
+    try:
+        health_data = health_service.get_all_health_status()
+        logger.info(f"Retrieved health status for {len(health_data)} servers")
+
+        return JSONResponse(
+            status_code=200,
+            content=health_data
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to retrieve health status: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve health status: {str(e)}"
+        )
 
 
 @router.post("/servers/groups/add")
@@ -1366,7 +1531,9 @@ async def add_server_to_groups_api(
       -F "group_names=admin,developers"
     ```
     """
-    logger.info(f"API add to groups request from user '{user_context.get('username')}' for server '{server_name}'")
+    logger.info(
+        f"API add to groups request from user '{user_context.get('username')}' for server '{server_name}'"
+    )
 
     # Call the existing internal_add_server_to_groups function
     return await internal_add_server_to_groups(server_name, group_names)
@@ -1403,7 +1570,9 @@ async def remove_server_from_groups_api(
       -F "group_names=developers"
     ```
     """
-    logger.info(f"API remove from groups request from user '{user_context.get('username')}' for server '{server_name}'")
+    logger.info(
+        f"API remove from groups request from user '{user_context.get('username')}' for server '{server_name}'"
+    )
 
     # Call the existing internal_remove_server_from_groups function
     return await internal_remove_server_from_groups(server_name, group_names)
@@ -1443,7 +1612,9 @@ async def create_group_api(
       -F "create_in_keycloak=true"
     ```
     """
-    logger.info(f"API create group request from user '{user_context.get('username')}' for group '{group_name}'")
+    logger.info(
+        f"API create group request from user '{user_context.get('username')}' for group '{group_name}'"
+    )
 
     # Call the existing internal_create_group function
     return await internal_create_group(group_name=group_name, description=description, create_in_keycloak=create_in_keycloak)
@@ -1483,7 +1654,9 @@ async def delete_group_api(
       -F "force=false"
     ```
     """
-    logger.info(f"API delete group request from user '{user_context.get('username')}' for group '{group_name}'")
+    logger.info(
+        f"API delete group request from user '{user_context.get('username')}' for group '{group_name}'"
+    )
 
     # Call the existing internal_delete_group function
     return await internal_delete_group(group_name=group_name, delete_from_keycloak=delete_from_keycloak, force=force)
@@ -1514,10 +1687,236 @@ async def list_groups_api(
       -H "Authorization: Bearer $JWT_TOKEN"
     ```
     """
-    logger.info(f"API list groups request from user '{user_context.get('username') if user_context else 'unknown'}'")
+    logger.info(
+        f"API list groups request from user '{user_context.get('username') if user_context else 'unknown'}'"
+    )
 
     # Call the existing internal_list_groups function
     return await internal_list_groups(include_keycloak=include_keycloak, include_scopes=include_scopes)
+
+
+@router.post("/servers/{path:path}/rate")
+async def rate_server(
+    path: str,
+    request: RatingRequest,
+    user_context: CurrentUser,
+):
+    """Save integer ratings to server."""
+    if not path.startswith("/"):
+        path = "/" + path
+
+    server_info = server_service.get_server_info(path)
+    if not server_info:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Server not found at path '{path}'",
+        )
+
+    # For non-admin users, check if they have access to this specific server
+    if not user_context['is_admin']:
+        if not server_service.user_can_access_server_path(path, user_context['accessible_servers']):
+            logger.warning(
+                f"User {user_context['username']} attempted to rate server {path} without permission"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this server",
+            )
+
+    try:
+        avg_rating = server_service.update_rating(path, user_context["username"], request.rating)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error updating rating: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save rating",
+        )
+
+    return {
+        "message": "Rating added successfully",
+        "average_rating": avg_rating,
+    }
+
+
+@router.get("/servers/{path:path}/rating")
+async def get_server_rating(
+    path: str,
+    user_context: CurrentUser,
+):
+    """Get server rating information."""
+    if not path.startswith("/"):
+        path = "/" + path
+
+    server_info = server_service.get_server_info(path)
+    if not server_info:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Server not found at path '{path}'",
+        )
+
+    # For non-admin users, check if they have access to this specific server
+    if not user_context['is_admin']:
+        if not server_service.user_can_access_server_path(path, user_context['accessible_servers']):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this server",
+            )
+
+    return {
+        "num_stars": server_info.get("num_stars", 0.0),
+        "rating_details": server_info.get("rating_details", []),
+    }
+
+
+@router.get("/servers/{path:path}/security-scan")
+async def get_server_security_scan(
+    path: str,
+    user_context: CurrentUser,
+):
+    """
+    Get security scan results for a server.
+
+    Returns the latest security scan results for the specified server,
+    including threat analysis, severity levels, and detailed findings.
+
+    **Authentication:** JWT Bearer token or session cookie
+    **Authorization:** Requires admin privileges or access to the server
+
+    **Path Parameters:**
+    - `path` (required): Server path (e.g., /cloudflare-docs)
+
+    **Response:**
+    Returns security scan results with analysis_results and tool_results.
+
+    **Example:**
+    ```bash
+    curl -X GET http://localhost/api/servers/cloudflare-docs/security-scan \\
+      --cookie-jar .cookies --cookie .cookies
+    ```
+    """
+    if not path.startswith("/"):
+        path = "/" + path
+
+    # Check if server exists
+    server_info = server_service.get_server_info(path)
+    if not server_info:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Server not found at path '{path}'",
+        )
+
+    # Check user permissions
+    if not user_context["is_admin"]:
+        if not server_service.user_can_access_server_path(
+            path, user_context["accessible_servers"]
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this server",
+            )
+
+    # Get scan results
+    scan_result = security_scanner_service.get_scan_result(path)
+    if not scan_result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No security scan results found for server '{path}'. "
+            "The server may not have been scanned yet.",
+        )
+
+    return scan_result
+
+
+@router.post("/servers/{path:path}/rescan")
+async def rescan_server(
+    path: str,
+    user_context: CurrentUser,
+):
+    """
+    Trigger a manual security scan for a server.
+
+    Initiates a new security scan for the specified server and returns
+    the results. This endpoint is useful for re-scanning servers after
+    updates or for on-demand security assessments.
+
+    **Authentication:** JWT Bearer token or session cookie
+    **Authorization:** Requires admin privileges
+
+    **Path Parameters:**
+    - `path` (required): Server path (e.g., /cloudflare-docs)
+
+    **Response:**
+    Returns the newly generated security scan results.
+
+    **Example:**
+    ```bash
+    curl -X POST http://localhost/api/servers/cloudflare-docs/rescan \\
+      --cookie-jar .cookies --cookie .cookies
+    ```
+    """
+    # Only admins can trigger manual scans
+    if not user_context["is_admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can trigger security scans",
+        )
+
+    if not path.startswith("/"):
+        path = "/" + path
+
+    # Check if server exists
+    server_info = server_service.get_server_info(path)
+    if not server_info:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Server not found at path '{path}'",
+        )
+
+    # Get server URL from server info
+    server_url = server_info.get("proxy_pass_url")
+    if not server_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Server '{path}' does not have a proxy_pass_url configured",
+        )
+
+    logger.info(
+        f"Manual security scan requested by user '{user_context.get('username')}' "
+        f"for server '{path}' at URL '{server_url}'"
+    )
+
+    try:
+        # Trigger security scan
+        scan_result = await security_scanner_service.scan_server(
+            server_url=server_url, analyzers=None, api_key=None, headers=None, timeout=None
+        )
+
+        # Return the scan result data
+        return {
+            "server_url": scan_result.server_url,
+            "server_path": path,
+            "scan_timestamp": scan_result.scan_timestamp,
+            "is_safe": scan_result.is_safe,
+            "critical_issues": scan_result.critical_issues,
+            "high_severity": scan_result.high_severity,
+            "medium_severity": scan_result.medium_severity,
+            "low_severity": scan_result.low_severity,
+            "analyzers_used": scan_result.analyzers_used,
+            "scan_failed": scan_result.scan_failed,
+            "error_message": scan_result.error_message,
+            "raw_output": scan_result.raw_output,
+        }
+    except Exception as e:
+        logger.exception(f"Failed to scan server '{path}': {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to scan server: {str(e)}",
+        )
 
 
 @router.get("/servers/tools/{service_path:path}")
@@ -1555,3 +1954,70 @@ async def get_service_tools_api(
 
     # Call the existing get_service_tools function
     return await get_service_tools(service_path=service_path, user_context=user_context)
+
+@router.get("/servers")
+async def get_servers_json(
+    query: str | None = None,
+    user_context: CurrentUser = None,
+):
+    """Get servers data as JSON for React frontend and external API (supports both session cookies and Bearer tokens)."""
+    # CRITICAL DIAGNOSTIC: Log user_context received by endpoint
+    logger.debug(f"[GET_SERVERS_DEBUG] Received user_context: {user_context}")
+    logger.debug(f"[GET_SERVERS_DEBUG] user_context type: {type(user_context)}")
+    if user_context:
+        logger.debug(f"[GET_SERVERS_DEBUG] Username: {user_context.get('username', 'NOT PRESENT')}")
+        logger.debug(f"[GET_SERVERS_DEBUG] Scopes: {user_context.get('scopes', 'NOT PRESENT')}")
+        logger.debug(f"[GET_SERVERS_DEBUG] Auth method: {user_context.get('auth_method', 'NOT PRESENT')}")
+
+    service_data = []
+    search_query = query.lower() if query else ""
+
+    # Get servers based on user permissions (same logic as root route)
+    if user_context['is_admin']:
+        all_servers = server_service.get_all_servers()
+    else:
+        all_servers = server_service.get_all_servers_with_permissions(user_context['accessible_servers'])
+    
+    sorted_server_paths = sorted(
+        all_servers.keys(), 
+        key=lambda p: all_servers[p]["server_name"]
+    )
+    
+    # Filter services based on UI permissions (same logic as root route)
+    accessible_services = user_context.get('accessible_services', [])
+
+    for path in sorted_server_paths:
+        server_info = all_servers[path]
+        server_name = server_info["server_name"]
+        # Extract technical name from path (remove leading and trailing slashes)
+        technical_name = path.strip('/')
+
+        # Check if user can list this service using technical name
+        if 'all' not in accessible_services and technical_name not in accessible_services:
+            continue
+        
+        # Include description and tags in search
+        searchable_text = f"{server_name.lower()} {server_info.get('description', '').lower()} {' '.join(server_info.get('tags', []))}"
+        if not search_query or search_query in searchable_text:
+            # Get real health status from health service
+            from ..health.service import health_service
+            health_data = health_service._get_service_health_data(path)
+            
+            service_data.append(
+                {
+                    "display_name": server_name,
+                    "path": path,
+                    "description": server_info.get("description", ""),
+                    "proxy_pass_url": server_info.get("proxy_pass_url", ""),
+                    "is_enabled": server_service.is_service_enabled(path),
+                    "tags": server_info.get("tags", []),
+                    "num_tools": server_info.get("num_tools", 0),
+                    "num_stars": server_info.get("num_stars", 0),
+                    "is_python": server_info.get("is_python", False),
+                    "license": server_info.get("license", "N/A"),
+                    "health_status": health_data["status"],  
+                    "last_checked_iso": health_data["last_checked_iso"]
+                }
+            )
+    
+    return {"servers": service_data}

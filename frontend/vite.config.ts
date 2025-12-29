@@ -1,40 +1,81 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 
-const backendPort = process.env.REGISTRY_PORT && Number(process.env.REGISTRY_PORT) || 7860;
-const backendURL = process.env.REGISTRY_URL ? `http://${process.env.REGISTRY_URL}:${backendPort}` : `http://localhost:${backendPort}`;
-const authURL = process.env.AUTH_SERVER_EXTERNAL_URL ? process.env.AUTH_SERVER_URL : `http://localhost:8888`;
-const basePath = process.env.NGINX_BASE_PATH || '';
+export default defineConfig(({ mode }) => {
+  // Load env file from root directory
+  const env = loadEnv(mode, path.resolve(__dirname, '..'), '');
+  
+  // For production: https://jarvis-demo.ascendingdc.com/gateway
+  // For local dev: http://localhost:7860
+  const backendURL = env.REGISTRY_URL || 'http://localhost:7860';
+  
+  // Auth server is at root /oauth2, not under registry path e.g. /gateway
+  const authURL = env.AUTH_SERVER_EXTERNAL_URL || env.AUTH_SERVER_URL || 'http://localhost:8888';
+  
+  const basePath = env.NGINX_BASE_PATH || '';
 
+  console.log('🔧 Vite Configuration:');
+  console.log('  AUTH_SERVER_EXTERNAL_URL:', env.AUTH_SERVER_EXTERNAL_URL);
+  console.log('  AUTH_SERVER_URL:', env.AUTH_SERVER_URL);
+  console.log('  Resolved authURL:', authURL);
+  console.log('  Backend URL:', backendURL);
 
-export default defineConfig({
-  plugins: [react()],
-  base: basePath, 
-  server: {
-    port: 5173,
-    host: '0.0.0.0',
-    proxy: {
-      '/v0': {
-        target: backendURL,
-        changeOrigin: true,
-      },
-      '/api/auth/providers': {
-        target: authURL, 
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/auth\/providers/, '/oauth2/providers'),
-      },
-      '/api': {
-        target: backendURL, 
-        changeOrigin: true,
-      },
-      '/health': {
-        target: backendURL, 
-        changeOrigin: true,
+  return {
+    // plugins: [
+    //   react(),
+    //   {
+    //     name: 'mock-auth-config',
+    //     configureServer(server) {
+    //       server.middlewares.use((req, res, next) => {
+    //         if (req.url === '/api/auth/config') {
+    //           res.setHeader('Content-Type', 'application/json');
+    //           res.end(JSON.stringify({ auth_server_url: authURL }));
+    //           return;
+    //         }
+    //         next();
+    //       });
+    //     }
+    //   }
+    // ],
+    base: basePath,
+    server: {
+      port: 5173,
+      host: '0.0.0.0',
+      proxy: {
+        '/oauth2': {
+          target: authURL,
+          changeOrigin: true,
+          secure: false,
+          cookieDomainRewrite: 'localhost',
+          cookiePathRewrite: '/',
+        },
+        '/api/auth/providers': {
+          target: authURL, 
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path.replace(/^\/api\/auth\/providers/, '/oauth2/providers'),
+        },
+        '/api': {
+          target: backendURL, 
+          changeOrigin: true,
+          secure: false,
+        },
+        '/v0': {
+          target: backendURL,
+          changeOrigin: true,
+          secure: false,
+        },
+        '/health': {
+          target: backendURL, 
+          changeOrigin: true,
+          secure: false,
+        },
       },
     },
-  },
-  build: {
-    outDir: 'build',
-    sourcemap: true,
-  },
+    build: {
+      outDir: 'build',
+      sourcemap: true,
+    },
+  };
 });

@@ -8,6 +8,7 @@ services:
       dockerfile: docker/Dockerfile.registry
       args:
         TOOL_DISCOVERY_MODE: ${TOOL_DISCOVERY_MODE:-embedded}
+        BUILD_VERSION: ${BUILD_VERSION:-}
     environment:
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
@@ -24,13 +25,31 @@ services:
       - EXTERNAL_REGISTRY_TAGS=${EXTERNAL_REGISTRY_TAGS:-anthropic-registry,workday-asor}
       - ASOR_ACCESS_TOKEN=${ASOR_ACCESS_TOKEN}
       - ASOR_CLIENT_CREDENTIALS=${ASOR_CLIENT_CREDENTIALS}
+      # Security Scanning Configuration
+      - SECURITY_SCAN_ENABLED=${SECURITY_SCAN_ENABLED:-true}
+      - SECURITY_SCAN_ON_REGISTRATION=${SECURITY_SCAN_ON_REGISTRATION:-true}
+      - SECURITY_BLOCK_UNSAFE_SERVERS=${SECURITY_BLOCK_UNSAFE_SERVERS:-true}
+      - SECURITY_ANALYZERS=${SECURITY_ANALYZERS:-yara}
+      - SECURITY_SCAN_TIMEOUT=${SECURITY_SCAN_TIMEOUT:-60}
+      - SECURITY_ADD_PENDING_TAG=${SECURITY_ADD_PENDING_TAG:-true}
+      - MCP_SCANNER_LLM_API_KEY=${MCP_SCANNER_LLM_API_KEY}
+      # Embeddings Configuration
+      # - EMBEDDINGS_PROVIDER=${EMBEDDINGS_PROVIDER:-sentence-transformers}
+      # - EMBEDDINGS_MODEL_NAME=${EMBEDDINGS_MODEL_NAME:-all-MiniLM-L6-v2}
+      # - EMBEDDINGS_MODEL_DIMENSIONS=${EMBEDDINGS_MODEL_DIMENSIONS:-384}
+      # - EMBEDDINGS_API_KEY=${EMBEDDINGS_API_KEY}
+      # - EMBEDDINGS_API_BASE=${EMBEDDINGS_API_BASE}
+      # - EMBEDDINGS_AWS_REGION=${EMBEDDINGS_AWS_REGION:-us-east-1}
     ports:
       - "7860:7860"
     volumes:
       - ${APP_HOME}/mcp-gateway/servers:/app/registry/servers
+      - ${APP_HOME}/mcp-gateway/agents:/app/registry/agents
       - ${APP_HOME}/mcp-gateway/models:/app/registry/models
       - ${APP_HOME}/mcp-gateway/logs:/app/logs
+      - ${APP_HOME}/mcp-gateway/security_scans:/app/security_scans
       - ${APP_HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
+      - ${APP_HOME}/mcp-gateway/federation.json:/app/config/federation.json
       - ${APP_HOME}/mcp-gateway/ssl:/etc/ssl:ro
     depends_on:
       auth-server:
@@ -42,6 +61,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    profiles:
+      - full
 
   # Registry Frontend
   registry-frontend:
@@ -58,6 +79,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    profiles:
+      - full
   
   # Metrics Collection Service
   metrics-service:
@@ -90,6 +113,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    profiles:
+      - full
+      - dev
 
   # Auth service (separate and scalable)
   auth-server:
@@ -129,6 +155,9 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    profiles:
+      - full
+      - dev
 
   # Current Time MCP Server
   currenttime-server:
@@ -141,6 +170,9 @@ services:
     ports:
       - "8000:8000"
     restart: unless-stopped
+    profiles:
+      - full
+      - dev
 
   # Financial Info MCP Server
   fininfo-server:
@@ -155,6 +187,8 @@ services:
     ports:
       - "8001:8001"
     restart: unless-stopped
+    profiles:
+      - full
 
   # MCP Gateway Server
   mcpgw-server:
@@ -179,6 +213,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    profiles:
+      - full
 
   # Real Server Fake Tools MCP Server
   realserverfaketools-server:
@@ -207,6 +243,9 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+    profiles:
+      - full
+      - dev
 
   # Atlassian MCP Server
   atlassian-server:
@@ -221,6 +260,8 @@ services:
       - $HOME/.mcp-atlassian:/home/app/.mcp-atlassian
     command: --transport streamable-http --port 8005
     restart: unless-stopped
+    profiles:
+      - full
 
   # SQLite container for metrics database
   metrics-db:
@@ -234,6 +275,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    profiles:
+      - full
+      - dev
 
   # Prometheus for metrics collection
   prometheus:
@@ -251,6 +295,8 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     restart: unless-stopped
+    profiles:
+      - full
 
   # Grafana for metrics visualization
   grafana:
@@ -267,6 +313,8 @@ services:
     depends_on:
       - prometheus
     restart: unless-stopped
+    profiles:
+      - full
 
   # PostgreSQL database for Keycloak
   keycloak-db:

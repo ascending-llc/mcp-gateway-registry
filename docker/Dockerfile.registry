@@ -3,11 +3,12 @@ FROM python:3.12-slim
 
 # Build argument to control whether to install discovery dependencies
 ARG TOOL_DISCOVERY_MODE=embedded
+ARG BUILD_VERSION=
 
 ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
-    TOOL_DISCOVERY_MODE=${TOOL_DISCOVERY_MODE}
-
+    TOOL_DISCOVERY_MODE=${TOOL_DISCOVERY_MODE} \
+    BUILD_VERSION=$BUILD_VERSION
 # Install system dependencies
 # For embedded mode, we need build-essential for compiling dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
