@@ -35,8 +35,20 @@ export async function runAgentTurn(history: AgentMessage[], config: AgentConfig)
   const provider = config.provider ?? DEFAULT_PROVIDER;
   const model = config.model ?? DEFAULT_MODEL;
 
+  // Fetch registry version
+  let registryVersion: string | undefined;
+  try {
+    const versionResponse = await fetch(`${config.gatewayBaseUrl}/api/version`);
+    if (versionResponse.ok) {
+      const versionData = await versionResponse.json();
+      registryVersion = versionData.version;
+    }
+  } catch (err) {
+    // Silently fail if version fetch fails
+  }
+
   const systemMessages = history.filter((msg) => msg.role === "system").map((msg) => msg.content);
-  const systemPrompt = [buildSystemPrompt(), ...systemMessages].join("\n\n");
+  const systemPrompt = [buildSystemPrompt(registryVersion), ...systemMessages].join("\n\n");
 
   const messages = history
     .filter((msg) => msg.role === "user" || msg.role === "assistant")
@@ -121,8 +133,21 @@ export async function runAgentTurn(history: AgentMessage[], config: AgentConfig)
   return { messages: finalMessages, toolOutputs, tokenUsage };
 }
 
-function buildSystemPrompt(): string {
-  return `You are the MCP Registry Assistant, an AI assistant with direct access to MCP (Model Context Protocol) Registry tools.
+function buildSystemPrompt(registryVersion?: string): string {
+  const versionInfo = registryVersion ? `
+
+<registry_version>
+You are connected to MCP Gateway Registry version ${registryVersion}.
+
+IMPORTANT: When users ask about versions or "what version":
+- The Registry version is: ${registryVersion}
+- MCP Gateway servers (mcpgw, currenttime, etc.) may have their own versions (often 1.0.0)
+- Always clarify which component's version you're referring to
+- The Registry is the central service managing all MCP servers
+</registry_version>
+` : '';
+
+  return `You are the MCP Registry Assistant, an AI assistant with direct access to MCP (Model Context Protocol) Registry tools.${versionInfo}
 
 <capabilities>
 You have access to powerful tools for managing and interacting with MCP servers:
@@ -147,22 +172,20 @@ CRITICAL: When providing server configuration examples, the field name MUST be \
 
 <tool name="shell_command">
 Execute shell commands for system diagnostics, debugging, and operations:
-- Run service management scripts: \`./cli/service_mgmt.sh list-groups\`
 - Read files and tokens: \`cat /path/to/file.json\`
 - Debug credentials and authentication: Decode JWT tokens, check group membership
 - Execute any bash command with full output capture
 
 CRITICAL USAGE NOTES:
-- Use this to run CLI scripts like \`./cli/service_mgmt.sh\`, \`./cli/agent_mgmt.sh\`, etc.
 - Use this to read and inspect token files, JSON configs, and logs
 - Decode JWT tokens by extracting the payload (middle section) and base64 decoding
 - Parse JSON using \`jq\` for filtering and analysis
 - This is essential for diagnosing authentication, authorization, and group membership issues
 
 EXAMPLES:
-- \`./cli/service_mgmt.sh list-groups\` - List all groups and synchronization status
 - \`cat .oauth-tokens/ingress.json | jq '.access_token'\` - Extract JWT token
 - \`cat .oauth-tokens/ingress.json | jq -r '.access_token' | cut -d'.' -f2 | base64 -d | jq\` - Decode JWT payload to see claims and groups
+- \`ls -la /path/to/directory\` - List files and directories
 </tool>
 
 <tool name="read_docs">

@@ -63,6 +63,9 @@ export default function App({options}: AppProps) {
   const [sessionOutputTokens, setSessionOutputTokens] = useState<number>(0);
   const [sessionTotalCost, setSessionTotalCost] = useState<number>(0);
 
+  // Registry version
+  const [registryVersion, setRegistryVersion] = useState<string | undefined>();
+
   const gatewayUrl = useMemo(() => options.url ?? "http://localhost/mcpgw/mcp", [options.url]);
   const gatewayBaseUrl = useMemo(() => deriveGatewayBase(gatewayUrl), [gatewayUrl]);
   const agentAvailable = useMemo(() => {
@@ -172,8 +175,16 @@ export default function App({options}: AppProps) {
             addMessage("assistant", `❌ Token refresh failed: ${error.message}. Please run: ./credentials-provider/generate_creds.sh --ingress-only`);
           });
       }
+
+      // Fetch registry version
+      fetch(`${gatewayBaseUrl}/api/version`)
+        .then(res => res.json())
+        .then(data => setRegistryVersion(data.version))
+        .catch(() => {
+          // Silently fail if version fetch fails
+        });
     }
-  }, [authState, addMessage, initialised, gatewayUrl, setAuthAttempt, hasShownWelcome]);
+  }, [authState, addMessage, initialised, gatewayUrl, gatewayBaseUrl, setAuthAttempt, hasShownWelcome]);
 
   useEffect(() => {
     if (!interactive && authState.status === "ready" && options.command) {
@@ -554,6 +565,7 @@ export default function App({options}: AppProps) {
               inputTokens={sessionInputTokens}
               outputTokens={sessionOutputTokens}
               cost={sessionTotalCost}
+              registryVersion={registryVersion}
             />
           </Box>
         )}

@@ -30,6 +30,7 @@ dependencies = [
     "langchain-anthropic>=0.3.17",
     "matplotlib>=3.10.5",
     "psutil>=6.1.0",
+    "email-validator>=2.2.0",
     "aiohttp>=3.8.0",
     "rich>=13.0.0",
     "requests>=2.31.0",
@@ -37,6 +38,7 @@ dependencies = [
     "faker>=37.11.0",
     "factory-boy>=3.3.3",
     "cisco-ai-mcp-scanner>=3.0.1",
+    "cisco-ai-a2a-scanner @ git+https://github.com/cisco-ai-defense/a2a-scanner.git@main",
     "awscli>=1.36.0",
     "boto3>=1.35.0",
     "langchain-weaviate>=0.0.6",
@@ -48,7 +50,8 @@ dependencies = [
     "weaviate-client>=4.18.1",
     "protobuf>=5.29.5",
     "grpcio>=1.76.0",
-    "cachetools>=6.2.4",
+    "cachetools>=6.2.4",    
+    "litellm>=1.50.0",
 ]
 
 [project.optional-dependencies]

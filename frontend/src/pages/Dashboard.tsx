@@ -96,7 +96,7 @@ const buildAgentAuthHeaders = (token?: string | null) =>
   token ? { Authorization: `Bearer ${token}` } : undefined;
 
 const Dashboard: React.FC = () => {
-  const { servers, activeFilter, loading, error, refreshData, setServers } = useServer();
+  const { servers, agents, viewMode, setViewMode, activeFilter, loading, error, refreshData, setServers, setAgents, toggleAgent } = useServer();
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [committedQuery, setCommittedQuery] = useState('');
@@ -127,13 +127,11 @@ const Dashboard: React.FC = () => {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Agent state management
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [agentsLoading, setAgentsLoading] = useState(true);
   const [agentsError, setAgentsError] = useState<string | null>(null);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
   const [agentApiToken, setAgentApiToken] = useState<string | null>(null);
 
-  // View filter state
+  // Local view filter that includes 'external' mode not in context
   const [viewFilter, setViewFilter] = useState<'all' | 'servers' | 'agents' | 'external'>('all');
   const [editAgentForm, setEditAgentForm] = useState({
     name: '',
@@ -154,7 +152,7 @@ const Dashboard: React.FC = () => {
           : agent
       )
     );
-  }, []);
+  }, [setAgents]);
 
   const performAgentHealthCheck = useCallback(async (agent: Agent, token?: string | null) => {
     if (!agent?.path) return;
@@ -188,92 +186,6 @@ const Dashboard: React.FC = () => {
       console.error('Failed to run agent health checks:', error);
     });
   }, [performAgentHealthCheck]);
-
-  // Fetch agents from the API
-  const fetchAgents = useCallback(async () => {
-    try {
-      setAgentsLoading(true);
-      setAgentsError(null);
-
-      // First, get JWT token
-      const tokenResponse = await axios.post('/api/tokens/generate', {
-        description: 'Dashboard agent fetch',
-        expires_in_hours: 1
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!tokenResponse.data.success) {
-        throw new Error('Failed to generate JWT token');
-      }
-
-      const jwtToken = tokenResponse.data.token_data.access_token;
-      setAgentApiToken(jwtToken);
-
-      // Fetch agents with JWT token
-      const response = await axios.get('/api/agents', {
-        headers: {
-          'Authorization': `Bearer ${jwtToken}`
-        }
-      });
-
-      const responseData = response.data || {};
-      const agentsList = responseData.agents || [];
-
-      console.log('Agent filtering debug info:');
-      console.log(`Total agents returned from API: ${agentsList.length}`);
-      console.log('Agent list:', agentsList.map((a: any) => ({
-        name: a.name,
-        path: a.path,
-        enabled: a.enabled
-      })));
-
-      // Transform agent data from API format to frontend format
-      const transformedAgents: Agent[] = agentsList.map((agentInfo: any) => {
-        console.log(`Processing agent ${agentInfo.name}:`, agentInfo);
-
-        const transformed = {
-          name: agentInfo.name || 'Unknown Agent',
-          path: agentInfo.path || '',
-          url: agentInfo.url || '',
-          description: agentInfo.description || '',
-          trust_level: agentInfo.trust_level || 'community',
-          enabled: agentInfo.is_enabled !== undefined ? agentInfo.is_enabled : false,
-          tags: agentInfo.tags || [],
-          rating: agentInfo.num_stars || 0,
-          status: normalizeAgentStatus(agentInfo.status),
-          last_checked_time: agentInfo.last_checked_time || null
-        };
-
-        console.log(`Transformed agent ${transformed.name}:`, {
-          enabled: transformed.enabled,
-          trust_level: transformed.trust_level,
-          rating: transformed.rating
-        });
-
-        return transformed;
-      });
-
-      setAgents(transformedAgents);
-      runInitialAgentHealthChecks(transformedAgents, jwtToken);
-    } catch (err: any) {
-      console.error('Failed to fetch agents:', err);
-      setAgentsError(err.response?.data?.detail || 'Failed to fetch agents');
-      setAgents([]);
-      setAgentApiToken(null);
-    } finally {
-      setAgentsLoading(false);
-    }
-  }, [runInitialAgentHealthChecks]);
-
-  // Fetch agents on component mount or when user changes
-  useEffect(() => {
-    if (user) {
-      fetchAgents();
-    }
-  }, [user, fetchAgents]);
 
   // External registry tags - can be configured via environment or constants
   // Default tags that identify servers from external registries
@@ -412,7 +324,7 @@ const Dashboard: React.FC = () => {
     }
 
     return filtered;
-  }, [agents, activeFilter, searchTerm]);
+  }, [internalAgents, activeFilter, searchTerm]);
 
   // Debug logging for filtering
   console.log('Dashboard filtering debug:');
@@ -430,6 +342,13 @@ const Dashboard: React.FC = () => {
     }
   }, [searchTerm, committedQuery]);
 
+  // Sync local viewFilter with context viewMode (but not vice versa for 'external')
+  useEffect(() => {
+    if (viewMode !== viewFilter && viewFilter !== 'external') {
+      setViewFilter(viewMode);
+    }
+  }, [viewMode, viewFilter]);
+
   const handleSemanticSearch = useCallback(() => {
     const trimmed = searchTerm.trim();
     setCommittedQuery(trimmed);
@@ -441,21 +360,24 @@ const Dashboard: React.FC = () => {
   }, []);
 
   const handleChangeViewFilter = useCallback(
-    (filter: typeof viewFilter) => {
+    (filter: 'all' | 'servers' | 'agents' | 'external') => {
       setViewFilter(filter);
+      // Sync with context viewMode (external is local to Dashboard)
+      if (filter !== 'external') {
+        setViewMode(filter);
+      }
       if (semanticSectionVisible) {
         setSearchTerm('');
         setCommittedQuery('');
       }
     },
-    [semanticSectionVisible]
+    [semanticSectionVisible, setViewMode]
   );
 
   const handleRefreshHealth = async () => {
     setRefreshing(true);
     try {
-      await refreshData();
-      await fetchAgents();
+      await refreshData(); // Refresh both servers and agents from useServerStats
     } finally {
       setRefreshing(false);
     }
@@ -761,6 +683,7 @@ const Dashboard: React.FC = () => {
             onRefreshSuccess={refreshData}
             onShowToast={showToast}
             onServerUpdate={handleServerUpdate}
+            authToken={agentApiToken}
           />
         ))}
       </div>
@@ -813,6 +736,7 @@ const Dashboard: React.FC = () => {
                     onRefreshSuccess={refreshData}
                     onShowToast={showToast}
                     onServerUpdate={handleServerUpdate}
+                    authToken={agentApiToken}
                   />
                 ))}
               </div>
@@ -833,7 +757,7 @@ const Dashboard: React.FC = () => {
                 <div className="text-red-500 text-lg mb-2">Failed to load agents</div>
                 <p className="text-red-600 dark:text-red-400 text-sm">{agentsError}</p>
               </div>
-            ) : agentsLoading ? (
+            ) : loading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600"></div>
               </div>
@@ -861,7 +785,7 @@ const Dashboard: React.FC = () => {
                     onToggle={handleToggleAgent}
                     onEdit={handleEditAgent}
                     canModify={user?.can_modify_servers || false}
-                    onRefreshSuccess={fetchAgents}
+                    onRefreshSuccess={refreshData}
                     onShowToast={showToast}
                     onAgentUpdate={handleAgentUpdate}
                     authToken={agentApiToken}
@@ -915,6 +839,7 @@ const Dashboard: React.FC = () => {
                         onRefreshSuccess={refreshData}
                         onShowToast={showToast}
                         onServerUpdate={handleServerUpdate}
+                        authToken={agentApiToken}
                       />
                     ))}
                   </div>
@@ -941,7 +866,7 @@ const Dashboard: React.FC = () => {
                         onToggle={handleToggleAgent}
                         onEdit={handleEditAgent}
                         canModify={user?.can_modify_servers || false}
-                        onRefreshSuccess={fetchAgents}
+                        onRefreshSuccess={refreshData}
                         onShowToast={showToast}
                         onAgentUpdate={handleAgentUpdate}
                       />
@@ -987,7 +912,7 @@ const Dashboard: React.FC = () => {
   }
 
   // Show loading state
-  if (loading && agentsLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>

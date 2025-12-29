@@ -217,24 +217,36 @@ For now, make these additional essential changes in the `.env` file:
 
 ```bash
 # Set authentication provider to Keycloak
-AUTH_PROVIDER=keycloak
+AUTH_PROVIDER=keycloak #Do not change
 
 # Set a secure admin password (change this!)
 # This is used for Keycloak API authentication during setup
-KEYCLOAK_ADMIN_PASSWORD=YourSecureAdminPassword123!
+KEYCLOAK_ADMIN_PASSWORD=YourSecureAdminPassword123! # change me
 
 # CRITICAL: Set INITIAL_ADMIN_PASSWORD to the SAME VALUE as KEYCLOAK_ADMIN_PASSWORD
 # This is used to set the password for the initial admin user in the realm
 # THESE MUST MATCH - see Step 5 for details
-INITIAL_ADMIN_PASSWORD=YourSecureAdminPassword123!
+INITIAL_ADMIN_PASSWORD=YourSecureAdminPassword123! # change me
 
 # Set Keycloak database password (change this!)
-KEYCLOAK_DB_PASSWORD=SecureKeycloakDB123!
+KEYCLOAK_DB_PASSWORD=SecureKeycloakDB123! # change me
 
 # Leave other Keycloak settings as default for now
 KEYCLOAK_URL=http://localhost:8080
 KEYCLOAK_REALM=mcp-gateway
 KEYCLOAK_CLIENT_ID=mcp-gateway-client
+
+# Session Cookie Security Configuration
+# CRITICAL: These settings must match your deployment environment
+
+# For LOCAL DEVELOPMENT (accessing via http://localhost):
+SESSION_COOKIE_SECURE=false  # MUST be false for HTTP access
+
+# For PRODUCTION with HTTPS (accessing via https://your-domain.com):
+# SESSION_COOKIE_SECURE=true  # Uncomment and set to true
+
+# Cookie domain (leave empty for most deployments)
+SESSION_COOKIE_DOMAIN=  # Empty = cookie scoped to exact host only
 
 # Save and exit (Ctrl+X, then Y, then Enter)
 ```
@@ -242,6 +254,8 @@ KEYCLOAK_CLIENT_ID=mcp-gateway-client
 **Important**:
 - Remember the passwords you set here - you'll need to use the same ones in Step 5!
 - **CRITICAL**: `KEYCLOAK_ADMIN_PASSWORD` and `INITIAL_ADMIN_PASSWORD` MUST be set to the same value. See Step 5 for details about why this is important.
+- **SESSION_COOKIE_SECURE**: For local development (HTTP), this MUST be `false`. Setting it to `true` will cause login to fail because cookies with `secure=true` are only sent over HTTPS connections.
+- For production deployments with HTTPS, change `SESSION_COOKIE_SECURE=true` before starting services.
 
 ### Download Required Embeddings Model
 
@@ -307,13 +321,13 @@ If these passwords don't match:
 
 ```bash
 # Start only the database and Keycloak services first
-docker-compose up -d keycloak-db keycloak
+docker compose up -d keycloak-db keycloak
 
 # Check if services are starting
-docker-compose ps
+docker compose ps
 
 # Monitor logs to see when Keycloak is ready
-docker-compose logs -f keycloak
+docker compose logs -f keycloak
 # Wait for message: "Keycloak 25.x.x started in xxxms"
 # Press Ctrl+C to exit logs when you see this message
 ```
@@ -858,6 +872,49 @@ docker-compose restart keycloak
    # Wait 2-3 minutes, then:
    ./keycloak/setup/init-keycloak.sh
    ```
+
+#### Login Redirects Back to Login Page
+
+**Most Common Cause**: Incorrect `SESSION_COOKIE_SECURE` setting
+
+**Symptoms**:
+- You enter username/password
+- Page redirects back to login page without error message
+- No session cookie is stored in browser
+
+**Solution**:
+1. Check your `.env` file:
+   ```bash
+   grep SESSION_COOKIE_SECURE .env
+   ```
+
+2. **For localhost (HTTP) access**:
+   ```bash
+   # MUST be false
+   SESSION_COOKIE_SECURE=false
+   ```
+
+3. **For HTTPS access**:
+   ```bash
+   # MUST be true
+   SESSION_COOKIE_SECURE=true
+   ```
+
+4. **Verify in browser dev tools**:
+   - Open browser dev tools (F12)
+   - Go to Application → Cookies → Your domain
+   - Check if `mcp_gateway_session` cookie exists
+   - For HTTP: `Secure` flag should be UNCHECKED
+   - For HTTPS: `Secure` flag should be CHECKED
+
+5. **After fixing, rebuild and restart**:
+   ```bash
+   docker compose down
+   docker compose build --no-cache auth-server registry
+   docker compose up -d
+   ```
+
+**Why this happens**: Cookies with `secure=true` are ONLY sent over HTTPS connections. If you access via HTTP (like `http://localhost:7860`), the browser will reject the cookie and login will fail.
 
 #### Authentication Issues
 ```bash

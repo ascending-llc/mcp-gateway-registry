@@ -1,6 +1,8 @@
 import os
 import secrets
 from pathlib import Path
+from typing import Optional
+
 from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
@@ -20,6 +22,8 @@ class Settings(BaseSettings):
     admin_password: str = "password"
     session_cookie_name: str = "mcp_gateway_session"
     session_max_age_seconds: int = 60 * 60 * 8  # 8 hours
+    session_cookie_secure: bool = False  # Set to True in production with HTTPS
+    session_cookie_domain: Optional[str] = None  # e.g., ".example.com" for cross-subdomain sharing
     auth_server_url: str = "http://localhost:8888"
     auth_server_external_url: str = "http://localhost:8888"  # External URL for OAuth redirects
 
@@ -46,6 +50,24 @@ class Settings(BaseSettings):
     tool_discovery_mode: str = "external"  # "embedded" (FAISS+transformers) or "external" (MCP service)
     external_vector_search_url: str = "http://localhost:8000/mcp"  # Used when tool_discovery_mode=external
 
+    # Security scanning settings (MCP Servers)
+    security_scan_enabled: bool = True
+    security_scan_on_registration: bool = True
+    security_block_unsafe_servers: bool = True
+    security_analyzers: str = "yara"  # Comma-separated: yara, llm, or yara,llm
+    security_scan_timeout: int = 60  # 1 minutes
+    security_add_pending_tag: bool = True
+    mcp_scanner_llm_api_key: str = ""  # Optional LLM API key for advanced analysis
+
+    # Agent security scanning settings (A2A Agents)
+    agent_security_scan_enabled: bool = True
+    agent_security_scan_on_registration: bool = True
+    agent_security_block_unsafe_agents: bool = True
+    agent_security_analyzers: str = "yara,spec"  # Comma-separated: yara, spec, heuristic, llm, endpoint
+    agent_security_scan_timeout: int = 60  # 1 minute
+    agent_security_add_pending_tag: bool = True
+    a2a_scanner_llm_api_key: str = ""  # Optional Azure OpenAI API key for LLM-based analysis
+    
     # Container paths - adjust for local development
     container_app_dir: Path = Path("/app")
     container_registry_dir: Path = Path("/app/registry")
