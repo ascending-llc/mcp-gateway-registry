@@ -25,8 +25,8 @@ def generate_code_challenge(code_verifier: str) -> str:
     return code_challenge
 
 
-# Template directory
-TEMPLATE_DIR = Path(__file__).parent / "templates" / "oauth"
+# Template directory - go up two levels from utils.py to registry/, then to templates/oauth/
+TEMPLATE_DIR = Path(__file__).parent.parent / "templates" / "oauth"
 
 
 def load_template(template_name: str, context: Dict[str, str]) -> str:

@@ -212,7 +212,7 @@ async def get_connection_service() -> MCPConnectionService:
     """Get connection service instance (singleton)"""
     global _connection_service_instance
     if _connection_service_instance is None:
-        from services.oauth.config_service import get_config_service
+        from services.oauth.oauth_config_service import get_config_service
         config_service = await get_config_service()
         _connection_service_instance = MCPConnectionService(config_service)
         await _connection_service_instance.initialize_app_connections()
