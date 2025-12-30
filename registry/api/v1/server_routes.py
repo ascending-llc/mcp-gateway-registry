@@ -13,7 +13,7 @@ from pydantic import ValidationError
 
 from registry.auth.dependencies import CurrentUser
 from registry.services.server_service_v1 import server_service_v1
-from registry.schemas.server_schemas_v1 import (
+from registry.schemas.server_api_schemas import (
     ServerListResponse,
     ServerListItemResponse,
     ServerDetailResponse,
@@ -73,10 +73,6 @@ async def list_servers(
     - per_page: Items per page (default: 20, min: 1, max: 100)
     """
     try:
-        # Extract user info
-        user_id = user_context.get("username")  # Using username as user_id
-        is_admin = user_context.get("is_admin", False)
-        
         # Validate scope if provided
         if scope and scope not in ["shared_app", "shared_user", "private_user"]:
             raise HTTPException(
@@ -91,15 +87,14 @@ async def list_servers(
                 detail="Invalid status. Must be one of: active, inactive, error"
             )
         
-        # Get servers from service
+        # Get servers from service (no permission filtering)
         servers, total = await server_service_v1.list_servers(
             query=query,
             scope=scope,
             status=status,
             page=page,
             per_page=per_page,
-            user_id=user_id,
-            is_admin=is_admin,
+            user_id=None,
         )
         
         # Convert to response models
@@ -140,13 +135,9 @@ async def get_server(
 ):
     """Get detailed information about a server by ID"""
     try:
-        user_id = user_context.get("username")
-        is_admin = user_context.get("is_admin", False)
-        
         server = await server_service_v1.get_server_by_id(
             server_id=server_id,
-            user_id=user_id,
-            is_admin=is_admin,
+            user_id=None,
         )
         
         if not server:
@@ -222,13 +213,11 @@ async def update_server(
     """Update a server with partial data"""
     try:
         user_id = user_context.get("username")
-        is_admin = user_context.get("is_admin", False)
         
         server = await server_service_v1.update_server(
             server_id=server_id,
             data=data,
             user_id=user_id,
-            is_admin=is_admin,
         )
         
         return convert_to_update_response(server)
@@ -262,16 +251,6 @@ async def update_server(
                         "message": error_msg,
                     }
                 )
-        
-        # Check if it's a permission error
-        if "access denied" in error_msg.lower() or "cannot update" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={
-                    "error": "forbidden",
-                    "message": error_msg,
-                }
-            )
         
         # Check if server not found
         if "not found" in error_msg.lower():
@@ -311,29 +290,15 @@ async def delete_server(
 ):
     """Delete a server"""
     try:
-        user_id = user_context.get("username")
-        is_admin = user_context.get("is_admin", False)
-        
         await server_service_v1.delete_server(
             server_id=server_id,
-            user_id=user_id,
-            is_admin=is_admin,
+            user_id=None,
         )
         
         return None  # 204 No Content
         
     except ValueError as e:
         error_msg = str(e)
-        
-        # Permission error
-        if "access denied" in error_msg.lower() or "cannot delete" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={
-                    "error": "forbidden",
-                    "message": error_msg,
-                }
-            )
         
         # Not found
         if "not found" in error_msg.lower():
@@ -373,29 +338,16 @@ async def toggle_server(
 ):
     """Toggle server enabled/disabled status"""
     try:
-        user_id = user_context.get("username")
-        is_admin = user_context.get("is_admin", False)
-        
         server = await server_service_v1.toggle_server_status(
             server_id=server_id,
             enabled=data.enabled,
-            user_id=user_id,
-            is_admin=is_admin,
+            user_id=None,
         )
         
         return convert_to_toggle_response(server, data.enabled)
         
     except ValueError as e:
         error_msg = str(e)
-        
-        if "access denied" in error_msg.lower() or "cannot toggle" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={
-                    "error": "forbidden",
-                    "message": error_msg,
-                }
-            )
         
         if "not found" in error_msg.lower():
             raise HTTPException(
@@ -433,13 +385,9 @@ async def get_server_tools(
 ):
     """Get server tools"""
     try:
-        user_id = user_context.get("username")
-        is_admin = user_context.get("is_admin", False)
-        
         server, tools = await server_service_v1.get_server_tools(
             server_id=server_id,
-            user_id=user_id,
-            is_admin=is_admin,
+            user_id=None,
         )
         
         return convert_to_tools_response(server, tools)
@@ -492,13 +440,9 @@ async def refresh_server_health(
 ):
     """Refresh server health status"""
     try:
-        user_id = user_context.get("username")
-        is_admin = user_context.get("is_admin", False)
-        
         health_info = await server_service_v1.refresh_server_health(
             server_id=server_id,
-            user_id=user_id,
-            is_admin=is_admin,
+            user_id=None,
         )
         
         server = health_info["server"]
@@ -507,15 +451,6 @@ async def refresh_server_health(
         
     except ValueError as e:
         error_msg = str(e)
-        
-        if "access denied" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={
-                    "error": "forbidden",
-                    "message": error_msg,
-                }
-            )
         
         if "not found" in error_msg.lower():
             raise HTTPException(

@@ -9,12 +9,8 @@ domain routers while handling core app configuration.
 
 import logging
 from contextlib import asynccontextmanager
-from typing import Annotated, Dict, Any
-from pathlib import Path
 
-from fastapi import FastAPI, Cookie, HTTPException, Depends
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
@@ -22,7 +18,7 @@ from registry.auth.middleware import UnifiedAuthMiddleware
 # Import domain routers
 from registry.auth.routes import router as auth_router
 from registry.api.server_routes import router as servers_router
-from registry.api.server_routes_v1 import router as servers_router_v1
+from registry.api.v1.server_routes import router as servers_router_v1
 from registry.api.internal_routes import router as internal_router
 from registry.api.search_routes import router as search_router
 from registry.api.wellknown_routes import router as wellknown_router

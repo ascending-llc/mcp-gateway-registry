@@ -21,7 +21,7 @@ from beanie.operators import In, RegEx, Or
 from packages.models._generated.mcpServer import MCPServerDocument
 from packages.models._generated.user import IUser
 
-from registry.schemas.server_schemas_v1 import (
+from registry.schemas.server_api_schemas import (
     ServerCreateRequest,
     ServerUpdateRequest,
 )
@@ -113,7 +113,6 @@ class ServerServiceV1:
         page: int = 1,
         per_page: int = 20,
         user_id: Optional[str] = None,
-        is_admin: bool = False,
     ) -> Tuple[List[MCPServerDocument], int]:
         """
         List servers with filtering and pagination.
@@ -124,8 +123,7 @@ class ServerServiceV1:
             status: Filter by operational state (active, inactive, error)
             page: Page number (min: 1)
             per_page: Items per page (min: 1, max: 100)
-            user_id: Current user's ID for permission filtering
-            is_admin: Whether the current user is an admin
+            user_id: Current user's ID (kept for compatibility but not used for filtering)
             
         Returns:
             Tuple of (servers list, total count)
@@ -137,22 +135,6 @@ class ServerServiceV1:
         
         # Build filter conditions
         filters = []
-        
-        # Access control: admins see all, users see their private servers + shared servers
-        if not is_admin and user_id:
-            # Match servers where:
-            # 1. config.scope is shared_app or shared_user, OR
-            # 2. config.scope is private_user AND config.user_id matches current user
-            access_filter = {
-                "$or": [
-                    {"config.scope": {"$in": ["shared_app", "shared_user"]}},
-                    {"$and": [
-                        {"config.scope": "private_user"},
-                        {"config.user_id": user_id}
-                    ]}
-                ]
-            }
-            filters.append(access_filter)
         
         # Scope filter
         if scope:
@@ -194,18 +176,16 @@ class ServerServiceV1:
         self,
         server_id: str,
         user_id: Optional[str] = None,
-        is_admin: bool = False,
     ) -> Optional[MCPServerDocument]:
         """
-        Get a server by its ID with permission check.
+        Get a server by its ID.
         
         Args:
             server_id: Server document ID
-            user_id: Current user's ID
-            is_admin: Whether the current user is an admin
+            user_id: Current user's ID (kept for compatibility but not used)
             
         Returns:
-            Server document or None if not found or no permission
+            Server document or None if not found
         """
         try:
             # Convert string ID to ObjectId
@@ -215,19 +195,6 @@ class ServerServiceV1:
             return None
         
         server = await MCPServerDocument.get(obj_id)
-        
-        if not server:
-            return None
-        
-        # Permission check
-        if not is_admin:
-            # Users can only access shared servers or their own private servers
-            scope = _extract_config_field(server, "scope", "private_user")
-            server_user_id = _extract_config_field(server, "user_id")
-            
-            if scope == "private_user" and server_user_id != user_id:
-                logger.warning(f"User {user_id} attempted to access private server {server_id}")
-                return None
         
         return server
     
@@ -288,15 +255,32 @@ class ServerServiceV1:
         if not author:
             # Create a minimal user record if not exists
             now = datetime.now(timezone.utc)
-            author = IUser(
-                username=user_id,
-                email=f"{user_id}@gmail.com",
-                emailVerified=False,
-                role="USER",
-                createdAt=now,
-                updatedAt=now
-            )
-            await author.insert()
+            # Generate unique email to avoid conflicts
+            email = f"{user_id}@local.mcp-gateway.internal"
+            
+            # Check if email already exists
+            existing_user = await IUser.find_one({"email": email})
+            if existing_user:
+                author = existing_user
+            else:
+                # Create user without OAuth ID fields to avoid unique index conflicts
+                # Use model_dump with exclude_none to prevent OAuth fields from being included
+                user_data = {
+                    "username": user_id,
+                    "email": email,
+                    "emailVerified": False,
+                    "role": "USER",
+                    "provider": "local",
+                    "createdAt": now,
+                    "updatedAt": now
+                }
+                
+                # Insert directly to avoid Pydantic adding None values for OAuth fields
+                collection = IUser.get_pymongo_collection()
+                result = await collection.insert_one(user_data)
+                
+                # Fetch the created user
+                author = await IUser.get(result.inserted_id)
         
         # Create server document with timestamps
         now = datetime.now(timezone.utc)
@@ -318,7 +302,6 @@ class ServerServiceV1:
         server_id: str,
         data: ServerUpdateRequest,
         user_id: Optional[str] = None,
-        is_admin: bool = False,
     ) -> MCPServerDocument:
         """
         Update a server with optimistic locking.
@@ -326,32 +309,22 @@ class ServerServiceV1:
         Args:
             server_id: Server document ID
             data: Update data (partial)
-            user_id: Current user's ID
-            is_admin: Whether the current user is an admin
+            user_id: Current user's ID (kept for compatibility but not used)
             
         Returns:
             Updated server document
             
         Raises:
-            ValueError: If server not found, no permission, or version conflict
+            ValueError: If server not found or version conflict
         """
-        server = await self.get_server_by_id(server_id, user_id, is_admin)
+        server = await self.get_server_by_id(server_id, user_id)
         
         if not server:
-            raise ValueError("Server not found or access denied")
+            raise ValueError("Server not found")
         
         # Get current config
         config = server.config or {}
-        scope = config.get("scope", "private_user")
-        server_user_id = config.get("user_id")
         current_version = config.get("version", 1)
-        
-        # Permission check: only admins or server owners can update
-        if not is_admin:
-            if scope == "private_user" and server_user_id != user_id:
-                raise ValueError("Cannot update another user's private server")
-            if scope in ["shared_app", "shared_user"]:
-                raise ValueError("Only admins can update shared servers")
         
         # Optimistic locking check
         if data.version is not None and current_version != data.version:
@@ -384,23 +357,20 @@ class ServerServiceV1:
         self,
         server_id: str,
         user_id: Optional[str] = None,
-        is_admin: bool = False,
     ) -> bool:
         """
         Delete a server.
         
         Args:
             server_id: Server document ID
-            user_id: Current user's ID
-            is_admin: Whether the current user is an admin
+            user_id: Current user's ID (kept for compatibility but not used)
             
         Returns:
             True if deleted successfully
             
         Raises:
-            ValueError: If server not found or no permission
+            ValueError: If server not found
         """
-        # First check if server exists (without permission check)
         try:
             obj_id = PydanticObjectId(server_id)
         except Exception as e:
@@ -410,18 +380,6 @@ class ServerServiceV1:
         
         if not server:
             raise ValueError("Server not found")
-        
-        # Get current config
-        config = server.config or {}
-        scope = config.get("scope", "private_user")
-        server_user_id = config.get("user_id")
-        
-        # Permission check: only admins or server owners can delete
-        if not is_admin:
-            if scope == "private_user" and server_user_id != user_id:
-                raise ValueError("Access denied: cannot delete another user's private server")
-            if scope in ["shared_app", "shared_user"]:
-                raise ValueError("Access denied: only admins can delete shared servers")
         
         await server.delete()
         logger.info(f"Deleted server: {server.serverName} (ID: {server.id})")
@@ -433,7 +391,6 @@ class ServerServiceV1:
         server_id: str,
         enabled: bool,
         user_id: Optional[str] = None,
-        is_admin: bool = False,
     ) -> MCPServerDocument:
         """
         Toggle server enabled/disabled status.
@@ -441,31 +398,21 @@ class ServerServiceV1:
         Args:
             server_id: Server document ID
             enabled: Enable (True) or disable (False)
-            user_id: Current user's ID
-            is_admin: Whether the current user is an admin
+            user_id: Current user's ID (kept for compatibility but not used)
             
         Returns:
             Updated server document
             
         Raises:
-            ValueError: If server not found or no permission
+            ValueError: If server not found
         """
-        server = await self.get_server_by_id(server_id, user_id, is_admin)
+        server = await self.get_server_by_id(server_id, user_id)
         
         if not server:
-            raise ValueError("Server not found or access denied")
+            raise ValueError("Server not found")
         
         # Get current config
         config = server.config or {}
-        scope = config.get("scope", "private_user")
-        server_user_id = config.get("user_id")
-        
-        # Permission check
-        if not is_admin:
-            if scope == "private_user" and server_user_id != user_id:
-                raise ValueError("Cannot toggle another user's private server")
-            if scope in ["shared_app", "shared_user"]:
-                raise ValueError("Only admins can toggle shared servers")
         
         # Update status in config
         config["status"] = "active" if enabled else "inactive"
@@ -484,26 +431,24 @@ class ServerServiceV1:
         self,
         server_id: str,
         user_id: Optional[str] = None,
-        is_admin: bool = False,
     ) -> Tuple[MCPServerDocument, List[Dict[str, Any]]]:
         """
         Get server tools.
         
         Args:
             server_id: Server document ID
-            user_id: Current user's ID
-            is_admin: Whether the current user is an admin
+            user_id: Current user's ID (kept for compatibility but not used)
             
         Returns:
             Tuple of (server, tools list)
             
         Raises:
-            ValueError: If server not found or no permission
+            ValueError: If server not found
         """
-        server = await self.get_server_by_id(server_id, user_id, is_admin)
+        server = await self.get_server_by_id(server_id, user_id)
         
         if not server:
-            raise ValueError("Server not found or access denied")
+            raise ValueError("Server not found")
         
         tool_list = _extract_config_field(server, "tool_list", [])
         return server, tool_list
@@ -512,7 +457,6 @@ class ServerServiceV1:
         self,
         server_id: str,
         user_id: Optional[str] = None,
-        is_admin: bool = False,
     ) -> Dict[str, Any]:
         """
         Refresh server health status.
@@ -522,19 +466,18 @@ class ServerServiceV1:
         
         Args:
             server_id: Server document ID
-            user_id: Current user's ID
-            is_admin: Whether the current user is an admin
+            user_id: Current user's ID (kept for compatibility but not used)
             
         Returns:
             Health information dictionary
             
         Raises:
-            ValueError: If server not found or no permission
+            ValueError: If server not found
         """
-        server = await self.get_server_by_id(server_id, user_id, is_admin)
+        server = await self.get_server_by_id(server_id, user_id)
         
         if not server:
-            raise ValueError("Server not found or access denied")
+            raise ValueError("Server not found")
         
         # Update last_connected timestamp in config
         config = server.config or {}

@@ -25,7 +25,6 @@ from packages.models._generated import (
 class MongoDB:
     """MongoDB connection manager with connection pooling."""
     client: Optional[AsyncIOMotorClient] = None
-    database_name: str = "mcp_gateway"
 
     @classmethod
     async def connect_db(cls, mongodb_url: Optional[str] = None, db_name: Optional[str] = None):
@@ -40,22 +39,26 @@ class MongoDB:
             return
         # Get MongoDB configuration from environment variables
         if mongodb_url is None:
-            # Build connection URL from individual components
-            mongo_host = os.getenv("MONGODB_HOST", "localhost")
-            mongo_port = os.getenv("MONGODB_PORT", "27017")
+            # Try to get MONGO_URI first (format: mongodb://host:port/dbname)
+            mongo_uri = os.getenv("MONGO_URI", "mongodb://127.0.0.1:27017/jarvis")
             mongo_username = os.getenv("MONGODB_USERNAME", "")
             mongo_password = os.getenv("MONGODB_PASSWORD", "")
-
-            # Build connection string with authentication if credentials provided
+            # Parse MONGO_URI to extract db_name if present
+            # Extract database name from URI
+            uri_parts = mongo_uri.rsplit('/', 1)
+            base_uri = uri_parts[0]
+            extracted_db = uri_parts[1] if len(uri_parts) > 1 else None
+            if extracted_db and not db_name:
+                db_name = extracted_db
+            # Insert credentials if provided
             if mongo_username and mongo_password:
-                # Escape username and password according to RFC 3986
                 escaped_username = quote_plus(mongo_username)
                 escaped_password = quote_plus(mongo_password)
-                mongodb_url = f"mongodb://{escaped_username}:{escaped_password}@{mongo_host}:{mongo_port}"
+                # Insert credentials after mongodb://
+                protocol, rest = base_uri.split('://', 1)
+                mongodb_url = f"{protocol}://{escaped_username}:{escaped_password}@{rest}"
             else:
-                mongodb_url = f"mongodb://{mongo_host}:{mongo_port}"
-
-        db_name = db_name or os.getenv("MONGODB_DB_NAME", cls.database_name)
+                mongodb_url = base_uri
         cls.database_name = db_name
         try:
             # Create Motor client with connection pool settings
