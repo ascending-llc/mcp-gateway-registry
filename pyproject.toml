@@ -56,6 +56,9 @@ dependencies = [
     "motor>=3.3.0",
 ]
 
+[project.scripts]
+seed_data = "scripts.seed_mongodb:cli"
+
 [project.optional-dependencies]
 # Vector search with embedded FAISS (default, adds ~2-3GB)
 # Install by default or with: pip install -e ".[embedded-search]"
@@ -95,7 +98,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 # Use find: to automatically discover all packages
-packages = ["registry", "packages"]
+packages = ["registry", "packages", "scripts"]
 
 [tool.setuptools.package-data]
 registry = ["**/*.yml", "**/*.yaml", "**/*.json", "**/*.html", "**/*.css", "**/*.png", "**/*.svg"]

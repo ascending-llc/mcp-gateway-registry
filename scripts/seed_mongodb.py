@@ -537,5 +537,10 @@ async def main():
         print("\nMongoDB connection closed.")
 
 
-if __name__ == "__main__":
+def cli():
+    """Entry point for command-line script."""
     asyncio.run(main())
+
+
+if __name__ == "__main__":
+    cli()
