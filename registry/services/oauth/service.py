@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Any, Set, Tuple
 from dataclasses import dataclass, field, asdict
 from registry.utils.log import logger
 
-DEFAULT_CONFIG_PATH = "/Users/dyl/ascending/code/mcp-gateway-registry/registry/mcp_integration/config/mcp_service.yaml"
+DEFAULT_CONFIG_PATH = "/Users/dyl/ascending/code/mcp-gateway-registry/mcp_service.yaml"
 
 @dataclass
 class MCPServerConfig:
