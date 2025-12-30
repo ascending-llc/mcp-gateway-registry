@@ -117,14 +117,6 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     [servers],
   );
 
-  useEffect(() => {
-    fetchServerStatus();
-    // 组件卸载时清理定时器
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-  }, []);
-
   // Calculate agent stats
   const agentStats = useMemo<AgentStats>(
     () => ({
@@ -138,6 +130,10 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
 
   useEffect(() => {
     refreshData();
+    fetchServerStatus();
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
   }, []);
 
   // Helper function to map backend health status to frontend status
@@ -216,6 +212,13 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
       }));
 
       setServers(transformedServers);
+      transformedServers.forEach(server => {
+        mockServerStatus[server.name] = {
+          connectionState: SERVER_CONNECTION.DISCONNECTED,
+          requiresOAuth: true,
+          error: undefined,
+        };
+      });
       setAgents(transformedAgents);
     } catch (err: any) {
       console.error('Failed to fetch data:', err);

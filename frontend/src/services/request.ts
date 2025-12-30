@@ -1,4 +1,4 @@
-import axios, { type AxiosError, AxiosRequestConfig } from 'axios';
+import axios, { type AxiosError, type AxiosRequestConfig } from 'axios';
 
 const cancelSources: Record<string, () => void> = {};
 const service = axios.create({ baseURL: '/', timeout: 20000 });
@@ -12,8 +12,8 @@ service.interceptors.request.use(
         cancelSources[config.cancelTokenKey || ''] = cancel;
       });
     }
-    
-    config.headers = config.headers || {};  
+
+    config.headers = config.headers || {};
     config.headers['Content-Type'] = 'application/json; charset=utf-8';
     // if (!config.headers.Authorization) config.headers.Authorization = `Bearer ${token}`;
 
@@ -31,13 +31,13 @@ service.interceptors.response.use(
     return response;
   },
   (error: AxiosError) => {
-    if (axios.isCancel(error)) return { Code: -200, message: '取消请求', cause: '取消请求' };
+    if (axios.isCancel(error)) return { Code: -200, message: 'Cancel request', cause: 'Cancel request' };
     return Promise.reject(error);
   },
 );
 
 type RequestType = { url: string; method: string; data?: object; config?: AxiosRequestConfig; reTry?: boolean };
-const request = async ({ url, method, data = {}, config = {}}: RequestType) => {
+const request = async ({ url, method, data = {}, config = {} }: RequestType) => {
   const body = method.toUpperCase() === 'GET' ? { params: data } : { data };
   try {
     const response = await service({ url, method, ...body, ...config });
