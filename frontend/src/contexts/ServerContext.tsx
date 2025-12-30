@@ -1,6 +1,10 @@
 import axios from 'axios';
 import type React from 'react';
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+
+import { mockServerStatus } from '../mock/serverStatus';
+import SERVICE from '../services';
+import { SERVER_CONNECTION, type SERVER_STATUS } from '../services/mcp/type';
 
 interface Server {
   name: string;
@@ -51,7 +55,8 @@ interface AgentStats {
 }
 
 interface ServerContextType {
-  // Server state
+  serverStatus: { [serverName: string]: SERVER_STATUS };
+  setServerStatus: React.Dispatch<React.SetStateAction<{ [serverName: string]: SERVER_STATUS }>>;
   servers: Server[];
   setServers: React.Dispatch<React.SetStateAction<Server[]>>;
   stats: ServerStats;
@@ -73,6 +78,8 @@ interface ServerContextType {
   refreshData: () => Promise<void>;
   toggleServer: (path: string, enabled: boolean) => Promise<void>;
   toggleAgent: (path: string, enabled: boolean) => Promise<void>;
+  refreshServerStatus: () => Promise<Record<string, SERVER_STATUS>>;
+  getServerStatusByPolling: (serverNames: string) => void;
 }
 
 const ServerContext = createContext<ServerContextType | undefined>(undefined);
@@ -92,10 +99,12 @@ interface ServerProviderProps {
 export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
   const [servers, setServers] = useState<Server[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [serverStatus, setServerStatus] = useState<Record<string, SERVER_STATUS>>({});
   const [viewMode, setViewMode] = useState<'all' | 'servers' | 'agents'>('all');
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Calculate server stats
   const stats = useMemo<ServerStats>(
@@ -107,6 +116,14 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     }),
     [servers],
   );
+
+  useEffect(() => {
+    fetchServerStatus();
+    // 组件卸载时清理定时器
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
 
   // Calculate agent stats
   const agentStats = useMemo<AgentStats>(
@@ -229,6 +246,62 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     [refreshData],
   );
 
+  const fetchServerStatus = useCallback(async (data?: Record<string, SERVER_STATUS>) => {
+    try {
+      const result = await SERVICE.MCP.getServerStatus();
+      const serverStatusData = (result || {})?.connectionStatus || {};
+
+      setServerStatus(serverStatusData);
+      return serverStatusData;
+    } catch (error: any) {
+      console.error('Failed to fetch server status:', error.data?.detail || 'error');
+      const newServerStatus = data ? { ...mockServerStatus, ...data } : mockServerStatus;
+      setServerStatus(newServerStatus);
+      return newServerStatus;
+    } finally {
+      // setLoading(false);
+    }
+  }, []);
+
+  const temp_count = useRef<Record<string, number>>({});
+  const getServerStatusByPolling = useCallback(
+    async (serverName: string) => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+
+      temp_count.current[serverName] = 0;
+      const initialState = serverStatus[serverName]?.connectionState;
+      const poll = async () => {
+        temp_count.current[serverName] += 1;
+        let temp_data = {
+          [serverName]: { connectionState: SERVER_CONNECTION.CONNECTING, requiresOAuth: true, error: undefined },
+        };
+        if (temp_count.current[serverName] > 2) {
+          temp_data = {
+            [serverName]: { connectionState: SERVER_CONNECTION.CONNECTED, requiresOAuth: true, error: undefined },
+          };
+        }
+        const latestStatusData = await fetchServerStatus(temp_data);
+        const currentState = latestStatusData[serverName]?.connectionState;
+
+        if (currentState === initialState) {
+          timeoutRef.current = setTimeout(() => {
+            poll();
+          }, 5000);
+        } else {
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+          }
+        }
+      };
+
+      await poll();
+    },
+    [serverStatus, fetchServerStatus],
+  );
+
   // Toggle agent
   const toggleAgent = useCallback(
     async (path: string, enabled: boolean) => {
@@ -256,6 +329,8 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     agentStats,
     viewMode,
     setViewMode,
+    serverStatus,
+    setServerStatus,
     activeFilter,
     setActiveFilter,
     loading,
@@ -263,6 +338,8 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     refreshData,
     toggleServer,
     toggleAgent,
+    refreshServerStatus: fetchServerStatus,
+    getServerStatusByPolling: getServerStatusByPolling,
   };
 
   return <ServerContext.Provider value={value}>{children}</ServerContext.Provider>;

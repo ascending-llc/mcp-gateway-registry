@@ -248,6 +248,7 @@ agents/.env.agent
 
 # Frontend / Node.js / React / TypeScript
 frontend/node_modules/
+frontend/_feature_doc/
 frontend/build/
 frontend/dist/
 frontend/.env
