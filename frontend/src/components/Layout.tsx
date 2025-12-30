@@ -1,22 +1,21 @@
-import React, { useState, useEffect, Fragment } from 'react';
 import { Menu, Transition } from '@headlessui/react';
-import { Link } from 'react-router-dom';
-import { 
-  Bars3Icon, 
-  UserIcon, 
-  ChevronDownIcon,
+import {
   ArrowRightOnRectangleIcon,
-  KeyIcon,
+  Bars3Icon,
+  ChevronDownIcon,
   Cog6ToothIcon,
+  MoonIcon,
   SunIcon,
-  MoonIcon
+  UserIcon,
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
-import Sidebar from './Sidebar';
-import { useServer } from '../contexts/ServerContext';
-import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
+import React, { Fragment, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import logo from '../assets/logo.svg';
+import { useAuth } from '../contexts/AuthContext';
+import { useServer } from '../contexts/ServerContext';
+import { useTheme } from '../contexts/ThemeContext';
+import Sidebar from './Sidebar';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -31,7 +30,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   useEffect(() => {
     // Fetch version from API
-    axios.get('/api/version')
+    axios
+      .get('/api/version')
       .then(res => setVersion(res.data.version))
       .catch(err => console.error('Failed to fetch version:', err));
   }, []);
@@ -45,42 +45,35 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden">
+    <div className='min-h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden'>
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
-        <div className="px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+      <header className='fixed top-0 left-0 right-0 z-50 bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700'>
+        <div className='px-4 sm:px-6 lg:px-8'>
+          <div className='flex justify-between items-center h-16'>
             {/* Left side */}
-            <div className="flex items-center">
+            <div className='flex items-center'>
               {/* Sidebar toggle button - visible on all screen sizes */}
               <button
-                type="button"
-                className="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 mr-2"
+                className='p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 mr-2'
                 onClick={() => {
                   console.log('Toggle clicked, current state:', sidebarOpen);
                   setSidebarOpen(!sidebarOpen);
                 }}
               >
-                <Bars3Icon className="h-6 w-6" />
+                <Bars3Icon className='h-6 w-6' />
               </button>
 
               {/* Logo */}
-              <div className="flex items-center ml-2 md:ml-0">
-                <Link to="/" className="flex items-center hover:opacity-80 transition-opacity">
-                  <img
-                    src={logo}
-                    alt="Registry Gateway Logo"
-                    className="h-8 w-8"
-                  />
-                  <span className="ml-2 text-xl font-bold text-gray-900 dark:text-white">
-                    Registry Gateway
-                  </span>
+              <div className='flex items-center ml-2 md:ml-0'>
+                <Link to='/' className='flex items-center hover:opacity-80 transition-opacity'>
+                  <img src={logo} alt='Registry Gateway Logo' className='h-8 w-8' />
+                  <span className='ml-2 text-xl font-bold text-gray-900 dark:text-white'>Registry Gateway</span>
                 </Link>
               </div>
             </div>
 
             {/* Right side */}
-            <div className="flex items-center space-x-4">
+            <div className='flex items-center space-x-4'>
               {/* GitHub link */}
               {/* <a
                 href="https://github.com/agentic-community/mcp-gateway-registry"
@@ -105,65 +98,57 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
               {/* Version badge */}
               {version && (
-                <div className="hidden md:flex items-center px-2.5 py-1 bg-purple-50 dark:bg-purple-900/20 rounded-md">
-                  <span className="text-xs font-medium text-purple-700 dark:text-purple-300">
-                    {version}
-                  </span>
+                <div className='hidden md:flex items-center px-2.5 py-1 bg-purple-50 dark:bg-purple-900/20 rounded-md'>
+                  <span className='text-xs font-medium text-purple-700 dark:text-purple-300'>{version}</span>
                 </div>
               )}
 
               {/* Theme toggle */}
               <button
                 onClick={toggleTheme}
-                className="p-2 text-gray-400 hover:text-gray-500 dark:text-gray-300 dark:hover:text-gray-100 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+                className='p-2 text-gray-400 hover:text-gray-500 dark:text-gray-300 dark:hover:text-gray-100 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800'
               >
-                {theme === 'dark' ? (
-                  <SunIcon className="h-5 w-5" />
-                ) : (
-                  <MoonIcon className="h-5 w-5" />
-                )}
+                {theme === 'dark' ? <SunIcon className='h-5 w-5' /> : <MoonIcon className='h-5 w-5' />}
               </button>
 
               {/* User dropdown */}
-              <Menu as="div" className="relative">
+              <Menu as='div' className='relative'>
                 <div>
-                  <Menu.Button className="flex items-center space-x-3 text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700">
-                    <div className="h-8 w-8 rounded-full bg-purple-100 dark:bg-purple-800 flex items-center justify-center">
-                      <UserIcon className="h-5 w-5 text-purple-600 dark:text-purple-300" />
+                  <Menu.Button className='flex items-center space-x-3 text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-700'>
+                    <div className='h-8 w-8 rounded-full bg-purple-100 dark:bg-purple-800 flex items-center justify-center'>
+                      <UserIcon className='h-5 w-5 text-purple-600 dark:text-purple-300' />
                     </div>
-                    <span className="hidden md:block text-gray-700 dark:text-gray-100 font-medium">
+                    <span className='hidden md:block text-gray-700 dark:text-gray-100 font-medium'>
                       {user?.username || 'Admin'}
                     </span>
-                    <ChevronDownIcon className="h-4 w-4 text-gray-400" />
+                    <ChevronDownIcon className='h-4 w-4 text-gray-400' />
                   </Menu.Button>
                 </div>
 
                 <Transition
                   as={Fragment}
-                  enter="transition ease-out duration-100"
-                  enterFrom="transform opacity-0 scale-95"
-                  enterTo="transform opacity-100 scale-100"
-                  leave="transition ease-in duration-75"
-                  leaveFrom="transform opacity-100 scale-100"
-                  leaveTo="transform opacity-0 scale-95"
+                  enter='transition ease-out duration-100'
+                  enterFrom='transform opacity-0 scale-95'
+                  enterTo='transform opacity-100 scale-100'
+                  leave='transition ease-in duration-75'
+                  leaveFrom='transform opacity-100 scale-100'
+                  leaveTo='transform opacity-0 scale-95'
                 >
-                  <Menu.Items className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white dark:bg-gray-800 py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+                  <Menu.Items className='absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white dark:bg-gray-800 py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none'>
                     <Menu.Item>
                       {({ active }) => (
                         <Link
-                          to="/settings"
-                          className={`${
-                            active ? 'bg-gray-100 dark:bg-gray-800' : ''
-                          } flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-100`}
+                          to='/settings'
+                          className={`${active ? 'bg-gray-100 dark:bg-gray-800' : ''} flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-100`}
                         >
-                          <Cog6ToothIcon className="mr-3 h-4 w-4" />
+                          <Cog6ToothIcon className='mr-3 h-4 w-4' />
                           Settings
                         </Link>
                       )}
                     </Menu.Item>
 
-                    <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
-                    
+                    <div className='border-t border-gray-100 dark:border-gray-700 my-1' />
+
                     <Menu.Item>
                       {({ active }) => (
                         <button
@@ -172,7 +157,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                             active ? 'bg-gray-100 dark:bg-gray-800' : ''
                           } flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-100`}
                         >
-                          <ArrowRightOnRectangleIcon className="mr-3 h-4 w-4" />
+                          <ArrowRightOnRectangleIcon className='mr-3 h-4 w-4' />
                           Sign out
                         </button>
                       )}
@@ -185,22 +170,21 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </div>
       </header>
 
-      <div className="flex h-screen pt-16">
+      <div className='flex h-screen pt-16'>
         {/* Sidebar */}
-        <Sidebar 
-          sidebarOpen={sidebarOpen} 
+        <Sidebar
+          sidebarOpen={sidebarOpen}
           setSidebarOpen={setSidebarOpen}
           stats={stats}
           activeFilter={activeFilter}
           setActiveFilter={setActiveFilter}
         />
 
-
         {/* Main content */}
-        <main className={`flex-1 flex flex-col transition-all duration-300 ${
-          sidebarOpen ? 'md:ml-64 lg:ml-72 xl:ml-80' : ''
-        }`}>
-          <div className="flex-1 flex flex-col px-4 sm:px-6 lg:px-8 py-4 md:py-8 overflow-hidden">
+        <main
+          className={`flex-1 flex flex-col transition-all duration-300 ${sidebarOpen ? 'md:ml-64 lg:ml-72 xl:ml-80' : ''}`}
+        >
+          <div className='flex-1 flex flex-col px-4 sm:px-6 lg:px-8 py-4 md:py-8 overflow-hidden'>
             {React.cloneElement(children as React.ReactElement, { activeFilter })}
           </div>
         </main>
@@ -209,4 +193,4 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   );
 };
 
-export default Layout; 
+export default Layout;
