@@ -269,7 +269,7 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
-
+      console.log(`🔄 aaaaa Polling server status for`, serverStatus);
       temp_count.current[serverName] = 0;
       const initialState = serverStatus[serverName]?.connectionState;
       const poll = async () => {
@@ -285,7 +285,7 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
         const latestStatusData = await fetchServerStatus(temp_data);
         const currentState = latestStatusData[serverName]?.connectionState;
 
-        if (currentState === initialState) {
+        if (currentState === initialState || currentState === SERVER_CONNECTION.CONNECTING) {
           timeoutRef.current = setTimeout(() => {
             poll();
           }, 5000);
