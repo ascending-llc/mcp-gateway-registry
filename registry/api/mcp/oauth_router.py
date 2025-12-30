@@ -3,21 +3,14 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
 from fastapi.security import HTTPBearer
-from mcp_integration.utils import load_template
 from registry.auth.dependencies import CurrentUser
-from registry.mcp_integration.config.service import MCPConfigService, get_config_service
-from registry.mcp_integration.oauth.service import MCPOAuthService
+from registry.auth.oauth.oauth_service import MCPOAuthService, get_oauth_service
+from registry.utils.log import logger
+from registry.utils.utils import load_template
 
-from utils.log import logger
 
 router = APIRouter()
 security = HTTPBearer()
-
-
-async def get_oauth_service(config_service: MCPConfigService = Depends(get_config_service)) -> MCPOAuthService:
-    service = MCPOAuthService(config_service)
-    logger.debug(f"Created MCPOAuthService with FlowStateManager id: {id(service.flow_manager)}")
-    return service
 
 
 @router.get("/{server_name}/oauth/initiate")

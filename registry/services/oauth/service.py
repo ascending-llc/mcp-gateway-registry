@@ -3,7 +3,7 @@ import yaml
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Set, Tuple
 from dataclasses import dataclass, field, asdict
-from utils.log import logger
+from registry.utils.log import logger
 
 DEFAULT_CONFIG_PATH = "/Users/dyl/ascending/code/mcp-gateway-registry/registry/mcp_integration/config/mcp_service.yaml"
 

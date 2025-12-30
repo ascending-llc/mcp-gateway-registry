@@ -3,7 +3,7 @@ import hashlib
 import base64
 from pathlib import Path
 from typing import Dict
-from utils.log import logger
+from registry.utils.log import logger
 
 
 # PKCE utility functions

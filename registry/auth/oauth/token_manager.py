@@ -1,12 +1,11 @@
 import asyncio
 import time
 
-import logging
 from typing import Dict, Optional
 
-from mcp_integration.models.moldes import OAuthTokens
+from registry.models.models import OAuthTokens
 
-from utils.log import logger
+from registry.utils.log import logger
 
 class OAuthTokenManager:
     """OAuth token manager"""

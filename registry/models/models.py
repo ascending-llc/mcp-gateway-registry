@@ -3,7 +3,6 @@ from typing import Dict, Any, Optional, List, Union
 from pydantic import BaseModel, Field, validator
 import time
 
-
 class OAuthTokens(BaseModel):
     """OAuth tokens"""
     access_token: str = Field(..., description="Access token")

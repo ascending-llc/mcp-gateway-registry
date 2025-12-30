@@ -1,10 +1,10 @@
 import asyncio
 import time
-from typing import Dict, Optional, Any, Tuple
+from typing import Dict, Optional, Any
 from dataclasses import dataclass, field, asdict
 
-from mcp_integration.models.enums import ConnectionState
-from utils.log import logger
+from schemas.enums import ConnectionState
+from registry.utils.log import logger
 
 
 @dataclass
@@ -212,7 +212,7 @@ async def get_connection_service() -> MCPConnectionService:
     """Get connection service instance (singleton)"""
     global _connection_service_instance
     if _connection_service_instance is None:
-        from mcp_integration.services.config_service import get_config_service
+        from services.oauth.config_service import get_config_service
         config_service = await get_config_service()
         _connection_service_instance = MCPConnectionService(config_service)
         await _connection_service_instance.initialize_app_connections()

@@ -3,15 +3,10 @@ import time
 import secrets
 import os
 from typing import Dict, Optional, Any
+from registry.models.models import OAuthFlow, MCPOAuthFlowMetadata, OAuthTokens, OAuthClientInformation, OAuthMetadata
+from registry.schemas.enums import OAuthFlowStatus
+from registry.utils.log import logger
 
-from mcp_integration.models.enums import OAuthFlowStatus
-from utils.log import logger
-from mcp_integration.models.moldes import (
-    OAuthClientInformation,
-    OAuthMetadata,
-    MCPOAuthFlowMetadata,
-    OAuthTokens, OAuthFlow,
-)
 
 
 class FlowStateManager:
@@ -20,7 +15,7 @@ class FlowStateManager:
     STATE_SEPARATOR = "##"  # state separator
 
     def __init__(self):
-        self.flows: Dict[str, OAuthFlow] = {}
+        self.flows: Dict[str, OAuthFlow] = {} # TODO:  添加redis
         self._lock = asyncio.Lock()
         self._flow_ttl = 600  # Flow time-to-live (seconds)
         logger.info("FlowStateManager instance created")
@@ -127,6 +122,8 @@ class FlowStateManager:
             flow.status = OAuthFlowStatus.COMPLETED
             flow.completed_at = time.time()
             flow.tokens = tokens
+            self.delete_flow(flow_id) #
+            logger.info(f"Completed flow: {flow_id}, status: {flow.status}")
 
     def fail_flow(self, flow_id: str, error: str) -> None:
         """Mark flow as failed"""
