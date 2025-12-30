@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from itsdangerous import SignatureExpired, BadSignature
 from starlette.middleware.base import BaseHTTPMiddleware
 from typing import Optional, Dict, Any
-from utils.log import logger
+from registry.utils.log import logger
 
 from registry.auth.dependencies import (map_cognito_groups_to_scopes, signer, get_ui_permissions_for_user,
                                         get_user_accessible_servers, get_accessible_services_for_user,
