@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
 import axios from 'axios';
+import { useEffect, useState } from 'react';
 
 type EntityType = 'mcp_server' | 'tool' | 'a2a_agent';
 
@@ -43,8 +43,8 @@ export interface SemanticAgentHit {
   trust_level?: string;
   visibility?: string;
   is_enabled?: boolean;
-   url?: string;
-   agent_card?: Record<string, any>;
+  url?: string;
+  agent_card?: Record<string, any>;
   relevance_score: number;
   match_context?: string;
 }
@@ -73,10 +73,7 @@ interface UseSemanticSearchReturn {
   debouncedQuery: string;
 }
 
-export const useSemanticSearch = (
-  query: string,
-  options: UseSemanticSearchOptions = {}
-): UseSemanticSearchReturn => {
+export const useSemanticSearch = (query: string, options: UseSemanticSearchOptions = {}): UseSemanticSearchReturn => {
   const [results, setResults] = useState<SemanticSearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,8 +83,7 @@ export const useSemanticSearch = (
   const minLength = options.minLength ?? 2;
   const maxResults = options.maxResults ?? 10;
   const entityTypes = options.entityTypes ?? DEFAULT_ENTITY_TYPES;
-  const entityTypesKey =
-    options.entityTypes?.join('|') ?? DEFAULT_ENTITY_TYPES_KEY;
+  const entityTypesKey = options.entityTypes?.join('|') ?? DEFAULT_ENTITY_TYPES_KEY;
 
   // Debounce user input to minimize API calls
   useEffect(() => {
@@ -118,19 +114,16 @@ export const useSemanticSearch = (
           {
             query: debouncedQuery,
             entity_types: entityTypes,
-            max_results: maxResults
+            max_results: maxResults,
           },
-          { signal: controller.signal }
+          { signal: controller.signal },
         );
         if (!cancelled) {
           setResults(response.data);
         }
       } catch (err: any) {
         if (axios.isCancel(err) || cancelled) return;
-        const message =
-          err.response?.data?.detail ||
-          err.message ||
-          'Semantic search failed.';
+        const message = err.response?.data?.detail || err.message || 'Semantic search failed.';
         setError(message);
         setResults(null);
       } finally {
