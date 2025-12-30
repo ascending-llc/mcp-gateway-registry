@@ -3,7 +3,6 @@ import logging
 
 from registry.core.config import settings
 
-
 def setup_logging():
     """Configure logging to write to both file and console."""
     # Ensure log directory exists
@@ -45,6 +44,5 @@ def setup_logging():
     root_logger.addHandler(console_handler)
 
     return root_logger
-
 
 logger = setup_logging()
