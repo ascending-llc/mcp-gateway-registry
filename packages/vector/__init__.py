@@ -18,6 +18,5 @@ __all__ = [
     'DependencyMissingError',
     'UnsupportedBackendError',
     'ConfigurationError',
-    'Repository',
+    'Repository'
 ]
-
