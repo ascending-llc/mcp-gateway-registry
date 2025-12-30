@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import axios from 'axios';
+import type React from 'react';
+import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
 import { getBasePath } from '../config';
 
 // Configure axios to include credentials (cookies) with all requests
@@ -62,7 +63,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         can_modify_servers: userData.can_modify_servers || false,
         is_admin: userData.is_admin || false,
       });
-    } catch (error) {
+    } catch (_error) {
       // User not authenticated
       setUser(null);
     } finally {
@@ -74,13 +75,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const formData = new FormData();
     formData.append('username', username);
     formData.append('password', password);
-    
+
     const response = await axios.post('/api/auth/login', formData, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
     });
-    
+
     if (response.status === 200) {
       await checkAuth();
     }
@@ -89,7 +90,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = async () => {
     try {
       await axios.post('/api/auth/logout');
-    } catch (error) {
+    } catch (_error) {
       // Ignore errors during logout
     } finally {
       setUser(null);
@@ -104,4 +105,4 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}; 
+};

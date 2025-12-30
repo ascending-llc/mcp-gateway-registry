@@ -26,8 +26,9 @@ from registry.api.registry_routes import router as registry_router
 from registry.api.agent_routes import router as agent_router
 from registry.api.management_routes import router as management_router
 from registry.health.routes import router as health_router
-from registry.proxy.routes import router as proxy_router, shutdown_proxy_client
-
+from registry.api.mcp.oauth_router import router as oauth_router
+from registry.version import __version__
+from registry.api.proxy_routes import router as proxy_router, shutdown_proxy_client
 from registry.auth.dependencies import CurrentUser
 
 # Import services for initialization
@@ -37,71 +38,7 @@ from registry.search.service import vector_service
 from registry.health.service import health_service
 from registry.services.federation_service import get_federation_service
 
-# Import core configuration
-from registry.core.config import settings
-
-# Import version
-from registry.version import __version__
-# Import MongoDB connection management
-from packages.database.mongodb import init_mongodb, close_mongodb
-
-
-# Configure logging with file and console handlers
-def setup_logging():
-    """Configure logging to write to both file and console."""
-    import sys
-
-    # Ensure log directory exists
-    log_dir = settings.log_dir
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    # Define log file path
-    log_file = log_dir / "registry.log"
-
-    # Create formatters
-    file_formatter = logging.Formatter(
-        '%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
-    )
-
-    console_formatter = logging.Formatter(
-        '%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
-    )
-
-    # Get root logger
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
-
-    # Remove any existing handlers
-    for handler in root_logger.handlers[:]:
-        root_logger.removeHandler(handler)
-
-    # File handler with UTF-8 encoding to handle emojis
-    file_handler = logging.FileHandler(log_file, encoding='utf-8')
-    file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(file_formatter)
-
-    # Console handler with UTF-8 encoding to handle emojis on Windows
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(console_formatter)
-    # Force UTF-8 encoding for console output on Windows
-    if hasattr(sys.stdout, 'reconfigure'):
-        try:
-            sys.stdout.reconfigure(encoding='utf-8')
-        except Exception:
-            pass  # Silently ignore if reconfigure fails
-
-    # Add handlers to root logger
-    root_logger.addHandler(file_handler)
-    root_logger.addHandler(console_handler)
-
-    return log_file
-
-
-# Setup logging
-log_file_path = setup_logging()
-logger = logging.getLogger(__name__)
-logger.info(f"Logging configured. Writing to file: {log_file_path}")
+from registry.utils.log import logger
 
 
 @asynccontextmanager
@@ -164,7 +101,7 @@ async def lifespan(app: FastAPI):
             # Sync on startup if configured
             sync_on_startup = (
                     (
-                                federation_service.config.anthropic.enabled and federation_service.config.anthropic.sync_on_startup) or
+                            federation_service.config.anthropic.enabled and federation_service.config.anthropic.sync_on_startup) or
                     (federation_service.config.asor.enabled and federation_service.config.asor.sync_on_startup)
             )
 
@@ -266,6 +203,7 @@ app.include_router(agent_router, prefix="/api", tags=["Agent Management"])
 app.include_router(management_router, prefix="/api")
 app.include_router(search_router, prefix="/api/search", tags=["Semantic Search"])
 app.include_router(health_router, prefix="/api/health", tags=["Health Monitoring"])
+app.include_router(oauth_router, prefix="/api/mcp", tags=["MCP  Management"])
 
 # Register Anthropic MCP Registry API (public API for MCP servers only)
 app.include_router(registry_router, tags=["Anthropic Registry API"])
