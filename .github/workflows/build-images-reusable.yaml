@@ -25,6 +25,7 @@ on:
 permissions:
   id-token: write 
   contents: read
+  actions: read
 
 jobs:
   build-and-push-mcpgateway:
@@ -111,22 +112,34 @@ jobs:
         id: schema
         run: |
           # Get the latest release tag from jarvis-api repo
-          RESPONSE=$(gh api repos/ascending-llc/jarvis-api/releases/latest 2>&1) || true
+          echo "Fetching latest release from ascending-llc/jarvis-api..."
           
-          # Check if we got a valid response with tag_name
-          if echo "$RESPONSE" | jq -e '.tag_name' > /dev/null 2>&1; then
-            SCHEMA_VERSION=$(echo "$RESPONSE" | jq -r '.tag_name')
+          # Use gh api with proper error handling
+          HTTP_CODE=$(curl -s -o /tmp/release.json -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/ascending-llc/jarvis-api/releases/latest")
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            SCHEMA_VERSION=$(jq -r '.tag_name' /tmp/release.json)
             echo "schema_version=${SCHEMA_VERSION}" >> $GITHUB_OUTPUT
             echo "✅ Using SCHEMA_VERSION: ${SCHEMA_VERSION}"
+          elif [ "$HTTP_CODE" = "404" ]; then
+            echo "⚠️  Error: jarvis-api repository not found or has no releases (HTTP 404)"
+            echo "This could mean:"
+            echo "  1. The repository has no releases published yet"
+            echo "  2. The GITHUB_TOKEN doesn't have access to ascending-llc/jarvis-api"
+            echo ""
+            echo "To fix this, either:"
+            echo "  - Ensure jarvis-api has at least one release published"
+            echo "  - Configure organization settings to allow workflow access to jarvis-api"
+            echo "  - Use a PAT with repo access instead of GITHUB_TOKEN"
+            exit 1
           else
-            echo "⚠️  Warning: Could not fetch latest release from jarvis-api"
-            echo "Response: $RESPONSE"
-            echo "Checking if jarvis-api repo has any releases..."
+            echo "⚠️  Error: Failed to fetch release (HTTP $HTTP_CODE)"
+            cat /tmp/release.json
             exit 1
           fi
-        env:
-          # Using built-in GITHUB_TOKEN for same-org cross-repo access
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Determine image tags
         id: tags
