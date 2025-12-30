@@ -1,8 +1,7 @@
 # Configure logging with file and console handlers
 import logging
 
-from core.config import settings
-
+from registry.core.config import settings
 
 def setup_logging():
     """Configure logging to write to both file and console."""
@@ -45,6 +44,5 @@ def setup_logging():
     root_logger.addHandler(console_handler)
 
     return root_logger
-
 
 logger = setup_logging()
