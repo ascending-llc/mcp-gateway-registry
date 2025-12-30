@@ -29,7 +29,7 @@ from registry.api.registry_routes import router as registry_router
 from registry.api.agent_routes import router as agent_router
 from registry.api.management_routes import router as management_router
 from registry.health.routes import router as health_router
-from registry.proxy.routes import router as proxy_router, shutdown_proxy_client
+from registry.api.proxy_routes import router as proxy_router, shutdown_proxy_client
 
 from registry.auth.dependencies import CurrentUser
 
