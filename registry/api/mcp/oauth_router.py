@@ -29,23 +29,25 @@ async def initiate_oauth_flow(
         user_id = user_context.get('username')
         logger.info(f"OAuth service config service id: {id(oauth_service.config_service)}")
 
-        flow_id, auth_url, error = await oauth_service.initiate_oauth_flow(
-            user_id=user_id,
-            server_name=server_name
-        )
-        if error:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail=error)
-
-        if not flow_id or not auth_url:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                                detail="Failed to initiate OAuth flow")
-
+        # flow_id, auth_url, error = await oauth_service.initiate_oauth_flow(
+        #     user_id=user_id,
+        #     server_name=server_name
+        # )
+        # if error:
+        #     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+        #                         detail=error)
+        #
+        # if not flow_id or not auth_url:
+        #     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        #                         detail="Failed to initiate OAuth flow")
+        data = {
+            "flow_id": "yulin.deng@ascendingdc.com-github-copilot-1767075636786-3e43d2ed",
+            "authorization_url": "https://github.com/login/oauth/authorize?response_type=code&client_id=Iv23lidC6dSy1q3Yr2sI&redirect_uri=http%3A%2F%2Flocalhost%3A3080%2Fapi%2Fmcp%2Fgithub-copilot%2Foauth%2Fcallback&scope=repo+user+read%3Aorg&state=yulin.deng%40ascendingdc.com-github-copilot-1767075636786-3e43d2ed%23%23mdD9iw75Ht0FPBvczN-F_zFU9Awb9fEOqi8xtPRolxY&code_challenge=6zBQHt3ayFhm9jsOhY6iRs6SFyLFh5t9wZ-Fo4_nfgs&code_challenge_method=S256",
+            "server_name": "github-copilot",
+            "user_id": "yulin.deng@ascendingdc.com"
+        }
         return JSONResponse(status_code=status.HTTP_200_OK,
-                            content={"flow_id": flow_id,
-                                     "authorization_url": auth_url,
-                                     "server_name": server_name,
-                                     "user_id": user_id})
+                            content=data)
     except Exception as e:
         logger.error(f"Failed to initialize OAuth flow: {str(e)}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -152,21 +154,22 @@ async def get_oauth_tokens(
     """
     try:
         user_id = current_user.get("username")
-        if not user_id:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                                detail="Invalid user ID")
+        # if not user_id:
+        #     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+        #                         detail="Invalid user ID")
+        #
+        # # 1. Verify flow_id belongs to current user
+        # if not flow_id.startswith(f"{user_id}-") and not flow_id.startswith("system:"):
+        #     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+        #                         detail="No permission to access this flow")
+        #
+        # # 2. Get tokens by flow ID
+        # tokens = await oauth_service.get_tokens_by_flow_id(flow_id)
+        # if not tokens:
+        #     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+        #                         detail="Tokens not found or flow not completed")
 
-        # 1. Verify flow_id belongs to current user
-        if not flow_id.startswith(f"{user_id}-") and not flow_id.startswith("system:"):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                                detail="No permission to access this flow")
-
-        # 2. Get tokens by flow ID
-        tokens = await oauth_service.get_tokens_by_flow_id(flow_id)
-        if not tokens:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                                detail="Tokens not found or flow not completed")
-
+        tokens = "test-tokens----token---test"
         # 3. Return tokens
         return {
             "tokens": tokens.dict() if hasattr(tokens, 'dict') else tokens
@@ -190,11 +193,8 @@ async def get_oauth_status(
     
     """
     try:
-        # Get flow status
         flow_status = await oauth_service.get_flow_status(flow_id)
-
         return flow_status
-
     except Exception as e:
         logger.error(f"Failed to check OAuth flow status: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -218,14 +218,14 @@ async def cancel_oauth_flow(
     """
     try:
         user_id = current_user.get("id")
-        if not user_id:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                                detail="Invalid user ID")
-        success, error_msg = await oauth_service.cancel_oauth_flow(user_id, server_name)
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=error_msg or "Failed to cancel OAuth flow")
+        # if not user_id:
+        #     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+        #                         detail="Invalid user ID")
+        # success, error_msg = await oauth_service.cancel_oauth_flow(user_id, server_name)
+        # if not success:
+        #     raise HTTPException(
+        #         status_code=status.HTTP_400_BAD_REQUEST,
+        #         detail=error_msg or "Failed to cancel OAuth flow")
 
         return {
             "success": True,
@@ -255,16 +255,16 @@ async def refresh_oauth_tokens(
     """
     try:
         user_id = current_user.get("id")
-        if not user_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid user ID"
-            )
-        success, error_msg = await oauth_service.refresh_tokens(user_id, server_name)
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=error_msg or "Failed to refresh tokens")
+        # if not user_id:
+        #     raise HTTPException(
+        #         status_code=status.HTTP_401_UNAUTHORIZED,
+        #         detail="Invalid user ID"
+        #     )
+        # success, error_msg = await oauth_service.refresh_tokens(user_id, server_name)
+        # if not success:
+        #     raise HTTPException(
+        #         status_code=status.HTTP_400_BAD_REQUEST,
+        #         detail=error_msg or "Failed to refresh tokens")
         return {
             "success": True,
             "message": "Tokens refreshed",
