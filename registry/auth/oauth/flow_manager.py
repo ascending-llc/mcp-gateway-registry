@@ -8,14 +8,13 @@ from registry.schemas.enums import OAuthFlowStatus
 from registry.utils.log import logger
 
 
-
 class FlowStateManager:
     """OAuth flow manager"""
-    
+
     STATE_SEPARATOR = "##"  # state separator
 
     def __init__(self):
-        self.flows: Dict[str, OAuthFlow] = {} # TODO:  添加redis
+        self.flows: Dict[str, OAuthFlow] = {}  # TODO:  添加redis
         self._lock = asyncio.Lock()
         self._flow_ttl = 600  # Flow time-to-live (seconds)
         logger.info("FlowStateManager instance created")
@@ -25,29 +24,29 @@ class FlowStateManager:
         timestamp = int(time.time() * 1000)
         random_hex = secrets.token_hex(4)
         return f"{user_id}-{server_name}-{timestamp}-{random_hex}"
-    
+
     def encode_state(self, flow_id: str, security_token: Optional[str] = None) -> str:
         """Encode state parameter"""
         if security_token is None:
             security_token = secrets.token_urlsafe(32)
-        
+
         state = f"{flow_id}{self.STATE_SEPARATOR}{security_token}"
         logger.debug(f"Encoded state: flow_id={flow_id}, token_length={len(security_token)}")
         return state
-    
+
     def decode_state(self, state: str) -> tuple[str, str]:
         """Decode state parameter"""
         if self.STATE_SEPARATOR not in state:
             error_msg = f"Invalid state format: missing separator '{self.STATE_SEPARATOR}'"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        
+
         parts = state.split(self.STATE_SEPARATOR, 1)
         if len(parts) != 2:
             error_msg = f"Invalid state format: expected 2 parts, got {len(parts)}"
             logger.error(error_msg)
             raise ValueError(error_msg)
-        
+
         flow_id, security_token = parts
         logger.debug(f"Decoded state: flow_id={flow_id}, token_length={len(security_token)}")
         return flow_id, security_token
@@ -65,7 +64,7 @@ class FlowStateManager:
         # Generate secure state parameter (flow_id##random_token)
         security_token = secrets.token_urlsafe(32)
         state = self.encode_state(flow_id, security_token)
-        
+
         return MCPOAuthFlowMetadata(
             server_name=server_name,
             user_id=user_id,
@@ -122,8 +121,6 @@ class FlowStateManager:
             flow.status = OAuthFlowStatus.COMPLETED
             flow.completed_at = time.time()
             flow.tokens = tokens
-            self.delete_flow(flow_id) #
-            logger.info(f"Completed flow: {flow_id}, status: {flow.status}")
 
     def fail_flow(self, flow_id: str, error: str) -> None:
         """Mark flow as failed"""
@@ -191,6 +188,7 @@ class FlowStateManager:
 
 
 _flow_state_manager_instance: Optional[FlowStateManager] = None
+
 
 def get_flow_state_manager() -> FlowStateManager:
     """Get flow state manager"""
