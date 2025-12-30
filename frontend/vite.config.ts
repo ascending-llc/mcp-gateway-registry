@@ -1,18 +1,18 @@
-import { defineConfig, loadEnv } from 'vite';
-import react from '@vitejs/plugin-react';
+/** biome-ignore-all lint/style/useNodejsImportProtocol: <> */
 import path from 'path';
+import { defineConfig, loadEnv } from 'vite';
 
 export default defineConfig(({ mode }) => {
   // Load env file from root directory
   const env = loadEnv(mode, path.resolve(__dirname, '..'), '');
-  
+
   // For production: https://jarvis-demo.ascendingdc.com/gateway
   // For local dev: http://localhost:7860
   const backendURL = env.REGISTRY_URL || 'http://localhost:7860';
-  
+
   // Auth server is at root /oauth2, not under registry path e.g. /gateway
   const authURL = env.AUTH_SERVER_EXTERNAL_URL || env.AUTH_SERVER_URL || 'http://localhost:8888';
-  
+
   const basePath = env.NGINX_BASE_PATH || '';
 
   console.log('🔧 Vite Configuration:');
@@ -51,13 +51,13 @@ export default defineConfig(({ mode }) => {
           cookiePathRewrite: '/',
         },
         '/api/auth/providers': {
-          target: authURL, 
+          target: authURL,
           changeOrigin: true,
           secure: false,
-          rewrite: (path) => path.replace(/^\/api\/auth\/providers/, '/oauth2/providers'),
+          rewrite: path => path.replace(/^\/api\/auth\/providers/, '/oauth2/providers'),
         },
         '/api': {
-          target: backendURL, 
+          target: backendURL,
           changeOrigin: true,
           secure: false,
         },
@@ -67,7 +67,7 @@ export default defineConfig(({ mode }) => {
           secure: false,
         },
         '/health': {
-          target: backendURL, 
+          target: backendURL,
           changeOrigin: true,
           secure: false,
         },
