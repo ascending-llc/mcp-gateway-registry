@@ -261,12 +261,15 @@ After starting the services, you can populate MongoDB with sample data including
 # Make sure MongoDB is running
 
 # Seed the database with sample data
-uv run python scripts/seed_mongodb.py
+uv run seed_data
+
+# Or use the full command:
+# uv run python scripts/seed_mongodb.py
 ```
 **Clean the database:**
 ```bash
 # Remove all seeded data
-uv run python scripts/seed_mongodb.py clean
+uv run seed_data clean
 ```
 
 **Environment Configuration:**
