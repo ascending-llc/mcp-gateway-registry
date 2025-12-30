@@ -246,10 +246,33 @@ docker-compose ps
 # - auth-server
 # - registry
 # - registry-frontend
+# - mongodb
 # - currenttime-server
 # - fininfo-server
 # - mcpgw-server
 # - realserverfaketools-server
+```
+
+### Seed MongoDB with Sample Data
+
+After starting the services, you can populate MongoDB with sample data including users, API keys, tokens, and MCP servers:
+
+```bash
+# Make sure MongoDB is running
+
+# Seed the database with sample data
+uv run python scripts/seed_mongodb.py
+```
+**Clean the database:**
+```bash
+# Remove all seeded data
+uv run python scripts/seed_mongodb.py clean
+```
+
+**Environment Configuration:**
+The seed script uses `MONGO_URI` from your `.env` file. Default value:
+```bash
+MONGO_URI=mongodb://localhost:27017/jarvis
 ```
 
 ### Monitor Service Logs
