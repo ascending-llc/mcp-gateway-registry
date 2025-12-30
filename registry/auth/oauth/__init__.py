@@ -1,5 +1,5 @@
-from .flow_manager import FlowStateManager, get_flow_state_manager
-from .http_client import OAuthHttpClient
+from .flow_state_manager import FlowStateManager, get_flow_state_manager
+from .oauth_http_client import OAuthHttpClient
 from .oauth_service import MCPOAuthService, get_oauth_service
 from .token_manager import OAuthTokenManager
 

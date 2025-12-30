@@ -3,7 +3,7 @@ import time
 import logging
 from typing import Dict, Optional, Any, Tuple, Union
 
-from services.oauth.config_service import get_oauth_service
+from services.oauth.oauth_config_service import get_oauth_service
 from services.oauth.service import get_config_service
 from schemas.enums import ConnectionState
 from services.oauth.connection_service import get_connection_service
