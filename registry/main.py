@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
+from packages.database import init_mongodb, close_mongodb
 from registry.auth.middleware import UnifiedAuthMiddleware
 # Import domain routers
 from registry.auth.routes import router as auth_router
