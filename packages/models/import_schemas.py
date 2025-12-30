@@ -67,6 +67,46 @@ class BeanieModelGenerator:
         self.imported_types = set()
         self.nested_models = []  # Store nested model definitions
 
+    def cleanup_generated_files(self):
+        """
+        Clean up existing generated files and caches to prevent import issues.
+        Removes all .py files in _generated/ and all __pycache__ directories.
+        """
+        import shutil
+        
+        if not self.generated_dir.exists():
+            return
+        
+        print("Cleaning up existing generated files and caches...")
+        
+        # Remove all .py files in _generated directory (except __init__.py will be recreated)
+        for py_file in self.generated_dir.glob('*.py'):
+            try:
+                py_file.unlink()
+                print(f"  Removed: {py_file.name}")
+            except Exception as e:
+                print(f"  Warning: Could not remove {py_file.name}: {e}")
+        
+        # Remove __pycache__ in _generated directory
+        pycache_dir = self.generated_dir / '__pycache__'
+        if pycache_dir.exists():
+            try:
+                shutil.rmtree(pycache_dir)
+                print(f"  Removed: _generated/__pycache__/")
+            except Exception as e:
+                print(f"  Warning: Could not remove __pycache__: {e}")
+        
+        # Remove parent __pycache__ directories
+        parent_pycache = self.output_dir / '__pycache__'
+        if parent_pycache.exists():
+            try:
+                shutil.rmtree(parent_pycache)
+                print(f"  Removed: models/__pycache__/")
+            except Exception as e:
+                print(f"  Warning: Could not remove parent __pycache__: {e}")
+        
+        print("Cleanup completed.\n")
+
     def load_local_schema(self, input_dir: str, filename: str) -> Dict[str, Any]:
         """
         Load JSON schema from local directory
@@ -151,6 +191,75 @@ class BeanieModelGenerator:
             raise
         except Exception:
             raise
+
+    def list_release_json_files(self, tag: str) -> List[str]:
+        """
+        List all .json files available in a GitHub Release.
+
+        Args:
+            tag: GitHub Release tag/version
+
+        Returns:
+            List of .json filenames available in the release
+        """
+        try:
+            owner, repo = self.github_repo.split('/')
+            api_url = f"https://api.github.com/repos/{owner}/{repo}/releases/tags/{tag}"
+
+            headers = {
+                'User-Agent': 'Jarvis-Schema-Downloader',
+                'Accept': 'application/vnd.github.v3+json'
+            }
+
+            if self.github_token:
+                headers['Authorization'] = f'token {self.github_token}'
+
+            req = urllib.request.Request(api_url, headers=headers)
+            with urllib.request.urlopen(req) as response:
+                if response.status != 200:
+                    raise Exception(f"HTTP {response.status}")
+                release_data = json.loads(response.read().decode('utf-8'))
+
+            # Extract all .json filenames
+            json_files = [
+                asset['name'] 
+                for asset in release_data.get('assets', []) 
+                if asset['name'].endswith('.json')
+            ]
+
+            return json_files
+
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                raise Exception(f"Release '{tag}' not found") from e
+            elif e.code == 401:
+                raise Exception(f"Invalid or missing GitHub token") from e
+            raise
+        except Exception:
+            raise
+
+    def list_local_json_files(self, input_dir: str) -> List[str]:
+        """
+        List all .json files in a local directory.
+
+        Args:
+            input_dir: Local directory path
+
+        Returns:
+            List of .json filenames in the directory
+        """
+        dir_path = Path(input_dir)
+        
+        if not dir_path.exists():
+            raise FileNotFoundError(f"Directory not found: {input_dir}")
+        
+        if not dir_path.is_dir():
+            raise NotADirectoryError(f"Not a directory: {input_dir}")
+        
+        # Get all .json files
+        json_files = [f.name for f in dir_path.glob('*.json')]
+        
+        return sorted(json_files)
 
     def generate_model(self, schema: Dict[str, Any]) -> tuple[str, str]:
         """Generate Python Beanie model code from JSON schema
@@ -393,6 +502,14 @@ class BeanieModelGenerator:
         field_type = self._get_python_type(field_def, field_name)
         field_attrs = []
         comments = []
+        
+        # Handle fields with leading underscores - Pydantic doesn't allow them
+        # Use alias to preserve the database field name
+        python_field_name = field_name
+        if field_name.startswith('_'):
+            python_field_name = field_name.lstrip('_')
+            field_attrs.append(f'alias="{field_name}"')
+            comments.append(f'DB field: {field_name}')
 
         # Handle auto-generated fields (like timestamps)
         if field_def.get('x-auto-generated'):
@@ -469,7 +586,7 @@ class BeanieModelGenerator:
         else:
             field_call = 'Field(...)'
 
-        result = f'    {field_name}: {field_type} = {field_call}'
+        result = f'    {python_field_name}: {field_type} = {field_call}'
         if comments:
             result += f'  # {", ".join(comments)}'
 
@@ -852,14 +969,20 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Local mode - convert from local JSON files
+  # Local mode - convert specific files
   python import-schemas.py --mode local --input-dir ./dist/json-schemas --files user.json token.json --output-dir ./models
 
-  # Remote mode - download from GitHub Release
+  # Local mode - convert all .json files in directory
+  python import-schemas.py --mode local --input-dir ./dist/json-schemas --output-dir ./models
+
+  # Remote mode - download specific files from GitHub Release
   python import-schemas.py --mode remote --tag asc0.4.0 --files user.json token.json --output-dir ./models --token ghp_xxxxx
 
-  # Remote mode (default) - public repository
-  python import-schemas.py --tag asc0.4.0 --files user.json --output-dir ./models
+  # Remote mode - download all .json files from GitHub Release
+  python import-schemas.py --mode remote --tag asc0.4.0 --output-dir ./models --token ghp_xxxxx
+
+  # Remote mode (default) - download all files from public repository
+  python import-schemas.py --tag asc0.4.0 --output-dir ./models
 
 GitHub Release URL format:
   https://github.com/{repo}/releases/download/{tag}/{filename}
@@ -878,8 +1001,8 @@ GitHub Release URL format:
     parser.add_argument(
         '--files',
         nargs='+',
-        required=True,
-        help='JSON schema filenames to convert (e.g., user.json token.json)'
+        required=False,
+        help='JSON schema filenames to convert (e.g., user.json token.json). If not specified, all .json files will be processed.'
     )
     parser.add_argument(
         '--output-dir',
@@ -929,6 +1052,9 @@ GitHub Release URL format:
         github_repo=args.repo,
         github_token=args.token
     )
+    
+    # Clean up existing files and caches to prevent import issues
+    generator.cleanup_generated_files()
 
     generated_files = []
     model_info = []  # List of (module_name, class_name) tuples
@@ -938,6 +1064,17 @@ GitHub Release URL format:
     if args.mode == 'local':
         print(f"Input directory: {args.input_dir}")
         print(f"Output directory: {args.output_dir}")
+        
+        # Discover all .json files if --files not provided
+        if not args.files:
+            print("Discovering all .json files in directory...")
+            try:
+                args.files = generator.list_local_json_files(args.input_dir)
+                print(f"Found {len(args.files)} .json file(s): {', '.join(args.files)}")
+            except Exception as e:
+                print(f"Error discovering files: {e}")
+                return 1
+        
         print(f"Files to convert: {len(args.files)}\n")
 
         for filename in args.files:
@@ -962,6 +1099,17 @@ GitHub Release URL format:
         print(f"GitHub repository: {args.repo}")
         print(f"Release tag: {args.tag}")
         print(f"Output directory: {args.output_dir}")
+        
+        # Discover all .json files if --files not provided
+        if not args.files:
+            print("Discovering all .json files in release...")
+            try:
+                args.files = generator.list_release_json_files(args.tag)
+                print(f"Found {len(args.files)} .json file(s): {', '.join(args.files)}")
+            except Exception as e:
+                print(f"Error discovering files: {e}")
+                return 1
+        
         print(f"Files to download: {len(args.files)}\n")
 
         for filename in args.files:

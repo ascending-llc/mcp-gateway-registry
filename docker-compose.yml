@@ -9,6 +9,8 @@ services:
       args:
         TOOL_DISCOVERY_MODE: ${TOOL_DISCOVERY_MODE:-embedded}
         BUILD_VERSION: ${BUILD_VERSION:-}
+        SCHEMA_VERSION: ${SCHEMA_VERSION:-}
+        GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     environment:
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
