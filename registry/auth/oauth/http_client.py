@@ -1,17 +1,11 @@
-import logging
 import base64
 import time
 import urllib.parse
-from typing import Dict, Optional, Any
 import httpx
+from typing import Dict, Optional, Any
+from registry.models.models import MCPOAuthFlowMetadata, OAuthTokens, TokenTransformConfig
+from registry.utils.log import logger
 
-from mcp_integration.models.moldes import (
-    MCPOAuthFlowMetadata,
-    OAuthTokens,
-    TokenTransformConfig,
-)
-
-from utils.log import logger
 
 class OAuthHttpClient:
     """OAuth HTTP client"""
@@ -28,20 +22,20 @@ class OAuthHttpClient:
         """Build authorization URL"""
         client_info = flow_metadata.client_info
         metadata = flow_metadata.metadata
-        
+
         state = flow_metadata.state
-        
+
         if not state.startswith(flow_id):
             logger.warning(f"State format issue: state does not start with flow_id. state={state}, flow_id={flow_id}")
-        
+
         redirect_uri = client_info.redirect_uris[0] if client_info.redirect_uris else ""
-        
+
         params = {
             "response_type": "code",
             "client_id": client_info.client_id,
             "redirect_uri": redirect_uri,
             "scope": client_info.scope or "",
-            "state": state,  
+            "state": state,
             "code_challenge": code_challenge,
             "code_challenge_method": "S256"
         }
@@ -53,7 +47,7 @@ class OAuthHttpClient:
         # Build URL
         auth_url = metadata.authorization_endpoint
         query_string = urllib.parse.urlencode(params)
-        
+
         full_url = f"{auth_url}?{query_string}"
         logger.debug(f"Built authorization URL with state (format: flow_id##token)")
 

@@ -1,15 +1,15 @@
 from typing import Dict, Optional, Any, Tuple
-from mcp_integration.models.moldes import (
-    OAuthTokens,
-)
+from fastapi import Depends
 
-from .oauth_flow_manager import FlowStateManager, get_flow_state_manager
-from .oauth_token_manager import OAuthTokenManager
-from .oauth_http_client import OAuthHttpClient
-from ..models.enums import OAuthFlowStatus
-from ..utils import generate_code_verifier, generate_code_challenge
+from registry.models.models import OAuthTokens
+from registry.services.oauth.service import MCPConfigService, get_config_service
+from .flow_manager import FlowStateManager, get_flow_state_manager
+from .token_manager import OAuthTokenManager
+from .http_client import OAuthHttpClient
+from registry.schemas.enums import OAuthFlowStatus
+from registry.utils.utils import generate_code_verifier, generate_code_challenge
 
-from utils.log import logger
+from registry.utils.log import logger
 
 class MCPOAuthService:
     """
@@ -102,12 +102,12 @@ class MCPOAuthService:
             except ValueError as e:
                 logger.error(f"Failed to decode state: {e}")
                 return False, "Invalid state format"
-            
+
             # 2. Verify flow_id consistency
             if decoded_flow_id != flow_id:
                 logger.error(f"Flow ID mismatch: decoded={decoded_flow_id}, provided={flow_id}")
                 return False, "Flow ID mismatch"
-            
+
             # 3. Get flow
             flow = self.flow_manager.get_flow(flow_id)
             if not flow:
@@ -117,7 +117,7 @@ class MCPOAuthService:
             if flow.state != state:
                 logger.error(f"State mismatch: flow.state={flow.state}, received state={state}")
                 return False, "Invalid state parameter"
-            
+
             logger.info(f"State validation passed for flow {flow_id} (with security token)")
 
             # Check if flow has expired
@@ -247,3 +247,9 @@ class MCPOAuthService:
             if flow.status == "failed":
                 return True
         return False
+
+
+async def get_oauth_service(config_service: MCPConfigService = Depends(get_config_service)) -> MCPOAuthService:
+    service = MCPOAuthService(config_service)
+    logger.debug(f"Created MCPOAuthService with FlowStateManager id: {id(service.flow_manager)}")
+    return service

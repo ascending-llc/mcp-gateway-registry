@@ -45,7 +45,7 @@ services:
     volumes:
       - ${APP_HOME}/mcp-gateway/servers:/app/registry/servers
       - ${APP_HOME}/mcp-gateway/agents:/app/registry/agents
-      - ${APP_HOME}/mcp-gateway/models:/app/registry/models
+      - ${APP_HOME}/mcp-gateway/data/models:/app/data/models
       - ${APP_HOME}/mcp-gateway/logs:/app/logs
       - ${APP_HOME}/mcp-gateway/security_scans:/app/security_scans
       - ${APP_HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
@@ -204,7 +204,7 @@ services:
       - WEAVIATE_HOST=weaviate
     volumes:
       - ${APP_HOME}/mcp-gateway/servers:/app/registry/servers
-      - ${APP_HOME}/mcp-gateway/models:/app/registry/models
+      - ${APP_HOME}/mcp-gateway/data/models:/app/data/models
       - ${APP_HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
     ports:
       - "8003:8003"

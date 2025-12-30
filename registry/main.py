@@ -29,9 +29,9 @@ from registry.api.registry_routes import router as registry_router
 from registry.api.agent_routes import router as agent_router
 from registry.api.management_routes import router as management_router
 from registry.health.routes import router as health_router
-from registry.api.mcp_oauth_router import router as oauth_router
+from registry.api.mcp.oauth_router import router as oauth_router
 from registry.proxy.routes import router as proxy_router, shutdown_proxy_client
-
+from registry.version import __version__
 from registry.auth.dependencies import CurrentUser
 
 # Import services for initialization
@@ -41,7 +41,7 @@ from registry.search.service import vector_service
 from registry.health.service import health_service
 from registry.services.federation_service import get_federation_service
 
-from utils.log import logger
+from registry.utils.log import logger
 
 
 @asynccontextmanager
