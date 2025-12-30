@@ -111,9 +111,19 @@ jobs:
         id: schema
         run: |
           # Get the latest release tag from jarvis-api repo
-          SCHEMA_VERSION=$(gh api repos/ascending-llc/jarvis-api/releases/latest --jq '.tag_name' || echo "")
-          echo "schema_version=${SCHEMA_VERSION}" >> $GITHUB_OUTPUT
-          echo "Using SCHEMA_VERSION: ${SCHEMA_VERSION}"
+          RESPONSE=$(gh api repos/ascending-llc/jarvis-api/releases/latest 2>&1) || true
+          
+          # Check if we got a valid response with tag_name
+          if echo "$RESPONSE" | jq -e '.tag_name' > /dev/null 2>&1; then
+            SCHEMA_VERSION=$(echo "$RESPONSE" | jq -r '.tag_name')
+            echo "schema_version=${SCHEMA_VERSION}" >> $GITHUB_OUTPUT
+            echo "✅ Using SCHEMA_VERSION: ${SCHEMA_VERSION}"
+          else
+            echo "⚠️  Warning: Could not fetch latest release from jarvis-api"
+            echo "Response: $RESPONSE"
+            echo "Checking if jarvis-api repo has any releases..."
+            exit 1
+          fi
         env:
           # Using built-in GITHUB_TOKEN for same-org cross-repo access
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
