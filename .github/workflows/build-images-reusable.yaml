@@ -21,6 +21,8 @@ on:
     secrets:
       AWS_DEPLOY_ROLE_ARN:
         required: true
+      JARVIS_RELEASE_ACCESS_TOKEN:
+        required: true
 
 permissions:
   id-token: write 
@@ -110,35 +112,22 @@ jobs:
       - name: Get latest schema version
         id: schema
         run: |
-          # Get the latest release tag from jarvis-api repo
-          echo "Fetching latest release from ascending-llc/jarvis-api..."
+          # Get the latest release tag from jarvis-api repo (private repo)
+          # Using PAT for cross-repo access to private repository
+          SCHEMA_VERSION=$(gh api repos/ascending-llc/jarvis-api/releases/latest --jq '.tag_name' || echo "")
           
-          # Use gh api with proper error handling
-          HTTP_CODE=$(curl -s -o /tmp/release.json -w "%{http_code}" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/ascending-llc/jarvis-api/releases/latest")
-          
-          if [ "$HTTP_CODE" = "200" ]; then
-            SCHEMA_VERSION=$(jq -r '.tag_name' /tmp/release.json)
-            echo "schema_version=${SCHEMA_VERSION}" >> $GITHUB_OUTPUT
-            echo "✅ Using SCHEMA_VERSION: ${SCHEMA_VERSION}"
-          elif [ "$HTTP_CODE" = "404" ]; then
-            echo "⚠️  Error: jarvis-api repository not found or has no releases (HTTP 404)"
+          if [ -z "$SCHEMA_VERSION" ]; then
+            echo "⚠️  Error: Failed to fetch latest release from jarvis-api"
             echo "This could mean:"
             echo "  1. The repository has no releases published yet"
-            echo "  2. The GITHUB_TOKEN doesn't have access to ascending-llc/jarvis-api"
-            echo ""
-            echo "To fix this, either:"
-            echo "  - Ensure jarvis-api has at least one release published"
-            echo "  - Configure organization settings to allow workflow access to jarvis-api"
-            echo "  - Use a PAT with repo access instead of GITHUB_TOKEN"
-            exit 1
-          else
-            echo "⚠️  Error: Failed to fetch release (HTTP $HTTP_CODE)"
-            cat /tmp/release.json
+            echo "  2. The PAT doesn't have access to ascending-llc/jarvis-api"
             exit 1
           fi
+          
+          echo "schema_version=${SCHEMA_VERSION}" >> $GITHUB_OUTPUT
+          echo "✅ Using SCHEMA_VERSION: ${SCHEMA_VERSION}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.JARVIS_RELEASE_ACCESS_TOKEN }}
 
       - name: Determine image tags
         id: tags
@@ -163,7 +152,7 @@ jobs:
             TOOL_DISCOVERY_MODE=external
             BUILD_VERSION=${{ steps.version.outputs.version }}
             SCHEMA_VERSION=${{ steps.schema.outputs.schema_version }}
-            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+            GITHUB_TOKEN=${{ secrets.JARVIS_RELEASE_ACCESS_TOKEN }}
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           provenance: false

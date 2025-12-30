@@ -69,4 +69,5 @@ jobs:
       version_tag: ${{ needs.bump-version-and-tag.outputs.new_tag }}
     secrets:
       AWS_DEPLOY_ROLE_ARN: ${{ secrets.SAAS_AWS_DEPLOY_ROLE_ARN }}
+      JARVIS_RELEASE_ACCESS_TOKEN: ${{ secrets.JARVIS_RELEASE_ACCESS_TOKEN }}
         
