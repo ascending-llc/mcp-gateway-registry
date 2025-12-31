@@ -216,16 +216,16 @@ export GITHUB_TOKEN=$(gh auth token)
 
 ```bash
 # Build and start all services (with schema import)
-GITHUB_TOKEN=$(gh auth token) docker-compose --profile full up --build -d
+GITHUB_TOKEN=$(gh auth token) docker compose --profile full up --build -d
 
 # Or if GITHUB_TOKEN is already exported:
-docker-compose --profile full up --build -d
+docker compose --profile full up --build -d
 ```
 
 ### Start everything but frontend and registry
 
 ```bash
-docker-compose --profile dev up -d
+docker compose --profile dev up -d
 ```
 
 **Important macOS Docker Volume Sharing**: On macOS, Docker Desktop only shares certain directories by default (like `/Users`, `/tmp`, `/private`). The `/opt` and `/var/log` directories we need are NOT shared by default, so we must create them with proper ownership for Docker containers to access them.
@@ -240,7 +240,7 @@ docker-compose --profile dev up -d
 ### Verify All Services are Running
 ```bash
 # Check all services status
-docker-compose ps
+docker compose ps
 
 # Expected services (all should show "Up"):
 # - auth-server
@@ -281,11 +281,11 @@ MONGO_URI=mongodb://localhost:27017/jarvis
 ### Monitor Service Logs
 ```bash
 # View all logs
-docker-compose logs -f
+docker compose logs -f
 
 # View specific service logs
-docker-compose logs -f auth-server
-docker-compose logs -f registry
+docker compose logs -f auth-server
+docker compose logs -f registry
 
 # Press Ctrl+C to exit log viewing
 ```
@@ -710,15 +710,15 @@ sudo lsof -ti :80 | xargs kill
 df -h
 
 # Restart all services
-docker-compose down
-docker-compose up -d
+docker compose down
+docker compose up -d
 ```
 
 ### Reset Everything
 If you need to start over completely:
 ```bash
 # Stop and remove all containers and data
-docker-compose down -v
+docker compose down -v
 
 # Remove Docker images (optional)
 docker system prune -a
@@ -731,10 +731,10 @@ cp .docker-compose.override.yml.example .docker-compose.override.yml
 ### View Service Status
 ```bash
 # Check all service status
-docker-compose ps
+docker compose ps
 
 # Check specific service health
-docker-compose logs [service-name] --tail 50
+docker compose logs [service-name] --tail 50
 
 # Check resource usage
 docker stats
@@ -792,4 +792,4 @@ You now have a fully functional MCP Gateway & Registry running on macOS! The sys
 
 ### Getting Help
 - **Documentation**: Check `/docs` folder for additional guides
-- **Logs**: Always check `docker-compose logs` for troubleshooting
+- **Logs**: Always check `docker compose logs` for troubleshooting

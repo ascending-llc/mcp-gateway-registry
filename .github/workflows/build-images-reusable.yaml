@@ -160,7 +160,7 @@ jobs:
           build-args: |
             TOOL_DISCOVERY_MODE=external
             BUILD_VERSION=${{ steps.version.outputs.version }}
-            SCHEMA_VERSION=${{ steps.schema.outputs.schema_version }}
+            SCHEMA_VERSION=${{ needs.get-schema-version.outputs.schema_version }}
             GITHUB_TOKEN=${{ secrets.JARVIS_RELEASE_ACCESS_TOKEN }}
           push: true
           tags: ${{ steps.tags.outputs.tags }}
