@@ -3,7 +3,7 @@ import time
 from typing import Dict, Optional, Any
 from dataclasses import dataclass, field, asdict
 
-from schemas.enums import ConnectionState
+from registry.schemas.enums import ConnectionState
 from registry.utils.log import logger
 
 
@@ -93,7 +93,6 @@ class MCPConnectionService:
                             f"Connection {server_name} for user {user_id} "
                             f"disconnected due to {connection.error_count} errors"
                         )
-
                 elif state == ConnectionState.CONNECTED:
                     connection.error_count = 0
 
@@ -114,10 +113,8 @@ class MCPConnectionService:
                 connection_state=initial_state,
                 details=details or {}
             )
-
             self.user_connections[user_id][server_name] = connection
             logger.info(f"Created user connection: {user_id}/{server_name}")
-
             return connection
 
     async def disconnect_user_connection(self, user_id: str, server_name: str) -> bool:
@@ -209,10 +206,10 @@ _connection_service_instance: Optional[MCPConnectionService] = None
 
 
 async def get_connection_service() -> MCPConnectionService:
-    """Get connection service instance (singleton)"""
+    """Get connection service instance"""
     global _connection_service_instance
     if _connection_service_instance is None:
-        from services.oauth.oauth_config_service import get_config_service
+        from registry.services.oauth.service import get_config_service
         config_service = await get_config_service()
         _connection_service_instance = MCPConnectionService(config_service)
         await _connection_service_instance.initialize_app_connections()

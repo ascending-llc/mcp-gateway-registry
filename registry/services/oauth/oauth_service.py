@@ -1,11 +1,9 @@
 from typing import Dict, Optional, Any, Tuple
 from fastapi import Depends
-
+from auth.oauth import OAuthHttpClient, get_flow_state_manager, FlowStateManager
 from registry.models.models import OAuthTokens
 from registry.services.oauth.service import MCPConfigService, get_config_service
-from .flow_state_manager import FlowStateManager, get_flow_state_manager
-from .token_manager import OAuthTokenManager
-from .oauth_http_client import OAuthHttpClient
+from registry.auth.oauth.token_manager import OAuthTokenManager
 from registry.schemas.enums import OAuthFlowStatus
 from registry.utils.utils import generate_code_verifier, generate_code_challenge
 
