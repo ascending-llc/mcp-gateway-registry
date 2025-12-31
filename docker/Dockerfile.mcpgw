@@ -3,14 +3,12 @@ FROM python:3.12-slim
 
 # Build argument to control whether to install vector search dependencies
 ARG TOOL_DISCOVERY_MODE=embedded
-ARG BUILD_VERSION=
 ARG SCHEMA_VERSION=
 ARG GITHUB_TOKEN=
 
 ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
-    TOOL_DISCOVERY_MODE=${TOOL_DISCOVERY_MODE} \
-    BUILD_VERSION=${BUILD_VERSION}
+    TOOL_DISCOVERY_MODE=${TOOL_DISCOVERY_MODE}
 
 # Install system dependencies
 # For embedded mode, we need build-essential for compiling dependencies

@@ -148,21 +148,21 @@ If you need to import database schemas from the jarvis-api repository for local 
 gh auth login
 
 # Run from repository root (important for correct paths!)
-cd /path/to/mcp-gateway-registry
+cd /path/to/mcp-gateway-registry/packages
 
 # Import ALL schemas from a specific release version (recommended)
 uv run import-schemas --tag asc0.4.0 \
-  --output-dir ./packages/models \
+  --output-dir ./models \
   --token $(gh auth token)
 
 # Or import specific files only
 uv run import-schemas --tag asc0.4.0 \
   --files user.json token.json mcpServer.json session.json \
-  --output-dir ./packages/models \
+  --output-dir ./models \
   --token $(gh auth token)
 
 # Verify schemas were imported (should be in packages/models/_generated/)
-ls -la packages/models/_generated/
+ls -la models/_generated/
 ```
 
 **Important Notes**: 

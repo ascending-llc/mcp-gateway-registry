@@ -103,25 +103,25 @@ async def seed_keys(users):
 
     keys_data = [
         {
-            "userId": users[0],  # Admin user
+            "userId": users[0].id,  # Admin user
             "name": "Admin API Key",
             "value": "sk_admin_1234567890abcdefghijklmnopqrstuvwxyz",
             "expiresAt": datetime.now(timezone.utc) + timedelta(days=365),
         },
         {
-            "userId": users[1],  # John Developer
+            "userId": users[1].id,  # John Developer
             "name": "Development Key",
             "value": "sk_dev_abcdefghijklmnopqrstuvwxyz1234567890",
             "expiresAt": datetime.now(timezone.utc) + timedelta(days=90),
         },
         {
-            "userId": users[1],  # John Developer
+            "userId": users[1].id,  # John Developer
             "name": "Testing Key",
             "value": "sk_test_xyz789012345678901234567890abcdefgh",
             "expiresAt": datetime.now(timezone.utc) + timedelta(days=30),
         },
         {
-            "userId": users[2],  # Jane Smith
+            "userId": users[2].id,  # Jane Smith
             "name": "Production API Key",
             "value": "sk_prod_mnopqrstuvwxyz1234567890abcdefghijkl",
             "expiresAt": datetime.now(timezone.utc) + timedelta(days=180),
@@ -150,10 +150,10 @@ async def seed_tokens(users):
 
     tokens_data = [
         {
-            "userId": users[2],  # Jane Smith (GitHub user)
+            "userId": users[2].id,  # Jane Smith (GitHub user)
             "email": users[2].email,
             "type": "oauth",
-            "identifier": "github",
+            "identifier": "mcp:github:client",
             "token": "gho_abcdefghijklmnopqrstuvwxyz1234567890",
             "createdAt": datetime.now(timezone.utc),
             "expiresAt": datetime.now(timezone.utc) + timedelta(hours=24),
@@ -164,10 +164,10 @@ async def seed_tokens(users):
             },
         },
         {
-            "userId": users[3],  # OAuth User (Google)
+            "userId": users[3].id,  # OAuth User (Google)
             "email": users[3].email,
             "type": "oauth",
-            "identifier": "google",
+            "identifier": "mcp:google:client",
             "token": "ya29.a0abcdefghijklmnopqrstuvwxyz123456789",
             "createdAt": datetime.now(timezone.utc),
             "expiresAt": datetime.now(timezone.utc) + timedelta(hours=1),
@@ -179,10 +179,10 @@ async def seed_tokens(users):
             },
         },
         {
-            "userId": users[1],  # John Developer
+            "userId": users[1].id,  # John Developer
             "email": users[1].email,
             "type": "refresh",
-            "identifier": "local",
+            "identifier": "mcp:local:refresh",
             "token": "rt_dev_xyz123456789abcdefghijklmnopqrstuv",
             "createdAt": datetime.now(timezone.utc),
             "expiresAt": datetime.now(timezone.utc) + timedelta(days=30),
@@ -217,7 +217,7 @@ async def seed_mcp_servers(users):
     servers_data = [
         {
             "serverName": "weather-service",
-            "author": users[0],  # Admin user
+            "author": users[0].id,  # Admin user
             "config": {
                 "name": "Weather Service",
                 "description": "Real-time weather data and forecasts",
@@ -237,7 +237,7 @@ async def seed_mcp_servers(users):
         },
         {
             "serverName": "github-integration",
-            "author": users[2],  # Jane Smith (GitHub user)
+            "author": users[2].id,  # Jane Smith (GitHub user)
             "config": {
                 "name": "GitHub Integration",
                 "description": "GitHub repository management and code search",
@@ -264,7 +264,7 @@ async def seed_mcp_servers(users):
         },
         {
             "serverName": "slack-notifications",
-            "author": users[1],  # John Developer
+            "author": users[1].id,  # John Developer
             "config": {
                 "name": "Slack Notifications",
                 "description": "Send notifications and messages to Slack channels",
@@ -286,7 +286,7 @@ async def seed_mcp_servers(users):
         },
         {
             "serverName": "database-manager",
-            "author": users[1],  # John Developer
+            "author": users[1].id,  # John Developer
             "config": {
                 "name": "Database Manager",
                 "description": "SQL and NoSQL database operations",
@@ -312,7 +312,7 @@ async def seed_mcp_servers(users):
         },
         {
             "serverName": "google-workspace",
-            "author": users[3],  # OAuth User
+            "author": users[3].id,  # OAuth User
             "config": {
                 "name": "Google Workspace",
                 "description": "Google Drive, Docs, Sheets, and Calendar integration",
@@ -344,7 +344,7 @@ async def seed_mcp_servers(users):
         },
         {
             "serverName": "analytics-service",
-            "author": users[0],  # Admin user
+            "author": users[0].id,  # Admin user
             "config": {
                 "name": "Analytics Service",
                 "description": "Data analytics and reporting",
@@ -369,7 +369,7 @@ async def seed_mcp_servers(users):
         },
         {
             "serverName": "atlassian-jira",
-            "author": users[2],  # Jane Smith
+            "author": users[2].id,  # Jane Smith
             "config": {
                 "name": "Atlassian JIRA",
                 "description": "JIRA issue tracking and project management",
@@ -396,7 +396,7 @@ async def seed_mcp_servers(users):
         },
         {
             "serverName": "currenttime-server",
-            "author": users[0],  # Admin user
+            "author": users[0].id,  # Admin user
             "config": {
                 "name": "Current Time Server",
                 "description": "Get current time in various formats and timezones",
