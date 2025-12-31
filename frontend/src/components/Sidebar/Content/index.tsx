@@ -1,47 +1,31 @@
-import { Dialog, Transition } from '@headlessui/react';
 import {
-  ArrowDownTrayIcon,
   ArrowLeftIcon,
   ChartBarIcon,
-  CheckIcon,
   ChevronDownIcon,
   ChevronUpIcon,
-  ClipboardIcon,
   FunnelIcon,
   KeyIcon,
-  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import type React from 'react';
-import { Fragment, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { useServer } from '../contexts/ServerContext';
 
-interface SidebarProps {
-  sidebarOpen: boolean;
-  setSidebarOpen: (open: boolean) => void;
-  stats: {
-    total: number;
-    enabled: number;
-    disabled: number;
-    withIssues: number;
-  };
-  activeFilter: string;
-  setActiveFilter: (filter: string) => void;
-}
+import { useAuth } from '@/contexts/AuthContext';
+import { useServer } from '@/contexts/ServerContext';
 
-const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
-  const { stats, agentStats, viewMode, activeFilter, setActiveFilter } = useServer();
-  const { user } = useAuth();
+const Content: React.FC<any> = ({ setTokenData, setSidebarOpen, setShowTokenModal }) => {
   const location = useLocation();
-  const [showScopes, setShowScopes] = useState(false);
-  const [showTokenModal, setShowTokenModal] = useState(false);
-  const [tokenData, setTokenData] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState<string>('');
+  const { user } = useAuth();
+  const { stats, agentStats, viewMode, activeFilter, setActiveFilter } = useServer();
 
+  const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [showScopes, setShowScopes] = useState(false);
+
+  const isTokenPage = location.pathname === '/generate-token';
+
+  /** List of filters available for token generation */
   const filters = [
     { key: 'all', label: 'All', count: 'total' },
     { key: 'enabled', label: 'Enabled', count: 'enabled' },
@@ -49,14 +33,28 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
     { key: 'unhealthy', label: 'With Issues', count: 'withIssues' },
   ];
 
-  const isTokenPage = location.pathname === '/generate-token';
+  const fetchAdminTokens = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const requestData = { description: 'Generated via sidebar', expires_in_hours: 8 };
 
-  // Debug logging
-  useEffect(() => {
-    console.log('Sidebar state changed:', sidebarOpen);
-  }, [sidebarOpen]);
+      const response = await axios.post('/api/tokens/generate', requestData, {
+        headers: { 'Content-Type': 'application/json' },
+      });
 
-  // Scope descriptions mapping
+      if (response.data.success) {
+        setTokenData(response.data);
+        setShowTokenModal(true);
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to generate token');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /** Scope descriptions mapping */
   const getScopeDescription = (scope: string) => {
     const scopeMappings: { [key: string]: string } = {
       'mcp-servers-restricted/read': 'Read access to restricted MCP servers',
@@ -71,61 +69,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
     return scopeMappings[scope] || 'Custom permission scope';
   };
 
-  const fetchAdminTokens = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const requestData = {
-        description: 'Generated via sidebar',
-        expires_in_hours: 8,
-      };
-
-      const response = await axios.post('/api/tokens/generate', requestData, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.data.success) {
-        setTokenData(response.data);
-        setShowTokenModal(true);
-      }
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to generate token');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCopyTokens = async () => {
-    if (!tokenData) return;
-
-    const formattedData = JSON.stringify(tokenData, null, 2);
-    try {
-      await navigator.clipboard.writeText(formattedData);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      console.error('Failed to copy:', error);
-    }
-  };
-
-  const handleDownloadTokens = () => {
-    if (!tokenData) return;
-
-    const formattedData = JSON.stringify(tokenData, null, 2);
-    const blob = new Blob([formattedData], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `mcp-registry-api-tokens-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const SidebarContent = () => (
+  return (
     <div className='flex h-full flex-col'>
       {/* Conditional Content */}
       {isTokenPage ? (
@@ -141,15 +85,6 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
             >
               <ArrowLeftIcon className='h-4 w-4' />
               <span>Back to Dashboard</span>
-            </Link>
-
-            <Link
-              to='/generate-token'
-              className='flex items-center space-x-3 px-3 py-2 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300'
-              tabIndex={0}
-            >
-              <KeyIcon className='h-4 w-4' />
-              <span>Generate Token</span>
             </Link>
           </div>
 
@@ -182,7 +117,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
 
                     {showScopes && (
                       <div className='mt-2 space-y-2 max-h-32 overflow-y-auto'>
-                        {user.scopes.map(scope => (
+                        {user.scopes.map((scope: string) => (
                           <div key={scope} className='bg-blue-50 dark:bg-blue-900/20 p-2 rounded text-xs'>
                             <div className='font-medium text-blue-800 dark:text-blue-200'>{scope}</div>
                             <div className='text-blue-600 dark:text-blue-300 mt-1'>{getScopeDescription(scope)}</div>
@@ -268,7 +203,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
 
                       {showScopes && (
                         <div className='mt-2 space-y-2 max-h-32 overflow-y-auto'>
-                          {user.scopes.map(scope => (
+                          {user.scopes.map((scope: string) => (
                             <div key={scope} className='bg-blue-50 dark:bg-blue-900/20 p-2 rounded text-xs'>
                               <div className='font-medium text-blue-800 dark:text-blue-200'>{scope}</div>
                               <div className='text-blue-600 dark:text-blue-300 mt-1'>{getScopeDescription(scope)}</div>
@@ -291,7 +226,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
             </div>
 
             <div className='space-y-2'>
-              {filters.map(filter => {
+              {filters.map((filter: any) => {
                 // Calculate count based on view mode
                 let count = 0;
                 if (viewMode === 'all') {
@@ -378,167 +313,6 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
       )}
     </div>
   );
-
-  return (
-    <>
-      {/* Mobile sidebar only */}
-      {window.innerWidth < 768 && (
-        <Transition.Root show={sidebarOpen} as={Fragment}>
-          <Dialog as='div' className='relative z-50' onClose={setSidebarOpen}>
-            <Transition.Child
-              as={Fragment}
-              enter='transition-opacity ease-linear duration-300'
-              enterFrom='opacity-0'
-              enterTo='opacity-100'
-              leave='transition-opacity ease-linear duration-300'
-              leaveFrom='opacity-100'
-              leaveTo='opacity-0'
-            >
-              <div className='fixed inset-0 bg-gray-900/80' />
-            </Transition.Child>
-
-            <div className='fixed inset-0 flex'>
-              <Transition.Child
-                as={Fragment}
-                enter='transition ease-in-out duration-300 transform'
-                enterFrom='-translate-x-full'
-                enterTo='translate-x-0'
-                leave='transition ease-in-out duration-300 transform'
-                leaveFrom='translate-x-0'
-                leaveTo='-translate-x-full'
-              >
-                <Dialog.Panel className='relative mr-16 flex w-full max-w-xs flex-1'>
-                  <Transition.Child
-                    as={Fragment}
-                    enter='ease-in-out duration-300'
-                    enterFrom='opacity-0'
-                    enterTo='opacity-100'
-                    leave='ease-in-out duration-300'
-                    leaveFrom='opacity-100'
-                    leaveTo='opacity-0'
-                  >
-                    <div className='absolute left-full top-0 flex w-16 justify-center pt-5'>
-                      <button className='-m-2.5 p-2.5' onClick={() => setSidebarOpen(false)} aria-label='Close sidebar'>
-                        <XMarkIcon className='h-6 w-6 text-white' />
-                      </button>
-                    </div>
-                  </Transition.Child>
-
-                  <div className='flex grow flex-col gap-y-5 overflow-y-auto bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700'>
-                    <SidebarContent />
-                  </div>
-                </Dialog.Panel>
-              </Transition.Child>
-            </div>
-          </Dialog>
-        </Transition.Root>
-      )}
-
-      {/* Desktop sidebar only */}
-      {window.innerWidth >= 768 && (
-        <Transition show={sidebarOpen} as={Fragment}>
-          <Transition.Child
-            as={Fragment}
-            enter='transition ease-in-out duration-300 transform'
-            enterFrom='-translate-x-full'
-            enterTo='translate-x-0'
-            leave='transition ease-in-out duration-300 transform'
-            leaveFrom='translate-x-0'
-            leaveTo='-translate-x-full'
-          >
-            <div className='fixed left-0 top-16 bottom-0 z-40 w-64 lg:w-72 xl:w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-y-auto'>
-              <SidebarContent />
-            </div>
-          </Transition.Child>
-        </Transition>
-      )}
-
-      {/* Token Modal */}
-      <Transition appear show={showTokenModal} as={Fragment}>
-        <Dialog as='div' className='relative z-50' onClose={() => setShowTokenModal(false)}>
-          <Transition.Child
-            as={Fragment}
-            enter='ease-out duration-300'
-            enterFrom='opacity-0'
-            enterTo='opacity-100'
-            leave='ease-in duration-200'
-            leaveFrom='opacity-100'
-            leaveTo='opacity-0'
-          >
-            <div className='fixed inset-0 bg-black bg-opacity-25' />
-          </Transition.Child>
-
-          <div className='fixed inset-0 overflow-y-auto'>
-            <div className='flex min-h-full items-center justify-center p-4 text-center'>
-              <Transition.Child
-                as={Fragment}
-                enter='ease-out duration-300'
-                enterFrom='opacity-0 scale-95'
-                enterTo='opacity-100 scale-100'
-                leave='ease-in duration-200'
-                leaveFrom='opacity-100 scale-100'
-                leaveTo='opacity-0 scale-95'
-              >
-                <Dialog.Panel className='w-full max-w-3xl transform overflow-hidden rounded-2xl bg-white dark:bg-gray-800 p-6 text-left align-middle shadow-xl transition-all'>
-                  <Dialog.Title as='h3' className='text-lg font-medium leading-6 text-gray-900 dark:text-white mb-4'>
-                    Keycloak Admin Tokens
-                  </Dialog.Title>
-
-                  {tokenData && (
-                    <div className='space-y-4'>
-                      {/* Action Buttons */}
-                      <div className='flex space-x-2'>
-                        <button
-                          onClick={handleCopyTokens}
-                          className='flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm'
-                        >
-                          {copied ? (
-                            <>
-                              <CheckIcon className='h-4 w-4' />
-                              <span>Copied!</span>
-                            </>
-                          ) : (
-                            <>
-                              <ClipboardIcon className='h-4 w-4' />
-                              <span>Copy JSON</span>
-                            </>
-                          )}
-                        </button>
-                        <button
-                          onClick={handleDownloadTokens}
-                          className='flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm'
-                        >
-                          <ArrowDownTrayIcon className='h-4 w-4' />
-                          <span>Download JSON</span>
-                        </button>
-                      </div>
-
-                      {/* Token Data Display */}
-                      <div className='bg-gray-50 dark:bg-gray-900 rounded-lg p-4 max-h-96 overflow-y-auto'>
-                        <pre className='text-xs text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-all'>
-                          {JSON.stringify(tokenData, null, 2)}
-                        </pre>
-                      </div>
-
-                      {/* Close Button */}
-                      <div className='flex justify-end'>
-                        <button
-                          onClick={() => setShowTokenModal(false)}
-                          className='px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors text-sm'
-                        >
-                          Close
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </Dialog.Panel>
-              </Transition.Child>
-            </div>
-          </div>
-        </Dialog>
-      </Transition>
-    </>
-  );
 };
 
-export default Sidebar;
+export default Content;
