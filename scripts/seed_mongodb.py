@@ -24,10 +24,10 @@ load_dotenv()
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from packages.database.mongodb import MongoDB
-from packages.models.models._generated.user import IUser
-from packages.models.models._generated.key import Key
-from packages.models.models._generated.token import Token
-from packages.models.models._generated.mcpServer import MCPServerDocument
+from packages.models._generated.user import IUser
+from packages.models._generated.key import Key
+from packages.models._generated.token import Token
+from packages.models._generated.mcpServer import MCPServerDocument
 
 
 async def seed_users():

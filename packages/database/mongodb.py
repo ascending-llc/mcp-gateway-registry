@@ -10,7 +10,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
 import os
 from urllib.parse import quote_plus
-from packages.models.models._generated import (
+from packages.models._generated import (
     IAccessRole,
     IAclEntry,
     IAction,

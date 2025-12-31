@@ -18,8 +18,8 @@ from bson import ObjectId
 from beanie import PydanticObjectId
 from beanie.operators import In, RegEx, Or
 
-from packages.models.models._generated.mcpServer import MCPServerDocument
-from packages.models.models._generated.user import IUser
+from packages.models._generated.mcpServer import MCPServerDocument
+from packages.models._generated.user import IUser
 
 from registry.schemas.server_api_schemas import (
     ServerCreateRequest,
