@@ -902,6 +902,18 @@ const Dashboard: React.FC = () => {
     );
   }
 
+  const getCardNumber = () => {
+    const serverLength = semanticSectionVisible ? semanticServers.length : filteredServers?.length || 0;
+    const agentLength = semanticSectionVisible ? semanticAgents.length : filteredAgents?.length || 0;
+    if (viewFilter === 'all') {
+      return `Showing ${serverLength} servers and ${agentLength} agents`;
+    } else if (viewFilter === 'servers') {
+      return `Showing ${serverLength} servers`;
+    } else if (viewFilter === 'agents') {
+      return `Showing ${agentLength} agents`;
+    }
+  };
+
   return (
     <>
       {/* Toast Notification */}
@@ -1001,15 +1013,7 @@ const Dashboard: React.FC = () => {
           {/* Results count */}
           <div className='flex items-center justify-between'>
             <p className='text-sm text-gray-500 dark:text-gray-300'>
-              {semanticSectionVisible ? (
-                <>
-                  Showing {semanticServers.length} servers and {semanticAgents.length} agents
-                </>
-              ) : (
-                <>
-                  Showing {filteredServers.length} servers and {filteredAgents.length} agents
-                </>
-              )}
+              {getCardNumber()}
               {activeFilter !== 'all' && (
                 <span className='ml-2 px-2 py-1 text-xs bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300 rounded-full'>
                   {activeFilter} filter active
