@@ -9,6 +9,8 @@ services:
       args:
         TOOL_DISCOVERY_MODE: ${TOOL_DISCOVERY_MODE:-embedded}
         BUILD_VERSION: ${BUILD_VERSION:-}
+        SCHEMA_VERSION: ${SCHEMA_VERSION:-}
+        GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     environment:
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
@@ -57,6 +59,8 @@ services:
       metrics-service:
         condition: service_healthy
       weaviate:
+        condition: service_healthy
+      mongodb:
         condition: service_healthy
     restart: unless-stopped
     env_file:
@@ -113,6 +117,30 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    profiles:
+      - full
+      - dev
+
+  # MongoDB Database
+  mongodb:
+    container_name: mcp-mongodb
+    image: mongo:7
+    restart: always
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      - MONGO_INITDB_DATABASE=${MONGODB_DB_NAME:-jarvis}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+      - mongodb-config:/data/configdb
+    command: mongod --noauth
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     profiles:
       - full
       - dev
@@ -202,6 +230,8 @@ services:
       - REGISTRY_PASSWORD=${ADMIN_PASSWORD}
       - JWT_SECRET_KEY=${SECRET_KEY}
       - WEAVIATE_HOST=weaviate
+      # MongoDB configuration
+      - MONGO_URI=${MONGO_URI:-mongodb://mongodb:27017/jarvis}
     volumes:
       - ${APP_HOME}/mcp-gateway/servers:/app/registry/servers
       - ${APP_HOME}/mcp-gateway/data/models:/app/data/models
@@ -383,6 +413,10 @@ services:
 volumes:
   ssl_data:
   keycloak_db_data:
+  mongodb-data:
+    driver: local
+  mongodb-config:
+    driver: local
   metrics-db-data:
   prometheus-data:
   grafana-data:

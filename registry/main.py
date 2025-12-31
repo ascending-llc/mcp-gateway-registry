@@ -9,19 +9,17 @@ domain routers while handling core app configuration.
 
 import logging
 from contextlib import asynccontextmanager
-from typing import Annotated, Dict, Any
-from pathlib import Path
 
-from fastapi import FastAPI, Cookie, HTTPException, Depends
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
+from packages.database import init_mongodb, close_mongodb
 from registry.auth.middleware import UnifiedAuthMiddleware
 # Import domain routers
 from registry.auth.routes import router as auth_router
 from registry.api.server_routes import router as servers_router
+from registry.api.v1.server_routes import router as servers_router_v1
 from registry.api.internal_routes import router as internal_router
 from registry.api.search_routes import router as search_router
 from registry.api.wellknown_routes import router as wellknown_router
@@ -50,6 +48,11 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Starting MCP Gateway Registry...")
 
     try:
+        # Initialize MongoDB connection first
+        logger.info("🗄️  Initializing MongoDB connection...")
+        await init_mongodb()
+        logger.info("✅ MongoDB connection established")
+
         # Initialize services in order
         logger.info("📚 Loading server definitions and state...")
         server_service.load_servers_and_state()
@@ -128,6 +131,11 @@ async def lifespan(app: FastAPI):
         # Shutdown services gracefully
         await health_service.shutdown()
         await shutdown_proxy_client()
+
+        # Close MongoDB connection
+        logger.info("🗄️  Closing MongoDB connection...")
+        await close_mongodb()
+
         logger.info("✅ Shutdown completed successfully!")
     except Exception as e:
         logger.error(f"❌ Error during shutdown: {e}", exc_info=True)
@@ -190,6 +198,7 @@ app.add_middleware(
 # Register API routers with /api prefix
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(servers_router, prefix="/api", tags=["Server Management"])
+app.include_router(servers_router_v1, prefix="/api", tags=["Server Management V1"])
 app.include_router(internal_router, prefix="/api", tags=["Server Management[internal]"])
 app.include_router(agent_router, prefix="/api", tags=["Agent Management"])
 app.include_router(management_router, prefix="/api")

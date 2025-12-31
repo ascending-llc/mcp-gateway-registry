@@ -139,6 +139,37 @@ ls -la ${HOME}/mcp-gateway/models/all-MiniLM-L6-v2/
 
 **Note**: This command automatically creates the necessary directory structure and downloads all required model files (~90MB). If you don't have `huggingface-cli` command installed, install it first with `uv pip install huggingface_hub[cli]` or `uv tool install huggingface-cli`.
 
+### Import Database Schemas (Optional for Local Dev)
+
+If you need to import database schemas from the jarvis-api repository for local development, you can do so using the import-schemas tool:
+
+```bash
+# Authenticate with GitHub CLI (for private repository access)
+gh auth login
+
+# Run from repository root (important for correct paths!)
+cd /path/to/mcp-gateway-registry
+
+# Import ALL schemas from a specific release version (recommended)
+uv run import-schemas --tag asc0.4.0 \
+  --output-dir ./packages/models \
+  --token $(gh auth token)
+
+# Or import specific files only
+uv run import-schemas --tag asc0.4.0 \
+  --files user.json token.json mcpServer.json session.json \
+  --output-dir ./packages/models \
+  --token $(gh auth token)
+
+# Verify schemas were imported (should be in packages/models/_generated/)
+ls -la packages/models/_generated/
+```
+
+**Important Notes**: 
+- Always run from the **package** directory to ensure correct paths
+- When building Docker images, `SCHEMA_VERSION` and `GITHUB_TOKEN` are **required** build arguments
+- The schemas will be automatically imported during Docker builds in CI/CD
+- When `--files` is omitted, **all .json files** from the release will be imported
 
 ### Create Docker Compose Override File 
 
@@ -168,10 +199,27 @@ nano .docker-compose.override.yml
 
 ## 4. Starting All Services
 
+### Set Schema Import Variables (Required for Registry Build)
+
+Before building the registry container, you need to set the schema version and GitHub token:
+
+```bash
+# Add to your .env file (recommended)
+echo "SCHEMA_VERSION=asc0.4.0" >> .env
+
+# Set GitHub token from gh auth (do NOT add to .env file for security)
+export GITHUB_TOKEN=$(gh auth token)
+
+```
+
 ### Start Services with Docker Compose
 
 ```bash
-docker-compose --profile full up -d
+# Build and start all services (with schema import)
+GITHUB_TOKEN=$(gh auth token) docker-compose --profile full up --build -d
+
+# Or if GITHUB_TOKEN is already exported:
+docker-compose --profile full up --build -d
 ```
 
 ### Start everything but frontend and registry
@@ -198,10 +246,36 @@ docker-compose ps
 # - auth-server
 # - registry
 # - registry-frontend
+# - mongodb
 # - currenttime-server
 # - fininfo-server
 # - mcpgw-server
 # - realserverfaketools-server
+```
+
+### Seed MongoDB with Sample Data
+
+After starting the services, you can populate MongoDB with sample data including users, API keys, tokens, and MCP servers:
+
+```bash
+# Make sure MongoDB is running
+
+# Seed the database with sample data
+uv run seed_data
+
+# Or use the full command:
+# uv run python scripts/seed_mongodb.py
+```
+**Clean the database:**
+```bash
+# Remove all seeded data
+uv run seed_data clean
+```
+
+**Environment Configuration:**
+The seed script uses `MONGO_URI` from your `.env` file. Default value:
+```bash
+MONGO_URI=mongodb://localhost:27017/jarvis
 ```
 
 ### Monitor Service Logs
