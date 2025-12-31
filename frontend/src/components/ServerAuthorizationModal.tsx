@@ -107,7 +107,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
 
         <div className='flex gap-2'>
           <button
-            className={`px-3 h-10 ${authUrl ? 'border-[1px] border-gray-300 hover:bg-slate-100' : 'text-white border-0 bg-red-700 hover:bg-red-800 disabled:bg-red-500'} text-sm rounded-lg cursor-pointer flex items-center justify-center gap-2`}
+            className='px-3 h-10 border-0 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:bg-gray-500 text-sm rounded-lg cursor-pointer flex items-center justify-center gap-2'
             disabled={loading}
             onClick={onClickCancel}
           >
@@ -121,7 +121,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
             )}
           </button>
           <button
-            className={`flex-1 h-10 text-white font-medium rounded-lg border-0 cursor-pointer flex items-center justify-center gap-2 text-sm transition-colors bg-black hover:bg-gray-800 ${authUrl ? 'bg-green-500 hover:bg-green-800' : ''}`}
+            className={`btn-primary flex-1 h-10 text-white font-medium rounded-lg border-0 cursor-pointer flex items-center justify-center gap-2 text-sm transition-colors ${authUrl ? 'bg-green-800 hover:bg-green-700' : ''}`}
             disabled={loading}
             onClick={onClickAuth}
           >
