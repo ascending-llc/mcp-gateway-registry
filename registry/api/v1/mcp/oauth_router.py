@@ -41,6 +41,9 @@ async def initiate_oauth_flow(
                                      "authorization_url": auth_url,
                                      "server_name": server_name,
                                      "user_id": user_id})
+    except HTTPException:
+        # Re-raise HTTP exceptions with their original status code
+        raise
     except Exception as e:
         logger.error(f"Failed to initialize OAuth flow: {str(e)}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -161,6 +164,9 @@ async def get_oauth_tokens(
         return {
             "tokens": tokens.dict() if hasattr(tokens, 'dict') else tokens
         }
+    except HTTPException:
+        # Re-raise HTTP exceptions with their original status code
+        raise
     except Exception as e:
         logger.error(f"Failed to get OAuth tokens: {str(e)}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -223,6 +229,9 @@ async def cancel_oauth_flow(
             "server_name": server_name,
             "user_id": user_id
         }
+    except HTTPException:
+        # Re-raise HTTP exceptions with their original status code
+        raise
     except Exception as e:
         logger.error(f"Failed to cancel OAuth flow: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -261,6 +270,9 @@ async def refresh_oauth_tokens(
             "server_name": server_name,
             "user_id": user_id
         }
+    except HTTPException:
+        # Re-raise HTTP exceptions with their original status code
+        raise
     except Exception as e:
         logger.error(f"Failed to refresh OAuth tokens: {str(e)}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
