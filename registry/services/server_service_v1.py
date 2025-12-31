@@ -500,6 +500,11 @@ class ServerServiceV1:
             "response_time_ms": 125,  # Mock value
         }
 
+    async def get_server_by_name(self,server_name: str) -> Optional[MCPServerDocument]:
+        """
+        Get server by name.
+        """
+        return await MCPServerDocument.find_one({"serverName": server_name})
 
 # Singleton instance
 server_service_v1 = ServerServiceV1()

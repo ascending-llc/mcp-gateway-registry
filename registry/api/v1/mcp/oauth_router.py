@@ -1,23 +1,20 @@
 from typing import Dict, Any, Optional
 from urllib.parse import quote
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
-from fastapi.security import HTTPBearer
 from registry.auth.dependencies import CurrentUser
-from registry.auth.oauth.oauth_service import MCPOAuthService, get_oauth_service
+from registry.services.oauth.mcp_service import get_mcp_service, MCPService
 from registry.utils.log import logger
 from registry.utils.utils import load_template
 
-
-router = APIRouter()
-security = HTTPBearer()
+router = APIRouter(prefix="/v1", tags=["oauth"])
 
 
 @router.get("/{server_name}/oauth/initiate")
 async def initiate_oauth_flow(
         server_name: str,
         user_context: CurrentUser,
-        oauth_service: MCPOAuthService = Depends(get_oauth_service)
+        mcp_service: MCPService = Depends(get_mcp_service)
 ) -> JSONResponse:
     """
     Initialize OAuth flow
@@ -27,15 +24,13 @@ async def initiate_oauth_flow(
     """
     try:
         user_id = user_context.get('username')
-        logger.info(f"OAuth service config service id: {id(oauth_service.config_service)}")
-
-        flow_id, auth_url, error = await oauth_service.initiate_oauth_flow(
+        logger.info(f"Oauth initiate for user id : {user_id}")
+        flow_id, auth_url, error = await mcp_service.oauth_service.initiate_oauth_flow(
             user_id=user_id,
             server_name=server_name
         )
         if error:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                                detail=error)
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
 
         if not flow_id or not auth_url:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -46,6 +41,9 @@ async def initiate_oauth_flow(
                                      "authorization_url": auth_url,
                                      "server_name": server_name,
                                      "user_id": user_id})
+    except HTTPException:
+        # Re-raise HTTP exceptions with their original status code
+        raise
     except Exception as e:
         logger.error(f"Failed to initialize OAuth flow: {str(e)}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -55,10 +53,11 @@ async def initiate_oauth_flow(
 @router.get("/{server_name}/oauth/callback")
 async def oauth_callback(
         server_name: str,
+        request: Request,
         code: Optional[str] = Query(None, description="OAuth authorization code"),
         state: Optional[str] = Query(None, description="State parameter (format: flow_id##security_token)"),
         error: Optional[str] = Query(None, description="OAuth error message"),
-        oauth_service: MCPOAuthService = Depends(get_oauth_service)
+        mcp_service: MCPService = Depends(get_mcp_service)
 ) -> RedirectResponse:
     """
     OAuth callback handler
@@ -76,39 +75,36 @@ async def oauth_callback(
         # 1. Check for errors returned by OAuth provider
         if error:
             logger.error(f"[MCP OAuth] OAuth error received from provider: {error}")
-            # URL encode error message
-            encoded_error = quote(str(error))
-            return RedirectResponse(url=f"/api/mcp/oauth/error?error={encoded_error}")
+            return _redirect_to_error(request, error)
 
         # 2. Validate required parameters
         if not code or not isinstance(code, str):
             logger.error("[MCP OAuth] Missing or invalid authorization code")
-            return RedirectResponse(url="/api/mcp/oauth/error?error=missing_code")
+            return _redirect_to_error(request, "missing_code")
 
         if not state or not isinstance(state, str):
             logger.error("[MCP OAuth] Missing or invalid state parameter")
-            return RedirectResponse(url="/api/mcp/oauth/error?error=missing_state")
+            return _redirect_to_error(request, "missing_state")
 
         # 3. Decode flow_id from state (state format: flow_id##security_token)
         try:
-            flow_id, security_token = oauth_service.flow_manager.decode_state(state)
+            flow_id, security_token = mcp_service.oauth_service.flow_manager.decode_state(state)
             logger.info(f"[MCP OAuth] Callback received: server={server_name}, "
                         f"flow_id={flow_id}, code={'present' if code else 'missing'}, "
                         f"security_token_length={len(security_token)}")
         except ValueError as e:
             logger.error(f"[MCP OAuth] Failed to decode state: {e}")
-            return RedirectResponse(url="/api/mcp/oauth/error?error=invalid_state_format")
+            return _redirect_to_error(request, "invalid_state_format")
 
         # Check if flow is already completed
-        flow = oauth_service.flow_manager.get_flow(flow_id)
+        flow = mcp_service.oauth_service.flow_manager.get_flow(flow_id)
         if flow and flow.status == "completed":
             logger.warning(f"[MCP OAuth] Flow already completed, preventing duplicate token exchange: {flow_id}")
-            encoded_server_name = quote(server_name)
-            return RedirectResponse(url=f"/api/mcp/oauth/success?serverName={encoded_server_name}")
+            return _redirect_to_success(request, server_name)
 
         # 4. Complete OAuth flow (validate state + exchange tokens)
         logger.debug(f"[MCP OAuth] Completing OAuth flow for {server_name}")
-        success, error_msg = await oauth_service.complete_oauth_flow(
+        success, error_msg = await mcp_service.oauth_service.complete_oauth_flow(
             flow_id=flow_id,
             authorization_code=code,
             state=state
@@ -116,26 +112,23 @@ async def oauth_callback(
 
         if not success:
             logger.error(f"[MCP OAuth] Failed to complete OAuth flow: {error_msg}")
-            encoded_error = quote(str(error_msg) if error_msg else "unknown_error")
-            return RedirectResponse(url=f"/api/mcp/oauth/error?error={encoded_error}")
+            return _redirect_to_error(request, error_msg or "unknown_error")
 
         logger.info(f"[MCP OAuth] OAuth flow completed successfully for {server_name}")
 
         # 5. Redirect to success page
-        encoded_server_name = quote(server_name)
-        return RedirectResponse(url=f"/api/mcp/oauth/success?serverName={encoded_server_name}")
+        return _redirect_to_success(request, server_name)
 
     except Exception as e:
         logger.error(f"[MCP OAuth] OAuth callback error: {str(e)}", exc_info=True)
-        encoded_error = quote("callback_failed")
-        return RedirectResponse(url=f"/api/mcp/oauth/error?error={encoded_error}")
+        return _redirect_to_error(request, "callback_failed")
 
 
 @router.get("/oauth/tokens/{flow_id}")
 async def get_oauth_tokens(
         flow_id: str,
         current_user: CurrentUser,
-        oauth_service: MCPOAuthService = Depends(get_oauth_service)
+        mcp_service: MCPService = Depends(get_mcp_service)
 ) -> Dict[str, Any]:
     """
     Get OAuth tokens
@@ -162,7 +155,7 @@ async def get_oauth_tokens(
                                 detail="No permission to access this flow")
 
         # 2. Get tokens by flow ID
-        tokens = await oauth_service.get_tokens_by_flow_id(flow_id)
+        tokens = await mcp_service.oauth_service.get_tokens_by_flow_id(flow_id)
         if not tokens:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                                 detail="Tokens not found or flow not completed")
@@ -171,6 +164,9 @@ async def get_oauth_tokens(
         return {
             "tokens": tokens.dict() if hasattr(tokens, 'dict') else tokens
         }
+    except HTTPException:
+        # Re-raise HTTP exceptions with their original status code
+        raise
     except Exception as e:
         logger.error(f"Failed to get OAuth tokens: {str(e)}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -180,7 +176,7 @@ async def get_oauth_tokens(
 @router.get("/oauth/status/{flow_id}")
 async def get_oauth_status(
         flow_id: str,
-        oauth_service: MCPOAuthService = Depends(get_oauth_service)
+        mcp_service: MCPService = Depends(get_mcp_service)
 ) -> Dict[str, Any]:
     """
     Check OAuth flow status
@@ -191,7 +187,7 @@ async def get_oauth_status(
     """
     try:
         # Get flow status
-        flow_status = await oauth_service.get_flow_status(flow_id)
+        flow_status = await mcp_service.oauth_service.get_flow_status(flow_id)
 
         return flow_status
 
@@ -207,7 +203,7 @@ async def get_oauth_status(
 async def cancel_oauth_flow(
         server_name: str,
         current_user: CurrentUser,
-        oauth_service: MCPOAuthService = Depends(get_oauth_service)
+        mcp_service: MCPService = Depends(get_mcp_service)
 ) -> Dict[str, Any]:
     """
     Cancel OAuth flow
@@ -221,7 +217,7 @@ async def cancel_oauth_flow(
         if not user_id:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                                 detail="Invalid user ID")
-        success, error_msg = await oauth_service.cancel_oauth_flow(user_id, server_name)
+        success, error_msg = await mcp_service.oauth_service.cancel_oauth_flow(user_id, server_name)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -233,6 +229,9 @@ async def cancel_oauth_flow(
             "server_name": server_name,
             "user_id": user_id
         }
+    except HTTPException:
+        # Re-raise HTTP exceptions with their original status code
+        raise
     except Exception as e:
         logger.error(f"Failed to cancel OAuth flow: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -245,7 +244,7 @@ async def cancel_oauth_flow(
 async def refresh_oauth_tokens(
         server_name: str,
         current_user: CurrentUser,
-        oauth_service: MCPOAuthService = Depends(get_oauth_service)
+        mcp_service: MCPService = Depends(get_mcp_service)
 ) -> Dict[str, Any]:
     """
     Refresh OAuth tokens
@@ -260,7 +259,7 @@ async def refresh_oauth_tokens(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid user ID"
             )
-        success, error_msg = await oauth_service.refresh_tokens(user_id, server_name)
+        success, error_msg = await mcp_service.oauth_service.refresh_tokens(user_id, server_name)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -271,15 +270,35 @@ async def refresh_oauth_tokens(
             "server_name": server_name,
             "user_id": user_id
         }
+    except HTTPException:
+        # Re-raise HTTP exceptions with their original status code
+        raise
     except Exception as e:
         logger.error(f"Failed to refresh OAuth tokens: {str(e)}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Failed to refresh tokens: {str(e)}")
 
 
-# ==================== Helper Routes ====================
+# ==================== Helper Functions ====================
 
-@router.get("/oauth/success")
+def _redirect_to_error(request: Request, error_code: str) -> RedirectResponse:
+    """
+    Redirecting to an error page
+    """
+    encoded_error = quote(str(error_code))
+    error_url = request.url_for("oauth_error").include_query_params(error=encoded_error)
+    return RedirectResponse(url=str(error_url))
+
+
+def _redirect_to_success(request: Request, server_name: str) -> RedirectResponse:
+    """
+    Generate a response that redirects to the success page.
+    """
+    success_url = request.url_for("oauth_success").include_query_params(serverName=server_name)
+    return RedirectResponse(url=str(success_url))
+
+
+@router.get("/oauth/success", name="oauth_success")
 async def oauth_success(
         serverName: Optional[str] = Query(None, description="Server name")
 ) -> HTMLResponse:
@@ -301,7 +320,7 @@ async def oauth_success(
     return HTMLResponse(content=html_content, status_code=200)
 
 
-@router.get("/oauth/error")
+@router.get("/oauth/error", name="oauth_error")
 async def oauth_error(
         error: Optional[str] = Query(None, description="Error message")
 ) -> HTMLResponse:

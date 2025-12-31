@@ -17,8 +17,8 @@ from httpx import AsyncClient
 from registry.main import app
 from registry.core.config import Settings
 from registry.services.server_service import ServerService
-from registry.search.base import VectorSearchService
 from registry.health.service import HealthMonitoringService
+from registry.services.search import VectorSearchService
 
 # Import test utilities
 from tests.fixtures.factories import (

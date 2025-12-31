@@ -10,7 +10,7 @@ Depending on the configuration (discovery_mode), it will either use:
 import logging
 from typing import TYPE_CHECKING
 
-from ..core.config import settings
+from registry.core.config import settings
 from .base import VectorSearchService
 
 if TYPE_CHECKING:

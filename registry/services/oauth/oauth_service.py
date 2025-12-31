@@ -1,15 +1,13 @@
 from typing import Dict, Optional, Any, Tuple
-from fastapi import Depends
-
-from registry.models.models import OAuthTokens
-from registry.services.oauth.service import MCPConfigService, get_config_service
-from .flow_state_manager import FlowStateManager, get_flow_state_manager
-from .token_manager import OAuthTokenManager
-from .oauth_http_client import OAuthHttpClient
+from registry.auth.oauth import OAuthHttpClient, get_flow_state_manager, FlowStateManager
+from registry.models.oauth_models import OAuthTokens
+from registry.auth.oauth.token_manager import OAuthTokenManager
 from registry.schemas.enums import OAuthFlowStatus
 from registry.utils.utils import generate_code_verifier, generate_code_challenge
+from registry.services.server_service_v1 import server_service_v1 as server_service
 
 from registry.utils.log import logger
+
 
 class MCPOAuthService:
     """
@@ -19,8 +17,7 @@ class MCPOAuthService:
     
     """
 
-    def __init__(self, config_service, flow_manager: Optional[FlowStateManager] = None):
-        self.config_service = config_service
+    def __init__(self, flow_manager: Optional[FlowStateManager] = None):
         self.flow_manager = flow_manager or get_flow_state_manager()
         self.token_manager = OAuthTokenManager()
         self.http_client = OAuthHttpClient()
@@ -38,14 +35,18 @@ class MCPOAuthService:
         try:
             logger.info(f"Starting OAuth flow for user={user_id}, server={server_name}")
 
-            # Get server configuration
-            config = self.config_service.get_server_config(server_name)
-            if not config.requires_oauth:
+            mcp_server = await server_service.get_server_by_name(server_name)
+            if not mcp_server:
+                return None, None, "Server not found"
+            
+            # Check if server requires OAuth
+            if not mcp_server.requires_oauth:
                 return None, None, f"Server '{server_name}' does not require OAuth"
-
-            if not config.oauth_config:
-                return None, None, f"Server '{server_name}' missing OAuth configuration"
-
+            
+            # Get OAuth config from server config
+            oauth_config = mcp_server.oauth_config
+            if not oauth_config:
+                return None, None, f"Server '{server_name}' OAuth configuration not found"
             # Generate PKCE parameters
             code_verifier = generate_code_verifier()
             code_challenge = generate_code_challenge(code_verifier)
@@ -55,10 +56,10 @@ class MCPOAuthService:
             flow_metadata = self.flow_manager.create_flow_metadata(
                 server_name=server_name,
                 user_id=user_id,
-                server_url=config.url or "",
+                server_url=mcp_server.url or "",
                 code_verifier=code_verifier,
-                oauth_config=config.oauth_config,
-                flow_id=flow_id  # Pass flow_id as state
+                oauth_config=oauth_config,
+                flow_id=flow_id
             )
 
             # Create OAuth flow
@@ -212,14 +213,19 @@ class MCPOAuthService:
             if not tokens or not tokens.refresh_token:
                 return False, "No refresh token available"
 
-            # Get server configuration
-            config = self.config_service.get_server_config(server_name)
-            if not config or not config.oauth_config:
-                return False, f"Server '{server_name}' configuration not found"
+            # Get server configuration from MongoDB
+            mcp_server = await server_service.get_server_by_name(server_name)
+            if not mcp_server:
+                return False, f"Server '{server_name}' not found"
+            
+            # Get OAuth config
+            oauth_config = mcp_server.oauth_config
+            if not oauth_config:
+                return False, f"Server '{server_name}' OAuth configuration not found"
 
             # Refresh tokens
             new_tokens = await self.http_client.refresh_tokens(
-                oauth_config=config.oauth_config,
+                oauth_config=oauth_config,
                 refresh_token=tokens.refresh_token
             )
 
@@ -249,7 +255,11 @@ class MCPOAuthService:
         return False
 
 
-async def get_oauth_service(config_service: MCPConfigService = Depends(get_config_service)) -> MCPOAuthService:
-    service = MCPOAuthService(config_service)
-    logger.debug(f"Created MCPOAuthService with FlowStateManager id: {id(service.flow_manager)}")
-    return service
+_oauth_service_instance: Optional[MCPOAuthService] = None
+
+
+async def get_oauth_service() -> MCPOAuthService:
+    global _oauth_service_instance
+    if _oauth_service_instance is None:
+        _oauth_service_instance = MCPOAuthService()
+    return _oauth_service_instance

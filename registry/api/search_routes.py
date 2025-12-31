@@ -4,7 +4,8 @@ from typing import Annotated, List, Literal, Optional
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
-from ..search.service import faiss_service
+
+from registry.services.search.service import faiss_service
 from ..services.server_service import server_service
 from ..services.agent_service import agent_service
 

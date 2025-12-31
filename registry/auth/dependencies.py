@@ -32,7 +32,7 @@ def get_current_user_by_mid(request: Request) -> Dict[str, Any]:
     """
     if not hasattr(request.state, 'user') or not request.state.is_authenticated:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Authentication required")
+                            detail="Is not authenticated")
     return request.state.user
 
 

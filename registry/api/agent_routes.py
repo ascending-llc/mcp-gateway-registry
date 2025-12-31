@@ -29,7 +29,7 @@ from ..schemas.agent_models import (
 )
 from ..auth.dependencies import CurrentUser
 from ..core.config import settings
-from ..search.service import faiss_service
+from registry.services.search.service import faiss_service
 from pydantic import BaseModel
 
 # Configure logging with basicConfig

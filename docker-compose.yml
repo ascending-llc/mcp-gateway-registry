@@ -126,7 +126,7 @@ services:
     container_name: mcp-mongodb
     image: mongo:7
     restart: always
-    user: "${UID:-1000}:${GID:-1000}"
+    #user: "${UID:-1000}:${GID:-1000}" # The default user does not have permission to run the program on the mount path.
     environment:
       - MONGO_INITDB_DATABASE=${MONGODB_DB_NAME:-jarvis}
     ports:
@@ -223,6 +223,11 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.mcpgw
+      args:
+        TOOL_DISCOVERY_MODE: ${TOOL_DISCOVERY_MODE:-embedded}
+        BUILD_VERSION: ${BUILD_VERSION:-}
+        SCHEMA_VERSION: ${SCHEMA_VERSION:-}
+        GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     environment:
       - PORT=8003
       - REGISTRY_BASE_URL=http://mcpgateway-registry:7860
@@ -234,7 +239,6 @@ services:
       - MONGO_URI=${MONGO_URI:-mongodb://mongodb:27017/jarvis}
     volumes:
       - ${APP_HOME}/mcp-gateway/servers:/app/registry/servers
-      - ${APP_HOME}/mcp-gateway/data/models:/app/data/models
       - ${APP_HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
     ports:
       - "8003:8003"

@@ -3,7 +3,7 @@ import time
 
 from typing import Dict, Optional
 
-from registry.models.models import OAuthTokens
+from registry.models.oauth_models import OAuthTokens
 
 from registry.utils.log import logger
 
