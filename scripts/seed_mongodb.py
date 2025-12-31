@@ -214,220 +214,39 @@ async def seed_mcp_servers(users):
     print("Seeding MCP servers...")
 
     # Sample server configurations with API key authentication
-    # servers_data = [
-    #     {
-    #         "serverName": "weather-service",
-    #         "author": users[0],  # Admin user
-    #         "config": {
-    #             "name": "Weather Service",
-    #             "description": "Real-time weather data and forecasts",
-    #             "version": "1.0.0",
-    #             "url": "http://weather-server:8010",
-    #             "transport": "streamable-http",
-    #             "authentication": {
-    #                 "type": "api_key",
-    #                 "header": "X-API-Key",
-    #                 "key": "weather_api_key_123456789",
-    #             },
-    #             "capabilities": ["get_weather", "get_forecast", "get_alerts"],
-    #             "tags": ["weather", "api-key", "production"],
-    #         },
-    #         "createdAt": datetime.now(timezone.utc),
-    #         "updatedAt": datetime.now(timezone.utc),
-    #     },
-    #     {
-    #         "serverName": "github-integration",
-    #         "author": users[2],  # Jane Smith (GitHub user)
-    #         "config": {
-    #             "name": "GitHub Integration",
-    #             "description": "GitHub repository management and code search",
-    #             "version": "2.1.0",
-    #             "url": "http://github-server:8011",
-    #             "transport": "streamable-http",
-    #             "authentication": {
-    #                 "type": "oauth",
-    #                 "provider": "github",
-    #                 "scopes": ["repo", "read:user", "read:org"],
-    #                 "token_url": "https://github.com/login/oauth/access_token",
-    #                 "authorize_url": "https://github.com/login/oauth/authorize",
-    #             },
-    #             "capabilities": [
-    #                 "search_code",
-    #                 "create_issue",
-    #                 "list_repos",
-    #                 "get_pull_requests",
-    #             ],
-    #             "tags": ["github", "oauth", "code", "vcs"],
-    #         },
-    #         "createdAt": datetime.now(timezone.utc),
-    #         "updatedAt": datetime.now(timezone.utc),
-    #     },
-    #     {
-    #         "serverName": "slack-notifications",
-    #         "author": users[1],  # John Developer
-    #         "config": {
-    #             "name": "Slack Notifications",
-    #             "description": "Send notifications and messages to Slack channels",
-    #             "version": "1.5.2",
-    #             "url": "http://slack-server:8012",
-    #             "transport": "streamable-http",
-    #             "authentication": {
-    #                 "type": "oauth",
-    #                 "provider": "slack",
-    #                 "scopes": ["chat:write", "channels:read", "users:read"],
-    #                 "token_url": "https://slack.com/api/oauth.v2.access",
-    #                 "authorize_url": "https://slack.com/oauth/v2/authorize",
-    #             },
-    #             "capabilities": ["send_message", "list_channels", "get_user_info"],
-    #             "tags": ["slack", "oauth", "notifications", "collaboration"],
-    #         },
-    #         "createdAt": datetime.now(timezone.utc),
-    #         "updatedAt": datetime.now(timezone.utc),
-    #     },
-    #     {
-    #         "serverName": "database-manager",
-    #         "author": users[1],  # John Developer
-    #         "config": {
-    #             "name": "Database Manager",
-    #             "description": "SQL and NoSQL database operations",
-    #             "version": "3.0.0",
-    #             "url": "http://database-server:8013",
-    #             "transport": "streamable-http",
-    #             "authentication": {
-    #                 "type": "api_key",
-    #                 "header": "Authorization",
-    #                 "prefix": "Bearer",
-    #                 "key": "db_api_key_xyz789012345678",
-    #             },
-    #             "capabilities": [
-    #                 "execute_query",
-    #                 "list_tables",
-    #                 "get_schema",
-    #                 "backup_database",
-    #             ],
-    #             "tags": ["database", "api-key", "sql", "nosql"],
-    #         },
-    #         "createdAt": datetime.now(timezone.utc),
-    #         "updatedAt": datetime.now(timezone.utc),
-    #     },
-    #     {
-    #         "serverName": "google-workspace",
-    #         "author": users[3],  # OAuth User
-    #         "config": {
-    #             "name": "Google Workspace",
-    #             "description": "Google Drive, Docs, Sheets, and Calendar integration",
-    #             "version": "1.8.0",
-    #             "url": "http://google-workspace-server:8014",
-    #             "transport": "streamable-http",
-    #             "authentication": {
-    #                 "type": "oauth",
-    #                 "provider": "google",
-    #                 "scopes": [
-    #                     "https://www.googleapis.com/auth/drive",
-    #                     "https://www.googleapis.com/auth/documents",
-    #                     "https://www.googleapis.com/auth/spreadsheets",
-    #                     "https://www.googleapis.com/auth/calendar",
-    #                 ],
-    #                 "token_url": "https://oauth2.googleapis.com/token",
-    #                 "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
-    #             },
-    #             "capabilities": [
-    #                 "list_files",
-    #                 "create_document",
-    #                 "read_sheet",
-    #                 "schedule_event",
-    #             ],
-    #             "tags": ["google", "oauth", "productivity", "cloud"],
-    #         },
-    #         "createdAt": datetime.now(timezone.utc),
-    #         "updatedAt": datetime.now(timezone.utc),
-    #     },
-    #     {
-    #         "serverName": "analytics-service",
-    #         "author": users[0],  # Admin user
-    #         "config": {
-    #             "name": "Analytics Service",
-    #             "description": "Data analytics and reporting",
-    #             "version": "2.3.1",
-    #             "url": "http://analytics-server:8015",
-    #             "transport": "streamable-http",
-    #             "authentication": {
-    #                 "type": "api_key",
-    #                 "header": "X-Analytics-Token",
-    #                 "key": "analytics_token_abcdef123456",
-    #             },
-    #             "capabilities": [
-    #                 "generate_report",
-    #                 "get_metrics",
-    #                 "export_data",
-    #                 "create_dashboard",
-    #             ],
-    #             "tags": ["analytics", "api-key", "reporting", "metrics"],
-    #         },
-    #         "createdAt": datetime.now(timezone.utc),
-    #         "updatedAt": datetime.now(timezone.utc),
-    #     },
-    #     {
-    #         "serverName": "atlassian-jira",
-    #         "author": users[2],  # Jane Smith
-    #         "config": {
-    #             "name": "Atlassian JIRA",
-    #             "description": "JIRA issue tracking and project management",
-    #             "version": "1.2.0",
-    #             "url": "http://atlassian-server:8005",
-    #             "transport": "streamable-http",
-    #             "authentication": {
-    #                 "type": "oauth",
-    #                 "provider": "atlassian",
-    #                 "scopes": ["read:jira-work", "write:jira-work", "read:jira-user"],
-    #                 "token_url": "https://auth.atlassian.com/oauth/token",
-    #                 "authorize_url": "https://auth.atlassian.com/authorize",
-    #             },
-    #             "capabilities": [
-    #                 "create_issue",
-    #                 "update_issue",
-    #                 "search_issues",
-    #                 "get_project",
-    #             ],
-    #             "tags": ["atlassian", "jira", "oauth", "project-management"],
-    #         },
-    #         "createdAt": datetime.now(timezone.utc),
-    #         "updatedAt": datetime.now(timezone.utc),
-    #     },
-    #     {
-    #         "serverName": "currenttime-server",
-    #         "author": users[0],  # Admin user
-    #         "config": {
-    #             "name": "Current Time Server",
-    #             "description": "Get current time in various formats and timezones",
-    #             "version": "1.0.0",
-    #             "url": "http://currenttime-server:8000",
-    #             "transport": "streamable-http",
-    #             "authentication": {
-    #                 "type": "none",
-    #             },
-    #             "capabilities": ["get_time", "get_timezone", "convert_time"],
-    #             "tags": ["time", "utility", "no-auth"],
-    #         },
-    #         "createdAt": datetime.now(timezone.utc),
-    #         "updatedAt": datetime.now(timezone.utc),
-    #     },
-    # ]
     servers_data = [
         {
-            "serverName": "github-copilot",
+            "serverName": "weather-service",
+            "author": users[0],  # Admin user
+            "config": {
+                "name": "Weather Service",
+                "description": "Real-time weather data and forecasts",
+                "version": "1.0.0",
+                "url": "http://weather-server:8010",
+                "transport": "streamable-http",
+                "authentication": {
+                    "type": "api_key",
+                    "header": "X-API-Key",
+                    "key": "weather_api_key_123456789",
+                },
+                "capabilities": ["get_weather", "get_forecast", "get_alerts"],
+                "tags": ["weather", "api-key", "production"],
+            },
+            "createdAt": datetime.now(timezone.utc),
+            "updatedAt": datetime.now(timezone.utc),
+        },
+        {
+            "serverName": "github-integration",
             "author": users[2],  # Jane Smith (GitHub user)
             "config": {
-                "name": "GitHub Copilot",
+                "name": "GitHub Integration",
                 "description": "GitHub repository management and code search",
                 "version": "2.1.0",
-                "url": "https://api.githubcopilot.com/mcp/",
+                "url": "http://github-server:8011",
                 "transport": "streamable-http",
                 "authentication": {
                     "type": "oauth",
                     "provider": "github",
-                    "client_id": "Iv23lidC6dSy1q3Yr2sI",
-                    "client_secret": "c33d7c668e0a96eced4a6d1105574f7973b94cba",
                     "scopes": ["repo", "read:user", "read:org"],
                     "token_url": "https://github.com/login/oauth/access_token",
                     "authorize_url": "https://github.com/login/oauth/authorize",
@@ -442,7 +261,157 @@ async def seed_mcp_servers(users):
             },
             "createdAt": datetime.now(timezone.utc),
             "updatedAt": datetime.now(timezone.utc),
-        }
+        },
+        {
+            "serverName": "slack-notifications",
+            "author": users[1],  # John Developer
+            "config": {
+                "name": "Slack Notifications",
+                "description": "Send notifications and messages to Slack channels",
+                "version": "1.5.2",
+                "url": "http://slack-server:8012",
+                "transport": "streamable-http",
+                "authentication": {
+                    "type": "oauth",
+                    "provider": "slack",
+                    "scopes": ["chat:write", "channels:read", "users:read"],
+                    "token_url": "https://slack.com/api/oauth.v2.access",
+                    "authorize_url": "https://slack.com/oauth/v2/authorize",
+                },
+                "capabilities": ["send_message", "list_channels", "get_user_info"],
+                "tags": ["slack", "oauth", "notifications", "collaboration"],
+            },
+            "createdAt": datetime.now(timezone.utc),
+            "updatedAt": datetime.now(timezone.utc),
+        },
+        {
+            "serverName": "database-manager",
+            "author": users[1],  # John Developer
+            "config": {
+                "name": "Database Manager",
+                "description": "SQL and NoSQL database operations",
+                "version": "3.0.0",
+                "url": "http://database-server:8013",
+                "transport": "streamable-http",
+                "authentication": {
+                    "type": "api_key",
+                    "header": "Authorization",
+                    "prefix": "Bearer",
+                    "key": "db_api_key_xyz789012345678",
+                },
+                "capabilities": [
+                    "execute_query",
+                    "list_tables",
+                    "get_schema",
+                    "backup_database",
+                ],
+                "tags": ["database", "api-key", "sql", "nosql"],
+            },
+            "createdAt": datetime.now(timezone.utc),
+            "updatedAt": datetime.now(timezone.utc),
+        },
+        {
+            "serverName": "google-workspace",
+            "author": users[3],  # OAuth User
+            "config": {
+                "name": "Google Workspace",
+                "description": "Google Drive, Docs, Sheets, and Calendar integration",
+                "version": "1.8.0",
+                "url": "http://google-workspace-server:8014",
+                "transport": "streamable-http",
+                "authentication": {
+                    "type": "oauth",
+                    "provider": "google",
+                    "scopes": [
+                        "https://www.googleapis.com/auth/drive",
+                        "https://www.googleapis.com/auth/documents",
+                        "https://www.googleapis.com/auth/spreadsheets",
+                        "https://www.googleapis.com/auth/calendar",
+                    ],
+                    "token_url": "https://oauth2.googleapis.com/token",
+                    "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
+                },
+                "capabilities": [
+                    "list_files",
+                    "create_document",
+                    "read_sheet",
+                    "schedule_event",
+                ],
+                "tags": ["google", "oauth", "productivity", "cloud"],
+            },
+            "createdAt": datetime.now(timezone.utc),
+            "updatedAt": datetime.now(timezone.utc),
+        },
+        {
+            "serverName": "analytics-service",
+            "author": users[0],  # Admin user
+            "config": {
+                "name": "Analytics Service",
+                "description": "Data analytics and reporting",
+                "version": "2.3.1",
+                "url": "http://analytics-server:8015",
+                "transport": "streamable-http",
+                "authentication": {
+                    "type": "api_key",
+                    "header": "X-Analytics-Token",
+                    "key": "analytics_token_abcdef123456",
+                },
+                "capabilities": [
+                    "generate_report",
+                    "get_metrics",
+                    "export_data",
+                    "create_dashboard",
+                ],
+                "tags": ["analytics", "api-key", "reporting", "metrics"],
+            },
+            "createdAt": datetime.now(timezone.utc),
+            "updatedAt": datetime.now(timezone.utc),
+        },
+        {
+            "serverName": "atlassian-jira",
+            "author": users[2],  # Jane Smith
+            "config": {
+                "name": "Atlassian JIRA",
+                "description": "JIRA issue tracking and project management",
+                "version": "1.2.0",
+                "url": "http://atlassian-server:8005",
+                "transport": "streamable-http",
+                "authentication": {
+                    "type": "oauth",
+                    "provider": "atlassian",
+                    "scopes": ["read:jira-work", "write:jira-work", "read:jira-user"],
+                    "token_url": "https://auth.atlassian.com/oauth/token",
+                    "authorize_url": "https://auth.atlassian.com/authorize",
+                },
+                "capabilities": [
+                    "create_issue",
+                    "update_issue",
+                    "search_issues",
+                    "get_project",
+                ],
+                "tags": ["atlassian", "jira", "oauth", "project-management"],
+            },
+            "createdAt": datetime.now(timezone.utc),
+            "updatedAt": datetime.now(timezone.utc),
+        },
+        {
+            "serverName": "currenttime-server",
+            "author": users[0],  # Admin user
+            "config": {
+                "name": "Current Time Server",
+                "description": "Get current time in various formats and timezones",
+                "version": "1.0.0",
+                "url": "http://currenttime-server:8000",
+                "transport": "streamable-http",
+                "authentication": {
+                    "type": "none",
+                },
+                "capabilities": ["get_time", "get_timezone", "convert_time"],
+                "tags": ["time", "utility", "no-auth"],
+            },
+            "createdAt": datetime.now(timezone.utc),
+            "updatedAt": datetime.now(timezone.utc),
+        },
     ]
 
     created_servers = []
