@@ -35,6 +35,7 @@ services:
       - SECURITY_SCAN_TIMEOUT=${SECURITY_SCAN_TIMEOUT:-60}
       - SECURITY_ADD_PENDING_TAG=${SECURITY_ADD_PENDING_TAG:-true}
       - MCP_SCANNER_LLM_API_KEY=${MCP_SCANNER_LLM_API_KEY}
+      - MONGO_URI=mongodb://registry-mongodb:27017/jarvis
       # Embeddings Configuration
       # - EMBEDDINGS_PROVIDER=${EMBEDDINGS_PROVIDER:-sentence-transformers}
       # - EMBEDDINGS_MODEL_NAME=${EMBEDDINGS_MODEL_NAME:-all-MiniLM-L6-v2}
@@ -60,7 +61,7 @@ services:
         condition: service_healthy
       weaviate:
         condition: service_healthy
-      mongodb:
+      registry-mongodb:
         condition: service_healthy
     restart: unless-stopped
     env_file:
@@ -75,6 +76,7 @@ services:
       dockerfile: docker/Dockerfile.registry-frontend
     environment:
       - NGINX_BASE_PATH=${NGINX_BASE_PATH:-}
+      - AUTH_SERVER_URL=http://auth-server:8888
     ports:
       - "80:80"
       - "443:443"
@@ -122,8 +124,8 @@ services:
       - dev
 
   # MongoDB Database
-  mongodb:
-    container_name: mcp-mongodb
+  registry-mongodb:
+    container_name: registry-mongodb
     image: mongo:7
     restart: always
     #user: "${UID:-1000}:${GID:-1000}" # The default user does not have permission to run the program on the mount path.
@@ -236,7 +238,7 @@ services:
       - JWT_SECRET_KEY=${SECRET_KEY}
       - WEAVIATE_HOST=weaviate
       # MongoDB configuration
-      - MONGO_URI=${MONGO_URI:-mongodb://mongodb:27017/jarvis}
+      - MONGO_URI=mongodb://registry-mongodb:27017/jarvis
     volumes:
       - ${APP_HOME}/mcp-gateway/servers:/app/registry/servers
       - ${APP_HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
