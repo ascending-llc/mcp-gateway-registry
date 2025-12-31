@@ -3,9 +3,10 @@ import logging
 from typing import Annotated
 from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import JSONResponse
+
+from registry.services.search.service import faiss_service
 from ..services.server_service import server_service
 from starlette import status
-from ..search.service import faiss_service
 from ..health.service import health_service
 from ..auth.dependencies import CurrentUser
 from ..utils.scopes_manager import add_server_to_groups

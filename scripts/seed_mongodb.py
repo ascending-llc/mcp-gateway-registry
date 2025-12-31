@@ -33,7 +33,7 @@ from packages.models._generated.mcpServer import MCPServerDocument
 async def seed_users():
     """Seed sample users."""
     print("Seeding users...")
-    
+
     users_data = [
         {
             "name": "Admin User",
@@ -80,7 +80,7 @@ async def seed_users():
             "updatedAt": datetime.now(timezone.utc),
         },
     ]
-    
+
     created_users = []
     for user_data in users_data:
         # Check if user already exists
@@ -93,41 +93,41 @@ async def seed_users():
             await user.insert()
             created_users.append(user)
             print(f"  Created user: {user_data['email']}")
-    
+
     return created_users
 
 
 async def seed_keys(users):
     """Seed API keys for users."""
     print("Seeding API keys...")
-    
+
     keys_data = [
         {
-            "userId": users[0],  # Admin user
+            "userId": users[0].id,  # Admin user
             "name": "Admin API Key",
             "value": "sk_admin_1234567890abcdefghijklmnopqrstuvwxyz",
             "expiresAt": datetime.now(timezone.utc) + timedelta(days=365),
         },
         {
-            "userId": users[1],  # John Developer
+            "userId": users[1].id,  # John Developer
             "name": "Development Key",
             "value": "sk_dev_abcdefghijklmnopqrstuvwxyz1234567890",
             "expiresAt": datetime.now(timezone.utc) + timedelta(days=90),
         },
         {
-            "userId": users[1],  # John Developer
+            "userId": users[1].id,  # John Developer
             "name": "Testing Key",
             "value": "sk_test_xyz789012345678901234567890abcdefgh",
             "expiresAt": datetime.now(timezone.utc) + timedelta(days=30),
         },
         {
-            "userId": users[2],  # Jane Smith
+            "userId": users[2].id,  # Jane Smith
             "name": "Production API Key",
             "value": "sk_prod_mnopqrstuvwxyz1234567890abcdefghijkl",
             "expiresAt": datetime.now(timezone.utc) + timedelta(days=180),
         },
     ]
-    
+
     created_keys = []
     for key_data in keys_data:
         # Check if key already exists
@@ -140,20 +140,20 @@ async def seed_keys(users):
             await key.insert()
             created_keys.append(key)
             print(f"  Created key: {key_data['name']}")
-    
+
     return created_keys
 
 
 async def seed_tokens(users):
     """Seed OAuth tokens for users."""
     print("Seeding tokens...")
-    
+
     tokens_data = [
         {
-            "userId": users[2],  # Jane Smith (GitHub user)
+            "userId": users[2].id,  # Jane Smith (GitHub user)
             "email": users[2].email,
             "type": "oauth",
-            "identifier": "github",
+            "identifier": "mcp:github:client",
             "token": "gho_abcdefghijklmnopqrstuvwxyz1234567890",
             "createdAt": datetime.now(timezone.utc),
             "expiresAt": datetime.now(timezone.utc) + timedelta(hours=24),
@@ -164,10 +164,10 @@ async def seed_tokens(users):
             },
         },
         {
-            "userId": users[3],  # OAuth User (Google)
+            "userId": users[3].id,  # OAuth User (Google)
             "email": users[3].email,
             "type": "oauth",
-            "identifier": "google",
+            "identifier": "mcp:google:client",
             "token": "ya29.a0abcdefghijklmnopqrstuvwxyz123456789",
             "createdAt": datetime.now(timezone.utc),
             "expiresAt": datetime.now(timezone.utc) + timedelta(hours=1),
@@ -179,10 +179,10 @@ async def seed_tokens(users):
             },
         },
         {
-            "userId": users[1],  # John Developer
+            "userId": users[1].id,  # John Developer
             "email": users[1].email,
             "type": "refresh",
-            "identifier": "local",
+            "identifier": "mcp:local:refresh",
             "token": "rt_dev_xyz123456789abcdefghijklmnopqrstuv",
             "createdAt": datetime.now(timezone.utc),
             "expiresAt": datetime.now(timezone.utc) + timedelta(days=30),
@@ -192,7 +192,7 @@ async def seed_tokens(users):
             },
         },
     ]
-    
+
     created_tokens = []
     for token_data in tokens_data:
         # Check if token already exists
@@ -205,19 +205,19 @@ async def seed_tokens(users):
             await token.insert()
             created_tokens.append(token)
             print(f"  Created token: {token_data['type']} for {token_data['identifier']}")
-    
+
     return created_tokens
 
 
 async def seed_mcp_servers(users):
     """Seed MCP servers with different authentication methods."""
     print("Seeding MCP servers...")
-    
+
     # Sample server configurations with API key authentication
     servers_data = [
         {
             "serverName": "weather-service",
-            "author": users[0],  # Admin user
+            "author": users[0].id,  # Admin user
             "config": {
                 "name": "Weather Service",
                 "description": "Real-time weather data and forecasts",
@@ -237,7 +237,7 @@ async def seed_mcp_servers(users):
         },
         {
             "serverName": "github-integration",
-            "author": users[2],  # Jane Smith (GitHub user)
+            "author": users[2].id,  # Jane Smith (GitHub user)
             "config": {
                 "name": "GitHub Integration",
                 "description": "GitHub repository management and code search",
@@ -264,7 +264,7 @@ async def seed_mcp_servers(users):
         },
         {
             "serverName": "slack-notifications",
-            "author": users[1],  # John Developer
+            "author": users[1].id,  # John Developer
             "config": {
                 "name": "Slack Notifications",
                 "description": "Send notifications and messages to Slack channels",
@@ -286,7 +286,7 @@ async def seed_mcp_servers(users):
         },
         {
             "serverName": "database-manager",
-            "author": users[1],  # John Developer
+            "author": users[1].id,  # John Developer
             "config": {
                 "name": "Database Manager",
                 "description": "SQL and NoSQL database operations",
@@ -312,7 +312,7 @@ async def seed_mcp_servers(users):
         },
         {
             "serverName": "google-workspace",
-            "author": users[3],  # OAuth User
+            "author": users[3].id,  # OAuth User
             "config": {
                 "name": "Google Workspace",
                 "description": "Google Drive, Docs, Sheets, and Calendar integration",
@@ -344,7 +344,7 @@ async def seed_mcp_servers(users):
         },
         {
             "serverName": "analytics-service",
-            "author": users[0],  # Admin user
+            "author": users[0].id,  # Admin user
             "config": {
                 "name": "Analytics Service",
                 "description": "Data analytics and reporting",
@@ -369,7 +369,7 @@ async def seed_mcp_servers(users):
         },
         {
             "serverName": "atlassian-jira",
-            "author": users[2],  # Jane Smith
+            "author": users[2].id,  # Jane Smith
             "config": {
                 "name": "Atlassian JIRA",
                 "description": "JIRA issue tracking and project management",
@@ -396,7 +396,7 @@ async def seed_mcp_servers(users):
         },
         {
             "serverName": "currenttime-server",
-            "author": users[0],  # Admin user
+            "author": users[0].id,  # Admin user
             "config": {
                 "name": "Current Time Server",
                 "description": "Get current time in various formats and timezones",
@@ -413,7 +413,7 @@ async def seed_mcp_servers(users):
             "updatedAt": datetime.now(timezone.utc),
         },
     ]
-    
+
     created_servers = []
     for server_data in servers_data:
         # Check if server already exists
@@ -429,32 +429,32 @@ async def seed_mcp_servers(users):
             created_servers.append(server)
             auth_type = server_data["config"]["authentication"]["type"]
             print(f"  Created server: {server_data['serverName']} (auth: {auth_type})")
-    
+
     return created_servers
 
 
 async def clean_database():
     """Clean all seeded collections."""
     print("Cleaning database collections...")
-    
+
     try:
         # Delete all documents from each collection
         user_count = await IUser.delete_all()
         print(f"  Deleted {user_count.deleted_count} users")
-        
+
         key_count = await Key.delete_all()
         print(f"  Deleted {key_count.deleted_count} keys")
-        
+
         token_count = await Token.delete_all()
         print(f"  Deleted {token_count.deleted_count} tokens")
-        
+
         server_count = await MCPServerDocument.delete_all()
         print(f"  Deleted {server_count.deleted_count} MCP servers")
-        
+
         print("\n" + "=" * 60)
         print("✅ Database cleaned successfully!")
         print("=" * 60)
-        
+
     except Exception as e:
         print(f"❌ Error cleaning database: {e}")
         raise
@@ -464,7 +464,7 @@ async def main():
     """Main function to seed or clean data."""
     # Parse command line arguments
     command = sys.argv[1] if len(sys.argv) > 1 else "seed"
-    
+
     if command not in ["seed", "clean"]:
         print(f"❌ Unknown command: {command}")
         print("\nUsage:")
@@ -472,10 +472,10 @@ async def main():
         print("  python scripts/seed_mongodb.py seed     # Seed data")
         print("  python scripts/seed_mongodb.py clean    # Clean all collections")
         sys.exit(1)
-    
+
     # Get MongoDB connection details from environment
     mongo_uri = os.getenv("MONGO_URI", "mongodb://127.0.0.1:27017/jarvis")
-    
+
     # Parse database name from URI if present
     db_name = None
     if '/' in mongo_uri.split('://')[-1]:
@@ -483,20 +483,20 @@ async def main():
         uri_path = mongo_uri.split('://')[-1]
         if '/' in uri_path:
             db_name = uri_path.split('/')[-1].split('?')[0]  # Handle query params
-    
+
     # Fall back to default if not in URI
     if not db_name:
         db_name = "jarvis"
-    
+
     print(f"Connecting to MongoDB at {mongo_uri}...")
     print(f"Database: {db_name}")
     print(f"Command: {command}\n")
-    
+
     try:
         # Connect to MongoDB
         await MongoDB.connect_db(mongodb_url=mongo_uri, db_name=db_name)
         print("Connected to MongoDB successfully!\n")
-        
+
         if command == "clean":
             # Clean database
             await clean_database()
@@ -504,16 +504,16 @@ async def main():
             # Seed data in order
             users = await seed_users()
             print()
-            
+
             keys = await seed_keys(users)
             print()
-            
+
             tokens = await seed_tokens(users)
             print()
-            
+
             servers = await seed_mcp_servers(users)
             print()
-            
+
             print("=" * 60)
             print("✅ Database seeding completed successfully!")
             print("=" * 60)
@@ -522,10 +522,13 @@ async def main():
             print(f"  - {len(keys)} API keys")
             print(f"  - {len(tokens)} tokens")
             print(f"  - {len(servers)} MCP servers")
-            print(f"    • API Key auth: {sum(1 for s in servers if s.config.get('authentication', {}).get('type') == 'api_key')}")
-            print(f"    • OAuth auth: {sum(1 for s in servers if s.config.get('authentication', {}).get('type') == 'oauth')}")
-            print(f"    • No auth: {sum(1 for s in servers if s.config.get('authentication', {}).get('type') == 'none')}")
-        
+            print(
+                f"    • API Key auth: {sum(1 for s in servers if s.config.get('authentication', {}).get('type') == 'api_key')}")
+            print(
+                f"    • OAuth auth: {sum(1 for s in servers if s.config.get('authentication', {}).get('type') == 'oauth')}")
+            print(
+                f"    • No auth: {sum(1 for s in servers if s.config.get('authentication', {}).get('type') == 'none')}")
+
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback

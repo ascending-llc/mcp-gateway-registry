@@ -1,4 +1,4 @@
-from .models import (
+from .oauth_models import (
     OAuthTokens,
     OAuthClientInformation,
     OAuthMetadata,

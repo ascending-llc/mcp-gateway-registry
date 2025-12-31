@@ -22,7 +22,6 @@ from packages.models._generated import (
 )
 
 
-
 class MongoDB:
     """MongoDB connection manager with connection pooling."""
     client: Optional[AsyncIOMotorClient] = None

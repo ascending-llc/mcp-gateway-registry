@@ -6,8 +6,6 @@ A clean, domain-driven FastAPI app for managing MCP (Model Context Protocol) ser
 This main.py file serves as the application coordinator, importing and registering 
 domain routers while handling core app configuration.
 """
-
-import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -27,7 +25,7 @@ from registry.api.registry_routes import router as registry_router
 from registry.api.agent_routes import router as agent_router
 from registry.api.management_routes import router as management_router
 from registry.health.routes import router as health_router
-from registry.api.mcp.oauth_router import router as oauth_router
+from registry.api.v1.mcp.oauth_router import router as oauth_router
 from registry.version import __version__
 from registry.api.proxy_routes import router as proxy_router, shutdown_proxy_client
 from registry.auth.dependencies import CurrentUser
@@ -35,9 +33,9 @@ from registry.auth.dependencies import CurrentUser
 # Import services for initialization
 from registry.services.server_service import server_service
 from registry.services.agent_service import agent_service
-from registry.search.service import vector_service
 from registry.health.service import health_service
 from registry.services.federation_service import get_federation_service
+from registry.services.search.service import vector_service
 
 from registry.utils.log import logger
 
@@ -191,9 +189,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.add_middleware(
-    UnifiedAuthMiddleware
-)
+# app.add_middleware(
+#     UnifiedAuthMiddleware
+# )
 
 # Register API routers with /api prefix
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])

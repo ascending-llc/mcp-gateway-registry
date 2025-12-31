@@ -514,14 +514,14 @@ class BeanieModelGenerator:
             field_attrs.append(f'alias="{field_name}"')
             comments.append(f'DB field: {field_name}')
 
-        # Handle reference fields FIRST - use Link type for better Beanie integration
+        # Handle reference fields FIRST - use PydanticObjectId for direct ObjectId storage
         ref_model = field_def.get('x-ref')
         if ref_model:
             # Normalize the reference name to match actual class names
             normalized_ref = self._normalize_model_reference(ref_model)
-            # Use Link type for references
-            field_type = f'Link["{normalized_ref}"]'
-            self.imported_types.add('Link')
+            # Use PydanticObjectId for references (stores plain ObjectId, not DBRef)
+            field_type = 'PydanticObjectId'
+            self.imported_types.add('PydanticObjectId')
             comments.append(f'references {normalized_ref} collection')
         else:
             # Get python type if not a reference

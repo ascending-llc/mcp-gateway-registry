@@ -15,7 +15,6 @@ from ..core.mcp_client import mcp_client_service
 from ..core.config import settings
 from ..services.server_service import server_service
 from ..auth.dependencies import user_has_ui_permission_for_service
-from ..search.service import faiss_service
 from ..auth.dependencies import CurrentUser
 from ..health.service import health_service
 from ..utils.scopes_manager import remove_server_scopes

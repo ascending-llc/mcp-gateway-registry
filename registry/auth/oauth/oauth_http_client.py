@@ -3,7 +3,7 @@ import time
 import urllib.parse
 import httpx
 from typing import Dict, Optional, Any
-from registry.models.models import MCPOAuthFlowMetadata, OAuthTokens, TokenTransformConfig
+from registry.models.oauth_models import MCPOAuthFlowMetadata, OAuthTokens, TokenTransformConfig
 from registry.utils.log import logger
 
 
@@ -29,7 +29,7 @@ class OAuthHttpClient:
             logger.warning(f"State format issue: state does not start with flow_id. state={state}, flow_id={flow_id}")
 
         redirect_uri = client_info.redirect_uris[0] if client_info.redirect_uris else ""
-
+        logger.info(f"redirect_uri={redirect_uri}")
         params = {
             "response_type": "code",
             "client_id": client_info.client_id,
@@ -152,7 +152,7 @@ class OAuthHttpClient:
             oauth_config: Dict[str, Any],
             refresh_token: str
     ) -> Optional[OAuthTokens]:
-        """Refresh tokens"""
+        """Refresh tokens using OAuth config from MongoDB"""
         try:
             token_url = oauth_config.get("token_url")
             if not token_url:
@@ -170,9 +170,13 @@ class OAuthHttpClient:
             if "client_secret" in oauth_config:
                 data["client_secret"] = oauth_config["client_secret"]
 
-            # Add scope if exists
-            if "scopes" in oauth_config:
-                data["scope"] = " ".join(oauth_config["scopes"])
+            # Add scope if exists (handle both list and string formats)
+            scopes = oauth_config.get("scopes")
+            if scopes:
+                if isinstance(scopes, list):
+                    data["scope"] = " ".join(scopes)
+                else:
+                    data["scope"] = scopes
 
             # Prepare request headers
             headers = {

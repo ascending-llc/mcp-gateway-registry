@@ -22,6 +22,11 @@ export default defineConfig(({ mode }) => {
   console.log('  Backend URL:', backendURL);
 
   return {
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, './src'),
+      },
+    },
     // plugins: [
     //   react(),
     //   {
