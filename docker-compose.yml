@@ -239,7 +239,6 @@ services:
       - MONGO_URI=${MONGO_URI:-mongodb://mongodb:27017/jarvis}
     volumes:
       - ${APP_HOME}/mcp-gateway/servers:/app/registry/servers
-      - ${APP_HOME}/mcp-gateway/data/models:/app/data/models
       - ${APP_HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
     ports:
       - "8003:8003"

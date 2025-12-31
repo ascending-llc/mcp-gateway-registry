@@ -106,7 +106,7 @@ if [ "${TOOL_DISCOVERY_MODE:-embedded}" = "embedded" ]; then\n\
     echo "Requires: Embedding models at /app/data/models/"\n\
     \n\
     EMBEDDINGS_MODEL_NAME="${EMBEDDINGS_MODEL_NAME:-all-MiniLM-L6-v2}"\n\
-    EMBEDDINGS_MODEL_DIR="/app/data/models/$EMBEDDINGS_MODEL_NAME"\n\
+    EMBEDDINGS_MODEL_DIR="/app/registry/models/$EMBEDDINGS_MODEL_NAME"\n\
     \n\
     if [ ! -d "$EMBEDDINGS_MODEL_DIR" ] || [ -z "$(ls -A "$EMBEDDINGS_MODEL_DIR" 2>/dev/null)" ]; then\n\
         echo "WARNING: Embeddings model not found at $EMBEDDINGS_MODEL_DIR"\n\
