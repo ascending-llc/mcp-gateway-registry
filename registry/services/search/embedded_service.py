@@ -14,9 +14,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 
 from pydantic import HttpUrl
-from ..core.config import settings
-from ..core.schemas import ServerInfo
-from ..schemas.agent_models import AgentCard
+from registry.schemas.agent_models import AgentCard
 
 from .base import VectorSearchService
 

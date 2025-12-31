@@ -4,6 +4,7 @@ from typing import Dict, Optional, Any
 from dataclasses import dataclass, field, asdict
 
 from registry.schemas.enums import ConnectionState
+from registry.services.server_service_v1 import server_service_v1
 from registry.utils.log import logger
 
 
@@ -20,31 +21,49 @@ class MCPConnection:
 class MCPConnectionService:
     """MCP connection service"""
 
-    def __init__(self, config_service):
-        self.config_service = config_service
+    def __init__(self):
         self.app_connections: Dict[str, MCPConnection] = {}
         self.user_connections: Dict[str, Dict[str, MCPConnection]] = {}  # user_id -> {server_name -> connection}
         self._lock = asyncio.Lock()
         self._max_error_count = 3  # Maximum error count
 
     async def initialize_app_connections(self) -> None:
-        """Initialize application-level connections"""
+        """
+        Initialize application-level connections
+        """
         async with self._lock:
-            for server_name, config in self.config_service.get_all_configs().items():
-                if not config.requires_oauth:
-                    # Create application-level connection for non-OAuth servers
-                    self.app_connections[server_name] = MCPConnection(
-                        server_name=server_name,
-                        connection_state=ConnectionState.CONNECTED,
-                        details={
-                            "type": "app_connection",
-                            "config": asdict(config),
-                            "created_at": time.time(),
-                            "last_health_check": time.time()
-                        }
-                    )
-
-            logger.info(f"Initialized {len(self.app_connections)} app connections")
+            try:
+                servers, total = await server_service_v1.list_servers(
+                    page=1,
+                    per_page=1000,
+                    status="active"
+                )
+                logger.info(f"Found {total} active servers in MongoDB")
+                
+                # 为不需要 OAuth 的服务器创建应用级连接
+                for server in servers:
+                    # 检查服务器是否需要 OAuth
+                    if not server.requires_oauth:
+                        self.app_connections[server.serverName] = MCPConnection(
+                            server_name=server.serverName,
+                            connection_state=ConnectionState.CONNECTED,
+                            details={
+                                "type": "app_connection",
+                                "server_id": str(server.id),
+                                "url": server.url,
+                                "config": server.config,
+                                "created_at": time.time(),
+                                "last_health_check": time.time()
+                            }
+                        )
+                        logger.debug(f"Created app connection for non-OAuth server: {server.serverName}")
+                    else:
+                        logger.debug(f"Skipped OAuth server: {server.serverName}")
+                
+                logger.info(f"Initialized {len(self.app_connections)} app-level connections from MongoDB")
+                
+            except Exception as e:
+                logger.error(f"Failed to initialize app connections: {e}", exc_info=True)
 
     def get_user_connections(self, user_id: str) -> Dict[str, MCPConnection]:
         """Get user connections"""
@@ -209,8 +228,6 @@ async def get_connection_service() -> MCPConnectionService:
     """Get connection service instance"""
     global _connection_service_instance
     if _connection_service_instance is None:
-        from registry.services.oauth.service import get_config_service
-        config_service = await get_config_service()
-        _connection_service_instance = MCPConnectionService(config_service)
+        _connection_service_instance = MCPConnectionService()
         await _connection_service_instance.initialize_app_connections()
     return _connection_service_instance

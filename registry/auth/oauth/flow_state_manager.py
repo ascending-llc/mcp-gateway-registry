@@ -3,7 +3,7 @@ import time
 import secrets
 import os
 from typing import Dict, Optional, Any
-from registry.models.models import OAuthFlow, MCPOAuthFlowMetadata, OAuthTokens, OAuthClientInformation, OAuthMetadata
+from registry.models.oauth_models import OAuthFlow, MCPOAuthFlowMetadata, OAuthTokens, OAuthClientInformation, OAuthMetadata
 from registry.schemas.enums import OAuthFlowStatus
 from registry.utils.log import logger
 
@@ -154,31 +154,44 @@ class FlowStateManager:
         return user_flows
 
     def _create_client_info(self, oauth_config: Dict[str, Any], server_name: str) -> OAuthClientInformation:
-        """Create client information"""
+        """Create client information from MongoDB OAuth config"""
         redirect_uri = oauth_config.get("redirect_uri")
         if not redirect_uri:
             base_url = os.environ.get("REGISTRY_URL", "http://127.0.0.1:3080")
-            redirect_uri = f"{base_url}/api/mcp/{server_name}/oauth/callback"
+            redirect_uri = f"{base_url}/api/mcp/v1/{server_name}/oauth/callback"
 
         redirect_uris = [redirect_uri] if redirect_uri else []
 
-        # TODO: Fixed for testing environment, needs adjustment
-        redirect_uris = ['http://localhost:3080/api/mcp/github-copilot/oauth/callback']
+        # Get scopes from config (can be list or string)
+        scopes = oauth_config.get("scopes", [])
+        if isinstance(scopes, list):
+            scope_string = " ".join(scopes)
+        else:
+            scope_string = scopes
+        
         return OAuthClientInformation(
             client_id=oauth_config.get("client_id", ""),
             client_secret=oauth_config.get("client_secret"),
             redirect_uris=redirect_uris,
-            scope=" ".join(oauth_config.get("scopes", [])),
+            scope=scope_string,
             additional_params=oauth_config.get("additional_params")
         )
 
     def _create_oauth_metadata(self, oauth_config: Dict[str, Any]) -> OAuthMetadata:
-        """Create OAuth metadata"""
+        """Create OAuth metadata from MongoDB OAuth config"""
+        auth_url = oauth_config.get("authorize_url") or oauth_config.get("auth_url", "")
+        token_url = oauth_config.get("token_url", "")
+        
+        # Get scopes (ensure it's a list)
+        scopes = oauth_config.get("scopes", [])
+        if isinstance(scopes, str):
+            scopes = [s.strip() for s in scopes.split()]
+        
         return OAuthMetadata(
-            authorization_endpoint=oauth_config.get("auth_url", ""),
-            token_endpoint=oauth_config.get("token_url", ""),
+            authorization_endpoint=auth_url,
+            token_endpoint=token_url,
             issuer=oauth_config.get("issuer", ""),
-            scopes_supported=oauth_config.get("scopes", []),
+            scopes_supported=scopes,
             grant_types_supported=oauth_config.get("grant_types_supported", ["authorization_code", "refresh_token"]),
             token_endpoint_auth_methods_supported=oauth_config.get("token_endpoint_auth_methods_supported",
                                                                    ["client_secret_basic", "client_secret_post"]),

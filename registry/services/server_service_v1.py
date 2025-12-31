@@ -18,8 +18,8 @@ from bson import ObjectId
 from beanie import PydanticObjectId
 from beanie.operators import In, RegEx, Or
 
-from packages.models._generated.mcpServer import MCPServerDocument
-from packages.models._generated.user import IUser
+from packages.models.models._generated.mcpServer import MCPServerDocument
+from packages.models.models._generated.user import IUser
 
 from registry.schemas.server_api_schemas import (
     ServerCreateRequest,
@@ -500,6 +500,11 @@ class ServerServiceV1:
             "response_time_ms": 125,  # Mock value
         }
 
+    async def get_server_by_name(self,server_name: str) -> Optional[MCPServerDocument]:
+        """
+        Get server by name.
+        """
+        return await MCPServerDocument.find_one({"serverName": server_name})
 
 # Singleton instance
 server_service_v1 = ServerServiceV1()
