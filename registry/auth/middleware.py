@@ -298,7 +298,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 scopes=scopes,
                 auth_method=auth_method,
                 provider=session_data.get('provider', 'local'),
-                auth_source=session_data.get('session_auth'),
+                auth_source='session_auth',
             )
 
         except Exception as e:
