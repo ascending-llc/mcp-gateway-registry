@@ -126,7 +126,7 @@ services:
   # MongoDB Database
   registry-mongodb:
     container_name: registry-mongodb
-    image: mongo:7
+    image: mongo:8.0.17
     restart: always
     #user: "${UID:-1000}:${GID:-1000}" # The default user does not have permission to run the program on the mount path.
     environment:
