@@ -98,14 +98,46 @@ log_info "ECR Registry: $ECR_REGISTRY"
 log_info "AWS Region: $AWS_REGION"
 log_info "Build Action: $ACTION"
 
+# Determine BUILD_VERSION from git
+if command -v git &> /dev/null && [ -d "${REPO_ROOT}/.git" ]; then
+    # Get the current git tag
+    GIT_TAG=$(git -C "$REPO_ROOT" describe --tags --exact-match 2>/dev/null || echo "")
+
+    if [ -n "$GIT_TAG" ]; then
+        # We're on a tagged commit - use just the tag (remove 'v' prefix)
+        BUILD_VERSION="${GIT_TAG#v}"
+        log_info "Build version (release): $BUILD_VERSION"
+    else
+        # Not on a tag - include branch name and commit info
+        GIT_BRANCH=$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+        GIT_DESCRIBE=$(git -C "$REPO_ROOT" describe --tags --always 2>/dev/null || echo "dev")
+
+        # Format: version-branch or describe-branch
+        if [[ "$GIT_DESCRIBE" =~ ^[0-9] ]]; then
+            # Starts with version number from describe
+            BUILD_VERSION="${GIT_DESCRIBE#v}-${GIT_BRANCH}"
+        else
+            # No version tags found, use commit hash
+            BUILD_VERSION="${GIT_DESCRIBE}-${GIT_BRANCH}"
+        fi
+
+        log_info "Build version (development): $BUILD_VERSION"
+    fi
+else
+    BUILD_VERSION="1.0.0-dev"
+    log_warning "Git not available, using default version: $BUILD_VERSION"
+fi
+
 # Parse images from YAML and build array
 declare -A IMAGES
+declare -A BUILD_ARGS
 declare -a IMAGE_NAMES
 
 # Single pass to parse config and collect image information
-while IFS='|' read -r name repo_name dockerfile context; do
+while IFS='|' read -r name repo_name dockerfile context build_args; do
     if [ -n "$name" ]; then
         IMAGES["$name"]="$repo_name|$dockerfile|$context"
+        BUILD_ARGS["$name"]="$build_args"
         IMAGE_NAMES+=("$name")
     fi
 done <<< "$(python3 << PYEOF
@@ -121,12 +153,16 @@ try:
         repo_name = image_config.get('repo_name')
         dockerfile = image_config.get('dockerfile')
         context = image_config.get('context', '.')
+        build_args = image_config.get('build_args', {})
 
         if not repo_name or not dockerfile:
             print(f"ERROR: Image '{name}' missing repo_name or dockerfile", file=sys.stderr)
             sys.exit(1)
 
-        print(f"{name}|{repo_name}|{dockerfile}|{context}")
+        # Format build_args as key=value pairs separated by spaces
+        build_args_str = ' '.join([f"{k}={v}" for k, v in build_args.items()])
+
+        print(f"{name}|{repo_name}|{dockerfile}|{context}|{build_args_str}")
 
 except Exception as e:
     print(f"ERROR: Failed to parse config: {e}", file=sys.stderr)
@@ -215,6 +251,7 @@ build_image() {
     local repo_name="$2"
     local dockerfile="$3"
     local context="$4"
+    local build_args="${BUILD_ARGS[$image_name]:-}"
 
     log_info "Building $image_name..."
 
@@ -229,11 +266,22 @@ build_image() {
         return 1
     fi
 
+    # Construct build args for docker command
+    local build_arg_flags="--build-arg BUILD_VERSION=$BUILD_VERSION"
+    if [ -n "$build_args" ]; then
+        log_info "Build args: $build_args"
+        for arg in $build_args; do
+            build_arg_flags="$build_arg_flags --build-arg $arg"
+        done
+    fi
+    log_info "BUILD_VERSION=$BUILD_VERSION"
+
     # Build the Docker image using buildx (faster, better caching, future-proof)
     docker buildx build \
         --load \
         -f "$REPO_ROOT/$dockerfile" \
         -t "$repo_name:latest" \
+        $build_arg_flags \
         "$REPO_ROOT/$context" || {
         log_error "Failed to build $image_name"
         cleanup_a2a_agent "$image_name" "$context"

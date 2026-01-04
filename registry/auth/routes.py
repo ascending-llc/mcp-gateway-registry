@@ -136,13 +136,26 @@ async def login_submit(
             # Traditional redirect response
             response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
         
-        response.set_cookie(
-            key=settings.session_cookie_name,
-            value=session_data,
-            max_age=settings.session_max_age_seconds,
-            httponly=True,
-            samesite="lax",
-        )
+        # Security Note: This implementation uses domain cookies for single-tenant deployments
+        # where cross-subdomain authentication is required (e.g., auth.domain.com and registry.domain.com).
+        # For multi-tenant SaaS deployments with tenant-based subdomains, do NOT use domain cookies
+        # as they would allow cross-tenant session sharing. Consider alternative authentication methods
+        # such as token-based auth or separate auth domains per tenant.
+        cookie_params = {
+            "key": settings.session_cookie_name,
+            "value": session_data,
+            "max_age": settings.session_max_age_seconds,
+            "httponly": True,  # Prevents JavaScript access (XSS protection)
+            "samesite": "lax",  # CSRF protection
+            "secure": settings.session_cookie_secure,  # Only transmit over HTTPS when True
+            "path": "/",  # Explicit path for clarity
+        }
+
+        # Add domain attribute if configured for cross-subdomain cookie sharing
+        if settings.session_cookie_domain:
+            cookie_params["domain"] = settings.session_cookie_domain
+
+        response.set_cookie(**cookie_params)
         logger.info(f"User '{username}' logged in successfully.")
         return response
     else:

@@ -1,7 +1,17 @@
 #!/bin/bash
 
+# DEPRECATED: This script is deprecated in favor of the Registry Management API
+# Use: uv run python api/registry_management.py OR cli/registry_cli_wrapper.py
+# See: api/README.md for documentation
+#
 # Agent Management Script for MCP Gateway Registry
 # Usage: ./cli/agent_mgmt.sh {register|list|get|test|test-all} [args...]
+
+echo "WARNING: This script is DEPRECATED. Please use the Registry Management API instead:"
+echo "  uv run python api/registry_management.py agent-register --help"
+echo "  uv run python api/registry_management.py agent-list --help"
+echo "See api/README.md for full documentation."
+echo ""
 
 set -e
 

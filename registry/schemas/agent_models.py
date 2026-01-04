@@ -456,11 +456,17 @@ class AgentCard(BaseModel):
         alias="isEnabled",
         description="Whether agent is enabled in registry",
     )
-    num_stars: int = Field(
-        0,
-        ge=0,
+    num_stars: float = Field(
+        0.0,
+        ge=0.0,
+        le=5.0,
         alias="numStars",
-        description="Community rating",
+        description="Average community rating (0.0-5.0)",
+    )
+    rating_details: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        alias="ratingDetails",
+        description="Individual user ratings with username and rating value",
     )
     license: str = Field(
         "N/A",
@@ -654,11 +660,12 @@ class AgentInfo(BaseModel):
         alias="numSkills",
         description="Number of skills",
     )
-    num_stars: int = Field(
-        0,
-        ge=0,
+    num_stars: float = Field(
+        0.0,
+        ge=0.0,
+        le=5.0,
         alias="numStars",
-        description="Community rating",
+        description="Average community rating (0.0-5.0)",
     )
     is_enabled: bool = Field(
         False,

@@ -30,6 +30,7 @@ dependencies = [
     "langchain-anthropic>=0.3.17",
     "matplotlib>=3.10.5",
     "psutil>=6.1.0",
+    "email-validator>=2.2.0",
     "aiohttp>=3.8.0",
     "rich>=13.0.0",
     "requests>=2.31.0",
@@ -37,9 +38,26 @@ dependencies = [
     "faker>=37.11.0",
     "factory-boy>=3.3.3",
     "cisco-ai-mcp-scanner>=3.0.1",
+    "cisco-ai-a2a-scanner @ git+https://github.com/cisco-ai-defense/a2a-scanner.git@main",
     "awscli>=1.36.0",
     "boto3>=1.35.0",
+    "langchain-weaviate>=0.0.6",
+    "langchain-classic>=1.0.0",
+    "langchain>=1.1.3",
+    "flashrank>=0.2.10",
+    "langchain-community>=0.4.1",
+    "async-lru>=2.0.5",
+    "weaviate-client>=4.18.1",
+    "protobuf>=5.29.5",
+    "grpcio>=1.76.0",
+    "cachetools>=6.2.4",
+    "litellm>=1.50.0",
+    "beanie>=1.26.0",
+    "motor>=3.3.0",
 ]
+
+[project.scripts]
+seed_data = "scripts.seed_mongodb:cli"
 
 [project.optional-dependencies]
 # Vector search with embedded FAISS (default, adds ~2-3GB)
@@ -74,8 +92,16 @@ docs = [
     "pymdown-extensions>=10.0.0",
 ]
 
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [tool.setuptools]
-packages = ["registry"]
+# Use find: to automatically discover all packages
+packages = ["registry", "packages", "scripts"]
+
+[tool.setuptools.package-data]
+registry = ["**/*.yml", "**/*.yaml", "**/*.json", "**/*.html", "**/*.css", "**/*.png", "**/*.svg"]
 
 # Pytest Configuration
 [tool.pytest.ini_options]
@@ -153,6 +179,12 @@ exclude_lines = [
 directory = "htmlcov"
 title = "MCP Registry Coverage Report"
 
+[tool.uv.workspace]
+members = [
+    "libraries/libraries",
+    "libraries",
+]
+
 [tool.uv]
-# Local-only project - never resolve from PyPI
-package = false
+# Dev mode - use local editable install
+dev-dependencies = []

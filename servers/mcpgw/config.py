@@ -1,0 +1,209 @@
+import argparse
+import logging
+import os
+
+from pathlib import Path
+from typing import Optional
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from packages.models.enums import ToolDiscoveryMode
+
+logging.basicConfig(
+    level=os.environ.get("LOGLEVEL", "INFO"),
+    format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
+)
+logger = logging.getLogger(__name__)
+
+
+class Constants:
+    """Application constants that don't change."""
+
+    DESCRIPTION: str = "MCP Gateway Registry Interaction Server (mcpgw)"
+    DEFAULT_MCP_TRANSPORT: str = "streamable-http"
+    DEFAULT_MCP_SERVER_LISTEN_PORT: str = "8003"
+    REQUEST_TIMEOUT: float = 15.0
+
+
+class Settings(BaseSettings):
+    """
+    Application settings loaded from environment variables.
+    
+    All settings can be overridden via environment variables with the same name.
+    For nested configs, use double underscore (e.g., REGISTRY__BASE_URL).
+    """
+    # Registry configuration
+    REGISTRY_BASE_URL: str = Field(
+        default="http://localhost:7860",
+        description="Base URL of the MCP Gateway Registry"
+    )
+    REGISTRY_USERNAME: str = Field(
+        default="",
+        description="Username for registry authentication"
+    )
+    REGISTRY_PASSWORD: str = Field(
+        default="",
+        description="Password for registry authentication"
+    )
+
+    # Server configuration
+    MCP_TRANSPORT: str = Field(
+        default=Constants.DEFAULT_MCP_TRANSPORT,
+        description="Transport type for the MCP server"
+    )
+    MCP_SERVER_LISTEN_PORT: str = Field(
+        default=Constants.DEFAULT_MCP_SERVER_LISTEN_PORT,
+        description="Port for the MCP server to listen on"
+    )
+
+    # Auth server configuration
+    AUTH_SERVER_URL: str = Field(
+        default="http://localhost:8888",
+        description="URL of the authentication server"
+    )
+
+    # JWT authentication configuration
+    JWT_SECRET_KEY: Optional[str] = Field(
+        default=None,
+        description="Secret key for JWT token validation (HS256)"
+    )
+    JWT_ISSUER: str = Field(
+        default="mcp-auth-server",
+        description="Expected JWT token issuer"
+    )
+    JWT_AUDIENCE: str = Field(
+        default="mcp-registry",
+        description="Expected JWT token audience"
+    )
+    JWT_SELF_SIGNED_KID: str = Field(
+        default="self-signed-key-v1",
+        description="Key ID for self-signed JWT tokens"
+    )
+
+    # Vector search configuration
+    TOOL_DISCOVERY_MODE: ToolDiscoveryMode = Field(
+        default=ToolDiscoveryMode.EMBEDDED,
+        description="Vector search mode: 'embedded' or 'external'"
+    )
+    EMBEDDINGS_MODEL_NAME: str = Field(
+        default="all-MiniLM-L6-v2",
+        description="Name of the sentence-transformers model"
+    )
+    EMBEDDINGS_MODEL_DIMENSION: int = Field(
+        default=384,
+        description="Dimension of embeddings"
+    )
+    FAISS_CHECK_INTERVAL: float = Field(
+        default=5.0,
+        description="Interval in seconds to check for FAISS index updates"
+    )
+
+    # Weaviate Configuration
+    WEAVIATE_HOST: str = Field(default="weaviate")
+    WEAVIATE_PORT: int = Field(default=8080)
+    WEAVIATE_API_KEY: Optional[str] = Field(
+        default="test-secret-key",
+        description="API key for WEAVIATE server"
+    )
+
+    WEAVIATE_SESSION_POOL_CONNECTIONS: int = Field(
+        default=20,
+        description=" Maximum connections"
+    )
+    WEAVIATE_SESSION_POOL_MAXSIZE: int = Field(
+        default=100,
+        description="Connection pool size"
+    )
+    WEAVIATE_INIT_TIME: int = Field(
+        default=20,
+        description="Initialization time"
+    )
+    WEAVIATE_QUERY_TIME: int = Field(
+        default=120,
+        description="Query time in seconds"
+    )
+    WEAVIATE_INSERT_TIME: int = Field(
+        default=300,
+        description="Insert time in seconds"
+    )
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+        # Enable environment variable validation
+        validate_default=True,
+    )
+
+    @field_validator("REGISTRY_BASE_URL")
+    @classmethod
+    def validate_registry_url(cls, v: str) -> str:
+        """Validate and normalize registry base URL."""
+        if not v:
+            raise ValueError("REGISTRY_BASE_URL must be set")
+        return v.rstrip("/")
+
+    @property
+    def scopes_config_path(self) -> Path:
+        """
+        Determine the path to scopes.yml configuration file.
+        
+        Returns:
+            Path: Path to scopes.yml file
+        """
+        # Try Docker container path first
+        docker_path = Path("/app/auth_server/scopes.yml")
+        if docker_path.exists():
+            return docker_path
+
+        # Try local development path
+        local_path = Path(__file__).parent.parent.parent / "auth_server" / "scopes.yml"
+        if local_path.exists():
+            return local_path
+
+        logger.warning("Scopes configuration file not found at expected locations")
+        return Path("scopes.yml")
+
+    def log_config(self):
+        """Log current configuration (hiding sensitive values)."""
+        logger.info("Configuration loaded:")
+        logger.info(f"  Registry URL: {self.REGISTRY_BASE_URL}")
+        logger.info(f"  Registry Username: {'***' if self.REGISTRY_USERNAME else 'not set'}")
+        logger.info(f"  Registry Password: {'***' if self.REGISTRY_PASSWORD else 'not set'}")
+        logger.info(f"  MCP Transport: {self.MCP_TRANSPORT}")
+        logger.info(f"  Listen Port: {self.MCP_SERVER_LISTEN_PORT}")
+        logger.info(f"  Auth Server URL: {self.AUTH_SERVER_URL}")
+        logger.info(f"  Tool Discovery Mode: {self.TOOL_DISCOVERY_MODE}")
+
+
+def parse_arguments() -> argparse.Namespace:
+    """
+    Parse command line arguments.
+    
+    Command line arguments override environment variables.
+    
+    Returns:
+        argparse.Namespace: Parsed command line arguments
+    """
+    parser = argparse.ArgumentParser(description=Constants.DESCRIPTION)
+
+    parser.add_argument(
+        "--port",
+        type=str,
+        help=f"Port for the MCP server to listen on (default: from env or {Constants.DEFAULT_MCP_SERVER_LISTEN_PORT})",
+    )
+
+    parser.add_argument(
+        "--transport",
+        type=str,
+        choices=["streamable-http"],
+        help=f"Transport type for the MCP server (default: from env or {Constants.DEFAULT_MCP_TRANSPORT})",
+    )
+
+    return parser.parse_args()
+
+
+# Create global settings instance
+settings = Settings()
+
+settings.log_config()

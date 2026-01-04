@@ -6,90 +6,38 @@ A clean, domain-driven FastAPI app for managing MCP (Model Context Protocol) ser
 This main.py file serves as the application coordinator, importing and registering 
 domain routers while handling core app configuration.
 """
-
-import logging
 from contextlib import asynccontextmanager
-from typing import Annotated, Dict, Any
-from pathlib import Path
 
-from fastapi import FastAPI, Cookie, HTTPException, Depends
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 
+from packages.database import init_mongodb, close_mongodb
 from registry.auth.middleware import UnifiedAuthMiddleware
 # Import domain routers
 from registry.auth.routes import router as auth_router
 from registry.api.server_routes import router as servers_router
+from registry.api.v1.server_routes import router as servers_router_v1
 from registry.api.internal_routes import router as internal_router
 from registry.api.search_routes import router as search_router
 from registry.api.wellknown_routes import router as wellknown_router
 from registry.api.registry_routes import router as registry_router
 from registry.api.agent_routes import router as agent_router
+from registry.api.management_routes import router as management_router
 from registry.health.routes import router as health_router
-from registry.proxy.routes import router as proxy_router, shutdown_proxy_client
-
+from registry.api.v1.mcp.oauth_router import router as oauth_router
+from registry.version import __version__
+from registry.api.proxy_routes import router as proxy_router, shutdown_proxy_client
 from registry.auth.dependencies import CurrentUser
 
 # Import services for initialization
 from registry.services.server_service import server_service
 from registry.services.agent_service import agent_service
-from registry.search.service import vector_service
 from registry.health.service import health_service
 from registry.services.federation_service import get_federation_service
+from registry.services.search.service import vector_service
 
-# Import core configuration
-from registry.core.config import settings
-
-
-# Configure logging with file and console handlers
-def setup_logging():
-    """Configure logging to write to both file and console."""
-    # Ensure log directory exists
-    log_dir = settings.log_dir
-    log_dir.mkdir(parents=True, exist_ok=True)
-
-    # Define log file path
-    log_file = log_dir / "registry.log"
-
-    # Create formatters
-    file_formatter = logging.Formatter(
-        '%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
-    )
-
-    console_formatter = logging.Formatter(
-        '%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
-    )
-
-    # Get root logger
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
-
-    # Remove any existing handlers
-    for handler in root_logger.handlers[:]:
-        root_logger.removeHandler(handler)
-
-    # File handler
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(file_formatter)
-
-    # Console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(console_formatter)
-
-    # Add handlers to root logger
-    root_logger.addHandler(file_handler)
-    root_logger.addHandler(console_handler)
-
-    return log_file
-
-
-# Setup logging
-log_file_path = setup_logging()
-logger = logging.getLogger(__name__)
-logger.info(f"Logging configured. Writing to file: {log_file_path}")
+from registry.utils.log import logger
 
 
 @asynccontextmanager
@@ -98,6 +46,11 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Starting MCP Gateway Registry...")
 
     try:
+        # Initialize MongoDB connection first
+        logger.info("🗄️  Initializing MongoDB connection...")
+        await init_mongodb()
+        logger.info("✅ MongoDB connection established")
+
         # Initialize services in order
         logger.info("📚 Loading server definitions and state...")
         server_service.load_servers_and_state()
@@ -147,7 +100,7 @@ async def lifespan(app: FastAPI):
             # Sync on startup if configured
             sync_on_startup = (
                     (
-                                federation_service.config.anthropic.enabled and federation_service.config.anthropic.sync_on_startup) or
+                            federation_service.config.anthropic.enabled and federation_service.config.anthropic.sync_on_startup) or
                     (federation_service.config.asor.enabled and federation_service.config.asor.sync_on_startup)
             )
 
@@ -176,6 +129,11 @@ async def lifespan(app: FastAPI):
         # Shutdown services gracefully
         await health_service.shutdown()
         await shutdown_proxy_client()
+
+        # Close MongoDB connection
+        logger.info("🗄️  Closing MongoDB connection...")
+        await close_mongodb()
+
         logger.info("✅ Shutdown completed successfully!")
     except Exception as e:
         logger.error(f"❌ Error during shutdown: {e}", exc_info=True)
@@ -185,8 +143,41 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="MCP Gateway Registry",
     description="A registry and management system for Model Context Protocol (MCP) servers",
-    version="1.0.0",
-    lifespan=lifespan
+    version=__version__,
+    lifespan=lifespan,
+    swagger_ui_parameters={
+        "persistAuthorization": True,
+    },
+    openapi_tags=[
+        {
+            "name": "Authentication",
+            "description": "OAuth2 and session-based authentication endpoints"
+        },
+        {
+            "name": "Server Management",
+            "description": "MCP server registration and management. Requires JWT Bearer token authentication."
+        },
+        {
+            "name": "Agent Management",
+            "description": "A2A agent registration and management. Requires JWT Bearer token authentication."
+        },
+        {
+            "name": "Management API",
+            "description": "IAM and user management operations. Requires JWT Bearer token with admin permissions."
+        },
+        {
+            "name": "Semantic Search",
+            "description": "Vector-based semantic search for agents. Requires JWT Bearer token authentication."
+        },
+        {
+            "name": "Health Monitoring",
+            "description": "Service health check endpoints"
+        },
+        {
+            "name": "Anthropic Registry API",
+            "description": "Anthropic-compatible registry API (v0.1) for MCP server discovery"
+        }
+    ]
 )
 
 # Add CORS middleware for React development and Docker deployment
@@ -205,16 +196,61 @@ app.add_middleware(
 # Register API routers with /api prefix
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(servers_router, prefix="/api", tags=["Server Management"])
+app.include_router(servers_router_v1, prefix="/api", tags=["Server Management V1"])
 app.include_router(internal_router, prefix="/api", tags=["Server Management[internal]"])
 app.include_router(agent_router, prefix="/api", tags=["Agent Management"])
+app.include_router(management_router, prefix="/api")
 app.include_router(search_router, prefix="/api/search", tags=["Semantic Search"])
 app.include_router(health_router, prefix="/api/health", tags=["Health Monitoring"])
+app.include_router(oauth_router, prefix="/api/mcp", tags=["MCP  Management"])
 
 # Register Anthropic MCP Registry API (public API for MCP servers only)
 app.include_router(registry_router, tags=["Anthropic Registry API"])
 
 # Register well-known discovery router
 app.include_router(wellknown_router, prefix="/.well-known", tags=["Discovery"])
+
+
+# Customize OpenAPI schema to add security schemes
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+
+    # Add security schemes
+    openapi_schema["components"]["securitySchemes"] = {
+        "Bearer": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "JWT Bearer token obtained from Keycloak OAuth2 authentication. "
+                          "Include in Authorization header as: `Authorization: Bearer <token>`"
+        }
+    }
+
+    # Apply Bearer security to all endpoints except auth, health, and public discovery endpoints
+    for path, path_item in openapi_schema["paths"].items():
+        # Skip authentication, health check, and public discovery endpoints
+        if path.startswith("/api/auth/") or path == "/health" or path.startswith("/.well-known/"):
+            continue
+
+        # Apply Bearer security to all methods in this path
+        for method in path_item:
+            if method in ["get", "post", "put", "delete", "patch"]:
+                if "security" not in path_item[method]:
+                    path_item[method]["security"] = [{"Bearer": []}]
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
 
 
 # Add user info endpoint for React auth context
@@ -239,6 +275,11 @@ async def health_check():
     """Simple health check for load balancers and monitoring."""
     return {"status": "healthy", "service": "mcp-gateway-registry"}
 
+# Version endpoint for UI
+@app.get("/api/version")
+async def get_version():
+    """Get application version."""
+    return {"version": __version__}
 
 app.include_router(proxy_router, prefix="/proxy", tags=["MCP Proxy"])
 

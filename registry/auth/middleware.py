@@ -1,20 +1,19 @@
 import base64
 import os
 import jwt
+import re
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from itsdangerous import SignatureExpired, BadSignature
 from starlette.middleware.base import BaseHTTPMiddleware
 from typing import Optional, Dict, Any
-import logging
+from registry.utils.log import logger
 
 from registry.auth.dependencies import (map_cognito_groups_to_scopes, signer, get_ui_permissions_for_user,
                                         get_user_accessible_servers, get_accessible_services_for_user,
                                         get_accessible_agents_for_user, user_can_modify_servers,
                                         user_has_wildcard_access)
 from registry.core.config import settings
-
-logger = logging.getLogger(__name__)
 
 
 class UnifiedAuthMiddleware(BaseHTTPMiddleware):
@@ -27,81 +26,107 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, public_paths: Optional[list] = None):
         super().__init__(app)
         self.public_paths = public_paths or [
-            "/", "/health", "/docs", "/openapi.json",
-            "/static",
-
+            "/",
+            "/health",
+            "/docs",
+            "/openapi.json",
+            "/static/*",
             "/callback",
             "/api/auth/providers",
             "/api/auth/login",
+            "/login",
+            "/api/auth/config",
+            "/api/mcp/*/oauth/callback",  # OAuth callback is public
+            "/api/mcp/oauth/success",  # OAuth success page
+            "/api/mcp/oauth/error",  # OAuth error page
         ]
         # note: admin
         self.internal_paths = [
-            "/api/internal/",
+            "/api/internal/*",
         ]
         # note: jwt auth
         self.servers_paths = [
-            "/api/servers/",
+            "/api/servers/*",
+            "/proxy/*",
+            "/api/mcp/*",
         ]
 
     async def dispatch(self, request: Request, call_next):
-        if self._is_public_path(request.url.path):
+        path = request.url.path
+        if self._match_path(path, self.public_paths):
+            logger.debug(f"Public path: {path}")
             return await call_next(request)
+
         try:
             user_context = await self._authenticate(request)
             request.state.user = user_context
             request.state.is_authenticated = True
             request.state.auth_source = user_context.get('auth_source', 'unknown')
-            logger.info(f"User {user_context.get('username')} is authenticated")
+            logger.info(f"User {user_context.get('username')} authenticated via {user_context.get('auth_source')}")
             return await call_next(request)
         except AuthenticationError as e:
-            logger.warning(f"Auth failed for {request.url.path}: {e}")
+            logger.warning(f"Auth failed for {path}: {e}")
             return JSONResponse(status_code=401, content={"detail": str(e)})
         except Exception as e:
-            logger.error(f"Auth error for {request.url.path}: {e}")
+            logger.error(f"Auth error for {path}: {e}")
             return JSONResponse(status_code=500, content={"detail": "Authentication error"})
 
-    def _is_public_path(self, path: str) -> bool:
-        """Check if the path is a public path (excludes internal paths which require authentication)"""
-        for public_path in self.public_paths:
-            if public_path == "/" and path == "/":
+    def _match_path(self, path: str, patterns: list) -> bool:
+        """
+        Path matching
+        
+        Supports:
+        - Exact match: "/api/auth/login"
+        - Suffix wildcard: "/api/servers/*" matches "/api/servers/anything"
+        - Middle wildcard: "/api/mcp/*/oauth/callback" matches "/api/mcp/{anything}/oauth/callback"
+        """
+        for pattern in patterns:
+            if pattern == path:
+                # Exact match
                 return True
-            elif public_path != "/" and (path == public_path or path.startswith(public_path + "/")):
-                return True
-        return False
 
-    def _is_skip_path(self, target_path: str, paths: list) -> bool:
-        """Check if the path is an internal path that requires Basic authentication"""
-        for path in paths:
-            if target_path.startswith(path):
-                return True
+            if "*" in pattern:
+                if pattern.endswith("/*"):
+                    # Suffix wildcard: /api/servers/* matches /api/servers/anything
+                    prefix = pattern[:-2]  # Remove /*
+                    if path == prefix or path.startswith(prefix + "/"):
+                        return True
+                else:
+                    # Middle wildcard: /api/mcp/*/oauth/callback
+                    # Convert pattern to regex, * matches any non-slash characters
+                    # Escape special characters, then replace * with [^/]+
+                    regex_pattern = "^" + re.escape(pattern).replace(r"\*", "[^/]+") + "$"
+                    if re.match(regex_pattern, path):
+                        return True
         return False
 
     async def _authenticate(self, request: Request) -> Dict[str, Any]:
         """
-        Unified authentication logic:
-            1. For internal paths: Use Basic authentication
-            2. For other paths:  then session cookies
+        Unified authentication logic (simple and efficient)
+        
+        1. Internal paths (/api/internal/*) → Basic Auth
+        2. Server paths (/api/servers/*, /proxy/*, /api/mcp/*) → JWT Auth
+        3. Other paths → Session Auth
         """
-        # Check if this is an internal path
-        if self._is_skip_path(request.url.path, self.internal_paths):
-            # Use Basic authentication for internal endpoints
+        path = request.url.path
+
+        if self._match_path(path, self.internal_paths):
             user_context = self._try_basic_auth(request)
             if user_context:
-                logger.info(f"basic auth success: {user_context['username']}")
                 return user_context
             raise AuthenticationError("Basic authentication required")
-        elif self._is_skip_path(request.url.path, self.servers_paths):
+
+        if self._match_path(path, self.servers_paths):
             user_context = self._try_jwt_auth(request)
             if user_context:
-                logger.info(f"jwt auth success: {user_context['username']}")
                 return user_context
-            raise AuthenticationError("token authentication required")
-        else:
-            user_context = self._try_session_auth(request)
-            if user_context:
-                logger.info(f"session auth success: {user_context['username']}")
-                return user_context
-            raise AuthenticationError("session auth required")
+            raise AuthenticationError("JWT authentication required")
+
+        # session Auth
+        user_context = self._try_session_auth(request)
+        if user_context:
+            return user_context
+        raise AuthenticationError("Session authentication required")
 
     def _try_basic_auth(self, request: Request) -> Optional[Dict[str, Any]]:
         """Basic authentication for internal endpoints"""
@@ -273,7 +298,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 scopes=scopes,
                 auth_method=auth_method,
                 provider=session_data.get('provider', 'local'),
-                auth_source=session_data.get('session_auth'),
+                auth_source='session_auth',
             )
 
         except Exception as e:
@@ -292,7 +317,14 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                                            'mcp-servers-unrestricted/execute'])
             return data
 
-        except (SignatureExpired, BadSignature, Exception):
+        except SignatureExpired as e:
+            logger.warning(f"Session cookie expired: {e}")
+            return None
+        except BadSignature as e:
+            logger.warning(f"Session cookie has invalid signature (likely from different server): {e}")
+            return None
+        except Exception as e:
+            logger.warning(f"Session cookie parse error: {e}")
             return None
 
     def _build_user_context(self, username: str, groups: list, scopes: list,

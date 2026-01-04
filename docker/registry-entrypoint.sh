@@ -97,6 +97,12 @@ EOF
     backend)
         echo "Starting MCP Registry Service..."
 
+        if [ -n "${BUILD_VERSION}" ]; then
+            echo "Using BUILD_VERSION from environment: $BUILD_VERSION"
+        else
+            echo "BUILD_VERSION not set, will use default version"
+        fi
+
         # Validate required environment variables
         if [ -z "${SECRET_KEY:-}" ]; then
             echo "ERROR: SECRET_KEY environment variable is not set."
@@ -119,7 +125,7 @@ EOF
         # Check for embeddings model only in embedded mode
         if [ "${TOOL_DISCOVERY_MODE}" = "embedded" ]; then
             EMBEDDINGS_MODEL_NAME="${EMBEDDINGS_MODEL_NAME:-all-MiniLM-L6-v2}"
-            EMBEDDINGS_MODEL_DIR="/app/registry/models/$EMBEDDINGS_MODEL_NAME"
+            EMBEDDINGS_MODEL_DIR="/app/data/models/$EMBEDDINGS_MODEL_NAME"
 
             echo "Checking for sentence-transformers model (embedded mode)..."
             if [ ! -d "$EMBEDDINGS_MODEL_DIR" ] || [ -z "$(ls -A "$EMBEDDINGS_MODEL_DIR" 2>/dev/null)" ]; then

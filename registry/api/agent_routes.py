@@ -29,7 +29,8 @@ from ..schemas.agent_models import (
 )
 from ..auth.dependencies import CurrentUser
 from ..core.config import settings
-from ..search.service import faiss_service
+from registry.services.search.service import faiss_service
+from pydantic import BaseModel
 
 # Configure logging with basicConfig
 logging.basicConfig(
@@ -41,6 +42,97 @@ logger = logging.getLogger(__name__)
 
 
 router = APIRouter()
+
+
+async def _perform_agent_security_scan_on_registration(
+    path: str,
+    agent_card: AgentCard,
+    agent_card_dict: dict,
+) -> bool:
+    """Perform security scan on newly registered agent.
+
+    Handles the complete security scan workflow including:
+    - Running the security scan with configured analyzers
+    - Adding security-pending tag if scan fails
+    - Disabling agent if configured and scan fails
+    - Updating FAISS with disabled state if agent disabled
+
+    All scan failures are non-fatal and will be logged but not raised.
+
+    Args:
+        path: Agent path (e.g., /code-reviewer)
+        agent_card: AgentCard Pydantic model instance
+        agent_card_dict: Agent card as dictionary for scanning
+
+    Returns:
+        bool: True if agent should remain enabled, False if disabled due to scan
+    """
+    from ..services.agent_scanner import agent_scanner_service
+    from ..search.service import faiss_service
+
+    scan_config = agent_scanner_service.get_scan_config()
+    if not (scan_config.enabled and scan_config.scan_on_registration):
+        return True  # Agent remains enabled
+
+    logger.info(f"Running A2A security scan for newly registered agent: {path}")
+
+    try:
+        # Run the security scan
+        scan_result = await agent_scanner_service.scan_agent(
+            agent_card=agent_card_dict,
+            agent_path=path,
+            analyzers=scan_config.analyzers,
+            api_key=scan_config.llm_api_key,
+            timeout=scan_config.scan_timeout_seconds,
+        )
+
+        # Handle unsafe agents
+        if not scan_result.is_safe:
+            logger.warning(
+                f"Agent {path} failed security scan. "
+                f"Critical: {scan_result.critical_issues}, High: {scan_result.high_severity}"
+            )
+
+            # Add security-pending tag if configured
+            if scan_config.add_security_pending_tag:
+                current_tags = agent_card.tags or []
+                if "security-pending" not in current_tags:
+                    current_tags.append("security-pending")
+                    agent_card.tags = current_tags
+                    # Update agent with new tags
+                    agent_info = agent_service.get_agent_info(path)
+                    if agent_info:
+                        updated_card = agent_info.model_dump()
+                        updated_card["tags"] = current_tags
+                        from ..schemas.agent_models import AgentCard as AgentCardModel
+
+                        agent_service.register_agent(AgentCardModel(**updated_card))
+                    logger.info(f"Added 'security-pending' tag to agent {path}")
+
+            # Disable agent if configured
+            if scan_config.block_unsafe_agents:
+                agent_service.toggle_agent(path, False)
+                logger.warning(f"Disabled agent {path} due to failed security scan")
+
+                # Update FAISS with disabled state
+                await faiss_service.add_or_update_entity(
+                    path, agent_card_dict, "a2a_agent", False
+                )
+                return False  # Agent disabled
+
+        else:
+            logger.info(f"Agent {path} passed security scan")
+
+        return True  # Agent remains enabled
+
+    except Exception as e:
+        logger.error(f"Failed to run security scan for agent {path}: {e}")
+        # Non-fatal error - agent is registered but not scanned
+        return True  # Agent remains enabled on scan error
+
+
+class RatingRequest(BaseModel):
+    rating: int
 
 
 def _normalize_path(
@@ -287,6 +379,12 @@ async def register_agent(
         f"by user '{user_context['username']}'"
     )
 
+    # Agent security scanning if enabled
+    agent_card_dict = agent_card.model_dump()
+    is_enabled = await _perform_agent_security_scan_on_registration(
+        path, agent_card, agent_card_dict
+    )
+
     return JSONResponse(
         status_code=status.HTTP_201_CREATED,
         content={
@@ -386,51 +484,8 @@ async def list_agents(
         "total_count": len(filtered_agents),
     }
 
-
-@router.get("/agents/{path:path}")
-async def get_agent(
-    path: str,
-    user_context: CurrentUser,
-):
-    """
-    Get a single agent by path.
-
-    Public agents are visible without special permissions.
-    Private and group-restricted agents require authorization.
-
-    Args:
-        path: Agent path
-        user_context: Authenticated user context
-
-    Returns:
-        Complete agent card
-
-    Raises:
-        HTTPException: 404 if not found, 403 if not authorized
-    """
-    path = _normalize_path(path)
-
-    agent_card = agent_service.get_agent_info(path)
-    if not agent_card:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Agent not found at path '{path}'",
-        )
-
-    accessible = _filter_agents_by_access([agent_card], user_context)
-
-    if not accessible:
-        logger.warning(
-            f"User {user_context['username']} attempted to access agent {path} "
-            f"without permission"
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have access to this agent",
-        )
-
-    return agent_card.model_dump()
-
+# IMPORTANT: Specific routes with path suffixes (/health, /rate, /rating, /toggle)
+# must come BEFORE catch-all {path:path} routes to prevent FastAPI from matching them incorrectly
 
 @router.post("/agents/{path:path}/health")
 async def check_agent_health(
@@ -508,6 +563,193 @@ async def check_agent_health(
         "response_time_ms": response_time_ms,
         "last_checked_iso": last_checked_iso,
     }
+
+
+@router.post("/agents/{path:path}/rate")
+async def rate_agent(
+    path: str,
+    request: RatingRequest,
+    user_context: CurrentUser,
+):
+    """Save integer ratings to agent card."""
+    path = _normalize_path(path)
+
+    agent_card = agent_service.get_agent_info(path)
+    if not agent_card:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent not found at path '{path}'",
+        )
+
+    accessible = _filter_agents_by_access([agent_card], user_context)
+    if not accessible:
+        logger.warning(
+            f"User {user_context['username']} attempted to rate agent {path} without permission"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this agent",
+        )
+
+    try:
+        avg_rating = agent_service.update_rating(path, user_context["username"], request.rating)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error updating rating: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save rating",
+        )
+
+    return {
+        "message": "Rating added successfully",
+        "average_rating": avg_rating,
+    }
+
+
+@router.get("/agents/{path:path}/rating")
+async def get_agent_rating(
+    path: str,
+    user_context: CurrentUser,
+):
+    """Get agent rating information."""
+    path = _normalize_path(path)
+
+    agent_card = agent_service.get_agent_info(path)
+    if not agent_card:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent not found at path '{path}'",
+        )
+
+    accessible = _filter_agents_by_access([agent_card], user_context)
+    if not accessible:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this agent",
+        )
+    
+    return {
+        "num_stars": agent_card.num_stars,
+        "rating_details": agent_card.rating_details,
+    }
+
+
+@router.post("/agents/{path:path}/toggle")
+async def toggle_agent(
+    path: str,
+    enabled: bool,
+    user_context: CurrentUser,
+):
+    """
+    Enable or disable an agent.
+
+    Requires toggle_service permission for the agent.
+
+    Args:
+        path: Agent path
+        enabled: New enabled state
+        user_context: Authenticated user context
+
+    Returns:
+        Updated agent status
+
+    Raises:
+        HTTPException: 404 if not found, 403 if unauthorized
+    """
+    path = _normalize_path(path)
+
+    agent_card = agent_service.get_agent_info(path)
+    if not agent_card:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent not found at path '{path}'",
+        )
+
+    _check_agent_permission("toggle_service", agent_card.name, user_context)
+
+    success = agent_service.toggle_agent(path, enabled)
+
+    if not success:
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": "Failed to toggle agent state"},
+        )
+
+    from ..search.service import faiss_service
+
+    await faiss_service.add_or_update_entity(
+        path,
+        agent_card.model_dump(),
+        "a2a_agent",
+        enabled,
+    )
+
+    logger.info(
+        f"Agent '{agent_card.name}' ({path}) toggled to {enabled} by user "
+        f"'{user_context['username']}'"
+    )
+
+    return {
+        "message": f"Agent {'enabled' if enabled else 'disabled'} successfully",
+        "path": path,
+        "is_enabled": enabled,
+    }
+
+
+@router.get("/agents/{path:path}")
+async def get_agent(
+    path: str,
+    user_context: CurrentUser,
+):
+    """
+    Get a single agent by path.
+
+    Public agents are visible without special permissions.
+    Private and group-restricted agents require authorization.
+
+    Args:
+        path: Agent path
+        user_context: Authenticated user context
+
+    Returns:
+        Complete agent card
+
+    Raises:
+        HTTPException: 404 if not found, 403 if not authorized
+    """
+    path = _normalize_path(path)
+
+    agent_card = agent_service.get_agent_info(path)
+    if not agent_card:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent not found at path '{path}'",
+        )
+
+    accessible = _filter_agents_by_access([agent_card], user_context)
+
+    if not accessible:
+        logger.warning(
+            f"User {user_context['username']} attempted to access agent {path} "
+            f"without permission"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this agent",
+        )
+
+    return agent_card.model_dump()
+
+
+
+
+
+
 
 
 @router.put("/agents/{path:path}")
@@ -684,66 +926,6 @@ async def delete_agent(
         status_code=status.HTTP_204_NO_CONTENT,
         content=None,
     )
-
-
-@router.post("/agents/{path:path}/toggle")
-async def toggle_agent(
-    path: str,
-    enabled: bool,
-    user_context: CurrentUser,
-):
-    """
-    Enable or disable an agent.
-
-    Requires toggle_service permission for the agent.
-
-    Args:
-        path: Agent path
-        enabled: New enabled state
-        user_context: Authenticated user context
-
-    Returns:
-        Updated agent status
-
-    Raises:
-        HTTPException: 404 if not found, 403 if unauthorized
-    """
-    path = _normalize_path(path)
-
-    agent_card = agent_service.get_agent_info(path)
-    if not agent_card:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Agent not found at path '{path}'",
-        )
-
-    _check_agent_permission("toggle_service", agent_card.name, user_context)
-
-    success = agent_service.toggle_agent(path, enabled)
-
-    if not success:
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"detail": "Failed to toggle agent state"},
-        )
-
-    await faiss_service.add_or_update_entity(
-        path,
-        agent_card.model_dump(),
-        "a2a_agent",
-        enabled,
-    )
-
-    logger.info(
-        f"Agent '{agent_card.name}' ({path}) toggled to {enabled} by user "
-        f"'{user_context['username']}'"
-    )
-
-    return {
-        "message": f"Agent {'enabled' if enabled else 'disabled'} successfully",
-        "path": path,
-        "is_enabled": enabled,
-    }
 
 
 @router.post("/agents/discover")
