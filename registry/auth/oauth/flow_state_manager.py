@@ -3,7 +3,8 @@ import time
 import secrets
 import os
 from typing import Dict, Optional, Any
-from registry.models.oauth_models import OAuthFlow, MCPOAuthFlowMetadata, OAuthTokens, OAuthClientInformation, OAuthMetadata
+from registry.models.oauth_models import OAuthFlow, MCPOAuthFlowMetadata, OAuthTokens, OAuthClientInformation, \
+    OAuthMetadata
 from registry.schemas.enums import OAuthFlowStatus
 from registry.utils.log import logger
 
@@ -55,7 +56,7 @@ class FlowStateManager:
             self,
             server_name: str,
             user_id: str,
-            server_url: str,
+            authorize_url: str,
             code_verifier: str,
             oauth_config: Dict[str, Any],
             flow_id: str
@@ -68,7 +69,7 @@ class FlowStateManager:
         return MCPOAuthFlowMetadata(
             server_name=server_name,
             user_id=user_id,
-            server_url=server_url,
+            authorize_url=authorize_url,
             state=state,
             code_verifier=code_verifier,
             client_info=self._create_client_info(oauth_config, server_name),
@@ -168,7 +169,7 @@ class FlowStateManager:
             scope_string = " ".join(scopes)
         else:
             scope_string = scopes
-        
+        logger.info(f"redirect_uris: {redirect_uris}")
         return OAuthClientInformation(
             client_id=oauth_config.get("client_id", ""),
             client_secret=oauth_config.get("client_secret"),
@@ -181,12 +182,12 @@ class FlowStateManager:
         """Create OAuth metadata from MongoDB OAuth config"""
         auth_url = oauth_config.get("authorize_url") or oauth_config.get("auth_url", "")
         token_url = oauth_config.get("token_url", "")
-        
+
         # Get scopes (ensure it's a list)
         scopes = oauth_config.get("scopes", [])
         if isinstance(scopes, str):
             scopes = [s.strip() for s in scopes.split()]
-        
+
         return OAuthMetadata(
             authorization_endpoint=auth_url,
             token_endpoint=token_url,

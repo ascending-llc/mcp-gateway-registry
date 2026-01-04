@@ -1,10 +1,10 @@
 from typing import Dict, Optional, Any, Tuple
 from registry.auth.oauth import OAuthHttpClient, get_flow_state_manager, FlowStateManager
 from registry.models.oauth_models import OAuthTokens
-from registry.auth.oauth.token_manager import OAuthTokenManager
 from registry.schemas.enums import OAuthFlowStatus
 from registry.utils.utils import generate_code_verifier, generate_code_challenge
 from registry.services.server_service_v1 import server_service_v1 as server_service
+from registry.services.v1.token_service import token_service
 
 from registry.utils.log import logger
 
@@ -19,7 +19,6 @@ class MCPOAuthService:
 
     def __init__(self, flow_manager: Optional[FlowStateManager] = None):
         self.flow_manager = flow_manager or get_flow_state_manager()
-        self.token_manager = OAuthTokenManager()
         self.http_client = OAuthHttpClient()
 
     async def initiate_oauth_flow(
@@ -38,15 +37,26 @@ class MCPOAuthService:
             mcp_server = await server_service.get_server_by_name(server_name)
             if not mcp_server:
                 return None, None, "Server not found"
-            
+
             # Check if server requires OAuth
-            if not mcp_server.requires_oauth:
+            if not mcp_server.config.get("requires_oauth"):
                 return None, None, f"Server '{server_name}' does not require OAuth"
+
+            # Get OAuth config from authentication
+            authentication = mcp_server.config.get("authentication")
+            if not authentication:
+                return None, None, f"Server '{server_name}' authentication configuration not found"
             
-            # Get OAuth config from server config
-            oauth_config = mcp_server.oauth_config
-            if not oauth_config:
-                return None, None, f"Server '{server_name}' OAuth configuration not found"
+            # OAuth configuration is directly under authentication
+            oauth_config = authentication
+            
+            # Debug logs: verify OAuth configuration
+            logger.debug(f"OAuth config keys: {list(oauth_config.keys())}")
+            logger.debug(f"authorize_url: {oauth_config.get('authorize_url')}")
+            logger.debug(f"token_url: {oauth_config.get('token_url')}")
+            logger.debug(f"client_id: {oauth_config.get('client_id')}")
+            logger.debug(f"scopes: {oauth_config.get('scopes')}")
+
             # Generate PKCE parameters
             code_verifier = generate_code_verifier()
             code_challenge = generate_code_challenge(code_verifier)
@@ -56,7 +66,7 @@ class MCPOAuthService:
             flow_metadata = self.flow_manager.create_flow_metadata(
                 server_name=server_name,
                 user_id=user_id,
-                server_url=mcp_server.url or "",
+                authorize_url=oauth_config.get("authorize_url", ""),
                 code_verifier=code_verifier,
                 oauth_config=oauth_config,
                 flow_id=flow_id
@@ -142,8 +152,25 @@ class MCPOAuthService:
             # Update flow status
             self.flow_manager.complete_flow(flow_id, tokens)
 
-            # Store tokens
-            await self.token_manager.store_tokens(flow.user_id, flow.server_name, tokens)
+            # Persist tokens to database with OAuth metadata
+            metadata = {}
+            if flow.metadata and flow.metadata.metadata:
+                metadata = {
+                    "authorization_endpoint": flow.metadata.metadata.authorization_endpoint,
+                    "token_endpoint": flow.metadata.metadata.token_endpoint,
+                    "issuer": flow.metadata.metadata.issuer,
+                    "scopes_supported": flow.metadata.metadata.scopes_supported or [],
+                    "grant_types_supported": ["authorization_code", "refresh_token"],
+                    "response_types_supported": ["code"],
+                }
+
+            await token_service.store_oauth_tokens(
+                user_id=flow.user_id,
+                service_name=flow.server_name,
+                tokens=tokens,
+                metadata=metadata
+            )
+            logger.info(f"Persisted OAuth tokens to database for {flow.user_id}/{flow.server_name}")
 
             logger.info(f"Completed OAuth flow: {flow_id}")
             return True, None
@@ -153,8 +180,22 @@ class MCPOAuthService:
             return False, str(e)
 
     async def get_tokens(self, user_id: str, server_name: str) -> Optional[OAuthTokens]:
-        """Get user's OAuth tokens"""
-        return await self.token_manager.get_tokens(user_id, server_name)
+        """
+        Get user's OAuth tokens from database
+        
+        Args:
+            user_id: 用户ID
+            server_name: 服务名称
+            
+        Returns:
+            OAuthTokens对象或None
+        """
+        tokens = await token_service.get_oauth_tokens(user_id, server_name)
+        if tokens:
+            logger.debug(f"Retrieved tokens from database for {user_id}/{server_name}")
+        else:
+            logger.debug(f"No tokens found in database for {user_id}/{server_name}")
+        return tokens
 
     async def get_tokens_by_flow_id(self, flow_id: str) -> Optional[OAuthTokens]:
         """Get OAuth tokens by flow ID"""
@@ -218,10 +259,13 @@ class MCPOAuthService:
             if not mcp_server:
                 return False, f"Server '{server_name}' not found"
             
-            # Get OAuth config
-            oauth_config = mcp_server.oauth_config
-            if not oauth_config:
-                return False, f"Server '{server_name}' OAuth configuration not found"
+            # Get OAuth config from authentication
+            authentication = mcp_server.config.get("authentication")
+            if not authentication:
+                return False, f"Server '{server_name}' authentication configuration not found"
+            
+            # OAuth configuration is directly under authentication
+            oauth_config = authentication
 
             # Refresh tokens
             new_tokens = await self.http_client.refresh_tokens(
@@ -232,8 +276,22 @@ class MCPOAuthService:
             if not new_tokens:
                 return False, "Failed to refresh tokens"
 
-            # Store new tokens
-            await self.token_manager.store_tokens(user_id, server_name, new_tokens)
+            # Persist refreshed tokens to database with metadata
+            metadata = {
+                "authorization_endpoint": oauth_config.get("authorize_url"),
+                "token_endpoint": oauth_config.get("token_url"),
+                "issuer": oauth_config.get("issuer"),
+                "scopes_supported": oauth_config.get("scopes", []),
+                "grant_types_supported": ["authorization_code", "refresh_token"],
+                "response_types_supported": ["code"],
+            }
+            await token_service.store_oauth_tokens(
+                user_id=user_id,
+                service_name=server_name,
+                tokens=new_tokens,
+                metadata=metadata
+            )
+            logger.info(f"Persisted refreshed tokens to database for {user_id}/{server_name}")
             logger.info(f"Refreshed tokens for {user_id}/{server_name}")
             return True, None
 

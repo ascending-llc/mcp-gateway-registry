@@ -29,7 +29,7 @@ class OAuthHttpClient:
             logger.warning(f"State format issue: state does not start with flow_id. state={state}, flow_id={flow_id}")
 
         redirect_uri = client_info.redirect_uris[0] if client_info.redirect_uris else ""
-        logger.info(f"redirect_uri={redirect_uri}")
+        logger.debug(f"redirect_uri={redirect_uri}")
         params = {
             "response_type": "code",
             "client_id": client_info.client_id,
@@ -49,7 +49,7 @@ class OAuthHttpClient:
         query_string = urllib.parse.urlencode(params)
 
         full_url = f"{auth_url}?{query_string}"
-        logger.debug(f"Built authorization URL with state (format: flow_id##token)")
+        logger.debug(f"Built authorization URL: {full_url}")
 
         return full_url
 
