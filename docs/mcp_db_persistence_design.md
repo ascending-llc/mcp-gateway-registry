@@ -105,6 +105,94 @@ Endpoints should support the following operations:
   * MongoDB: `"id": "674e1a2b3c4d5e6f7a8b9c0d"` (24-char ObjectId)
   * File-based: `"id": "uuid-v4-here"` or derived from path
 
+**Server Response Schema:**
+
+All server endpoints return a **flattened response structure** for frontend convenience. The API layer transforms the nested MongoDB `config` object into a flat structure.
+
+⚠️ **IMPORTANT FOR ENGINEERS:**
+```python
+# Storage Layer (MongoDB): Nested config object
+{
+  "_id": ObjectId("..."),
+  "serverName": "github",
+  "config": {  # ← Nested in database
+    "title": "GitHub MCP Server",
+    "description": "...",
+    "type": "streamable-http",
+    "url": "https://...",
+    # ... all transport/auth config
+  },
+  "author": ObjectId("..."),
+  "createdAt": ISODate("..."),
+  "updatedAt": ISODate("...")
+}
+
+# API Response Layer: Flattened for frontend
+{
+  "id": "674e1a2b3c4d5e6f7a8b9c0d",
+  "serverName": "github",
+  # ↓ Config fields flattened to root level
+  "title": "GitHub MCP Server",
+  "description": "...",
+  "type": "streamable-http",
+  "url": "https://...",
+  "requiresOAuth": false,
+  "capabilities": "{...}",
+  "tools": "tool1, tool2, tool3",
+  # ↓ Additional computed/root-level fields
+  "author": "507f1f77bcf86cd799439011",
+  "scope": "shared_app",
+  "status": "active",
+  "path": "/mcp/github",
+  "tags": ["github"],
+  "numTools": 3,  # ← Calculated from tools string split
+  "numStars": 1250,
+  "lastConnected": "2026-01-04T14:30:00Z",
+  "createdAt": "2026-01-01T10:00:00Z",
+  "updatedAt": "2026-01-03T15:45:00Z"
+}
+
+```
+
+**Flattened API Response Fields:**
+
+**Identity & Metadata:**
+- `id`: string - MongoDB ObjectId converted to string
+- `serverName`: string - Unique server identifier
+- `author`: string - ObjectId of the user who created this server (as string)
+- `scope`: string - Access level (shared_app, shared_user, private_user) *[stored at root in DB]*
+- `status`: string - Server status (active, inactive, error) *[stored at root in DB]*
+- `createdAt`: string (ISO 8601) - Creation timestamp
+- `updatedAt`: string (ISO 8601) - Last update timestamp
+
+**Configuration Fields (flattened from config object):**
+- `title`: string - Display name
+- `description`: string - Server description
+- `type`: string - Transport type **ONLY: `streamable-http` or `sse`** (stdio/websocket not supported in registry)
+- `url`: string - Server endpoint URL (required for HTTP-based transports)
+- `apiKey`: object (optional) - API key configuration with `key`, `source`, `authorization_type`, `custom_header`
+- `requiresOAuth`: boolean - Whether OAuth is required
+- `oauth`: object (optional) - OAuth configuration
+- `capabilities`: string - JSON string of server capabilities
+- `tools`: string - Comma-separated list of tool names (e.g., "tool1, tool2, tool3")
+- `toolFunctions`: object - Tool function definitions in OpenAI format *[NOT returned in list endpoints, only in detail/tools endpoints]*
+- `initDuration`: number - Server initialization time in ms
+
+**Additional Fields (stored at root or computed):**
+- `path`: string - API path for this server (e.g., "/mcp/github") *[stored at root in DB]*
+- `proxyPassUrl`: string (optional) - Proxy URL for HTTP-based servers *[stored at root in DB]*
+- `tags`: string[] - Array of tags for categorization *[stored at root in DB]*
+- `numTools`: number - **Calculated** from splitting the `tools` string (e.g., "tool1, tool2" → 2)
+- `numStars`: number - Number of stars/favorites *[stored at root in DB]*
+- `lastConnected`: string (nullable, ISO 8601) - Last successful connection timestamp *[stored at root in DB]*
+- `lastError`: string (nullable, ISO 8601) - Last error timestamp *[stored at root in DB]*
+- `errorMessage`: string (nullable) - Last error message details *[stored at root in DB]*
+
+**Reference:** 
+- Database schema: [mcpServer.py](../packages/models/_generated/mcpServer.py)
+- Config schema (TypeScript): https://github.com/ascending-llc/jarvis-api/blob/e15d37b399fc186376843d77e8519545a7ead586/packages/data-provider/src/mcp.ts
+- Retrieval logic: https://github.com/ascending-llc/jarvis-api/blob/e15d37b399fc186376843d77e8519545a7ead586/packages/api/src/mcp/registry/db/ServerConfigsDB.ts
+
 #### Server Management Endpoints
 
 **1. List Servers**
@@ -133,31 +221,63 @@ Response 200:
   "servers": [
     {
       "id": "674e1a2b3c4d5e6f7a8b9c0d",
-      "server_name": "GitHub Server",
-      "path": "/github",
-      "description": "GitHub integration server",
-      "proxy_pass_url": "http://localhost:3100",
-      "supported_transports": ["streamable-http"],
-      "auth_type": "oauth",
-      "tags": ["github", "git", "vcs"],
-      "num_tools": 15,
-      "num_stars": 250,
-      "is_python": false,
-      "license": "MIT",
-      "tool_list": [...],
+      "serverName": "github",
+      "title": "GitHub MCP Server",
+      "description": "Interact with GitHub repositories",
+      "type": "streamable-http",
+      "url": "https://mcp-github.example.com/",
+      "requiresOAuth": false,
+      "capabilities": "{\"experimental\":{},\"prompts\":{\"listChanged\":true},\"resources\":{\"subscribe\":false,\"listChanged\":true},\"tools\":{\"listChanged\":true}}",
+      "tools": "create_repository, create_issue, search_repositories",
+      "author": "507f1f77bcf86cd799439011",
       "scope": "shared_app",
-      "user_id": null,
-      "created_at": "2024-12-01T09:00:00Z",
-      "updated_at": "2024-12-15T10:30:00Z"
+      "status": "active",
+      "path": "/mcp/github",
+      "tags": ["github", "version-control", "collaboration"],
+      "numTools": 3,
+      "numStars": 1250,
+      "lastConnected": "2026-01-04T14:30:00Z",
+      "createdAt": "2026-01-01T10:00:00Z",
+      "updatedAt": "2026-01-03T15:45:00Z"
+    },
+    {
+      "id": "674e1a2b3c4d5e6f7a8b9c0e",
+      "serverName": "tavilysearchv1",
+      "title": "Tavily Search v1",
+      "description": "Search the web with Tavily",
+      "type": "streamable-http",
+      "url": "https://mcp.tavily.com/mcp/",
+      "apiKey": {
+        "key": "encrypted_api_key_here",
+        "source": "admin",
+        "authorization_type": "custom",
+        "custom_header": "tavilyApiKey"
+      },
+      "requiresOAuth": false,
+      "capabilities": "{\"experimental\":{},\"prompts\":{\"listChanged\":true},\"resources\":{\"subscribe\":false,\"listChanged\":true},\"tools\":{\"listChanged\":true}}",
+      "tools": "tavily_search, tavily_extract, tavily_crawl, tavily_map",
+      "author": "507f1f77bcf86cd799439011",
+      "scope": "shared_app",
+      "status": "active",
+      "path": "/mcp/tavilysearchv1",
+      "proxyPassUrl": "https://mcp.tavily.com",
+      "tags": ["search", "web", "tavily"],
+      "numTools": 4,
+      "numStars": 890,
+      "lastConnected": "2026-01-04T15:09:45Z",
+      "createdAt": "2026-01-04T15:09:45Z",
+      "updatedAt": "2026-01-04T15:09:45Z"
     }
   ],
   "pagination": {
-    "total": 145,
+    "total": 42,
     "page": 1,
     "per_page": 20,
-    "total_pages": 8
+    "total_pages": 3
   }
 }
+
+**Note:** List endpoint does NOT return `toolFunctions` for performance.
 ```
 
 **2. Get Server Details**
@@ -168,71 +288,69 @@ Authorization: Bearer <token>
 Response 200:
 {
   "id": "674e1a2b3c4d5e6f7a8b9c0d",
-  "server_name": "GitHub Server",
-  "path": "/github",
-  "description": "GitHub integration server",
-  "proxy_pass_url": "http://localhost:3100",
-  "supported_transports": ["streamable-http"],
-  "auth_type": "oauth",
-  "auth_provider": "github",
-  "tags": ["github", "git", "vcs"],
-  "num_tools": 15,
-  "num_stars": 250,
-  "is_python": false,
-  "license": "MIT",
-  "tool_list": [
-    {
-      "name": "create_issue",
-      "description": "Create a GitHub issue",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "repo": {"type": "string"},
-          "title": {"type": "string"}
-        },
-        "required": ["repo", "title"]
+  "serverName": "github",
+  "title": "GitHub MCP Server",
+  "description": "Interact with GitHub repositories, issues, and pull requests",
+  "type": "streamable-http",
+  "url": "https://mcp-github.example.com/",
+  "requiresOAuth": false,
+  "capabilities": "{\"experimental\":{},\"prompts\":{\"listChanged\":true},\"resources\":{\"subscribe\":false,\"listChanged\":true},\"tools\":{\"listChanged\":true}}",
+  "tools": "create_repository, create_issue, search_repositories, list_commits, create_pull_request",
+  "toolFunctions": {
+    "create_repository_github": {
+      "type": "function",
+      "function": {
+        "name": "create_repository_github",
+        "description": "Create a new GitHub repository",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Repository name"
+            },
+            "private": {
+              "type": "boolean",
+              "description": "Whether the repository is private"
+            }
+          },
+          "required": ["name"]
+        }
+      }
+    },
+    "create_issue_github": {
+      "type": "function",
+      "function": {
+        "name": "create_issue_github",
+        "description": "Create a new issue in a repository",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "repo": {"type": "string"},
+            "title": {"type": "string"},
+            "body": {"type": "string"}
+          },
+          "required": ["repo", "title"]
+        }
       }
     }
-  ],
+  },
+  "initDuration": 150,
+  "author": "507f1f77bcf86cd799439011",
   "scope": "shared_app",
-  "user_id": null,
-  "organization_id": null,
-  "startup": true,
-  "icon_path": "/icons/github.svg",
-  "timeout": 30000,
-  "init_timeout": 60000,
-  "chat_menu": true,
-  "server_instructions": "Use this for GitHub operations",
-  "transport": {
-    "type": "stdio",
-    "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-github"],
-    "env": {
-      "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
-    }
-  },
-  "requires_oauth": true,
-  "oauth": {
-    "authorization_url": "https://github.com/login/oauth/authorize",
-    "token_url": "https://github.com/login/oauth/access_token",
-    "client_id": "github_client_id",
-    "scope": "repo read:user"
-  },
-  "custom_user_vars": {
-    "GITHUB_TOKEN": {
-      "title": "GitHub Personal Access Token",
-      "description": "Your GitHub API token",
-      "required": true
-    }
-  },
   "status": "active",
-  "last_connected": "2024-12-15T10:30:00Z",
-  "last_error": null,
-  "error_message": null,
-  "created_at": "2024-12-01T09:00:00Z",
-  "updated_at": "2024-12-15T10:30:00Z",
-  "version": 3
+  "path": "/mcp/github",
+  "tags": ["github", "version-control", "collaboration", "development"],
+  "numTools": 5,
+  "numStars": 1250,
+  "lastConnected": "2026-01-04T14:30:00Z",
+  "lastError": null,
+  "errorMessage": null,
+  "createdAt": "2026-01-01T10:00:00Z",
+  "updatedAt": "2026-01-03T15:45:00Z"
 }
+
+**Note:** Detail endpoint includes `toolFunctions` with complete OpenAI function schemas.
 ```
 
 **3. Register Server**
@@ -243,46 +361,74 @@ Content-Type: application/json
 
 Request:
 {
-  "server_name": "Custom Server",
-  "description": "My custom MCP server",
-  "path": "/custom",
-  "proxy_pass_url": "http://localhost:8080",
-  "scope": "private_user",
-  "tags": ["custom", "api"],
-  "num_tools": 5,
-  "num_stars": 0,
-  "is_python": true,
-  "license": "MIT",
-  "auth_type": "bearer",
-  "auth_provider": "oauth2",
-  "supported_transports": ["streamable-http"],
-  "transport": {
-    "type": "stdio",
-    "command": "python",
-    "args": ["-m", "my_mcp_server"]
+  "serverName": "custom-api-server",
+  "title": "Custom API Server",
+  "description": "My custom API integration",
+  "type": "streamable-http",
+  "url": "https://api.example.com/mcp/",
+  "apiKey": {
+    "key": "user_provided_key",
+    "source": "user",
+    "authorization_type": "bearer"
   },
-  "startup": false,
-  "chat_menu": true,
-  "tool_list": [
-    {
-      "name": "tool1",
-      "description": "First tool"
-    }
-  ]
+  "requiresOAuth": false,
+  "scope": "private_user",
+  "tags": ["api", "custom"]
 }
 
 Response 201:
 {
   "id": "674e1a2b3c4d5e6f7a8b9c0e",
-  "server_name": "Custom Server",
-  "path": "/custom",
-  "description": "My custom MCP server",
+  "serverName": "custom-api-server",
+  "title": "Custom API Server",
+  "description": "My custom API integration",
+  "type": "streamable-http",
+  "url": "https://api.example.com/mcp/",
+  "apiKey": {
+    "key": "encrypted_api_key_here",
+    "source": "user",
+    "authorization_type": "bearer"
+  },
+  "requiresOAuth": false,
+  "capabilities": "{\"tools\":{}}",
+  "tools": "search, analyze",
+  "toolFunctions": {
+    "search_custom_api_server": {
+      "type": "function",
+      "function": {
+        "name": "search_custom_api_server",
+        "description": "Search through data",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string"}}}
+      }
+    },
+    "analyze_custom_api_server": {
+      "type": "function",
+      "function": {
+        "name": "analyze_custom_api_server",
+        "description": "Analyze data",
+        "parameters": {"type": "object", "properties": {"data": {"type": "string"}}}
+      }
+    }
+  },
+  "initDuration": 80,
+  "author": "507f1f77bcf86cd799439012",
   "scope": "private_user",
   "status": "active",
-  "created_at": "2024-12-15T11:00:00Z",
-  "updated_at": "2024-12-15T11:00:00Z",
-  "version": 1
+  "path": "/mcp/custom-api-server",
+  "tags": ["api", "custom"],
+  "numTools": 2,
+  "numStars": 0,
+  "lastConnected": "2026-01-04T16:00:00Z",
+  "createdAt": "2026-01-04T16:00:00Z",
+  "updatedAt": "2026-01-04T16:00:00Z"
 }
+
+**Note:** Upon registration, the registry automatically:
+1. Connects to the MCP server at the provided URL
+2. Retrieves the server's capabilities and tool list
+3. Stores `capabilities`, `tools` (comma-separated string), and `toolFunctions` (OpenAI format)
+4. Calculates `numTools` from the tools string
+5. Measures `initDuration` (connection time in ms)
 ```
 
 **4. Update Server**
@@ -293,34 +439,41 @@ Content-Type: application/json
 
 Request:
 {
-  "description": "Updated description",
-  "tags": ["github", "git", "vcs", "updated"],
-  "num_tools": 20,
-  "num_stars": 300,
-  "status": "active",
-  "version": 3
+  "description": "Updated description - Enhanced GitHub integration",
+  "tags": ["github", "version-control", "collaboration", "enhanced"],
+  "status": "active"
 }
 
 Response 200:
 {
   "id": "674e1a2b3c4d5e6f7a8b9c0d",
-  "server_name": "GitHub Server",
-  "path": "/github",
-  "description": "Updated description",
-  "tags": ["github", "git", "vcs", "updated"],
-  "num_tools": 20,
-  "num_stars": 300,
+  "serverName": "github",
+  "title": "GitHub MCP Server",
+  "description": "Updated description - Enhanced GitHub integration",
+  "type": "streamable-http",
+  "url": "https://mcp-github.example.com/",
+  "requiresOAuth": false,
+  "capabilities": "{\"experimental\":{},\"prompts\":{},\"resources\":{},\"tools\":{}}",
+  "tools": "create_repository, create_issue, search_repositories",
+  "initDuration": 150,
+  "author": "507f1f77bcf86cd799439011",
+  "scope": "shared_app",
   "status": "active",
-  "updated_at": "2024-12-15T11:30:00Z",
-  "version": 4
+  "path": "/mcp/github",
+  "tags": ["github", "version-control", "collaboration", "enhanced"],
+  "numTools": 3,
+  "numStars": 1250,
+  "lastConnected": "2026-01-04T14:30:00Z",
+  "createdAt": "2026-01-01T10:00:00Z",
+  "updatedAt": "2026-01-04T16:05:00Z"
 }
 
 Response 409 (Conflict):
 {
   "error": "conflict",
   "message": "Server was modified by another process",
-  "current_version": 4,
-  "provided_version": 3
+  "current_updated_at": "2026-01-04T16:05:00Z",
+  "provided_updated_at": "2026-01-03T15:45:00Z"
 }
 ```
 
@@ -358,11 +511,11 @@ Request:
 Response 200:
 {
   "id": "674e1a2b3c4d5e6f7a8b9c0d",
-  "server_name": "GitHub Server",
-  "path": "/github",
-  "enabled": true,
+  "serverName": "github",
   "status": "active",
-  "updated_at": "2024-12-15T11:30:00Z"
+  "enabled": true,
+  "message": "Server enabled successfully",
+  "updatedAt": "2026-01-04T16:10:00Z"
 }
 ```
 
@@ -374,12 +527,29 @@ Authorization: Bearer <token>
 Response 200:
 {
   "id": "674e1a2b3c4d5e6f7a8b9c0d",
-  "server_name": "GitHub Server",
-  "path": "/github",
+  "serverName": "github",
   "tools": [
     {
-      "name": "create_issue",
-      "description": "Create a GitHub issue",
+      "name": "create_repository_github",
+      "description": "Create a new GitHub repository",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Repository name"
+          },
+          "private": {
+            "type": "boolean",
+            "description": "Whether the repository is private"
+          }
+        },
+        "required": ["name"]
+      }
+    },
+    {
+      "name": "create_issue_github",
+      "description": "Create a new issue in a repository",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -391,9 +561,18 @@ Response 200:
       }
     }
   ],
-  "num_tools": 15,
-  "cached": false
+  "numTools": 15,
+  "capabilities": {
+    "experimental": {},
+    "prompts": {"listChanged": true},
+    "resources": {"subscribe": false, "listChanged": true},
+    "tools": {"listChanged": true}
+  },
+  "cached": false,
+  "retrievedAt": "2026-01-04T16:15:00Z"
 }
+
+**Note:** This endpoint returns tools in MCP's native format (with `inputSchema`), which is different from the `toolFunctions` OpenAI format stored in the database.
 ```
 
 **8. Refresh Server Health**
@@ -404,13 +583,20 @@ Authorization: Bearer <token>
 Response 200:
 {
   "id": "674e1a2b3c4d5e6f7a8b9c0d",
-  "server_name": "GitHub Server",
-  "path": "/github",
-  "status": "healthy",
-  "last_checked": "2024-12-15T11:45:00Z",
-  "response_time_ms": 125,
-  "num_tools": 15
+  "serverName": "github",
+  "status": "active",
+  "lastConnected": "2026-01-04T16:20:00Z",
+  "lastError": null,
+  "errorMessage": null,
+  "numTools": 3,
+  "capabilities": "{\"experimental\":{},\"prompts\":{},\"resources\":{},\"tools\":{}}",
+  "tools": "create_repository, create_issue, search_repositories",
+  "initDuration": 145,
+  "message": "Server health check successful",
+  "updatedAt": "2026-01-04T16:20:00Z"
 }
+
+**Note:** Health refresh reconnects to the MCP server and updates tools/capabilities if they changed.
 ```
 
 #### Token Management Endpoints
@@ -574,92 +760,27 @@ Response 200:
 
 #### Admin Endpoints
 
-**Storage Backend Compatibility:**
-- ✅ **Both File & MongoDB**: Endpoints 1, 2, 4, 5, 6, 7 (basic CRUD, health, groups, audit)
-- ⚙️ **MongoDB-specific**: Endpoint 3 (statistics with aggregations)
+**Admin Authorization:**
+- Admins are identified by `user.role` from the `UserContext` (extracted from JWT token)
+- Admin users have elevated permissions to manage all servers across the system
 
-**1. Get All Servers**
+**Endpoint Behavior:**
+- **Regular endpoints** (`/api/v1/servers`, `/api/v1/servers/{id}`, etc.) work for both regular users and admins
+- **Regular users**: See only their own `private_user` servers + `shared_app` and `shared_user` servers they have access to
+- **Admin users** (when `user.role == "admin"`): See ALL servers (`shared_app`, `shared_user`, and `private_user` from all users)
+
+**Admin Capabilities:**
+1. **List All Servers**: Use `GET /api/v1/servers` with admin token to see all servers system-wide
+2. **Filter by User**: Add `?author={user_id}` to filter servers by specific user
+3. **Create Shared Servers**: Admins can create servers with `scope: shared_app` or `scope: shared_user`
+4. **Modify Any Server**: Admins can update/delete any server regardless of ownership
+5. **View Statistics**: Access the dedicated stats endpoint for system-wide metrics
+
+**Admin-Specific Endpoint:**
+
+**GET /api/v1/servers/stats**
 ```http
-GET /api/v1/admin/servers?user_id={user_id}&scope={scope}&status={status}
-Authorization: Bearer <admin_token>
-
-Query Parameters:
-- user_id (optional): Filter by user ID
-- scope (optional): Filter by scope (shared_app, shared_user, private_user)
-- status (optional): Filter by status (active, inactive, error)
-- page (optional): Page number (default: 1)
-- per_page (optional): Items per page (default: 20, max: 100)
-
-Response 200:
-{
-  "servers": [
-    {
-      "id": "674e1a2b3c4d5e6f7a8b9c0d",
-      "server_name": "GitHub Server",
-      "path": "/github",
-      "description": "GitHub integration server",
-      "scope": "shared_app",
-      "user_id": null,
-      "status": "active",
-      "num_tools": 15,
-      "tags": ["github", "git"],
-      "created_at": "2024-12-01T09:00:00Z",
-      "updated_at": "2024-12-15T10:30:00Z"
-    }
-  ],
-  "total": 250,
-  "page": 1,
-  "per_page": 20,
-  "total_pages": 13
-}
-```
-
-**2. Create Shared Server**
-```http
-POST /api/v1/admin/servers
-Authorization: Bearer <admin_token>
-Content-Type: application/json
-
-Request:
-{
-  "server_name": "Organization GitHub",
-  "scope": "shared_app",
-  "organization_id": "674e1a2b3c4d5e6f7a8b9c0f",
-  "path": "/org-github",
-  "description": "Organization-wide GitHub server",
-  "proxy_pass_url": "http://localhost:3100",
-  "transport": {
-    "type": "stdio",
-    "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-github"]
-  },
-  "requires_oauth": true,
-  "oauth": {
-    "authorization_url": "https://github.com/login/oauth/authorize",
-    "token_url": "https://github.com/login/oauth/access_token",
-    "client_id": "org_client_id",
-    "client_secret": "org_client_secret",
-    "scope": "repo read:org"
-  },
-  "startup": true,
-  "tags": ["github", "organization"]
-}
-
-Response 201:
-{
-  "id": "674e1a2b3c4d5e6f7a8b9c10",
-  "server_name": "Organization GitHub",
-  "path": "/org-github",
-  "scope": "shared_app",
-  "status": "active",
-  "created_at": "2024-12-15T11:00:00Z",
-  "version": 1
-}
-```
-
-**3. Get Server Statistics (MongoDB-specific)**
-```http
-GET /api/v1/admin/servers/stats
+GET /api/v1/servers/stats
 Authorization: Bearer <admin_token>
 
 Note: This endpoint uses MongoDB aggregation pipelines and is only available when using MongoDB storage backend.
@@ -679,9 +800,8 @@ Response 200:
     "error": 5
   },
   "servers_by_transport": {
-    "stdio": 180,
-    "websocket": 50,
-    "http": 20
+    "streamable-http": 200,
+    "sse": 50
   },
   "total_tokens": 450,
   "tokens_by_type": {
@@ -695,81 +815,6 @@ Response 200:
   "total_tools": 3250
 }
 ```
-
-**4. Get Server Health Status**
-```http
-GET /api/v1/admin/servers/health
-Authorization: Bearer <admin_token>
-
-Note: Available for both file-based and MongoDB storage backends.
-
-Response 200:
-{
-  "services": [
-    {
-      "id": "674e1a2b3c4d5e6f7a8b9c0d",
-      "path": "/github",
-      "server_name": "GitHub Server",
-      "status": "healthy",
-      "last_checked": "2024-12-15T10:30:00Z",
-      "response_time_ms": 125,
-      "last_connected": "2024-12-15T10:25:00Z"
-    },
-    {
-      "id": "674e1a2b3c4d5e6f7a8b9c0e",
-      "path": "/filesystem",
-      "server_name": "Filesystem Server",
-      "status": "unhealthy",
-      "last_checked": "2024-12-15T10:29:00Z",
-      "error": "Connection timeout",
-      "last_error": "2024-12-15T10:29:00Z"
-    }
-  ],
-  "summary": {
-    "total": 10,
-    "healthy": 8,
-    "unhealthy": 2,
-    "disabled": 0
-  }
-}
-
-**7. Audit Log**
-```http
-GET /api/v1/admin/audit?entity_type={type}&user_id={user_id}&action={action}
-Authorization: Bearer <admin_token>
-
-Query Parameters:
-- entity_type (optional): Filter by entity type (server, token)
-- user_id (optional): Filter by user ID
-- action (optional): Filter by action (create, update, delete)
-- start_date (optional): Start date (ISO 8601)
-- end_date (optional): End date (ISO 8601)
-- page (optional): Page number
-- per_page (optional): Items per page
-
-Response 200:
-{
-  "logs": [
-    {
-      "id": "674e1a2b3c4d5e6f7a8b9c20",
-      "action": "update",
-      "entity_type": "server",
-      "entity_id": "674e1a2b3c4d5e6f7a8b9c0d",
-      "user_id": "674e1a2b3c4d5e6f7a8b9c01",
-      "username": "admin",
-      "changes": {
-        "status": {"old": "inactive", "new": "active"},
-        "num_tools": {"old": 15, "new": 20}
-      },
-      "timestamp": "2024-12-15T11:30:00Z"
-    }
-  ],
-  "total": 1250,
-  "page": 1,
-  "per_page": 50
-}
-```
-
 
 ## MongoDB Integration
 
@@ -794,7 +839,7 @@ MongoDB integration provides a scalable, multi-tenant storage backend for MCP se
 
 #### Schema Generation Strategy
 
-**Problem:** The MCP server schema is already defined in Jarvis's TypeScript packages (`@librechat/data-schemas`). Duplicating this schema in Python would create maintenance burden and drift.
+**Problem:** The MCP server schema is already defined in Jarvis's TypeScript packages (`@jarvis`/data-schemas`). Duplicating this schema in Python would create maintenance burden and drift.
 
 **Solution:** 
 1. **Jarvis** publishes JSON schemas to GitHub Releases
@@ -833,7 +878,7 @@ MongoDB integration provides a scalable, multi-tenant storage backend for MCP se
 │ scripts/                                                     │
 │   └── generate_schemas.py     (Download & generate)         │
 │                                                              │
-│ registry/models/                                             │
+│ packages/models/                                             │
 │   ├── __init__.py             (Exports from _generated)     │
 │   └── _generated/             (⚠️  .gitignored)             │
 │       ├── README.md           (Generation instructions)     │
@@ -922,7 +967,7 @@ echo "   Timestamp: $TIMESTAMP"
 
 ```json
 {
-  "name": "@librechat/data-schemas",
+  "name": "@jarvis/data-schemas",
   "version": "0.0.31",
   "scripts": {
     "build": "npm run build:ts && npm run build:schemas",
@@ -960,7 +1005,7 @@ https://github.com/ascending-llc/jarvis-api/releases/download/v0.0.31/Token.json
 """
 Generate Python Beanie models from Jarvis JSON schemas.
 
-Generated files are placed in registry/models/_generated/ (gitignored).
+Generated files are placed in packages/models/_generated/ (gitignored).
 Engineers run this script to browse schemas in their IDE without repo switching.
 
 Usage:
@@ -981,8 +1026,8 @@ import urllib.request
 
 # Configuration
 JARVIS_REPO = "ascending-llc/jarvis-api"
-SCHEMA_BASE_URL = f"https://github.com/{LIBRECHAT_REPO}/releases/download"
-OUTPUT_DIR = Path("registry/models/_generated")
+SCHEMA_BASE_URL = f"https://github.com/{JARVIS_REPO}/releases/download"
+OUTPUT_DIR = Path("packages/models/_generated")
 SCHEMA_VERSION_FILE = OUTPUT_DIR / ".schema-version"
 
 SCHEMAS = {
@@ -1032,7 +1077,7 @@ python scripts/generate_schemas.py
 **Generated Directory Structure (gitignored):**
 
 ```
-registry/models/_generated/      # ⚠️  In .gitignore
+packages/models/_generated/      # ⚠️  In .gitignore
 ├── .schema-version              # "v0.0.31"
 ├── README.md                    # DO NOT EDIT warning + instructions
 ├── __init__.py                  # Exports
@@ -1044,14 +1089,14 @@ registry/models/_generated/      # ⚠️  In .gitignore
 **Using Generated Schemas:**
 
 ```python
-# registry/models/__init__.py
+# packages/models/__init__.py
 from ._generated import MCPServer, MCPConfig, OAuthConfig, Token
 
 __all__ = ["MCPServer", "MCPConfig", "OAuthConfig", "Token"]
 
 
 # In application code - engineers must generate locally to browse
-from registry.models import MCPServer, MCPConfig, Token
+from packages.models import MCPServer, MCPConfig, Token
 
 server = MCPServer(
     server_name="github",
@@ -1094,7 +1139,7 @@ token = Token(
 **mcp-gateway-registry Side:**
 1. Run `python scripts/generate_schemas.py --version v0.0.32`
 2. Script downloads JSON from GitHub Release
-3. Generates Python Beanie models in `registry/models/_generated/`
+3. Generates Python Beanie models in `packages/models/_generated/`
 4. Engineers can browse schema code in IDE
 5. Generated files are NOT committed (gitignored)
 6. Each engineer runs generation locally when needed
@@ -1105,7 +1150,7 @@ token = Token(
 $ python scripts/generate_schemas.py --version v0.0.31
 
 # Then can browse schema in IDE
-from registry.models import MCPServer  # Cmd+Click works!
+from packages.models import MCPServer  # Cmd+Click works!
 
 # IDE shows (from generated file):
 class MCPServer(Document):
@@ -1121,18 +1166,18 @@ class MCPServer(Document):
 ```gitignore
 # .gitignore
 # Ignore generated schemas (engineers generate locally)
-registry/models/_generated/
-!registry/models/_generated/README.md  # Keep instructions in git
+packages/models/_generated/
+!packages/models/_generated/README.md  # Keep instructions in git
 ```
 
 ```bash
 # First time setup for new engineers
 $ python scripts/generate_schemas.py --version v0.0.31
-✅ Generated in registry/models/_generated
+✅ Generated in packages/models/_generated
 💡 Schemas are gitignored - each engineer runs generation locally
 
 # Verify schemas exist before running app
-$ python -c "from registry.models import MCPServer; print('✅ Schemas ready')"
+$ python -c "from packages.models import MCPServer; print('✅ Schemas ready')"
 ```
 
 
@@ -1210,7 +1255,7 @@ class MCPServer(Document):
         ]
 ```
 
-**Note:** The complete schema definition is generated automatically from TypeScript. Run `python scripts/generate_schemas.py` to generate and browse `registry/models/_generated/mcpserver.py`.
+**Note:** The complete schema definition is generated automatically from TypeScript. Run `python scripts/generate_schemas.py` to generate and browse `packages/models/_generated/mcpserver.py`.
 
 **2. Token Storage Collection**
 
@@ -1255,142 +1300,178 @@ class Token(Document):
         }
 ```
 
-**Note:** Token schema is shared with Jarvis. Run `python scripts/generate_schemas.py` to generate and browse `registry/models/_generated/token.py`.
+**Note:** Token schema is shared with Jarvis. Run `python scripts/generate_schemas.py` to generate and browse `packages/models/_generated/token.py`.
 
 ### Storage Examples
 
-#### Example 1: Shared GitHub Server (stdio transport)
+⚠️ **IMPORTANT:** In MongoDB, the `config` object remains **nested**. The flattening only happens at the API response layer.
+
+#### Example 1: GitHub Server (streamable-http)
 
 ```json
 {
   "_id": ObjectId("674e1a2b3c4d5e6f7a8b9c0d"),
-  "server_name": "github_server",
-  "scope": "shared_app",
-  "user_id": null,
-  "organization_id": ObjectId("org123"),
-  
-  "startup": true,
-  "icon_path": "/icons/github.svg",
-  "timeout": 30000,
-  "init_timeout": 60000,
-  "chat_menu": true,
-  "server_instructions": "Use this for GitHub operations",
-  
-  "transport": {
-    "type": "stdio",
-    "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-github"],
-    "env": {
-      "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
-    },
-    "stderr": "capture"
-  },
-  
-  "requires_oauth": true,
-  "oauth": {
-    "authorization_url": "https://github.com/login/oauth/authorize",
-    "token_url": "https://github.com/login/oauth/access_token",
-    "client_id": "github_client_id",
-    "client_secret": "encrypted_secret_value",
-    "scope": "repo read:user",
-    "redirect_uri": "http://localhost:3000/oauth/callback",
-    "token_exchange_method": "POST",
-    "grant_types_supported": ["authorization_code", "refresh_token"]
-  },
-  "oauth_headers": {
-    "Accept": "application/json"
-  },
-  
-  "custom_user_vars": {
-    "GITHUB_TOKEN": {
-      "title": "GitHub Personal Access Token",
-      "description": "Your GitHub API token with repo access",
-      "required": true
-    }
-  },
-  
-  "oauth_metadata": null,
-  "capabilities": "{\"tools\": true, \"resources\": true}",
-  "tools": "[{\"name\": \"create_issue\", \"description\": \"Create a GitHub issue\"}]",
-  "tool_functions": {
-    "create_issue": {
-      "type": "function",
-      "function": {
-        "name": "create_issue",
-        "description": "Create a new GitHub issue",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "repo": {"type": "string"},
-            "title": {"type": "string"},
-            "body": {"type": "string"}
-          },
-          "required": ["repo", "title"]
+  "serverName": "github",
+  "config": {
+    "title": "GitHub MCP Server",
+    "description": "Interact with GitHub repositories, issues, and pull requests",
+    "type": "streamable-http",
+    "url": "https://mcp-github.example.com/",
+    "requiresOAuth": false,
+    "capabilities": "{\"experimental\":{},\"prompts\":{\"listChanged\":true},\"resources\":{\"subscribe\":false,\"listChanged\":true},\"tools\":{\"listChanged\":true}}",
+    "tools": "create_repository, create_issue, search_repositories",
+    "toolFunctions": {
+      "create_repository_github": {
+        "type": "function",
+        "function": {
+          "name": "create_repository_github",
+          "description": "Create a new GitHub repository",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {"type": "string", "description": "Repository name"},
+              "private": {"type": "boolean", "description": "Whether the repository is private"}
+            },
+            "required": ["name"]
+          }
         }
       }
-    }
+    },
+    "initDuration": 150
   },
-  "init_duration": 1250,
-  
+  "author": ObjectId("507f1f77bcf86cd799439011"),
+  "scope": "shared_app",
   "status": "active",
-  "last_connected": ISODate("2024-12-15T10:30:00.000Z"),
-  "last_error": null,
-  "error_message": null,
-  
-  "created_by": ObjectId("admin123"),
-  "created_at": ISODate("2024-12-01T09:00:00.000Z"),
-  "updated_at": ISODate("2024-12-15T10:30:00.000Z"),
-  "version": 3
+  "path": "/mcp/github",
+  "tags": ["github", "version-control", "collaboration"],
+  "numTools": 3,
+  "numStars": 1250,
+  "lastConnected": ISODate("2026-01-04T14:30:00Z"),
+  "lastError": null,
+  "errorMessage": null,
+  "createdAt": ISODate("2026-01-01T10:00:00Z"),
+  "updatedAt": ISODate("2026-01-03T15:45:00Z")
 }
 ```
 
-#### Example 2: Private WebSocket Server
+#### Example 2: Tavily Search Server (streamable-http with API key)
 
 ```json
 {
   "_id": ObjectId("674e1a2b3c4d5e6f7a8b9c0e"),
-  "server_name": "custom_analytics",
-  "scope": "private_user",
-  "user_id": ObjectId("user456"),
-  "organization_id": null,
-  
-  "startup": false,
-  "icon_path": null,
-  "timeout": 45000,
-  "init_timeout": 90000,
-  "chat_menu": true,
-  "server_instructions": false,
-  
-  "transport": {
-    "type": "websocket",
-    "url": "wss://analytics.example.com/mcp",
-    "headers": {
-      "X-API-Key": "${ANALYTICS_API_KEY}"
-    }
+  "serverName": "tavilysearchv1",
+  "config": {
+    "title": "tavilysearchv1",
+    "description": "tavily search",
+    "type": "streamable-http",
+    "url": "https://mcp.tavily.com/mcp/",
+    "apiKey": {
+      "key": "51d082dd191f6dcf7dfdd60bc318f53e:5a052bb48fef0635329562541e62f6cc9e866d1c9303af4b36bae0ae3662eceac0265872b4e92b9469a459c44055091d",
+      "source": "admin",
+      "authorization_type": "custom",
+      "custom_header": "tavilyApiKey"
+    },
+    "requiresOAuth": false,
+    "capabilities": "{\"experimental\":{},\"prompts\":{\"listChanged\":true},\"resources\":{\"subscribe\":false,\"listChanged\":true},\"tools\":{\"listChanged\":true}}",
+    "tools": "tavily_search, tavily_extract, tavily_crawl, tavily_map",
+    "toolFunctions": {
+      "tavily_search_mcp_temp_server_name": {
+        "type": "function",
+        "function": {
+          "name": "tavily_search_mcp_temp_server_name",
+          "description": "Search the web for real-time information about any topic...",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "query": {"description": "Search query", "type": "string"},
+              "max_results": {"default": 5, "type": "integer"}
+            },
+            "required": ["query"]
+          }
+        }
+      },
+      "tavily_extract_mcp_temp_server_name": {
+        "type": "function",
+        "function": {
+          "name": "tavily_extract_mcp_temp_server_name",
+          "description": "Extract and process content from specific web pages...",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "urls": {"items": {"type": "string"}, "type": "array"}
+            },
+            "required": ["urls"]
+          }
+        }
+      }
+    },
+    "initDuration": 119
   },
-  
-  "requires_oauth": false,
-  "oauth": null,
-  "oauth_headers": null,
-  
-  "custom_user_vars": {
-    "ANALYTICS_API_KEY": {
-      "title": "Analytics API Key",
-      "description": "API key for analytics service"
-    }
-  },
-  
+  "author": ObjectId("67efec288d159a51908dcf10"),
+  "scope": "shared_app",
   "status": "active",
-  "connection_state": "disconnected",
-  
-  "created_by": ObjectId("user456"),
-  "created_at": ISODate("2024-12-10T14:20:00.000Z"),
-  "updated_at": ISODate("2024-12-10T14:20:00.000Z"),
-  "version": 1
+  "path": "/mcp/tavilysearchv1",
+  "proxyPassUrl": "https://mcp.tavily.com",
+  "tags": ["search", "web", "tavily"],
+  "numTools": 4,
+  "numStars": 0,
+  "lastConnected": ISODate("2026-01-04T15:09:45Z"),
+  "lastError": null,
+  "errorMessage": null,
+  "createdAt": ISODate("2026-01-04T15:09:45.754Z"),
+  "updatedAt": ISODate("2026-01-04T15:09:45.754Z"),
+  "__v": 0
 }
 ```
 
-#### Example 3: OAuth Access Token Storage
+#### Example 3: SSE Server with Error
+
+```json
+{
+  "_id": ObjectId("674e1a2b3c4d5e6f7a8b9c0f"),
+  "serverName": "custom-analytics",
+  "config": {
+    "title": "Custom Analytics",
+    "description": "Private analytics integration",
+    "type": "sse",
+    "url": "https://analytics.example.com/events",
+    "apiKey": {
+      "key": "encrypted_key_here",
+      "source": "user",
+      "authorization_type": "bearer"
+    },
+    "requiresOAuth": false,
+    "capabilities": "{\"tools\":{}}",
+    "tools": "query_data, generate_report",
+    "toolFunctions": {
+      "query_data_custom_analytics": {
+        "type": "function",
+        "function": {
+          "name": "query_data_custom_analytics",
+          "description": "Query analytics data",
+          "parameters": {"type": "object", "properties": {"query": {"type": "string"}}}
+        }
+      }
+    },
+    "initDuration": 200
+  },
+  "author": ObjectId("507f1f77bcf86cd799439012"),
+  "scope": "private_user",
+  "status": "error",
+  "path": "/mcp/custom-analytics",
+  "proxyPassUrl": "http://sse-proxy:8080",
+  "tags": ["analytics", "custom"],
+  "numTools": 2,
+  "numStars": 0,
+  "lastConnected": ISODate("2026-01-03T10:15:00Z"),
+  "lastError": ISODate("2026-01-04T08:30:00Z"),
+  "errorMessage": "Connection timeout: Could not connect to https://analytics.example.com/events after 3 attempts",
+  "createdAt": ISODate("2026-01-02T14:20:00Z"),
+  "updatedAt": ISODate("2026-01-04T08:30:00Z")
+}
+```
+
+#### Example 4: OAuth Access Token Storage
 
 ```json
 {
@@ -1411,7 +1492,7 @@ class Token(Document):
 }
 ```
 
-#### Example 4: OAuth Refresh Token Storage
+#### Example 5: OAuth Refresh Token Storage
 
 ```json
 {
@@ -1427,6 +1508,7 @@ class Token(Document):
     "server_name": "github_server",
     "access_token_id": ObjectId("674e1a2b3c4d5e6f7a8b9c10")
   }
+}
 }
 ```
 
@@ -1517,577 +1599,73 @@ async def get_server_with_state(server_id: ObjectId) -> dict:
     }
 ```
 
+
+
+
+### Encryption & Decryption for Sensitive Data
+
+**Purpose**: Protect sensitive credentials stored in MongoDB using AES-CBC (Advanced Encryption Standard - Cipher Block Chaining).
+
+**Configuration**:
+- `process.env.CREDS_KEY` - Encryption key (32 bytes for AES-256)
+- `process.env.CREDS_IV` - Initialization Vector (16 bytes)
+
+**Fields to Encrypt**:
+- OAuth access tokens and refresh tokens
+- API keys
+- OAuth client secrets
+
+**Pseudocode**:
+
+```python
+# Encryption
+def encrypt_value(plaintext: str) -> str:
+    key = process.env.CREDS_KEY
+    iv = process.env.CREDS_IV
+    
+    # Convert plaintext to bytes
+    data = plaintext.encode('utf-8')
+    
+    # Encrypt using AES-CBC
+    cipher = AES_CBC(key, iv)
+    encrypted_bytes = cipher.encrypt(data)
+    
+    # Convert to hex string for storage
+    return encrypted_bytes.hex()
+
+# Decryption
+def decrypt_value(encrypted_hex: str) -> str:
+    key = process.env.CREDS_KEY
+    iv = process.env.CREDS_IV
+    
+    # Convert hex string back to bytes
+    encrypted_bytes = bytes.fromhex(encrypted_hex)
+    
+    # Decrypt using AES-CBC
+    cipher = AES_CBC(key, iv)
+    decrypted_bytes = cipher.decrypt(encrypted_bytes)
+    
+    # Convert bytes back to string
+    return decrypted_bytes.decode('utf-8')
+
+# Usage Example
+# Before saving to database
+token_value = encrypt_value("my-secret-token-12345")
+client_secret = encrypt_value("oauth-client-secret-abc")
+
+# After reading from database
+plaintext_token = decrypt_value(token_value)
+plaintext_secret = decrypt_value(client_secret)
+```
+
+
+
+
 ### Seeding Initial Data
 
 For initial deployment to customer environments, we seed the database with sample/default server configurations from JSON files. This is a **one-time operation** run by DevOps during deployment, not an automatic migration.
 
-```python
-from bson import ObjectId
-from datetime import datetime
-from pathlib import Path
-import json
-from typing import Dict, Any, List
 
-# Import generated schemas (in version control!)
-from registry.models import MCPServer, MCPConfig
-
-async def seed_servers(admin_user_id: ObjectId, servers_dir: str = "registry/servers"):
-    """
-    Seed MongoDB with initial server configurations from JSON files.
-    This is intended for initial deployment to customer environments.
-    
-    Args:
-        admin_user_id: ObjectId of the admin user creating these servers
-        servers_dir: Directory containing server JSON configuration files
-    
-    Returns:
-        List of created MCPServer documents
-    """
-    
-    # Check if servers already exist
-    existing_count = await MCPServer.find().count()
-    if existing_count > 0:
-        print(f"⚠️  Database already has {existing_count} servers, skipping seeding")
-        print("   Use --force flag to seed anyway (will create duplicates)")
-        return []
-    
-    servers_path = Path(servers_dir)
-    if not servers_path.exists():
-        print(f"❌ Servers directory {servers_dir} not found")
-        return []
-    
-    print(f"🌱 Seeding servers from {servers_dir} to MongoDB...")
-    
-    seeded_servers = []
-    json_files = list(servers_path.glob("*.json"))
-    
-    if not json_files:
-        print("❌ No server JSON files found in directory")
-        return []
-    
-    print(f"📁 Found {len(json_files)} server configuration files")
-    
-    for json_file in json_files:
-        try:
-            # Read the JSON file
-            with open(json_file, 'r') as f:
-                server_config = json.load(f)
-            
-            # Extract server name from filename (e.g., "github.json" -> "github")
-            server_name = json_file.stem
-            
-            print(f"   ⏳ Processing: {server_name}")
-            
-            # Map file-based config to MongoDB schema
-            server_data = map_file_config_to_database(server_config, server_name, admin_user_id)
-            
-            # Create and insert the server document
-            server = MCPServer(**server_data)
-            await server.insert()
-            
-            seeded_servers.append(server)
-            print(f"   ✅ Seeded: {server.server_name}")
-            
-        except Exception as e:
-            print(f"   ❌ Failed to seed {json_file.name}: {e}")
-            continue
-    
-    print(f"\n🎉 Successfully seeded {len(seeded_servers)} servers to MongoDB")
-    return seeded_servers
-
-
-def map_file_config_to_database(config: Dict[str, Any], server_name: str, admin_user_id: ObjectId) -> Dict[str, Any]:
-    """
-    Map file-based server configuration to MongoDB schema.
-    
-    File-based config structure (from registry/servers/*.json):
-    {
-      "transport": {...},
-      "oauth": {...},
-      "requires_oauth": bool,
-      "startup": bool,
-      "icon_path": str,
-      "timeout": int,
-      "init_timeout": int,
-      "chat_menu": bool,
-      "server_instructions": str,
-      "custom_user_vars": {...},
-      // ... other fields
-    }
-    
-    Returns:
-        Dictionary ready to create MCPServer document (using generated schema)
-    """
-    
-    # Build MCPConfig from file config
-    # This matches the generated MCPConfig schema from Jarvis
-    mcp_config = {
-        "title": config.get("title", server_name),
-        "description": config.get("description"),
-        "startup": config.get("startup", False),
-        "icon_path": config.get("icon_path"),
-        "timeout": config.get("timeout", 30000),
-        "init_timeout": config.get("init_timeout", 60000),
-        "chat_menu": config.get("chat_menu", True),
-        "server_instructions": config.get("server_instructions"),
-        "requires_oauth": config.get("requires_oauth", False),
-        "oauth": config.get("oauth"),
-        "oauth_headers": config.get("oauth_headers"),
-        "api_key": config.get("api_key"),
-        "custom_user_vars": config.get("custom_user_vars"),
-        
-        # Transport configuration (flattened in MCPConfig)
-        "type": config.get("transport", {}).get("type"),
-        "command": config.get("transport", {}).get("command"),
-        "args": config.get("transport", {}).get("args"),
-        "env": config.get("transport", {}).get("env"),
-        "stderr": config.get("transport", {}).get("stderr"),
-        "url": config.get("transport", {}).get("url"),
-        "headers": config.get("transport", {}).get("headers"),
-    }
-    
-    # Build the MongoDB document matching generated MCPServer schema
-    mongo_doc = {
-        "server_name": server_name,  # Maps to serverName
-        "config": mcp_config,        # Nested MCPConfig
-        "author": admin_user_id,     # Creator user ID
-        "created_at": datetime.utcnow(),
-        "updated_at": datetime.utcnow(),
-    }
-    
-    # Remove None values to use schema defaults
-    return {k: v for k, v in mongo_doc.items() if v is not None}
-```
-
-**Standalone Seeding Script:**
-
-Create `scripts/seed_servers.py` for DevOps to run during initial deployment:
-
-```python
-"""
-Seed MongoDB with initial MCP server configurations.
-
-Usage:
-    python scripts/seed_servers.py --admin-user-id <user_id> [--servers-dir <path>] [--force]
-
-Example:
-    python scripts/seed_servers.py --admin-user-id 000000000000000000000001
-    python scripts/seed_servers.py --admin-user-id 507f1f77bcf86cd799439011 --servers-dir ./config/servers
-"""
-
-import asyncio
-import argparse
-import sys
-import os
-from pathlib import Path
-from motor.motor_asyncio import AsyncIOMotorClient
-from beanie import init_beanie
-from bson import ObjectId
-
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-# Import generated schemas (committed to git)
-from registry.models import MCPServer, Token
-
-from registry.config import settings
-
-# Import the seeding functions
-from registry.utils.seeding import seed_servers, map_file_config_to_database
-
-
-async def run_seeding(admin_user_id: str, servers_dir: str = "registry/servers", force: bool = False):
-    """Run the database seeding operation"""
-    
-    print("=" * 60)
-    print("🌱 MCP Server Database Seeding")
-    print("=" * 60)
-    print(f"MongoDB URI: {settings.MONGO_URI}")
-    print(f"Database: {settings.MONGO_DB_NAME}")
-    print(f"Admin User ID: {admin_user_id}")
-    print(f"Servers Directory: {servers_dir}")
-    print(f"Force Mode: {force}")
-    print("=" * 60)
-    
-    # Connect to MongoDB
-    client = AsyncIOMotorClient(settings.MONGO_URI)
-    database = client[settings.MONGO_DB_NAME]
-    
-    try:
-        # Initialize Beanie ODM
-        await init_beanie(database=database, document_models=[MCPServer, Token])
-        print("✅ Connected to MongoDB")
-        
-        # Convert admin_user_id string to ObjectId
-        admin_oid = ObjectId(admin_user_id)
-        
-        # Run seeding
-        servers = await seed_servers(
-            admin_user_id=admin_oid,
-            servers_dir=servers_dir,
-            force=force
-        )
-        
-        if servers:
-            print("\n" + "=" * 60)
-            print("✅ Seeding completed successfully!")
-            print(f"📊 Total servers seeded: {len(servers)}")
-            print("=" * 60)
-            return 0
-        else:
-            print("\n" + "=" * 60)
-            print("⚠️  No servers were seeded")
-            print("=" * 60)
-            return 1
-            
-    except Exception as e:
-        print(f"\n❌ Seeding failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
-        
-    finally:
-        # Close connection
-        client.close()
-        print("\n🔌 MongoDB connection closed")
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Seed MongoDB with initial MCP server configurations"
-    )
-    parser.add_argument(
-        "--admin-user-id",
-        required=True,
-        help="ObjectId of the admin user (24-character hex string)"
-    )
-    parser.add_argument(
-        "--servers-dir",
-        default="registry/servers",
-        help="Directory containing server JSON files (default: registry/servers)"
-    )
-    parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Force seeding even if servers already exist (may create duplicates)"
-    )
-    
-    args = parser.parse_args()
-    
-    # Validate admin_user_id format
-    try:
-        ObjectId(args.admin_user_id)
-    except Exception:
-        print(f"❌ Invalid admin-user-id: {args.admin_user_id}")
-        print("   Must be a 24-character hexadecimal string")
-        sys.exit(1)
-    
-    # Run seeding
-    exit_code = asyncio.run(run_seeding(
-        admin_user_id=args.admin_user_id,
-        servers_dir=args.servers_dir,
-        force=args.force
-    ))
-    
-    sys.exit(exit_code)
-
-
-if __name__ == "__main__":
-    main()
-```
-
-**Add to pyproject.toml:**
-
-```toml
-[project.scripts]
-seed-servers = "scripts.seed_servers:main"
-```
-
-**Usage Examples:**
-
-```bash
-# DevOps runs this during initial deployment
-python scripts/seed_servers.py --admin-user-id 507f1f77bcf86cd799439011
-
-# Or using the installed script (after pip install -e .)
-seed-servers --admin-user-id 507f1f77bcf86cd799439011
-
-# Custom servers directory
-seed-servers --admin-user-id 507f1f77bcf86cd799439011 --servers-dir ./config/production/servers
-
-# Force seeding (if you need to re-seed)
-seed-servers --admin-user-id 507f1f77bcf86cd799439011 --force
-```
-
-**Expected Output:**
-
-```
-============================================================
-🌱 MCP Server Database Seeding
-============================================================
-MongoDB URI: mongodb://localhost:27017
-Database: mcp_gateway
-Admin User ID: 507f1f77bcf86cd799439011
-Servers Directory: registry/servers
-Force Mode: False
-============================================================
-✅ Connected to MongoDB
-🌱 Seeding servers from registry/servers to MongoDB...
-📁 Found 5 server configuration files
-   ⏳ Processing: github
-   ✅ Seeded: github
-   ⏳ Processing: filesystem
-   ✅ Seeded: filesystem
-   ⏳ Processing: slack
-   ✅ Seeded: slack
-   ⏳ Processing: postgres
-   ✅ Seeded: postgres
-   ⏳ Processing: memory
-   ✅ Seeded: memory
-
-🎉 Successfully seeded 5 servers to MongoDB
-
-============================================================
-✅ Seeding completed successfully!
-📊 Total servers seeded: 5
-============================================================
-
-🔌 MongoDB connection closed
-```
-
-**Example File-Based Config (registry/servers/github.json):**
-
-```json
-{
-  "transport": {
-    "type": "stdio",
-    "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-github"],
-    "env": {
-      "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
-    },
-    "stderr": "capture"
-  },
-  "requires_oauth": true,
-  "oauth": {
-    "authorization_url": "https://github.com/login/oauth/authorize",
-    "token_url": "https://github.com/login/oauth/access_token",
-    "client_id": "github_client_id",
-    "scope": "repo read:user"
-  },
-  "startup": true,
-  "icon_path": "/icons/github.svg",
-  "timeout": 30000,
-  "chat_menu": true,
-  "server_instructions": "Use this for GitHub operations",
-  "custom_user_vars": {
-    "GITHUB_TOKEN": {
-      "title": "GitHub Personal Access Token",
-      "description": "Your GitHub API token",
-      "required": true
-    }
-  }
-}
-```
-
-**DevOps Deployment Checklist:**
-
-1. ✅ Ensure MongoDB is running and accessible
-2. ✅ Set environment variables (`MONGO_URI`, `MONGO_DB_NAME`)
-3. ✅ Prepare server JSON files in `registry/servers/` directory
-4. ✅ Get or create admin user ObjectId
-5. ✅ Run seeding script: `seed-servers --admin-user-id <id>`
-6. ✅ Verify seeding success (check MongoDB collection)
-7. ✅ Start the application
-
-**Note:** The seeding script is idempotent - it will skip seeding if servers already exist unless `--force` is used.
-
-      "description": "Your GitHub API token",
-      "required": true
-    }
-  }
-}
-```
-
-**Migration Output:**
-
-```
-Migrating servers from registry/servers to MongoDB...
-Found 5 server configuration files
-Migrating server: github
-✓ Migrated server: github
-Migrating server: filesystem
-✓ Migrated server: filesystem
-Migrating server: slack
-✓ Migrated server: slack
-Migrating server: postgres
-✓ Migrated server: postgres
-Migrating server: memory
-✓ Migrated server: memory
-
-✅ Successfully migrated 5 servers to MongoDB
-```
-
-### Security Considerations
-
-#### 1. Token Encryption at Rest
-
-```python
-from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad, unpad
-import os
-import base64
-
-class TokenEncryption:
-    """Encrypt/decrypt tokens using AES-256 encryption (compatible with jarvis-api)"""
-    
-    def __init__(self):
-        # Load encryption key and IV from environment
-        # CREDS_KEY: 32 bytes (256-bit) for AES-256 encryption
-        # Example: f34be427ebb29de8d88c107a71546019685ed8b241d8f2ed00c3df97ad2566f0
-        self.key = bytes.fromhex(os.getenv("CREDS_KEY"))
-        
-        # CREDS_IV: 16 bytes (128-bit) initialization vector
-        # Example: e2341419ec3dd3d19b13a1a87fafcbfb
-        self.iv = bytes.fromhex(os.getenv("CREDS_IV"))
-        
-        # Validate key and IV lengths
-        if len(self.key) != 32:
-            raise ValueError("CREDS_KEY must be 32 bytes (64 hex characters) for AES-256")
-        if len(self.iv) != 16:
-            raise ValueError("CREDS_IV must be 16 bytes (32 hex characters)")
-    
-    def encrypt(self, token: str) -> str:
-        """Encrypt token using AES-256-CBC"""
-        cipher = AES.new(self.key, AES.MODE_CBC, self.iv)
-        
-        # Pad the token to AES block size (16 bytes)
-        padded_token = pad(token.encode('utf-8'), AES.block_size)
-        
-        # Encrypt and return base64-encoded string
-        encrypted_bytes = cipher.encrypt(padded_token)
-        return base64.b64encode(encrypted_bytes).decode('utf-8')
-    
-    def decrypt(self, encrypted_token: str) -> str:
-        """Decrypt token using AES-256-CBC"""
-        cipher = AES.new(self.key, AES.MODE_CBC, self.iv)
-        
-        # Decode from base64
-        encrypted_bytes = base64.b64decode(encrypted_token)
-        
-        # Decrypt and remove padding
-        decrypted_padded = cipher.decrypt(encrypted_bytes)
-        decrypted_token = unpad(decrypted_padded, AES.block_size)
-        
-        return decrypted_token.decode('utf-8')
-
-# Initialize encryption service (singleton)
-token_encryption = TokenEncryption()
-
-# Use in repository
-async def store_token(self, ..., token_value: str, ...):
-    encrypted_token = token_encryption.encrypt(token_value)
-    token = Token(..., token=encrypted_token, ...)
-    await token.insert()
-
-async def get_token(self, user_id: ObjectId, identifier: str) -> Optional[Token]:
-    token = await Token.find_one({"user_id": user_id, "identifier": identifier})
-    if token:
-        # Decrypt token before returning
-        token.token = token_encryption.decrypt(token.token)
-    return token
-```
-
-**Generating Keys:**
-```python
-import secrets
-
-# Generate CREDS_KEY (32 bytes = 64 hex characters)
-creds_key = secrets.token_hex(32)
-print(f"CREDS_KEY={creds_key}")
-
-# Generate CREDS_IV (16 bytes = 32 hex characters)
-creds_iv = secrets.token_hex(16)
-print(f"CREDS_IV={creds_iv}")
-```
-
-**Dependencies:**
-```bash
-pip install pycryptodome  # AES encryption library
-```
-
-#### 2. OAuth Client Secret Encryption
-
-- Store `oauth.client_secret` encrypted using the same AES-256 mechanism
-- Use the same `CREDS_KEY` and `CREDS_IV` for consistency with jarvis-api
-- Decrypt only when needed for token exchange
-
-```python
-# Encrypt OAuth client secret before storing
-async def register_server_with_oauth(server_info: Dict[str, Any], user_id: ObjectId):
-    if server_info.get("oauth") and server_info["oauth"].get("client_secret"):
-        # Encrypt the client secret
-        server_info["oauth"]["client_secret"] = token_encryption.encrypt(
-            server_info["oauth"]["client_secret"]
-        )
-    
-    server = await mongo_repo.register_server(server_info, user_id)
-    return server
-
-# Decrypt when needed for OAuth flow
-async def get_oauth_client_secret(server: MCPServer) -> str:
-    if server.oauth and server.oauth.client_secret:
-        return token_encryption.decrypt(server.oauth.client_secret)
-    return None
-```
-
-#### 3. Access Control
-
-- Enforce user_id checks in all repository methods
-- Use MongoDB query filters to prevent cross-user data access
-- Admin users can access all servers, regular users only their own + shared
-
-### Performance Optimization
-
-#### 1. Index Strategy
-
-```python
-# Compound indexes for common queries
-[("server_name", 1), ("user_id", 1), ("scope", 1)]  # Server lookup
-[("status", 1), ("user_id", 1)]  # Active servers per user
-[("user_id", 1), ("type", 1)]  # Tokens by user and type
-[("expires_at", 1)]  # TTL cleanup
-```
-
-#### 2. Connection Pooling
-
-```python
-# Configure Motor connection pool
-client = AsyncIOMotorClient(
-    mongo_uri,
-    maxPoolSize=50,
-    minPoolSize=10,
-    maxIdleTimeMS=30000
-)
-```
-
-#### 3. Caching Layer
-
-```python
-from cachetools import TTLCache
-from functools import wraps
-
-# Cache frequently accessed shared servers
-server_cache = TTLCache(maxsize=100, ttl=300)  # 5 min TTL
-
-async def get_shared_servers():
-    if "shared_servers" in server_cache:
-        return server_cache["shared_servers"]
-    
-    servers = await MCPServer.find({"scope": "shared_app"}).to_list()
-    server_cache["shared_servers"] = servers
-    return servers
-```
 
 ### Monitoring & Observability
 
@@ -2146,7 +1724,7 @@ class MCPServer(Document):
     class Config:
         json_schema_extra = {
             "source": "MCPServerDocument",
-            "package": "@librechat/data-schemas",
+            "package": "@jarvis/data-schemas",
             "version": "0.0.31",  # Tracks Jarvis package version
             "generated_at": "2025-12-16T12:00:00Z"
         }
@@ -2190,13 +1768,13 @@ def check_schema_compatibility():
 python scripts/generate_schemas.py --version v0.0.32
 
 # 2. Review changes in generated files
-git diff registry/models/_generated/
+git diff packages/models/_generated/
 
 # 3. Run tests to ensure compatibility
 pytest tests/
 
 # 4. Commit generated code
-git add registry/models/_generated/
+git add packages/models/_generated/
 git commit -m "chore: update schemas to Jarvis v0.0.32"
 
 # 5. Deploy
