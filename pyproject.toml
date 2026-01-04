@@ -54,6 +54,7 @@ dependencies = [
     "litellm>=1.50.0",
     "beanie>=1.26.0",
     "motor>=3.3.0",
+    "redis>=7.1.0",
 ]
 
 [project.scripts]

@@ -92,6 +92,11 @@ class RegistryConstants(BaseModel):
     AWS_SESSION_TOKEN: str = os.getenv("AWS_SESSION_TOKEN")
     AWS_REGION: str = os.getenv("AWS_REGION")
 
+    REDIS_HOST:str = os.getenv("REDIS_HOST", "localhost")
+    REDIS_PORT:int = int(os.getenv("REDIS_PORT", "6379"))
+    REDIS_DB:int = int(os.getenv("REDIS_DB", "3"))
+    REDIS_PASSWORD:str = os.getenv("REDIS_PASSWORD", "")
+
 
 # Global instance
 REGISTRY_CONSTANTS = RegistryConstants()

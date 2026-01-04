@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List, Union
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, field_validator
 import time
 
 class OAuthTokens(BaseModel):
@@ -13,7 +13,7 @@ class OAuthTokens(BaseModel):
     obtained_at: Optional[int] = Field(None, description="Obtained timestamp")
     expires_at: Optional[int] = Field(None, description="Expiration timestamp")
 
-    @validator("expires_at", always=True)
+    @field_validator("expires_at")
     def set_expires_at(cls, v, values):
         """Calculate expires_at based on expires_in"""
         if v is None and values.get("expires_in") is not None:
