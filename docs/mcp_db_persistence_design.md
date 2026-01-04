@@ -18,70 +18,137 @@ Living design document for MongoDB integration
 
 ## Introduction
 
-### Problem statement
+### Problem Statement
 
-Server configuration data is currently persisted to the filesystem as JSON documents stored under `registry/server/*.json`. This approach has limitations for scale, concurrency, and transactional guarantees. A database-backed persistence option (MongoDB) is proposed to address these limitations, while allowing existing file-based behavior to continue.
+The MCP Gateway Registry requires a robust persistence layer to establish foundational **Access Control List (ACL)** capabilities and **authentication management** for MCP servers. Currently, server configurations are stored as file-based JSON documents, which lack the necessary infrastructure for:
+
+- **Fine-grained ACL control**: Managing server access across users, groups, and scopes (private, shared)
+- **Authentication lifecycle**: Storing and managing OAuth tokens, API keys, and credentials
+- **Multi-user environments**: Supporting concurrent access, role-based permissions (admin vs. regular users)
+- **Transactional integrity**: Ensuring atomic updates for server configurations and associated credentials
+
+### Migration Strategy
+
+**Phase 1: One-time Import (Current)**
+- Load existing file-based server configurations from `registry/server/*.json`
+- Import servers into MongoDB during initial deployment
+- This is a **one-way migration** - no backward compatibility with file-based storage
+
+**Phase 2: MongoDB-Only Operation**
+- All file-based storage code will be removed
+- MongoDB becomes the single source of truth for:
+  - Server configurations (mcpservers collection)
+  - Authentication tokens (tokens collection)
+  - User permissions and ACL metadata
 
 ### Objectives
 
-- Provide a option to persist server configuration to a MongoDB instance
-- Ensure server configuration endpoints enforce admin and user authentication scopes.
-- Preserve existing file-based storage patterns as a backward-compatible option.
+- **Primary**: Establish MongoDB as the persistent storage layer for ACL-controlled MCP servers
+- **Authentication Management**: Store and manage OAuth tokens, API keys, and client secrets with encryption
+- **Role-Based Access Control**: Implement admin and user scopes with fine-grained permissions
+- **Migration**: Import existing file-based servers once, then fully transition to MongoDB
+- **No Backward Compatibility**: File-based storage will be removed after migration
 
 
 ## Proposed Architecture
 
-- Expose `MONGO_URI` env var via application settings (`config.py`)
-- Use a factory-pattern to return the correct storage provider, defaulting to the existing file-based implementation
-- Update `server_service` to depend on repository interfaces rather than concrete storage implementations
+**Core Design Principles:**
+- **MongoDB-Only Storage**: Single source of truth for all server configurations and credentials
+- **ACL-First Design**: Every server has scope (private_user, shared_user, shared_app) and author tracking
+- **Authentication Management**: Encrypted storage for OAuth tokens, API keys, and client secrets
+- **Role-Based Access Control**: Admin users see all servers, regular users see only authorized servers
 
-### Class Diagram
+**Configuration:**
+- `MONGO_URI` (required): MongoDB connection string (env var via `config.py`)
+- `CREDS_KEY` (required): AES-256 encryption key for sensitive credentials
+- `CREDS_IV` (required): Initialization vector for AES-CBC encryption
+
+### Architecture Diagram
 
 ```mermaid
 classDiagram
     direction TB
 
+    class UserContext {
+        +str user_id
+        +str role
+        +str username
+        +validate_admin()
+        +validate_owner(server)
+    }
+
     class ServerRepository {
-        <<interface>>
-        load_servers_and_state()
-        get_all_servers(include_federated)
-        register_server(server_info)
-        update_server(path, server_info)
-        remove_server(path)
-        toggle_service(path, enabled)
-        save_service_state()
+        <<MongoDB Only>>
+        +get_all_servers(user_context)
+        +get_server_by_id(server_id, user_context)
+        +register_server(server_info, user_context)
+        +update_server(server_id, updates, user_context)
+        +delete_server(server_id, user_context)
+        +toggle_status(server_id, enabled, user_context)
+        +get_servers_by_scope(scope, user_context)
+        +get_servers_by_author(author_id)
     }
 
-    class FileRepository
-    class MongoRepository
-
-    ServerRepository <|.. FileRepository
-    ServerRepository <|.. MongoRepository
-
-    class StorageFactory {
-        get_storage_provider()
-        _create_filesystem_provider()
-        _create_mongo_provider()
+    class TokenRepository {
+        <<MongoDB Only>>
+        +store_token(server_id, token_data)
+        +get_tokens(server_id)
+        +update_token(token_id, updates)
+        +delete_token(token_id)
+        +encrypt_token_value(plaintext)
+        +decrypt_token_value(encrypted)
     }
 
-    class ConfigLoader
+    class EncryptionService {
+        +encrypt_value(plaintext)
+        +decrypt_value(ciphertext)
+        +load_keys_from_env()
+    }
+
     class ServerService {
-        init(self, storage_provider)
+        -ServerRepository repo
+        -TokenRepository token_repo
+        -EncryptionService encryption
+        +list_servers(user_context)
+        +get_server_details(server_id, user_context)
+        +register_server(server_info, user_context)
+        +update_server(server_id, updates, user_context)
+        +enforce_acl(server, user_context)
     }
 
-    StorageFactory --> ServerRepository : returns chosen implementation
-    StorageFactory ..> FileRepository : creates when no DB URI
-    StorageFactory ..> MongoRepository : creates when MONGO_URI set
+    class APIRouter {
+        <<FastAPI>>
+        +GET /api/v1/servers
+        +GET /api/v1/servers/:id
+        +POST /api/v1/servers
+        +PUT /api/v1/servers/:id
+        +DELETE /api/v1/servers/:id
+        +GET /api/v1/servers/stats
+    }
 
-    ConfigLoader --> StorageFactory : provides MONGO_URI env var
-    ServerService --> ServerRepository : depends on
-    APIRouter --> ServerService : depends on
-```  
+    class MongoDatabase {
+        <<Collections>>
+        +mcpservers
+        +tokens
+    }
 
-- API Router (`registry/api/server_routes.py`): Exposes HTTP endpoints for server operations. Validates requests through role-based access controls set in the `UserContext`
-- ServerService (`registry/services/server_service.py`): Service class for business logic
-- ServerInterface: Abstract class for server storage providers 
-- FileRepository/MongoRepository: storage-specific implementations
+    APIRouter --> ServerService : authenticates user
+    ServerService --> UserContext : validates permissions
+    ServerService --> ServerRepository : queries with ACL
+    ServerService --> TokenRepository : manages credentials
+    ServerService --> EncryptionService : encrypts/decrypts
+    ServerRepository --> MongoDatabase : mcpservers collection
+    TokenRepository --> MongoDatabase : tokens collection
+    TokenRepository --> EncryptionService : encrypts sensitive data
+```
+
+**Component Responsibilities:**
+
+- **APIRouter** (`registry/api/server_routes.py`): HTTP endpoints with JWT authentication, extracts `UserContext` from tokens
+- **ServerService** (`registry/services/server_service.py`): Business logic, ACL enforcement, coordinates repositories
+- **Models** (`packages/models/**`): MongoDB operations for mcp servers and tokens
+- **EncryptionService** (`packages/database/encryption.py`): AES-CBC encryption/decryption for credentials
+- **UserContext** (`registry/auth/dependencies.py`): Role-based access control, admin validation
 
 ### Data Schema
 
