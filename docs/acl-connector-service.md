@@ -141,29 +141,22 @@ class ACLService:
 
 ### ACL API
 
-Note: The ACl endpoints are admin-only
-
-```
-
-```
+TBD - Does this service need an API or will it be primarily used by the registry server api?
 
 ## Jarvis API Integration
 
-`/jarvis-api/packages/api/src/mcp/registry/db/ServerConfigsDB.ts`
+Assuming we are porting server registration to the registry project:
 
+`jarvis-api/packages/api/src/mcp/registry/MCPServersRegistry.ts`
 
-```TypeScript
-  constructor(mongoose: typeof import('mongoose')) {
-    if (!mongoose) {
-      throw new Error('ServerConfigsDB requires mongoose instance');
-    }
-    this._mongoose = mongoose;
-    this._dbMethods = createMethods(mongoose);
-    this._aclService = new AccessControlService(mongoose); // Use the ACL API exposed by the registry if we'd like to keep server registration functionality in jarvis
-  }
 ```
+private readonly dbConfigsRepo: IServerConfigsRepositoryInterface; // Eventually should point to /v1/server endpoint
+private readonly cacheConfigsRepo: IServerConfigsRepositoryInterface;
+private readonly allowedDomains?: string[] | null;
+private readonly readThroughCache: Keyv<t.ParsedServerConfig>;
+private readonly readThroughCacheAll: Keyv<Record<string, t.ParsedServerConfig>>;
 
-
+```
 
 ## Questions: 
 1. Will MCP server regsitration functionality stay in Jarvis or will it move to registry project?
