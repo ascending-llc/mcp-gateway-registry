@@ -84,16 +84,29 @@ docker-compose.yml     # Multi-service config
 
 ## Access Control & Environment
 
-**Access tiers** (auth_server/scopes.yml): admin-bot (all), lob1-bot (/code-reviewer + /test-automation, currenttime+mcpgw), lob2-bot (/data-analysis + /security-analyzer, currenttime+mcpgw+fininfo). Test: `./keycloak/setup/generate-agent-token.sh [bot]` → `tests/run-lob-bot-tests.sh`
+**Access tiers** (auth_server/scopes.yml):
+- **admin-bot**: All agents, all services
+- **lob1-bot**: /code-reviewer + /test-automation agents, currenttime+mcpgw services
+- **lob2-bot**: /data-analysis + /security-analyzer agents, currenttime+mcpgw+fininfo services
 
-**Key env vars** (.env.example → .env): APP_HOME=/opt, MONGO_URI, KEYCLOAK_ADMIN_URL/EXTERNAL_URL/REALM/M2M_CLIENT_ID/M2M_CLIENT_SECRET, AWS_REGION (for builds), GITHUB_TOKEN (schemas)
+Test: `./keycloak/setup/generate-agent-token.sh [bot]` → `tests/run-lob-bot-tests.sh`
+
+**Key env vars** (.env.example → .env):
+- Required: APP_HOME, MONGO_URI, KEYCLOAK_ADMIN_URL, KEYCLOAK_EXTERNAL_URL, KEYCLOAK_REALM, KEYCLOAK_M2M_CLIENT_ID, KEYCLOAK_M2M_CLIENT_SECRET
+- Optional: AWS_REGION (for builds), GITHUB_TOKEN (schemas), METRICS_SERVICE_URL
 
 ## Code Standards
 Python 3.12, type hints, Pydantic BaseModel, FastAPI, private functions with `_` prefix, two blank lines between functions, `logging.basicConfig()`. **Ignore CLAUDE.md's uv requirement - use pip.**
 
 ## Quick Commands
 
-**Setup:** `pip install --upgrade pip setuptools wheel && pip install -e .[dev] && cd packages && pip install -e . && cd .. && docker compose up -d && sleep 30 && ./credentials-provider/generate_creds.sh`
+**Setup:**
+```bash
+pip install --upgrade pip setuptools wheel && pip install -e .[dev]
+cd packages && pip install -e . && cd ..
+docker compose up -d && sleep 30
+./credentials-provider/generate_creds.sh
+```
 
 **Daily:** `./credentials-provider/generate_creds.sh && pytest tests/unit -v && bandit -r registry/ && ./tests/run_all_tests.sh`
 
