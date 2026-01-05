@@ -190,19 +190,19 @@ services:
       - dev
 
   # Current Time MCP Server
-  currenttime-server:
-    build:
-      context: servers/currenttime
-      dockerfile: ../../docker/Dockerfile.mcp-server
-    environment:
-      - PORT=8000
-      - MCP_TRANSPORT=streamable-http
-    ports:
-      - "8000:8000"
-    restart: unless-stopped
-    profiles:
-      - full
-      - dev
+  # currenttime-server:
+  #   build:
+  #     context: servers/currenttime
+  #     dockerfile: ../../docker/Dockerfile.mcp-server
+  #   environment:
+  #     - PORT=8000
+  #     - MCP_TRANSPORT=streamable-http
+  #   ports:
+  #     - "8000:8000"
+  #   restart: unless-stopped
+  #   profiles:
+  #     - full
+  #     - dev
 
   # Financial Info MCP Server
   fininfo-server:
