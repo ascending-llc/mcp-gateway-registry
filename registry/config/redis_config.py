@@ -11,15 +11,9 @@ def get_redis_url() -> str:
     """
     host = REGISTRY_CONSTANTS.REDIS_HOST
     port = REGISTRY_CONSTANTS.REDIS_PORT
-    db = REGISTRY_CONSTANTS.REDIS_DB
-    password = REGISTRY_CONSTANTS.REDIS_PASSWORD
-    
+
     # Build URL
-    if password:
-        redis_url = f"redis://:{password}@{host}:{port}/{db}"
-    else:
-        redis_url = f"redis://{host}:{port}/{db}"
-    
+    redis_url = f"redis://{host}:{port}/1"
     return redis_url
 
 

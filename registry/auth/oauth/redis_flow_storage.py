@@ -11,7 +11,7 @@ class RedisFlowStorage:
     Redis storage for OAuth flows
     """
     
-    KEY_PREFIX = "oauth_flow:flow:"
+    KEY_PREFIX = "jarvis_registry:oauth_flow:flow:"
     DEFAULT_TTL = 600  # 10 minutes
     
     def __init__(self, redis_client: Redis):
