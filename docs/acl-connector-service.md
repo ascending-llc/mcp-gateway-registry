@@ -141,7 +141,7 @@ class ACLService:
 
 ### ACL API
 
-TBD - Does this service need an API or will it be primarily used by the registry server api?
+TBD - Does this service need to expose an API or will it be primarily used internally by server & agent endpoints?
 
 ## Jarvis API Integration
 
@@ -149,13 +149,12 @@ Assuming we are porting server registration to the registry project:
 
 `jarvis-api/packages/api/src/mcp/registry/MCPServersRegistry.ts`
 
-```
+```TypeScript
 private readonly dbConfigsRepo: IServerConfigsRepositoryInterface; // Eventually should point to /v1/server endpoint
 private readonly cacheConfigsRepo: IServerConfigsRepositoryInterface;
 private readonly allowedDomains?: string[] | null;
 private readonly readThroughCache: Keyv<t.ParsedServerConfig>;
 private readonly readThroughCacheAll: Keyv<Record<string, t.ParsedServerConfig>>;
-
 ```
 
 ## Questions: 
