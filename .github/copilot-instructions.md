@@ -18,34 +18,79 @@ Enterprise platform for MCP (Model Context Protocol) servers with OAuth authenti
 ### Rule 2: Maintain Project Structure
 Enforce strict file organization according to responsibility:
 
-#### Project Structure
+#### Project Structure (key directories and their purposes)
 
 ```text
-registry/              # Main FastAPI app
+registry/              # Main FastAPI app (Registry Service)
 ├── api/              # Routes ONLY: agent, server, proxy, search, internal
 ├── services/         # Business logic: agent_service, server_service, etc.
 ├── auth/             # Authentication/authorization logic
 ├── main.py           # App entry point
 └── constants.py      # Global constants (no hardcoded values elsewhere)
 
-packages/             # Shared ORM and database
+auth_server/          # OAuth 2.0 Authorization Server (Standalone FastAPI app)
+├── server.py         # Auth server entry point
+├── providers/        # OAuth provider implementations (Keycloak, Cognito, Entra)
+├── utils/            # Auth utilities and helpers
+├── scopes.yml        # OAuth scope definitions
+├── oauth2_providers.yml  # Provider configurations
+└── metrics_middleware.py # Prometheus metrics
+
+frontend/             # React/TypeScript Web UI (Vite + Tailwind CSS)
+├── src/              # React components and application logic
+├── public/           # Static assets
+├── vite.config.ts    # Vite configuration
+├── tailwind.config.js # Tailwind CSS configuration
+└── package.json      # Node.js dependencies
+
+servers/              # Example MCP Servers
+├── mcpgw/            # MCP Gateway server implementation
+├── fininfo/          # Financial information MCP server
+├── currenttime/      # Time service MCP server
+└── example-server/   # Template MCP server for reference
+
+packages/             # Shared ORM and database utilities
 ├── models/           # Beanie models and data definitions
 │   └── _generated/   # Auto-generated models (DO NOT manually edit)
 └── database/         # MongoDB connection utilities
 
 tests/                # Test suite (80% coverage required)
-├── unit/             # Unit tests
-├── integration/      # Integration tests
-└── conftest.py       # Pytest fixtures
+├── unit/             # Unit tests for services and business logic
+├── integration/      # Integration tests for API endpoints
+└── conftest.py       # Pytest fixtures and test configuration
 ```
 
 #### File Placement Rules
 
+**Registry Service (`/registry`):**
 - **`/api`** - Route definitions ONLY. No business logic, no database calls.
 - **`/services`** - All business logic, data processing, external integrations.
 - **`/auth`** - Authentication and authorization logic only.
 - **`/models`** - Data schemas, Beanie models, type definitions.
 - **`/constants.py`** - All application constants (no magic values in code).
+
+**Auth Server (`/auth_server`):**
+- **`server.py`** - OAuth 2.0 server implementation and endpoints.
+- **`/providers`** - Provider-specific implementations (Keycloak, Cognito, Entra ID).
+- **`/utils`** - Shared authentication utilities and token helpers.
+- **`scopes.yml`** - OAuth scope definitions (source of truth).
+- **`oauth2_providers.yml`** - Provider connection configurations.
+
+**Frontend (`/frontend`):**
+- **`/src`** - React components, hooks, services, and TypeScript code.
+- **`/public`** - Static assets (images, fonts, etc.).
+- **`vite.config.ts`** - Build configuration (DO NOT modify without team review).
+- **`tailwind.config.js`** - UI styling configuration.
+
+**MCP Servers (`/servers`):**
+- Each subdirectory is a standalone MCP server implementation.
+- Follow MCP protocol specifications for server implementations.
+- Include `README.md` with setup and usage instructions.
+
+**Shared Code (`/packages`):**
+- **`/models`** - Shared Beanie models used across services.
+- **`/database`** - Database connection and utility functions.
+- Code here must be framework-agnostic and reusable.
 
 ## Code Standards (Python 3.12)
 
