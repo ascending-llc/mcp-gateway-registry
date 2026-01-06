@@ -1,0 +1,470 @@
+from typing import Optional, List, Dict, Any
+from beanie import PydanticObjectId
+from packages.models._generated.token import Token
+from packages.models._generated.user import IUser
+from registry.models.oauth_models import OAuthTokens
+from registry.models.emus import TokenType
+from registry.utils.log import logger
+from datetime import datetime, timezone, timedelta
+
+
+class TokenService:
+
+    def _get_client_identifier(self, service_name: str) -> str:
+        """Build client token identifier"""
+        return f"mcp:{service_name}:client"
+
+    def _get_refresh_identifier(self, service_name: str) -> str:
+        """Build refresh token identifier"""
+        return f"mcp:{service_name}:refresh"
+
+    async def store_oauth_client_token(
+            self,
+            user_id: str,
+            service_name: str,
+            tokens: OAuthTokens,
+            metadata: Optional[Dict[str, Any]] = None
+    ) -> Token:
+        """
+        Store OAuth client token (access token)
+        
+        Args:
+            user_id: User ID
+            service_name: Service name (e.g., notion, agentcore, etc.)
+            tokens: OAuth tokens object
+            metadata: Additional metadata (e.g., OAuth configuration)
+            
+        Returns:
+            Created or updated Token document
+        """
+        identifier = self._get_client_identifier(service_name)
+        user_obj_id = await self._get_user_object_id(user_id)
+
+        # Calculate expiration time
+        expires_at = self._calculate_expiration(tokens.expires_in)
+
+        # Check if token exists
+        existing_token = await Token.find_one({
+            "userId": user_obj_id,
+            "type": TokenType.MCP_OAUTH_CLIENT.value,
+            "identifier": identifier,
+        })
+
+        if existing_token:
+            # Update existing token
+            existing_token.token = tokens.access_token
+            existing_token.expiresAt = expires_at
+            if metadata:
+                existing_token.metadata = metadata
+            await existing_token.save()
+            logger.info(f"Updated OAuth client token for user={user_id}, service={service_name}")
+            return existing_token
+        else:
+            # Create new token
+            token_doc = Token(
+                userId=user_obj_id,
+                type=TokenType.MCP_OAUTH_CLIENT.value,
+                identifier=identifier,
+                token=tokens.access_token,
+                expiresAt=expires_at,
+                metadata=metadata or {}
+            )
+            await token_doc.insert()
+            logger.info(f"Created OAuth client token for user={user_id}, service={service_name}")
+            return token_doc
+
+    async def store_oauth_refresh_token(
+            self,
+            user_id: str,
+            service_name: str,
+            tokens: OAuthTokens,
+            metadata: Optional[Dict[str, Any]] = None
+    ) -> Optional[Token]:
+        """
+        Store OAuth refresh token
+        
+        Args:
+            user_id: User ID
+            service_name: Service name
+            tokens: OAuth tokens object
+            metadata: Additional metadata
+        """
+        if not tokens.refresh_token:
+            logger.debug(f"No refresh token provided for user={user_id}, service={service_name}")
+            return None
+
+        identifier = self._get_refresh_identifier(service_name)
+        user_obj_id = await self._get_user_object_id(user_id)
+
+        # Refresh tokens typically have a longer expiration time, set to 1 year here
+        # Or set according to OAuth provider configuration
+        expires_at = datetime.now(timezone.utc) + timedelta(days=365)
+
+        # Check if token exists
+        existing_token = await Token.find_one({
+            "userId": user_obj_id,
+            "type": TokenType.MCP_OAUTH_REFRESH.value,
+            "identifier": identifier
+        })
+
+        if existing_token:
+            # Update existing token
+            existing_token.token = tokens.refresh_token
+            existing_token.expiresAt = expires_at
+            if metadata:
+                existing_token.metadata = metadata
+            await existing_token.save()
+            logger.info(f"Updated OAuth refresh token for user={user_id}, service={service_name}")
+            return existing_token
+        else:
+            # Create new token
+            token_doc = Token(
+                userId=user_obj_id,
+                type=TokenType.MCP_OAUTH_REFRESH.value,
+                identifier=identifier,
+                token=tokens.refresh_token,
+                expiresAt=expires_at,
+                metadata=metadata or {}
+            )
+            await token_doc.insert()
+            logger.info(f"Created OAuth refresh token for user={user_id}, service={service_name}")
+            return token_doc
+
+    async def store_oauth_tokens(
+            self,
+            user_id: str,
+            service_name: str,
+            tokens: OAuthTokens,
+            metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Optional[Token]]:
+        """
+        Store complete OAuth tokens (access + refresh)
+        
+        This is the main storage method, which stores both access token and refresh token
+        
+        Args:
+            user_id: User ID
+            service_name: Service name
+            tokens: OAuth tokens object
+            metadata: Additional metadata (e.g., OAuth configuration)
+            
+        Returns:
+            Dictionary containing client and refresh tokens
+        """
+        try:
+            # Store access token
+            client_token = await self.store_oauth_client_token(
+                user_id=user_id,
+                service_name=service_name,
+                tokens=tokens,
+                metadata=metadata
+            )
+
+            # Store refresh token (if exists)
+            refresh_token = await self.store_oauth_refresh_token(
+                user_id=user_id,
+                service_name=service_name,
+                tokens=tokens,
+                metadata=metadata
+            )
+
+            return {
+                "client": client_token,
+                "refresh": refresh_token
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to store OAuth tokens: {e}", exc_info=True)
+            raise
+
+    async def get_oauth_client_token(
+            self,
+            user_id: str,
+            service_name: str
+    ) -> Optional[Token]:
+        """
+        Get OAuth client token
+        
+        Args:
+            user_id: User ID
+            service_name: Service name
+            
+        Returns:
+            Token document or None
+        """
+        identifier = self._get_client_identifier(service_name)
+        user_obj_id = await self._get_user_object_id(user_id)
+
+        token = await Token.find_one({
+            "userId": user_obj_id,
+            "type": TokenType.MCP_OAUTH_CLIENT.value,
+            "identifier": identifier
+        })
+
+        # Check if token is expired
+        if token and self._is_token_expired(token):
+            logger.info(f"Token expired for user={user_id}, service={service_name}")
+            return None
+
+        return token
+
+    async def get_oauth_refresh_token(
+            self,
+            user_id: str,
+            service_name: str
+    ) -> Optional[Token]:
+        """
+        Get OAuth refresh token
+        
+        Args:
+            user_id: User ID
+            service_name: Service name
+            
+        Returns:
+            Token document or None
+        """
+        identifier = self._get_refresh_identifier(service_name)
+        user_obj_id = await self._get_user_object_id(user_id)
+
+        token = await Token.find_one({
+            "userId": user_obj_id,
+            "type": TokenType.MCP_OAUTH_REFRESH.value,
+            "identifier": identifier
+        })
+
+        # Check if token is expired
+        if token and self._is_token_expired(token):
+            logger.info(f"Refresh token expired for user={user_id}, service={service_name}")
+            return None
+
+        return token
+
+    async def get_oauth_tokens(
+            self,
+            user_id: str,
+            service_name: str
+    ) -> Optional[OAuthTokens]:
+        """
+        Get complete OAuth tokens and convert to OAuthTokens object
+        
+        Args:
+            user_id: User ID
+            service_name: Service name
+            
+        Returns:
+            OAuthTokens object or None
+        """
+        client_token = await self.get_oauth_client_token(user_id, service_name)
+
+        if not client_token:
+            return None
+
+        refresh_token = await self.get_oauth_refresh_token(user_id, service_name)
+
+        # Convert to OAuthTokens object
+        return OAuthTokens(
+            access_token=client_token.token,
+            refresh_token=refresh_token.token if refresh_token else None,
+            token_type="Bearer",
+            expires_in=self._calculate_expires_in(client_token.expiresAt),
+            expires_at=int(client_token.expiresAt.timestamp()) if client_token.expiresAt else None
+        )
+
+    async def delete_oauth_tokens(
+            self,
+            user_id: str,
+            service_name: str
+    ) -> bool:
+        """
+        Delete user's OAuth tokens
+        
+        Args:
+            user_id: User ID
+            service_name: Service name
+            
+        Returns:
+            Whether deletion was successful
+        """
+        user_obj_id = await self._get_user_object_id(user_id)
+
+        # Delete client token
+        client_identifier = self._get_client_identifier(service_name)
+        client_result = await Token.find_one({
+            "userId": user_obj_id,
+            "type": TokenType.MCP_OAUTH_CLIENT.value,
+            "identifier": client_identifier
+        })
+
+        # Delete refresh token
+        refresh_identifier = self._get_refresh_identifier(service_name)
+        refresh_result = await Token.find_one({
+            "userId": user_obj_id,
+            "type": TokenType.MCP_OAUTH_REFRESH.value,
+            "identifier": refresh_identifier
+        })
+
+        deleted_count = 0
+        if client_result:
+            await client_result.delete()
+            deleted_count += 1
+
+        if refresh_result:
+            await refresh_result.delete()
+            deleted_count += 1
+
+        if deleted_count > 0:
+            logger.info(f"Deleted {deleted_count} tokens for user={user_id}, service={service_name}")
+            return True
+
+        return False
+
+    async def get_user_tokens(
+            self,
+            user_id: str,
+            token_type: Optional[TokenType] = None
+    ) -> List[Token]:
+        """
+        Get all user tokens
+        
+        Args:
+            user_id: User ID
+            token_type: Optional token type filter (TokenType.MCP_OAUTH_CLIENT or TokenType.MCP_OAUTH_REFRESH)
+            
+        Returns:
+            List of Token documents
+        """
+        user_obj_id = await self._get_user_object_id(user_id)
+
+        query = {"userId": user_obj_id}
+        if token_type:
+            query["type"] = token_type.value
+
+        tokens = await Token.find(query).to_list()
+
+        # Filter out expired tokens
+        valid_tokens = [token for token in tokens if not self._is_token_expired(token)]
+
+        return valid_tokens
+
+    async def cleanup_expired_tokens(self) -> int:
+        """
+        Clean up all expired tokens
+        
+        Returns:
+            Number of tokens cleaned up
+        """
+        now = datetime.now(timezone.utc)
+
+        # Find all expired tokens
+        expired_tokens = await Token.find({"expiresAt": {"$lt": now}}).to_list()
+
+        count = len(expired_tokens)
+
+        # Delete expired tokens
+        for token in expired_tokens:
+            await token.delete()
+
+        if count > 0:
+            logger.info(f"Cleaned up {count} expired tokens")
+
+        return count
+
+
+    async def _get_user_object_id(self, user_id: str) -> PydanticObjectId:
+        """
+        Get or create user's ObjectId  TODO: Will be replaced with real user system
+        
+        Args:
+            user_id: User ID (username)
+            
+        Returns:
+            User's PydanticObjectId
+        """
+        user = await IUser.find_one({"username": user_id})
+
+        if not user:
+            now = datetime.now(timezone.utc)
+            email = f"{user_id}@local.mcp-gateway.internal"
+
+            existing_user = await IUser.find_one({"email": email})
+            if existing_user:
+                return existing_user.id
+
+            # Create user
+            user_data = {
+                "username": user_id,
+                "email": email,
+                "emailVerified": False,
+                "role": "USER",
+                "provider": "local",
+                "createdAt": now,
+                "updatedAt": now
+            }
+
+            collection = IUser.get_pymongo_collection()
+            result = await collection.insert_one(user_data)
+            logger.info(f"Created user record for token storage: {user_id}")
+            return result.inserted_id
+
+        return user.id
+
+    def _calculate_expiration(self, expires_in: Optional[int]) -> datetime:
+        """
+        Calculate token expiration time
+        
+        Args:
+            expires_in: Expiration time (in seconds)
+            
+        Returns:
+            datetime object of expiration time
+        """
+        if not expires_in:
+            # Default to 1 hour
+            expires_in = 3600
+
+        return datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+
+    def _calculate_expires_in(self, expires_at: datetime) -> int:
+        """
+        Calculate remaining valid time
+        
+        Args:
+            expires_at: Expiration time
+            
+        Returns:
+            Remaining seconds
+        """
+        now = datetime.now(timezone.utc)
+
+        # Ensure expires_at is timezone-aware
+        if expires_at.tzinfo is None:
+            # If timezone-naive, assume UTC
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+        delta = expires_at - now
+        return max(0, int(delta.total_seconds()))
+
+    def _is_token_expired(self, token: Token) -> bool:
+        """
+        Check if token is expired
+
+        Args:
+            token: Token document
+
+        Returns:
+            Whether expired
+        """
+        if not token.expiresAt:
+            return False
+        now = datetime.now(timezone.utc)
+
+        # If expiresAt is timezone-naive, assume it's UTC and add timezone info
+        if token.expiresAt.tzinfo is None:
+            expires_at = token.expiresAt.replace(tzinfo=timezone.utc)
+        else:
+            expires_at = token.expiresAt
+
+        return expires_at <= (now + timedelta(seconds=3))
+
+
+token_service = TokenService()

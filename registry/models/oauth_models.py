@@ -91,7 +91,7 @@ class MCPOAuthFlowMetadata(BaseModel):
     """MCP OAuth flow metadata"""
     server_name: str = Field(..., description="Server name")
     user_id: str = Field(..., description="User ID")
-    server_url: str = Field(..., description="Server URL")
+    authorize_url: str = Field(..., description="Authorize URL")
     state: str = Field(..., description="State parameter")
     code_verifier: str = Field(..., description="PKCE code_verifier")
     client_info: OAuthClientInformation = Field(..., description="Client information")

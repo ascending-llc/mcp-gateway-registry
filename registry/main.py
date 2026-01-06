@@ -26,6 +26,7 @@ from registry.api.agent_routes import router as agent_router
 from registry.api.management_routes import router as management_router
 from registry.health.routes import router as health_router
 from registry.api.v1.mcp.oauth_router import router as oauth_router
+from registry.api.v1.mcp.connection_router import router as connection_router
 from registry.version import __version__
 from registry.api.proxy_routes import router as proxy_router, shutdown_proxy_client
 from registry.auth.dependencies import CurrentUser
@@ -202,7 +203,8 @@ app.include_router(agent_router, prefix="/api", tags=["Agent Management"])
 app.include_router(management_router, prefix="/api")
 app.include_router(search_router, prefix="/api/search", tags=["Semantic Search"])
 app.include_router(health_router, prefix="/api/health", tags=["Health Monitoring"])
-app.include_router(oauth_router, prefix="/api/mcp", tags=["MCP  Management"])
+app.include_router(oauth_router, prefix="/api/mcp", tags=["MCP  Oauth Management"])
+app.include_router(connection_router, prefix="/api/mcp", tags=["MCP  Connection Management"])
 
 # Register Anthropic MCP Registry API (public API for MCP servers only)
 app.include_router(registry_router, tags=["Anthropic Registry API"])
@@ -230,7 +232,7 @@ def custom_openapi():
             "scheme": "bearer",
             "bearerFormat": "JWT",
             "description": "JWT Bearer token obtained from Keycloak OAuth2 authentication. "
-                          "Include in Authorization header as: `Authorization: Bearer <token>`"
+                           "Include in Authorization header as: `Authorization: Bearer <token>`"
         }
     }
 
@@ -275,11 +277,13 @@ async def health_check():
     """Simple health check for load balancers and monitoring."""
     return {"status": "healthy", "service": "mcp-gateway-registry"}
 
+
 # Version endpoint for UI
 @app.get("/api/version")
 async def get_version():
     """Get application version."""
     return {"version": __version__}
+
 
 app.include_router(proxy_router, prefix="/proxy", tags=["MCP Proxy"])
 

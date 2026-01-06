@@ -36,9 +36,9 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/api/auth/login",
             "/login",
             "/api/auth/config",
-            "/api/mcp/*/oauth/callback",  # OAuth callback is public
-            "/api/mcp/oauth/success",  # OAuth success page
-            "/api/mcp/oauth/error",  # OAuth error page
+            "/api/mcp/*/*/oauth/callback",  # OAuth callback is public
+            "/api/mcp/*/oauth/success",  # OAuth success page
+            "/api/mcp/*/oauth/error",  # OAuth error page
         ]
         # note: admin
         self.internal_paths = [

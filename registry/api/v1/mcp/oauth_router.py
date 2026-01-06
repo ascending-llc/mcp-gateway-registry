@@ -213,7 +213,7 @@ async def cancel_oauth_flow(
     
     """
     try:
-        user_id = current_user.get("id")
+        user_id = current_user.get("username")
         if not user_id:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                                 detail="Invalid user ID")
@@ -253,7 +253,7 @@ async def refresh_oauth_tokens(
     TypeScript implementation: Call MCPOAuthHandler.refreshOAuthTokens()
     """
     try:
-        user_id = current_user.get("id")
+        user_id = current_user.get("username")
         if not user_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
