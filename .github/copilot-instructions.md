@@ -66,7 +66,7 @@ tests/                # Test suite (80% coverage required)
 - **`/api`** - Route definitions ONLY. No business logic, no database calls.
 - **`/services`** - All business logic, data processing, external integrations.
 - **`/auth`** - Authentication and authorization logic only.
-- **`/models`** - Data schemas, Beanie models, type definitions.
+- **`/models`** - Data schemas for registry such as response, request etc.
 - **`/constants.py`** - All application constants (no magic values in code).
 
 **Auth Server (`/auth_server`):**
@@ -87,8 +87,8 @@ tests/                # Test suite (80% coverage required)
 - Follow MCP protocol specifications for server implementations.
 - Include `README.md` with setup and usage instructions.
 
-**Shared Code (`/packages`):**
-- **`/models`** - Shared Beanie models used across services.
+**Shared Libraries (`/packages`):**
+- **`/models`** - ORM models.
 - **`/database`** - Database connection and utility functions.
 - Code here must be framework-agnostic and reusable.
 
