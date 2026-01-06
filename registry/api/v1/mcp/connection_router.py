@@ -27,7 +27,7 @@ async def reinitialize_server(
     Notes: POST /:serverName/reinitialize (TypeScript reference)
     """
     try:
-        user_id = current_user.get('username')
+        user_id = current_user.get('user_id')
         logger.info(f"User {user_id} reinitializing server: {server_name}")
 
         # 1. Disconnect existing connection
@@ -107,7 +107,7 @@ async def get_all_connection_status(
     Notes: GET /connection/status (TypeScript reference)
     """
     try:
-        user_id = current_user.get('username')
+        user_id = current_user.get('user_id')
         logger.debug(f"Fetching connection status for all servers (user: {user_id})")
 
         # Get all user connections
@@ -149,7 +149,7 @@ async def get_server_connection_status(
     Notes: GET /connection/status/:serverName (TypeScript reference)
     """
     try:
-        user_id = current_user.get('username')
+        user_id = current_user.get('user_id')
         logger.debug(f"Fetching status for {server_name} (user: {user_id})")
 
         # Get connection for specific server
@@ -195,7 +195,7 @@ async def check_auth_values(
     Security: Only returns boolean flags, never actual credential values
     """
     try:
-        user_id = current_user.get('username')
+        user_id = current_user.get('user_id')
         logger.debug(f"Checking auth values for {server_name} (user: {user_id})")
 
         # Check if OAuth tokens exist
