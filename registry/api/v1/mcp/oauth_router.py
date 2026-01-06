@@ -23,7 +23,7 @@ async def initiate_oauth_flow(
     TypeScript implementation: Directly call MCPOAuthHandler.initiateOAuthFlow()
     """
     try:
-        user_id = user_context.get('username')
+        user_id = user_context.get('user_id')
         logger.info(f"Oauth initiate for user id : {user_id}")
         flow_id, auth_url, error = await mcp_service.oauth_service.initiate_oauth_flow(
             user_id=user_id,
@@ -144,10 +144,7 @@ async def get_oauth_tokens(
     - OAuth tokens
     """
     try:
-        user_id = current_user.get("username")
-        if not user_id:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                                detail="Invalid user ID")
+        user_id = current_user.get("user_id")
 
         # 1. Verify flow_id belongs to current user
         if not flow_id.startswith(f"{user_id}-") and not flow_id.startswith("system:"):
@@ -213,10 +210,7 @@ async def cancel_oauth_flow(
     
     """
     try:
-        user_id = current_user.get("username")
-        if not user_id:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                                detail="Invalid user ID")
+        user_id = current_user.get("user_id")
         success, error_msg = await mcp_service.oauth_service.cancel_oauth_flow(user_id, server_name)
         if not success:
             raise HTTPException(
@@ -253,12 +247,7 @@ async def refresh_oauth_tokens(
     TypeScript implementation: Call MCPOAuthHandler.refreshOAuthTokens()
     """
     try:
-        user_id = current_user.get("username")
-        if not user_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid user ID"
-            )
+        user_id = current_user.get("user_id")
         success, error_msg = await mcp_service.oauth_service.refresh_tokens(user_id, server_name)
         if not success:
             raise HTTPException(

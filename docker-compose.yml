@@ -63,6 +63,8 @@ services:
         condition: service_healthy
       registry-mongodb:
         condition: service_healthy
+      registry-redis:
+        condition: service_started
     restart: unless-stopped
     env_file:
       - .env
@@ -138,7 +140,7 @@ services:
       - mongodb-config:/data/configdb
     command: mongod --noauth
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -146,6 +148,21 @@ services:
     profiles:
       - full
       - dev
+
+  registry-redis:
+    container_name: registry-redis
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   # Auth service (separate and scalable)
   auth-server:
@@ -274,7 +291,7 @@ services:
     volumes:
       - weaviate_data:/var/lib/weaviate
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/v1/.well-known/ready"]
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/v1/.well-known/ready" ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -304,10 +321,10 @@ services:
     image: alpine:latest
     volumes:
       - metrics-db-data:/var/lib/sqlite
-    command: ["sh", "-c", "apk add --no-cache sqlite && mkdir -p /var/lib/sqlite && sqlite3 /var/lib/sqlite/metrics.db 'CREATE TABLE IF NOT EXISTS _health (id INTEGER);' && tail -f /dev/null"]
+    command: [ "sh", "-c", "apk add --no-cache sqlite && mkdir -p /var/lib/sqlite && sqlite3 /var/lib/sqlite/metrics.db 'CREATE TABLE IF NOT EXISTS _health (id INTEGER);' && tail -f /dev/null" ]
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "sqlite3", "/var/lib/sqlite/metrics.db", ".tables"]
+      test: [ "CMD", "sqlite3", "/var/lib/sqlite/metrics.db", ".tables" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -363,7 +380,7 @@ services:
       - keycloak_db_data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      test: [ "CMD-SHELL", "pg_isready -U keycloak" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -398,7 +415,7 @@ services:
 
       # Logging
       KC_LOG_LEVEL: INFO
-      
+
     ports:
       - "8080:8080"
     depends_on:
@@ -427,4 +444,6 @@ volumes:
   prometheus-data:
   grafana-data:
   weaviate_data:
+    driver: local
+  redis_data:
     driver: local
