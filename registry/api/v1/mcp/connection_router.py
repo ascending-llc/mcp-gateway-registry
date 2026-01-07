@@ -118,15 +118,12 @@ async def get_all_connection_status(
             requires_oauth = server.config.get("requires_oauth", False)
             if connection:
                 connection_status[server.serverName] = {
-                    "requiresOAuth": requires_oauth,
-                    "connectionState": connection.connection_state.value.lower()
-                }
+                    "requires_oauth": requires_oauth,
+                    "connection_state": connection.connection_state.value.lower()}
             else:
                 connection_status[server.serverName] = {
-                    "requiresOAuth": requires_oauth,
-                    "connectionState": "disconnected"
-                }
-
+                    "requires_oauth": requires_oauth,
+                    "connection_state": "disconnected"}
         return {
             "success": True,
             "connectionStatus": connection_status
@@ -161,7 +158,7 @@ async def get_server_connection_status(
         connection = await mcp_service.connection_service.get_connection(user_id, server_name)
         server_docs = await get_service_config(server_name)
         requires_oauth = server_docs.config.get("requires_oauth", False)
-        
+
         if not connection:
             return {
                 "success": True,
