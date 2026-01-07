@@ -12,12 +12,11 @@ TypeScript equivalent:
 """
 
 import os
-import logging
+from registry.utils.log import logger
 from typing import Optional
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
-logger = logging.getLogger(__name__)
 
 # Algorithm constants
 ALGORITHM = "AES-CBC"
