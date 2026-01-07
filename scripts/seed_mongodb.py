@@ -255,7 +255,6 @@ async def seed_mcp_servers(users):
                 "path": "/tavilysearch",
                 "url": "https://mcp.tavily.com/mcp/",
                 "type": "streamable-http",
-                "url": "https://mcp.tavily.com/mcp/",
                 "scope": "shared_user",
                 "status": "active",
                 "apiKey": {
