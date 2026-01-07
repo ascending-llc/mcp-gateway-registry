@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
-from registry.oauth.tracker import OAuthReconnectionTracker
+from registry.auth.oauth.reconnection.tracker import OAuthReconnectionTracker
 
 
 @pytest.fixture

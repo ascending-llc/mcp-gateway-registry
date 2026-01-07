@@ -15,7 +15,8 @@ from registry.auth.routes import (
     oauth2_login_redirect,
     oauth2_callback,
     login_submit,
-    logout
+    logout_get,
+    logout_post
 )
 
 
@@ -30,6 +31,7 @@ class TestAuthRoutes:
         request = Mock(spec=Request)
         request.base_url = "http://localhost:8000/"
         request.cookies = {}
+        request.headers = {"accept": "text/html"}
         return request
 
     @pytest.fixture
@@ -37,6 +39,7 @@ class TestAuthRoutes:
         """Mock settings for testing."""
         with patch('registry.auth.routes.settings') as mock_settings:
             mock_settings.auth_server_url = "http://auth.example.com"
+            mock_settings.auth_server_external_url = "http://auth.example.com"
             mock_settings.session_cookie_name = "session"
             mock_settings.session_max_age_seconds = 3600
             mock_settings.templates_dir = "/templates"
@@ -239,7 +242,7 @@ class TestAuthRoutes:
             assert "oauth2_callback_error" in response.headers["location"]
 
     @pytest.mark.asyncio
-    async def test_login_submit_success(self, mock_settings):
+    async def test_login_submit_success(self, mock_request, mock_settings):
         """Test successful traditional login."""
         username = "testuser"
         password = "testpass"
@@ -250,17 +253,17 @@ class TestAuthRoutes:
             mock_validate.return_value = True
             mock_create_session.return_value = "session_data"
             
-            response = await login_submit(username, password)
+            response = await login_submit(mock_request, username, password)
             
             assert isinstance(response, RedirectResponse)
             assert response.status_code == 303
             assert response.headers["location"] == "/"
             
             # Check cookie was set
-            assert mock_settings.session_cookie_name in response.raw_headers[2][1].decode()
+            assert any(mock_settings.session_cookie_name in h[1].decode() for h in response.raw_headers if h[0] == b'set-cookie')
 
     @pytest.mark.asyncio
-    async def test_login_submit_failure(self):
+    async def test_login_submit_failure(self, mock_request):
         """Test failed traditional login."""
         username = "testuser"
         password = "wrongpass"
@@ -268,16 +271,16 @@ class TestAuthRoutes:
         with patch('registry.auth.routes.validate_login_credentials') as mock_validate:
             mock_validate.return_value = False
             
-            response = await login_submit(username, password)
+            response = await login_submit(mock_request, username, password)
             
             assert isinstance(response, RedirectResponse)
             assert response.status_code == 303
             assert "Invalid+username+or+password" in response.headers["location"]
 
     @pytest.mark.asyncio
-    async def test_logout(self, mock_settings):
-        """Test logout functionality."""
-        response = await logout()
+    async def test_logout_get(self, mock_request, mock_settings):
+        """Test logout via GET request."""
+        response = await logout_get(mock_request)
         
         assert isinstance(response, RedirectResponse)
         assert response.status_code == 303
@@ -288,4 +291,20 @@ class TestAuthRoutes:
         assert len(cookie_headers) > 0
         cookie_value = cookie_headers[0][1].decode()
         assert mock_settings.session_cookie_name in cookie_value
-        assert "expires=" in cookie_value.lower()  # Cookie deletion sets expires in past 
+        assert "expires=" in cookie_value.lower()  # Cookie deletion sets expires in past
+
+    @pytest.mark.asyncio
+    async def test_logout_post(self, mock_request, mock_settings):
+        """Test logout via POST request."""
+        response = await logout_post(mock_request)
+        
+        assert isinstance(response, RedirectResponse)
+        assert response.status_code == 303
+        assert response.headers["location"] == "/login"
+        
+        # Check that cookie deletion header is present
+        cookie_headers = [h for h in response.raw_headers if h[0] == b'set-cookie']
+        assert len(cookie_headers) > 0
+        cookie_value = cookie_headers[0][1].decode()
+        assert mock_settings.session_cookie_name in cookie_value
+        assert "expires=" in cookie_value.lower()  # Cookie deletion sets expires in past
