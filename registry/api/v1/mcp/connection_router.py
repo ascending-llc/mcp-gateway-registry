@@ -5,7 +5,7 @@ from registry.auth.dependencies import CurrentUser
 from registry.services.oauth.mcp_service import MCPService, get_mcp_service
 from registry.schemas.enums import ConnectionState
 from registry.utils.log import logger
-from services.server_service_v1 import server_service_v1
+from registry.services.server_service_v1 import server_service_v1
 
 router = APIRouter(prefix="/v1", tags=["connection"])
 

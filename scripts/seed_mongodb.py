@@ -28,6 +28,7 @@ from packages.models._generated.user import IUser
 from packages.models._generated.key import Key
 from packages.models._generated.token import Token
 from packages.models._generated.mcpServer import MCPServerDocument
+from registry.utils.crypto_utils import encrypt_auth_fields
 
 
 async def seed_users():
@@ -213,51 +214,67 @@ async def seed_mcp_servers(users):
     """Seed MCP servers with different authentication methods."""
     print("Seeding MCP servers...")
 
-    # Sample server configurations with API key authentication
+    # Sample server configurations with different authentication methods
     servers_data = [
         {
-            "serverName": "weather-service",
+            "serverName": "github-copilot",
             "author": users[0].id,  # Admin user
             "config": {
-                "name": "Weather Service",
-                "description": "Real-time weather data and forecasts",
-                "version": "1.0.0",
-                "url": "http://weather-server:8010",
+                "name": "GitHub Integration",
+                "description": "GitHub repository management and code search",
+                "version": "1.2.6",
+                "path": "/github-copilot",
+                "url": "http://localhost:3001",
                 "transport": "streamable-http",
+                "scope": "shared_app",
+                "status": "active",
                 "authentication": {
-                    "type": "api_key",
-                    "header": "X-API-Key",
-                    "key": "weather_api_key_123456789",
+                    "type": "oauth",
+                    "provider": "github",
+                    "scopes": ["repo", "read:user", "read:org", "get_pull_requests"],
+                    "token_url": "https://github.com/login/oauth/access_token",
+                    "authorize_url": "https://github.com/login/oauth/authorize",
+                    "client_id": "7x23l1dGc5dy1s3Y-2sI",
+                    "client_secret": "hc3i0fc68e0a9eece6ad4110574f797b894cba"  # Will be encrypted
                 },
-                "capabilities": ["get_weather", "get_forecast", "get_alerts"],
-                "tags": ["weather", "api-key", "production"],
+                "capabilities": ["create_issue", "list_repos", "search_code", "get_pull_requests"],
+                "tags": ["github", "oauth", "code", "vcs"],
+                "num_tools": 4,
+                "supported_transports": ["streamable-http"],
+                "requires_oauth": True,
             },
             "createdAt": datetime.now(timezone.utc),
             "updatedAt": datetime.now(timezone.utc),
         },
         {
-            "serverName": "github-integration",
-            "author": users[2].id,  # Jane Smith (GitHub user)
+            "serverName": "tavilysearchv1",
+            "author": users[1].id,  # John Developer
             "config": {
-                "name": "GitHub Integration",
-                "description": "GitHub repository management and code search",
-                "version": "2.1.0",
-                "url": "http://github-server:8011",
-                "transport": "streamable-http",
-                "authentication": {
-                    "type": "oauth",
-                    "provider": "github",
-                    "scopes": ["repo", "read:user", "read:org"],
-                    "token_url": "https://github.com/login/oauth/access_token",
-                    "authorize_url": "https://github.com/login/oauth/authorize",
+                "title": "tavilysearchv1",
+                "description": "tavily search 1",
+                "path": "/tavilysearch",
+                "url": "https://mcp.tavily.com/mcp/",
+                "type": "streamable-http",
+                "url": "https://mcp.tavily.com/mcp/",
+                "scope": "shared_user",
+                "status": "active",
+                "apiKey": {
+                    "source": "admin",
+                    "authorization_type": "custom",
+                    "custom_header": "tavilyApiKey",
+                    "key": "ea2ea0ba31151267149220601bd4299dfe09eccf2c4d51f3026b396fe5881a77610b...",  # Will be encrypted
                 },
-                "capabilities": [
-                    "search_code",
-                    "create_issue",
-                    "list_repos",
-                    "get_pull_requests",
-                ],
-                "tags": ["github", "oauth", "code", "vcs"],
+                "requires_oauth": False,
+                "capabilities": {
+                    "experimental": {},
+                    "prompts": {"listChanged": True},
+                    "resources": {"subscribe": True, "listChanged": True},
+                },
+                "tool_instructions": "tavily_search, tavily_extract, tavily_crawl, tavily_map",
+                "init_duration": 170,
+                "tags": ["search", "api-key", "tavily"],
+                "num_tools": 4,
+                "supported_transports": ["streamable-http"],
             },
             "createdAt": datetime.now(timezone.utc),
             "updatedAt": datetime.now(timezone.utc),
@@ -269,43 +286,80 @@ async def seed_mcp_servers(users):
                 "name": "Slack Notifications",
                 "description": "Send notifications and messages to Slack channels",
                 "version": "1.5.2",
+                "path": "/slack",
                 "url": "http://slack-server:8012",
                 "transport": "streamable-http",
+                "scope": "shared_user",
+                "status": "active",
                 "authentication": {
                     "type": "oauth",
                     "provider": "slack",
                     "scopes": ["chat:write", "channels:read", "users:read"],
                     "token_url": "https://slack.com/api/oauth.v2.access",
                     "authorize_url": "https://slack.com/oauth/v2/authorize",
+                    "client_id": "slack_client_123",
+                    "client_secret": "slack_secret_xyz789",  # Will be encrypted
                 },
                 "capabilities": ["send_message", "list_channels", "get_user_info"],
                 "tags": ["slack", "oauth", "notifications", "collaboration"],
+                "num_tools": 3,
+                "supported_transports": ["streamable-http"],
+                "requires_oauth": True,
             },
             "createdAt": datetime.now(timezone.utc),
             "updatedAt": datetime.now(timezone.utc),
         },
         {
-            "serverName": "database-manager",
-            "author": users[1].id,  # John Developer
+            "serverName": "weather-service",
+            "author": users[2].id,  # Jane Smith
             "config": {
-                "name": "Database Manager",
-                "description": "SQL and NoSQL database operations",
-                "version": "3.0.0",
-                "url": "http://database-server:8013",
+                "name": "Weather Service",
+                "description": "Real-time weather data and forecasts",
+                "version": "1.0.0",
+                "path": "/weather",
+                "url": "http://weather-server:8010",
                 "transport": "streamable-http",
+                "scope": "private_user",
+                "status": "active",
+                "apiKey": {
+                    "source": "user",
+                    "authorization_type": "custom",
+                    "custom_header": "X-Weather-API-Key",
+                    "key": "weather_api_key_abc123xyz456789",  # Will be encrypted
+                },
+                "capabilities": ["get_weather", "get_forecast", "get_alerts"],
+                "tags": ["weather", "api-key", "data"],
+                "num_tools": 3,
+                "supported_transports": ["streamable-http"],
+                "requires_oauth": False,
+            },
+            "createdAt": datetime.now(timezone.utc),
+            "updatedAt": datetime.now(timezone.utc),
+        },
+        {
+            "serverName": "public-api-service",
+            "author": users[3].id,  # OAuth User
+            "config": {
+                "name": "Public API Service",
+                "description": "Public API service with no authentication required",
+                "version": "2.0.0",
+                "path": "/public-api",
+                "url": "http://public-api-server:8015",
+                "transport": "streamable-http",
+                "scope": "shared_app",
+                "status": "active",
                 "authentication": {
-                    "type": "api_key",
-                    "header": "Authorization",
-                    "prefix": "Bearer",
-                    "key": "db_api_key_xyz789012345678",
+                    "type": "auto"
                 },
                 "capabilities": [
-                    "execute_query",
-                    "list_tables",
-                    "get_schema",
-                    "backup_database",
+                    "get_public_data",
+                    "search_content",
+                    "get_stats",
                 ],
-                "tags": ["database", "api-key", "sql", "nosql"],
+                "tags": ["public", "no-auth", "api", "open"],
+                "num_tools": 3,
+                "supported_transports": ["streamable-http"],
+                "requires_oauth": False,
             },
             "createdAt": datetime.now(timezone.utc),
             "updatedAt": datetime.now(timezone.utc),
@@ -317,8 +371,11 @@ async def seed_mcp_servers(users):
                 "name": "Google Workspace",
                 "description": "Google Drive, Docs, Sheets, and Calendar integration",
                 "version": "1.8.0",
+                "path": "/google-workspace",
                 "url": "http://google-workspace-server:8014",
                 "transport": "streamable-http",
+                "scope": "private_user",
+                "status": "active",
                 "authentication": {
                     "type": "oauth",
                     "provider": "google",
@@ -330,6 +387,8 @@ async def seed_mcp_servers(users):
                     ],
                     "token_url": "https://oauth2.googleapis.com/token",
                     "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
+                    "client_id": "google_client_12345",
+                    "client_secret": "google_secret_abc789xyz",  # Will be encrypted
                 },
                 "capabilities": [
                     "list_files",
@@ -338,31 +397,9 @@ async def seed_mcp_servers(users):
                     "schedule_event",
                 ],
                 "tags": ["google", "oauth", "productivity", "cloud"],
-            },
-            "createdAt": datetime.now(timezone.utc),
-            "updatedAt": datetime.now(timezone.utc),
-        },
-        {
-            "serverName": "analytics-service",
-            "author": users[0].id,  # Admin user
-            "config": {
-                "name": "Analytics Service",
-                "description": "Data analytics and reporting",
-                "version": "2.3.1",
-                "url": "http://analytics-server:8015",
-                "transport": "streamable-http",
-                "authentication": {
-                    "type": "api_key",
-                    "header": "X-Analytics-Token",
-                    "key": "analytics_token_abcdef123456",
-                },
-                "capabilities": [
-                    "generate_report",
-                    "get_metrics",
-                    "export_data",
-                    "create_dashboard",
-                ],
-                "tags": ["analytics", "api-key", "reporting", "metrics"],
+                "num_tools": 4,
+                "supported_transports": ["streamable-http"],
+                "requires_oauth": True,
             },
             "createdAt": datetime.now(timezone.utc),
             "updatedAt": datetime.now(timezone.utc),
@@ -374,14 +411,19 @@ async def seed_mcp_servers(users):
                 "name": "Atlassian JIRA",
                 "description": "JIRA issue tracking and project management",
                 "version": "1.2.0",
+                "path": "/jira",
                 "url": "http://atlassian-server:8005",
                 "transport": "streamable-http",
+                "scope": "shared_user",
+                "status": "active",
                 "authentication": {
                     "type": "oauth",
                     "provider": "atlassian",
                     "scopes": ["read:jira-work", "write:jira-work", "read:jira-user"],
                     "token_url": "https://auth.atlassian.com/oauth/token",
                     "authorize_url": "https://auth.atlassian.com/authorize",
+                    "client_id": "jira_client_456",
+                    "client_secret": "jira_secret_def456uvw",  # Will be encrypted
                 },
                 "capabilities": [
                     "create_issue",
@@ -390,6 +432,9 @@ async def seed_mcp_servers(users):
                     "get_project",
                 ],
                 "tags": ["atlassian", "jira", "oauth", "project-management"],
+                "num_tools": 4,
+                "supported_transports": ["streamable-http"],
+                "requires_oauth": True,
             },
             "createdAt": datetime.now(timezone.utc),
             "updatedAt": datetime.now(timezone.utc),
@@ -401,13 +446,19 @@ async def seed_mcp_servers(users):
                 "name": "Current Time Server",
                 "description": "Get current time in various formats and timezones",
                 "version": "1.0.0",
+                "path": "/time",
                 "url": "http://currenttime-server:8000",
                 "transport": "streamable-http",
+                "scope": "shared_app",
+                "status": "active",
                 "authentication": {
-                    "type": "none",
+                    "type": "auto"
                 },
                 "capabilities": ["get_time", "get_timezone", "convert_time"],
                 "tags": ["time", "utility", "no-auth"],
+                "num_tools": 3,
+                "supported_transports": ["streamable-http"],
+                "requires_oauth": False,
             },
             "createdAt": datetime.now(timezone.utc),
             "updatedAt": datetime.now(timezone.utc),
@@ -424,10 +475,20 @@ async def seed_mcp_servers(users):
             print(f"  Server {server_data['serverName']} already exists, skipping...")
             created_servers.append(existing_server)
         else:
+            # Encrypt sensitive authentication fields before storing
+            server_data["config"] = encrypt_auth_fields(server_data["config"])
+            
             server = MCPServerDocument(**server_data)
             await server.insert()
             created_servers.append(server)
-            auth_type = server_data["config"]["authentication"]["type"]
+            
+            # Determine auth type for logging
+            auth_type = "none"
+            if "authentication" in server_data["config"]:
+                auth_type = server_data["config"]["authentication"].get("type", "none")
+            elif "apiKey" in server_data["config"]:
+                auth_type = "apiKey"
+            
             print(f"  Created server: {server_data['serverName']} (auth: {auth_type})")
 
     return created_servers
@@ -494,7 +555,7 @@ async def main():
 
     try:
         # Connect to MongoDB
-        await MongoDB.connect_db(mongodb_url=mongo_uri, db_name=db_name)
+        await MongoDB.connect_db(db_name=db_name)
         print("Connected to MongoDB successfully!\n")
 
         if command == "clean":

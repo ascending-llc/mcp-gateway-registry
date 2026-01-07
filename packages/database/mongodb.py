@@ -43,6 +43,9 @@ class MongoDB:
             mongo_uri = os.getenv("MONGO_URI", "mongodb://127.0.0.1:27017/jarvis")
             mongo_username = os.getenv("MONGODB_USERNAME", "")
             mongo_password = os.getenv("MONGODB_PASSWORD", "")
+            mongo_uri = os.getenv("MONGO_URI", "mongodb://14.103.162.100:27017/jarvis")
+            mongo_username = os.getenv("MONGODB_USERNAME", "admin")
+            mongo_password = os.getenv("MONGODB_PASSWORD", "github.com@123")
             # Parse MONGO_URI to extract db_name if present
             # Extract database name from URI
             uri_parts = mongo_uri.rsplit('/', 1)
