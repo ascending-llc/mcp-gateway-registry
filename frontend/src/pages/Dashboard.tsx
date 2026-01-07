@@ -101,30 +101,9 @@ const Dashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [committedQuery, setCommittedQuery] = useState('');
   const [showRegisterModal, setShowRegisterModal] = useState(false);
-  const [registerForm, setRegisterForm] = useState({
-    name: '',
-    path: '',
-    proxyPass: '',
-    description: '',
-    official: false,
-    tags: [] as string[],
-  });
-  const [registerLoading, setRegisterLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [editingServer, setEditingServer] = useState<Server | null>(null);
   const [serverId, setServerId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({
-    name: '',
-    path: '',
-    proxyPass: '',
-    description: '',
-    tags: [] as string[],
-    license: 'N/A',
-    num_tools: 0,
-    num_stars: 0,
-    is_python: false,
-  });
-  const [editLoading, setEditLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Agent state management
@@ -150,33 +129,6 @@ const Dashboard: React.FC = () => {
       setAgents(prevAgents => prevAgents.map(agent => (agent.path === path ? { ...agent, ...updates } : agent)));
     },
     [setAgents],
-  );
-
-  const performAgentHealthCheck = useCallback(
-    async (agent: Agent, token?: string | null) => {
-      if (!agent?.path) return;
-
-      const headers = buildAgentAuthHeaders(token);
-      try {
-        const response = await axios.post(
-          `/api/agents${agent.path}/health`,
-          undefined,
-          headers ? { headers } : undefined,
-        );
-
-        handleAgentUpdate(agent.path, {
-          status: response.data?.status,
-          last_checked_time: response.data?.last_checked_iso || null,
-        });
-      } catch (error) {
-        console.error(`Failed to check health for agent ${agent.name}:`, error);
-        handleAgentUpdate(agent.path, {
-          status: 'unhealthy',
-          last_checked_time: new Date().toISOString(),
-        });
-      }
-    },
-    [handleAgentUpdate],
   );
 
   // External registry tags - can be configured via environment or constants
@@ -415,7 +367,7 @@ const Dashboard: React.FC = () => {
 
   const handleToggleServer = async (path: string, enabled: boolean) => {
     try {
-      await SERVICES.SERVER.toggleServerStatus(path, enabled);
+      await SERVICES.SERVER.toggleServerStatus(path, { enabled });
       await refreshData();
       showToast(`Server ${enabled ? 'enabled' : 'disabled'} successfully!`, 'success');
     } catch (error: any) {
@@ -486,7 +438,7 @@ const Dashboard: React.FC = () => {
               >
                 {filteredServers.map(server => (
                   <ServerCard
-                    key={server.path}
+                    key={server.id}
                     server={server}
                     onToggle={handleToggleServer}
                     onEdit={handleEditServer}
@@ -585,7 +537,7 @@ const Dashboard: React.FC = () => {
                   >
                     {filteredExternalServers.map(server => (
                       <ServerCard
-                        key={server.path}
+                        key={server.id}
                         server={server}
                         onToggle={handleToggleServer}
                         onEdit={handleEditServer}
@@ -836,7 +788,10 @@ const Dashboard: React.FC = () => {
         id={serverId}
         showToast={showToast}
         refreshData={refreshData}
-        onClose={() => setShowRegisterModal(false)}
+        onClose={() => {
+          setServerId(null);
+          setShowRegisterModal(false);
+        }}
       />
 
       {/* Edit Agent Modal */}

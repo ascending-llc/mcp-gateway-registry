@@ -1,7 +1,7 @@
 export type AuthType = 'auto' | 'apiKey' | 'oauth';
-export type ApiKeySource = 'global' | 'user';
+export type ApiKeySource = 'admin' | 'user';
 export type ApiKeyHeaderFormat = 'bearer' | 'basic' | 'custom';
-export type ServerType = 'streamable-https' | 'sse';
+export type ServerType = 'streamable-http' | 'sse';
 
 export interface AuthenticationConfig {
   type: AuthType;
@@ -22,6 +22,7 @@ export interface ServerConfig {
   server_name: string;
   description: string;
   path: string;
+  url: string;
   supported_transports: ServerType;
   authConfig: AuthenticationConfig;
   trustServer: boolean;

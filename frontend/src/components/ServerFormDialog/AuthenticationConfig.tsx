@@ -41,40 +41,40 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
             <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2'>
               Authentication Type
             </label>
-            <div className='flex items-center space-x-6'>
-              <label className='flex items-center'>
-                <input
-                  type='radio'
-                  name='authType'
-                  value='auto'
-                  checked={config.type === 'auto'}
-                  onChange={() => updateConfig({ type: 'auto' })}
-                  className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
-                />
-                <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>Auto Detect</span>
-              </label>
-              <label className='flex items-center'>
-                <input
-                  type='radio'
-                  name='authType'
-                  value='apiKey'
-                  checked={config.type === 'apiKey'}
-                  onChange={() => updateConfig({ type: 'apiKey' })}
-                  className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
-                />
-                <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>API Key</span>
-              </label>
-              <label className='flex items-center'>
-                <input
-                  type='radio'
-                  name='authType'
-                  value='oauth'
-                  checked={config.type === 'oauth'}
-                  onChange={() => updateConfig({ type: 'oauth' })}
-                  className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
-                />
-                <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>Manual OAuth</span>
-              </label>
+            <div className='flex p-1 bg-gray-200 dark:bg-gray-700/50 rounded-lg'>
+              <button
+                type='button'
+                onClick={() => updateConfig({ type: 'auto' })}
+                className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                  config.type === 'auto'
+                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                Auto Detect
+              </button>
+              <button
+                type='button'
+                onClick={() => updateConfig({ type: 'apiKey' })}
+                className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                  config.type === 'apiKey'
+                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                API Key
+              </button>
+              <button
+                type='button'
+                onClick={() => updateConfig({ type: 'oauth' })}
+                className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                  config.type === 'oauth'
+                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                Manual OAuth
+              </button>
             </div>
           </div>
 
@@ -96,9 +96,9 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                     <input
                       type='radio'
                       name='source'
-                      value='global'
-                      checked={config.source === 'global'}
-                      onChange={() => updateConfig({ source: 'global' })}
+                      value='admin'
+                      checked={config.source === 'admin'}
+                      onChange={() => updateConfig({ source: 'admin' })}
                       className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
                     />
                     <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>Provide a key for all users</span>
@@ -119,7 +119,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                 </div>
               </div>
 
-              {config.source === 'global' && (
+              {config.source === 'admin' && (
                 <div>
                   <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>API Key</label>
                   <div className='relative rounded-md shadow-sm'>

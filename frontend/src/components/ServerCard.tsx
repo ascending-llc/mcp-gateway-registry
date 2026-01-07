@@ -1,8 +1,19 @@
-import { ArrowPathIcon, ClockIcon, CogIcon, PencilIcon, WrenchScrewdriverIcon } from '@heroicons/react/24/outline';
+import {
+  ArrowPathIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  CogIcon,
+  KeyIcon,
+  PencilIcon,
+  WrenchScrewdriverIcon,
+} from '@heroicons/react/24/outline';
 import type React from 'react';
 import { useCallback, useState } from 'react';
 
+import { useServer } from '@/contexts/ServerContext';
 import SERVICES from '@/services';
+import { SERVER_CONNECTION } from '@/services/mcp/type';
+import ServerAuthorizationModal from './ServerAuthorizationModal';
 import ServerConfigModal from './ServerConfigModal';
 import StarRatingWidget from './StarRatingWidget';
 
@@ -92,11 +103,30 @@ const ServerCard: React.FC<ServerCardProps> = ({
   onServerUpdate,
   authToken,
 }) => {
+  const { serverStatus: serverStatusMap, getServerStatusByPolling } = useServer();
   const [tools, setTools] = useState<Tool[]>([]);
   const [loadingTools, setLoadingTools] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [loadingRefresh, setLoadingRefresh] = useState(false);
+  const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
+
+  const serverStatus = serverStatusMap[server.name];
+  const { connectionState, requiresOAuth } = serverStatus || {};
+
+  const getAuthStatusIcon = useCallback(() => {
+    console.log('connectionState', connectionState);
+    console.log('requiresOAuth', requiresOAuth);
+    if (requiresOAuth && connectionState === SERVER_CONNECTION.CONNECTED) {
+      return <CheckCircleIcon className='h-4 w-4 text-green-500' />;
+    }
+    if (requiresOAuth && connectionState === SERVER_CONNECTION.DISCONNECTED) {
+      return <KeyIcon className='h-4 w-4 text-amber-500' />;
+    }
+    if (requiresOAuth && connectionState === SERVER_CONNECTION.CONNECTING) {
+      return <KeyIcon className='h-4 w-4 text-amber-500' />;
+    }
+  }, [requiresOAuth, connectionState]);
 
   const handleViewTools = useCallback(async () => {
     if (loadingTools) return;
@@ -200,6 +230,18 @@ const ServerCard: React.FC<ServerCardProps> = ({
             </div>
 
             <div className='flex gap-1'>
+              <button
+                className='p-1.5 text-amber-500 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-all duration-200 flex-shrink-0'
+                disabled={connectionState === SERVER_CONNECTION.CONNECTING}
+                onClick={() => setShowApiKeyDialog(true)}
+                title='Manage API keys'
+              >
+                {connectionState === SERVER_CONNECTION.CONNECTING ? (
+                  <div className='animate-spin rounded-full h-3 w-3 border-b-2 border-slate-200' />
+                ) : (
+                  getAuthStatusIcon()
+                )}
+              </button>
               {canModify && (
                 <button
                   className='p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-all duration-200 flex-shrink-0'
@@ -430,6 +472,17 @@ const ServerCard: React.FC<ServerCardProps> = ({
         onClose={() => setShowConfig(false)}
         onShowToast={onShowToast}
       />
+
+      {showApiKeyDialog && (
+        <ServerAuthorizationModal
+          name={server.name}
+          status={connectionState}
+          showApiKeyDialog={showApiKeyDialog}
+          setShowApiKeyDialog={setShowApiKeyDialog}
+          onShowToast={onShowToast}
+          getServerStatusByPolling={getServerStatusByPolling}
+        />
+      )}
     </>
   );
 };
