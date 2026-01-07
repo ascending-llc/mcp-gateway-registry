@@ -1,14 +1,34 @@
+import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import type React from 'react';
+import { useState } from 'react';
 import type { AuthenticationConfig as AuthConfigType } from './types';
 
 interface AuthenticationConfigProps {
   config: AuthConfigType;
   onChange: (config: AuthConfigType) => void;
+  errors?: Record<string, string | undefined>;
 }
 
-const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onChange }) => {
+const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onChange, errors = {} }) => {
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [showClientSecret, setShowClientSecret] = useState(false);
+
   const updateConfig = (updates: Partial<AuthConfigType>) => {
     onChange({ ...config, ...updates });
+  };
+
+  const getInputClass = (fieldName: string) => {
+    const baseClass =
+      'block w-full rounded-md shadow-sm focus:ring-purple-500 sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500';
+    const borderClass = errors[fieldName]
+      ? 'border-red-500 focus:border-red-500 pr-10' // Add padding for icon if needed, though error message is below
+      : 'border-gray-300 dark:border-gray-600 focus:border-purple-500';
+    return `${baseClass} ${borderClass}`;
+  };
+
+  const renderError = (fieldName: string) => {
+    if (!errors[fieldName]) return null;
+    return <p className='mt-1 text-xs text-red-500'>{errors[fieldName]}</p>;
   };
 
   return (
@@ -37,9 +57,9 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                 <input
                   type='radio'
                   name='authType'
-                  value='api-key'
-                  checked={config.type === 'api-key'}
-                  onChange={() => updateConfig({ type: 'api-key' })}
+                  value='apiKey'
+                  checked={config.type === 'apiKey'}
+                  onChange={() => updateConfig({ type: 'apiKey' })}
                   className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
                 />
                 <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>API Key</span>
@@ -65,7 +85,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
             </div>
           )}
 
-          {config.type === 'api-key' && (
+          {config.type === 'apiKey' && (
             <div className='space-y-4 animate-fadeIn'>
               <div>
                 <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2'>
@@ -75,10 +95,10 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                   <label className='flex items-center'>
                     <input
                       type='radio'
-                      name='apiKeySource'
+                      name='source'
                       value='global'
-                      checked={config.apiKeySource === 'global'}
-                      onChange={() => updateConfig({ apiKeySource: 'global' })}
+                      checked={config.source === 'global'}
+                      onChange={() => updateConfig({ source: 'global' })}
                       className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
                     />
                     <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>Provide a key for all users</span>
@@ -86,10 +106,10 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                   <label className='flex items-center'>
                     <input
                       type='radio'
-                      name='apiKeySource'
+                      name='source'
                       value='user'
-                      checked={config.apiKeySource === 'user'}
-                      onChange={() => updateConfig({ apiKeySource: 'user' })}
+                      checked={config.source === 'user'}
+                      onChange={() => updateConfig({ source: 'user' })}
                       className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
                     />
                     <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>
@@ -99,18 +119,30 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                 </div>
               </div>
 
-              {config.apiKeySource === 'global' && (
+              {config.source === 'global' && (
                 <div>
                   <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>API Key</label>
                   <div className='relative rounded-md shadow-sm'>
                     <input
-                      type='password'
-                      className='block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-purple-500 focus:ring-purple-500 sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500'
+                      type={showApiKey ? 'text' : 'password'}
+                      className={`${getInputClass('key')} pr-10`}
                       placeholder='<HIDDEN>'
-                      value={config.apiKey || ''}
-                      onChange={e => updateConfig({ apiKey: e.target.value })}
+                      value={config.key || ''}
+                      onChange={e => updateConfig({ key: e.target.value })}
                     />
+                    <button
+                      type='button'
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className='absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 focus:outline-none'
+                    >
+                      {showApiKey ? (
+                        <EyeSlashIcon className='h-5 w-5' aria-hidden='true' />
+                      ) : (
+                        <EyeIcon className='h-5 w-5' aria-hidden='true' />
+                      )}
+                    </button>
                   </div>
+                  {renderError('key')}
                 </div>
               )}
 
@@ -120,10 +152,10 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                   <label className='flex items-center'>
                     <input
                       type='radio'
-                      name='headerFormat'
+                      name='auth_type'
                       value='bearer'
-                      checked={config.headerFormat === 'bearer'}
-                      onChange={() => updateConfig({ headerFormat: 'bearer' })}
+                      checked={config.auth_type === 'bearer'}
+                      onChange={() => updateConfig({ auth_type: 'bearer' })}
                       className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
                     />
                     <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>Bearer</span>
@@ -131,10 +163,10 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                   <label className='flex items-center'>
                     <input
                       type='radio'
-                      name='headerFormat'
+                      name='auth_type'
                       value='basic'
-                      checked={config.headerFormat === 'basic'}
-                      onChange={() => updateConfig({ headerFormat: 'basic' })}
+                      checked={config.auth_type === 'basic'}
+                      onChange={() => updateConfig({ auth_type: 'basic' })}
                       className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
                     />
                     <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>Basic</span>
@@ -142,15 +174,31 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                   <label className='flex items-center'>
                     <input
                       type='radio'
-                      name='headerFormat'
+                      name='auth_type'
                       value='custom'
-                      checked={config.headerFormat === 'custom'}
-                      onChange={() => updateConfig({ headerFormat: 'custom' })}
+                      checked={config.auth_type === 'custom'}
+                      onChange={() => updateConfig({ auth_type: 'custom' })}
                       className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
                     />
                     <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>Custom</span>
                   </label>
                 </div>
+
+                {config.auth_type === 'custom' && (
+                  <div className='mt-4 animate-fadeIn'>
+                    <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>
+                      Custom Header Name
+                    </label>
+                    <input
+                      type='text'
+                      className={getInputClass('custom_header')}
+                      value={config.custom_header || ''}
+                      onChange={e => updateConfig({ custom_header: e.target.value })}
+                      placeholder='X-Custom-Auth'
+                    />
+                    {renderError('custom_header')}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -164,23 +212,36 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                 <input
                   type='text'
                   required
-                  className='block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-purple-500 focus:ring-purple-500 sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500'
-                  value={config.clientId || ''}
-                  onChange={e => updateConfig({ clientId: e.target.value })}
+                  className={getInputClass('client_id')}
+                  value={config.client_id || ''}
+                  onChange={e => updateConfig({ client_id: e.target.value })}
                 />
+                {renderError('client_id')}
               </div>
               <div>
                 <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>
                   Client Secret <span className='text-red-500'>*</span>
                 </label>
-                <div className='relative'>
+                <div className='relative rounded-md shadow-sm'>
                   <input
-                    type='password'
+                    type={showClientSecret ? 'text' : 'password'}
                     required
-                    className='block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-purple-500 focus:ring-purple-500 sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500'
-                    value={config.clientSecret || ''}
-                    onChange={e => updateConfig({ clientSecret: e.target.value })}
+                    className={`${getInputClass('client_secret')} pr-10`}
+                    value={config.client_secret || ''}
+                    onChange={e => updateConfig({ client_secret: e.target.value })}
                   />
+                  <button
+                    type='button'
+                    onClick={() => setShowClientSecret(!showClientSecret)}
+                    className='absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 focus:outline-none'
+                  >
+                    {showClientSecret ? (
+                      <EyeSlashIcon className='h-5 w-5' aria-hidden='true' />
+                    ) : (
+                      <EyeIcon className='h-5 w-5' aria-hidden='true' />
+                    )}
+                  </button>
+                  {renderError('client_secret')}
                 </div>
               </div>
               <div>
@@ -190,10 +251,11 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                 <input
                   type='url'
                   required
-                  className='block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-purple-500 focus:ring-purple-500 sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500'
-                  value={config.authorizationUrl || ''}
-                  onChange={e => updateConfig({ authorizationUrl: e.target.value })}
+                  className={getInputClass('authorization_url')}
+                  value={config.authorization_url || ''}
+                  onChange={e => updateConfig({ authorization_url: e.target.value })}
                 />
+                {renderError('authorization_url')}
               </div>
               <div>
                 <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>
@@ -202,25 +264,18 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                 <input
                   type='url'
                   required
-                  className='block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-purple-500 focus:ring-purple-500 sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500'
-                  value={config.tokenUrl || ''}
-                  onChange={e => updateConfig({ tokenUrl: e.target.value })}
+                  className={getInputClass('token_url')}
+                  value={config.token_url || ''}
+                  onChange={e => updateConfig({ token_url: e.target.value })}
                 />
-              </div>
-
-              <div>
-                <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>Redirect URI</label>
-                <div className='block w-full rounded-md bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 p-3 text-sm text-gray-500 dark:text-gray-400'>
-                  The redirect URI will be provided after the server is created. Configure it in your OAuth provider
-                  settings.
-                </div>
+                {renderError('token_url')}
               </div>
 
               <div>
                 <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>Scope</label>
                 <input
                   type='text'
-                  className='block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-purple-500 focus:ring-purple-500 sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500'
+                  className={getInputClass('scope')}
                   value={config.scope || ''}
                   onChange={e => updateConfig({ scope: e.target.value })}
                 />

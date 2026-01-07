@@ -2,7 +2,10 @@ import axios from 'axios';
 import type React from 'react';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
+import SERVICES from '@/services';
+
 interface Server {
+  id: string;
   name: string;
   path: string;
   description?: string;
@@ -12,7 +15,7 @@ interface Server {
   last_checked_time?: string;
   usersCount?: number;
   rating?: number;
-  status?: 'healthy' | 'healthy-auth-expired' | 'unhealthy' | 'unknown';
+  status?: 'active' | 'inactive' | 'error';
   num_tools?: number;
   proxy_pass_url?: string;
   license?: string;
@@ -70,8 +73,7 @@ interface ServerContextType {
   error: string | null;
 
   // Actions
-  refreshData: () => Promise<void>;
-  toggleServer: (path: string, enabled: boolean) => Promise<void>;
+  refreshData: (notLoading?: boolean) => Promise<void>;
   toggleAgent: (path: string, enabled: boolean) => Promise<void>;
 }
 
@@ -103,7 +105,7 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
       total: servers.length,
       enabled: servers.filter(s => s.enabled).length,
       disabled: servers.filter(s => !s.enabled).length,
-      withIssues: servers.filter(s => s.status === 'unhealthy').length,
+      withIssues: servers.filter(s => s.status === 'inactive').length,
     }),
     [servers],
   );
@@ -132,23 +134,21 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     return 'unknown';
   };
 
-  // Fetch both servers and agents
-  const refreshData = useCallback(async () => {
+  const refreshData = useCallback(async (notLoading?: boolean) => {
     try {
-      setLoading(true);
+      if (!notLoading) setLoading(true);
       setError(null);
 
       // Fetch both servers and agents in parallel
       const [serversResponse, agentsResponse] = await Promise.all([
-        axios.get('/api/servers'),
+        SERVICES.SERVER.getServers(),
         axios
           .get('/api/agents')
           .catch(() => ({ data: { agents: [] } })), // Graceful fallback for agents
       ]);
 
       // Process servers
-      const responseData = serversResponse.data || {};
-      const serversList = responseData.servers || [];
+      const serversList = serversResponse.servers || [];
 
       console.log('🔍 Server filtering debug info:');
       console.log(`📊 Total servers returned from API: ${serversList.length}`);
@@ -157,16 +157,17 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
         console.log(`🕐 Server ${serverInfo.display_name}: last_checked_iso =`, serverInfo.last_checked_iso);
 
         return {
-          name: serverInfo.display_name || 'Unknown Server',
+          id: serverInfo.id,
+          name: serverInfo.server_name || 'Unknown Server',
           path: serverInfo.path,
           description: serverInfo.description || '',
-          official: serverInfo.is_official || false,
-          enabled: serverInfo.is_enabled !== undefined ? serverInfo.is_enabled : false,
+          official: serverInfo.is_official || false, // undefined
+          enabled: serverInfo.is_enabled !== undefined ? serverInfo.is_enabled : false, // undefined
           tags: serverInfo.tags || [],
-          last_checked_time: serverInfo.last_checked_iso,
+          last_checked_time: serverInfo.updatedAt,
           usersCount: 0,
           rating: serverInfo.num_stars || 0,
-          status: mapHealthStatus(serverInfo.health_status || 'unknown'),
+          status: serverInfo.status || 'unknown', // undefined
           num_tools: serverInfo.num_tools || 0,
           proxy_pass_url: serverInfo.proxy_pass_url,
           license: serverInfo.license,
@@ -202,32 +203,13 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
       setAgents(transformedAgents);
     } catch (err: any) {
       console.error('Failed to fetch data:', err);
-      setError(err.response?.data?.detail || 'Failed to fetch data');
+      setError(err?.detail || 'Failed to fetch data');
       setServers([]);
       setAgents([]);
     } finally {
       setLoading(false);
     }
   }, []);
-  // Toggle server
-  const toggleServer = useCallback(
-    async (path: string, enabled: boolean) => {
-      // Optimistic update
-      setServers(prev => prev.map(s => (s.path === path ? { ...s, enabled } : s)));
-
-      try {
-        const formData = new FormData();
-        formData.append('enabled', enabled.toString());
-        await axios.post(`/api/toggle${path}`, formData);
-      } catch (err) {
-        console.error('Error toggling server:', err);
-        // Revert on error
-        await refreshData();
-        throw err;
-      }
-    },
-    [refreshData],
-  );
 
   // Toggle agent
   const toggleAgent = useCallback(
@@ -261,7 +243,6 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     loading,
     error,
     refreshData,
-    toggleServer,
     toggleAgent,
   };
 

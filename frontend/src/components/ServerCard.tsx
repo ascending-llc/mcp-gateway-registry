@@ -1,11 +1,13 @@
 import { ArrowPathIcon, ClockIcon, CogIcon, PencilIcon, WrenchScrewdriverIcon } from '@heroicons/react/24/outline';
-import axios from 'axios';
 import type React from 'react';
 import { useCallback, useState } from 'react';
+
+import SERVICES from '@/services';
 import ServerConfigModal from './ServerConfigModal';
 import StarRatingWidget from './StarRatingWidget';
 
 export interface Server {
+  id: string;
   name: string;
   path: string;
   description?: string;
@@ -16,13 +18,13 @@ export interface Server {
   usersCount?: number;
   num_stars?: number; // Average rating from backend
   rating_details?: Array<{ user: string; rating: number }>;
-  status?: 'healthy' | 'healthy-auth-expired' | 'unhealthy' | 'unknown';
+  status?: 'active' | 'inactive' | 'error';
   num_tools?: number;
 }
 
 interface ServerCardProps {
   server: Server;
-  onToggle: (path: string, enabled: boolean) => void;
+  onToggle: (id: string, enabled: boolean) => void;
   onEdit?: (server: Server) => void;
   canModify?: boolean;
   onRefreshSuccess?: () => void;
@@ -34,7 +36,7 @@ interface ServerCardProps {
 interface Tool {
   name: string;
   description?: string;
-  schema?: any;
+  inputSchema?: any;
 }
 
 // Helper function to format time since last checked
@@ -101,8 +103,9 @@ const ServerCard: React.FC<ServerCardProps> = ({
 
     setLoadingTools(true);
     try {
-      const response = await axios.get(`/api/tools${server.path}`);
-      setTools(response.data.tools || []);
+      const result = await SERVICES.SERVER.getServerTools(server.id);
+      console.log('result', result);
+      setTools(result.tools || []);
       setShowTools(true);
     } catch (error) {
       console.error('Failed to fetch tools:', error);
@@ -119,29 +122,16 @@ const ServerCard: React.FC<ServerCardProps> = ({
 
     setLoadingRefresh(true);
     try {
-      // Extract service name from path (remove leading slash)
-      const serviceName = server.path.replace(/^\//, '');
+      const result = await SERVICES.SERVER.refreshServerHealth(server.id);
 
-      const response = await axios.post(`/api/refresh/${serviceName}`);
-
-      // Update just this server instead of triggering global refresh
-      if (onServerUpdate && response.data) {
+      if (onServerUpdate && result) {
         const updates: Partial<Server> = {
-          status:
-            response.data.status === 'healthy'
-              ? 'healthy'
-              : response.data.status === 'healthy-auth-expired'
-                ? 'healthy-auth-expired'
-                : response.data.status === 'unhealthy'
-                  ? 'unhealthy'
-                  : 'unknown',
-          last_checked_time: response.data.last_checked_iso,
-          num_tools: response.data.num_tools,
+          status: result.status,
+          last_checked_time: result.last_checked,
+          num_tools: result.num_tools,
         };
-
-        onServerUpdate(server.path, updates);
+        onServerUpdate(server.id, updates);
       } else if (onRefreshSuccess) {
-        // Fallback to global refresh if onServerUpdate is not provided
         onRefreshSuccess();
       }
 
@@ -149,9 +139,8 @@ const ServerCard: React.FC<ServerCardProps> = ({
         onShowToast('Health status refreshed successfully', 'success');
       }
     } catch (error: any) {
-      console.error('Failed to refresh health:', error);
       if (onShowToast) {
-        onShowToast(error.response?.data?.detail || 'Failed to refresh health status', 'error');
+        onShowToast(error?.detail || 'Failed to refresh health status', 'error');
       }
     } finally {
       setLoadingRefresh(false);
@@ -270,7 +259,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
               onRatingUpdate={newRating => {
                 // Update local server rating when user submits rating
                 if (onServerUpdate) {
-                  onServerUpdate(server.path, { num_stars: newRating });
+                  onServerUpdate(server.id, { num_stars: newRating });
                 }
               }}
             />
@@ -324,22 +313,22 @@ const ServerCard: React.FC<ServerCardProps> = ({
               <div className='flex items-center gap-1'>
                 <div
                   className={`w-2.5 h-2.5 rounded-full ${
-                    server.status === 'healthy'
+                    server.status === 'active'
                       ? 'bg-emerald-400 shadow-lg shadow-emerald-400/30'
-                      : server.status === 'healthy-auth-expired'
+                      : server.status === 'inactive'
                         ? 'bg-orange-400 shadow-lg shadow-orange-400/30'
-                        : server.status === 'unhealthy'
+                        : server.status === 'error'
                           ? 'bg-red-400 shadow-lg shadow-red-400/30'
                           : 'bg-amber-400 shadow-lg shadow-amber-400/30'
                   }`}
                 />
                 <span className='text-xs font-medium text-gray-700 dark:text-gray-300 max-w-[80px] truncate'>
-                  {server.status === 'healthy'
-                    ? 'Healthy'
-                    : server.status === 'healthy-auth-expired'
-                      ? 'Healthy (Auth Expired)'
-                      : server.status === 'unhealthy'
-                        ? 'Unhealthy'
+                  {server.status === 'active'
+                    ? 'Active'
+                    : server.status === 'inactive'
+                      ? 'Inactive'
+                      : server.status === 'error'
+                        ? 'Error'
                         : 'Unknown'}
                 </span>
               </div>
@@ -374,8 +363,8 @@ const ServerCard: React.FC<ServerCardProps> = ({
               <label className='relative inline-flex items-center cursor-pointer'>
                 <input
                   type='checkbox'
-                  checked={server.enabled}
-                  onChange={e => onToggle(server.path, e.target.checked)}
+                  checked={server.status === 'active'}
+                  onChange={e => onToggle(server.id, e.target.checked)}
                   className='sr-only peer'
                 />
                 <div
@@ -417,11 +406,11 @@ const ServerCard: React.FC<ServerCardProps> = ({
                     {tool.description && (
                       <p className='text-sm text-gray-600 dark:text-gray-300 mb-2'>{tool.description}</p>
                     )}
-                    {tool.schema && (
+                    {tool.inputSchema && (
                       <details className='text-xs'>
                         <summary className='cursor-pointer text-gray-500 dark:text-gray-300'>View Schema</summary>
                         <pre className='mt-2 p-3 bg-gray-50 dark:bg-gray-900 border dark:border-gray-700 rounded overflow-x-auto text-gray-900 dark:text-gray-100'>
-                          {JSON.stringify(tool.schema, null, 2)}
+                          {JSON.stringify(tool.inputSchema, null, 2)}
                         </pre>
                       </details>
                     )}

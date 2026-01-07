@@ -1,4 +1,4 @@
-export type AuthType = 'auto' | 'api-key' | 'oauth';
+export type AuthType = 'auto' | 'apiKey' | 'oauth';
 export type ApiKeySource = 'global' | 'user';
 export type ApiKeyHeaderFormat = 'bearer' | 'basic' | 'custom';
 export type ServerType = 'streamable-https' | 'sse';
@@ -6,23 +6,23 @@ export type ServerType = 'streamable-https' | 'sse';
 export interface AuthenticationConfig {
   type: AuthType;
   // API Key specific props
-  apiKeySource?: ApiKeySource;
-  apiKey?: string;
-  headerFormat?: ApiKeyHeaderFormat;
+  source?: ApiKeySource;
+  key?: string;
+  auth_type?: ApiKeyHeaderFormat;
+  custom_header?: string;
   // OAuth specific props
-  clientId?: string;
-  clientSecret?: string;
-  authorizationUrl?: string;
-  tokenUrl?: string;
+  client_id?: string;
+  client_secret?: string;
+  authorization_url?: string;
+  token_url?: string;
   scope?: string;
 }
 
 export interface ServerConfig {
-  icon?: string; // URL or base64
-  name: string;
+  server_name: string;
   description: string;
-  url: string;
-  serverType: ServerType;
+  path: string;
+  supported_transports: ServerType;
   authConfig: AuthenticationConfig;
   trustServer: boolean;
 }
