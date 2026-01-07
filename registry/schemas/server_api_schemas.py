@@ -132,7 +132,7 @@ class ToolSchema(BaseModel):
     description: str
     inputSchema: Optional[Dict[str, Any]] = None
     
-    class Config:
+    class ConfigDict:
         extra = "allow"
 
 
@@ -159,7 +159,7 @@ class ServerListItemResponse(BaseModel):
     createdAt: datetime
     updatedAt: datetime
     
-    class Config:
+    class ConfigDict:
         from_attributes = True
 
 
@@ -202,7 +202,7 @@ class ServerDetailResponse(BaseModel):
     updatedAt: datetime
     version: int
     
-    class Config:
+    class ConfigDict:
         from_attributes = True
 
 
@@ -218,7 +218,7 @@ class ServerCreateResponse(BaseModel):
     updatedAt: datetime
     version: int
     
-    class Config:
+    class ConfigDict:
         from_attributes = True
 
 
@@ -235,7 +235,7 @@ class ServerUpdateResponse(BaseModel):
     updatedAt: datetime
     version: int
     
-    class Config:
+    class ConfigDict:
         from_attributes = True
 
 
@@ -248,7 +248,7 @@ class ServerToggleResponse(BaseModel):
     status: str
     updatedAt: datetime
     
-    class Config:
+    class ConfigDict:
         from_attributes = True
 
 
@@ -261,7 +261,7 @@ class ServerToolsResponse(BaseModel):
     num_tools: int
     cached: bool = False
     
-    class Config:
+    class ConfigDict:
         from_attributes = True
 
 
@@ -275,7 +275,7 @@ class ServerHealthResponse(BaseModel):
     response_time_ms: Optional[int] = None
     num_tools: int
     
-    class Config:
+    class ConfigDict:
         from_attributes = True
 
 

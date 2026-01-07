@@ -258,9 +258,10 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.info(f"JWT token validated for user: {username}, type: {token_type}, scopes: {scopes}")
             if description:
                 logger.debug(f"Token description: {description}")
-
+            user_id = claims.get('user_id')
             # Return user context similar to _try_basic_auth
             return self._build_user_context(
+                user_id=user_id,
                 username=username,
                 groups=groups,
                 scopes=scopes,
@@ -302,7 +303,6 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 if not scopes:
                     scopes = ['mcp-registry-admin', 'mcp-servers-unrestricted/read', 'mcp-servers-unrestricted/execute']
                 logger.info(f"Traditional user {username} with groups {groups} mapped to scopes: {scopes}")
-
             return self._build_user_context(
                 username=username,
                 groups=groups,
@@ -338,7 +338,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.warning(f"Session cookie parse error: {e}")
             return None
 
-    def _build_user_context(self, username: str, groups: list, scopes: list,
+    def _build_user_context(self, user_id, username: str, groups: list, scopes: list,
                             auth_method: str, provider: str, auth_source: str = None) -> Dict[str, Any]:
         """
             Construct the complete user context (from the original enhanced_auth logic).
@@ -350,6 +350,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         can_modify = user_can_modify_servers(groups, scopes)
 
         user_context = {
+            "user_id": user_id,
             'username': username,
             'groups': groups,
             'scopes': scopes,

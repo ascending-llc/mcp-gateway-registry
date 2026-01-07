@@ -126,20 +126,17 @@ class OAuthHttpClient:
             # Parse response
             token_data = response.json()
 
-            # Transform tokens
-            tokens = self._transform_tokens(token_data, flow_metadata.token_transform)
-
             # Calculate expiration time (convert to integer timestamp)
             expires_at = None
             if "expires_in" in token_data:
                 expires_at = int(time.time()) + int(token_data["expires_in"])
 
             return OAuthTokens(
-                access_token=tokens.get("access_token"),
-                token_type=tokens.get("token_type", "Bearer"),
-                expires_in=tokens.get("expires_in"),
-                refresh_token=tokens.get("refresh_token"),
-                scope=tokens.get("scope"),
+                access_token=token_data.get("access_token"),
+                token_type=token_data.get("token_type", "Bearer"),
+                expires_in=token_data.get("expires_in"),
+                refresh_token=token_data.get("refresh_token"),
+                scope=token_data.get("scope"),
                 expires_at=expires_at
             )
 
