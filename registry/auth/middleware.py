@@ -327,8 +327,9 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.warning(f"Session cookie parse error: {e}")
             return None
 
-    def _build_user_context(self, user_id, username: str, groups: list, scopes: list,
-                            auth_method: str, provider: str, auth_source: str = None) -> Dict[str, Any]:
+    def _build_user_context(self, username: str, groups: list, scopes: list,
+                            auth_method: str, provider: str, auth_source: str = None, 
+                            user_id: str = None) -> Dict[str, Any]:
         """
             Construct the complete user context (from the original enhanced_auth logic).
         """
