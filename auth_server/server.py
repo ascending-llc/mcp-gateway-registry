@@ -1273,6 +1273,7 @@ async def generate_user_token(
             "iss": JWT_ISSUER,
             "aud": JWT_AUDIENCE,
             "sub": username,
+            "user_id": username, # TODO: get ObjectsID from mongo
             "scope": " ".join(requested_scopes),
             "groups": user_groups,  # Include user groups from context
             "exp": expires_at,

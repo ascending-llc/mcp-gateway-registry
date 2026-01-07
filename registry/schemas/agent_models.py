@@ -220,7 +220,7 @@ class SecurityScheme(BaseModel):
         description="OpenID Connect discovery URL",
     )
 
-    class Config:
+    class ConfigDict:
         populate_by_name = True  # Allow both snake_case and camelCase on input
 
     @field_validator("type")
@@ -270,7 +270,7 @@ class AgentProvider(BaseModel):
         description="Provider website or documentation URL",
     )
 
-    class Config:
+    class ConfigDict:
         populate_by_name = True
 
 
@@ -319,7 +319,7 @@ class Skill(BaseModel):
         description="Skill-level security requirements",
     )
 
-    class Config:
+    class ConfigDict:
         populate_by_name = True  # Allow both snake_case and camelCase on input
 
     @field_validator("id")
@@ -512,7 +512,7 @@ class AgentCard(BaseModel):
         description="unverified, community, verified, trusted",
     )
 
-    class Config:
+    class ConfigDict:
         populate_by_name = True  # Allow both snake_case and camelCase on input
 
     @field_validator("protocol_version")
@@ -686,7 +686,7 @@ class AgentInfo(BaseModel):
         description="unverified, community, verified, trusted",
     )
 
-    class Config:
+    class ConfigDictDict:
         populate_by_name = True  # Allow both snake_case and camelCase on input
 
 
