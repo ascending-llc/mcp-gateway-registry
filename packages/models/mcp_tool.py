@@ -66,7 +66,8 @@ class McpTool:
         self.description_returns = description_returns
         self.description_raises = description_raises
         self.schema_json = schema_json
-        self.tags = tags or []
+        # Normalize tags to lowercase for case-insensitive filtering
+        self.tags = [tag.lower().strip() if isinstance(tag, str) else str(tag).lower().strip() for tag in (tags or [])]
         self.is_enabled = is_enabled
         self.content = content
         self.relevance_score = relevance_score

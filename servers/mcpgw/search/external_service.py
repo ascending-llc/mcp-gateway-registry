@@ -166,33 +166,33 @@ class ExternalVectorSearchService(VectorSearchService):
         if not query and not tags:
             raise Exception("At least one of 'query' or 'tags' must be provided")
 
+        # Normalize tags for case-insensitive matching (stored as lowercase in DB)
+        normalized_tags = [tag.lower().strip() for tag in tags] if tags else []
+        normalized_tags.append("all")
+        logger.info(f"Filtering by tags (normalized): {normalized_tags}")
+
         use_search_type = search_type or self.search_type
-        logger.info(
-            f"Searching tools: query='{query}', tags={tags}, limit={top_n_tools}, "
-            f"search_type={use_search_type}"
-        )
-
+        logger.info(f"Searching tools: query='{query}', tags={tags}, limit={top_n_tools}, "
+                    f"search_type={use_search_type}")
         try:
-            filter_conditions = {"is_enabled": True}
-
+            filter_conditions = {"is_enabled": True,
+                                 "tags": {"$in": str(normalized_tags)}}
             if not query:
                 # Metadata-only filter
                 tools = self._mcp_tools.filter(
                     filters=filter_conditions,
-                    limit=top_n_tools * 2 if tags else top_n_tools
+                    limit=top_n_tools
                 )
             elif self.enable_rerank:
                 # Use rerank - Repository layer handles logic automatically
                 candidate_k = min(top_n_tools * 3, 100)
-                if tags:
-                    candidate_k = min(candidate_k * 2, 150)
 
                 logger.info(f"Using rerank: type={use_search_type.value}, "
-                            f"candidate_k={candidate_k}, k={top_n_tools * 2 if tags else top_n_tools}")
+                            f"candidate_k={candidate_k}, k={top_n_tools}")
                 tools = self._mcp_tools.search_with_rerank(
                     query=query,
                     search_type=use_search_type,
-                    k=top_n_tools * 2 if tags else top_n_tools,
+                    k=top_n_tools,
                     candidate_k=candidate_k,
                     filters=filter_conditions,
                     reranker_type=RerankerProvider.FLASHRANK,
@@ -203,20 +203,12 @@ class ExternalVectorSearchService(VectorSearchService):
                 tools = self._mcp_tools.search(
                     query=query,
                     search_type=use_search_type,
-                    k=top_n_tools * 2 if tags else top_n_tools,
+                    k=top_n_tools,
                     filters=filter_conditions
                 )
 
-            # Apply tag filtering in-memory if needed
-            if tags:
-                filtered_tools = []
-                for tool in tools:
-                    tool_tags = tool.tags or []
-                    if any(tag in tool_tags for tag in tags):
-                        filtered_tools.append(tool)
-                tools = filtered_tools[:top_n_tools]
-            else:
-                tools = tools[:top_n_tools]
+            # Tags filtering is now done at database level via filter_conditions
+            tools = tools[:top_n_tools]
 
             logger.info(f"Search returned {len(tools)} tools (rerank={'ON' if self.enable_rerank else 'OFF'})")
 
