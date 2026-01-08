@@ -3,7 +3,8 @@ import { ArrowPathIcon, KeyIcon, TrashIcon, XMarkIcon } from '@heroicons/react/2
 import type React from 'react';
 import { useState } from 'react';
 
-import SERVICE from '../services';
+import { useServer } from '@/contexts/ServerContext';
+import SERVICES from '@/services';
 import { SERVER_CONNECTION } from '../services/mcp/type';
 
 interface ServerAuthorizationModalProps {
@@ -12,9 +13,6 @@ interface ServerAuthorizationModalProps {
   showApiKeyDialog: boolean;
   setShowApiKeyDialog: (show: boolean) => void;
   onShowToast?: (message: string, type: 'success' | 'error') => void;
-  refreshServerStatus?: () => void;
-  getServerStatusByPolling?: (serverNames: string) => void;
-  cancelPolling?: (serverName: string) => void;
 }
 
 const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
@@ -23,10 +21,9 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
   showApiKeyDialog,
   setShowApiKeyDialog,
   onShowToast,
-  refreshServerStatus,
-  getServerStatusByPolling,
-  cancelPolling,
 }) => {
+  const { refreshServerStatus, getServerStatusByPolling, cancelPolling } = useServer();
+
   const [loading, setLoading] = useState(false);
 
   const isConnecting = status === SERVER_CONNECTION.CONNECTING;
@@ -42,7 +39,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
     if (isConnecting || isAuthenticated) {
       try {
         setLoading(true);
-        const result = await SERVICE.MCP.cancelAuth(name);
+        const result = await SERVICES.MCP.cancelAuth(name);
         if (result.success) {
           onShowToast?.(result?.message || 'OAuth flow cancelled', 'success');
           setShowApiKeyDialog(false);
@@ -63,7 +60,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
     try {
       setLoading(true);
       if (isAuthenticated) {
-        const result = await SERVICE.MCP.getSOauthReinit(name);
+        const result = await SERVICES.MCP.getSOauthReinit(name);
         if (result.success) {
           onShowToast?.(result?.message || 'Server reinitialized successfully', 'success');
           setShowApiKeyDialog(false);
@@ -71,7 +68,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
           onShowToast?.(result?.message || 'Server reinitialized failed', 'error');
         }
       } else {
-        const result = await SERVICE.MCP.getOauthInitiate(name);
+        const result = await SERVICES.MCP.getOauthInitiate(name);
         if (result?.authorization_url) {
           window.open(result.authorization_url, '_blank');
           getServerStatusByPolling?.(name);

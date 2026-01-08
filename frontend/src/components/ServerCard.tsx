@@ -61,7 +61,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
   onServerUpdate,
   authToken,
 }) => {
-  const { serverStatus: serverStatusMap, refreshServerStatus, getServerStatusByPolling, cancelPolling } = useServer();
+  const { serverStatus: serverStatusMap } = useServer();
   const [tools, setTools] = useState<Tool[]>([]);
   const [loadingTools, setLoadingTools] = useState(false);
   const [showTools, setShowTools] = useState(false);
@@ -436,9 +436,6 @@ const ServerCard: React.FC<ServerCardProps> = ({
           showApiKeyDialog={showApiKeyDialog}
           setShowApiKeyDialog={setShowApiKeyDialog}
           onShowToast={onShowToast}
-          refreshServerStatus={refreshServerStatus}
-          getServerStatusByPolling={getServerStatusByPolling}
-          cancelPolling={cancelPolling}
         />
       )}
     </>

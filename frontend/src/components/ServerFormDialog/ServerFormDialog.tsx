@@ -81,8 +81,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
         };
       }
       setFormData(formData);
-    } catch (error) {
-      console.error(error);
+    } catch (_error) {
       showToast('Failed to fetch server details', 'error');
     } finally {
       setLoading(false);
