@@ -32,27 +32,16 @@ jobs:
   get-schema-version:
     runs-on: ubuntu-latest
     outputs:
-      schema_version: ${{ steps.schema.outputs.schema_version }}
+      schema_version: ${{ steps.schema.outputs.schema-version }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Get latest schema version
         id: schema
-        run: |
-          # Get the latest release tag from jarvis-api repo (private repo)
-          # Using PAT for cross-repo access to private repository
-          SCHEMA_VERSION=$(gh api repos/ascending-llc/jarvis-api/releases/latest --jq '.tag_name' || echo "")
-          
-          if [ -z "$SCHEMA_VERSION" ]; then
-            echo "⚠️  Error: Failed to fetch latest release from jarvis-api"
-            echo "This could mean:"
-            echo "  1. The repository has no releases published yet"
-            echo "  2. The PAT doesn't have access to ascending-llc/jarvis-api"
-            exit 1
-          fi
-          
-          echo "schema_version=${SCHEMA_VERSION}" >> $GITHUB_OUTPUT
-          echo "✅ Using SCHEMA_VERSION: ${SCHEMA_VERSION}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.JARVIS_RELEASE_ACCESS_TOKEN }}
+        uses: ./.github/actions/get-schema-version
+        with:
+          github-token: ${{ secrets.JARVIS_RELEASE_ACCESS_TOKEN }}
 
   build-and-push-mcpgateway:
     needs: get-schema-version
