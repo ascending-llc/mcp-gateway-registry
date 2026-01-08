@@ -1,11 +1,14 @@
+import time
 from typing import Dict, Any, Optional
 from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
 from registry.auth.dependencies import CurrentUser
 from registry.services.oauth.mcp_service import get_mcp_service, MCPService
+from registry.schemas.enums import ConnectionState, OAuthFlowStatus
 from registry.utils.log import logger
 from registry.utils.utils import load_template
+from registry.auth.oauth.reconnection import get_reconnection_manager
 
 router = APIRouter(prefix="/v1", tags=["oauth"])
 
@@ -98,7 +101,7 @@ async def oauth_callback(
 
         # Check if flow is already completed
         flow = mcp_service.oauth_service.flow_manager.get_flow(flow_id)
-        if flow and flow.status == "completed":
+        if flow and flow.status == OAuthFlowStatus.COMPLETED:
             logger.warning(f"[MCP OAuth] Flow already completed, preventing duplicate token exchange: {flow_id}")
             return _redirect_to_success(request, server_name)
 
@@ -116,7 +119,47 @@ async def oauth_callback(
 
         logger.info(f"[MCP OAuth] OAuth flow completed successfully for {server_name}")
 
-        # 5. Redirect to success page
+        # 5. Create user connection and setup server
+        try:
+            # Get user_id from flow
+            flow = mcp_service.oauth_service.flow_manager.get_flow(flow_id)
+            if flow and flow.user_id:
+                user_id = flow.user_id
+                logger.debug(f"[MCP OAuth] Attempting to reconnect {server_name} with new OAuth tokens")
+
+                # Create user connection with CONNECTED state
+                await mcp_service.connection_service.create_user_connection(
+                    user_id=user_id,
+                    server_name=server_name,
+                    initial_state=ConnectionState.CONNECTED,
+                    details={
+                        "oauth_completed": True,
+                        "flow_id": flow_id,
+                        "created_at": time.time()
+                    }
+                )
+                logger.info(f"[MCP OAuth] Successfully reconnected {server_name} for user {user_id}")
+
+                # Clear any reconnection attempts
+                try:
+                    reconnection_manager = get_reconnection_manager(
+                        mcp_service=mcp_service,
+                        oauth_service=mcp_service.oauth_service
+                    )
+                    reconnection_manager.clear_reconnection(user_id, server_name)
+                    logger.debug(f"[MCP OAuth] Cleared reconnection attempts for {server_name}")
+                except Exception as e:
+                    logger.error(f"[MCP OAuth] Could not clear reconnection (manager not initialized): {e}")
+
+                # TODO: Fetch tools, resources, and prompts in parallel
+                # This should be done asynchronously in the background
+                logger.debug(f"[MCP OAuth] User connection created for {server_name}")
+
+        except Exception as error:
+            logger.error(f"[MCP OAuth] Failed to reconnect {server_name} after OAuth, "
+                         f"but tokens are saved: {error}")
+
+        # 6. Redirect to success page
         return _redirect_to_success(request, server_name)
 
     except Exception as e:
@@ -147,7 +190,7 @@ async def get_oauth_tokens(
         user_id = current_user.get("user_id")
 
         # 1. Verify flow_id belongs to current user
-        if not flow_id.startswith(f"{user_id}-") and not flow_id.startswith("system:"):
+        if not flow_id.startswith(f"{user_id}") and not flow_id.startswith("system:"):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                                 detail="No permission to access this flow")
 

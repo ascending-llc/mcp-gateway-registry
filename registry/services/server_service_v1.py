@@ -79,26 +79,26 @@ def _build_config_from_request(data: ServerCreateRequest) -> Dict[str, Any]:
         config["oauth"] = data.oauth
     if data.custom_user_vars is not None:
         config["custom_user_vars"] = data.custom_user_vars
-    
+
     return config
 
 
 def _update_config_from_request(config: Dict[str, Any], data: ServerUpdateRequest) -> Dict[str, Any]:
     """Update config dictionary from ServerUpdateRequest"""
     update_dict = data.model_dump(exclude_unset=True, exclude={'version'})
-    
+
     # Normalize tags if present
     if 'tags' in update_dict and update_dict['tags']:
         update_dict['tags'] = [tag.lower() for tag in update_dict['tags']]
-    
+
     # Update config with new values (only fields that were explicitly set)
     for key, value in update_dict.items():
         if value is not None:
             config[key] = value
-    
+
     # Increment version
     config['version'] = config.get('version', 1) + 1
-    
+
     return config
 
 
@@ -475,7 +475,7 @@ class ServerServiceV1:
             ValueError: If server not found
         """
         server = await self.get_server_by_id(server_id, user_id)
-        
+
         if not server:
             raise ValueError("Server not found")
         
@@ -500,11 +500,12 @@ class ServerServiceV1:
             "response_time_ms": 125,  # Mock value
         }
 
-    async def get_server_by_name(self,server_name: str) -> Optional[MCPServerDocument]:
+    async def get_server_by_name(self, server_name: str, status: str = "active") -> Optional[MCPServerDocument]:
         """
         Get server by name.
         """
-        return await MCPServerDocument.find_one({"serverName": server_name})
+        return await MCPServerDocument.find_one({"serverName": server_name, "config.status": status})
+
 
 # Singleton instance
 server_service_v1 = ServerServiceV1()
