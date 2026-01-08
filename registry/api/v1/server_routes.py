@@ -8,7 +8,7 @@ This is a complete rewrite independent of the legacy server_routes.py.
 import logging
 import math
 from typing import Optional
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status as http_status, Depends
 from pydantic import ValidationError
 
 from registry.auth.dependencies import CurrentUser
@@ -36,6 +36,9 @@ from registry.schemas.server_api_schemas import (
     convert_to_health_response,
 )
 
+# API Version constant
+API_VERSION = "v1"
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -49,7 +52,7 @@ def get_user_context(user_context: CurrentUser):
 # ==================== Endpoints ====================
 
 @router.get(
-    "/v1/servers",
+    f"/{API_VERSION}/servers",
     response_model=ServerListResponse,
     summary="List Servers",
     description="List all servers with filtering, searching, and pagination",
@@ -76,14 +79,14 @@ async def list_servers(
         # Validate scope if provided
         if scope and scope not in ["shared_app", "shared_user", "private_user"]:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=http_status.HTTP_400_BAD_REQUEST,
                 detail="Invalid scope. Must be one of: shared_app, shared_user, private_user"
             )
         
         # Validate status if provided
         if status and status not in ["active", "inactive", "error"]:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=http_status.HTTP_400_BAD_REQUEST,
                 detail="Invalid status. Must be one of: active, inactive, error"
             )
         
@@ -118,13 +121,13 @@ async def list_servers(
     except Exception as e:
         logger.error(f"Error listing servers: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while listing servers"
         )
 
 
 @router.get(
-    "/v1/servers/{server_id}",
+    f"/{API_VERSION}/servers/{{server_id}}",
     response_model=ServerDetailResponse,
     summary="Get Server Details",
     description="Get detailed information about a specific server",
@@ -142,7 +145,7 @@ async def get_server(
         
         if not server:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Server not found"
             )
         
@@ -153,15 +156,15 @@ async def get_server(
     except Exception as e:
         logger.error(f"Error getting server {server_id}: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while getting server"
         )
 
 
 @router.post(
-    "/v1/servers",
+    f"/{API_VERSION}/servers",
     response_model=ServerCreateResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=http_status.HTTP_201_CREATED,
     summary="Register Server",
     description="Register a new MCP server",
 )
@@ -183,24 +186,24 @@ async def create_server(
     except ValueError as e:
         # Business logic errors (e.g., duplicate path, duplicate tags)
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
     except ValidationError as e:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e)
         )
     except Exception as e:
         logger.error(f"Error creating server: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while creating server"
         )
 
 
 @router.patch(
-    "/v1/servers/{server_id}",
+    f"/{API_VERSION}/servers/{{server_id}}",
     response_model=ServerUpdateResponse,
     summary="Update Server",
     description="Update server configuration with optimistic locking",
@@ -234,7 +237,7 @@ async def update_server(
                 current_version = int(parts[1])
                 
                 raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
+                    status_code=http_status.HTTP_409_CONFLICT,
                     detail={
                         "error": "conflict",
                         "message": "Server was modified by another process",
@@ -245,7 +248,7 @@ async def update_server(
             except (IndexError, ValueError):
                 # Fallback if parsing fails
                 raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
+                    status_code=http_status.HTTP_409_CONFLICT,
                     detail={
                         "error": "conflict",
                         "message": error_msg,
@@ -255,7 +258,7 @@ async def update_server(
         # Check if server not found
         if "not found" in error_msg.lower():
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail={
                     "error": "not_found",
                     "message": error_msg,
@@ -264,7 +267,7 @@ async def update_server(
         
         # Other validation errors
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=error_msg
         )
         
@@ -273,14 +276,14 @@ async def update_server(
     except Exception as e:
         logger.error(f"Error updating server {server_id}: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while updating server"
         )
 
 
 @router.delete(
-    "/v1/servers/{server_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    f"/{API_VERSION}/servers/{{server_id}}",
+    status_code=http_status.HTTP_204_NO_CONTENT,
     summary="Delete Server",
     description="Delete a server",
 )
@@ -303,7 +306,7 @@ async def delete_server(
         # Not found
         if "not found" in error_msg.lower():
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail={
                     "error": "not_found",
                     "message": "Server not found",
@@ -311,7 +314,7 @@ async def delete_server(
             )
         
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=error_msg
         )
         
@@ -320,13 +323,13 @@ async def delete_server(
     except Exception as e:
         logger.error(f"Error deleting server {server_id}: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while deleting server"
         )
 
 
 @router.post(
-    "/v1/servers/{server_id}/toggle",
+    f"/{API_VERSION}/servers/{{server_id}}/toggle",
     response_model=ServerToggleResponse,
     summary="Toggle Server Status",
     description="Enable or disable a server",
@@ -351,7 +354,7 @@ async def toggle_server(
         
         if "not found" in error_msg.lower():
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail={
                     "error": "not_found",
                     "message": "Server not found",
@@ -359,7 +362,7 @@ async def toggle_server(
             )
         
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=error_msg
         )
         
@@ -368,13 +371,13 @@ async def toggle_server(
     except Exception as e:
         logger.error(f"Error toggling server {server_id}: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while toggling server"
         )
 
 
 @router.get(
-    "/v1/servers/{server_id}/tools",
+    f"/{API_VERSION}/servers/{{server_id}}/tools",
     response_model=ServerToolsResponse,
     summary="Get Server Tools",
     description="Get the list of tools provided by a server",
@@ -397,7 +400,7 @@ async def get_server_tools(
         
         if "access denied" in error_msg.lower():
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
+                status_code=http_status.HTTP_403_FORBIDDEN,
                 detail={
                     "error": "forbidden",
                     "message": error_msg,
@@ -406,7 +409,7 @@ async def get_server_tools(
         
         if "not found" in error_msg.lower():
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail={
                     "error": "not_found",
                     "message": "Server not found",
@@ -414,7 +417,7 @@ async def get_server_tools(
             )
         
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=error_msg
         )
         
@@ -423,13 +426,13 @@ async def get_server_tools(
     except Exception as e:
         logger.error(f"Error getting tools for server {server_id}: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while getting server tools"
         )
 
 
 @router.post(
-    "/v1/servers/{server_id}/refresh",
+    f"/{API_VERSION}/servers/{{server_id}}/refresh",
     response_model=ServerHealthResponse,
     summary="Refresh Server Health",
     description="Refresh server health status and check connectivity",
@@ -454,7 +457,7 @@ async def refresh_server_health(
         
         if "not found" in error_msg.lower():
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail={
                     "error": "not_found",
                     "message": "Server not found",
@@ -462,7 +465,7 @@ async def refresh_server_health(
             )
         
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=error_msg
         )
         
@@ -471,7 +474,7 @@ async def refresh_server_health(
     except Exception as e:
         logger.error(f"Error refreshing health for server {server_id}: {e}", exc_info=True)
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while refreshing server health"
         )
 
