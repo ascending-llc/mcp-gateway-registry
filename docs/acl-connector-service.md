@@ -19,8 +19,8 @@
 5. [Additional Considerations](#additional-considerations)
     - [Server Registration Form Updates](#server-registration-form-updates)
     - [ACL Service Cache](#acl-service-cache)
-    - [Blockers](#blockers)
-6. [Etc Notes](#etc-notes)
+6. [Roadmap](#roadmap)
+7. [Etc Notes](#etc-notes)
 
 
 ## Introduction
