@@ -161,7 +161,8 @@ class ACLService:
         principal_id: Optional[str] = None,
         resource_type: str,
         resource_id: str,
-        granted_by: str = None,
+        granted_by: str,
+        role_id: Optional[str] = str,
         perm_bits: Optional[int] = None,
     )
         """
@@ -172,6 +173,12 @@ class ACLService:
         # Validate input parameters 
         if principal_type in ["user", "group"] and not principal_id:
             raise ValueError("principal_id must be set for user/group principal_type")
+
+        if not role_id or perm_bits: 
+            raise ValueError("Permission bits must set via perm_bits or role_id")
+
+        if role_id: 
+            perm_bits = await IAccessRole.find_one({"accessRoleId": role_id}).perm_bits
 
         # Check that the granting user is either an admin or has owner permission bits for the specified resource
         granting_user = await IUser.find_one({"email": granted_by}) # get email from middleware
