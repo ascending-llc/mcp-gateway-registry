@@ -4,6 +4,7 @@ from typing import Optional, List
 from redis import Redis
 from registry.constants import REGISTRY_CONSTANTS
 from registry.models.oauth_models import OAuthFlow, MCPOAuthFlowMetadata, OAuthTokens
+from registry.schemas.enums import OAuthFlowStatus
 from registry.utils.log import logger
 
 
@@ -39,7 +40,7 @@ class RedisFlowStorage:
                 "user_id": flow.user_id,
                 "code_verifier": flow.code_verifier,
                 "state": flow.state,
-                "status": flow.status,
+                "status": flow.status.value,  # Convert enum to string value
                 "created_at": str(flow.created_at),
                 "completed_at": str(flow.completed_at) if flow.completed_at else "",
                 "error": flow.error or "",
@@ -98,7 +99,7 @@ class RedisFlowStorage:
                 user_id=data["user_id"],
                 code_verifier=data["code_verifier"],
                 state=data["state"],
-                status=data["status"],
+                status=OAuthFlowStatus(data["status"]),  # Convert string back to enum
                 created_at=float(data["created_at"]),
                 completed_at=float(data["completed_at"]) if data.get("completed_at") else None,
                 tokens=tokens,
