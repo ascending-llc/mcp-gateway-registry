@@ -174,10 +174,11 @@ class ACLService:
             raise ValueError("principal_id must be set for user/group principal_type")
 
         # Check that the granting user is either an admin or has owner permission bits for the specified resource
-        is_admin = await IUser.find_one({"_id": granted_by}, projection=["role"]).role == "ADMIN"
+        granting_user = await IUser.find_one({"email": granted_by}) # get email from middleware
+        is_admin = granting_user.role == "ADMIN"
         has_owner_perm = self.check_permission(
             principal_type= PrincipalType.USER,
-            principal_id=granted_by,
+            principal_id=granting_user._id
             resource_type=resource_type,
             resource_id=resource_id,
             required_permission=RoleBits.OWNER
@@ -197,7 +198,7 @@ class ACLService:
         if acl_entry:
             acl_entry.permBits = perm_bits
             acl_entry.roleId = role_id
-            acl_entry.grantedBy = granted_by
+            acl_entry.grantedBy = granting_user._id
             acl_entry.grantedAt = datetime.utcnow().isoformat()
             acl_entry.updatedAt = datetime.utcnow().isoformat()
             await acl_entry.save()
@@ -210,7 +211,7 @@ class ACLService:
                 resourceId=resource_id,
                 permBits=perm_bits,
                 roleId=role_id,
-                grantedBy=granted_by,
+                grantedBy=granting_user._id,
                 grantedAt=datetime.utcnow().isoformat(),
                 createdAt=datetime.utcnow().isoformat(),
                 updatedAt=datetime.utcnow().isoformat()
