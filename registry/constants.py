@@ -92,8 +92,8 @@ class RegistryConstants(BaseModel):
     AWS_SESSION_TOKEN: str = os.getenv("AWS_SESSION_TOKEN")
     AWS_REGION: str = os.getenv("AWS_REGION")
 
-    REDIS_HOST:str = os.getenv("REDIS_HOST", "127.0.0.1")
-    REDIS_PORT:int = int(os.getenv("REDIS_PORT", "6379"))
+    REDIS_URI: str = os.getenv("REDIS_URI", "redis://redis:6379/1")
+    REDIS_KEY_PREFIX: str = os.getenv("REDIS_KEY_PREFIX", "jarvis-registry")
 
 
 # Global instance

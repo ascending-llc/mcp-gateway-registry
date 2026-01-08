@@ -71,7 +71,7 @@ async def reinitialize_server(
                         "success": False,
                         "message": f"Failed to initiate OAuth: {error}",
                         "server_name": server_name,
-                        "requires_oauth":server_docs.config.get("requires_oauth", False)
+                        "requires_oauth": server_docs.config.get("requires_oauth", False)
                     }
                 )
 
@@ -110,21 +110,23 @@ async def get_all_connection_status(
         user_id = current_user.get('user_id')
         logger.debug(f"Fetching connection status for all servers (user: {user_id})")
 
-        # Get all user connections
-        user_connections = mcp_service.connection_service.get_user_connections(user_id)
-
         connection_status = {}
-        for server_name, connection in user_connections.items():
-            connection_status[server_name] = {
-                "connection_state": connection.connection_state.value,
-                "last_activity": connection.last_activity,
-                "error_count": connection.error_count,
-                "details": connection.details
-            }
-
+        all_services, _ = await server_service_v1.list_servers(per_page=1000)
+        logger.info(f"Found {len(all_services)} servers")
+        for server in all_services:
+            connection = await mcp_service.connection_service.get_connection(user_id, server.serverName)
+            requires_oauth = server.config.get("requires_oauth", False)
+            if connection:
+                connection_status[server.serverName] = {
+                    "requires_oauth": requires_oauth,
+                    "connection_state": connection.connection_state.value.lower()}
+            else:
+                connection_status[server.serverName] = {
+                    "requires_oauth": requires_oauth,
+                    "connection_state": "disconnected"}
         return {
             "success": True,
-            "connection_status": connection_status
+            "connectionStatus": connection_status
         }
 
     except Exception as e:
@@ -155,20 +157,22 @@ async def get_server_connection_status(
         # Get connection for specific server
         connection = await mcp_service.connection_service.get_connection(user_id, server_name)
         server_docs = await get_service_config(server_name)
+        requires_oauth = server_docs.config.get("requires_oauth", False)
+
         if not connection:
             return {
                 "success": True,
-                "server_name": server_name,
-                "connection_status": "DISCONNECTED",
-                "requires_oauth": server_docs.config.get("requires_oauth", False),
+                "serverName": server_name,
+                "connectionState": "disconnected",
+                "requiresOAuth": requires_oauth,
                 "details": {}
             }
 
         return {
             "success": True,
-            "server_name": server_name,
-            "connection_status": connection.connection_state.value,
-            "requires_oauth": server_docs.config.get("requires_oauth", False),
+            "serverName": server_name,
+            "connectionState": connection.connection_state.value.lower(),
+            "requiresOAuth": requires_oauth,
             "details": connection.details
         }
 
