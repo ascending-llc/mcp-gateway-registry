@@ -251,11 +251,11 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                 <input
                   type='url'
                   required
-                  className={getInputClass('authorization_url')}
-                  value={config.authorization_url || ''}
-                  onChange={e => updateConfig({ authorization_url: e.target.value })}
+                  className={getInputClass('authorize_url')}
+                  value={config.authorize_url || ''}
+                  onChange={e => updateConfig({ authorize_url: e.target.value })}
                 />
-                {renderError('authorization_url')}
+                {renderError('authorize_url')}
               </div>
               <div>
                 <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>

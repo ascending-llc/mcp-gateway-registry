@@ -92,8 +92,6 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
   );
 };
 
-const buildAgentAuthHeaders = (token?: string | null) => (token ? { Authorization: `Bearer ${token}` } : undefined);
-
 const Dashboard: React.FC = () => {
   const { servers, agents, viewMode, setViewMode, activeFilter, loading, error, refreshData, setServers, setAgents } =
     useServer();

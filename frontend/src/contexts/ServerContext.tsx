@@ -174,11 +174,11 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
 
         return {
           id: serverInfo.id,
-          name: serverInfo.server_name || 'Unknown Server',
+          name: serverInfo.serverName || 'Unknown Server',
           path: serverInfo.path,
           description: serverInfo.description || '',
           official: serverInfo.is_official || false, // undefined
-          enabled: serverInfo.is_enabled !== undefined ? serverInfo.is_enabled : false, // undefined
+          enabled: serverInfo.enabled !== undefined ? serverInfo.enabled : false,
           tags: serverInfo.tags || [],
           last_checked_time: serverInfo.updatedAt,
           usersCount: 0,

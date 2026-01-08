@@ -6,7 +6,6 @@ import {
   FunnelIcon,
   KeyIcon,
 } from '@heroicons/react/24/outline';
-import axios from 'axios';
 import type React from 'react';
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';

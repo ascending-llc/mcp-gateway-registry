@@ -32,21 +32,21 @@ const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, updateField, 
     <div className='space-y-6'>
       {/* Name */}
       <div>
-        <label htmlFor='server_name' className='block text-sm font-medium text-gray-900 dark:text-gray-100'>
+        <label htmlFor='serverName' className='block text-sm font-medium text-gray-900 dark:text-gray-100'>
           Name <span className='text-red-500'>*</span>
         </label>
         <div className='mt-1'>
           <input
             type='text'
-            name='server_name'
-            id='server_name'
+            name='serverName'
+            id='serverName'
             required
-            className={getInputClass('server_name')}
+            className={getInputClass('serverName')}
             placeholder='Custom Tool'
-            value={formData.server_name}
-            onChange={e => handleUpdateField('server_name', e.target.value)}
+            value={formData.serverName}
+            onChange={e => handleUpdateField('serverName', e.target.value)}
           />
-          {errors?.server_name && <p className='mt-1 text-xs text-red-500'>{errors.server_name}</p>}
+          {errors?.serverName && <p className='mt-1 text-xs text-red-500'>{errors.serverName}</p>}
         </div>
       </div>
 

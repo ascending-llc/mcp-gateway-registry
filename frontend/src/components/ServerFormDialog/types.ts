@@ -13,13 +13,13 @@ export interface AuthenticationConfig {
   // OAuth specific props
   client_id?: string;
   client_secret?: string;
-  authorization_url?: string;
+  authorize_url?: string;
   token_url?: string;
   scope?: string;
 }
 
 export interface ServerConfig {
-  server_name: string;
+  serverName: string;
   description: string;
   path: string;
   url: string;

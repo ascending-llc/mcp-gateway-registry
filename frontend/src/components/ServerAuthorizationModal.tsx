@@ -91,10 +91,10 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
       className='fixed inset-0 z-50 flex items-center justify-center p-4'
     >
       <div className='fixed inset-0 bg-black/50' aria-hidden='true' />
-      <div className='w-[512px] h-[140px] bg-white shadow-xl rounded-lg p-6 relative'>
+      <div className='w-[512px] h-[140px] bg-white dark:bg-gray-800 shadow-xl rounded-lg p-6 relative'>
         <div className='flex items-start justify-between mb-6'>
           <div className='flex items-center gap-4'>
-            <h3 className='text-xl font-semibold text-gray-900'>{name}</h3>
+            <h3 className='text-xl font-semibold text-gray-900 dark:text-white'>{name}</h3>
             {isConnecting ? (
               <span className='flex items-center gap-1.5 text-sm text-blue-500'>
                 <div className='animate-spin rounded-full h-3 w-3 border-b-2 border-slate-600' />

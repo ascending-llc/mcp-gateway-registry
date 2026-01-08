@@ -1,4 +1,4 @@
-const SERVER_BASE_URL = '/api/v1';
+const SERVER_BASE_URL = '/api/v2';
 const MCP_BASE_URL = '/api/mcp/v1';
 
 const API = {

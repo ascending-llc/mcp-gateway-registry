@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 
 import SERVICES from '@/services';
 import MainConfigForm from './MainConfigForm';
+import ServerCreationSuccessDialog from './ServerCreationSuccessDialog';
 import type { AuthenticationConfig as AuthConfigType, ServerConfig } from './types';
 
 interface ServerFormDialogProps {
@@ -18,7 +19,7 @@ interface ServerFormDialogProps {
 const DEFAULT_AUTH_CONFIG: AuthConfigType = { type: 'auto', source: 'admin', auth_type: 'bearer' };
 
 const INIT_DATA: ServerConfig = {
-  server_name: '',
+  serverName: '',
   description: '',
   path: '',
   url: '',
@@ -32,6 +33,8 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<ServerConfig>(INIT_DATA);
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
+  const [serverData, setServerData] = useState<{ serverName: string }>({ serverName: '' });
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
 
   const isEditMode = !!id;
 
@@ -52,7 +55,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
       const result = await SERVICES.SERVER.getServerDetail(id);
 
       const formData: ServerConfig = {
-        server_name: result.server_name,
+        serverName: result.serverName,
         description: result.description,
         path: result.path,
         url: result.url || '',
@@ -75,9 +78,9 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
           type: 'oauth',
           client_id: result.authentication?.client_id,
           client_secret: result.authentication?.client_secret,
-          authorization_url: result.authentication?.authorization_url,
+          authorize_url: result.authentication?.authorize_url,
           token_url: result.authentication?.token_url,
-          scope: result.authentication?.scope?.join(','),
+          scope: (result.authentication?.scope || result.authentication?.scopes)?.join(','),
         };
       }
       setFormData(formData);
@@ -91,8 +94,8 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
   const validate = () => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.server_name.trim()) {
-      newErrors.server_name = 'Name is required';
+    if (!formData.serverName.trim()) {
+      newErrors.serverName = 'Name is required';
     }
 
     if (!formData.path.trim()) {
@@ -116,7 +119,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
     } else if (auth.type === 'oauth') {
       if (!auth.client_id?.trim()) newErrors.client_id = 'Client ID is required';
       if (!auth.client_secret?.trim()) newErrors.client_secret = 'Client Secret is required';
-      if (!auth.authorization_url?.trim()) newErrors.authorization_url = 'Authorization URL is required';
+      if (!auth.authorize_url?.trim()) newErrors.authorize_url = 'Authorization URL is required';
       if (!auth.token_url?.trim()) newErrors.token_url = 'Token URL is required';
     }
 
@@ -145,8 +148,8 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
           nextErrors.client_secret = undefined;
           hasChanges = true;
         }
-        if (nextErrors.authorization_url && newConfig.authorization_url?.trim()) {
-          nextErrors.authorization_url = undefined;
+        if (nextErrors.authorize_url && newConfig.authorize_url?.trim()) {
+          nextErrors.authorize_url = undefined;
           hasChanges = true;
         }
         if (nextErrors.token_url && newConfig.token_url?.trim()) {
@@ -164,7 +167,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
 
   const processDataByAuthType = (data: ServerConfig) => {
     const baseData = {
-      server_name: data.server_name,
+      serverName: data.serverName,
       description: data.description,
       path: data.path,
       url: data.url,
@@ -192,7 +195,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
             type: data.authConfig.type,
             client_id: data.authConfig.client_id,
             client_secret: data.authConfig.client_secret,
-            authorization_url: data.authConfig.authorization_url,
+            authorize_url: data.authConfig.authorize_url,
             token_url: data.authConfig.token_url,
             scope: data.authConfig.scope?.split(','),
           },
@@ -221,11 +224,12 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
       if (isEditMode) {
         await SERVICES.SERVER.updateServer(id, data);
         showToast('Server updated successfully', 'success');
+        onClose();
       } else {
-        await SERVICES.SERVER.createServer(data);
-        showToast('Server created successfully', 'success');
+        const result = await SERVICES.SERVER.createServer(data);
+        setServerData(result);
+        setShowSuccessDialog(true);
       }
-      onClose();
       refreshData(true);
     } catch (error: any) {
       showToast(error?.detail || error, 'error');
@@ -293,6 +297,15 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
           </div>
         </Dialog.Panel>
       </div>
+
+      <ServerCreationSuccessDialog
+        isOpen={showSuccessDialog}
+        serverData={serverData}
+        onClose={() => {
+          setShowSuccessDialog(false);
+          onClose();
+        }}
+      />
     </Dialog>
   );
 };
