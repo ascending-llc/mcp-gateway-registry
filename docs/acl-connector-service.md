@@ -140,8 +140,6 @@ These enums are not currently imported via `import-schema`. Updates to the `impo
 
 ### Service Design
 
-If the current user is an admin OR if the current user has owner permission bits for the specified resource being updated 
-
 The ACL service needs to facilitate the following operations: 
 1. Admin/Owner can share resource with specific user 
 2. Admin/Owner can share resource with specific group
