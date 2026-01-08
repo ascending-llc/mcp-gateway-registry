@@ -13,7 +13,7 @@ from registry.constants import REGISTRY_CONSTANTS
 
 router = APIRouter(prefix="/v1", tags=["oauth"])
 
-base_path = REGISTRY_CONSTANTS.API_BASE_PATH.rstrip("/")
+base_path = REGISTRY_CONSTANTS.NGINX_BASE_PATH.rstrip("/")
 
 
 @router.get("/{server_name}/oauth/initiate")
