@@ -3,6 +3,8 @@ from typing import Dict, Any, Optional, List, Union
 from pydantic import BaseModel, Field, field_validator
 import time
 
+from registry.schemas.enums import OAuthFlowStatus
+
 class OAuthTokens(BaseModel):
     """OAuth tokens"""
     access_token: str = Field(..., description="Access token")
@@ -112,7 +114,7 @@ class OAuthFlow:
     user_id: str
     code_verifier: str
     state: str
-    status: str = "pending"  # pending, completed, failed
+    status: OAuthFlowStatus = OAuthFlowStatus.PENDING
     created_at: float = field(default_factory=time.time)  # Use dataclasses.field instead of Pydantic Field
     completed_at: Optional[float] = None
     tokens: Optional[OAuthTokens] = None
