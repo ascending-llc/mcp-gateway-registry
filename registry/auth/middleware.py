@@ -1,12 +1,12 @@
 import base64
 import os
 import jwt
-import re
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from itsdangerous import SignatureExpired, BadSignature
 from starlette.middleware.base import BaseHTTPMiddleware
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Tuple
+from starlette.routing import compile_path
 from registry.utils.log import logger
 
 from registry.auth.dependencies import (map_cognito_groups_to_scopes, signer, get_ui_permissions_for_user,
@@ -23,37 +23,54 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         It automatically attempts all authentication methods and stores the results in `request.state`.
     """
 
-    def __init__(self, app, public_paths: Optional[list] = None):
+    def __init__(self, app):
         super().__init__(app)
-        self.public_paths = public_paths or [
+        self.public_paths_compiled = self._compile_patterns([
             "/",
             "/health",
             "/docs",
             "/openapi.json",
-            "/static/*",
-            "/callback",
-            "/api/auth/providers",
-            "/api/auth/login",
-            "/login",
-            "/api/auth/config",
-            "/api/mcp/*/*/oauth/callback",  # OAuth callback is public
-            "/api/mcp/*/oauth/success",  # OAuth success page
-            "/api/mcp/*/oauth/error",  # OAuth error page
-        ]
+            "/static/{path:path}",
+            "/api/auth/{path:path}",
+            "/api/mcp/{versions}/{server_name}/oauth/callback",  # OAuth callback is public
+            "/api/mcp/{versions}/oauth/success",  # OAuth success page
+            "/api/mcp/{versions}/oauth/error",  # OAuth error page
+        ])
         # note: admin
-        self.internal_paths = [
-            "/api/internal/*",
-        ]
+        self.internal_paths_compiled = self._compile_patterns([
+            "/api/internal/{path:path}",
+        ])
         # note: jwt auth
-        self.servers_paths = [
-            "/api/servers/*",
-            "/proxy/*",
-            "/api/mcp/*",
-        ]
+        self.servers_paths_compiled = self._compile_patterns([
+            "/api/{versions}/servers/{path:path}",
+            "/api/{versions}/servers",
+            "/proxy/{path:path}",
+            "/api/mcp/{path:path}",
+        ])
+        logger.info(
+            f"Auth middleware initialized with Starlette routing: "
+            f"{len(self.public_paths_compiled)} public, "
+            f"{len(self.internal_paths_compiled)} internal, "
+            f"{len(self.servers_paths_compiled)} server patterns"
+        )
+
+    def _compile_patterns(self, patterns: List[str]) -> List[Tuple]:
+        """
+        Compile path patterns into Starlette route matchers
+        """
+        compiled = []
+        for pattern in patterns:
+            try:
+                path_regex, path_format, param_convertors = compile_path(pattern)
+                compiled.append((pattern, path_regex, path_format, param_convertors))
+                logger.debug(f"Compiled pattern: {pattern} -> {path_regex.pattern}")
+            except Exception as e:
+                logger.error(f"Failed to compile pattern '{pattern}': {e}")
+        return compiled
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        if self._match_path(path, self.public_paths):
+        if self._match_path(path, self.public_paths_compiled):
             logger.debug(f"Public path: {path}")
             return await call_next(request)
 
@@ -71,33 +88,15 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.error(f"Auth error for {path}: {e}")
             return JSONResponse(status_code=500, content={"detail": "Authentication error"})
 
-    def _match_path(self, path: str, patterns: list) -> bool:
+    def _match_path(self, path: str, compiled_patterns: List[Tuple]) -> bool:
         """
-        Path matching
-        
-        Supports:
-        - Exact match: "/api/auth/login"
-        - Suffix wildcard: "/api/servers/*" matches "/api/servers/anything"
-        - Middle wildcard: "/api/mcp/*/oauth/callback" matches "/api/mcp/{anything}/oauth/callback"
+        Match path using Starlette route matcher
         """
-        for pattern in patterns:
-            if pattern == path:
-                # Exact match
+        for original_pattern, path_regex, path_format, param_convertors in compiled_patterns:
+            match = path_regex.match(path)
+            if match:
+                logger.info(f"Path '{path}' matched pattern '{original_pattern}'")
                 return True
-
-            if "*" in pattern:
-                if pattern.endswith("/*"):
-                    # Suffix wildcard: /api/servers/* matches /api/servers/anything
-                    prefix = pattern[:-2]  # Remove /*
-                    if path == prefix or path.startswith(prefix + "/"):
-                        return True
-                else:
-                    # Middle wildcard: /api/mcp/*/oauth/callback
-                    # Convert pattern to regex, * matches any non-slash characters
-                    # Escape special characters, then replace * with [^/]+
-                    regex_pattern = "^" + re.escape(pattern).replace(r"\*", "[^/]+") + "$"
-                    if re.match(regex_pattern, path):
-                        return True
         return False
 
     async def _authenticate(self, request: Request) -> Dict[str, Any]:
@@ -110,13 +109,13 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         """
         path = request.url.path
 
-        if self._match_path(path, self.internal_paths):
+        if self._match_path(path, self.internal_paths_compiled):
             user_context = self._try_basic_auth(request)
             if user_context:
                 return user_context
             raise AuthenticationError("Basic authentication required")
 
-        if self._match_path(path, self.servers_paths):
+        if self._match_path(path, self.servers_paths_compiled):
             user_context = self._try_jwt_auth(request)
             if user_context:
                 return user_context
@@ -328,8 +327,8 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             return None
 
     def _build_user_context(self, username: str, groups: list, scopes: list,
-                            auth_method: str, provider: str, auth_source: str = None, 
-                            user_id: str = None) -> Dict[str, Any]:
+                            auth_method: str, provider: str,
+                            auth_source: str = None, user_id: str = None) -> Dict[str, Any]:
         """
             Construct the complete user context (from the original enhanced_auth logic).
         """

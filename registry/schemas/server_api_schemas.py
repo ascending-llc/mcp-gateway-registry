@@ -5,9 +5,10 @@ These schemas define the request and response models for the
 Server Management endpoints based on the API documentation.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
+from registry.utils.crypto_utils import decrypt_auth_fields
 
 
 # ==================== Request Schemas ====================
@@ -17,7 +18,7 @@ class ServerCreateRequest(BaseModel):
     server_name: str = Field(..., description="Name of the MCP server")
     path: str = Field(..., description="Unique path/route for the server")
     description: Optional[str] = Field(default="", description="Server description")
-    proxy_pass_url: Optional[str] = Field(default=None, description="Backend proxy URL")
+    url: Optional[str] = Field(default=None, description="Backend proxy URL")
     scope: str = Field(default="private_user", description="Access scope: shared_app, shared_user, or private_user")
     tags: List[str] = Field(default_factory=list, description="Server tags")
     num_tools: int = Field(default=0, description="Number of tools")
@@ -27,7 +28,7 @@ class ServerCreateRequest(BaseModel):
     auth_type: Optional[str] = Field(default=None, description="Authentication type")
     auth_provider: Optional[str] = Field(default=None, description="Authentication provider")
     supported_transports: List[str] = Field(default_factory=list, description="Supported transports")
-    transport: Optional[Dict[str, Any]] = Field(default=None, description="Transport configuration")
+    transport: Optional[Union[str, Dict[str, Any]]] = Field(default=None, description="Transport configuration (string or dict)")
     startup: bool = Field(default=False, description="Start on system startup")
     chat_menu: bool = Field(default=True, description="Show in chat menu")
     tool_list: List[Dict[str, Any]] = Field(default_factory=list, description="List of tools")
@@ -38,6 +39,8 @@ class ServerCreateRequest(BaseModel):
     requires_oauth: bool = Field(default=False, description="Requires OAuth")
     oauth: Optional[Dict[str, Any]] = Field(default=None, description="OAuth configuration")
     custom_user_vars: Optional[Dict[str, Any]] = Field(default=None, description="Custom variables")
+    authentication: Optional[Dict[str, Any]] = Field(default=None, description="Authentication configuration (type, provider, scopes, etc.)")
+    apiKey: Optional[Dict[str, Any]] = Field(default=None, description="API Key authentication configuration")
     
     @field_validator('tags', mode='before')
     @classmethod
@@ -61,7 +64,7 @@ class ServerUpdateRequest(BaseModel):
     """Request schema for updating a server (partial update)"""
     server_name: Optional[str] = None
     description: Optional[str] = None
-    proxy_pass_url: Optional[str] = None
+    url: Optional[str] = None
     tags: Optional[List[str]] = None
     num_tools: Optional[int] = None
     num_stars: Optional[int] = None
@@ -70,7 +73,7 @@ class ServerUpdateRequest(BaseModel):
     auth_type: Optional[str] = None
     auth_provider: Optional[str] = None
     supported_transports: Optional[List[str]] = None
-    transport: Optional[Dict[str, Any]] = None
+    transport: Optional[Union[str, Dict[str, Any]]] = None
     startup: Optional[bool] = None
     chat_menu: Optional[bool] = None
     tool_list: Optional[List[Dict[str, Any]]] = None
@@ -81,6 +84,8 @@ class ServerUpdateRequest(BaseModel):
     requires_oauth: Optional[bool] = None
     oauth: Optional[Dict[str, Any]] = None
     custom_user_vars: Optional[Dict[str, Any]] = None
+    authentication: Optional[Dict[str, Any]] = None
+    apiKey: Optional[Dict[str, Any]] = None
     status: Optional[str] = None
     scope: Optional[str] = None
     version: Optional[int] = Field(None, description="Current version for optimistic locking")
@@ -137,7 +142,7 @@ class ServerListItemResponse(BaseModel):
     server_name: str
     path: str
     description: Optional[str] = None
-    proxy_pass_url: Optional[str] = None
+    url: Optional[str] = None
     supported_transports: List[str] = Field(default_factory=list)
     auth_type: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
@@ -147,7 +152,10 @@ class ServerListItemResponse(BaseModel):
     license: Optional[str] = None
     tool_list: List[Dict[str, Any]] = Field(default_factory=list)
     scope: str
+    status: str = "active"
     author_id: Optional[str] = None
+    authentication: Optional[Dict[str, Any]] = None
+    apiKey: Optional[Dict[str, Any]] = None
     createdAt: datetime
     updatedAt: datetime
     
@@ -161,7 +169,7 @@ class ServerDetailResponse(BaseModel):
     server_name: str
     path: str
     description: Optional[str] = None
-    proxy_pass_url: Optional[str] = None
+    url: Optional[str] = None
     supported_transports: List[str] = Field(default_factory=list)
     auth_type: Optional[str] = None
     auth_provider: Optional[str] = None
@@ -180,10 +188,12 @@ class ServerDetailResponse(BaseModel):
     init_timeout: Optional[int] = None
     chat_menu: bool = True
     server_instructions: Optional[str] = None
-    transport: Optional[Dict[str, Any]] = None
+    transport: Optional[Union[str, Dict[str, Any]]] = None
     requires_oauth: bool = False
     oauth: Optional[Dict[str, Any]] = None
     custom_user_vars: Optional[Dict[str, Any]] = None
+    authentication: Optional[Dict[str, Any]] = None
+    apiKey: Optional[Dict[str, Any]] = None
     status: str
     last_connected: Optional[datetime] = None
     last_error: Optional[str] = None
@@ -304,16 +314,18 @@ def convert_to_list_item(server) -> ServerListItemResponse:
     """Convert MCPServerDocument to ServerListItemResponse"""
     config = server.config or {}
     
-    # Extract author_id from server.author Link object
-    # Use ref.id to avoid fetching the entire user document
-    author_id = str(server.author.ref.id) if server.author else None
+    # Decrypt sensitive authentication fields before returning
+    config = decrypt_auth_fields(config)
+    
+    # Extract author_id from server.author PydanticObjectId
+    author_id = str(server.author) if server.author else None
     
     return ServerListItemResponse(
         id=str(server.id),
         server_name=server.serverName,
         path=config.get("path", ""),
         description=config.get("description"),
-        proxy_pass_url=config.get("proxy_pass_url"),
+        url=config.get("url"),
         supported_transports=config.get("supported_transports", []),
         auth_type=config.get("auth_type"),
         tags=config.get("tags", []),
@@ -323,7 +335,10 @@ def convert_to_list_item(server) -> ServerListItemResponse:
         license=config.get("license"),
         tool_list=config.get("tool_list", []),
         scope=config.get("scope", "private_user"),
+        status=config.get("status", "active"),
         author_id=author_id,
+        authentication=config.get("authentication"),
+        apiKey=config.get("apiKey"),
         createdAt=server.createdAt or datetime.now(),
         updatedAt=server.updatedAt or datetime.now(),
     )
@@ -333,9 +348,11 @@ def convert_to_detail(server) -> ServerDetailResponse:
     """Convert MCPServerDocument to ServerDetailResponse"""
     config = server.config or {}
     
-    # Extract author_id from server.author Link object
-    # Use ref.id to avoid fetching the entire user document
-    author_id = str(server.author.ref.id) if server.author else None
+    # Decrypt sensitive authentication fields before returning
+    config = decrypt_auth_fields(config)
+    
+    # Extract author_id from server.author PydanticObjectId
+    author_id = str(server.author) if server.author else None
     
     # Parse last_connected if stored as ISO string
     last_connected = None
@@ -348,12 +365,25 @@ def convert_to_detail(server) -> ServerDetailResponse:
         except (ValueError, AttributeError):
             pass
     
+    # Handle transport field - keep as-is (string or dict)
+    transport_value = config.get("transport")
+    
+    # Handle version field - ensure it's an integer
+    version_value = config.get("version", 1)
+    if isinstance(version_value, str):
+        try:
+            # Try to parse as integer (e.g., "1" -> 1)
+            version_value = int(float(version_value))
+        except (ValueError, TypeError):
+            # If parsing fails, default to 1
+            version_value = 1
+    
     return ServerDetailResponse(
         id=str(server.id),
         server_name=server.serverName,
         path=config.get("path", ""),
         description=config.get("description"),
-        proxy_pass_url=config.get("proxy_pass_url"),
+        url=config.get("url"),
         supported_transports=config.get("supported_transports", []),
         auth_type=config.get("auth_type"),
         auth_provider=config.get("auth_provider"),
@@ -372,23 +402,34 @@ def convert_to_detail(server) -> ServerDetailResponse:
         init_timeout=config.get("init_timeout"),
         chat_menu=config.get("chat_menu", True),
         server_instructions=config.get("server_instructions"),
-        transport=config.get("transport"),
+        transport=transport_value,
         requires_oauth=config.get("requires_oauth", False),
         oauth=config.get("oauth"),
         custom_user_vars=config.get("custom_user_vars"),
+        authentication=config.get("authentication"),
+        apiKey=config.get("apiKey"),
         status=config.get("status", "active"),
         last_connected=last_connected,
         last_error=config.get("last_error"),
         error_message=config.get("error_message"),
         createdAt=server.createdAt or datetime.now(),
         updatedAt=server.updatedAt or datetime.now(),
-        version=config.get("version", 1),
+        version=version_value,
     )
 
 
 def convert_to_create_response(server) -> ServerCreateResponse:
     """Convert MCPServerDocument to ServerCreateResponse"""
     config = server.config or {}
+    
+    # Handle version field - ensure it's an integer
+    version_value = config.get("version", 1)
+    if isinstance(version_value, str):
+        try:
+            version_value = int(float(version_value))
+        except (ValueError, TypeError):
+            version_value = 1
+    
     return ServerCreateResponse(
         id=str(server.id),
         server_name=server.serverName,
@@ -398,13 +439,22 @@ def convert_to_create_response(server) -> ServerCreateResponse:
         status=config.get("status", "active"),
         createdAt=server.createdAt or datetime.now(),
         updatedAt=server.updatedAt or datetime.now(),
-        version=config.get("version", 1),
+        version=version_value,
     )
 
 
 def convert_to_update_response(server) -> ServerUpdateResponse:
     """Convert MCPServerDocument to ServerUpdateResponse"""
     config = server.config or {}
+    
+    # Handle version field - ensure it's an integer
+    version_value = config.get("version", 1)
+    if isinstance(version_value, str):
+        try:
+            version_value = int(float(version_value))
+        except (ValueError, TypeError):
+            version_value = 1
+    
     return ServerUpdateResponse(
         id=str(server.id),
         server_name=server.serverName,
@@ -415,7 +465,7 @@ def convert_to_update_response(server) -> ServerUpdateResponse:
         num_stars=config.get("num_stars", 0),
         status=config.get("status", "active"),
         updatedAt=server.updatedAt or datetime.now(),
-        version=config.get("version", 1),
+        version=version_value,
     )
 
 
