@@ -365,9 +365,9 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleToggleServer = async (path: string, enabled: boolean) => {
+  const handleToggleServer = async (id: string, enabled: boolean) => {
     try {
-      await SERVICES.SERVER.toggleServerStatus(path, { enabled });
+      await SERVICES.SERVER.toggleServerStatus(id, { enabled });
       await refreshData();
       showToast(`Server ${enabled ? 'enabled' : 'disabled'} successfully!`, 'success');
     } catch (error: any) {

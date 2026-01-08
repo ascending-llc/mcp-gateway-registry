@@ -260,7 +260,7 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
-      console.log(`🔄 aaaaa Polling server status for`, serverStatus);
+      console.log(`🔄 Polling server status for`, serverStatus);
       temp_count.current[serverName] = 0;
       const initialState = serverStatus[serverName]?.connectionState;
       const poll = async () => {

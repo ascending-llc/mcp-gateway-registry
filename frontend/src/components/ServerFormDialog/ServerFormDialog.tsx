@@ -7,7 +7,7 @@ import SERVICES from '@/services';
 import MainConfigForm from './MainConfigForm';
 import type { AuthenticationConfig as AuthConfigType, ServerConfig } from './types';
 
-interface ServerConfigModalProps {
+interface ServerFormDialogProps {
   isOpen: boolean;
   showToast: (message: string, type: 'success' | 'error') => void;
   refreshData: (notLoading?: boolean) => void;
@@ -27,7 +27,7 @@ const INIT_DATA: ServerConfig = {
   trustServer: false,
 };
 
-const ServerConfigModal: React.FC<ServerConfigModalProps> = ({ isOpen, showToast, refreshData, onClose, id }) => {
+const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, refreshData, onClose, id }) => {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<ServerConfig>(INIT_DATA);
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
@@ -197,7 +197,7 @@ const ServerConfigModal: React.FC<ServerConfigModalProps> = ({ isOpen, showToast
           },
         };
       default:
-        break;
+        return {};
     }
   };
 
@@ -219,10 +219,11 @@ const ServerConfigModal: React.FC<ServerConfigModalProps> = ({ isOpen, showToast
     try {
       if (isEditMode) {
         await SERVICES.SERVER.updateServer(id, data);
+        showToast('Server updated successfully', 'success');
       } else {
         await SERVICES.SERVER.createServer(data);
+        showToast('Server created successfully', 'success');
       }
-      showToast('Server created successfully', 'success');
       onClose();
       refreshData(true);
     } catch (error: any) {
@@ -277,8 +278,7 @@ const ServerConfigModal: React.FC<ServerConfigModalProps> = ({ isOpen, showToast
                     onClick={handleDelete}
                     className='inline-flex items-center px-4 py-2 border border-red-300 dark:border-red-800 rounded-md shadow-sm text-sm font-medium text-red-700 dark:text-red-400 bg-white dark:bg-gray-800 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500'
                   >
-                    <TrashIcon className='h-4 w-4 mr-2' />
-                    Delete
+                    <TrashIcon className='h-4 w-4' />
                   </button>
                 )}
               </div>
@@ -331,4 +331,4 @@ const ServerConfigModal: React.FC<ServerConfigModalProps> = ({ isOpen, showToast
   );
 };
 
-export default ServerConfigModal;
+export default ServerFormDialog;

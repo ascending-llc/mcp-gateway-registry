@@ -67,10 +67,6 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
     } catch (error) {
       onShowToast?.(error instanceof Error ? error.message : 'Unknown error', 'error');
     } finally {
-      setTimeout(() => {
-        setLoading(false);
-        setAuthUrl('https://www.google.com/');
-      }, 1000);
     }
   };
 

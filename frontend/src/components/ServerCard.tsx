@@ -115,8 +115,6 @@ const ServerCard: React.FC<ServerCardProps> = ({
   const { connectionState, requiresOAuth } = serverStatus || {};
 
   const getAuthStatusIcon = useCallback(() => {
-    console.log('connectionState', connectionState);
-    console.log('requiresOAuth', requiresOAuth);
     if (requiresOAuth && connectionState === SERVER_CONNECTION.CONNECTED) {
       return <CheckCircleIcon className='h-4 w-4 text-green-500' />;
     }
@@ -134,7 +132,6 @@ const ServerCard: React.FC<ServerCardProps> = ({
     setLoadingTools(true);
     try {
       const result = await SERVICES.SERVER.getServerTools(server.id);
-      console.log('result', result);
       setTools(result.tools || []);
       setShowTools(true);
     } catch (error) {
