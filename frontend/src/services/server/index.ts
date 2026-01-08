@@ -5,7 +5,7 @@ import type * as TYPE from './type';
 
 const getVersion: () => Promise<TYPE.GET_VERSION_RESPONSE> = async () => await Request.get(API.getVersion);
 
-const getServers: any = async (data?: TYPE.GET_SERVERS_QUERY) => await Request.get(API.getServers, data);
+const getServers: any = async (data?: TYPE.GET_SERVERS_REQUEST) => await Request.get(API.getServers, data);
 
 const getServerDetail: any = async (id: string) => await Request.get(API.getServerDetail(id));
 

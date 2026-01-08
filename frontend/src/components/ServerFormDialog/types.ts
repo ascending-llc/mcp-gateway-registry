@@ -26,4 +26,5 @@ export interface ServerConfig {
   supported_transports: ServerType;
   authConfig: AuthenticationConfig;
   trustServer: boolean;
+  tags?: string[];
 }

@@ -1,5 +1,7 @@
 import axios, { type AxiosError, type AxiosRequestConfig } from 'axios';
 
+import UTILS from '@/utils';
+
 const cancelSources: Record<string, () => void> = {};
 const service = axios.create({ baseURL: '/', timeout: 20000 });
 
@@ -15,10 +17,10 @@ service.interceptors.request.use(
 
     config.headers = config.headers || {};
     config.headers['Content-Type'] = 'application/json; charset=utf-8';
-    // if (!config.headers.Authorization) {
-    //   const token = localStorage.getItem('accessToken');
-    //   config.headers.Authorization = `Bearer ${token}`;
-    // }
+    if (!config.headers.Authorization) {
+      const token = UTILS.getLocalStorage('accessToken');
+      if (token) config.headers.Authorization = `Bearer ${token}`;
+    }
 
     return config;
   },
@@ -46,7 +48,6 @@ const request = async ({ url, method, data = {}, config = {} }: RequestType) => 
     const response = await service({ url, method, ...body, ...config });
     return response?.data;
   } catch (error) {
-    console.log('error', error);
     throw (error as AxiosError).response?.data;
   }
 };

@@ -4,6 +4,7 @@ import { createContext, type ReactNode, useContext, useEffect, useState } from '
 
 import { getBasePath } from '@/config';
 import SERVICES from '@/services';
+import UTILS from '@/utils';
 
 // Configure axios to include credentials (cookies) with all requests
 axios.defaults.withCredentials = true;
@@ -48,15 +49,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // getToken();
+    getToken();
     checkAuth();
   }, []);
 
   const getToken = async () => {
     try {
+      const token = UTILS.getLocalStorage('accessToken');
+      if (token) return;
+
       const result = await SERVICES.TOKEN.getToken({ expires_in_hours: 8, description: 'Generated via sidebar' });
       if (result.success) {
-        localStorage.setItem('accessToken', result.token_data.access_token);
+        UTILS.setLocalStorage('accessToken', result?.token_data.access_token, 480);
       }
     } catch (error) {
       console.error('Failed to fetch token:', error);

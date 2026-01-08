@@ -6,12 +6,11 @@ import type { ServerConfig } from './types';
 interface MainConfigFormProps {
   formData: ServerConfig;
   updateField: (field: keyof ServerConfig, value: any) => void;
-  onClose: () => void;
-  isEditMode: boolean;
+
   errors?: Record<string, string | undefined>;
 }
 
-const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, updateField, onClose, isEditMode, errors }) => {
+const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, updateField, errors }) => {
   const handleUpdateField = (field: keyof ServerConfig, value: any) => {
     updateField(field, value);
   };
@@ -23,8 +22,9 @@ const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, updateField, 
   const getInputClass = (fieldName: string) => {
     const baseClass =
       'block w-full rounded-md shadow-sm focus:border-purple-500 focus:ring-purple-500 sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500';
-    const borderClass =
-      errors && errors[fieldName] ? 'border-red-500 focus:border-red-500' : 'border-gray-300 dark:border-gray-600';
+    const borderClass = errors?.[fieldName]
+      ? 'border-red-500 focus:border-red-500'
+      : 'border-gray-300 dark:border-gray-600';
     return `${baseClass} ${borderClass}`;
   };
 
@@ -80,7 +80,7 @@ const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, updateField, 
             id='path'
             required
             className={getInputClass('path')}
-            placeholder='/mcp'
+            placeholder='/my-server'
             value={formData.path}
             onChange={e => handleUpdateField('path', e.target.value)}
           />
@@ -100,7 +100,7 @@ const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, updateField, 
             id='url'
             required
             className={getInputClass('url')}
-            placeholder='https://mcp.example.com'
+            placeholder='https://server.example.com'
             value={formData.url || ''}
             onChange={e => handleUpdateField('url', e.target.value)}
           />
@@ -139,6 +139,28 @@ const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, updateField, 
 
       {/* Authentication */}
       <AuthenticationConfig config={formData.authConfig} onChange={handleAuthChange} errors={errors} />
+
+      {/* Tags */}
+      <div>
+        <label htmlFor='tags' className='block text-sm font-medium text-gray-900 dark:text-gray-100'>
+          Tags <span className='text-gray-500 dark:text-gray-400 font-normal'>(optional)</span>
+        </label>
+        <div className='mt-1'>
+          <input
+            type='text'
+            name='tags'
+            id='tags'
+            className={getInputClass('tags')}
+            placeholder='tag1,tag2,tag3'
+            value={formData.tags?.join(',') || ''}
+            onChange={e => {
+              const val = e.target.value;
+              const tagsArray = val ? val.split(',') : [];
+              handleUpdateField('tags', tagsArray);
+            }}
+          />
+        </div>
+      </div>
 
       {/* Trust Checkbox */}
       <div className='flex items-start'>

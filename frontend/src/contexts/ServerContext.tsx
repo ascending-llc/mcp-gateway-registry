@@ -80,6 +80,7 @@ interface ServerContextType {
   toggleAgent: (path: string, enabled: boolean) => Promise<void>;
   refreshServerStatus: () => Promise<Record<string, SERVER_STATUS>>;
   getServerStatusByPolling: (serverNames: string) => void;
+  cancelPolling: (serverName?: string) => void;
 }
 
 const ServerContext = createContext<ServerContextType | undefined>(undefined);
@@ -104,7 +105,7 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<Record<string, NodeJS.Timeout>>({});
 
   // Calculate server stats
   const stats = useMemo<ServerStats>(
@@ -132,7 +133,11 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     refreshData();
     fetchServerStatus();
     return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      // Clear all timeouts on unmount
+      Object.values(timeoutRef.current).forEach(timeout => {
+        clearTimeout(timeout);
+      });
+      timeoutRef.current = {};
     };
   }, []);
 
@@ -243,7 +248,7 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
   const fetchServerStatus = useCallback(async () => {
     try {
       const result = await SERVICES.MCP.getServerStatus();
-      const serverStatusData = (result || {})?.connectionStatus || {};
+      const serverStatusData = result?.connectionStatus || {};
       setServerStatus(serverStatusData);
       return serverStatusData;
     } catch (error: any) {
@@ -254,28 +259,30 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     }
   }, []);
 
-  const temp_count = useRef<Record<string, number>>({});
   const getServerStatusByPolling = useCallback(
     async (serverName: string) => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
+      // Clear existing timeout for this specific server if it exists
+      if (timeoutRef.current[serverName]) {
+        clearTimeout(timeoutRef.current[serverName]);
+        delete timeoutRef.current[serverName];
       }
-      console.log(`🔄 Polling server status for`, serverStatus);
-      temp_count.current[serverName] = 0;
-      const initialState = serverStatus[serverName]?.connectionState;
+
+      console.log(`🔄 Polling server status for`, serverName);
+      const initialState = serverStatus[serverName]?.connection_state;
+
       const poll = async () => {
-        temp_count.current[serverName] += 1;
         const latestStatusData = await fetchServerStatus();
-        const currentState = latestStatusData[serverName]?.connectionState;
+        const currentState = latestStatusData[serverName]?.connection_state;
 
         if (currentState === initialState || currentState === SERVER_CONNECTION.CONNECTING) {
-          timeoutRef.current = setTimeout(() => {
+          timeoutRef.current[serverName] = setTimeout(() => {
             poll();
           }, 5000);
         } else {
-          if (timeoutRef.current) {
-            clearTimeout(timeoutRef.current);
-            timeoutRef.current = null;
+          // Stop polling for this server
+          if (timeoutRef.current[serverName]) {
+            clearTimeout(timeoutRef.current[serverName]);
+            delete timeoutRef.current[serverName];
           }
         }
       };
@@ -284,6 +291,20 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     },
     [serverStatus, fetchServerStatus],
   );
+
+  const cancelPolling = useCallback((serverName?: string) => {
+    if (serverName) {
+      if (timeoutRef.current[serverName]) {
+        clearTimeout(timeoutRef.current[serverName]);
+        delete timeoutRef.current[serverName];
+      }
+    } else {
+      Object.values(timeoutRef.current).forEach(timeout => {
+        clearTimeout(timeout);
+      });
+      timeoutRef.current = {};
+    }
+  }, []);
 
   const value: ServerContextType = {
     servers,
@@ -303,7 +324,8 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     refreshData,
     toggleAgent,
     refreshServerStatus: fetchServerStatus,
-    getServerStatusByPolling: getServerStatusByPolling,
+    getServerStatusByPolling,
+    cancelPolling,
   };
 
   return <ServerContext.Provider value={value}>{children}</ServerContext.Provider>;

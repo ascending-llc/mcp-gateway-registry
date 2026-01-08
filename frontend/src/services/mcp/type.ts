@@ -1,33 +1,39 @@
-
 export enum SERVER_CONNECTION {
   CONNECTED = 'connected',
   DISCONNECTED = 'disconnected',
   CONNECTING = 'connecting',
-  ERROR = 'error'
+  ERROR = 'error',
 }
 
 export type SERVER_STATUS = {
-  connectionState: SERVER_CONNECTION;
-  requiresOAuth: boolean;
+  connection_state: SERVER_CONNECTION;
+  requires_oauth: boolean;
   error?: string;
-}
+};
 
 export type GET_SERVER_STATUS_RESPONSE = {
   success: boolean;
   connectionStatus: {
-    [serverName: string]: SERVER_STATUS
-  }
-}
+    [serverName: string]: SERVER_STATUS;
+  };
+};
+
+export type GET_OAUTH_INITIATE_RESPONSE = {
+  authorization_url: string;
+  flow_id: string;
+  server_name: string;
+  user_id: string;
+};
 
 export type GET_SERVER_AUTH_URL_RESPONSE = {
-  success: boolean,
-  message: string,
-  oauthUrl: string,
-  serverName: string,
-  oauthRequired: boolean
-}
+  success: boolean;
+  message: string;
+  oauthUrl: string;
+  serverName: string;
+  oauthRequired: boolean;
+};
 
 export type CANCEL_AUTH_RESPONSE = {
   success: boolean;
   message: string;
-}
+};

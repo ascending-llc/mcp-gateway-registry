@@ -1,7 +1,7 @@
 import { Dialog } from '@headlessui/react';
 import { ArrowPathIcon, KeyIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import SERVICE from '../services';
 import { SERVER_CONNECTION } from '../services/mcp/type';
@@ -12,7 +12,9 @@ interface ServerAuthorizationModalProps {
   showApiKeyDialog: boolean;
   setShowApiKeyDialog: (show: boolean) => void;
   onShowToast?: (message: string, type: 'success' | 'error') => void;
+  refreshServerStatus?: () => void;
   getServerStatusByPolling?: (serverNames: string) => void;
+  cancelPolling?: (serverName: string) => void;
 }
 
 const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
@@ -21,52 +23,67 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
   showApiKeyDialog,
   setShowApiKeyDialog,
   onShowToast,
+  refreshServerStatus,
   getServerStatusByPolling,
+  cancelPolling,
 }) => {
   const [loading, setLoading] = useState(false);
-  const [authUrl, setAuthUrl] = useState('');
 
-  const isConnecting = !!authUrl && status === SERVER_CONNECTION.CONNECTING;
+  const isConnecting = status === SERVER_CONNECTION.CONNECTING;
   const isAuthenticated = status === SERVER_CONNECTION.CONNECTED;
 
-  useEffect(() => {
-    return () => {
-      setAuthUrl('');
-    };
-  }, []);
+  const onCancel = () => {
+    cancelPolling?.(name);
+    refreshServerStatus?.();
+    setShowApiKeyDialog(false);
+  };
 
-  const onClickCancel = async () => {
-    if (isConnecting) {
+  const onClickRevoke = async () => {
+    if (isConnecting || isAuthenticated) {
       try {
+        setLoading(true);
         const result = await SERVICE.MCP.cancelAuth(name);
         if (result.success) {
+          onShowToast?.(result?.message || 'OAuth flow cancelled', 'success');
           setShowApiKeyDialog(false);
-          return;
+        } else {
+          onShowToast?.(result?.message || 'Unknown error', 'error');
         }
       } catch (error) {
         onShowToast?.(error instanceof Error ? error.message : 'Unknown error', 'error');
+      } finally {
+        setLoading(false);
+        refreshServerStatus?.();
       }
     }
     setShowApiKeyDialog(false);
   };
 
-  const onClickAuth = async () => {
+  const handleAuth = async () => {
     try {
-      if (authUrl) {
-        window.open(authUrl, '_blank');
-        getServerStatusByPolling?.(name);
-        return;
-      }
       setLoading(true);
-      const result = await SERVICE.MCP.getServerAuthUrl(name);
-      if (!result.success) {
-        onShowToast?.(result.message || 'Failed to get auth URL', 'error');
-        return;
+      if (isAuthenticated) {
+        const result = await SERVICE.MCP.getSOauthReinit(name);
+        if (result.success) {
+          onShowToast?.(result?.message || 'Server reinitialized successfully', 'success');
+          setShowApiKeyDialog(false);
+        } else {
+          onShowToast?.(result?.message || 'Server reinitialized failed', 'error');
+        }
+      } else {
+        const result = await SERVICE.MCP.getOauthInitiate(name);
+        if (result?.authorization_url) {
+          window.open(result.authorization_url, '_blank');
+          getServerStatusByPolling?.(name);
+          setShowApiKeyDialog(false);
+        } else {
+          onShowToast?.('Failed to get auth URL', 'error');
+        }
       }
-      setAuthUrl(result.oauthUrl);
     } catch (error) {
       onShowToast?.(error instanceof Error ? error.message : 'Unknown error', 'error');
     } finally {
+      setLoading(false);
     }
   };
 
@@ -86,6 +103,11 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
                 <div className='animate-spin rounded-full h-3 w-3 border-b-2 border-slate-600' />
                 Connecting
               </span>
+            ) : isAuthenticated ? (
+              <span className='flex items-center gap-1.5 text-sm text-green-500'>
+                <div className='w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-lg shadow-emerald-400/30' />
+                Authenticated
+              </span>
             ) : (
               <span className='flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-600 rounded-full text-xs font-medium'>
                 <KeyIcon className='h-3 w-3' />
@@ -102,29 +124,36 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
         </div>
 
         <div className='flex gap-2'>
-          <button
-            className='px-3 h-10 border-0 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:bg-gray-500 text-sm rounded-lg cursor-pointer flex items-center justify-center gap-2'
-            disabled={loading}
-            onClick={onClickCancel}
-          >
-            {authUrl ? (
-              'Cancel'
-            ) : (
-              <>
-                <TrashIcon className='h-4 w-4' />
-                Revoke
-              </>
-            )}
-          </button>
-          <button
-            className={`btn-primary flex-1 h-10 text-white font-medium rounded-lg border-0 cursor-pointer flex items-center justify-center gap-2 text-sm transition-colors ${authUrl ? 'bg-green-800 hover:bg-green-700' : ''}`}
-            disabled={loading}
-            onClick={onClickAuth}
-          >
-            {loading && <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-slate-200' />}
-            {!(isConnecting || loading || authUrl || isAuthenticated) && <ArrowPathIcon className='h-4 w-4' />}
-            {authUrl ? 'Continue with OAuth' : isAuthenticated ? 'Authenticated' : 'Authenticate'}
-          </button>
+          {isConnecting && (
+            <button
+              className='px-3 h-10 border-0 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:bg-gray-500 text-sm rounded-lg cursor-pointer flex items-center justify-center gap-2'
+              disabled={loading}
+              onClick={onCancel}
+            >
+              Cancel
+            </button>
+          )}
+          {isAuthenticated && (
+            <button
+              className='px-3 h-10 border-0 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:bg-gray-500 text-sm rounded-lg cursor-pointer flex items-center justify-center gap-2'
+              disabled={loading}
+              onClick={onClickRevoke}
+            >
+              <TrashIcon className='h-4 w-4' />
+              Revoke
+            </button>
+          )}
+          {!isConnecting && (
+            <button
+              className='btn-primary flex-1 h-10 text-white font-medium rounded-lg border-0 cursor-pointer flex items-center justify-center gap-2 text-sm transition-colors'
+              disabled={loading}
+              onClick={handleAuth}
+            >
+              {loading && <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-slate-200' />}
+              {!(loading || isAuthenticated) && <ArrowPathIcon className='h-4 w-4' />}
+              {isAuthenticated ? 'Reconnect' : 'Authenticate'}
+            </button>
+          )}
         </div>
       </div>
     </Dialog>

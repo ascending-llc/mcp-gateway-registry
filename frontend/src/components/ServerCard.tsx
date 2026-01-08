@@ -13,6 +13,7 @@ import { useCallback, useState } from 'react';
 import { useServer } from '@/contexts/ServerContext';
 import SERVICES from '@/services';
 import { SERVER_CONNECTION } from '@/services/mcp/type';
+import UTILS from '@/utils';
 import ServerAuthorizationModal from './ServerAuthorizationModal';
 import ServerConfigModal from './ServerConfigModal';
 import StarRatingWidget from './StarRatingWidget';
@@ -50,49 +51,6 @@ interface Tool {
   inputSchema?: any;
 }
 
-// Helper function to format time since last checked
-const formatTimeSince = (timestamp: string | null | undefined): string | null => {
-  if (!timestamp) {
-    console.log('🕐 formatTimeSince: No timestamp provided', timestamp);
-    return null;
-  }
-
-  try {
-    const now = new Date();
-    const lastChecked = new Date(timestamp);
-
-    // Check if the date is valid
-    if (Number.isNaN(lastChecked.getTime())) {
-      console.log('🕐 formatTimeSince: Invalid timestamp', timestamp);
-      return null;
-    }
-
-    const diffMs = now.getTime() - lastChecked.getTime();
-
-    const diffSeconds = Math.floor(diffMs / 1000);
-    const diffMinutes = Math.floor(diffSeconds / 60);
-    const diffHours = Math.floor(diffMinutes / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    let result: string | null = null;
-    if (diffDays > 0) {
-      result = `${diffDays}d ago`;
-    } else if (diffHours > 0) {
-      result = `${diffHours}h ago`;
-    } else if (diffMinutes > 0) {
-      result = `${diffMinutes}m ago`;
-    } else {
-      result = `${diffSeconds}s ago`;
-    }
-
-    console.log(`🕐 formatTimeSince: ${timestamp} -> ${result}`);
-    return result;
-  } catch (error) {
-    console.error('🕐 formatTimeSince error:', error, 'for timestamp:', timestamp);
-    return null;
-  }
-};
-
 const ServerCard: React.FC<ServerCardProps> = ({
   server,
   onToggle,
@@ -103,7 +61,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
   onServerUpdate,
   authToken,
 }) => {
-  const { serverStatus: serverStatusMap, getServerStatusByPolling } = useServer();
+  const { serverStatus: serverStatusMap, refreshServerStatus, getServerStatusByPolling, cancelPolling } = useServer();
   const [tools, setTools] = useState<Tool[]>([]);
   const [loadingTools, setLoadingTools] = useState(false);
   const [showTools, setShowTools] = useState(false);
@@ -112,19 +70,19 @@ const ServerCard: React.FC<ServerCardProps> = ({
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
 
   const serverStatus = serverStatusMap[server.name];
-  const { connectionState, requiresOAuth } = serverStatus || {};
+  const { connection_state, requires_oauth } = serverStatus || {};
 
   const getAuthStatusIcon = useCallback(() => {
-    if (requiresOAuth && connectionState === SERVER_CONNECTION.CONNECTED) {
+    if (requires_oauth && connection_state === SERVER_CONNECTION.CONNECTED) {
       return <CheckCircleIcon className='h-4 w-4 text-green-500' />;
     }
-    if (requiresOAuth && connectionState === SERVER_CONNECTION.DISCONNECTED) {
+    if (requires_oauth && connection_state === SERVER_CONNECTION.DISCONNECTED) {
       return <KeyIcon className='h-4 w-4 text-amber-500' />;
     }
-    if (requiresOAuth && connectionState === SERVER_CONNECTION.CONNECTING) {
+    if (requires_oauth && connection_state === SERVER_CONNECTION.CONNECTING) {
       return <KeyIcon className='h-4 w-4 text-amber-500' />;
     }
-  }, [requiresOAuth, connectionState]);
+  }, [requires_oauth, connection_state]);
 
   const handleViewTools = useCallback(async () => {
     if (loadingTools) return;
@@ -227,18 +185,19 @@ const ServerCard: React.FC<ServerCardProps> = ({
             </div>
 
             <div className='flex gap-1'>
-              <button
-                className='p-1.5 text-amber-500 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-all duration-200 flex-shrink-0'
-                disabled={connectionState === SERVER_CONNECTION.CONNECTING}
-                onClick={() => setShowApiKeyDialog(true)}
-                title='Manage API keys'
-              >
-                {connectionState === SERVER_CONNECTION.CONNECTING ? (
-                  <div className='animate-spin rounded-full h-3 w-3 border-b-2 border-slate-200' />
-                ) : (
-                  getAuthStatusIcon()
-                )}
-              </button>
+              {requires_oauth && (
+                <button
+                  className='p-1.5 text-amber-500 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-all duration-200 flex-shrink-0'
+                  onClick={() => setShowApiKeyDialog(true)}
+                  title='Manage API keys'
+                >
+                  {connection_state === SERVER_CONNECTION.CONNECTING ? (
+                    <div className='animate-spin rounded-full h-3 w-3 border-b-2 border-slate-200' />
+                  ) : (
+                    getAuthStatusIcon()
+                  )}
+                </button>
+              )}
               {canModify && (
                 <button
                   className='p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-all duration-200 flex-shrink-0'
@@ -378,7 +337,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
               {/* Last Checked */}
               {(() => {
                 console.log(`🕐 ServerCard ${server.name}: last_checked_time =`, server.last_checked_time);
-                const timeText = formatTimeSince(server.last_checked_time);
+                const timeText = UTILS.formatTimeSince(server.last_checked_time);
                 console.log(`🕐 ServerCard ${server.name}: timeText =`, timeText);
                 return server.last_checked_time && timeText ? (
                   <div className='text-xs text-gray-500 dark:text-gray-300 flex items-center gap-1 hidden md:flex'>
@@ -473,11 +432,13 @@ const ServerCard: React.FC<ServerCardProps> = ({
       {showApiKeyDialog && (
         <ServerAuthorizationModal
           name={server.name}
-          status={connectionState}
+          status={connection_state}
           showApiKeyDialog={showApiKeyDialog}
           setShowApiKeyDialog={setShowApiKeyDialog}
           onShowToast={onShowToast}
+          refreshServerStatus={refreshServerStatus}
           getServerStatusByPolling={getServerStatusByPolling}
+          cancelPolling={cancelPolling}
         />
       )}
     </>
