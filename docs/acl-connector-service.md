@@ -56,31 +56,27 @@ An ACLService is already implemented in the Jarvis project. Prior to defining th
 - **Permissions**: Numeric bitmasks that define allowed actions (view, edit).
 
 ### Jarvis ACL Service Implementation
-The existing [ACLService](#https://github.com/ascending-llc/jarvis-api/blob/deploy/packages/api/src/acl/accessControlService.ts) in Jarvis exposes the following methods for managing object-level permissions on resources:
+The existing [ACLService](#https://github.com/ascending-llc/jarvis-api/blob/deploy/packages/api/src/acl/accessControlService.ts) in Jarvis exposes several methods for managing object-level permissions. In the list below, methods that are misaligned with current requirements are shown with strikethroughs, while the remaining methods are candidates for refactoring to meet the updated needs:
 
-- `grantPermission`: Grants permissions to a principal for specific resources using a permission set defined in a role
+- `grantPermission`: Grants permissions to a principal for specific resources using a permission set optionally defined in a role
 - `findAccessibleResources`: Finds all resources of a specific type that a user has access to with specific permission bits
-- `findPubliclyAccessibleResources`: Find all publicly accessible resources of a specific type
-- `getResourcePermissionsMap`: Get effective permissions for multiple resources in a batch operation
+- ~~`findPubliclyAccessibleResources`: Find all publicly accessible resources of a specific type~~
+- ~~`getResourcePermissionsMap`: Get effective permissions for multiple resources in a batch operation~~
 - `removeAllPermissions`: Removes all permissions for a resource
 - `checkPermission`: Checks if a specific user has permissions on a resource
-- `validateResourceType`: Validates a resource types and manages permission schemas.
+- ~~`validateResourceType`: Validates a resource types and manages permission schemas.~~
 
 **Compatibility with Requirements:**
-1. The model supports assigning permissions to individual users, groups, and the public
-2. Permission bits and default roles allow for fine-grained control over actions (i.e., view, edit) on resources.
+1. Supports permissions for users, groups, and public.
+2. Enables fine-grained control via permission bits and roles.
 
 **Misalignment with Requirements:**
-1. The existing service exposes functions that are unnecessary or do not capture complete scope of requirements. For example, `findAccessibleResources` is scopes to Users and does not include groups.  Similarily, functions that do meet the requirements, like `grantPermission`, require refactoring so principles can be granted permissions via roles or bits. 
-
-2. Synchronization of enums/constants (default roles, permission bits, etc.) between Jarvis data schema(s) and the registry is not automated. 
-
-3. The registry project currently lacks access to the authenticated UserContext from Jarvis. For example, when a user logs into Jarvis and requests a server list via `server_service_v1`, there is no established mechanism for passing user credentials or authentication context from Jarvis to the registry service.
+1. Some functions (e.g., `findAccessibleResources`) are user-only and omit groups; others (e.g., `grantPermission`) need refactoring for broader principal support.
+2. No automated sync of enums/constants (roles, permission bits) between Jarvis and registry schemas.
+3. No mechanism for passing authenticated user context from Jarvis to the registry, blocking accurate permission checks.
 
 **Proposed Solutions**
-To address the identified gaps and ensure robust ACL integration, the following solutions are proposed:
-
-1. Design the registry ACL service with a minimal, focused set of functions that directly satisfy the current requirements for sharing resources with users, groups, and public, while allowing for future extensibility as additional use cases emerge. See ACL Service Design > Service Design below.
+1. Design the registry ACL service with a minimal, focused set of functions that directly satisfy the current requirements for sharing resources with users, groups, and public, while allowing for future extensibility as additional use cases emerge.
 
 2. Implement automated synchronization of enums and constants (such as roles and permission bits) between Jarvis and the registry project to maintain schema consistency and prevent drift.
 
@@ -99,13 +95,13 @@ TODO: Translate Drawing into mermaid chart
 
 Required Fields: 
 - `principleType`: String - The type of principle (user, group, or public)
-- `principalId`: Mixed - The ID of the principle (objectId for user/group, null for "public")
-- `principalModel`: String - The model name for the principle (TODO: Clarify why is this actually needed)
+- `principalId?`: Mixed - The ID of the principle (objectId for user/group, null for "public")
 - `resourceType`: String - The type of resource (MCP Server, Agent)
 - `resourceId`: ObjectId - The ID of the resource
 - `permBits`: Number - The permission bits 
 
 Optional Fields:
+- `principalModel?`: String - The MongoDB model, null for "public". Can be used to support bulk updates 
 - `roleId?:` ObjectId - The ID of the role whose permissions are being inherited 
 - `inheritedFrom?`: ObjectId - ID of the resource this permission is inherited from
 - `grantedBy?`: ObjectId - ID of the user who granted this permission
@@ -144,38 +140,58 @@ These enums are not currently imported via `import-schema`. Updates to the `impo
 
 
 ### Service Design
+
+If the current user is an admin OR if the current user has owner permission bits for the specified resource being updated 
+
 The ACL service needs to facilitate the following operations: 
-1. Admin can share resource with specific user 
-2. Admin can share resource with specific group
-3. Admin can share resource with everyone 
-4. Admin can remove all permissions from resource (in the case of resource deletion)
+1. Admin/Owner can share resource with specific user 
+2. Admin/Owner can share resource with specific group
+3. Admin/Owner can share resource with everyone 
+4. Admin/Owner can remove all permissions from resource (in the case of resource deletion)
 
 ```python
+from packages.models._generated.user import IUser
+
 class ACLService: 
     def grant_permission(
         self,
         principal_type: str,
-        principal_id: str,
+        principal_id: Union[str, None],
         resource_type: str,
         resource_id: str,
         perm_bits: int,
+        granted_by: str,
         role_id: str = None,
-        granted_by: str = None
     ) -> ACLEntry: 
         """
-        Assigns permission bits to a specified principal (user, group, or public) for a given resource. Supports optional role association and audit tracking via granted_by.
+        Assigns permission bits to a specified principal (user, group, or public) for a given resource.
 
         Returns the created or updated ACL entry
         """
+        # Validate input parameters
+            # Example validation includes:
+            # if principal_type is user/group, principal_id must be set
+            # if role_id is set perm_bits should be obtained from that role
+
+        # Check that the granting user is an admin OR has owner permission bits for the specified resource
+
+            # IUser.find_one({"_id": user_id}) 
+            # check_permission(self, PrincipalType.USER, cur_user_id, resource_type, resource_id, RoleBits.OWNER)
+
+        # Check if an ACL entry already exists for this principal/resource
+
+        # Create or update entry permissions and metadata
+
+        # Return the created or updated ACL entry
 
     def check_permission(
         self,
         principal_type: str,
         principal_id: str,
-        role: str,
         resource_type: str,
         resource_id: str,
-        required_permission: int
+        required_permission: int,
+        role: str = None
     ) -> bool:
         """
         Check if a principal (user, group, public) has specific permission bits on a resource.
@@ -186,9 +202,9 @@ class ACLService:
         self,
         principal_type: str,
         principal_id: str,
-        role: str,
         resource_type: str,
-        required_permissions: int
+        required_permissions: int,
+        role: str = None
     ) -> List[str]:
         """
         List all resources a principal (user, group, public) has access to with specific permission bits.
@@ -203,16 +219,10 @@ class ACLService:
         """
         Remove all permissions for a resource (cleanup).
         Returns the number of ACL entries removed.
-        """
-
-    # TBD - Will likely need some helper functions 
-           
+        """           
 ```
 
 **Note**: The ACL Service will primarily be consumed by internal registry services. For that reason, it does not need to expose an API. 
-
-### Server & Agent Service Integration
-Code illustrating how `server_service_v1.py` will use `acl_service.py`
 
 ## Jarvis Integration
 
@@ -263,7 +273,7 @@ Listed below are work items that need to be for ACL Service Integration
 - Write authentication middleware to connect jarvis and registry
 - Refactor `import-schema` tool to include constants and enums from `librechat/data-provider`
 - Write the ACLService in the registry project
-- Update the `server_service_v1` to incoprate acl permissions for server operations
+- Update the Resource-based services to incorporate ACL permissions
 - point jarvis to `server_service_v1`
 
 
