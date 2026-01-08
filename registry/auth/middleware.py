@@ -52,35 +52,24 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         ]
 
     async def dispatch(self, request: Request, call_next):
-        # # 跳过公开路径
-        # if self._is_public_path(request.url.path):
-        #     return await call_next(request)
+        path = request.url.path
+        if self._match_path(path, self.public_paths):
+            logger.debug(f"Public path: {path}")
+            return await call_next(request)
 
-        # 开发模式：自动通过所有鉴权
-        user_context = {
-            'username': 'admin',
-            'groups': ['mcp-registry-admin'],
-            'scopes': ['mcp-registry-admin', 'mcp-servers-unrestricted/read', 'mcp-servers-unrestricted/execute'],
-            'auth_method': 'dev',
-            'provider': 'dev',
-            'accessible_servers': ['*'],
-            'accessible_services': ['all'],
-            'accessible_agents': ['all'],
-            'ui_permissions': {
-                'list_service': ['all'],
-                'toggle_service': ['all'],
-                'register_service': ['all'],
-                'list_agents': ['all']
-            },
-            'can_modify_servers': True,
-            'is_admin': True,
-            'auth_source': 'dev_bypass'
-        }
-        request.state.user = user_context
-        request.state.is_authenticated = True
-        request.state.auth_source = 'dev_bypass'
-        logger.info(f"Dev mode: Auto-authenticated as admin for {request.url.path}")
-        return await call_next(request)
+        try:
+            user_context = await self._authenticate(request)
+            request.state.user = user_context
+            request.state.is_authenticated = True
+            request.state.auth_source = user_context.get('auth_source', 'unknown')
+            logger.info(f"User {user_context.get('username')} authenticated via {user_context.get('auth_source')}")
+            return await call_next(request)
+        except AuthenticationError as e:
+            logger.warning(f"Auth failed for {path}: {e}")
+            return JSONResponse(status_code=401, content={"detail": str(e)})
+        except Exception as e:
+            logger.error(f"Auth error for {path}: {e}")
+            return JSONResponse(status_code=500, content={"detail": "Authentication error"})
 
     def _match_path(self, path: str, patterns: list) -> bool:
         """

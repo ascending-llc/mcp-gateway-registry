@@ -37,7 +37,7 @@ from registry.schemas.server_api_schemas import (
 )
 
 # API Version constant
-API_VERSION = "v2"
+API_VERSION = "v1"
 
 logger = logging.getLogger(__name__)
 

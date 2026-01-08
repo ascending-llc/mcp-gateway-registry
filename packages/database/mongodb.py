@@ -27,41 +27,36 @@ class MongoDB:
     client: Optional[AsyncIOMotorClient] = None
 
     @classmethod
-    async def connect_db(cls, mongodb_url: Optional[str] = None, db_name: Optional[str] = None):
+    async def connect_db(cls, db_name: Optional[str] = None):
         """
         Initialize MongoDB connection with connection pooling.
         
         Args:
-            mongodb_url: MongoDB connection URL. If not provided, reads from MONGODB_URL env var.
             db_name: Database name. If not provided, uses default or MONGODB_DB_NAME env var.
         """
         if cls.client is not None:
             return
         # Get MongoDB configuration from environment variables
-        if mongodb_url is None:
-            # Try to get MONGO_URI first (format: mongodb://host:port/dbname)
-            mongo_uri = os.getenv("MONGO_URI", "mongodb://127.0.0.1:27017/jarvis")
-            mongo_username = os.getenv("MONGODB_USERNAME", "")
-            mongo_password = os.getenv("MONGODB_PASSWORD", "")
-            mongo_uri = os.getenv("MONGO_URI", "mongodb://14.103.162.100:27017/jarvis")
-            mongo_username = os.getenv("MONGODB_USERNAME", "admin")
-            mongo_password = os.getenv("MONGODB_PASSWORD", "github.com@123")
-            # Parse MONGO_URI to extract db_name if present
-            # Extract database name from URI
-            uri_parts = mongo_uri.rsplit('/', 1)
-            base_uri = uri_parts[0]
-            extracted_db = uri_parts[1] if len(uri_parts) > 1 else None
-            if extracted_db and not db_name:
-                db_name = extracted_db
-            # Insert credentials if provided
-            if mongo_username and mongo_password:
-                escaped_username = quote_plus(mongo_username)
-                escaped_password = quote_plus(mongo_password)
-                # Insert credentials after mongodb://
-                protocol, rest = base_uri.split('://', 1)
-                mongodb_url = f"{protocol}://{escaped_username}:{escaped_password}@{rest}"
-            else:
-                mongodb_url = base_uri
+        # Try to get MONGO_URI first (format: mongodb://host:port/dbname)
+        mongo_uri = os.getenv("MONGO_URI", "mongodb://127.0.0.1:27017/jarvis")
+        mongo_username = os.getenv("MONGODB_USERNAME", "")
+        mongo_password = os.getenv("MONGODB_PASSWORD", "")
+        # Parse MONGO_URI to extract db_name if present
+        # Extract database name from URI
+        uri_parts = mongo_uri.rsplit('/', 1)
+        base_uri = uri_parts[0]
+        extracted_db = uri_parts[1] if len(uri_parts) > 1 else None
+        if extracted_db and not db_name:
+            db_name = extracted_db
+        # Insert credentials if provided
+        if mongo_username and mongo_password:
+            escaped_username = quote_plus(mongo_username)
+            escaped_password = quote_plus(mongo_password)
+            # Insert credentials after mongodb://
+            protocol, rest = base_uri.split('://', 1)
+            mongodb_url = f"{protocol}://{escaped_username}:{escaped_password}@{rest}"
+        else:
+            mongodb_url = base_uri
         cls.database_name = db_name
         try:
             # Create Motor client with connection pool settings
@@ -164,7 +159,7 @@ class MongoDB:
 
 
 # Convenience functions for FastAPI lifespan events
-async def init_mongodb(mongodb_url: Optional[str] = None, db_name: Optional[str] = None):
+async def init_mongodb(db_name: Optional[str] = None):
     """
     Initialize MongoDB connection. To be called during FastAPI startup.
     
@@ -172,7 +167,7 @@ async def init_mongodb(mongodb_url: Optional[str] = None, db_name: Optional[str]
         mongodb_url: MongoDB connection URL
         db_name: Database name
     """
-    await MongoDB.connect_db(mongodb_url, db_name)
+    await MongoDB.connect_db(db_name)
 
 
 async def close_mongodb():

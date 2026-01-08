@@ -325,7 +325,7 @@ def convert_to_list_item(server) -> ServerListItemResponse:
         server_name=server.serverName,
         path=config.get("path", ""),
         description=config.get("description"),
-        url=config.get("url"),  # 从数据库的 url 字段直接返回为 url
+        url=config.get("url"),
         supported_transports=config.get("supported_transports", []),
         auth_type=config.get("auth_type"),
         tags=config.get("tags", []),
@@ -383,7 +383,7 @@ def convert_to_detail(server) -> ServerDetailResponse:
         server_name=server.serverName,
         path=config.get("path", ""),
         description=config.get("description"),
-        url=config.get("url"),  # 从数据库的 url 字段直接返回为 url
+        url=config.get("url"),
         supported_transports=config.get("supported_transports", []),
         auth_type=config.get("auth_type"),
         auth_provider=config.get("auth_provider"),
