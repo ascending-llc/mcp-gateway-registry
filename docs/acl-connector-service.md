@@ -1,162 +1,274 @@
 # AS-1376
 
+## Table of Contents
+1. [Introduction](#introduction)
+    - [Problem Statement](#problem-statement)
+    - [Objectives](#objectives)
+2. [Existing Role-Based Permission System](#existing-role-based-permission-system)
+    - [Terminology](#terminology)
+    - [Existing ACL Service](#existing-acl-service)
+    - [Compatibility and Gaps with Current Requirements](#compatibility-and-gaps-with-current-requirements)
+    - [Solution: Bridging the Gaps](#solution-bridging-the-gaps)
+3. [ACL Service Design](#acl-service-design)
+    - [High-Level Data Flow Diagram](#high-level-data-flow-diagram)
+    - [Data Models](#data-models)
+    - [Service Design](#service-design)
+    - [Server & Agent Service Integration](#server-agent-service-integration)
+4. [Jarvis Integration](#jarvis-integration)
+    - [Authentication Middleware / JWT Forwarding](#authenitcation-middleware/jwt-forwarding)
+5. [Additional Considerations](#additional-considerations)
+    - [Server Registration Form Updates](#server-registration-form-updates)
+    - [ACL Service Cache](#acl-service-cache)
+    - [Blockers](#blockers)
+6. [Etc Notes](#etc-notes)
+
+
 ## Introduction
 
-Currently, all end users have access to the same set of MCP servers and A2A agents. Customers would like full control over which connectors are visible to which users. To satisify this requirement, we will introduce an access control list (ACL) service in the MCP registry project that will define object-level permissions for all servers & A2A agents. 
+### Problem Statement
 
-## Objectives
+The MCP Gateway Registry requires fine-grained Access Control List (ACL) capabilities to support secure environments for MCP servers and A2A agents. Currently, all end users have access to the same set of connectors, which does not meet customer requirements for object-level permissions. To address this, we will introduce an ACL service in the MCP registry project that enables:
 
-Design an ACL service that allows admins to share a connector with:
+- Object-level permissions for servers and agents 
+- Control over visibility and access for individual users, user groups, and public (everyone)
+- Integration with a MongoDB-backed persistence layer for scalable, transactional storage
 
-- Everyone 
-- Specific user groups (development, sales, HR, etc.)
-- Specific users (TODO: Put example of a user-specific example)
+This ACL service will be foundational for enforcing secure access and will be compatible with the shared data models and interfaces used in the Jarvis project.
 
-This service should be compitable with the existing data models and interfaces used in jarvis-api
+### Objectives
 
-## Registry ACL Design
+- Design an ACL service that allows admins to share an MCP Server or Agent with:
+  - Everyone (public)
+  - Specific user groups
+  - Specific users
+- Ensure compatibility with existing data models and interfaces (as defined in jarvis-api and shared schemas)
+- Leverage MongoDB as the single source of truth for ACL metadata and permissions
+- Support role-based access control (RBAC) and object-level permissions for all resources
 
-### Data Model
-The ACL data model is defined in the Jarvis-API project (`packages/data-schemas/src/types/aclEntry.ts`). The `import-schema` tool will be used to ensure the registry project uses compatiable models:
+## Existing Role-Based Permission System
 
-Generated ACL Document Model - `mcp-gateway-registry/packages/models/_generated/aclEntry.py`
+An ACLService is already implemented in the Jarvis project. Prior to defining the registry-specific approach, it is essential to review this existing design and assess its compatibility with the updated requirements for sharing connectors (MCP servers and agents) across user, group, and public scopes.
 
-```python
-class IAclEntry(Document):
-    """
-    IAclEntry Model
-    
-    Generated from: aclEntry.ts
-    Schema version: asc0.4.0
-    Generated at: 2025-12-28T16:00:02.739426Z
-    """
+### Terminology
+- **Principals**: Entities that can be granted permissions (individual users, group, public, and roles)
+- **Roles**: Predefined sets of permissions. Each role is associated with a resource type  and maps to permission bits (permBits) 
+- **Resources**: Items that require access control (mcp servers, agents), identified by resourceType and resourceId.
+- **Permissions**: Numeric bitmasks that define allowed actions (view, edit).
 
-    principalType: str = Field(...)
-    principalId: Optional[Dict[str, Any]] = Field(default=None)
-    principalModel: Optional[str] = Field(default=None)
-    resourceType: str = Field(...)
-    resourceId: PydanticObjectId = Field(...)
-    permBits: Optional[float] = Field(default=1)
-    roleId: Optional[PydanticObjectId] = Field(default=None, pattern=r"^[0-9a-fA-F]{24}$")  # references IAccessRole collection
-    inheritedFrom: Optional[PydanticObjectId] = Field(default=None, pattern=r"^[0-9a-fA-F]{24}$")
-    grantedBy: Optional[PydanticObjectId] = Field(default=None, pattern=r"^[0-9a-fA-F]{24}$")  # references IUser collection
-    grantedAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    createdAt: Optional[datetime] = Field(default=None)  # auto-generated by Beanie
-    updatedAt: Optional[datetime] = Field(default=None)  # auto-generated by Beanie
+### Jarvis ACL Service Implementation
+The existing [ACLService](#https://github.com/ascending-llc/jarvis-api/blob/deploy/packages/api/src/acl/accessControlService.ts) in Jarvis exposes the following methods for managing object-level permissions on resources:
+
+- `grantPermission`: Grants permissions to a principal for specific resources using a permission set defined in a role
+- `findAccessibleResources`: Finds all resources of a specific type that a user has access to with specific permission bits
+- `findPubliclyAccessibleResources`: Find all publicly accessible resources of a specific type
+- `getResourcePermissionsMap`: Get effective permissions for multiple resources in a batch operation
+- `removeAllPermissions`: Removes all permissions for a resource
+- `checkPermission`: Checks if a specific user has permissions on a resource
+- `validateResourceType`: Validates a resource types and manages permission schemas.
+
+**Compatibility with Requirements:**
+1. The model supports assigning permissions to individual users, groups, and the public
+2. Permission bits and default roles allow for fine-grained control over actions (i.e., view, edit) on resources.
+
+**Misalignment with Requirements:**
+1. The existing service exposes functions that are unnecessary or do not capture complete scope of requirements. For example, `findAccessibleResources` is scopes to Users and does not include groups.  Similarily, functions that do meet the requirements, like `grantPermission`, require refactoring so principles can be granted permissions via roles or bits. 
+
+2. Synchronization of enums/constants (default roles, permission bits, etc.) between Jarvis data schema(s) and the registry is not automated. 
+
+3. The registry project currently lacks access to the authenticated UserContext from Jarvis. For example, when a user logs into Jarvis and requests a server list via `server_service_v1`, there is no established mechanism for passing user credentials or authentication context from Jarvis to the registry service.
+
+**Proposed Solutions**
+To address the identified gaps and ensure robust ACL integration, the following solutions are proposed:
+
+1. Design the registry ACL service with a minimal, focused set of functions that directly satisfy the current requirements for sharing resources with users, groups, and public, while allowing for future extensibility as additional use cases emerge. See ACL Service Design > Service Design below.
+
+2. Implement automated synchronization of enums and constants (such as roles and permission bits) between Jarvis and the registry project to maintain schema consistency and prevent drift.
+
+3. Establish a secure mechanism for passing authenticated user context (e.g., JWT tokens) from Jarvis to the registry service, enabling accurate permission checks and resource filtering based on user identity.
+
+
+## ACL Service Design
+
+### High-Level Data Flow Diagram 
+
+TODO: Translate Drawing into mermaid chart
+
+### Data Models
+
+#### Field Definitions
+
+Required Fields: 
+- `principleType`: String - The type of principle (user, group, or public)
+- `principalId`: Mixed - The ID of the principle (objectId for user/group, null for "public")
+- `principalModel`: String - The model name for the principle (TODO: Clarify why is this actually needed)
+- `resourceType`: String - The type of resource (MCP Server, Agent)
+- `resourceId`: ObjectId - The ID of the resource
+- `permBits`: Number - The permission bits 
+
+Optional Fields:
+- `roleId?:` ObjectId - The ID of the role whose permissions are being inherited 
+- `inheritedFrom?`: ObjectId - ID of the resource this permission is inherited from
+- `grantedBy?`: ObjectId - ID of the user who granted this permission
+- `grantedAt?`: String (ISO 8601) -  When this permission was granted
+
+#### MongoDB Schema Model
+MongoDB `ACLEntry`
+
+```bson
+{
+  _id: ObjectId("..."),
+  principalType: "user" | "group" | "public",
+  principalId: "..." | null,
+  principalModel: "..." | null,
+  resourceType: "mcpServer" | "agent"
+  resourceId: ObjectId("..."),
+  permBits: NumberLong(1),
+  roleId: ObjectId("...") | null,
+  inheritedFrom: ObjectId("...") | null,
+  grantedBy: ObjectId("...") | null,
+  grantedAt: ISODate("..."),
+  createdAt: ISODate("...")
+  updatedAt: ISODate("...")
+}
 ```
+**Supporting Enums / Constants**
+The `ACLEntry` relies on the following enums/constants exported by `librechat-data-provider`:
+
+- **PrincipleType**
+- **PrincipleModel**
+- **ResourceType**
+- **PermBits**
+- **AccessRoleIds**
+
+These enums are not currently imported via `import-schema`. Updates to the `import-schema` tool or an additional import tool will be needed to keep the supporting models in-line with jarvis-api. 
+
 
 ### Service Design
+The ACL service needs to facilitate the following operations: 
+1. Admin can share resource with specific user 
+2. Admin can share resource with specific group
+3. Admin can share resource with everyone 
+4. Admin can remove all permissions from resource (in the case of resource deletion)
 
-ACL Service - `mcp-gateway-registry/registry/services/aclService.py`
-
-```python 
-import logging
-from packages.models._generated.aclEntry import IAclEntry
-from packages.models._generated.user import IUser
-
+```python
 class ACLService: 
-    """Service class for administering connector-level access control policies"""
-
-    async def grant_permission(
+    def grant_permission(
         self,
         principal_type: str,
-        principal_id: Optional[Union[str, ObjectId]],
+        principal_id: str,
         resource_type: str,
-        resource_id: Union[str, ObjectId],
-        access_role_id: str,
-        granted_by: Union[str, ObjectId],
-        session: Optional[Any] = None,
-        role_id: Optional[Union[str, ObjectId]] = None
-    ) -> IAclEntry: 
-    """
-    Grant a permission to a principal for a resource using a role.
-    Returns the created or updated ACL entry.
-    """
+        resource_id: str,
+        perm_bits: int,
+        role_id: str = None,
+        granted_by: str = None
+    ) -> ACLEntry: 
+        """
+        Assigns permission bits to a specified principal (user, group, or public) for a given resource. Supports optional role association and audit tracking via granted_by.
 
-    def find_accessible_resources(
+        Returns the created or updated ACL entry
+        """
+
+    def check_permission(
         self,
-        user_id: str,
+        principal_type: str,
+        principal_id: str,
+        role: str,
+        resource_type: str,
+        resource_id: str,
+        required_permission: int
+    ) -> bool:
+        """
+        Check if a principal (user, group, public) has specific permission bits on a resource.
+        Returns True if the permission is present, otherwise False.
+        """
+
+    def list_accessible_resources(
+        self,
+        principal_type: str,
+        principal_id: str,
         role: str,
         resource_type: str,
         required_permissions: int
-    ) -> List[ObjectId]:
-    """
-    Find all resources of a specific type that a user has access to with specific permission bits.
-    Returns a list of resource IDs.
-    """
-
-
-    def find_publicly_accessible_resources(
-        self,
-        resource_type: str,
-        required_permissions: int
-    ) -> List[ObjectId]:
-    """
-    Find all publicly accessible resources of a specific type.
-    Returns a list of resource IDs.
-    """
-
-    def get_resource_permissions_map(
-        self,
-        user_id: str,
-        role: str,
-        resource_type: str,
-        resource_ids: List[Union[str, ObjectId]]
-    ) -> Dict[str, int]:
-    """
-    Get effective permissions for multiple resources in a batch operation.
-    Returns a map of resourceId to permission bits.
-    """
+    ) -> List[str]:
+        """
+        List all resources a principal (user, group, public) has access to with specific permission bits.
+        Returns a list of resource IDs (as strings).
+        """
 
     def remove_all_permissions(
         self,
         resource_type: str,
-        resource_id: Union[str, ObjectId]
-    ) -> Dict:
-    """
-    Remove all permissions for a resource (cleanup when resource is deleted).
-    Returns result of the deletion operation.
-    """
+        resource_id: str
+    ) -> int:
+        """
+        Remove all permissions for a resource (cleanup).
+        Returns the number of ACL entries removed.
+        """
 
-    def check_permission(
-        self,
-        user_id: str,
-        role: Optional[str],
-        resource_type: str,
-        resource_id: Union[str, ObjectId],
-        required_permission: int
-    ) -> bool:
-    """
-    Check if a user has specific permission bits on a resource.
-    Returns True if user has required permission, else False.
-    """
-
-    def _validate_resource_type(self, resource_type: str) -> None:
-    """
-    Validates that the resourceType is one of the supported enum values.
-    Raises an error if not valid.
-    """
-
+    # TBD - Will likely need some helper functions 
+           
 ```
 
-### ACL API
+**Note**: The ACL Service will primarily be consumed by internal registry services. For that reason, it does not need to expose an API. 
 
-TBD - Does this service need to expose an API or will it be primarily used internally by server & agent endpoints?
+### Server & Agent Service Integration
+Code illustrating how `server_service_v1.py` will use `acl_service.py`
 
-## Jarvis API Integration
+## Jarvis Integration
 
-Assuming we are porting server registration to the registry project:
+### Authentication Middleware
 
-`jarvis-api/packages/api/src/mcp/registry/MCPServersRegistry.ts`
+To ensure robust enforcement of ACL permissions, the registry service must reliably obtain authenticated user context from incoming requests, regardless of whether the call originates from Jarvis or the registry project. The current approach, which relies on FastAPI's dependency injection, is insufficient for cross-service integration.
 
-```TypeScript
-private readonly dbConfigsRepo: IServerConfigsRepositoryInterface; // Eventually should point to /v1/server endpoint
-private readonly cacheConfigsRepo: IServerConfigsRepositoryInterface;
-private readonly allowedDomains?: string[] | null;
-private readonly readThroughCache: Keyv<t.ParsedServerConfig>;
-private readonly readThroughCacheAll: Keyv<Record<string, t.ParsedServerConfig>>;
+Instead, a dedicated authentication middleware should be implemented to extract and validate user information from JWT tokens provided in the Authorization header. This enables consistent permission checks and resource filtering based on user identity across all entry points.
+
+#### Example: FastAPI JWT Authentication Middleware
+```python
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+import jwt 
+
+class JWTAuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        auth_header = request.headers.get("Authorization")
+        user_context = None
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ", 1)[1]
+            try:
+                payload = jwt.decode(token, os.getenv("JWT_SECRET"), algorithms=["HS256"])
+                user_context = {
+                    "username": payload.get("sub"),
+                    "roles": payload.get("roles", []),
+                    # ...other fields as needed
+                }
+                request.state.user_context = user_context
+            except jwt.PyJWTError:
+                return JSONResponse(status_code=401, content={"detail": "Invalid or expired token"})
+        # Optionally, handle anonymous or missing user context
+        response = await call_next(request)
+        return response
 ```
+ 
+## Additional Considerations
 
-## Questions: 
-1. Will MCP server regsitration functionality stay in Jarvis or will it move to registry project?
+### Server Registration Form Updates 
+The Server registration form should be updated to include a field that specifies who all can access the server 
 
+### ACL Service Cache
+TBD after evaulating performance of initial service implementation
+
+## Roadmap 
+Listed below are work items that need to be for ACL Service Integration 
+- Write authentication middleware to connect jarvis and registry
+- Refactor `import-schema` tool to include constants and enums from `librechat/data-provider`
+- Write the ACLService in the registry project
+- Update the `server_service_v1` to incoprate acl permissions for server operations
+- point jarvis to `server_service_v1`
+
+
+## Etc Notes
+Working notes. To be deleted upon final draft
+
+### Questions
+1. `grantedAt` & `createdAt` duplicate info. Probably want to remove one
