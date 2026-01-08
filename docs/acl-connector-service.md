@@ -149,44 +149,74 @@ The ACL service needs to facilitate the following operations:
 4. Admin/Owner can remove all permissions from resource (in the case of resource deletion)
 
 ```python
+from datetime import datetime
+from packages.models._generated.aclEntry import IAclEntry
+from packages.models._generated.accessRole import IAccessRole
+from packages.models._generated.user import IUser
+
 class ACLService: 
     def grant_permission(
         self,
         principal_type: str,
-        principal_id: Union[str, None],
+        principal_id: Optional[str] = None,
         resource_type: str,
         resource_id: str,
-        perm_bits: int,
-        granted_by: str,
-        role_id: str = None,
-    ) -> ACLEntry: 
+        granted_by: str = None,
+        perm_bits: Optional[int] = None,
+    )
         """
         Assigns permission bits to a specified principal (user, group, or public) for a given resource.
 
         Returns the created or updated ACL entry
         """
-        # Validate input parameters
-            # if principal_type is user/group, principal_id must be set
-            # if role_id is set perm_bits should be obtained from that role
+        # Validate input parameters 
+        if principal_type in ["user", "group"] and not principal_id:
+            raise ValueError("principal_id must be set for user/group principal_type")
 
         # Check that the granting user is either an admin or has owner permission bits for the specified resource
-        # from packages.models._generated.user import IUser
-        # is_admin = await IUser.find_one({"_id": granted_by}, projection=["role"]).role == "ADMIN"
-        # has_owner_perm = self.check_permission(
-        #     principal_type= PrincipalType.USER,
-        #     principal_id=granted_by,
-        #     resource_type=resource_type,
-        #     resource_id=resource_id,
-        #     required_permission=RoleBits.OWNER
-        # )
-        # if not (is_admin or has_owner_perm):
-        #     raise PermissionError("User must be admin or owner to grant ACL permission")
+        is_admin = await IUser.find_one({"_id": granted_by}, projection=["role"]).role == "ADMIN"
+        has_owner_perm = self.check_permission(
+            principal_type= PrincipalType.USER,
+            principal_id=granted_by,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            required_permission=RoleBits.OWNER
+        )
+        if not (is_admin or has_owner_perm):
+            raise PermissionError("User must be admin or owner to grant ACL permission")
 
         # Check if an ACL entry already exists for this principal/resource
+        acl_entry = await IAclEntry.find_one({
+            "principalType": principal_type,
+            "principalId": principal_id,
+            "resourceType": resource_type,
+            "resourceId": resource_id
+        })
 
         # Create or update entry permissions and metadata
-
-        # Return the created or updated ACL entry
+        if acl_entry:
+            acl_entry.permBits = perm_bits
+            acl_entry.roleId = role_id
+            acl_entry.grantedBy = granted_by
+            acl_entry.grantedAt = datetime.utcnow().isoformat()
+            acl_entry.updatedAt = datetime.utcnow().isoformat()
+            await acl_entry.save()
+            return acl_entry
+        else:
+            new_entry = IAclEntry(
+                principalType=principal_type,
+                principalId=principal_id,
+                resourceType=resource_type,
+                resourceId=resource_id,
+                permBits=perm_bits,
+                roleId=role_id,
+                grantedBy=granted_by,
+                grantedAt=datetime.utcnow().isoformat(),
+                createdAt=datetime.utcnow().isoformat(),
+                updatedAt=datetime.utcnow().isoformat()
+            )
+            await new_entry.insert()
+            return new_entry
 
     def check_permission(
         self,
