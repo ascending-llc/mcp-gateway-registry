@@ -254,18 +254,40 @@ async def cancel_oauth_flow(
     Notes: POST /oauth/cancel/:serverName
     TypeScript implementation: Directly call flowManager.failFlow()
     
+    Process:
+    1. Cancel the OAuth flow
+    2. Update user connection state to DISCONNECTED
     """
     try:
         user_id = current_user.get("user_id")
+        logger.info(f"[OAuth Cancel] Cancelling OAuth flow for {server_name} by user {user_id}")
+        
+        # 1. Cancel the OAuth flow
         success, error_msg = await mcp_service.oauth_service.cancel_oauth_flow(user_id, server_name)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=error_msg or "Failed to cancel OAuth flow")
 
+        # 2. Update user connection state to DISCONNECTED
+        try:
+            await mcp_service.connection_service.update_connection_state(
+                user_id=user_id,
+                server_name=server_name,
+                state=ConnectionState.DISCONNECTED,
+                details={
+                    "oauth_cancelled": True,
+                    "cancelled_at": time.time(),
+                    "reason": "User cancelled OAuth flow"
+                }
+            )
+            logger.info(f"[OAuth Cancel] Updated connection state to DISCONNECTED for {server_name}")
+        except Exception as e:
+            logger.warning(f"[OAuth Cancel] Failed to update connection state: {e}")
+
         return {
             "success": True,
-            "message": "OAuth flow cancelled",
+            "message": f"OAuth flow for {server_name} cancelled successfully",
             "server_name": server_name,
             "user_id": user_id
         }
@@ -291,17 +313,71 @@ async def refresh_oauth_tokens(
     
     Notes: POST /oauth/refresh/:serverName
     TypeScript implementation: Call MCPOAuthHandler.refreshOAuthTokens()
+    
+    Process:
+    1. Refresh OAuth tokens
+    2. Update user connection state to CONNECTED
+    3. Clear any reconnection attempts
     """
     try:
         user_id = current_user.get("user_id")
+        logger.info(f"[OAuth Refresh] Refreshing OAuth tokens for {server_name} by user {user_id}")
+        
+        # 1. Refresh OAuth tokens
         success, error_msg = await mcp_service.oauth_service.refresh_tokens(user_id, server_name)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=error_msg or "Failed to refresh tokens")
+        
+        logger.info(f"[OAuth Refresh] Successfully refreshed tokens for {server_name}")
+        
+        # 2. Update user connection state to CONNECTED
+        try:
+            # Check if user connection exists, if not create it
+            connection = await mcp_service.connection_service.get_connection(user_id, server_name)
+            if connection:
+                # Update existing connection
+                await mcp_service.connection_service.update_connection_state(
+                    user_id=user_id,
+                    server_name=server_name,
+                    state=ConnectionState.CONNECTED,
+                    details={
+                        "oauth_refreshed": True,
+                        "refreshed_at": time.time()
+                    }
+                )
+                logger.info(f"[OAuth Refresh] Updated connection state to CONNECTED for {server_name}")
+            else:
+                # Create new connection if it doesn't exist
+                await mcp_service.connection_service.create_user_connection(
+                    user_id=user_id,
+                    server_name=server_name,
+                    initial_state=ConnectionState.CONNECTED,
+                    details={
+                        "oauth_refreshed": True,
+                        "created_at": time.time(),
+                        "refreshed_at": time.time()
+                    }
+                )
+                logger.info(f"[OAuth Refresh] Created new connection with CONNECTED state for {server_name}")
+        except Exception as e:
+            logger.warning(f"[OAuth Refresh] Failed to update connection state: {e}")
+        
+        # 3. Clear any reconnection attempts
+        try:
+            reconnection_manager = get_reconnection_manager(
+                mcp_service=mcp_service,
+                oauth_service=mcp_service.oauth_service
+            )
+            reconnection_manager.clear_reconnection(user_id, server_name)
+            logger.debug(f"[OAuth Refresh] Cleared reconnection attempts for {server_name}")
+        except Exception as e:
+            logger.warning(f"[OAuth Refresh] Could not clear reconnection (manager not initialized): {e}")
+        
         return {
             "success": True,
-            "message": "Tokens refreshed",
+            "message": f"Tokens refreshed successfully for {server_name}",
             "server_name": server_name,
             "user_id": user_id
         }
