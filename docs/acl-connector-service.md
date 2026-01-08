@@ -13,7 +13,6 @@
     - [High-Level Data Flow Diagram](#high-level-data-flow-diagram)
     - [Data Models](#data-models)
     - [Service Design](#service-design)
-    - [Server & Agent Service Integration](#server-agent-service-integration)
 4. [Jarvis Integration](#jarvis-integration)
     - [Authentication Middleware / JWT Forwarding](#authenitcation-middleware/jwt-forwarding)
 5. [Additional Considerations](#additional-considerations)
@@ -150,8 +149,6 @@ The ACL service needs to facilitate the following operations:
 4. Admin/Owner can remove all permissions from resource (in the case of resource deletion)
 
 ```python
-from packages.models._generated.user import IUser
-
 class ACLService: 
     def grant_permission(
         self,
@@ -169,14 +166,21 @@ class ACLService:
         Returns the created or updated ACL entry
         """
         # Validate input parameters
-            # Example validation includes:
             # if principal_type is user/group, principal_id must be set
             # if role_id is set perm_bits should be obtained from that role
 
-        # Check that the granting user is an admin OR has owner permission bits for the specified resource
-
-            # IUser.find_one({"_id": user_id}) 
-            # check_permission(self, PrincipalType.USER, cur_user_id, resource_type, resource_id, RoleBits.OWNER)
+        # Check that the granting user is either an admin or has owner permission bits for the specified resource
+        # from packages.models._generated.user import IUser
+        # is_admin = await IUser.find_one({"_id": granted_by}, projection=["role"]).role == "ADMIN"
+        # has_owner_perm = self.check_permission(
+        #     principal_type= PrincipalType.USER,
+        #     principal_id=granted_by,
+        #     resource_type=resource_type,
+        #     resource_id=resource_id,
+        #     required_permission=RoleBits.OWNER
+        # )
+        # if not (is_admin or has_owner_perm):
+        #     raise PermissionError("User must be admin or owner to grant ACL permission")
 
         # Check if an ACL entry already exists for this principal/resource
 
@@ -248,8 +252,8 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             try:
                 payload = jwt.decode(token, os.getenv("JWT_SECRET"), algorithms=["HS256"])
                 user_context = {
-                    "username": payload.get("sub"),
-                    "roles": payload.get("roles", []),
+                    "user_id": payload.get("_id"),
+                    "email": payload.get("email")
                     # ...other fields as needed
                 }
                 request.state.user_context = user_context
