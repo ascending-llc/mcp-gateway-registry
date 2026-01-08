@@ -397,7 +397,7 @@ def _redirect_to_error(request: Request, error_code: str) -> RedirectResponse:
     Redirecting to an error page
     """
     encoded_error = quote(str(error_code))
-    error_url = f"{base_path}/api/mcp/v1/oauth/error?error={encoded_error}"
+    error_url = f"/{base_path}/api/mcp/v1/oauth/error?error={encoded_error}"
     logger.debug(f"[OAuth Redirect] Redirecting to error page: {error_url}")
     return RedirectResponse(url=error_url)
 
@@ -407,7 +407,7 @@ def _redirect_to_success(request: Request, server_name: str) -> RedirectResponse
     Generate a response that redirects to the success page.
     """
     encoded_server = quote(str(server_name))
-    success_url = f"{base_path}/api/mcp/v1/oauth/success?serverName={encoded_server}"
+    success_url = f"/{base_path}/api/mcp/v1/oauth/success?serverName={encoded_server}"
     logger.debug(f"[OAuth Redirect] Redirecting to success page: {success_url}")
     return RedirectResponse(url=success_url)
 
