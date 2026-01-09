@@ -93,6 +93,7 @@ async def reinitialize_server(
                             detail=f"Internal server error: {str(e)}")
 
 
+@DeprecationWarning
 @router.get("/connection/status")
 async def get_all_connection_status(
         current_user: CurrentUser,
