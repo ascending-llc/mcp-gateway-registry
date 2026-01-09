@@ -82,7 +82,7 @@ def _build_config_from_request(data: ServerCreateRequest) -> Dict[str, Any]:
         config["oauth"] = data.oauth
     if data.custom_user_vars is not None:
         config["custom_user_vars"] = data.custom_user_vars
-    
+
     # Handle mutually exclusive authentication fields: apiKey and authentication
     # Only store one of them, with authentication taking priority
     if data.authentication is not None:
@@ -126,7 +126,7 @@ def _update_config_from_request(config: Dict[str, Any], data: ServerUpdateReques
     for key, value in update_dict.items():
         if value is not None:
             config[key] = value
-    
+
     return config
 
 
@@ -679,7 +679,7 @@ class ServerServiceV1:
             ValueError: If server not found
         """
         server = await self.get_server_by_id(server_id, user_id)
-        
+
         if not server:
             raise ValueError("Server not found")
         
@@ -714,30 +714,30 @@ class ServerServiceV1:
             "response_time_ms": response_time_ms,
         }
 
-    async def get_server_by_name(self,server_name: str) -> Optional[MCPServerDocument]:
+    async def get_server_by_name(self, server_name: str, status: str = "active") -> Optional[MCPServerDocument]:
         """
         Get server by name.
         """
         return await MCPServerDocument.find_one({"serverName": server_name})
-    
+
     async def get_stats(self) -> Dict[str, Any]:
         """
         Get system-wide statistics (Admin only).
-        
+
         This method uses MongoDB aggregation pipelines to gather statistics about:
         - Servers (total, by scope, by status, by transport)
         - Tokens (total, by type, active/expired)
         - Active users (users with active tokens)
         - Total tools across all servers
-        
+
         Returns:
             Dictionary containing all statistics
         """
         from packages.models._generated.token import Token
         from packages.models._generated.user import IUser
-        
+
         stats = {}
-        
+
         # 1. Server Statistics
         try:
             # Use facet to get multiple aggregations in one query
@@ -763,39 +763,39 @@ class ServerServiceV1:
                     }
                 }
             ]
-            
+
             # Use PyMongo collection directly for aggregation
             collection = MCPServerDocument.get_pymongo_collection()
             cursor = collection.aggregate(server_pipeline)
             server_results = await cursor.to_list(length=None)
-            
+
             if server_results and len(server_results) > 0:
                 result = server_results[0]
-                
+
                 # Total servers
                 stats["total_servers"] = result["total"][0]["count"] if result["total"] else 0
-                
+
                 # Servers by scope
                 servers_by_scope = {}
                 for item in result.get("by_scope", []):
                     scope = item["_id"] or "unknown"
                     servers_by_scope[scope] = item["count"]
                 stats["servers_by_scope"] = servers_by_scope
-                
+
                 # Servers by status
                 servers_by_status = {}
                 for item in result.get("by_status", []):
                     status = item["_id"] or "unknown"
                     servers_by_status[status] = item["count"]
                 stats["servers_by_status"] = servers_by_status
-                
+
                 # Servers by transport
                 servers_by_transport = {}
                 for item in result.get("by_transport", []):
                     transport = item["_id"] or "unknown"
                     servers_by_transport[transport] = item["count"]
                 stats["servers_by_transport"] = servers_by_transport
-                
+
                 # Total tools
                 stats["total_tools"] = result["total_tools"][0]["total"] if result["total_tools"] else 0
             else:
@@ -805,7 +805,7 @@ class ServerServiceV1:
                 stats["servers_by_status"] = {}
                 stats["servers_by_transport"] = {}
                 stats["total_tools"] = 0
-                
+
         except Exception as e:
             logger.error(f"Error gathering server statistics: {e}", exc_info=True)
             stats["total_servers"] = 0
@@ -813,11 +813,11 @@ class ServerServiceV1:
             stats["servers_by_status"] = {}
             stats["servers_by_transport"] = {}
             stats["total_tools"] = 0
-        
+
         # 2. Token Statistics
         try:
             now = datetime.now(timezone.utc)
-            
+
             token_pipeline = [
                 {
                     "$facet": {
@@ -844,25 +844,25 @@ class ServerServiceV1:
                     }
                 }
             ]
-            
+
             # Use PyMongo collection directly for aggregation
             token_collection = Token.get_pymongo_collection()
             token_cursor = token_collection.aggregate(token_pipeline)
             token_results = await token_cursor.to_list(length=None)
-            
+
             if token_results and len(token_results) > 0:
                 result = token_results[0]
-                
+
                 # Total tokens
                 stats["total_tokens"] = result["total"][0]["count"] if result["total"] else 0
-                
+
                 # Tokens by type
                 tokens_by_type = {}
                 for item in result.get("by_type", []):
                     token_type = item["_id"] or "unknown"
                     tokens_by_type[token_type] = item["count"]
                 stats["tokens_by_type"] = tokens_by_type
-                
+
                 # Active/Expired tokens
                 active_count = 0
                 expired_count = 0
@@ -871,7 +871,7 @@ class ServerServiceV1:
                         active_count = item["count"]
                     elif item["_id"] == "expired":
                         expired_count = item["count"]
-                
+
                 stats["active_tokens"] = active_count
                 stats["expired_tokens"] = expired_count
             else:
@@ -880,38 +880,38 @@ class ServerServiceV1:
                 stats["tokens_by_type"] = {}
                 stats["active_tokens"] = 0
                 stats["expired_tokens"] = 0
-                
+
         except Exception as e:
             logger.error(f"Error gathering token statistics: {e}", exc_info=True)
             stats["total_tokens"] = 0
             stats["tokens_by_type"] = {}
             stats["active_tokens"] = 0
             stats["expired_tokens"] = 0
-        
+
         # 3. Active Users Statistics
         try:
             now = datetime.now(timezone.utc)
-            
+
             # Count unique users with active tokens
             active_users_pipeline = [
                 {"$match": {"expiresAt": {"$gt": now}}},
                 {"$group": {"_id": "$userId"}},
                 {"$count": "count"}
             ]
-            
+
             # Use PyMongo collection directly for aggregation
             active_users_collection = Token.get_pymongo_collection()
             active_users_cursor = active_users_collection.aggregate(active_users_pipeline)
             active_users_results = await active_users_cursor.to_list(length=None)
-            
+
             stats["active_users"] = active_users_results[0]["count"] if active_users_results else 0
-            
+
         except Exception as e:
             logger.error(f"Error gathering active users statistics: {e}", exc_info=True)
             stats["active_users"] = 0
-        
+
         logger.info(f"Generated system statistics: {stats['total_servers']} servers, {stats['total_tokens']} tokens, {stats['active_users']} active users")
-        
+
         return stats
 
 # Singleton instance
