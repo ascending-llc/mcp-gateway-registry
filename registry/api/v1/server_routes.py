@@ -13,6 +13,9 @@ from pydantic import ValidationError
 
 from registry.auth.dependencies import CurrentUser
 from registry.services.server_service_v1 import server_service_v1
+from registry.services.oauth.mcp_service import get_mcp_service
+from registry.services.oauth.flow_helpers import get_server_connection_status as get_server_status_helper
+from registry.schemas.enums import ConnectionState
 from registry.schemas.server_api_schemas import (
     ServerListResponse,
     ServerListItemResponse,
@@ -55,7 +58,7 @@ def get_user_context(user_context: CurrentUser):
     f"/{API_VERSION}/servers",
     response_model=ServerListResponse,
     summary="List Servers",
-    description="List all servers with filtering, searching, and pagination",
+    description="List all servers with filtering, searching, and pagination. Includes connection status for each server.",
 )
 async def list_servers(
     query: Optional[str] = None,
@@ -67,6 +70,7 @@ async def list_servers(
 ):
     """
     List servers with optional filtering and pagination.
+    Includes connection status (connection_state, requires_oauth, error) for each server.
     
     Query Parameters:
     - query: Free-text search across server_name, description, tags
@@ -103,6 +107,52 @@ async def list_servers(
         # Convert to response models
         server_items = [convert_to_list_item(server) for server in servers]
         
+        # Get connection status for each server
+        try:
+            user_id = user_context.get('user_id')
+            mcp_service = await get_mcp_service()
+            
+            mcp_config = {}
+            oauth_servers = set()
+            for server in servers:
+                server_name = server.serverName
+                mcp_config[server_name] = {
+                    "name": server_name,
+                    "config": server.config,
+                    "updated_at": server.updatedAt.timestamp() if server.updatedAt else None,
+                }
+                if server.config.get("requires_oauth", False):
+                    oauth_servers.add(server_name)
+            
+            # Get app-level and user-level connections (direct reference, no copy needed)
+            app_connections = mcp_service.connection_service.app_connections
+            user_connections = mcp_service.connection_service.get_user_connections(user_id)
+            
+            # Add connection status to each server item
+            for server_item in server_items:
+                server_name = server_item.server_name
+                try:
+                    server_status = await get_server_status_helper(
+                        user_id=user_id,
+                        server_name=server_name,
+                        server_config=mcp_config[server_name],
+                        app_connections=app_connections,
+                        user_connections=user_connections,
+                        oauth_servers=oauth_servers
+                    )
+                    server_item.connection_state = server_status.get("connection_state")
+                    server_item.requires_oauth = server_status.get("requires_oauth", False)
+                    server_item.error = server_status.get("error")
+                except Exception as e:
+                    logger.error(f"Error getting connection status for {server_name}: {e}", exc_info=True)
+                    # Set error state if we can't get connection status
+                    server_item.connection_state = ConnectionState.ERROR.value
+                    server_item.requires_oauth = server_name in oauth_servers
+                    server_item.error = f"Failed to get connection status: {str(e)}"
+        
+        except Exception as e:
+            logger.warning(f"Error getting connection statuses: {e}", exc_info=True)
+
         # Calculate pagination metadata
         total_pages = math.ceil(total / per_page) if total > 0 else 0
         

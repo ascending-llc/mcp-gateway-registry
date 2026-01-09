@@ -158,6 +158,10 @@ class ServerListItemResponse(BaseModel):
     apiKey: Optional[Dict[str, Any]] = None
     createdAt: datetime
     updatedAt: datetime
+    # Connection status fields
+    connection_state: Optional[str] = Field(default=None, description="Connection state")
+    requires_oauth: Optional[bool] = Field(default=None, description="Whether server requires OAuth")
+    error: Optional[str] = Field(default=None, description="Error message if connection failed")
     
     class ConfigDict:
         from_attributes = True
