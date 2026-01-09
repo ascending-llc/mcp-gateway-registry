@@ -25,6 +25,7 @@ from registry.schemas.server_api_schemas import (
     ServerToggleResponse,
     ServerToolsResponse,
     ServerHealthResponse,
+    ServerStatsResponse,
     PaginationMetadata,
     ErrorResponse,
     convert_to_list_item,
@@ -47,6 +48,30 @@ router = APIRouter()
 def get_user_context(user_context: CurrentUser):
     """Extract user context from authentication dependency"""
     return user_context
+
+
+def check_admin_permission(user_context: dict) -> bool:
+    """
+    Check if user has admin permissions.
+    
+    This is a placeholder function for future permission system.
+    Currently returns True for all users, but provides a hook for
+    implementing role-based access control (RBAC) in the future.
+    
+    Future implementation should check:
+    - user_context.get("role") == "ADMIN"
+    - user_context.get("is_admin") == True
+    
+    Args:
+        user_context: User context dictionary from authentication
+        
+    Returns:
+        True if user is admin, False otherwise
+    """
+    # TODO: Implement actual permission check when RBAC is ready
+    # For now, allow all authenticated users to access stats
+    # Future: return user_context.get("role") == "ADMIN" or user_context.get("is_admin", False)
+    return True
 
 
 # ==================== Endpoints ====================
@@ -123,6 +148,56 @@ async def list_servers(
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while listing servers"
+        )
+
+
+@router.get(
+    f"/{API_VERSION}/servers/stats",
+    response_model=ServerStatsResponse,
+    summary="Get System Statistics",
+    description="Get system-wide statistics (Admin only). Includes server, token, and user metrics using MongoDB aggregation pipelines.",
+)
+async def get_server_stats(
+    user_context: dict = Depends(get_user_context),
+):
+    """
+    Get system-wide statistics.
+    
+    **Admin Only Endpoint**
+    
+    Returns comprehensive statistics about:
+    - Total servers and breakdown by scope, status, and transport
+    - Total tokens and breakdown by type, expiry status
+    - Active users count
+    - Total tools across all servers
+    
+    Note: This endpoint uses MongoDB aggregation pipelines and is only 
+    available when using MongoDB storage backend. File-based storage 
+    will return a simplified version or 501 Not Implemented.
+    """
+    try:
+        # Check admin permission (currently returns True for all, but reserved for future RBAC)
+        if not check_admin_permission(user_context):
+            raise HTTPException(
+                status_code=http_status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "forbidden",
+                    "message": "Admin access required to view system statistics",
+                }
+            )
+        
+        # Get statistics from service
+        stats = await server_service_v1.get_stats()
+        
+        return ServerStatsResponse(**stats)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting server statistics: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error while getting statistics"
         )
 
 
@@ -206,7 +281,7 @@ async def create_server(
     f"/{API_VERSION}/servers/{{server_id}}",
     response_model=ServerUpdateResponse,
     summary="Update Server",
-    description="Update server configuration with optimistic locking",
+    description="Update server configuration",
 )
 async def update_server(
     server_id: str,
@@ -227,33 +302,6 @@ async def update_server(
         
     except ValueError as e:
         error_msg = str(e)
-        
-        # Check if it's a version conflict
-        if "Version conflict" in error_msg:
-            # Extract version numbers if possible
-            try:
-                parts = error_msg.split("expected ")[1].split(", current is ")
-                provided_version = int(parts[0])
-                current_version = int(parts[1])
-                
-                raise HTTPException(
-                    status_code=http_status.HTTP_409_CONFLICT,
-                    detail={
-                        "error": "conflict",
-                        "message": "Server was modified by another process",
-                        "current_version": current_version,
-                        "provided_version": provided_version,
-                    }
-                )
-            except (IndexError, ValueError):
-                # Fallback if parsing fails
-                raise HTTPException(
-                    status_code=http_status.HTTP_409_CONFLICT,
-                    detail={
-                        "error": "conflict",
-                        "message": error_msg,
-                    }
-                )
         
         # Check if server not found
         if "not found" in error_msg.lower():
@@ -477,4 +525,3 @@ async def refresh_server_health(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while refreshing server health"
         )
-

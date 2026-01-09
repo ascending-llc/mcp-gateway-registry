@@ -54,7 +54,7 @@ def _build_config_from_request(data: ServerCreateRequest) -> Dict[str, Any]:
         "chat_menu": data.chat_menu,
         "tool_list": data.tool_list,
         "status": "active",
-        "version": 1,
+        "enabled": data.enabled,
     }
     
     # Add optional fields only if they are provided (not None)
@@ -82,9 +82,14 @@ def _build_config_from_request(data: ServerCreateRequest) -> Dict[str, Any]:
         config["oauth"] = data.oauth
     if data.custom_user_vars is not None:
         config["custom_user_vars"] = data.custom_user_vars
+
+    # Handle mutually exclusive authentication fields: apiKey and authentication
+    # Only store one of them, with authentication taking priority
     if data.authentication is not None:
+        # When authentication is provided, store it and do NOT store apiKey
         config["authentication"] = data.authentication
-    if data.apiKey is not None:
+    elif data.apiKey is not None:
+        # When only apiKey is provided, store it
         config["apiKey"] = data.apiKey
     
     return config
@@ -92,30 +97,35 @@ def _build_config_from_request(data: ServerCreateRequest) -> Dict[str, Any]:
 
 def _update_config_from_request(config: Dict[str, Any], data: ServerUpdateRequest) -> Dict[str, Any]:
     """Update config dictionary from ServerUpdateRequest"""
-    update_dict = data.model_dump(exclude_unset=True, exclude={'version'})
-
+    update_dict = data.model_dump(exclude_unset=True)
+    
     # Normalize tags if present
     if 'tags' in update_dict and update_dict['tags']:
         update_dict['tags'] = [tag.lower() for tag in update_dict['tags']]
     
     # Handle mutually exclusive authentication fields: apiKey and authentication
     # If one is being updated, remove the other from config
-    if 'apiKey' in update_dict:
-        # When apiKey is provided, remove authentication field
-        if 'authentication' in config:
-            del config['authentication']
-    elif 'authentication' in update_dict:
-        # When authentication is provided, remove apiKey field
+    if 'authentication' in update_dict:
+        # When authentication is provided, remove apiKey field and store authentication
         if 'apiKey' in config:
             del config['apiKey']
+        # Store authentication with all its fields
+        config['authentication'] = update_dict['authentication']
+        # Remove from update_dict to avoid duplicate processing
+        del update_dict['authentication']
+    elif 'apiKey' in update_dict:
+        # When apiKey is provided, remove authentication field and store apiKey
+        if 'authentication' in config:
+            del config['authentication']
+        # Store apiKey with all its fields
+        config['apiKey'] = update_dict['apiKey']
+        # Remove from update_dict to avoid duplicate processing
+        del update_dict['apiKey']
     
-    # Update config with new values (only fields that were explicitly set)
+    # Update config with remaining fields (only fields that were explicitly set)
     for key, value in update_dict.items():
         if value is not None:
             config[key] = value
-
-    # Increment version
-    config['version'] = config.get('version', 1) + 1
 
     return config
 
@@ -251,10 +261,10 @@ class ServerServiceV1:
         if existing:
             raise ValueError(f"Server with path '{data.path}' already exists")
         
-        # Check if server_name already exists
-        existing_name = await MCPServerDocument.find_one({"serverName": data.server_name})
+        # Check if serverName already exists
+        existing_name = await MCPServerDocument.find_one({"serverName": data.serverName})
         if existing_name:
-            raise ValueError(f"Server with name '{data.server_name}' already exists")
+            raise ValueError(f"Server with name '{data.serverName}' already exists")
         
         # Check for duplicate tags (case-insensitive)
         normalized_tags = [tag.lower() for tag in data.tags]
@@ -306,7 +316,7 @@ class ServerServiceV1:
         # Create server document with timestamps
         now = datetime.now(timezone.utc)
         server = MCPServerDocument(
-            serverName=data.server_name,
+            serverName=data.serverName,
             config=config,
             author=author.id,  # Use PydanticObjectId instead of Link
             createdAt=now,
@@ -371,7 +381,7 @@ class ServerServiceV1:
         user_id: Optional[str] = None,
     ) -> MCPServerDocument:
         """
-        Update a server with optimistic locking.
+        Update a server.
         
         Args:
             server_id: Server document ID
@@ -382,7 +392,7 @@ class ServerServiceV1:
             Updated server document
             
         Raises:
-            ValueError: If server not found or version conflict
+            ValueError: If server not found
         """
         server = await self.get_server_by_id(server_id, user_id)
         
@@ -391,13 +401,6 @@ class ServerServiceV1:
         
         # Get current config
         config = server.config or {}
-        current_version = config.get("version", 1)
-        
-        # Optimistic locking check
-        if data.version is not None and current_version != data.version:
-            raise ValueError(
-                f"Version conflict: expected {data.version}, current is {current_version}"
-            )
         
         # Check for duplicate tags if tags are being updated
         if data.tags is not None:
@@ -405,9 +408,9 @@ class ServerServiceV1:
             if len(normalized_tags) != len(set(normalized_tags)):
                 raise ValueError("Duplicate tags are not allowed (case-insensitive)")
         
-        # Update server_name if provided
-        if data.server_name is not None:
-            server.serverName = data.server_name
+        # Update serverName if provided
+        if data.serverName is not None:
+            server.serverName = data.serverName
         
         # Update config with new values
         updated_config = _update_config_from_request(config, data)
@@ -422,7 +425,7 @@ class ServerServiceV1:
         server.updatedAt = datetime.now(timezone.utc)
         
         await server.save()
-        logger.info(f"Updated server: {server.serverName} (ID: {server.id}, Version: {server.config.get('version')})")
+        logger.info(f"Updated server: {server.serverName} (ID: {server.id})")
         
         return server
     
@@ -487,16 +490,15 @@ class ServerServiceV1:
         # Get current config
         config = server.config or {}
         
-        # Update status in config
-        config["status"] = "active" if enabled else "inactive"
-        config["version"] = config.get("version", 1) + 1
+        # Update enabled field in config
+        config["enabled"] = enabled
         server.config = config
         
         # Update the updatedAt timestamp
         server.updatedAt = datetime.now(timezone.utc)
         
         await server.save()
-        logger.info(f"Toggled server {server.serverName} (ID: {server.id}) to {config['status']}")
+        logger.info(f"Toggled server {server.serverName} (ID: {server.id}) to {'enabled' if enabled else 'disabled'}")
         
         return server
     
@@ -716,8 +718,201 @@ class ServerServiceV1:
         """
         Get server by name.
         """
-        return await MCPServerDocument.find_one({"serverName": server_name, "config.status": status})
+        return await MCPServerDocument.find_one({"serverName": server_name})
 
+    async def get_stats(self) -> Dict[str, Any]:
+        """
+        Get system-wide statistics (Admin only).
+
+        This method uses MongoDB aggregation pipelines to gather statistics about:
+        - Servers (total, by scope, by status, by transport)
+        - Tokens (total, by type, active/expired)
+        - Active users (users with active tokens)
+        - Total tools across all servers
+
+        Returns:
+            Dictionary containing all statistics
+        """
+        from packages.models._generated.token import Token
+        from packages.models._generated.user import IUser
+
+        stats = {}
+
+        # 1. Server Statistics
+        try:
+            # Use facet to get multiple aggregations in one query
+            server_pipeline = [
+                {
+                    "$facet": {
+                        "total": [
+                            {"$count": "count"}
+                        ],
+                        "by_scope": [
+                            {"$group": {"_id": "$config.scope", "count": {"$sum": 1}}}
+                        ],
+                        "by_status": [
+                            {"$group": {"_id": "$config.status", "count": {"$sum": 1}}}
+                        ],
+                        "by_transport": [
+                            {"$unwind": "$config.supported_transports"},
+                            {"$group": {"_id": "$config.supported_transports", "count": {"$sum": 1}}}
+                        ],
+                        "total_tools": [
+                            {"$group": {"_id": None, "total": {"$sum": "$config.num_tools"}}}
+                        ]
+                    }
+                }
+            ]
+
+            # Use PyMongo collection directly for aggregation
+            collection = MCPServerDocument.get_pymongo_collection()
+            cursor = collection.aggregate(server_pipeline)
+            server_results = await cursor.to_list(length=None)
+
+            if server_results and len(server_results) > 0:
+                result = server_results[0]
+
+                # Total servers
+                stats["total_servers"] = result["total"][0]["count"] if result["total"] else 0
+
+                # Servers by scope
+                servers_by_scope = {}
+                for item in result.get("by_scope", []):
+                    scope = item["_id"] or "unknown"
+                    servers_by_scope[scope] = item["count"]
+                stats["servers_by_scope"] = servers_by_scope
+
+                # Servers by status
+                servers_by_status = {}
+                for item in result.get("by_status", []):
+                    status = item["_id"] or "unknown"
+                    servers_by_status[status] = item["count"]
+                stats["servers_by_status"] = servers_by_status
+
+                # Servers by transport
+                servers_by_transport = {}
+                for item in result.get("by_transport", []):
+                    transport = item["_id"] or "unknown"
+                    servers_by_transport[transport] = item["count"]
+                stats["servers_by_transport"] = servers_by_transport
+
+                # Total tools
+                stats["total_tools"] = result["total_tools"][0]["total"] if result["total_tools"] else 0
+            else:
+                # No servers found
+                stats["total_servers"] = 0
+                stats["servers_by_scope"] = {}
+                stats["servers_by_status"] = {}
+                stats["servers_by_transport"] = {}
+                stats["total_tools"] = 0
+
+        except Exception as e:
+            logger.error(f"Error gathering server statistics: {e}", exc_info=True)
+            stats["total_servers"] = 0
+            stats["servers_by_scope"] = {}
+            stats["servers_by_status"] = {}
+            stats["servers_by_transport"] = {}
+            stats["total_tools"] = 0
+
+        # 2. Token Statistics
+        try:
+            now = datetime.now(timezone.utc)
+
+            token_pipeline = [
+                {
+                    "$facet": {
+                        "total": [
+                            {"$count": "count"}
+                        ],
+                        "by_type": [
+                            {"$group": {"_id": "$type", "count": {"$sum": 1}}}
+                        ],
+                        "by_expiry": [
+                            {
+                                "$group": {
+                                    "_id": {
+                                        "$cond": [
+                                            {"$gt": ["$expiresAt", now]},
+                                            "active",
+                                            "expired"
+                                        ]
+                                    },
+                                    "count": {"$sum": 1}
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+
+            # Use PyMongo collection directly for aggregation
+            token_collection = Token.get_pymongo_collection()
+            token_cursor = token_collection.aggregate(token_pipeline)
+            token_results = await token_cursor.to_list(length=None)
+
+            if token_results and len(token_results) > 0:
+                result = token_results[0]
+
+                # Total tokens
+                stats["total_tokens"] = result["total"][0]["count"] if result["total"] else 0
+
+                # Tokens by type
+                tokens_by_type = {}
+                for item in result.get("by_type", []):
+                    token_type = item["_id"] or "unknown"
+                    tokens_by_type[token_type] = item["count"]
+                stats["tokens_by_type"] = tokens_by_type
+
+                # Active/Expired tokens
+                active_count = 0
+                expired_count = 0
+                for item in result.get("by_expiry", []):
+                    if item["_id"] == "active":
+                        active_count = item["count"]
+                    elif item["_id"] == "expired":
+                        expired_count = item["count"]
+
+                stats["active_tokens"] = active_count
+                stats["expired_tokens"] = expired_count
+            else:
+                # No tokens found
+                stats["total_tokens"] = 0
+                stats["tokens_by_type"] = {}
+                stats["active_tokens"] = 0
+                stats["expired_tokens"] = 0
+
+        except Exception as e:
+            logger.error(f"Error gathering token statistics: {e}", exc_info=True)
+            stats["total_tokens"] = 0
+            stats["tokens_by_type"] = {}
+            stats["active_tokens"] = 0
+            stats["expired_tokens"] = 0
+
+        # 3. Active Users Statistics
+        try:
+            now = datetime.now(timezone.utc)
+
+            # Count unique users with active tokens
+            active_users_pipeline = [
+                {"$match": {"expiresAt": {"$gt": now}}},
+                {"$group": {"_id": "$userId"}},
+                {"$count": "count"}
+            ]
+
+            # Use PyMongo collection directly for aggregation
+            active_users_collection = Token.get_pymongo_collection()
+            active_users_cursor = active_users_collection.aggregate(active_users_pipeline)
+            active_users_results = await active_users_cursor.to_list(length=None)
+
+            stats["active_users"] = active_users_results[0]["count"] if active_users_results else 0
+
+        except Exception as e:
+            logger.error(f"Error gathering active users statistics: {e}", exc_info=True)
+            stats["active_users"] = 0
+
+        logger.info(f"Generated system statistics: {stats['total_servers']} servers, {stats['total_tokens']} tokens, {stats['active_users']} active users")
+
+        return stats
 
 # Singleton instance
 server_service_v1 = ServerServiceV1()
