@@ -241,8 +241,8 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                       <EyeIcon className='h-5 w-5' aria-hidden='true' />
                     )}
                   </button>
-                  {renderError('client_secret')}
                 </div>
+                {renderError('client_secret')}
               </div>
               <div>
                 <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>
