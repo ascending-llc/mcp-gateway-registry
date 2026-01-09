@@ -308,7 +308,7 @@ class MCPOAuthService:
         """Check if there is a failed OAuth flow"""
         user_flows = self.flow_manager.get_user_flows(user_id, server_name)
         for flow in user_flows:
-            if flow.status == "failed":
+            if flow.status == OAuthFlowStatus.FAILED:
                 return True
         return False
 

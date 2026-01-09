@@ -6,12 +6,13 @@ This service handles all server-related operations using MongoDB and Beanie ODM.
 ODM Schema:
 - serverName: str (required)
 - config: Dict[str, Any] (required) - stores all server configuration
-- author: Link[IUser] (required) - references user who created the server
+- author: PydanticObjectId (required) - references user who created the server
 - createdAt: datetime (auto-generated)
 - updatedAt: datetime (auto-generated)
 """
 
 import logging
+import httpx
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
 from bson import ObjectId
@@ -25,6 +26,8 @@ from registry.schemas.server_api_schemas import (
     ServerCreateRequest,
     ServerUpdateRequest,
 )
+from registry.utils.crypto_utils import encrypt_auth_fields
+from registry.core.mcp_client import get_tools_from_server_with_server_info
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +58,8 @@ def _build_config_from_request(data: ServerCreateRequest) -> Dict[str, Any]:
     }
     
     # Add optional fields only if they are provided (not None)
-    if data.proxy_pass_url is not None:
-        config["proxy_pass_url"] = data.proxy_pass_url
+    if data.url is not None:
+        config["url"] = data.url
     if data.license is not None:
         config["license"] = data.license
     if data.auth_type is not None:
@@ -79,6 +82,10 @@ def _build_config_from_request(data: ServerCreateRequest) -> Dict[str, Any]:
         config["oauth"] = data.oauth
     if data.custom_user_vars is not None:
         config["custom_user_vars"] = data.custom_user_vars
+    if data.authentication is not None:
+        config["authentication"] = data.authentication
+    if data.apiKey is not None:
+        config["apiKey"] = data.apiKey
     
     return config
 
@@ -86,19 +93,30 @@ def _build_config_from_request(data: ServerCreateRequest) -> Dict[str, Any]:
 def _update_config_from_request(config: Dict[str, Any], data: ServerUpdateRequest) -> Dict[str, Any]:
     """Update config dictionary from ServerUpdateRequest"""
     update_dict = data.model_dump(exclude_unset=True, exclude={'version'})
-    
+
     # Normalize tags if present
     if 'tags' in update_dict and update_dict['tags']:
         update_dict['tags'] = [tag.lower() for tag in update_dict['tags']]
+    
+    # Handle mutually exclusive authentication fields: apiKey and authentication
+    # If one is being updated, remove the other from config
+    if 'apiKey' in update_dict:
+        # When apiKey is provided, remove authentication field
+        if 'authentication' in config:
+            del config['authentication']
+    elif 'authentication' in update_dict:
+        # When authentication is provided, remove apiKey field
+        if 'apiKey' in config:
+            del config['apiKey']
     
     # Update config with new values (only fields that were explicitly set)
     for key, value in update_dict.items():
         if value is not None:
             config[key] = value
-    
+
     # Increment version
     config['version'] = config.get('version', 1) + 1
-    
+
     return config
 
 
@@ -246,6 +264,9 @@ class ServerServiceV1:
         # Build config dictionary
         config = _build_config_from_request(data)
         
+        # Encrypt sensitive authentication fields before storing
+        config = encrypt_auth_fields(config)
+        
         # Set user_id for private servers
         if data.scope == "private_user":
             config["user_id"] = user_id
@@ -287,13 +308,59 @@ class ServerServiceV1:
         server = MCPServerDocument(
             serverName=data.server_name,
             config=config,
-            author=author,
+            author=author.id,  # Use PydanticObjectId instead of Link
             createdAt=now,
             updatedAt=now
         )
         
         await server.insert()
         logger.info(f"Created server: {server.serverName} (ID: {server.id}, Path: {data.path})")
+        
+        # Perform health check and tool retrieval after registration
+        if data.url:
+            logger.info(f"Performing post-registration health check and tool retrieval for {server.serverName}")
+            
+            try:
+                # 1. Health check - REQUIRED
+                is_healthy, status_msg, response_time_ms = await self.perform_health_check(server)
+                logger.info(f"Health check result for {server.serverName}: {status_msg} (response_time: {response_time_ms}ms)")
+                
+                if not is_healthy:
+                    # Health check failed - delete the server and reject registration
+                    logger.error(f"Health check failed for {server.serverName}: {status_msg}")
+                    await server.delete()
+                    raise ValueError(f"Server registration rejected: Health check failed - {status_msg}")
+                
+                # Update config with health check results
+                config["last_connected"] = datetime.now(timezone.utc).isoformat()
+                config["status"] = "active"
+                
+                # 2. Tool retrieval - REQUIRED
+                tool_list, tool_error = await self.retrieve_tools_from_server(server)
+                
+                if tool_list is None:
+                    # Tool retrieval failed - delete the server and reject registration
+                    logger.error(f"Tool retrieval failed for {server.serverName}: {tool_error}")
+                    await server.delete()
+                    raise ValueError(f"Server registration rejected: Failed to retrieve tools - {tool_error}")
+                
+                config["tool_list"] = tool_list
+                config["num_tools"] = len(tool_list)
+                logger.info(f"Retrieved {len(tool_list)} tools for {server.serverName}")
+                
+                # Save updated config
+                server.config = config
+                server.updatedAt = datetime.now(timezone.utc)
+                await server.save()
+                
+            except ValueError:
+                # Re-raise ValueError (our validation errors)
+                raise
+            except Exception as e:
+                # Unexpected error during health check or tool retrieval
+                logger.error(f"Unexpected error during post-registration checks for {server.serverName}: {e}", exc_info=True)
+                await server.delete()
+                raise ValueError(f"Server registration rejected: Unexpected error during validation - {type(e).__name__}: {str(e)}")
         
         return server
     
@@ -343,7 +410,13 @@ class ServerServiceV1:
             server.serverName = data.server_name
         
         # Update config with new values
-        server.config = _update_config_from_request(config, data)
+        updated_config = _update_config_from_request(config, data)
+        
+        # Encrypt sensitive authentication fields if they were updated
+        if data.authentication is not None or data.apiKey is not None:
+            updated_config = encrypt_auth_fields(updated_config)
+        
+        server.config = updated_config
         
         # Update the updatedAt timestamp
         server.updatedAt = datetime.now(timezone.utc)
@@ -453,6 +526,138 @@ class ServerServiceV1:
         tool_list = _extract_config_field(server, "tool_list", [])
         return server, tool_list
     
+    async def perform_health_check(
+        self,
+        server: MCPServerDocument,
+    ) -> Tuple[bool, str, Optional[int]]:
+        """
+        Perform health check on a server.
+        
+        Args:
+            server: Server document
+            
+        Returns:
+            Tuple of (is_healthy, status_message, response_time_ms)
+        """
+        config = server.config or {}
+        url = config.get("url")
+        
+        if not url:
+            return False, "No URL configured", None
+        
+        supported_transports = config.get("supported_transports", ["streamable-http"])
+        
+        # Skip health checks for stdio transport
+        if supported_transports == ["stdio"]:
+            logger.info(f"Skipping health check for stdio transport: {url}")
+            return True, "healthy (stdio transport skipped)", None
+        
+        try:
+            # Perform simple HTTP health check
+            start_time = datetime.now(timezone.utc)
+            
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # Try to access the MCP endpoint
+                base_url = url.rstrip('/')
+                
+                # Try streamable-http transport first (most common)
+                if "streamable-http" in supported_transports:
+                    endpoint = f"{base_url}/mcp" if not base_url.endswith('/mcp') else base_url
+                    
+                    try:
+                        # Try a simple GET request first
+                        response = await client.get(endpoint, follow_redirects=True)
+                        
+                        # Calculate response time
+                        end_time = datetime.now(timezone.utc)
+                        response_time_ms = int((end_time - start_time).total_seconds() * 1000)
+                        
+                        # Check if response indicates a healthy server
+                        # 200, 400 (MCP protocol errors), 405 (method not allowed) are all healthy signs
+                        if response.status_code in [200, 400, 405]:
+                            return True, "healthy", response_time_ms
+                        elif response.status_code in [401, 403]:
+                            # Auth required but server is responding
+                            return True, "healthy (auth required)", response_time_ms
+                        else:
+                            return False, f"unhealthy: status {response.status_code}", response_time_ms
+                    except Exception as e:
+                        logger.warning(f"Health check failed for {endpoint}: {e}")
+                        return False, f"unhealthy: {type(e).__name__}", None
+                
+                # Try SSE transport if configured
+                elif "sse" in supported_transports:
+                    endpoint = f"{base_url}/sse" if not base_url.endswith('/sse') else base_url
+                    
+                    try:
+                        response = await client.get(endpoint, follow_redirects=True)
+                        end_time = datetime.now(timezone.utc)
+                        response_time_ms = int((end_time - start_time).total_seconds() * 1000)
+                        
+                        if response.status_code in [200, 400, 405]:
+                            return True, "healthy", response_time_ms
+                        else:
+                            return False, f"unhealthy: status {response.status_code}", response_time_ms
+                    except Exception as e:
+                        logger.warning(f"Health check failed for {endpoint}: {e}")
+                        return False, f"unhealthy: {type(e).__name__}", None
+                
+                # Unknown transport
+                else:
+                    return False, f"unsupported transport: {supported_transports}", None
+                    
+        except Exception as e:
+            logger.error(f"Health check error for server {server.serverName}: {e}")
+            return False, f"error: {type(e).__name__}", None
+    
+    async def retrieve_tools_from_server(
+        self,
+        server: MCPServerDocument,
+    ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
+        """
+        Retrieve tools from a server using MCP client.
+        
+        Args:
+            server: Server document
+            
+        Returns:
+            Tuple of (tool_list, error_message)
+            If successful, returns (tool_list, None)
+            If failed, returns (None, error_message)
+        """
+        config = server.config or {}
+        url = config.get("url")
+        
+        if not url:
+            return None, "No URL configured"
+        
+        try:
+            # Build server_info dict for mcp_client
+            server_info = {
+                "supported_transports": config.get("supported_transports", ["streamable-http"]),
+                "tags": config.get("tags", []),
+            }
+            
+            # Add headers if present
+            if "headers" in config:
+                server_info["headers"] = config["headers"]
+            
+            logger.info(f"Retrieving tools from {url} for server {server.serverName}")
+            
+            # Use the MCP client to get tools
+            tool_list = await get_tools_from_server_with_server_info(url, server_info)
+            
+            if tool_list is None:
+                return None, "Failed to retrieve tools from MCP server"
+            
+            logger.info(f"Retrieved {len(tool_list)} tools from {server.serverName}")
+            return tool_list, None
+            
+        except Exception as e:
+            error_msg = f"Error retrieving tools: {type(e).__name__} - {str(e)}"
+            logger.error(f"Tool retrieval error for server {server.serverName}: {e}")
+            return None, error_msg
+    
     async def refresh_server_health(
         self,
         server_id: str,
@@ -460,9 +665,6 @@ class ServerServiceV1:
     ) -> Dict[str, Any]:
         """
         Refresh server health status.
-        
-        This is a placeholder that returns basic health info.
-        In a real implementation, this would ping the actual server.
         
         Args:
             server_id: Server document ID
@@ -475,36 +677,47 @@ class ServerServiceV1:
             ValueError: If server not found
         """
         server = await self.get_server_by_id(server_id, user_id)
-        
+
         if not server:
             raise ValueError("Server not found")
         
-        # Update last_connected timestamp in config
+        # Perform actual health check
+        is_healthy, status_msg, response_time_ms = await self.perform_health_check(server)
+        
+        # Update server config with health check results
         config = server.config or {}
         now = datetime.now(timezone.utc)
         config["last_connected"] = now.isoformat()
-        server.config = config
         
-        # Update the updatedAt timestamp
+        if is_healthy:
+            config["status"] = "active"
+            config["last_error"] = None
+            config["error_message"] = None
+        else:
+            config["status"] = "error"
+            config["last_error"] = now.isoformat()
+            config["error_message"] = status_msg
+        
+        server.config = config
         server.updatedAt = now
         
         await server.save()
         
         # Return health info
-        # In real implementation, would ping the server and measure response time
-        status = config.get("status", "active")
         return {
             "server": server,
-            "status": "healthy" if status == "active" else "unhealthy",
-            "last_checked": datetime.now(timezone.utc),
-            "response_time_ms": 125,  # Mock value
+            "status": "healthy" if is_healthy else "unhealthy",
+            "status_message": status_msg,
+            "last_checked": now,
+            "response_time_ms": response_time_ms,
         }
 
-    async def get_server_by_name(self,server_name: str) -> Optional[MCPServerDocument]:
+    async def get_server_by_name(self, server_name: str, status: str = "active") -> Optional[MCPServerDocument]:
         """
         Get server by name.
         """
-        return await MCPServerDocument.find_one({"serverName": server_name})
+        return await MCPServerDocument.find_one({"serverName": server_name, "config.status": status})
+
 
 # Singleton instance
 server_service_v1 = ServerServiceV1()
