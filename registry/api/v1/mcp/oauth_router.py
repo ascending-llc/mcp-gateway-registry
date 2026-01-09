@@ -79,16 +79,16 @@ async def oauth_callback(
         # 1. Check for errors returned by OAuth provider
         if error:
             logger.error(f"[MCP OAuth] OAuth error received from provider: {error}")
-            return _redirect_to_page(server_name, error_msg=error)
+            return _redirect_to_page(request, server_name, error_msg=error)
 
         # 2. Validate required parameters
         if not code or not isinstance(code, str):
             logger.error("[MCP OAuth] Missing or invalid authorization code")
-            return _redirect_to_page(server_name, error_msg="missing_code")
+            return _redirect_to_page(request, server_name, error_msg="missing_code")
 
         if not state or not isinstance(state, str):
             logger.error("[MCP OAuth] Missing or invalid state parameter")
-            return _redirect_to_page(server_name, error_msg="missing_state")
+            return _redirect_to_page(request, server_name, error_msg="missing_state")
 
         # 3. Decode flow_id from state (state format: flow_id##security_token)
         try:
@@ -98,13 +98,13 @@ async def oauth_callback(
                         f"security_token_length={len(security_token)}")
         except ValueError as e:
             logger.error(f"[MCP OAuth] Failed to decode state: {e}")
-            return _redirect_to_page(server_name, error_msg="invalid_state_format")
+            return _redirect_to_page(request, server_name, error_msg="invalid_state_format")
 
         # Check if flow is already completed
         flow = mcp_service.oauth_service.flow_manager.get_flow(flow_id)
         if flow and flow.status == OAuthFlowStatus.COMPLETED:
             logger.warning(f"[MCP OAuth] Flow already completed, preventing duplicate token exchange: {flow_id}")
-            return _redirect_to_page(server_name, flag="success")
+            return _redirect_to_page(request, server_name, flag="success")
 
         # 4. Complete OAuth flow (validate state + exchange tokens)
         logger.debug(f"[MCP OAuth] Completing OAuth flow for {server_name}")
@@ -116,7 +116,7 @@ async def oauth_callback(
 
         if not success:
             logger.error(f"[MCP OAuth] Failed to complete OAuth flow: {error_msg}")
-            return _redirect_to_page(server_name, error_msg=error_msg or "unknown_error")
+            return _redirect_to_page(request, server_name, error_msg=error_msg or "unknown_error")
 
         logger.info(f"[MCP OAuth] OAuth flow completed successfully for {server_name}")
 
@@ -161,11 +161,11 @@ async def oauth_callback(
                          f"but tokens are saved: {error}")
 
         # 6. Redirect to success page
-        return _redirect_to_page(server_name, flag="success")
+        return _redirect_to_page(request, server_name, flag="success")
 
     except Exception as e:
         logger.error(f"[MCP OAuth] OAuth callback error: {str(e)}", exc_info=True)
-        return _redirect_to_page(server_name, error_msg="callback_failed")
+        return _redirect_to_page(request, server_name, error_msg="callback_failed")
 
 
 @router.get("/oauth/tokens/{flow_id}")
@@ -390,7 +390,8 @@ async def refresh_oauth_tokens(
 
 # ==================== Helper Functions ====================
 
-def _redirect_to_page(server_name: str,
+def _redirect_to_page(request: Request,
+                      server_name: str,
                       flag: str = "error",
                       error_msg: str = None) -> RedirectResponse:
     """
@@ -401,11 +402,14 @@ def _redirect_to_page(server_name: str,
     base_path = REGISTRY_CONSTANTS.NGINX_BASE_PATH.rstrip("/")
     encoded_server = quote(str(server_name))
 
-    redirect_url = f"/{base_path}/oauth/callback?type={flag}&serverName={encoded_server}"
+    # Build full URL with host if request is provided
+    host = request.headers.get("host", "localhost:7860")
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    redirect_url = f"{proto}://{host}/{base_path}/oauth/callback?type={flag}&serverName={encoded_server}"
 
     if error_msg and flag == "error":
         encoded_error = quote(str(error_msg))
         redirect_url += f"&error={encoded_error}"
 
-    logger.debug(f"[OAuth Redirect] Redirecting to {flag} page: {redirect_url}")
+    logger.info(f"[OAuth Redirect] Redirecting to {flag} page: {redirect_url}")
     return RedirectResponse(url=redirect_url)

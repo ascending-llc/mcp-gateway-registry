@@ -98,7 +98,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         for original_pattern, path_regex, path_format, param_convertors in compiled_patterns:
             match = path_regex.match(path)
             if match:
-                logger.info(f"Path '{path}' matched pattern '{original_pattern}'")
+                logger.debug(f"Path '{path}' matched pattern '{original_pattern}'")
                 return True
         return False
 
