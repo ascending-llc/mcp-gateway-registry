@@ -86,7 +86,81 @@ The existing [ACLService](#https://github.com/ascending-llc/jarvis-api/blob/depl
 
 ### High-Level Data Flow Diagram 
 
-TODO: Translate Drawing into mermaid chart
+```mermaid
+flowchart LR
+  %% ========= Jarvis Side =========
+  JarvisAuth["`
+AuthService
+*AuthServer.js*
+Issues JWT (JWS) via HS256/RS256
+`"]
+
+  JarvisServerRegistry["`
+Server/Agent Registry Client
+*MCPServersRegistry.ts*
+Forwards Authorization: Bearer <JWT>
+`"]
+
+  subgraph Jarvis
+    direction TB
+    JarvisAuth -- "JWT issued (JWS: signed token)" --> JarvisServerRegistry
+  end
+
+  %% ========= Registry Side =========
+  subgraph MCPRegistry
+    direction TB
+
+    AuthMiddleware["`
+JWTAuthMiddleware
+- Extract Bearer token from Authorization header
+- Verify signature (JWS) + validate exp/nbf/iat
+- Decode claims -> request.state.user_context
+`"]
+
+    APIRouter["`
+API Router
+*registry/main.py*
+Routes use request.state.user_context
+`"]
+
+    ServerService["`
+Server/Agent Service
+(List + read server/agent resources)
+`"]
+
+    ACLService["`
+ACLService (internal)
+- check_permission(...)
+- list_accessible_resources(...)
+- grant_permission(...)
+- remove_all_permissions(...)
+`"]
+
+    AuthMiddleware -- "attach user_context (user_id, email, ...)" --> APIRouter
+    APIRouter --> ServerService
+    ServerService -- "permission checks + resource filtering" --> ACLService
+  end
+
+  %% ========= Cross-service request flow (JWT forwarding) =========
+  JarvisServerRegistry -- "HTTP request
+Authorization: Bearer <JWT (JWS)>" --> AuthMiddleware
+
+  %% Explicit “back” arrow to satisfy “AuthMiddle -> JarvisServerRegistry”
+  AuthMiddleware -- "401/403 on invalid/expired JWT
+(or proceeds if valid)" --> JarvisServerRegistry
+
+  %% ========= Persistence =========
+  subgraph MongoDB
+    ServerCollection["Server Collection"]
+    AgentCollection["Agent Collection"]
+    ACLCollection["ACLEntry Collection"]
+  end
+
+  ServerService --> ServerCollection
+  ServerService --> AgentCollection
+  ACLService --> ACLCollection
+
+```
 
 ### Data Models
 
@@ -309,16 +383,9 @@ The Server registration form should be updated to include a field that specifies
 TBD after evaulating performance of initial service implementation
 
 ## Roadmap 
-Listed below are work items that need to be for ACL Service Integration 
+Listed below are work items that need to be completed for ACL Service Integration 
+- Write the ACLService in the registry project
 - Write authentication middleware to connect jarvis and registry
 - Refactor `import-schema` tool to include constants and enums from `librechat/data-provider`
-- Write the ACLService in the registry project
 - Update the Resource-based services to incorporate ACL permissions
 - point jarvis to `server_service_v1`
-
-
-## Etc Notes
-Working notes. To be deleted upon final draft
-
-### Questions
-1. `grantedAt` & `createdAt` duplicate info. Probably want to remove one
