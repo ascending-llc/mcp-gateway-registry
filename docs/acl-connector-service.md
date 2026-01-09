@@ -14,7 +14,7 @@
     - [Data Models](#data-models)
     - [Service Design](#service-design)
 4. [Jarvis Integration](#jarvis-integration)
-    - [Authentication Middleware / JWT Forwarding](#authentication-middleware/jwt-forwarding)
+    - [Authentication Middleware / JWT Forwarding](#authentication-middleware)
 5. [Additional Considerations](#additional-considerations)
     - [Server Registration Form Updates](#server-registration-form-updates)
     - [ACL Service Cache](#acl-service-cache)
@@ -54,7 +54,7 @@ An ACLService is already implemented in the Jarvis project. Prior to defining th
 - **Resources**: Items that require access control (mcp servers, agents), identified by resourceType and resourceId.
 - **Permissions**: Numeric bitmasks that define allowed actions (view, edit).
 
-### Jarvis ACL Service Implementation
+### Existing ACL Service
 The existing [ACLService](https://github.com/ascending-llc/jarvis-api/blob/deploy/packages/api/src/acl/accessControlService.ts) in Jarvis exposes several methods for managing object-level permissions. In the list below, methods that are misaligned with current requirements are shown with strikethroughs, while the remaining methods are candidates for refactoring to meet the updated needs:
 
 - `grantPermission`: Grants permissions to a principal for specific resources using a permission set optionally defined in a role
@@ -236,7 +236,7 @@ class ACLService:
         granted_by: str,
         role_id: Optional[str] = None,
         perm_bits: Optional[int] = None,
-    )
+    ):
         """
         Assigns permission bits to a specified principal (user, group, or public) for a given resource.
 
@@ -257,7 +257,7 @@ class ACLService:
         is_admin = granting_user.role == "ADMIN"
         has_owner_perm = self.check_permission(
             principal_type=PrincipalType.USER,
-            principal_id=granting_user._id
+            principal_id=granting_user._id,
             resource_type=resource_type,
             resource_id=resource_id,
             required_permission=RoleBits.OWNER
