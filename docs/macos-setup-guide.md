@@ -177,7 +177,7 @@ ls -la models/_generated/
 cp docker-compose.override.yml.example docker-compose.override.yml
 
 # open docker compose override file for editing
-nano .docker-compose.override.yml
+nano docker-compose.override.yml
 ```
 
 ### Configure Docker Compose 

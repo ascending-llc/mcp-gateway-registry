@@ -14,7 +14,7 @@
     - [Data Models](#data-models)
     - [Service Design](#service-design)
 4. [Jarvis Integration](#jarvis-integration)
-    - [Authentication Middleware / JWT Forwarding](#authenitcation-middleware/jwt-forwarding)
+    - [Authentication Middleware / JWT Forwarding](#authentication-middleware/jwt-forwarding)
 5. [Additional Considerations](#additional-considerations)
     - [Server Registration Form Updates](#server-registration-form-updates)
     - [ACL Service Cache](#acl-service-cache)
@@ -49,13 +49,13 @@ This ACL service will be foundational for enforcing secure access and will be co
 An ACLService is already implemented in the Jarvis project. Prior to defining the registry-specific approach, it is essential to review this existing design and assess its compatibility with the updated requirements for sharing connectors (MCP servers and agents) across user, group, and public scopes.
 
 ### Terminology
-- **Principals**: Entities that can be granted permissions (individual users, group, public, and roles)
+- **Principals**: Entities that can be granted permissions (individual users, groups, public, and roles)
 - **Roles**: Predefined sets of permissions. Each role is associated with a resource type  and maps to permission bits (permBits) 
 - **Resources**: Items that require access control (mcp servers, agents), identified by resourceType and resourceId.
 - **Permissions**: Numeric bitmasks that define allowed actions (view, edit).
 
 ### Jarvis ACL Service Implementation
-The existing [ACLService](#https://github.com/ascending-llc/jarvis-api/blob/deploy/packages/api/src/acl/accessControlService.ts) in Jarvis exposes several methods for managing object-level permissions. In the list below, methods that are misaligned with current requirements are shown with strikethroughs, while the remaining methods are candidates for refactoring to meet the updated needs:
+The existing [ACLService](https://github.com/ascending-llc/jarvis-api/blob/deploy/packages/api/src/acl/accessControlService.ts) in Jarvis exposes several methods for managing object-level permissions. In the list below, methods that are misaligned with current requirements are shown with strikethroughs, while the remaining methods are candidates for refactoring to meet the updated needs:
 
 - `grantPermission`: Grants permissions to a principal for specific resources using a permission set optionally defined in a role
 - `findAccessibleResources`: Finds all resources of a specific type that a user has access to with specific permission bits
@@ -167,8 +167,8 @@ Authorization: Bearer <JWT (JWS)>" --> AuthMiddleware
 #### Field Definitions
 
 Required Fields: 
-- `principleType`: String - The type of principle (user, group, or public)
-- `principalId?`: Mixed - The ID of the principle (objectId for user/group, null for "public")
+- `principalType`: String - The type of principal (user, group, or public)
+- `principalId?`: Mixed - The ID of the principal (objectId for user/group, null for "public")
 - `resourceType`: String - The type of resource (MCP Server, Agent)
 - `resourceId`: ObjectId - The ID of the resource
 - `permBits`: Number - The permission bits 
@@ -203,8 +203,8 @@ MongoDB `ACLEntry`
 **Supporting Enums / Constants**
 The `ACLEntry` relies on the following enums/constants exported by `librechat-data-provider`:
 
-- **PrincipleType**
-- **PrincipleModel**
+- **principalType**
+- **principalModel**
 - **ResourceType**
 - **PermBits**
 - **AccessRoleIds**
@@ -234,7 +234,7 @@ class ACLService:
         resource_type: str,
         resource_id: str,
         granted_by: str,
-        role_id: Optional[str] = str,
+        role_id: Optional[str] = None,
         perm_bits: Optional[int] = None,
     )
         """
@@ -246,7 +246,7 @@ class ACLService:
         if principal_type in ["user", "group"] and not principal_id:
             raise ValueError("principal_id must be set for user/group principal_type")
 
-        if not role_id or perm_bits: 
+        if not role_id and not perm_bits: 
             raise ValueError("Permission bits must set via perm_bits or role_id")
 
         if role_id: 
@@ -256,7 +256,7 @@ class ACLService:
         granting_user = await IUser.find_one({"email": granted_by}) # get email from middleware
         is_admin = granting_user.role == "ADMIN"
         has_owner_perm = self.check_permission(
-            principal_type= PrincipalType.USER,
+            principal_type=PrincipalType.USER,
             principal_id=granting_user._id
             resource_type=resource_type,
             resource_id=resource_id,
