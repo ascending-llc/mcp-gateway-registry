@@ -31,6 +31,7 @@ const INIT_DATA: ServerConfig = {
 
 const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, refreshData, onClose, id }) => {
   const [loading, setLoading] = useState(false);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const [formData, setFormData] = useState<ServerConfig>(INIT_DATA);
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [serverData, setServerData] = useState<{ serverName: string }>({ serverName: '' });
@@ -42,7 +43,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
     if (id && isOpen) {
       getDetail();
     } else {
-      setLoading(false);
+      setLoadingDetail(false);
       setFormData(INIT_DATA);
       setErrors({});
     }
@@ -50,7 +51,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
 
   const getDetail = async () => {
     if (!id) return;
-    setLoading(true);
+    setLoadingDetail(true);
     try {
       const result = await SERVICES.SERVER.getServerDetail(id);
 
@@ -87,7 +88,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
     } catch (_error) {
       showToast('Failed to fetch server details', 'error');
     } finally {
-      setLoading(false);
+      setLoadingDetail(false);
     }
   };
 
@@ -172,11 +173,15 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
       path: data.path,
       url: data.url,
       tags: data.tags,
+      enabled: true,
       supported_transports: [data.supported_transports],
     };
     switch (data.authConfig.type) {
       case 'auto':
-        return baseData;
+        return {
+          ...baseData,
+          authentication: { type: 'auto' },
+        };
       case 'apiKey':
         return {
           ...baseData,
@@ -219,6 +224,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
   const handleSave = async () => {
     if (!validate()) return;
 
+    setLoading(true);
     const data = processDataByAuthType(formData);
     try {
       if (isEditMode) {
@@ -232,7 +238,9 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
       }
       refreshData(true);
     } catch (error: any) {
-      showToast(error?.detail || error, 'error');
+      showToast(error?.detail?.[0]?.msg || error, 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -259,7 +267,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
 
           {/* Content */}
           <div className='px-6 py-4 overflow-y-auto custom-scrollbar flex-1'>
-            {loading ? (
+            {loadingDetail ? (
               <div className='flex items-center justify-center h-full min-h-[200px]'>
                 <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600'></div>
               </div>
@@ -274,7 +282,8 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
               {isEditMode && (
                 <button
                   onClick={handleDelete}
-                  className='inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-red-500 dark:text-red-400 bg-white dark:bg-gray-800 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500'
+                  disabled={loading}
+                  className='inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-red-500 dark:text-red-400 bg-white dark:bg-gray-800 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed'
                 >
                   <TrashIcon className='h-4 w-4' />
                 </button>
@@ -283,14 +292,17 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
             <div className='flex space-x-3'>
               <button
                 onClick={onClose}
-                className='px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500'
+                disabled={loading}
+                className='px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed'
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
-                className='px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-700 hover:bg-purple-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500'
+                disabled={loading}
+                className='inline-flex items-center gap-2 px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-700 hover:bg-purple-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed'
               >
+                {loading && <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white'></div>}
                 {isEditMode ? 'Update' : 'Create'}
               </button>
             </div>

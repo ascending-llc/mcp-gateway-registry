@@ -106,8 +106,8 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
                 Authenticated
               </span>
             ) : (
-              <span className='flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-600 rounded-full text-xs font-medium'>
-                <KeyIcon className='h-3 w-3' />
+              <span className='flex items-center gap-1 px-2 py-0.5 bg-amber-50 dark:bg-amber-300 text-amber-600 dark:text-amber-600 rounded-full text-xs font-medium'>
+                <KeyIcon className='h-3 w-3 dark:text-amber-600' />
                 OAuth
               </span>
             )}
@@ -136,7 +136,11 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
               disabled={loading}
               onClick={onClickRevoke}
             >
-              <TrashIcon className='h-4 w-4' />
+              {loading ? (
+                <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-slate-200' />
+              ) : (
+                <TrashIcon className='h-4 w-4' />
+              )}
               Revoke
             </button>
           )}
@@ -146,7 +150,9 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
               disabled={loading}
               onClick={handleAuth}
             >
-              {loading && <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-slate-200' />}
+              {loading && !isAuthenticated && (
+                <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-slate-200' />
+              )}
               {!(loading || isAuthenticated) && <ArrowPathIcon className='h-4 w-4' />}
               {isAuthenticated ? 'Reconnect' : 'Authenticate'}
             </button>

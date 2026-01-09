@@ -100,7 +100,6 @@ const Dashboard: React.FC = () => {
   const [committedQuery, setCommittedQuery] = useState('');
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [editingServer, setEditingServer] = useState<Server | null>(null);
   const [serverId, setServerId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -337,12 +336,11 @@ const Dashboard: React.FC = () => {
   };
 
   const handleCloseEdit = () => {
-    setEditingServer(null);
     setEditingAgent(null);
   };
 
   const showToast = (message: string, type: 'success' | 'error') => {
-    setToast({ message, type });
+    setToast({ message: String(message), type });
   };
 
   const hideToast = () => {
@@ -360,17 +358,6 @@ const Dashboard: React.FC = () => {
       showToast(error.response?.data?.detail || 'Failed to update agent', 'error');
     } finally {
       setEditAgentLoading(false);
-    }
-  };
-
-  const handleToggleServer = async (id: string, enabled: boolean) => {
-    try {
-      await SERVICES.SERVER.toggleServerStatus(id, { enabled });
-      await refreshData();
-      showToast(`Server ${enabled ? 'enabled' : 'disabled'} successfully!`, 'success');
-    } catch (error: any) {
-      await refreshData();
-      showToast(error.detail || 'Failed to toggle server', 'error');
     }
   };
 
@@ -407,48 +394,54 @@ const Dashboard: React.FC = () => {
         (filteredServers.length > 0 || (!searchTerm && activeFilter === 'all')) && (
           <div className='mb-8'>
             <h2 className='text-xl font-bold text-gray-900 dark:text-white mb-4'>MCP Servers</h2>
-
-            {filteredServers.length === 0 ? (
-              <div className='text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg'>
-                <div className='text-gray-400 text-lg mb-2'>No servers found</div>
-                <p className='text-gray-500 dark:text-gray-300 text-sm'>
-                  {searchTerm || activeFilter !== 'all'
-                    ? 'Press Enter in the search bar to search semantically'
-                    : 'No servers are registered yet'}
-                </p>
-                {!searchTerm && activeFilter === 'all' && (
-                  <button
-                    onClick={handleRegisterServer}
-                    className='mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-colors'
-                  >
-                    <PlusIcon className='h-4 w-4 mr-2' />
-                    Register Server
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div
-                className='grid'
-                style={{
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-                  gap: 'clamp(1.5rem, 1.5rem, 2.5rem)',
-                }}
-              >
-                {filteredServers.map(server => (
-                  <ServerCard
-                    key={server.id}
-                    server={server}
-                    onToggle={handleToggleServer}
-                    onEdit={handleEditServer}
-                    canModify={user?.can_modify_servers || false}
-                    onRefreshSuccess={refreshData}
-                    onShowToast={showToast}
-                    onServerUpdate={handleServerUpdate}
-                    authToken={agentApiToken}
-                  />
-                ))}
-              </div>
-            )}
+            <div className='relative'>
+              {loading && (
+                <div className='absolute inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10'>
+                  <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600'></div>
+                </div>
+              )}
+              {filteredServers.length === 0 ? (
+                <div className='text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg'>
+                  <div className='text-gray-400 text-lg mb-2'>No servers found</div>
+                  <p className='text-gray-500 dark:text-gray-300 text-sm'>
+                    {searchTerm || activeFilter !== 'all'
+                      ? 'Press Enter in the search bar to search semantically'
+                      : 'No servers are registered yet'}
+                  </p>
+                  {!searchTerm && activeFilter === 'all' && (
+                    <button
+                      onClick={handleRegisterServer}
+                      className='mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-colors'
+                    >
+                      <PlusIcon className='h-4 w-4 mr-2' />
+                      Register Server
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div
+                  className='grid'
+                  style={{
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                    gap: 'clamp(1.5rem, 1.5rem, 2.5rem)',
+                  }}
+                >
+                  {filteredServers.map(server => (
+                    <ServerCard
+                      key={server.id}
+                      server={server}
+                      canModify={user?.can_modify_servers || false}
+                      authToken={agentApiToken}
+                      onEdit={handleEditServer}
+                      onShowToast={showToast}
+                      onServerUpdate={handleServerUpdate}
+                      onRefreshSuccess={refreshData}
+                      handleServerUpdate={handleServerUpdate}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -457,48 +450,50 @@ const Dashboard: React.FC = () => {
         (filteredAgents.length > 0 || (!searchTerm && activeFilter === 'all')) && (
           <div className='mb-8'>
             <h2 className='text-xl font-bold text-gray-900 dark:text-white mb-4'>A2A Agents</h2>
-
-            {agentsError ? (
-              <div className='text-center py-12 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800'>
-                <div className='text-red-500 text-lg mb-2'>Failed to load agents</div>
-                <p className='text-red-600 dark:text-red-400 text-sm'>{agentsError}</p>
-              </div>
-            ) : loading ? (
-              <div className='flex items-center justify-center py-12'>
-                <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600'></div>
-              </div>
-            ) : filteredAgents.length === 0 ? (
-              <div className='text-center py-12 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800'>
-                <div className='text-gray-400 text-lg mb-2'>No agents found</div>
-                <p className='text-gray-500 dark:text-gray-300 text-sm'>
-                  {searchTerm || activeFilter !== 'all'
-                    ? 'Press Enter in the search bar to search semantically'
-                    : 'No agents are registered yet'}
-                </p>
-              </div>
-            ) : (
-              <div
-                className='grid'
-                style={{
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-                  gap: 'clamp(1.5rem, 3vw, 2.5rem)',
-                }}
-              >
-                {filteredAgents.map(agent => (
-                  <AgentCard
-                    key={agent.path}
-                    agent={agent}
-                    onToggle={handleToggleAgent}
-                    onEdit={handleEditAgent}
-                    canModify={user?.can_modify_servers || false}
-                    onRefreshSuccess={refreshData}
-                    onShowToast={showToast}
-                    onAgentUpdate={handleAgentUpdate}
-                    authToken={agentApiToken}
-                  />
-                ))}
-              </div>
-            )}
+            <div className='relative'>
+              {loading && (
+                <div className='absolute inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10'>
+                  <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600'></div>
+                </div>
+              )}
+              {agentsError ? (
+                <div className='text-center py-12 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800'>
+                  <div className='text-red-500 text-lg mb-2'>Failed to load agents</div>
+                  <p className='text-red-600 dark:text-red-400 text-sm'>{agentsError}</p>
+                </div>
+              ) : filteredAgents.length === 0 ? (
+                <div className='text-center py-12 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800'>
+                  <div className='text-gray-400 text-lg mb-2'>No agents found</div>
+                  <p className='text-gray-500 dark:text-gray-300 text-sm'>
+                    {searchTerm || activeFilter !== 'all'
+                      ? 'Press Enter in the search bar to search semantically'
+                      : 'No agents are registered yet'}
+                  </p>
+                </div>
+              ) : (
+                <div
+                  className='grid'
+                  style={{
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+                    gap: 'clamp(1.5rem, 3vw, 2.5rem)',
+                  }}
+                >
+                  {filteredAgents.map(agent => (
+                    <AgentCard
+                      key={agent.path}
+                      agent={agent}
+                      onToggle={handleToggleAgent}
+                      onEdit={handleEditAgent}
+                      canModify={user?.can_modify_servers || false}
+                      onRefreshSuccess={refreshData}
+                      onShowToast={showToast}
+                      onAgentUpdate={handleAgentUpdate}
+                      authToken={agentApiToken}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -506,78 +501,84 @@ const Dashboard: React.FC = () => {
       {viewFilter === 'external' && (
         <div className='mb-8'>
           <h2 className='text-xl font-bold text-gray-900 dark:text-white mb-4'>External Registries</h2>
-
-          {filteredExternalServers.length === 0 && filteredExternalAgents.length === 0 ? (
-            <div className='text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg border border-dashed border-gray-300 dark:border-gray-600'>
-              <div className='text-gray-400 text-lg mb-2'>
-                {externalServers.length === 0 && externalAgents.length === 0
-                  ? 'No External Registries Available'
-                  : 'No Results Found'}
+          <div className='relative'>
+            {loading && (
+              <div className='absolute inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10'>
+                <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600'></div>
               </div>
-              <p className='text-gray-500 dark:text-gray-300 text-sm max-w-md mx-auto'>
-                {externalServers.length === 0 && externalAgents.length === 0
-                  ? 'External registry integrations (Anthropic, ASOR, and more) will be available soon'
-                  : 'Press Enter in the search bar to search semantically'}
-              </p>
-            </div>
-          ) : (
-            <div>
-              {/* External Servers */}
-              {filteredExternalServers.length > 0 && (
-                <div className='mb-6'>
-                  <h3 className='text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3'>Servers</h3>
-                  <div
-                    className='grid'
-                    style={{
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-                      gap: 'clamp(1.5rem, 3vw, 2.5rem)',
-                    }}
-                  >
-                    {filteredExternalServers.map(server => (
-                      <ServerCard
-                        key={server.id}
-                        server={server}
-                        onToggle={handleToggleServer}
-                        onEdit={handleEditServer}
-                        canModify={user?.can_modify_servers || false}
-                        onRefreshSuccess={refreshData}
-                        onShowToast={showToast}
-                        onServerUpdate={handleServerUpdate}
-                        authToken={agentApiToken}
-                      />
-                    ))}
-                  </div>
+            )}
+            {filteredExternalServers.length === 0 && filteredExternalAgents.length === 0 ? (
+              <div className='text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg border border-dashed border-gray-300 dark:border-gray-600'>
+                <div className='text-gray-400 text-lg mb-2'>
+                  {externalServers.length === 0 && externalAgents.length === 0
+                    ? 'No External Registries Available'
+                    : 'No Results Found'}
                 </div>
-              )}
+                <p className='text-gray-500 dark:text-gray-300 text-sm max-w-md mx-auto'>
+                  {externalServers.length === 0 && externalAgents.length === 0
+                    ? 'External registry integrations (Anthropic, ASOR, and more) will be available soon'
+                    : 'Press Enter in the search bar to search semantically'}
+                </p>
+              </div>
+            ) : (
+              <div>
+                {/* External Servers */}
+                {filteredExternalServers.length > 0 && (
+                  <div className='mb-6'>
+                    <h3 className='text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3'>Servers</h3>
+                    <div
+                      className='grid'
+                      style={{
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+                        gap: 'clamp(1.5rem, 3vw, 2.5rem)',
+                      }}
+                    >
+                      {filteredExternalServers.map(server => (
+                        <ServerCard
+                          key={server.id}
+                          server={server}
+                          canModify={user?.can_modify_servers || false}
+                          authToken={agentApiToken}
+                          onEdit={handleEditServer}
+                          onShowToast={showToast}
+                          onServerUpdate={handleServerUpdate}
+                          onRefreshSuccess={refreshData}
+                          handleServerUpdate={handleServerUpdate}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-              {/* External Agents */}
-              {filteredExternalAgents.length > 0 && (
-                <div>
-                  <h3 className='text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3'>Agents</h3>
-                  <div
-                    className='grid'
-                    style={{
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-                      gap: 'clamp(1.5rem, 3vw, 2.5rem)',
-                    }}
-                  >
-                    {filteredExternalAgents.map(agent => (
-                      <AgentCard
-                        key={agent.path}
-                        agent={agent}
-                        onToggle={handleToggleAgent}
-                        onEdit={handleEditAgent}
-                        canModify={user?.can_modify_servers || false}
-                        onRefreshSuccess={refreshData}
-                        onShowToast={showToast}
-                        onAgentUpdate={handleAgentUpdate}
-                      />
-                    ))}
+                {/* External Agents */}
+                {filteredExternalAgents.length > 0 && (
+                  <div>
+                    <h3 className='text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3'>Agents</h3>
+                    <div
+                      className='grid'
+                      style={{
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+                        gap: 'clamp(1.5rem, 3vw, 2.5rem)',
+                      }}
+                    >
+                      {filteredExternalAgents.map(agent => (
+                        <AgentCard
+                          key={agent.path}
+                          agent={agent}
+                          onToggle={handleToggleAgent}
+                          onEdit={handleEditAgent}
+                          canModify={user?.can_modify_servers || false}
+                          onRefreshSuccess={refreshData}
+                          onShowToast={showToast}
+                          onAgentUpdate={handleAgentUpdate}
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -609,15 +610,6 @@ const Dashboard: React.FC = () => {
         >
           Try Again
         </button>
-      </div>
-    );
-  }
-
-  // Show loading state
-  if (loading) {
-    return (
-      <div className='flex items-center justify-center h-64'>
-        <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600'></div>
       </div>
     );
   }

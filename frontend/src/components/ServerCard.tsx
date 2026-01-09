@@ -10,7 +10,6 @@ import {
 import type React from 'react';
 import { useCallback, useState } from 'react';
 
-import { useServer } from '@/contexts/ServerContext';
 import SERVICES from '@/services';
 import { SERVER_CONNECTION } from '@/services/mcp/type';
 import UTILS from '@/utils';
@@ -32,17 +31,19 @@ export interface Server {
   rating_details?: Array<{ user: string; rating: number }>;
   status?: 'active' | 'inactive' | 'error';
   num_tools?: number;
+  connection_state: SERVER_CONNECTION;
+  requires_oauth: boolean;
 }
 
 interface ServerCardProps {
   server: Server;
-  onToggle: (id: string, enabled: boolean) => void;
-  onEdit?: (server: Server) => void;
   canModify?: boolean;
-  onRefreshSuccess?: () => void;
-  onShowToast?: (message: string, type: 'success' | 'error') => void;
-  onServerUpdate?: (path: string, updates: Partial<Server>) => void;
   authToken?: string | null;
+  onEdit?: (server: Server) => void;
+  onShowToast: (message: string, type: 'success' | 'error') => void;
+  onServerUpdate?: (path: string, updates: Partial<Server>) => void;
+  onRefreshSuccess?: () => void;
+  handleServerUpdate: (id: string, updates: Partial<Server>) => void;
 }
 
 interface Tool {
@@ -53,15 +54,15 @@ interface Tool {
 
 const ServerCard: React.FC<ServerCardProps> = ({
   server,
-  onToggle,
-  onEdit,
   canModify,
-  onRefreshSuccess,
+  authToken,
+  onEdit,
   onShowToast,
   onServerUpdate,
-  authToken,
+  onRefreshSuccess,
+  handleServerUpdate,
 }) => {
-  const { serverStatus: serverStatusMap } = useServer();
+  const [loading, setLoading] = useState(false);
   const [tools, setTools] = useState<Tool[]>([]);
   const [loadingTools, setLoadingTools] = useState(false);
   const [showTools, setShowTools] = useState(false);
@@ -69,8 +70,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
   const [loadingRefresh, setLoadingRefresh] = useState(false);
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
 
-  const serverStatus = serverStatusMap[server.name];
-  const { connection_state, requires_oauth } = serverStatus || {};
+  const { connection_state, requires_oauth } = server || {};
 
   const getAuthStatusIcon = useCallback(() => {
     if (requires_oauth && connection_state === SERVER_CONNECTION.CONNECTED) {
@@ -132,22 +132,40 @@ const ServerCard: React.FC<ServerCardProps> = ({
     }
   }, [server.path, loadingRefresh, onRefreshSuccess, onShowToast, onServerUpdate]);
 
+  const handleToggleServer = async (id: string, enabled: boolean) => {
+    try {
+      setLoading(true);
+      await SERVICES.SERVER.toggleServerStatus(id, { enabled });
+      handleServerUpdate(id, { enabled });
+      onShowToast(`Server ${enabled ? 'enabled' : 'disabled'} successfully!`, 'success');
+    } catch (error: any) {
+      onShowToast(error.detail || 'Failed to toggle server', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Generate MCP configuration for the server
   // Check if this is an Anthropic registry server
   const isAnthropicServer = server.tags?.includes('anthropic-registry');
 
   // Check if this server has security pending
   const isSecurityPending = server.tags?.includes('security-pending');
-  console.log('isSecurityPending', isSecurityPending);
+
   return (
     <>
       <div
-        className={`group rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 h-full flex flex-col ${
+        className={`group rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 h-full flex flex-col relative ${
           isAnthropicServer
             ? 'bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border-2 border-purple-200 dark:border-purple-700 hover:border-purple-300 dark:hover:border-purple-600'
             : 'bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600'
         }`}
       >
+        {loading && (
+          <div className='absolute inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10'>
+            <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600'></div>
+          </div>
+        )}
         {/* Header */}
         <div className='p-4 pb-3'>
           <div className='flex items-start justify-between mb-3'>
@@ -361,8 +379,8 @@ const ServerCard: React.FC<ServerCardProps> = ({
               <label className='relative inline-flex items-center cursor-pointer'>
                 <input
                   type='checkbox'
-                  checked={server.status === 'active'}
-                  onChange={e => onToggle(server.id, e.target.checked)}
+                  checked={server.enabled}
+                  onChange={e => handleToggleServer(server.id, e.target.checked)}
                   className='sr-only peer'
                 />
                 <div
