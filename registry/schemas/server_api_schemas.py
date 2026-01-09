@@ -8,7 +8,7 @@ Server Management endpoints based on the API documentation.
 import json
 from typing import Any, Dict, List, Optional, Union
 from datetime import datetime
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_serializer
 from registry.utils.crypto_utils import decrypt_auth_fields
 
 
@@ -161,7 +161,6 @@ class ServerListItemResponse(BaseModel):
     scope: str
     status: str = "active"
     path: str
-    proxyPassUrl: Optional[str] = Field(None, alias="proxyPassUrl", description="Proxy pass URL")
     tags: List[str] = Field(default_factory=list)
     numTools: int = Field(0, alias="numTools")
     numStars: int = Field(0, alias="numStars")
@@ -173,6 +172,17 @@ class ServerListItemResponse(BaseModel):
     class ConfigDict:
         from_attributes = True
         populate_by_name = True
+    
+    @model_serializer(mode='wrap')
+    def _serialize(self, serializer, info):
+        data = serializer(self)
+        # If authentication exists, remove apiKey from response
+        if data.get('authentication'):
+            data.pop('apiKey', None)
+        # If authentication doesn't exist, remove authentication from response
+        else:
+            data.pop('authentication', None)
+        return data
 
 
 class ServerDetailResponse(BaseModel):
@@ -194,7 +204,6 @@ class ServerDetailResponse(BaseModel):
     scope: str
     status: str
     path: str
-    proxyPassUrl: Optional[str] = Field(None, alias="proxyPassUrl", description="Proxy pass URL")
     tags: List[str] = Field(default_factory=list)
     numTools: int = Field(0, alias="numTools")
     numStars: int = Field(0, alias="numStars")
@@ -208,6 +217,17 @@ class ServerDetailResponse(BaseModel):
     class ConfigDict:
         from_attributes = True
         populate_by_name = True
+    
+    @model_serializer(mode='wrap')
+    def _serialize(self, serializer, info):
+        data = serializer(self)
+        # If authentication exists, remove apiKey from response
+        if data.get('authentication'):
+            data.pop('apiKey', None)
+        # If authentication doesn't exist, remove authentication from response
+        else:
+            data.pop('authentication', None)
+        return data
 
 
 class ServerCreateResponse(BaseModel):
@@ -240,6 +260,17 @@ class ServerCreateResponse(BaseModel):
     class ConfigDict:
         from_attributes = True
         populate_by_name = True
+    
+    @model_serializer(mode='wrap')
+    def _serialize(self, serializer, info):
+        data = serializer(self)
+        # If authentication exists, remove apiKey from response
+        if data.get('authentication'):
+            data.pop('apiKey', None)
+        # If authentication doesn't exist, remove authentication from response
+        else:
+            data.pop('authentication', None)
+        return data
 
 
 class ServerUpdateResponse(BaseModel):
@@ -405,7 +436,6 @@ def convert_to_list_item(server) -> ServerListItemResponse:
         scope=config.get("scope", "private_user"),
         status=config.get("status", "active"),
         path=config.get("path", ""),
-        proxyPassUrl=config.get("proxy_pass_url"),
         tags=config.get("tags", []),
         numTools=config.get("num_tools", 0),
         numStars=config.get("num_stars", 0),
@@ -509,7 +539,6 @@ def convert_to_detail(server) -> ServerDetailResponse:
         scope=config.get("scope", "private_user"),
         status=config.get("status", "active"),
         path=config.get("path", ""),
-        proxyPassUrl=config.get("proxy_pass_url"),
         tags=config.get("tags", []),
         numTools=config.get("num_tools", 0),
         numStars=config.get("num_stars", 0),
