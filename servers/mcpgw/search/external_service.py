@@ -166,17 +166,23 @@ class ExternalVectorSearchService(VectorSearchService):
         if not query and not tags:
             raise Exception("At least one of 'query' or 'tags' must be provided")
 
-        # Normalize tags for case-insensitive matching (stored as lowercase in DB)
-        normalized_tags = [tag.lower().strip() for tag in tags] if tags else []
-        normalized_tags.append("all")
-        logger.info(f"Filtering by tags (normalized): {normalized_tags}")
+        # Build base filter conditions
+        filter_conditions = {"is_enabled": True}
+        
+        # Only add tags filter if tags are provided
+        if tags:
+            # Normalize tags for case-insensitive matching (stored as lowercase in DB)
+            normalized_tags = [tag.lower().strip() for tag in tags]
+            normalized_tags.append("all")
+            filter_conditions["tags"] = {"$in": normalized_tags}
+            logger.info(f"Filtering by tags (normalized): {normalized_tags}")
+        else:
+            logger.info("No tags filter applied - searching all tools")
 
         use_search_type = search_type or self.search_type
         logger.info(f"Searching tools: query='{query}', tags={tags}, limit={top_n_tools}, "
                     f"search_type={use_search_type}")
         try:
-            filter_conditions = {"is_enabled": True,
-                                 "tags": {"$in": str(normalized_tags)}}
             if not query:
                 # Metadata-only filter
                 tools = self._mcp_tools.filter(
