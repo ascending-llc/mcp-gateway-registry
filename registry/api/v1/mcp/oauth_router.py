@@ -399,7 +399,7 @@ def _redirect_to_page(request: Request,
         /oauth/callback?type=success&serverName=value
         /oauth/callback?type=error&serverName=value&error=value
     """
-    base_path = REGISTRY_CONSTANTS.NGINX_BASE_PATH.rstrip("/")
+    base_path = REGISTRY_CONSTANTS.NGINX_BASE_PATH.strip("/")
     encoded_server = quote(str(server_name))
 
     # Build full URL with host if request is provided
