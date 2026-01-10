@@ -11,7 +11,6 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ServerFormDialog } from '@/components/ServerFormDialog';
-import SERVICES from '@/services';
 import AgentCard from '../components/AgentCard';
 import SemanticSearchResults from '../components/SemanticSearchResults';
 import ServerCard from '../components/ServerCard';
@@ -436,7 +435,6 @@ const Dashboard: React.FC = () => {
                       onShowToast={showToast}
                       onServerUpdate={handleServerUpdate}
                       onRefreshSuccess={refreshData}
-                      handleServerUpdate={handleServerUpdate}
                     />
                   ))}
                 </div>
@@ -543,7 +541,6 @@ const Dashboard: React.FC = () => {
                           onShowToast={showToast}
                           onServerUpdate={handleServerUpdate}
                           onRefreshSuccess={refreshData}
-                          handleServerUpdate={handleServerUpdate}
                         />
                       ))}
                     </div>

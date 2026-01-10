@@ -24,7 +24,7 @@ const Footer: React.FC = () => (
 
 const OAuthCallback: React.FC = () => {
   const [searchParams] = useSearchParams();
-  const [countdown, setCountdown] = useState(10);
+  const [countdown, setCountdown] = useState(5);
 
   // Get URL parameters with memoization
   const type = useMemo(() => searchParams.get('type') || 'success', [searchParams]);
@@ -33,12 +33,8 @@ const OAuthCallback: React.FC = () => {
 
   const closeWindow = useCallback(() => {
     try {
+      if (window.opener) window.opener.focus();
       window.close();
-
-      if (window.opener) {
-        window.opener.focus();
-        window.close();
-      }
     } catch {
       console.log('Could not close window automatically');
     }
@@ -55,13 +51,11 @@ const OAuthCallback: React.FC = () => {
       });
     }, 1000);
 
-    if (window.opener) {
-      setTimeout(closeWindow, 3000);
-    }
-
+    let timerCloseWindow: NodeJS.Timeout;
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        setTimeout(closeWindow, 1000);
+        if (timerCloseWindow) clearTimeout(timerCloseWindow);
+        timerCloseWindow = setTimeout(closeWindow, 1000);
       }
     };
 
@@ -69,6 +63,7 @@ const OAuthCallback: React.FC = () => {
 
     return () => {
       clearInterval(timer);
+      if (timerCloseWindow) clearTimeout(timerCloseWindow);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [closeWindow]);

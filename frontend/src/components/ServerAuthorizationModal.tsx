@@ -96,15 +96,15 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
           <div className='flex items-center gap-4'>
             <h3 className='text-xl font-semibold text-gray-900 dark:text-white'>{name}</h3>
             {isConnecting ? (
-              <span className='flex items-center gap-1.5 text-sm text-blue-500'>
+              <div className='flex items-center gap-1.5 text-sm text-blue-500'>
                 <div className='animate-spin rounded-full h-3 w-3 border-b-2 border-slate-600' />
                 Connecting
-              </span>
+              </div>
             ) : isAuthenticated ? (
-              <span className='flex items-center gap-1.5 text-sm text-green-500'>
+              <div className='flex items-center gap-1.5 text-sm text-green-500'>
                 <div className='w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-lg shadow-emerald-400/30' />
                 Authenticated
-              </span>
+              </div>
             ) : (
               <span className='flex items-center gap-1 px-2 py-0.5 bg-amber-50 dark:bg-amber-300 text-amber-600 dark:text-amber-600 rounded-full text-xs font-medium'>
                 <KeyIcon className='h-3 w-3 dark:text-amber-600' />

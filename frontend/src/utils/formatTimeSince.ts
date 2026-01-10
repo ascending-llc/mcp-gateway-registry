@@ -1,6 +1,5 @@
 const formatTimeSince = (timestamp: string | null | undefined): string | null => {
   if (!timestamp) {
-    console.log('🕐 formatTimeSince: No timestamp provided', timestamp);
     return null;
   }
 
@@ -10,7 +9,6 @@ const formatTimeSince = (timestamp: string | null | undefined): string | null =>
 
     // Check if the date is valid
     if (Number.isNaN(lastChecked.getTime())) {
-      console.log('🕐 formatTimeSince: Invalid timestamp', timestamp);
       return null;
     }
 
@@ -32,10 +30,8 @@ const formatTimeSince = (timestamp: string | null | undefined): string | null =>
       result = `${diffSeconds}s ago`;
     }
 
-    console.log(`🕐 formatTimeSince: ${timestamp} -> ${result}`);
     return result;
-  } catch (error) {
-    console.error('🕐 formatTimeSince error:', error, 'for timestamp:', timestamp);
+  } catch (_error) {
     return null;
   }
 };

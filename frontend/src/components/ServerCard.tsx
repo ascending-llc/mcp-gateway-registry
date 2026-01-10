@@ -41,9 +41,8 @@ interface ServerCardProps {
   authToken?: string | null;
   onEdit?: (server: Server) => void;
   onShowToast: (message: string, type: 'success' | 'error') => void;
-  onServerUpdate?: (path: string, updates: Partial<Server>) => void;
+  onServerUpdate: (id: string, updates: Partial<Server>) => void;
   onRefreshSuccess?: () => void;
-  handleServerUpdate: (id: string, updates: Partial<Server>) => void;
 }
 
 interface Tool {
@@ -60,7 +59,6 @@ const ServerCard: React.FC<ServerCardProps> = ({
   onShowToast,
   onServerUpdate,
   onRefreshSuccess,
-  handleServerUpdate,
 }) => {
   const [loading, setLoading] = useState(false);
   const [tools, setTools] = useState<Tool[]>([]);
@@ -136,7 +134,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
     try {
       setLoading(true);
       await SERVICES.SERVER.toggleServerStatus(id, { enabled });
-      handleServerUpdate(id, { enabled });
+      onServerUpdate(id, { enabled });
       onShowToast(`Server ${enabled ? 'enabled' : 'disabled'} successfully!`, 'success');
     } catch (error: any) {
       onShowToast(error.detail || 'Failed to toggle server', 'error');
@@ -354,9 +352,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
             <div className='flex items-center gap-2'>
               {/* Last Checked */}
               {(() => {
-                console.log(`🕐 ServerCard ${server.name}: last_checked_time =`, server.last_checked_time);
                 const timeText = UTILS.formatTimeSince(server.last_checked_time);
-                console.log(`🕐 ServerCard ${server.name}: timeText =`, timeText);
                 return server.last_checked_time && timeText ? (
                   <div className='text-xs text-gray-500 dark:text-gray-300 flex items-center gap-1 hidden md:flex'>
                     <ClockIcon className='h-3 w-3' />

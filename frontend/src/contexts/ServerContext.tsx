@@ -292,7 +292,7 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
 
       await poll();
     },
-    [fetchServerStatus],
+    [fetchServerStatus, servers],
   );
 
   const cancelPolling = useCallback((serverName?: string) => {
