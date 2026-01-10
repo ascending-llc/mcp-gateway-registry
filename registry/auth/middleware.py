@@ -31,7 +31,10 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/docs",
             "/openapi.json",
             "/static/{path:path}",
-            "/api/auth/{path:path}",
+            # Auth endpoints - explicitly list public ones (excluding /api/auth/me)
+            "/api/auth/config",
+            "/api/auth/login",
+            "/api/auth/providers",
             "/api/mcp/{versions}/{server_name}/oauth/callback",  # OAuth callback is public
             "/api/mcp/{versions}/oauth/success",  # OAuth success page
             "/api/mcp/{versions}/oauth/error",  # OAuth error page
