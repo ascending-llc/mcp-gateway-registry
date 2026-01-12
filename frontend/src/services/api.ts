@@ -1,5 +1,6 @@
-const MCP_BASE_URL = '/api/v1/mcp';
-const SERVER_BASE_URL = '/api/v1/servers';
+const BASE_URL = '/api/v1';
+const MCP_BASE_URL = `${BASE_URL}/mcp`;
+const SERVER_BASE_URL = `${BASE_URL}/servers`;
 
 const API = {
   getToken: '/api/tokens/generate',
