@@ -7,18 +7,20 @@ This is a complete rewrite independent of the legacy server_routes.py.
 
 import logging
 import math
-from typing import Optional
+from typing import Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, status as http_status, Depends
 from pydantic import ValidationError
 
 from registry.auth.dependencies import CurrentUser
 from registry.services.server_service_v1 import server_service_v1
 from registry.services.oauth.mcp_service import get_mcp_service
-from registry.services.oauth.flow_helpers import get_server_connection_status as get_server_status_helper
+from registry.services.oauth.connection_status_service import (
+    get_servers_connection_status,
+    get_single_server_connection_status
+)
 from registry.schemas.enums import ConnectionState
 from registry.schemas.server_api_schemas import (
     ServerListResponse,
-    ServerListItemResponse,
     ServerDetailResponse,
     ServerCreateRequest,
     ServerCreateResponse,
@@ -30,7 +32,6 @@ from registry.schemas.server_api_schemas import (
     ServerHealthResponse,
     ServerStatsResponse,
     PaginationMetadata,
-    ErrorResponse,
     convert_to_list_item,
     convert_to_detail,
     convert_to_create_response,
@@ -75,6 +76,25 @@ def check_admin_permission(user_context: dict) -> bool:
     # For now, allow all authenticated users to access stats
     # Future: return user_context.get("role") == "ADMIN" or user_context.get("is_admin", False)
     return True
+
+
+def apply_connection_status_to_server(
+    server_item,
+    status: Optional[Dict[str, Any]],
+    fallback_requires_oauth: bool = False
+) -> None:
+    """
+    Apply connection status to a server response object.
+    """
+    if status:
+        server_item.connection_state = status.get("connection_state")
+        server_item.requires_oauth = status.get("requires_oauth", False)
+        server_item.error = status.get("error")
+    else:
+        # Fallback if status not found
+        server_item.connection_state = ConnectionState.ERROR.value
+        server_item.requires_oauth = fallback_requires_oauth
+        server_item.error = "Connection status not available"
 
 
 # ==================== Endpoints ====================
@@ -132,51 +152,24 @@ async def list_servers(
         # Convert to response models
         server_items = [convert_to_list_item(server) for server in servers]
         
-        # Get connection status for each server
+        # Get connection status and enrich server items
         try:
             user_id = user_context.get('user_id')
             mcp_service = await get_mcp_service()
             
-            mcp_config = {}
-            oauth_servers = set()
-            for server in servers:
-                server_name = server.serverName
-                mcp_config[server_name] = {
-                    "name": server_name,
-                    "config": server.config,
-                    "updated_at": server.updatedAt.timestamp() if server.updatedAt else None,
-                }
-                if server.config.get("requires_oauth", False):
-                    oauth_servers.add(server_name)
-            
-            # Get app-level and user-level connections (direct reference, no copy needed)
-            app_connections = mcp_service.connection_service.app_connections
-            user_connections = mcp_service.connection_service.get_user_connections(user_id)
-            
-            # Add connection status to each server item
+            connection_status = await get_servers_connection_status(
+                user_id=user_id,
+                servers=servers,
+                mcp_service=mcp_service
+            )
+            # Enrich each server item with connection status
             for server_item in server_items:
-                server_name = server_item.server_name
-                try:
-                    server_status = await get_server_status_helper(
-                        user_id=user_id,
-                        server_name=server_name,
-                        server_config=mcp_config[server_name],
-                        app_connections=app_connections,
-                        user_connections=user_connections,
-                        oauth_servers=oauth_servers
-                    )
-                    server_item.connection_state = server_status.get("connection_state")
-                    server_item.requires_oauth = server_status.get("requires_oauth", False)
-                    server_item.error = server_status.get("error")
-                except Exception as e:
-                    logger.error(f"Error getting connection status for {server_name}: {e}", exc_info=True)
-                    # Set error state if we can't get connection status
-                    server_item.connection_state = ConnectionState.ERROR.value
-                    server_item.requires_oauth = server_name in oauth_servers
-                    server_item.error = f"Failed to get connection status: {str(e)}"
+                server_name = server_item.serverName
+                status = connection_status.get(server_name)
+                apply_connection_status_to_server(server_item, status, fallback_requires_oauth=False)
         
         except Exception as e:
-            logger.warning(f"Error getting connection statuses: {e}", exc_info=True)
+            logger.warning(f"Error getting connection status: {e}", exc_info=True)
 
         # Calculate pagination metadata
         total_pages = math.ceil(total / per_page) if total > 0 else 0
@@ -255,13 +248,13 @@ async def get_server_stats(
     f"/{API_VERSION}/servers/{{server_id}}",
     response_model=ServerDetailResponse,
     summary="Get Server Details",
-    description="Get detailed information about a specific server",
+    description="Get detailed information about a specific server, including connection status",
 )
 async def get_server(
     server_id: str,
     user_context: dict = Depends(get_user_context),
 ):
-    """Get detailed information about a server by ID"""
+    """Get detailed information about a server by ID, including connection status"""
     try:
         server = await server_service_v1.get_server_by_id(
             server_id=server_id,
@@ -274,7 +267,26 @@ async def get_server(
                 detail="Server not found"
             )
         
-        return convert_to_detail(server)
+        # Convert to response model
+        server_detail = convert_to_detail(server)
+        try:
+            user_id = user_context.get('user_id')
+            mcp_service = await get_mcp_service()
+            server_status = await get_single_server_connection_status(
+                user_id=user_id,
+                server_name=server.serverName,
+                mcp_service=mcp_service
+            )
+            apply_connection_status_to_server(server_detail, server_status)
+        
+        except Exception as e:
+            logger.warning(f"Error getting connection status for {server.serverName}: {e}", exc_info=True)
+            # Apply error state with custom error message
+            fallback_requires_oauth = server.config.get("requires_oauth", False)
+            apply_connection_status_to_server(server_detail, None, fallback_requires_oauth)
+            server_detail.error = f"Failed to get connection status: {str(e)}"
+        
+        return server_detail
         
     except HTTPException:
         raise
