@@ -36,6 +36,8 @@ from registry.core.nginx_service import nginx_service
 # Import core configuration
 from registry.core.config import settings
 
+from otel.exporters import setup_otel
+
 # Configure logging with file and console handlers
 def setup_logging():
     """Configure logging to write to both file and console."""
@@ -91,6 +93,11 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Starting MCP Gateway Registry...")
     
     try:
+        # --- OpenTelemetry Initialization ---
+        logger.info("🔭 Initializing OpenTelemetry...")
+        setup_otel(
+            service_name="registry"
+        )
         # Initialize services in order
         logger.info("📚 Loading server definitions and state...")
         server_service.load_servers_and_state()

@@ -36,10 +36,14 @@ services:
       - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD}
       - KEYCLOAK_M2M_CLIENT_ID=${KEYCLOAK_M2M_CLIENT_ID}
       - KEYCLOAK_M2M_CLIENT_SECRET=${KEYCLOAK_M2M_CLIENT_SECRET}
+      - OTEL_SERVICE_NAME=registry
+      - OTEL_PROMETHEUS_ENABLED=true
+      - OTEL_PROMETHEUS_PORT=9464
     ports:
       - "80:80"
       - "443:443"
       - "7860:7860"
+      - "9464:9464"  # Prometheus metrics
     volumes:
       - ${HOME}/mcp-gateway/servers:/app/registry/servers
       - ${HOME}/mcp-gateway/models:/app/registry/models

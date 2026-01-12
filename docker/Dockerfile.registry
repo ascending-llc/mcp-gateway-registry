@@ -1,10 +1,32 @@
-# Registry Dockerfile - includes nginx, SSL, FAISS, models, and registry service
+# --------------------------------------------------------
+# Stage 1: Frontend Builder
+# --------------------------------------------------------
+# Use a specific Node image instead of installing it via curl later
+FROM node:20-slim AS frontend-builder
+
+WORKDIR /app/frontend
+
+# Copy only package files first to leverage Docker cache for npm install
+COPY frontend/package.json frontend/package-lock.json* ./
+
+# Install dependencies
+RUN npm install --legacy-peer-deps
+
+# Copy the rest of the frontend source code and build
+COPY frontend/ ./
+RUN npm run build
+
+
+# --------------------------------------------------------
+# Stage 2: Final Registry Image
+# --------------------------------------------------------
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies including nginx with lua module and Node.js
+# Install system dependencies
+# NOTE: We REMOVED Node.js and curl setup from here
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nginx \
     nginx-extras \
@@ -15,29 +37,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     build-essential \
     ca-certificates \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy the application code
+# Copy the application code (Python backend)
 COPY . /app/
 
-# Copy nginx configurations (both HTTP-only and HTTP+HTTPS versions)
+# --------------------------------------------------------
+# COPY THE BUILD ARTIFACTS
+# This takes the 'build' folder from Stage 1 and places it
+# exactly where the app expects it to be.
+# --------------------------------------------------------
+COPY --from=frontend-builder /app/frontend/build /app/frontend/build
+
+# Copy nginx configurations
 COPY docker/nginx_rev_proxy_http_only.conf /app/docker/nginx_rev_proxy_http_only.conf
 COPY docker/nginx_rev_proxy_http_and_https.conf /app/docker/nginx_rev_proxy_http_and_https.conf
 
-# Build React frontend
-WORKDIR /app/frontend
-COPY frontend/package.json ./
-RUN npm install --legacy-peer-deps
-COPY frontend/ ./
-RUN npm run build
-
-# Return to app directory
-WORKDIR /app
+# Create logs directory
+RUN mkdir -p /app/logs
 
 # Install uv and setup Python environment
 RUN pip install uv && \
@@ -59,21 +79,22 @@ RUN pip install uv && \
     "scikit-learn>=1.3.0" \
     "torch>=1.6.0" \
     "huggingface-hub[cli,hf_xet]>=0.31.1" \
+    "opentelemetry-api>=1.20.0" \
+    "opentelemetry-sdk>=1.20.0" \
+    "opentelemetry-exporter-prometheus>=0.45b0" \
+    "opentelemetry-exporter-otlp>=1.20.0" \
     "hf_xet>=0.1.0" && \
     uv pip install -e .
 
-# Create logs directory
-RUN mkdir -p /app/logs
-
-# Expose ports for nginx (HTTP/HTTPS) and registry
-EXPOSE 80 443 7860
+# Expose ports
+EXPOSE 80 443 7860 9464
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:7860/health || exit 1
 
-# Entrypoint script that sets up everything from original entrypoint.sh
+# Entrypoint
 COPY docker/registry-entrypoint.sh /app/registry-entrypoint.sh
 RUN chmod +x /app/registry-entrypoint.sh
 
-ENTRYPOINT ["/app/registry-entrypoint.sh"] 
+ENTRYPOINT ["/app/registry-entrypoint.sh"]

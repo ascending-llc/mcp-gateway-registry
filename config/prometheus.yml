@@ -12,4 +12,10 @@ scrape_configs:
       - targets: ['metrics-service:9465']
     scrape_interval: 10s
     metrics_path: /metrics
+  
+  - job_name: 'python-registry'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['registry:9464']
     
+
