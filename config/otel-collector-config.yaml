@@ -1,0 +1,28 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+
+exporters:
+  # 'debug' prints metrics to the console (perfect for verifying it works)
+  debug:
+    verbosity: detailed
+  
+  # Optional: If you want Prometheus to scrape the Collector instead of your app directly
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [debug] # <--- Make sure this is here!
+    metrics:
+      receivers: [otlp]
+      exporters: [debug, prometheus]

@@ -6,13 +6,13 @@ A clean, domain-driven FastAPI app for managing MCP (Model Context Protocol) ser
 This main.py file serves as the application coordinator, importing and registering 
 domain routers while handling core app configuration.
 """
-
 import logging
 from contextlib import asynccontextmanager
+import time
 from typing import Annotated, Dict, Any
 from pathlib import Path
 
-from fastapi import FastAPI, Cookie, HTTPException, Depends
+from fastapi import FastAPI, Cookie, HTTPException, Depends, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,7 +36,9 @@ from registry.core.nginx_service import nginx_service
 # Import core configuration
 from registry.core.config import settings
 
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from otel.exporters import setup_otel
+from otel.instruments import mcp_metrics
 
 # Configure logging with file and console handlers
 def setup_logging():
@@ -93,11 +95,6 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Starting MCP Gateway Registry...")
     
     try:
-        # --- OpenTelemetry Initialization ---
-        logger.info("🔭 Initializing OpenTelemetry...")
-        setup_otel(
-            service_name="registry"
-        )
         # Initialize services in order
         logger.info("📚 Loading server definitions and state...")
         server_service.load_servers_and_state()
@@ -152,7 +149,14 @@ app = FastAPI(
     description="A registry and management system for Model Context Protocol (MCP) servers",
     version="1.0.0",
     lifespan=lifespan
+)       
+# --- OpenTelemetry Initialization ---
+logger.info("🔭 Initializing OpenTelemetry...")
+# We explicitly pass the service name and port to ensure they match
+setup_otel(
+    service_name="regedy-spaghetti"
 )
+FastAPIInstrumentor.instrument_app(app)
 
 # Add CORS middleware for React development and Docker deployment
 app.add_middleware(
@@ -193,6 +197,8 @@ async def get_current_user(user_context: Dict[str, Any] = Depends(enhanced_auth)
 @app.get("/health")
 async def health_check():
     """Simple health check for load balancers and monitoring."""
+    love_counter = mcp_metrics.love_counter
+    love_counter.add(1)
     return {"status": "healthy", "service": "mcp-gateway-registry"}
 
 # Serve React static files

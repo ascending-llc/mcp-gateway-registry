@@ -83,6 +83,7 @@ RUN pip install uv && \
     "opentelemetry-sdk>=1.20.0" \
     "opentelemetry-exporter-prometheus>=0.45b0" \
     "opentelemetry-exporter-otlp>=1.20.0" \
+    "opentelemetry-instrumentation-fastapi" \
     "hf_xet>=0.1.0" && \
     uv pip install -e .
 

@@ -3,19 +3,19 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: 'prometheus'
-    static_configs:
-      - targets: ['localhost:9090']
+  # - job_name: 'prometheus'
+  #   static_configs:
+  #     - targets: ['localhost:9090']
 
-  - job_name: 'mcp-metrics-service'
-    static_configs:
-      - targets: ['metrics-service:9465']
-    scrape_interval: 10s
-    metrics_path: /metrics
+  # - job_name: 'mcp-metrics-service'
+  #   static_configs:
+  #     - targets: ['metrics-service:9465']
+  #   scrape_interval: 10s
+  #   metrics_path: /metrics
   
-  - job_name: 'python-registry'
+  - job_name: 'otel-collector'
     scrape_interval: 10s
     static_configs:
-      - targets: ['registry:9464']
+      - targets: ['otel-collector:8889']
     
 

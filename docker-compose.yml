@@ -37,8 +37,7 @@ services:
       - KEYCLOAK_M2M_CLIENT_ID=${KEYCLOAK_M2M_CLIENT_ID}
       - KEYCLOAK_M2M_CLIENT_SECRET=${KEYCLOAK_M2M_CLIENT_SECRET}
       - OTEL_SERVICE_NAME=registry
-      - OTEL_PROMETHEUS_ENABLED=true
-      - OTEL_PROMETHEUS_PORT=9464
+      - OTEL_OTLP_ENDPOINT=http://otel-collector:4318
     ports:
       - "80:80"
       - "443:443"
@@ -54,6 +53,20 @@ services:
       - auth-server
       - metrics-service
     restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./config/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "1888:1888"   # pprof extension
+      - "9888:8888"   # <--- CHANGED: Host port 9888 maps to container 8888 (Internal metrics)
+      - "8889:8889"   # Prometheus exporter
+      - "13133:13133" # health_check extension
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver
+      - "55679:55679" # zpages extension
 
   # Metrics Collection Service
   metrics-service:
