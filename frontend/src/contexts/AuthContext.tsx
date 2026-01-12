@@ -55,12 +55,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const getToken = async () => {
     try {
-      const token = UTILS.getLocalStorage('accessToken');
+      const token = UTILS.getSessionConfig('accessToken');
       if (token) return;
 
       const result = await SERVICES.TOKEN.getToken({ expires_in_hours: 8, description: 'Generated via sidebar' });
       if (result.success) {
-        UTILS.setLocalStorage('accessToken', result?.token_data.access_token, 480);
+        UTILS.setSessionConfig('accessToken', result?.token_data.access_token, 480);
       }
     } catch (error) {
       console.error('Failed to fetch token:', error);

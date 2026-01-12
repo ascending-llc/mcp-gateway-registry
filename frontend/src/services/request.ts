@@ -18,7 +18,7 @@ service.interceptors.request.use(
     config.headers = config.headers || {};
     config.headers['Content-Type'] = 'application/json; charset=utf-8';
     if (!config.headers.Authorization) {
-      const token = UTILS.getLocalStorage('accessToken');
+      const token = UTILS.getSessionConfig('accessToken');
       if (token) config.headers.Authorization = `Bearer ${token}`;
     }
 
