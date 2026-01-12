@@ -11,7 +11,7 @@ from registry.services.oauth.connection_status_service import (
     get_single_server_connection_status
 )
 
-router = APIRouter(prefix="/v1", tags=["connection"])
+router = APIRouter(prefix="/v1/mcp", tags=["connection"])
 
 
 @router.post("/{server_name}/reinitialize")

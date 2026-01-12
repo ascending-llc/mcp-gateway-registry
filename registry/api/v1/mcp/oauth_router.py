@@ -11,7 +11,7 @@ from registry.utils.utils import load_template
 from registry.auth.oauth.reconnection import get_reconnection_manager
 from registry.constants import REGISTRY_CONSTANTS
 
-router = APIRouter(prefix="/v1", tags=["oauth"])
+router = APIRouter(prefix="/v1/mcp", tags=["oauth"])
 
 
 @router.get("/{server_name}/oauth/initiate")
