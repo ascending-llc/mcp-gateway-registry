@@ -222,7 +222,6 @@ async def seed_mcp_servers(users):
             "config": {
                 "name": "GitHub Integration",
                 "description": "GitHub repository management and code search",
-                "version": "1.2.6",
                 "path": "/github-copilot",
                 "url": "http://localhost:3001",
                 "transport": "streamable-http",
@@ -242,6 +241,7 @@ async def seed_mcp_servers(users):
                 "num_tools": 4,
                 "supported_transports": ["streamable-http"],
                 "requires_oauth": True,
+                "enabled": True
             },
             "createdAt": datetime.now(timezone.utc),
             "updatedAt": datetime.now(timezone.utc),
@@ -274,6 +274,7 @@ async def seed_mcp_servers(users):
                 "tags": ["search", "api-key", "tavily"],
                 "num_tools": 4,
                 "supported_transports": ["streamable-http"],
+                "enabled": True
             },
             "createdAt": datetime.now(timezone.utc),
             "updatedAt": datetime.now(timezone.utc),
@@ -284,7 +285,6 @@ async def seed_mcp_servers(users):
             "config": {
                 "name": "Slack Notifications",
                 "description": "Send notifications and messages to Slack channels",
-                "version": "1.5.2",
                 "path": "/slack",
                 "url": "http://slack-server:8012",
                 "transport": "streamable-http",
@@ -304,6 +304,7 @@ async def seed_mcp_servers(users):
                 "num_tools": 3,
                 "supported_transports": ["streamable-http"],
                 "requires_oauth": True,
+                "enabled": True
             },
             "createdAt": datetime.now(timezone.utc),
             "updatedAt": datetime.now(timezone.utc),
@@ -314,7 +315,6 @@ async def seed_mcp_servers(users):
             "config": {
                 "name": "Weather Service",
                 "description": "Real-time weather data and forecasts",
-                "version": "1.0.0",
                 "path": "/weather",
                 "url": "http://weather-server:8010",
                 "transport": "streamable-http",
@@ -331,6 +331,7 @@ async def seed_mcp_servers(users):
                 "num_tools": 3,
                 "supported_transports": ["streamable-http"],
                 "requires_oauth": False,
+                "enabled": True
             },
             "createdAt": datetime.now(timezone.utc),
             "updatedAt": datetime.now(timezone.utc),
@@ -341,7 +342,6 @@ async def seed_mcp_servers(users):
             "config": {
                 "name": "Public API Service",
                 "description": "Public API service with no authentication required",
-                "version": "2.0.0",
                 "path": "/public-api",
                 "url": "http://public-api-server:8015",
                 "transport": "streamable-http",
@@ -359,6 +359,7 @@ async def seed_mcp_servers(users):
                 "num_tools": 3,
                 "supported_transports": ["streamable-http"],
                 "requires_oauth": False,
+                "enabled": True
             },
             "createdAt": datetime.now(timezone.utc),
             "updatedAt": datetime.now(timezone.utc),
@@ -369,7 +370,6 @@ async def seed_mcp_servers(users):
             "config": {
                 "name": "Google Workspace",
                 "description": "Google Drive, Docs, Sheets, and Calendar integration",
-                "version": "1.8.0",
                 "path": "/google-workspace",
                 "url": "http://google-workspace-server:8014",
                 "transport": "streamable-http",
@@ -399,6 +399,7 @@ async def seed_mcp_servers(users):
                 "num_tools": 4,
                 "supported_transports": ["streamable-http"],
                 "requires_oauth": True,
+                "enabled": True
             },
             "createdAt": datetime.now(timezone.utc),
             "updatedAt": datetime.now(timezone.utc),
@@ -409,7 +410,6 @@ async def seed_mcp_servers(users):
             "config": {
                 "name": "Atlassian JIRA",
                 "description": "JIRA issue tracking and project management",
-                "version": "1.2.0",
                 "path": "/jira",
                 "url": "http://atlassian-server:8005",
                 "transport": "streamable-http",
@@ -434,6 +434,7 @@ async def seed_mcp_servers(users):
                 "num_tools": 4,
                 "supported_transports": ["streamable-http"],
                 "requires_oauth": True,
+                "enabled": True
             },
             "createdAt": datetime.now(timezone.utc),
             "updatedAt": datetime.now(timezone.utc),
@@ -444,7 +445,6 @@ async def seed_mcp_servers(users):
             "config": {
                 "name": "Current Time Server",
                 "description": "Get current time in various formats and timezones",
-                "version": "1.0.0",
                 "path": "/time",
                 "url": "http://currenttime-server:8000",
                 "transport": "streamable-http",
@@ -458,6 +458,7 @@ async def seed_mcp_servers(users):
                 "num_tools": 3,
                 "supported_transports": ["streamable-http"],
                 "requires_oauth": False,
+                "enabled": True
             },
             "createdAt": datetime.now(timezone.utc),
             "updatedAt": datetime.now(timezone.utc),
