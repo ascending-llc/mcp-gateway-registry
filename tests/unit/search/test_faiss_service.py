@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch, AsyncMock, MagicMock
 from pathlib import Path
 import numpy as np
 
-from registry.search.service import FaissService, faiss_service
+from registry.services.search.service import faiss_service
 
 
 @pytest.mark.unit
@@ -419,6 +419,7 @@ class TestFaissService:
 
     def test_global_service_instance(self):
         """Test that the global service instance is accessible."""
-        from registry.search.service import faiss_service
+        from registry.services.search.service import faiss_service
         assert faiss_service is not None
-        assert isinstance(faiss_service, FaissService) 
+        # Note: faiss_service could be either EmbeddedFaissService or ExternalVectorSearchService
+        # depending on settings.use_external_discovery 

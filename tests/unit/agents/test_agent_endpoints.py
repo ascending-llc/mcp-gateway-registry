@@ -189,7 +189,7 @@ class TestAgentRegistration:
             "is_agent_enabled",
             return_value=False,
         ), patch(
-            "registry.search.service.faiss_service.add_or_update_agent",
+            "registry.services.search.service.faiss_service.add_or_update_agent",
             new_callable=AsyncMock,
         ):
 
@@ -334,7 +334,7 @@ class TestAgentRegistration:
             agent_service,
             "register_agent",
             return_value=sample_agent_card,
-        ), patch("registry.search.service.faiss_service.add_or_update_agent", new_callable=AsyncMock):
+        ), patch("registry.services.search.service.faiss_service.add_or_update_agent", new_callable=AsyncMock):
 
             client = TestClient(app)
             response = client.post(
@@ -654,7 +654,7 @@ class TestUpdateAgent:
             agent_service,
             "update_agent",
             return_value=updated_card,
-        ), patch("registry.search.service.faiss_service.add_or_update_agent", new_callable=AsyncMock):
+        ), patch("registry.services.search.service.faiss_service.add_or_update_agent", new_callable=AsyncMock):
 
             client = TestClient(app)
             response = client.put(
@@ -717,7 +717,7 @@ class TestUpdateAgent:
             agent_service,
             "update_agent",
             return_value=private_agent_card,
-        ), patch("registry.search.service.faiss_service.add_or_update_agent", new_callable=AsyncMock):
+        ), patch("registry.services.search.service.faiss_service.add_or_update_agent", new_callable=AsyncMock):
 
             client = TestClient(app)
             response = client.put(
@@ -757,7 +757,7 @@ class TestDeleteAgent:
             agent_service,
             "remove_agent",
             return_value=True,
-        ), patch("registry.search.service.faiss_service.remove_agent", new_callable=AsyncMock):
+        ), patch("registry.services.search.service.faiss_service.remove_agent", new_callable=AsyncMock):
 
             client = TestClient(app)
             response = client.delete(f"/api/agents{private_agent_card.path}")

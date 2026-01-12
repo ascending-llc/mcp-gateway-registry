@@ -7,8 +7,8 @@ from unittest.mock import patch, MagicMock, AsyncMock
 # Add project root to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
-from registry.oauth.flow_manager import FlowStateManager
-from registry.oauth.models import OAuthFlowStatus
+from registry.auth.oauth.flow_state_manager import FlowStateManager
+from registry.schemas.enums import OAuthFlowStatus
 
 
 @pytest.mark.unit
@@ -352,14 +352,14 @@ class TestFlowStateManager:
 
     def test_singleton_get_flow_manager(self):
         """Test the singleton get_flow_manager function."""
-        from registry.oauth.flow_manager import get_flow_manager
+        from registry.auth.oauth.flow_state_manager import get_flow_state_manager
         
         # First call should create instance
-        manager1 = get_flow_manager()
+        manager1 = get_flow_state_manager()
         assert manager1 is not None
         
         # Second call should return same instance
-        manager2 = get_flow_manager()
+        manager2 = get_flow_state_manager()
         assert manager2 is manager1
         
         # Verify it's a FlowStateManager instance
