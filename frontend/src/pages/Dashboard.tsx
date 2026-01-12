@@ -9,6 +9,8 @@ import {
 import axios from 'axios';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+
+import { ServerFormDialog } from '@/components/ServerFormDialog';
 import AgentCard from '../components/AgentCard';
 import SemanticSearchResults from '../components/SemanticSearchResults';
 import ServerCard from '../components/ServerCard';
@@ -17,6 +19,7 @@ import { useServer } from '../contexts/ServerContext';
 import { useSemanticSearch } from '../hooks/useSemanticSearch';
 
 interface Server {
+  id: string;
   name: string;
   path: string;
   description?: string;
@@ -26,7 +29,7 @@ interface Server {
   last_checked_time?: string;
   usersCount?: number;
   rating?: number;
-  status?: 'healthy' | 'healthy-auth-expired' | 'unhealthy' | 'unknown';
+  status?: 'active' | 'inactive' | 'error';
   num_tools?: number;
   proxy_pass_url?: string;
   license?: string;
@@ -88,18 +91,6 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
   );
 };
 
-const normalizeAgentStatus = (status?: string | null): Agent['status'] => {
-  if (status === 'healthy' || status === 'healthy-auth-expired') {
-    return status;
-  }
-  if (status === 'unhealthy') {
-    return 'unhealthy';
-  }
-  return 'unknown';
-};
-
-const buildAgentAuthHeaders = (token?: string | null) => (token ? { Authorization: `Bearer ${token}` } : undefined);
-
 const Dashboard: React.FC = () => {
   const { servers, agents, viewMode, setViewMode, activeFilter, loading, error, refreshData, setServers, setAgents } =
     useServer();
@@ -107,29 +98,8 @@ const Dashboard: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [committedQuery, setCommittedQuery] = useState('');
   const [showRegisterModal, setShowRegisterModal] = useState(false);
-  const [registerForm, setRegisterForm] = useState({
-    name: '',
-    path: '',
-    proxyPass: '',
-    description: '',
-    official: false,
-    tags: [] as string[],
-  });
-  const [registerLoading, setRegisterLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [editingServer, setEditingServer] = useState<Server | null>(null);
-  const [editForm, setEditForm] = useState({
-    name: '',
-    path: '',
-    proxyPass: '',
-    description: '',
-    tags: [] as string[],
-    license: 'N/A',
-    num_tools: 0,
-    num_stars: 0,
-    is_python: false,
-  });
-  const [editLoading, setEditLoading] = useState(false);
+  const [serverId, setServerId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Agent state management
@@ -155,45 +125,6 @@ const Dashboard: React.FC = () => {
       setAgents(prevAgents => prevAgents.map(agent => (agent.path === path ? { ...agent, ...updates } : agent)));
     },
     [setAgents],
-  );
-
-  const performAgentHealthCheck = useCallback(
-    async (agent: Agent, token?: string | null) => {
-      if (!agent?.path) return;
-
-      const headers = buildAgentAuthHeaders(token);
-      try {
-        const response = await axios.post(
-          `/api/agents${agent.path}/health`,
-          undefined,
-          headers ? { headers } : undefined,
-        );
-
-        handleAgentUpdate(agent.path, {
-          status: normalizeAgentStatus(response.data?.status),
-          last_checked_time: response.data?.last_checked_iso || null,
-        });
-      } catch (error) {
-        console.error(`Failed to check health for agent ${agent.name}:`, error);
-        handleAgentUpdate(agent.path, {
-          status: 'unhealthy',
-          last_checked_time: new Date().toISOString(),
-        });
-      }
-    },
-    [handleAgentUpdate],
-  );
-
-  const runInitialAgentHealthChecks = useCallback(
-    (agentsList: Agent[], token?: string | null) => {
-      const candidates = agentsList.filter(agent => agent.enabled);
-      if (!candidates.length) return;
-
-      Promise.allSettled(candidates.map(agent => performAgentHealthCheck(agent, token))).catch(error => {
-        console.error('Failed to run agent health checks:', error);
-      });
-    },
-    [performAgentHealthCheck],
   );
 
   // External registry tags - can be configured via environment or constants
@@ -259,7 +190,7 @@ const Dashboard: React.FC = () => {
     // Apply filter first
     if (activeFilter === 'enabled') filtered = filtered.filter(s => s.enabled);
     else if (activeFilter === 'disabled') filtered = filtered.filter(s => !s.enabled);
-    else if (activeFilter === 'unhealthy') filtered = filtered.filter(s => s.status === 'unhealthy');
+    else if (activeFilter === 'unhealthy') filtered = filtered.filter(s => s.status === 'inactive');
 
     // Then apply search
     if (searchTerm) {
@@ -336,16 +267,6 @@ const Dashboard: React.FC = () => {
     return filtered;
   }, [internalAgents, activeFilter, searchTerm]);
 
-  // Debug logging for filtering
-  console.log('Dashboard filtering debug:');
-  console.log(`Current user:`, user);
-  console.log(`Total servers from hook: ${servers.length}`);
-  console.log(`Total agents from API: ${agents.length}`);
-  console.log(`Active filter: ${activeFilter}`);
-  console.log(`Search term: "${searchTerm}"`);
-  console.log(`Filtered servers: ${filteredServers.length}`);
-  console.log(`Filtered agents: ${filteredAgents.length}`);
-
   useEffect(() => {
     if (searchTerm.trim().length === 0 && committedQuery.length > 0) {
       setCommittedQuery('');
@@ -394,39 +315,8 @@ const Dashboard: React.FC = () => {
   };
 
   const handleEditServer = async (server: Server) => {
-    try {
-      // Fetch full server details including proxy_pass_url and tags
-      const response = await axios.get(`/api/server_details${server.path}`);
-      const serverDetails = response.data;
-
-      setEditingServer(server);
-      setEditForm({
-        name: serverDetails.server_name || server.name,
-        path: server.path,
-        proxyPass: serverDetails.proxy_pass_url || '',
-        description: serverDetails.description || '',
-        tags: serverDetails.tags || [],
-        license: serverDetails.license || 'N/A',
-        num_tools: serverDetails.num_tools || 0,
-        num_stars: serverDetails.num_stars || 0,
-        is_python: serverDetails.is_python || false,
-      });
-    } catch (error) {
-      console.error('Failed to fetch server details:', error);
-      // Fallback to basic server data
-      setEditingServer(server);
-      setEditForm({
-        name: server.name,
-        path: server.path,
-        proxyPass: '',
-        description: server.description || '',
-        tags: server.tags || [],
-        license: 'N/A',
-        num_tools: server.num_tools || 0,
-        num_stars: 0,
-        is_python: false,
-      });
-    }
+    setServerId((server as any).id);
+    setShowRegisterModal(true);
   };
 
   const handleEditAgent = async (agent: Agent) => {
@@ -445,52 +335,15 @@ const Dashboard: React.FC = () => {
   };
 
   const handleCloseEdit = () => {
-    setEditingServer(null);
     setEditingAgent(null);
   };
 
   const showToast = (message: string, type: 'success' | 'error') => {
-    setToast({ message, type });
+    setToast({ message: String(message), type });
   };
 
   const hideToast = () => {
     setToast(null);
-  };
-
-  const handleSaveEdit = async () => {
-    if (editLoading || !editingServer) return;
-
-    try {
-      setEditLoading(true);
-
-      const formData = new FormData();
-      formData.append('name', editForm.name);
-      formData.append('description', editForm.description);
-      formData.append('proxy_pass_url', editForm.proxyPass);
-      formData.append('tags', editForm.tags.join(','));
-      formData.append('license', editForm.license);
-      formData.append('num_tools', editForm.num_tools.toString());
-      formData.append('num_stars', editForm.num_stars.toString());
-      formData.append('is_python', editForm.is_python.toString());
-
-      // Use the correct edit endpoint with the server path
-      await axios.post(`/api/edit${editingServer.path}`, formData, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      });
-
-      // Refresh server list
-      await refreshData();
-      setEditingServer(null);
-
-      showToast('Server updated successfully!', 'success');
-    } catch (error: any) {
-      console.error('Failed to update server:', error);
-      showToast(error.response?.data?.detail || 'Failed to update server', 'error');
-    } finally {
-      setEditLoading(false);
-    }
   };
 
   const handleSaveEditAgent = async () => {
@@ -498,57 +351,12 @@ const Dashboard: React.FC = () => {
 
     try {
       setEditAgentLoading(true);
-
-      // TODO: Implement agent edit endpoint when backend is ready
-      // For now, just show a message
       showToast('Agent editing is not yet implemented', 'error');
-
-      // When backend is ready, uncomment and implement:
-      // const formData = new FormData();
-      // formData.append('name', editAgentForm.name);
-      // formData.append('description', editAgentForm.description);
-      // formData.append('version', editAgentForm.version);
-      // formData.append('visibility', editAgentForm.visibility);
-      // formData.append('trust_level', editAgentForm.trust_level);
-      // formData.append('tags', editAgentForm.tags.join(','));
-      //
-      // await axios.post(`/api/agents${editingAgent.path}/edit`, formData, {
-      //   headers: {
-      //     'Content-Type': 'application/x-www-form-urlencoded',
-      //   },
-      // });
-      //
-      // await fetchAgents();
-      // setEditingAgent(null);
-      // showToast('Agent updated successfully!', 'success');
     } catch (error: any) {
       console.error('Failed to update agent:', error);
       showToast(error.response?.data?.detail || 'Failed to update agent', 'error');
     } finally {
       setEditAgentLoading(false);
-    }
-  };
-
-  const handleToggleServer = async (path: string, enabled: boolean) => {
-    try {
-      const formData = new FormData();
-      formData.append('enabled', enabled ? 'on' : 'off');
-
-      await axios.post(`/api/toggle${path}`, formData, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      });
-
-      const updatedServers = servers.map(server => (server.path === path ? { ...server, enabled } : server));
-
-      await refreshData();
-      showToast(`Server ${enabled ? 'enabled' : 'disabled'} successfully!`, 'success');
-    } catch (error: any) {
-      console.error('Failed to toggle server:', error);
-      const revertedServers = servers.map(server => (server.path === path ? { ...server, enabled: !enabled } : server));
-      await refreshData();
-      showToast(error.response?.data?.detail || 'Failed to toggle server', 'error');
     }
   };
 
@@ -570,115 +378,13 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleServerUpdate = (path: string, updates: Partial<Server>) => {
-    setServers(prevServers => prevServers.map(server => (server.path === path ? { ...server, ...updates } : server)));
+  const handleServerUpdate = (id: string, updates: Partial<Server>) => {
+    setServers(prevServers => prevServers.map(server => (server.id === id ? { ...server, ...updates } : server)));
   };
 
   const handleRegisterServer = useCallback(() => {
     setShowRegisterModal(true);
   }, []);
-
-  const handleRegisterSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (registerLoading) return; // Prevent double submission
-
-      try {
-        setRegisterLoading(true);
-
-        const formData = new FormData();
-        formData.append('name', registerForm.name);
-        formData.append('description', registerForm.description);
-        formData.append('path', registerForm.path);
-        formData.append('proxy_pass_url', registerForm.proxyPass);
-        formData.append('tags', registerForm.tags.join(','));
-        formData.append('license', 'MIT');
-
-        await axios.post('/api/register', formData, {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-        });
-
-        // Reset form and close modal
-        setRegisterForm({
-          name: '',
-          path: '',
-          proxyPass: '',
-          description: '',
-          official: false,
-          tags: [],
-        });
-        setShowRegisterModal(false);
-
-        // Refresh server list
-        await refreshData();
-
-        showToast('Server registered successfully!', 'success');
-      } catch (error: any) {
-        console.error('Failed to register server:', error);
-        showToast(error.response?.data?.detail || 'Failed to register server', 'error');
-      } finally {
-        setRegisterLoading(false);
-      }
-    },
-    [registerForm, registerLoading, refreshData],
-  );
-
-  const renderServerGrid = (
-    list: Server[],
-    options?: { emptyTitle?: string; emptySubtitle?: string; showRegisterCta?: boolean },
-  ) => {
-    if (list.length === 0) {
-      const title = options?.emptyTitle ?? 'No servers found';
-      const subtitle =
-        options?.emptySubtitle ??
-        (searchTerm || activeFilter !== 'all'
-          ? 'Press Enter in the search bar to search semantically'
-          : 'No servers are registered yet');
-      const shouldShowCta = options?.showRegisterCta ?? (!searchTerm && activeFilter === 'all');
-
-      return (
-        <div className='text-center py-16'>
-          <div className='text-gray-400 text-xl mb-4'>{title}</div>
-          <p className='text-gray-500 dark:text-gray-300 text-base max-w-md mx-auto'>{subtitle}</p>
-          {shouldShowCta && (
-            <button
-              onClick={handleRegisterServer}
-              className='mt-6 inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors'
-            >
-              <PlusIcon className='h-5 w-5 mr-2' />
-              Register Server
-            </button>
-          )}
-        </div>
-      );
-    }
-
-    return (
-      <div
-        className='grid pb-12'
-        style={{
-          gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-          gap: 'clamp(1.5rem, 3vw, 2.5rem)',
-        }}
-      >
-        {list.map(server => (
-          <ServerCard
-            key={server.path}
-            server={server}
-            onToggle={handleToggleServer}
-            onEdit={handleEditServer}
-            canModify={user?.can_modify_servers || false}
-            onRefreshSuccess={refreshData}
-            onShowToast={showToast}
-            onServerUpdate={handleServerUpdate}
-            authToken={agentApiToken}
-          />
-        ))}
-      </div>
-    );
-  };
 
   const renderDashboardCollections = () => (
     <>
@@ -687,48 +393,53 @@ const Dashboard: React.FC = () => {
         (filteredServers.length > 0 || (!searchTerm && activeFilter === 'all')) && (
           <div className='mb-8'>
             <h2 className='text-xl font-bold text-gray-900 dark:text-white mb-4'>MCP Servers</h2>
-
-            {filteredServers.length === 0 ? (
-              <div className='text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg'>
-                <div className='text-gray-400 text-lg mb-2'>No servers found</div>
-                <p className='text-gray-500 dark:text-gray-300 text-sm'>
-                  {searchTerm || activeFilter !== 'all'
-                    ? 'Press Enter in the search bar to search semantically'
-                    : 'No servers are registered yet'}
-                </p>
-                {!searchTerm && activeFilter === 'all' && (
-                  <button
-                    onClick={handleRegisterServer}
-                    className='mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-colors'
-                  >
-                    <PlusIcon className='h-4 w-4 mr-2' />
-                    Register Server
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div
-                className='grid'
-                style={{
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-                  gap: 'clamp(1.5rem, 1.5rem, 2.5rem)',
-                }}
-              >
-                {filteredServers.map(server => (
-                  <ServerCard
-                    key={server.path}
-                    server={server}
-                    onToggle={handleToggleServer}
-                    onEdit={handleEditServer}
-                    canModify={user?.can_modify_servers || false}
-                    onRefreshSuccess={refreshData}
-                    onShowToast={showToast}
-                    onServerUpdate={handleServerUpdate}
-                    authToken={agentApiToken}
-                  />
-                ))}
-              </div>
-            )}
+            <div className='relative'>
+              {loading && (
+                <div className='absolute inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10'>
+                  <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600'></div>
+                </div>
+              )}
+              {filteredServers.length === 0 ? (
+                <div className='text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg'>
+                  <div className='text-gray-400 text-lg mb-2'>No servers found</div>
+                  <p className='text-gray-500 dark:text-gray-300 text-sm'>
+                    {searchTerm || activeFilter !== 'all'
+                      ? 'Press Enter in the search bar to search semantically'
+                      : 'No servers are registered yet'}
+                  </p>
+                  {!searchTerm && activeFilter === 'all' && (
+                    <button
+                      onClick={handleRegisterServer}
+                      className='mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-colors'
+                    >
+                      <PlusIcon className='h-4 w-4 mr-2' />
+                      Register Server
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div
+                  className='grid'
+                  style={{
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                    gap: 'clamp(1.5rem, 1.5rem, 2.5rem)',
+                  }}
+                >
+                  {filteredServers.map(server => (
+                    <ServerCard
+                      key={server.id}
+                      server={server}
+                      canModify={user?.can_modify_servers || false}
+                      authToken={agentApiToken}
+                      onEdit={handleEditServer}
+                      onShowToast={showToast}
+                      onServerUpdate={handleServerUpdate}
+                      onRefreshSuccess={refreshData}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -737,48 +448,50 @@ const Dashboard: React.FC = () => {
         (filteredAgents.length > 0 || (!searchTerm && activeFilter === 'all')) && (
           <div className='mb-8'>
             <h2 className='text-xl font-bold text-gray-900 dark:text-white mb-4'>A2A Agents</h2>
-
-            {agentsError ? (
-              <div className='text-center py-12 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800'>
-                <div className='text-red-500 text-lg mb-2'>Failed to load agents</div>
-                <p className='text-red-600 dark:text-red-400 text-sm'>{agentsError}</p>
-              </div>
-            ) : loading ? (
-              <div className='flex items-center justify-center py-12'>
-                <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600'></div>
-              </div>
-            ) : filteredAgents.length === 0 ? (
-              <div className='text-center py-12 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800'>
-                <div className='text-gray-400 text-lg mb-2'>No agents found</div>
-                <p className='text-gray-500 dark:text-gray-300 text-sm'>
-                  {searchTerm || activeFilter !== 'all'
-                    ? 'Press Enter in the search bar to search semantically'
-                    : 'No agents are registered yet'}
-                </p>
-              </div>
-            ) : (
-              <div
-                className='grid'
-                style={{
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-                  gap: 'clamp(1.5rem, 3vw, 2.5rem)',
-                }}
-              >
-                {filteredAgents.map(agent => (
-                  <AgentCard
-                    key={agent.path}
-                    agent={agent}
-                    onToggle={handleToggleAgent}
-                    onEdit={handleEditAgent}
-                    canModify={user?.can_modify_servers || false}
-                    onRefreshSuccess={refreshData}
-                    onShowToast={showToast}
-                    onAgentUpdate={handleAgentUpdate}
-                    authToken={agentApiToken}
-                  />
-                ))}
-              </div>
-            )}
+            <div className='relative'>
+              {loading && (
+                <div className='absolute inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10'>
+                  <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600'></div>
+                </div>
+              )}
+              {agentsError ? (
+                <div className='text-center py-12 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800'>
+                  <div className='text-red-500 text-lg mb-2'>Failed to load agents</div>
+                  <p className='text-red-600 dark:text-red-400 text-sm'>{agentsError}</p>
+                </div>
+              ) : filteredAgents.length === 0 ? (
+                <div className='text-center py-12 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800'>
+                  <div className='text-gray-400 text-lg mb-2'>No agents found</div>
+                  <p className='text-gray-500 dark:text-gray-300 text-sm'>
+                    {searchTerm || activeFilter !== 'all'
+                      ? 'Press Enter in the search bar to search semantically'
+                      : 'No agents are registered yet'}
+                  </p>
+                </div>
+              ) : (
+                <div
+                  className='grid'
+                  style={{
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+                    gap: 'clamp(1.5rem, 3vw, 2.5rem)',
+                  }}
+                >
+                  {filteredAgents.map(agent => (
+                    <AgentCard
+                      key={agent.path}
+                      agent={agent}
+                      onToggle={handleToggleAgent}
+                      onEdit={handleEditAgent}
+                      canModify={user?.can_modify_servers || false}
+                      onRefreshSuccess={refreshData}
+                      onShowToast={showToast}
+                      onAgentUpdate={handleAgentUpdate}
+                      authToken={agentApiToken}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -786,78 +499,83 @@ const Dashboard: React.FC = () => {
       {viewFilter === 'external' && (
         <div className='mb-8'>
           <h2 className='text-xl font-bold text-gray-900 dark:text-white mb-4'>External Registries</h2>
-
-          {filteredExternalServers.length === 0 && filteredExternalAgents.length === 0 ? (
-            <div className='text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg border border-dashed border-gray-300 dark:border-gray-600'>
-              <div className='text-gray-400 text-lg mb-2'>
-                {externalServers.length === 0 && externalAgents.length === 0
-                  ? 'No External Registries Available'
-                  : 'No Results Found'}
+          <div className='relative'>
+            {loading && (
+              <div className='absolute inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10'>
+                <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600'></div>
               </div>
-              <p className='text-gray-500 dark:text-gray-300 text-sm max-w-md mx-auto'>
-                {externalServers.length === 0 && externalAgents.length === 0
-                  ? 'External registry integrations (Anthropic, ASOR, and more) will be available soon'
-                  : 'Press Enter in the search bar to search semantically'}
-              </p>
-            </div>
-          ) : (
-            <div>
-              {/* External Servers */}
-              {filteredExternalServers.length > 0 && (
-                <div className='mb-6'>
-                  <h3 className='text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3'>Servers</h3>
-                  <div
-                    className='grid'
-                    style={{
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-                      gap: 'clamp(1.5rem, 3vw, 2.5rem)',
-                    }}
-                  >
-                    {filteredExternalServers.map(server => (
-                      <ServerCard
-                        key={server.path}
-                        server={server}
-                        onToggle={handleToggleServer}
-                        onEdit={handleEditServer}
-                        canModify={user?.can_modify_servers || false}
-                        onRefreshSuccess={refreshData}
-                        onShowToast={showToast}
-                        onServerUpdate={handleServerUpdate}
-                        authToken={agentApiToken}
-                      />
-                    ))}
-                  </div>
+            )}
+            {filteredExternalServers.length === 0 && filteredExternalAgents.length === 0 ? (
+              <div className='text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg border border-dashed border-gray-300 dark:border-gray-600'>
+                <div className='text-gray-400 text-lg mb-2'>
+                  {externalServers.length === 0 && externalAgents.length === 0
+                    ? 'No External Registries Available'
+                    : 'No Results Found'}
                 </div>
-              )}
+                <p className='text-gray-500 dark:text-gray-300 text-sm max-w-md mx-auto'>
+                  {externalServers.length === 0 && externalAgents.length === 0
+                    ? 'External registry integrations (Anthropic, ASOR, and more) will be available soon'
+                    : 'Press Enter in the search bar to search semantically'}
+                </p>
+              </div>
+            ) : (
+              <div>
+                {/* External Servers */}
+                {filteredExternalServers.length > 0 && (
+                  <div className='mb-6'>
+                    <h3 className='text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3'>Servers</h3>
+                    <div
+                      className='grid'
+                      style={{
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+                        gap: 'clamp(1.5rem, 3vw, 2.5rem)',
+                      }}
+                    >
+                      {filteredExternalServers.map(server => (
+                        <ServerCard
+                          key={server.id}
+                          server={server}
+                          canModify={user?.can_modify_servers || false}
+                          authToken={agentApiToken}
+                          onEdit={handleEditServer}
+                          onShowToast={showToast}
+                          onServerUpdate={handleServerUpdate}
+                          onRefreshSuccess={refreshData}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-              {/* External Agents */}
-              {filteredExternalAgents.length > 0 && (
-                <div>
-                  <h3 className='text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3'>Agents</h3>
-                  <div
-                    className='grid'
-                    style={{
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-                      gap: 'clamp(1.5rem, 3vw, 2.5rem)',
-                    }}
-                  >
-                    {filteredExternalAgents.map(agent => (
-                      <AgentCard
-                        key={agent.path}
-                        agent={agent}
-                        onToggle={handleToggleAgent}
-                        onEdit={handleEditAgent}
-                        canModify={user?.can_modify_servers || false}
-                        onRefreshSuccess={refreshData}
-                        onShowToast={showToast}
-                        onAgentUpdate={handleAgentUpdate}
-                      />
-                    ))}
+                {/* External Agents */}
+                {filteredExternalAgents.length > 0 && (
+                  <div>
+                    <h3 className='text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3'>Agents</h3>
+                    <div
+                      className='grid'
+                      style={{
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+                        gap: 'clamp(1.5rem, 3vw, 2.5rem)',
+                      }}
+                    >
+                      {filteredExternalAgents.map(agent => (
+                        <AgentCard
+                          key={agent.path}
+                          agent={agent}
+                          onToggle={handleToggleAgent}
+                          onEdit={handleEditAgent}
+                          canModify={user?.can_modify_servers || false}
+                          onRefreshSuccess={refreshData}
+                          onShowToast={showToast}
+                          onAgentUpdate={handleAgentUpdate}
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -889,15 +607,6 @@ const Dashboard: React.FC = () => {
         >
           Try Again
         </button>
-      </div>
-    );
-  }
-
-  // Show loading state
-  if (loading) {
-    return (
-      <div className='flex items-center justify-center h-64'>
-        <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600'></div>
       </div>
     );
   }
@@ -1060,262 +769,17 @@ const Dashboard: React.FC = () => {
         <div className='pb-12'></div>
       </div>
 
-      {/* Register Server Modal */}
-      {showRegisterModal && (
-        <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4'>
-          <div className='bg-white dark:bg-gray-800 rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto'>
-            <form onSubmit={handleRegisterSubmit} className='p-6'>
-              <div className='flex items-center justify-between mb-4'>
-                <h3 className='text-lg font-semibold text-gray-900 dark:text-white'>Register New Server</h3>
-                <button
-                  onClick={() => setShowRegisterModal(false)}
-                  className='text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
-                >
-                  <XMarkIcon className='h-6 w-6' />
-                </button>
-              </div>
-
-              <div className='space-y-4'>
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1'>
-                    Server Name *
-                  </label>
-                  <input
-                    type='text'
-                    required
-                    className='block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-purple-500 focus:border-purple-500'
-                    value={registerForm.name}
-                    onChange={e => setRegisterForm(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder='e.g., My Custom Server'
-                  />
-                </div>
-
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1'>Path *</label>
-                  <input
-                    type='text'
-                    required
-                    className='block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-purple-500 focus:border-purple-500'
-                    value={registerForm.path}
-                    onChange={e => setRegisterForm(prev => ({ ...prev, path: e.target.value }))}
-                    placeholder='/my-server'
-                  />
-                </div>
-
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1'>Proxy URL *</label>
-                  <input
-                    type='url'
-                    required
-                    className='block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-purple-500 focus:border-purple-500'
-                    value={registerForm.proxyPass}
-                    onChange={e => setRegisterForm(prev => ({ ...prev, proxyPass: e.target.value }))}
-                    placeholder='http://localhost:8080'
-                  />
-                </div>
-
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1'>Description</label>
-                  <textarea
-                    className='block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-purple-500 focus:border-purple-500'
-                    rows={3}
-                    value={registerForm.description}
-                    onChange={e => setRegisterForm(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder='Brief description of the server'
-                  />
-                </div>
-
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1'>Tags</label>
-                  <input
-                    type='text'
-                    value={registerForm.tags.join(',')}
-                    onChange={e =>
-                      setRegisterForm(prev => ({
-                        ...prev,
-                        tags: e.target.value
-                          .split(',')
-                          .map(t => t.trim())
-                          .filter(t => t),
-                      }))
-                    }
-                    className='block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-purple-500 focus:border-purple-500'
-                    placeholder='tag1,tag2,tag3'
-                  />
-                </div>
-              </div>
-
-              <div className='flex justify-end space-x-3 mt-6'>
-                <button
-                  onClick={() => setShowRegisterModal(false)}
-                  className='flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors'
-                >
-                  Cancel
-                </button>
-                <button
-                  type='submit'
-                  disabled={registerLoading}
-                  className='px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded-md transition-colors'
-                >
-                  {registerLoading ? 'Registering...' : 'Register Server'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Server Modal */}
-      {editingServer && (
-        <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50'>
-          <div className='bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto'>
-            <h3 className='text-lg font-semibold text-gray-900 dark:text-white mb-4'>
-              Edit Server: {editingServer.name}
-            </h3>
-
-            <form
-              onSubmit={async e => {
-                e.preventDefault();
-                await handleSaveEdit();
-              }}
-              className='space-y-4'
-            >
-              <div>
-                <label className='block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1'>Server Name *</label>
-                <input
-                  type='text'
-                  value={editForm.name}
-                  onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))}
-                  className='block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-purple-500 focus:border-purple-500'
-                  required
-                />
-              </div>
-
-              <div>
-                <label className='block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1'>
-                  Proxy Pass URL *
-                </label>
-                <input
-                  type='url'
-                  value={editForm.proxyPass}
-                  onChange={e => setEditForm(prev => ({ ...prev, proxyPass: e.target.value }))}
-                  className='block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-purple-500 focus:border-purple-500'
-                  placeholder='http://localhost:8080'
-                  required
-                />
-              </div>
-
-              <div>
-                <label className='block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1'>Description</label>
-                <textarea
-                  value={editForm.description}
-                  onChange={e => setEditForm(prev => ({ ...prev, description: e.target.value }))}
-                  className='block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-purple-500 focus:border-purple-500'
-                  rows={3}
-                  placeholder='Brief description of the server'
-                />
-              </div>
-
-              <div>
-                <label className='block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1'>Tags</label>
-                <input
-                  type='text'
-                  value={editForm.tags.join(',')}
-                  onChange={e =>
-                    setEditForm(prev => ({
-                      ...prev,
-                      tags: e.target.value
-                        .split(',')
-                        .map(t => t.trim())
-                        .filter(t => t),
-                    }))
-                  }
-                  className='block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-purple-500 focus:border-purple-500'
-                  placeholder='tag1,tag2,tag3'
-                />
-              </div>
-
-              <div className='grid grid-cols-2 gap-4'>
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1'>
-                    Number of Tools
-                  </label>
-                  <input
-                    type='number'
-                    value={editForm.num_tools}
-                    onChange={e => setEditForm(prev => ({ ...prev, num_tools: parseInt(e.target.value, 10) || 0 }))}
-                    className='block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-purple-500 focus:border-purple-500'
-                    min='0'
-                  />
-                </div>
-
-                <div>
-                  <label className='block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1'>Stars</label>
-                  <input
-                    type='number'
-                    value={editForm.num_stars}
-                    onChange={e => setEditForm(prev => ({ ...prev, num_stars: parseInt(e.target.value, 10) || 0 }))}
-                    className='block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-purple-500 focus:border-purple-500'
-                    min='0'
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className='block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1'>License</label>
-                <input
-                  type='text'
-                  value={editForm.license}
-                  onChange={e => setEditForm(prev => ({ ...prev, license: e.target.value }))}
-                  className='block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-purple-500 focus:border-purple-500'
-                  placeholder='MIT, Apache-2.0, etc.'
-                />
-              </div>
-
-              <div className='flex items-center'>
-                <input
-                  type='checkbox'
-                  id='is_python'
-                  checked={editForm.is_python}
-                  onChange={e => setEditForm(prev => ({ ...prev, is_python: e.target.checked }))}
-                  className='h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded'
-                />
-                <label htmlFor='is_python' className='ml-2 block text-sm text-gray-700 dark:text-gray-200'>
-                  Python-based server
-                </label>
-              </div>
-
-              <div>
-                <label className='block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1'>
-                  Path (read-only)
-                </label>
-                <input
-                  type='text'
-                  value={editForm.path}
-                  className='block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-300'
-                  disabled
-                />
-              </div>
-
-              <div className='flex space-x-3 pt-4'>
-                <button
-                  type='submit'
-                  disabled={editLoading}
-                  className='flex-1 px-4 py-2 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded-md transition-colors'
-                >
-                  {editLoading ? 'Saving...' : 'Save Changes'}
-                </button>
-                <button
-                  onClick={handleCloseEdit}
-                  className='flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors'
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Register and Edit Server Modal */}
+      <ServerFormDialog
+        isOpen={showRegisterModal}
+        id={serverId}
+        showToast={showToast}
+        refreshData={refreshData}
+        onClose={() => {
+          setServerId(null);
+          setShowRegisterModal(false);
+        }}
+      />
 
       {/* Edit Agent Modal */}
       {editingAgent && (
