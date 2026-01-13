@@ -1,0 +1,21 @@
+# Start with a Nodejs base image
+FROM node:22-bookworm AS builder
+
+# Copy & build Frontend 
+WORKDIR /app/frontend
+COPY frontend/package.json ./
+RUN npm install 
+COPY frontend/ ./
+RUN npm run build
+
+# Create production image
+FROM nginx:1.27-bookworm AS production
+COPY --from=builder /app/frontend/build/ /usr/share/nginx/html
+
+COPY /frontend/nginx_http_only.conf /nginx_http_only.conf
+COPY /frontend/nginx_http_and_https.conf /nginx_http_and_https.conf
+
+COPY /docker/registry-entrypoint.sh /entrypoint.sh
+RUN chmod +x entrypoint.sh
+EXPOSE 80 443
+ENTRYPOINT ["/entrypoint.sh", "frontend"] 

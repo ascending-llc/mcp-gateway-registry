@@ -67,3 +67,4 @@ temp/
 # Specific large directories
 mcp-atlassian/
 # frontend/build/ - KEEP THIS, needed by registry service
+mcp_service.yaml

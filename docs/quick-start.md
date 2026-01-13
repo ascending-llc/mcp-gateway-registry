@@ -12,8 +12,10 @@ By the end of this guide, you'll have:
 
 ## Prerequisites
 
-- **Amazon Cognito Setup**: You'll need Cognito credentials (see [minimal setup](#amazon-cognito-minimal-setup))
-- **Docker**: Docker and Docker Compose installed
+- **Identity Provider**: Amazon Cognito or Keycloak (see [minimal setup](#amazon-cognito-minimal-setup) or [Keycloak Integration](keycloak-integration.md))
+- **Container Runtime**: One of:
+  - **Docker**: Docker and Docker Compose installed
+  - **Podman**: Podman and Podman Compose (rootless alternative, recommended for macOS)
 - **Basic Command Line**: Comfort with terminal/command prompt
 
 ## Step 1: Clone and Configure
@@ -64,30 +66,64 @@ INGRESS_OAUTH_CLIENT_SECRET=your_cognito_client_secret
 ./credentials-provider/generate_creds.sh
 ```
 
-## Step 3: Install and Deploy
+## Step 3: Install Container Runtime
+
+**Choose Docker or Podman:**
+
+### Option A: Docker (Default)
 
 ```bash
-# Install Python environment
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.local/bin/env
-
 # Install Docker (Ubuntu/Debian)
 sudo apt-get update
 sudo apt-get install -y docker.io docker-compose
 sudo usermod -a -G docker $USER
 newgrp docker
 
-# Deploy all services
-./build_and_run.sh
+# Verify installation
+docker --version
+docker compose version
 ```
 
-⏱️ **This takes about 2-3 minutes** - Docker will build images and start services.
-
-## Step 4: Verify Installation
+### Option B: Podman (Rootless, macOS-friendly)
 
 ```bash
+# macOS installation
+brew install podman-desktop
+# OR: brew install podman
+
+# Initialize Podman machine (macOS only)
+podman machine init --cpus 4 --memory 8192
+podman machine start
+
+# Linux installation
+sudo apt-get install -y podman podman-compose  # Ubuntu/Debian
+# OR: sudo dnf install -y podman podman-compose  # Fedora/RHEL
+
+# Verify installation
+podman --version
+podman compose version
+```
+
+## Step 4: Deploy Services
+
+**With Docker:**
+```bash
+./build_and_run.sh --prebuilt
+```
+
+**With Podman:**
+```bash
+./build_and_run.sh --prebuilt --podman
+```
+
+⏱️ **This takes about 2-3 minutes** - Container images will be pulled and services started.
+
+## Step 5: Verify Installation
+
+**With Docker:**
+```bash
 # Check all services are running
-docker-compose ps
+docker compose ps
 
 # You should see services like:
 # - registry (port 7860)  
@@ -96,19 +132,43 @@ docker-compose ps
 # - Various MCP servers (ports 8000-8003)
 ```
 
+**With Podman:**
+```bash
+# Check all services are running
+podman compose ps
+
+# Same services, but nginx accessible on ports 8080/8443
+```
+
 **Access the web interface:**
+
+**Docker:**
 ```bash
 # Open in browser
 open http://localhost:7860
-
-# Or visit: http://localhost:7860
+# Main interface: http://localhost
 ```
+
+**Podman:**
+```bash
+# Open in browser
+open http://localhost:7860
+# Main interface (note port 8080): http://localhost:8080
+```
+
+**Port Reference:**
+
+| Service | Docker | Podman |
+|---------|--------|--------|
+| Main UI | `http://localhost` | `http://localhost:8080` |
+| Registry API | `http://localhost:7860` | `http://localhost:7860` |
+| All others | Same ports | Same ports |
 
 **Login options:**
 - **Username**: `admin` (or your `ADMIN_USER` value)
 - **Password**: Your `ADMIN_PASSWORD` value
 
-## Step 5: Connect AI Coding Assistant
+## Step 6: Connect AI Coding Assistant
 
 ### VS Code Setup (Recommended for first test)
 
@@ -134,7 +194,7 @@ cat .oauth-tokens/vscode-mcp.json >> ~/.vscode/settings.json
 cp .oauth-tokens/mcp.json ~/.vscode/mcp-settings.json
 ```
 
-## Step 6: Test Everything Works
+## Step 7: Test Everything Works
 
 ```bash
 # Test gateway connectivity

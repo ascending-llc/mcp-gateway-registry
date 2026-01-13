@@ -1,0 +1,35 @@
+[project]
+name = "packages"
+version = "0.1.0"
+description = "Shared database ORM and models for MCP Gateway Registry"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "dotenv>=0.9.9",
+    "langchain-aws>=1.1.0",
+    "langchain-classic>=1.0.0",
+    "langchain-community>=0.4.1",
+    "langchain-weaviate>=0.0.6",
+    "pydantic>=2.12.4",
+    "pytest>=9.0.1",
+    "pytest-asyncio>=0.23.0",
+]
+
+[project.scripts]
+import-schemas = "packages.models.import_schemas:main"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# Map the package "packages" to the parent directory
+# When pip install -e ./packages is run from /app, 
+# it treats /app/packages/ as the "packages" module
+package-dir = {"" = ".."}
+
+[tool.setuptools.packages.find]
+# Find packages in parent directory, specifically the "packages" directory
+where = [".."]
+include = ["packages*"]
+namespaces = false

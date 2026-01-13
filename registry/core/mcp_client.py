@@ -59,15 +59,19 @@ import httpx
 def _build_headers_for_server(server_info: dict = None) -> Dict[str, str]:
     """
     Build HTTP headers for server requests by merging server-specific headers.
-    
+
     Args:
         server_info: Server configuration dictionary
-        
+
     Returns:
         Headers dictionary with server-specific headers
     """
-    headers = {}
-    
+    # Start with default MCP headers (required by some servers like Cloudflare)
+    headers = {
+        'Accept': 'application/json, text/event-stream',
+        'Content-Type': 'application/json'
+    }
+
     # Merge server-specific headers if present
     if server_info:
         server_headers = server_info.get("headers", [])
@@ -76,7 +80,7 @@ def _build_headers_for_server(server_info: dict = None) -> Dict[str, str]:
                 if isinstance(header_dict, dict):
                     headers.update(header_dict)
                     logger.debug(f"Added server headers to MCP client: {header_dict}")
-    
+
     return headers
 
 
@@ -228,9 +232,8 @@ async def _get_tools_streamable_http(base_url: str, server_info: dict = None) ->
     # If URL already has MCP endpoint, use it directly
     if base_url.endswith('/mcp') or '/mcp/' in base_url:
         mcp_url = base_url
-        if not mcp_url.endswith('/'):
-            mcp_url += '/'
-        
+        # Don't add trailing slash - some servers like Cloudflare reject it
+
         # Handle streamable-http and sse servers imported from anthropinc by adding required query parameter
         if server_info and 'tags' in server_info and 'anthropic-registry' in server_info.get('tags', []):
             if '?' not in mcp_url:

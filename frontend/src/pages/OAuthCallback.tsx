@@ -1,45 +1,151 @@
-import React, { useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { CheckCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import type React from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+
+import logo from '@/assets/logo.svg';
+
+// Common layout components to reduce duplication
+const PageLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className='min-h-screen bg-white dark:bg-gray-900 flex flex-col'>
+    <header className='bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 py-4 text-center'>
+      <img src={logo} alt='LibreChat' className='h-12 w-auto mx-auto' />
+    </header>
+    <main className='flex-grow flex items-center justify-center px-4 py-8'>{children}</main>
+    <Footer />
+  </div>
+);
+
+const Footer: React.FC = () => (
+  <footer className='py-4 text-center text-sm text-gray-500 dark:text-gray-400'>
+    © {new Date().getFullYear()} Jarvis. All rights reserved.
+  </footer>
+);
 
 const OAuthCallback: React.FC = () => {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user, loading } = useAuth();
+  const [countdown, setCountdown] = useState(5);
+
+  // Get URL parameters with memoization
+  const type = useMemo(() => searchParams.get('type') || 'success', [searchParams]);
+  const serverName = useMemo(() => searchParams.get('serverName') || 'Connectors', [searchParams]);
+  const error = useMemo(() => searchParams.get('error') || 'Unknown error occurred', [searchParams]);
+
+  const closeWindow = useCallback(() => {
+    try {
+      if (window.opener) window.opener.focus();
+      window.close();
+    } catch {
+      console.log('Could not close window automatically');
+    }
+  }, []);
 
   useEffect(() => {
-    // Check if there's an error parameter from the auth server
-    const error = searchParams.get('error');
-    const errorDetails = searchParams.get('details');
+    const timer = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          closeWindow();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
-    if (error) {
-      // Redirect to login with error message
-      const errorMessage = errorDetails ? `${error}: ${errorDetails}` : error;
-      navigate(`/login?error=${encodeURIComponent(errorMessage)}`, { replace: true });
-      return;
-    }
-
-    // If no error and not loading, check authentication status
-    if (!loading) {
-      if (user) {
-        // User is authenticated, redirect to dashboard
-        navigate('/', { replace: true });
-      } else {
-        // User is not authenticated, redirect to login
-        navigate('/login?error=oauth2_session_invalid', { replace: true });
+    let timerCloseWindow: NodeJS.Timeout;
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (timerCloseWindow) clearTimeout(timerCloseWindow);
+        timerCloseWindow = setTimeout(closeWindow, 1000);
       }
-    }
-  }, [user, loading, navigate, searchParams]);
+    };
 
-  // Show loading spinner while checking authentication
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(timer);
+      if (timerCloseWindow) clearTimeout(timerCloseWindow);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [closeWindow]);
+
+  // Render error state
+  if (type === 'error') {
+    return (
+      <PageLayout>
+        <div className='card p-10 max-w-md w-full text-center animate-slide-up'>
+          <div className='mx-auto mb-8 w-16 h-16 bg-red-600 dark:bg-red-600 rounded-full flex items-center justify-center animate-pulse'>
+            <XMarkIcon className='w-10 h-10 text-white' strokeWidth={3} />
+          </div>
+
+          <p className='text-base text-gray-600 dark:text-gray-300 mb-6 leading-relaxed'>
+            Sorry, there was a problem during the OAuth authorization process
+          </p>
+
+          <div className='bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300 p-4 rounded-lg text-sm mb-6 font-mono break-words text-left'>
+            <strong className='block mb-2'>Error Details:</strong>
+            {error}
+          </div>
+
+          <div className='flex gap-3 justify-center flex-wrap'>
+            <Link
+              to='/'
+              className='btn-primary px-6 py-3 hover:transform hover:-translate-y-0.5 transition-all duration-200 shadow-md hover:shadow-lg inline-block'
+            >
+              Retry Authorization
+            </Link>
+            <button
+              onClick={closeWindow}
+              className='bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-6 py-3 rounded-lg font-semibold hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200'
+            >
+              Close Window
+            </button>
+          </div>
+
+          <div className='text-xs text-gray-500 dark:text-gray-400 mt-6 pt-6 border-t border-gray-200 dark:border-gray-700'>
+            <p>If the problem persists, please contact the system administrator</p>
+            <p className='mt-2'>
+              Error Code: <code className='bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded'>{error}</code>
+            </p>
+          </div>
+        </div>
+      </PageLayout>
+    );
+  }
+
+  // Render success state (default)
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col justify-center items-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mb-4"></div>
-      <p className="text-gray-600 dark:text-gray-400">
-        Completing authentication...
-      </p>
-    </div>
+    <PageLayout>
+      <div className='card p-10 max-w-md w-full text-center animate-slide-up'>
+        <div className='mx-auto mb-8 w-16 h-16 bg-green-700 dark:bg-primary-600 rounded-full flex items-center justify-center animate-pulse'>
+          <CheckCircleIcon className='w-10 h-10 text-white' />
+        </div>
+
+        <h1 className='text-3xl font-semibold text-gray-900 dark:text-white mb-6'>Authentication Successful</h1>
+
+        <p className='text-base text-gray-600 dark:text-gray-300 mb-6 leading-relaxed'>
+          You've been authenticated for{' '}
+          <span className='inline-block font-semibold text-green-600 dark:text-primary-400 bg-green-50 dark:bg-primary-900/20 px-3 py-1 rounded-md mx-1'>
+            {serverName}
+          </span>
+        </p>
+
+        <p className='text-base text-gray-600 dark:text-gray-300 mb-6 leading-relaxed'>
+          Your credentials have been securely saved. You can now close this window and retry your original command.
+        </p>
+
+        <button
+          onClick={closeWindow}
+          className='btn-primary w-full mt-6 hover:transform hover:-translate-y-0.5 transition-all duration-200 shadow-md hover:shadow-lg'
+        >
+          Close Window
+        </button>
+
+        <div className='text-xs text-gray-500 dark:text-gray-400 mt-6 opacity-80'>
+          This window will close automatically in {countdown} seconds
+        </div>
+      </div>
+    </PageLayout>
   );
 };
 
-export default OAuthCallback; 
+export default OAuthCallback;

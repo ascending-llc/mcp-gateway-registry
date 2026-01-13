@@ -28,13 +28,15 @@ from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 import secrets
 import urllib.parse
 import httpx
-from string import Template
 
 # Import metrics middleware
-from metrics_middleware import add_auth_metrics_middleware
+from .metrics_middleware import add_auth_metrics_middleware
 
 # Import provider factory
-from providers.factory import get_auth_provider
+from .providers.factory import get_auth_provider
+
+# Import OAuth2 config loader
+from .utils.config_loader import OAuth2ConfigLoader, get_oauth2_config
 
 # Configure logging
 logging.basicConfig(
@@ -47,21 +49,29 @@ logger = logging.getLogger(__name__)
 # Configuration for token generation
 JWT_ISSUER = "mcp-auth-server"
 JWT_AUDIENCE = "mcp-registry"
+JWT_SELF_SIGNED_KID = "self-signed-key-v1"
 MAX_TOKEN_LIFETIME_HOURS = 24
 DEFAULT_TOKEN_LIFETIME_HOURS = 8
 
 # Rate limiting for token generation (simple in-memory counter)
 user_token_generation_counts = {}
-MAX_TOKENS_PER_USER_PER_HOUR = 10
+MAX_TOKENS_PER_USER_PER_HOUR = int(os.environ.get('MAX_TOKENS_PER_USER_PER_HOUR', '100'))
 
 # Load scopes configuration
 def load_scopes_config():
     """Load the scopes configuration from scopes.yml"""
     try:
-        scopes_file = Path(__file__).parent / "scopes.yml"
+        # Check for environment variable first (for EFS-mounted config)
+        scopes_path = os.environ.get('SCOPES_CONFIG_PATH')
+        if scopes_path:
+            scopes_file = Path(scopes_path)
+        else:
+            # Fall back to default location (baked into image)
+            scopes_file = Path(__file__).parent / "scopes.yml"
+
         with open(scopes_file, 'r') as f:
             config = yaml.safe_load(f)
-            logger.info(f"Loaded scopes configuration with {len(config.get('group_mappings', {}))} group mappings")
+            logger.info(f"Loaded scopes configuration from {scopes_file} with {len(config.get('group_mappings', {}))} group mappings")
             return config
     except Exception as e:
         logger.error(f"Failed to load scopes configuration: {e}")
@@ -266,15 +276,19 @@ def _normalize_server_name(name: str) -> str:
 def _server_names_match(name1: str, name2: str) -> bool:
     """
     Compare two server names, normalizing for trailing slashes.
+    Supports wildcard matching with '*'.
 
     Args:
-        name1: First server name
+        name1: First server name (can be '*' for wildcard)
         name2: Second server name
 
     Returns:
-        True if names match (ignoring trailing slashes), False otherwise
+        True if names match (ignoring trailing slashes) or if name1 is '*', False otherwise
     """
-    return _normalize_server_name(name1) == _normalize_server_name(name2)
+    normalized_name1 = _normalize_server_name(name1)
+    if normalized_name1 == '*':
+        return True
+    return normalized_name1 == _normalize_server_name(name2)
 
 
 def validate_server_tool_access(server_name: str, method: str, tool_name: str, user_scopes: List[str]) -> bool:
@@ -329,11 +343,14 @@ def validate_server_tool_access(server_name: str, method: str, tool_name: str, u
                     allowed_methods = server_config.get('methods', [])
                     logger.info(f"  Allowed methods for server '{server_name}': {allowed_methods}")
                     logger.info(f"  Checking if method '{method}' is in allowed methods...")
-                    
+
+                    # Check if all methods are allowed (wildcard support)
+                    has_wildcard_methods = 'all' in allowed_methods or '*' in allowed_methods
+
                     # for all methods except tools/call we are good if the method is allowed
                     # for tools/call we need to do an extra validation to check if the tool
                     # itself is allowed or not
-                    if method in allowed_methods and method != 'tools/call':
+                    if (method in allowed_methods or has_wildcard_methods) and method != 'tools/call':
                         logger.info(f"  ✓ Method '{method}' found in allowed methods!")
                         logger.info(f"Access granted: scope '{scope}' allows access to {server_name}.{method}")
                         logger.info(f"=== VALIDATE_SERVER_TOOL_ACCESS END: GRANTED ===")
@@ -342,11 +359,14 @@ def validate_server_tool_access(server_name: str, method: str, tool_name: str, u
                     # Check tools if method not found in methods
                     allowed_tools = server_config.get('tools', [])
                     logger.info(f"  Allowed tools for server '{server_name}': {allowed_tools}")
-                    
+
+                    # Check if all tools are allowed (wildcard support)
+                    has_wildcard_tools = 'all' in allowed_tools or '*' in allowed_tools
+
                     # For tools/call, check if the specific tool is allowed
                     if method == 'tools/call' and tool_name:
                         logger.info(f"  Checking if tool '{tool_name}' is in allowed tools for tools/call...")
-                        if tool_name in allowed_tools:
+                        if tool_name in allowed_tools or has_wildcard_tools:
                             logger.info(f"  ✓ Tool '{tool_name}' found in allowed tools!")
                             logger.info(f"Access granted: scope '{scope}' allows access to {server_name}.{method} for tool {tool_name}")
                             logger.info(f"=== VALIDATE_SERVER_TOOL_ACCESS END: GRANTED ===")
@@ -356,7 +376,7 @@ def validate_server_tool_access(server_name: str, method: str, tool_name: str, u
                     else:
                         # For other methods, check if method is in tools list (backward compatibility)
                         logger.info(f"  Checking if method '{method}' is in allowed tools...")
-                        if method in allowed_tools:
+                        if method in allowed_tools or has_wildcard_tools:
                             logger.info(f"  ✓ Method '{method}' found in allowed tools!")
                             logger.info(f"Access granted: scope '{scope}' allows access to {server_name}.{method}")
                             logger.info(f"=== VALIDATE_SERVER_TOOL_ACCESS END: GRANTED ===")
@@ -824,6 +844,7 @@ async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "simplified-auth-server"}
 
+
 @app.get("/validate")
 async def validate_request(request: Request):
     """
@@ -842,11 +863,13 @@ async def validate_request(request: Request):
     Raises:
         HTTPException: If the token is missing, invalid, or configuration is incomplete
     """
-    
-    
     try:
         # Extract headers
+        # Check for X-Authorization first (custom header used by this gateway)
+        # Only if X-Authorization is not present, check standard Authorization header
         authorization = request.headers.get("X-Authorization")
+        if not authorization:
+            authorization = request.headers.get("Authorization")
         cookie_header = request.headers.get("Cookie", "")
         user_pool_id = request.headers.get("X-User-Pool-Id")
         client_id = request.headers.get("X-Client-Id")
@@ -940,49 +963,69 @@ async def validate_request(request: Request):
             # Extract token
             access_token = authorization.split(" ")[1]
             
-            # Get authentication provider based on AUTH_PROVIDER environment variable
+            # FIRST: Check if this is a self-signed token (fast path detection by kid header)
+            # This must happen BEFORE provider-specific validation to avoid sending HS256 tokens to RS256 providers
             try:
-                auth_provider = get_auth_provider()
-                logger.info(f"Using authentication provider: {auth_provider.__class__.__name__}")
+                unverified_header = jwt.get_unverified_header(access_token)
+                header_kid = unverified_header.get('kid')
                 
-                # Provider-specific validation
-                if hasattr(auth_provider, 'validate_token'):
-                    # For Keycloak, no additional headers needed
-                    validation_result = auth_provider.validate_token(access_token)
-                    logger.info(f"Token validation successful using {auth_provider.__class__.__name__}")
+                # If kid is our self-signed token identifier, validate as self-signed immediately
+                if header_kid == JWT_SELF_SIGNED_KID:
+                    logger.info("Detected self-signed token by kid header, validating...")
+                    validation_result = validator.validate_self_signed_token(access_token)
+                    logger.info(f"Self-signed token validation successful for user: {hash_username(validation_result.get('username', ''))}")
                 else:
-                    # Fallback to old validation for compatibility
-                    if not user_pool_id:
-                        logger.warning("Missing X-User-Pool-Id header for Cognito validation")
-                        raise HTTPException(
-                            status_code=400,
-                            detail="Missing X-User-Pool-Id header",
-                            headers={"Connection": "close"}
-                        )
-                    
-                    if not client_id:
-                        logger.warning("Missing X-Client-Id header for Cognito validation")
-                        raise HTTPException(
-                            status_code=400,
-                            detail="Missing X-Client-Id header",
-                            headers={"Connection": "close"}
-                        )
-                    
-                    # Use old validator for backward compatibility
-                    validation_result = validator.validate_token(
-                        access_token=access_token,
-                        user_pool_id=user_pool_id,
-                        client_id=client_id,
-                        region=region
-                    )
-                    
+                    # Not a self-signed token, continue to provider validation
+                    validation_result = None
             except Exception as e:
-                logger.error(f"Authentication provider error: {e}")
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Authentication provider configuration error: {str(e)}",
-                    headers={"Connection": "close"}
-                )
+                logger.debug(f"Could not check JWT header for self-signed detection: {e}")
+                validation_result = None
+            
+            # If not a self-signed token, use provider-specific validation
+            if not validation_result:
+                # Get authentication provider based on AUTH_PROVIDER environment variable
+                try:
+                    auth_provider = get_auth_provider()
+                    logger.info(f"Using authentication provider: {auth_provider.__class__.__name__}")
+                    
+                    # Provider-specific validation
+                    if hasattr(auth_provider, 'validate_token'):
+                        # For Keycloak, Entra ID, etc. - no additional headers needed
+                        validation_result = auth_provider.validate_token(access_token)
+                        logger.info(f"Token validation successful using {auth_provider.__class__.__name__}")
+                    else:
+                        # Fallback to old validation for compatibility
+                        if not user_pool_id:
+                            logger.warning("Missing X-User-Pool-Id header for Cognito validation")
+                            raise HTTPException(
+                                status_code=400,
+                                detail="Missing X-User-Pool-Id header",
+                                headers={"Connection": "close"}
+                            )
+                        
+                        if not client_id:
+                            logger.warning("Missing X-Client-Id header for Cognito validation")
+                            raise HTTPException(
+                                status_code=400,
+                                detail="Missing X-Client-Id header",
+                                headers={"Connection": "close"}
+                            )
+                        
+                        # Use old validator for backward compatibility
+                        validation_result = validator.validate_token(
+                            access_token=access_token,
+                            user_pool_id=user_pool_id,
+                            client_id=client_id,
+                            region=region
+                        )
+                        
+                except Exception as e:
+                    logger.error(f"Authentication provider error: {e}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Authentication provider configuration error: {str(e)}",
+                        headers={"Connection": "close"}
+                    )
         
         logger.info(f"Token validation successful using method: {validation_result['method']}")
         
@@ -1020,26 +1063,29 @@ async def validate_request(request: Request):
                     logger.error(f"Error processing request payload for tool extraction: {e}")
         
         # Validate scope-based access if we have server/tool information
-        # For Keycloak, map groups to scopes; otherwise use scopes directly
+        # For providers that use groups (Keycloak, Entra ID, Cognito), map groups to scopes
         user_groups = validation_result.get('groups', [])
-        if user_groups and validation_result.get('method') == 'keycloak':
-            # Map Keycloak groups to scopes using the group mappings
+        auth_method = validation_result.get('method', '')
+        if user_groups and auth_method in ['keycloak', 'entra', 'cognito']:
+            # Map IdP groups to scopes using the group mappings
             user_scopes = map_groups_to_scopes(user_groups)
-            logger.info(f"Mapped Keycloak groups {user_groups} to scopes: {user_scopes}")
+            logger.info(f"Mapped {auth_method} groups {user_groups} to scopes: {user_scopes}")
         else:
             user_scopes = validation_result.get('scopes', [])
-        if request_payload and server_name and tool_name:
-            # Extract method and actual tool name
-            method = tool_name  # The extracted tool_name is actually the method
+        if server_name:
+            # For ANY server access, enforce scope validation (fail closed principle)
+            # This includes MCP initialization methods that may not have a specific tool
+
+            method = tool_name if tool_name else "initialize"  # Default to initialize if no tool specified
             actual_tool_name = None
-            
+
             # For tools/call, extract the actual tool name from params
             if method == 'tools/call' and isinstance(request_payload, dict):
                 params = request_payload.get('params', {})
                 if isinstance(params, dict):
                     actual_tool_name = params.get('name')
                     logger.info(f"Extracted actual tool name for tools/call: '{actual_tool_name}'")
-            
+
             # Check if user has any scopes - if not, deny access (fail closed)
             if not user_scopes:
                 logger.warning(f"Access denied for user {hash_username(validation_result.get('username', ''))} to {server_name}.{method} (tool: {actual_tool_name}) - no scopes configured")
@@ -1057,10 +1103,8 @@ async def validate_request(request: Request):
                     headers={"Connection": "close"}
                 )
             logger.info(f"Scope validation passed for {server_name}.{method} (tool: {actual_tool_name})")
-        elif server_name or tool_name:
-            logger.debug(f"Partial server/tool info available (server='{server_name}', tool='{tool_name}'), skipping scope validation")
         else:
-            logger.debug("No server/tool information available, skipping scope validation")
+            logger.debug("No server information available, skipping scope validation")
         
         # Prepare JSON response data
         response_data = {
@@ -1178,12 +1222,13 @@ async def generate_user_token(
     """
     try:
         # Note: No internal API key validation needed since registry already validates user session
-        
+
         # Extract user context
         user_context = request.user_context
         username = user_context.get('username')
         user_scopes = user_context.get('scopes', [])
-        
+        user_groups = user_context.get('groups', [])
+        logger.info(f"User context: {user_context}")
         if not username:
             raise HTTPException(
                 status_code=400,
@@ -1228,7 +1273,9 @@ async def generate_user_token(
             "iss": JWT_ISSUER,
             "aud": JWT_AUDIENCE,
             "sub": username,
+            "user_id": username, # TODO: get ObjectsID from mongo
             "scope": " ".join(requested_scopes),
+            "groups": user_groups,  # Include user groups from context
             "exp": expires_at,
             "iat": current_time,
             "jti": str(uuid.uuid4()),  # Unique token ID
@@ -1242,7 +1289,14 @@ async def generate_user_token(
             access_payload["description"] = request.description
 
         # Sign the access token using HS256 with shared SECRET_KEY
-        access_token = jwt.encode(access_payload, SECRET_KEY, algorithm='HS256')
+        # Add kid (Key ID) to JWT header for consistency with RS256 tokens
+        headers = {
+            "kid": JWT_SELF_SIGNED_KID,  # Static key ID for self-signed tokens
+            "typ": "JWT",
+            "alg": "HS256"
+        }
+        # Sign the access token using HS256 with shared SECRET_KEY
+        access_token = jwt.encode(access_payload, SECRET_KEY, algorithm='HS256' , headers=headers)
 
         # No refresh tokens - users should configure longer token lifetimes in Keycloak if needed
         refresh_token = None
@@ -1386,64 +1440,9 @@ def main():
 if __name__ == "__main__":
     main()
 
-# Load OAuth2 providers configuration
-def load_oauth2_config():
-    """Load the OAuth2 providers configuration from oauth2_providers.yml"""
-    try:
-        oauth2_file = Path(__file__).parent / "oauth2_providers.yml"
-        with open(oauth2_file, 'r') as f:
-            config = yaml.safe_load(f)
-            
-        # Substitute environment variables in configuration
-        processed_config = substitute_env_vars(config)
-        return processed_config
-    except Exception as e:
-        logger.error(f"Failed to load OAuth2 configuration: {e}")
-        return {"providers": {}, "session": {}, "registry": {}}
-
-def auto_derive_cognito_domain(user_pool_id: str) -> str:
-    """
-    Auto-derive Cognito domain from User Pool ID.
-    
-    Example: us-east-1_KmP5A3La3 → us-east-1kmp5a3la3
-    """
-    if not user_pool_id:
-        return ""
-    
-    # Remove underscore and convert to lowercase
-    domain = user_pool_id.replace('_', '').lower()
-    logger.info(f"Auto-derived Cognito domain '{domain}' from user pool ID '{user_pool_id}'")
-    return domain
-
-def substitute_env_vars(config):
-    """Recursively substitute environment variables in configuration"""
-    if isinstance(config, dict):
-        return {k: substitute_env_vars(v) for k, v in config.items()}
-    elif isinstance(config, list):
-        return [substitute_env_vars(item) for item in config]
-    elif isinstance(config, str) and "${" in config:
-        try:
-            # Handle special case for auto-derived Cognito domain
-            if "COGNITO_DOMAIN:-auto" in config:
-                # Check if COGNITO_DOMAIN is set, if not auto-derive from user pool ID
-                cognito_domain = os.environ.get('COGNITO_DOMAIN')
-                if not cognito_domain:
-                    user_pool_id = os.environ.get('COGNITO_USER_POOL_ID', '')
-                    cognito_domain = auto_derive_cognito_domain(user_pool_id)
-                
-                # Replace the template with the derived domain
-                config = config.replace('${COGNITO_DOMAIN:-auto}', cognito_domain)
-            
-            template = Template(config)
-            return template.substitute(os.environ)
-        except KeyError as e:
-            logger.warning(f"Environment variable not found for template {config}: {e}")
-            return config
-    else:
-        return config
-
-# Global OAuth2 configuration
-OAUTH2_CONFIG = load_oauth2_config()
+# Global OAuth2 configuration using the new config loader
+# This will use the singleton OAuth2ConfigLoader instance
+OAUTH2_CONFIG = get_oauth2_config()
 
 # Initialize SECRET_KEY and signer for session management
 SECRET_KEY = os.environ.get('SECRET_KEY')
@@ -1655,7 +1654,6 @@ async def oauth2_callback(
             
         token_data = await exchange_code_for_token(provider, code, provider_config, auth_server_url)
         logger.info(f"Token data keys: {list(token_data.keys())}")
-        
         # For Cognito and Keycloak, try to extract user info from JWT tokens
         if provider in ["cognito", "keycloak"]:
             try:
@@ -1707,9 +1705,35 @@ async def oauth2_callback(
                     else:
                         logger.warning("No ID token found in Keycloak response, falling back to userInfo")
                         raise ValueError("Missing ID token")
-                    
+
             except Exception as e:
                 logger.warning(f"JWT token validation failed: {e}, falling back to userInfo endpoint")
+                # Fallback to userInfo endpoint
+                user_info = await get_user_info(token_data["access_token"], provider_config)
+                logger.info(f"Raw user info from {provider}: {user_info}")
+                mapped_user = map_user_info(user_info, provider_config)
+                logger.info(f"Mapped user info from userInfo: {mapped_user}")
+        elif provider == "entra":
+            # For Entra ID, prioritize ID token claims over userinfo endpoint
+            try:
+                # For Entra ID, use provider's get_user_info method
+                auth_provider = get_auth_provider('entra')
+
+                user_info = auth_provider.get_user_info(
+                    access_token=token_data.get("access_token"),  # Required for Graph API calls
+                    id_token=token_data.get("id_token")           # Preferred for user identity extraction
+                )
+                mapped_user = {
+                    "username": user_info["username"],
+                    "email": user_info.get("email"),
+                    "name": user_info.get("name"),
+                    "groups": user_info.get("groups", [])
+                }
+                logger.info(f"User info retrieved for Entra ID: {mapped_user['username']}"
+                            f" with {len(mapped_user['groups'])} groups")
+
+            except Exception as e:
+                logger.warning(f"Entra ID token parsing failed: {e}, falling back to userInfo endpoint")
                 # Fallback to userInfo endpoint
                 user_info = await get_user_info(token_data["access_token"], provider_config)
                 logger.info(f"Raw user info from {provider}: {user_info}")
@@ -1739,14 +1763,41 @@ async def oauth2_callback(
         response = RedirectResponse(url=redirect_url, status_code=302)
         
         # Set registry-compatible session cookie
-        response.set_cookie(
-            key="mcp_gateway_session",  # Same as registry SESSION_COOKIE_NAME
-            value=registry_session,
-            max_age=OAUTH2_CONFIG.get("session", {}).get("max_age_seconds", 28800),
-            httponly=OAUTH2_CONFIG.get("session", {}).get("httponly", True),
-            samesite=OAUTH2_CONFIG.get("session", {}).get("samesite", "lax"),
-            secure=OAUTH2_CONFIG.get("session", {}).get("secure", False)
-        )
+        # Check if HTTPS is terminated at load balancer (x-forwarded-proto header)
+        x_forwarded_proto = request.headers.get("x-forwarded-proto", "")
+        is_https = x_forwarded_proto == "https" or request.url.scheme == "https"
+
+        # Only set secure=True if the original request was HTTPS
+        cookie_secure_config = OAUTH2_CONFIG.get("session", {}).get("secure", False)
+        cookie_secure = cookie_secure_config and is_https
+        cookie_samesite = OAUTH2_CONFIG.get("session", {}).get("samesite", "lax")
+        cookie_domain = OAUTH2_CONFIG.get("session", {}).get("domain", "")
+
+        # Handle domain configuration - only use explicitly configured values
+        # Empty string or placeholder means no domain attribute (exact host only)
+        if not cookie_domain or cookie_domain == "${SESSION_COOKIE_DOMAIN}":
+            cookie_domain = None
+            logger.info(f"No cookie domain configured - cookie will be set for exact host only")
+        else:
+            logger.info(f"Using explicitly configured cookie domain: {cookie_domain}")
+
+        logger.info(f"Auth server setting session cookie: secure={cookie_secure} (config={cookie_secure_config}, is_https={is_https}), samesite={cookie_samesite}, domain={cookie_domain or 'not set'}, x-forwarded-proto={x_forwarded_proto}, request_scheme={request.url.scheme}")
+
+        cookie_params = {
+            "key": "mcp_gateway_session",  # Same as registry SESSION_COOKIE_NAME
+            "value": registry_session,
+            "max_age": OAUTH2_CONFIG.get("session", {}).get("max_age_seconds", 28800),
+            "httponly": OAUTH2_CONFIG.get("session", {}).get("httponly", True),
+            "samesite": cookie_samesite,
+            "secure": cookie_secure,
+            "path": "/"  # Ensure cookie is sent for all paths
+        }
+
+        # Only set domain if configured or inferred (for cross-subdomain cookies)
+        if cookie_domain:
+            cookie_params["domain"] = cookie_domain
+
+        response.set_cookie(**cookie_params)
         
         # Clear temporary OAuth2 session
         response.delete_cookie("oauth2_temp_session")

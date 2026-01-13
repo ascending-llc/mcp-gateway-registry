@@ -1,0 +1,297 @@
+name: MCP Gateway Deployment Pipeline
+on:
+  workflow_dispatch:
+    inputs:
+      application:
+        description: 'Application to deploy to'
+        type: choice
+        required: true
+        default: jarvis-demo
+        options:
+          - jarvis
+          - jarvis-demo
+      region:
+        description: 'AWS Region to deploy to'
+        type: string
+        required: true
+        default: us-east-1
+
+
+
+run-name: Deploy MCP Gateway for ${{ inputs.application }}
+
+permissions:
+  id-token: write 
+  contents: read
+jobs:
+  refresh_secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      
+      - name: Install Python dependencies
+        run: |
+          pip install boto3 PyYAML
+
+      - name: Load Application Configuration
+        id: config
+        run: |
+          CONFIG=$(cat .github/workflows/config/applications.json | jq -r --arg app "${{ inputs.application }}" '.[$app]')
+          echo "eks_cluster_name=$(echo $CONFIG | jq -r '.eks_cluster_name')" >> $GITHUB_OUTPUT
+          echo "aws_deploy_role=$(echo $CONFIG | jq -r '.aws_deploy_role')" >> $GITHUB_OUTPUT
+          echo "secret_name=$(echo $CONFIG | jq -r '.secret_name')" >> $GITHUB_OUTPUT
+      
+      - name: Set IAM role to assume
+        id: set-role
+        run: |
+          echo "role=${{ secrets[steps.config.outputs.aws_deploy_role] }}" >> $GITHUB_OUTPUT
+  
+      - name: Assume IAM role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ steps.set-role.outputs.role }}
+          role-session-name: deployment-role-session
+          aws-region: ${{ inputs.region }}
+      
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name ${{ steps.config.outputs.eks_cluster_name }} --region ${{ inputs.region }}
+      
+      - name: Sync mcp gateway env variables
+        env:
+          AWS_REGION: ${{ inputs.region }}
+          SECRET_NAME: ${{ steps.config.outputs.secret_name }}
+        run: |
+          echo "Generating new mcp gateway env YAML..."
+          python .github/workflows/utils/generate_k8s_mcp_gateway_env.py
+
+          echo "Applying new env vars..."
+          kubectl apply -f kubernetes/mcpgateway_env_externalsecret.yaml -n ${{ inputs.application  }}
+
+          echo "Updating env vars in EKS pods..."
+          kubectl annotate es mcpgateway-env force-sync=$(date +%s) --overwrite -n ${{ inputs.application  }}
+
+  build-images:
+    uses: ./.github/workflows/build-images-reusable.yaml
+    needs: refresh_secrets
+    with:
+      region: ${{ inputs.region }}
+    secrets:
+      AWS_DEPLOY_ROLE_ARN: ${{ secrets.SAAS_AWS_DEPLOY_ROLE_ARN }}
+      JARVIS_RELEASE_ACCESS_TOKEN: ${{ secrets.JARVIS_RELEASE_ACCESS_TOKEN }}
+
+  deploy-mcpgateway:
+    runs-on: ubuntu-latest
+    needs: build-images
+    env:
+      DEPLOYMENT_NAME: mcpgateway-gwserver
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: latest
+      
+      - name: Load Application Configuration
+        id: config
+        run: |
+          CONFIG=$(cat .github/workflows/config/applications.json | jq -r --arg app "${{ inputs.application }}" '.[$app]')
+          echo "eks_cluster_name=$(echo $CONFIG | jq -r '.eks_cluster_name')" >> $GITHUB_OUTPUT
+          echo "aws_deploy_role=$(echo $CONFIG | jq -r '.aws_deploy_role')" >> $GITHUB_OUTPUT
+
+      - name: Set IAM role to assume
+        id: set-role
+        run: |
+          echo "role=${{ secrets[steps.config.outputs.aws_deploy_role] }}" >> $GITHUB_OUTPUT
+  
+      - name: Assume IAM role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ steps.set-role.outputs.role }}
+          role-session-name: deployment-role-session
+          aws-region: ${{ inputs.region }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name ${{ steps.config.outputs.eks_cluster_name }} --region ${{ inputs.region }}
+
+      - name: Update backend images on EKS
+        env:
+          image: ${{ steps.login-ecr.outputs.registry }}/jarvis/mcpgateway:${{ github.sha }}
+        run: |
+          kubectl set image deploy/${{ env.DEPLOYMENT_NAME }} mcpgateway-server=$image -n ${{ inputs.application  }}
+
+      - name: Check pod status
+        run: |
+          kubectl rollout status deploy/${{ env.DEPLOYMENT_NAME }} -n ${{ inputs.application  }}
+
+  deploy-registry:
+    runs-on: ubuntu-latest
+    needs: build-images
+    env:
+      DEPLOYMENT_NAME: mcpgateway-registry
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: latest
+      
+      - name: Load Application Configuration
+        id: config
+        run: |
+          CONFIG=$(cat .github/workflows/config/applications.json | jq -r --arg app "${{ inputs.application }}" '.[$app]')
+          echo "eks_cluster_name=$(echo $CONFIG | jq -r '.eks_cluster_name')" >> $GITHUB_OUTPUT
+          echo "aws_deploy_role=$(echo $CONFIG | jq -r '.aws_deploy_role')" >> $GITHUB_OUTPUT
+
+      - name: Set IAM role to assume
+        id: set-role
+        run: |
+          echo "role=${{ secrets[steps.config.outputs.aws_deploy_role] }}" >> $GITHUB_OUTPUT
+  
+      - name: Assume IAM role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ steps.set-role.outputs.role }}
+          role-session-name: deployment-role-session
+          aws-region: ${{ inputs.region }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name ${{ steps.config.outputs.eks_cluster_name }} --region ${{ inputs.region }}
+
+      - name: Update backend images on EKS
+        env:
+          image: ${{ steps.login-ecr.outputs.registry }}/jarvis/registry:${{ github.sha }}
+        run: |
+          kubectl set image deploy/${{ env.DEPLOYMENT_NAME }} mcpgateway-registry=$image -n ${{ inputs.application  }}
+
+      - name: Check pod status
+        run: |
+          kubectl rollout status deploy/${{ env.DEPLOYMENT_NAME }} -n ${{ inputs.application  }}
+
+  deploy-registry-frontend:
+    runs-on: ubuntu-latest
+    needs: build-images
+    env:
+      DEPLOYMENT_NAME: mcpgateway-frontend
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: latest
+      
+      - name: Load Application Configuration
+        id: config
+        run: |
+          CONFIG=$(cat .github/workflows/config/applications.json | jq -r --arg app "${{ inputs.application }}" '.[$app]')
+          echo "eks_cluster_name=$(echo $CONFIG | jq -r '.eks_cluster_name')" >> $GITHUB_OUTPUT
+          echo "aws_deploy_role=$(echo $CONFIG | jq -r '.aws_deploy_role')" >> $GITHUB_OUTPUT
+
+      - name: Set IAM role to assume
+        id: set-role
+        run: |
+          echo "role=${{ secrets[steps.config.outputs.aws_deploy_role] }}" >> $GITHUB_OUTPUT
+  
+      - name: Assume IAM role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ steps.set-role.outputs.role }}
+          role-session-name: deployment-role-session
+          aws-region: ${{ inputs.region }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name ${{ steps.config.outputs.eks_cluster_name }} --region ${{ inputs.region }}
+
+      - name: Update backend images on EKS
+        env:
+          image: ${{ steps.login-ecr.outputs.registry }}/jarvis/registry-frontend:${{ github.sha }}
+        run: |
+          kubectl set image deploy/${{ env.DEPLOYMENT_NAME }} mcpgateway-frontend=$image -n ${{ inputs.application  }}
+
+      - name: Check pod status
+        run: |
+          kubectl rollout status deploy/${{ env.DEPLOYMENT_NAME }} -n ${{ inputs.application  }}
+
+  deploy-auth-server:
+    runs-on: ubuntu-latest
+    needs: build-images
+    env:
+      DEPLOYMENT_NAME: auth-server
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: latest
+      
+      - name: Load Application Configuration
+        id: config
+        run: |
+          CONFIG=$(cat .github/workflows/config/applications.json | jq -r --arg app "${{ inputs.application }}" '.[$app]')
+          echo "eks_cluster_name=$(echo $CONFIG | jq -r '.eks_cluster_name')" >> $GITHUB_OUTPUT
+          echo "aws_deploy_role=$(echo $CONFIG | jq -r '.aws_deploy_role')" >> $GITHUB_OUTPUT
+
+      - name: Set IAM role to assume
+        id: set-role
+        run: |
+          echo "role=${{ secrets[steps.config.outputs.aws_deploy_role] }}" >> $GITHUB_OUTPUT
+  
+      - name: Assume IAM role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ steps.set-role.outputs.role }}
+          role-session-name: deployment-role-session
+          aws-region: ${{ inputs.region }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name ${{ steps.config.outputs.eks_cluster_name }} --region ${{ inputs.region }}
+
+      - name: Update backend images on EKS
+        env:
+          image: ${{ steps.login-ecr.outputs.registry }}/jarvis/auth-server:${{ github.sha }}
+        run: |
+          kubectl set image deploy/${{ env.DEPLOYMENT_NAME }} auth-server=$image -n ${{ inputs.application  }}
+
+      - name: Check pod status
+        run: |
+          kubectl rollout status deploy/${{ env.DEPLOYMENT_NAME }} -n ${{ inputs.application  }}
+

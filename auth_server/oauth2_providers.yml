@@ -34,7 +34,7 @@ providers:
     groups_claim: "cognito:groups"
     email_claim: "email"
     name_claim: "name"
-    enabled: true
+    enabled: false
 
   github:
     display_name: "GitHub"
@@ -70,6 +70,31 @@ providers:
     name_claim: "name"
     enabled: false  # Disabled by default
 
+  entra:
+    display_name: "Microsoft Entra ID"
+    client_id: "${ENTRA_CLIENT_ID}"
+    client_secret: "${ENTRA_CLIENT_SECRET}"
+    # Tenant ID can be specific tenant or 'common' for multi-tenant
+    tenant_id: "${ENTRA_TENANT_ID}"
+    auth_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/authorize"
+    token_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/token"
+    jwks_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/discovery/v2.0/keys"
+    user_info_url: "https://graph.microsoft.com/v1.0/me"
+    logout_url: "https://login.microsoftonline.com/${ENTRA_TENANT_ID}/oauth2/v2.0/logout"
+    scopes: ["openid", "profile", "email", "User.Read"]
+    response_type: "code"
+    grant_type: "authorization_code"
+    # Entra ID specific claim mapping (with sensible defaults)
+    username_claim: "${ENTRA_USERNAME_CLAIM:-preferred_username}"
+    groups_claim: "${ENTRA_GROUPS_CLAIM:-groups}"
+    email_claim: "${ENTRA_EMAIL_CLAIM:-email}"
+    name_claim: "${ENTRA_NAME_CLAIM:-name}"
+    # Microsoft Graph API base URL (for sovereign clouds)
+    graph_url: "${ENTRA_GRAPH_URL:-https://graph.microsoft.com}"
+    # M2M (Machine-to-Machine) default scope
+    m2m_scope: "${ENTRA_M2M_SCOPE:-https://graph.microsoft.com/.default}"
+    enabled: true
+
 # Default session settings
 session:
   max_age_seconds: 28800  # 8 hours
@@ -77,6 +102,7 @@ session:
   secure: true  # Set to false for development
   httponly: true
   samesite: "lax"
+  domain: "${SESSION_COOKIE_DOMAIN}"  # Set to your domain (with leading dot) to share cookies across subdomains, e.g., ".example.com"
 
 # Registry integration settings
 registry:

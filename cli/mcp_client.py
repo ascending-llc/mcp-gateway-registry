@@ -69,8 +69,9 @@ def _check_token_expiration(
             print("")
             print("Please regenerate your token using one of these methods:")
             print("")
-            print("  1. Generate ingress token (recommended):")
-            print("     ./credentials-provider/generate_creds.sh")
+            print("  1. For LOB bot agents (recommended):")
+            print("     ./keycloak/setup/generate-agent-token.sh lob1-bot")
+            print("     ./keycloak/setup/generate-agent-token.sh lob2-bot")
             print("")
             print("  2. Use token file (for Cognito/OAuth):")
             print("     --token-file /path/to/your/.token_file")
@@ -91,12 +92,29 @@ def _check_token_expiration(
 
 
 def _load_token_from_file(file_path: str) -> Optional[str]:
-    """Load access token from a file"""
+    """Load access token from a file
+
+    Supports two formats:
+    1. Plain JWT token (single line)
+    2. JSON object with 'access_token' field (from agent token generation)
+    """
     try:
         with open(file_path, 'r') as f:
-            token = f.read().strip()
-            if token:
-                return token
+            content = f.read().strip()
+            if not content:
+                return None
+
+            # Try to parse as JSON first (for agent token files)
+            try:
+                token_data = json.loads(content)
+                if isinstance(token_data, dict) and 'access_token' in token_data:
+                    return token_data['access_token']
+            except json.JSONDecodeError:
+                # Not JSON, treat as plain token string
+                pass
+
+            # Return as-is (plain JWT token)
+            return content if content else None
     except FileNotFoundError:
         print(f"Warning: Token file not found: {file_path}")
     except Exception as e:
@@ -167,8 +185,9 @@ Examples:
 
 Authentication (priority order):
   1. --token-file: Path to file containing access token
-  2. Environment variables: CLIENT_ID, CLIENT_SECRET, KEYCLOAK_URL, KEYCLOAK_REALM
-  3. Ingress token: Automatically loaded from ~/.mcp/ingress_token if available
+  2. OAUTH_TOKEN environment variable: Direct JWT token
+  3. Environment variables: CLIENT_ID, CLIENT_SECRET, KEYCLOAK_URL, KEYCLOAK_REALM
+  4. Ingress token: Automatically loaded from ~/.mcp/ingress_token if available
         """)
     parser.add_argument('--url', default='http://localhost/mcpgw/mcp',
                        help='Gateway URL (default: %(default)s)')
@@ -181,14 +200,18 @@ Authentication (priority order):
 
     args = parser.parse_args()
 
-    # Load authentication (priority: token-file > M2M > ingress token)
+    # Load authentication (priority: token-file > OAUTH_TOKEN env var > M2M > ingress token)
     access_token = None
 
     # Try loading from file first if specified
     if args.token_file:
         access_token = _load_token_from_file(args.token_file)
 
-    # Fall back to M2M credentials if no token file or file loading failed
+    # Fall back to OAUTH_TOKEN environment variable if no token file or file loading failed
+    if not access_token:
+        access_token = os.getenv('OAUTH_TOKEN')
+
+    # Fall back to M2M credentials if no OAUTH_TOKEN
     if not access_token:
         access_token = _load_m2m_credentials()
 
@@ -203,6 +226,8 @@ Authentication (priority order):
             if client.access_token:
                 if args.token_file:
                     print(f"✓ Token file authentication successful ({args.token_file})")
+                elif os.getenv('OAUTH_TOKEN'):
+                    print("✓ OAuth token authentication successful (OAUTH_TOKEN env var)")
                 elif access_token:
                     print("✓ M2M authentication successful")
                 else:

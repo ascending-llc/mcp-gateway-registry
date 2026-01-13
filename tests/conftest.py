@@ -17,9 +17,8 @@ from httpx import AsyncClient
 from registry.main import app
 from registry.core.config import Settings
 from registry.services.server_service import ServerService
-from registry.search.service import FaissService
 from registry.health.service import HealthMonitoringService
-from registry.core.nginx_service import NginxConfigService
+from registry.services.search import VectorSearchService
 
 # Import test utilities
 from tests.fixtures.factories import (
@@ -77,7 +76,6 @@ def mock_settings(test_settings: Settings, monkeypatch):
     monkeypatch.setattr("registry.services.server_service.settings", test_settings)
     monkeypatch.setattr("registry.search.service.settings", test_settings)
     monkeypatch.setattr("registry.health.service.settings", test_settings)
-    monkeypatch.setattr("registry.core.nginx_service.settings", test_settings)
     return test_settings
 
 
@@ -91,10 +89,10 @@ def server_service(mock_settings: Settings) -> ServerService:
 @pytest.fixture
 def mock_faiss_service() -> Mock:
     """Create a mock FAISS service."""
-    mock_service = Mock(spec=FaissService)
+    mock_service = Mock(spec=VectorSearchService)
     mock_service.initialize = AsyncMock()
     mock_service.add_or_update_service = AsyncMock()
-    mock_service.search_services = AsyncMock(return_value=[])
+    mock_service.search = AsyncMock(return_value=[])
     mock_service.save_data = AsyncMock()
     return mock_service
 
@@ -103,13 +101,6 @@ def mock_faiss_service() -> Mock:
 def health_service() -> HealthMonitoringService:
     """Create a fresh health monitoring service for testing."""
     service = HealthMonitoringService()
-    return service
-
-
-@pytest.fixture
-def nginx_service(mock_settings: Settings) -> NginxConfigService:
-    """Create a fresh nginx service for testing."""
-    service = NginxConfigService()
     return service
 
 

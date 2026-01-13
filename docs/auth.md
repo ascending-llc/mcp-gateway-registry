@@ -5,11 +5,29 @@ The MCP Gateway Registry provides enterprise-ready authentication and authorizat
 ## Quick Navigation
 
 **I want to...**
+- [Manage A2A agents via CLI](#a2a-agent-management) → Agent Management
 - [Build an AI agent with authentication](#quick-start-for-ai-agents) → Quick Start
-- [Understand the authentication architecture](#authentication-architecture) → Architecture 
+- [Understand the authentication architecture](#authentication-architecture) → Architecture
 - [Set up external service integration](#external-service-integration) → Egress Auth
 - [Configure fine-grained permissions](#fine-grained-access-control-fgac) → FGAC
 - [See all configuration options](#configuration-reference) → Reference
+
+---
+
+## A2A Agent Management
+
+For managing A2A agents through the CLI using the `mcp-gateway-m2m` service account:
+
+**See: [A2A Agent Management Guide](a2a-agent-management.md)**
+
+Quick commands:
+```bash
+uv run python cli/agent_mgmt.py register cli/examples/code_reviewer_agent.json
+uv run python cli/agent_mgmt.py list
+uv run python cli/agent_mgmt.py get /code-reviewer
+```
+
+The `mcp-gateway-m2m` service account is automatically configured with full agent management permissions.
 
 ---
 
@@ -40,6 +58,14 @@ KEYCLOAK_M2M_CLIENT_SECRET=your_keycloak_m2m_client_secret
 # INGRESS_OAUTH_USER_POOL_ID=us-east-1_XXXXXXXXX
 # INGRESS_OAUTH_CLIENT_ID=your_cognito_client_id
 # INGRESS_OAUTH_CLIENT_SECRET=your_cognito_client_secret
+
+# Alternative: Microsoft Entra ID (if AUTH_PROVIDER=entra)
+# ENTRA_TENANT_ID=your-tenant-id-or-common
+# ENTRA_CLIENT_ID=your-application-client-id
+# ENTRA_CLIENT_SECRET=your-client-secret-value
+# ENTRA_TOKEN_KIND=id  # 'id' or 'access' - which token to use for user info
+# ENTRA_GRAPH_URL=https://graph.microsoft.com  # For sovereign clouds
+# ENTRA_M2M_SCOPE=https://graph.microsoft.com/.default  # M2M scope
 
 # Egress Authentication (Optional - for external services)
 EGRESS_OAUTH_CLIENT_ID_1=your_external_provider_client_id

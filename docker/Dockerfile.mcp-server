@@ -1,5 +1,10 @@
-# Generic MCP Server Dockerfile - each server has pyproject.toml and server.py
+# Generic MCP Server Dockerfile for servers in the servers/ directory
+# Each server must have pyproject.toml and server.py
+# Build context can be either the server directory or repo root (for servers needing registry module)
 FROM python:3.12-slim
+
+# Build arg for server directory (when building from repo root)
+ARG SERVER_DIR
 
 ENV PYTHONUNBUFFERED=1
 
@@ -14,20 +19,31 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Build argument for server path
-ARG SERVER_PATH
+# Copy server files - handle both build contexts
+# If SERVER_DIR is set (building from root), copy from that directory
+# Otherwise copy from current context (building from server directory)
+COPY ${SERVER_DIR:-.}/ /app/
 
-# Copy the specific MCP server files
-COPY ${SERVER_PATH}/ /app/
+# Copy registry module for embeddings support (only when building from root with SERVER_DIR set)
+# This is required for servers that use the embeddings client (like mcpgw)
+# Use a conditional copy that won't fail if registry doesn't exist
+COPY --chown=root:root . /tmp/build-context/
+RUN if [ -d /tmp/build-context/registry ]; then \
+        cp -r /tmp/build-context/registry /app/registry && \
+        echo "Registry module copied successfully"; \
+    else \
+        echo "Registry module not found in build context (expected for non-mcpgw servers)"; \
+    fi && \
+    rm -rf /tmp/build-context
 
 # Install uv and setup Python environment
 RUN pip install uv && \
     uv venv .venv --python 3.12
 
-# Install dependencies from pyproject.toml
+# Install dependencies from pyproject.toml (copied from SERVER_PATH)
 RUN . .venv/bin/activate && \
-    if [ -f pyproject.toml ]; then \
-        uv pip install --requirement pyproject.toml; \
+    if [ -f /app/pyproject.toml ]; then \
+        uv pip install --requirement /app/pyproject.toml; \
     fi
 
 # Expose default port (can be overridden by environment variable)

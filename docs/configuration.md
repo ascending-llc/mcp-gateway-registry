@@ -27,6 +27,7 @@ The MCP Gateway Registry supports multiple authentication providers. Choose one 
 
 - **`keycloak`**: Enterprise-grade open-source identity and access management with individual agent audit trails
 - **`cognito`**: Amazon managed authentication service
+- **`entra`**: Microsoft Entra ID (formerly Azure Active Directory) for Microsoft 365 and Azure integration
 
 Based on your selection, configure the corresponding provider-specific variables below.
 
@@ -37,7 +38,7 @@ Based on your selection, configure the corresponding provider-specific variables
 | `REGISTRY_URL` | Public URL of the MCP Gateway Registry | `https://mcpgateway.ddns.net` | ✅ |
 | `ADMIN_USER` | Registry admin username | `admin` | ✅ |
 | `ADMIN_PASSWORD` | Registry admin password | `your-secure-password` | ✅ |
-| `AUTH_PROVIDER` | Authentication provider (`cognito` or `keycloak`) | `keycloak` | ✅ |
+| `AUTH_PROVIDER` | Authentication provider (`keycloak`, `cognito`, or `entra`) | `keycloak` | ✅ |
 | `AWS_REGION` | AWS region for services | `us-east-1` | ✅ |
 
 ### Keycloak Configuration (if AUTH_PROVIDER=keycloak)
@@ -104,6 +105,90 @@ cat keycloak/setup/keycloak-client-secrets.txt
 | `COGNITO_CLIENT_ID` | Amazon Cognito App Client ID | `3aju04s66t...` | ✅ |
 | `COGNITO_CLIENT_SECRET` | Amazon Cognito App Client Secret | `85ps32t55df39hm61k966fqjurj...` | ✅ |
 | `COGNITO_DOMAIN` | Cognito domain (optional) | `auto` | Optional |
+
+### Microsoft Entra ID Configuration (if AUTH_PROVIDER=entra)
+
+#### Required Variables
+
+| Variable | Description | Example | Required |
+|----------|-------------|---------|----------|
+| `ENTRA_TENANT_ID` | Azure AD tenant ID (or 'common' for multi-tenant) | `12345678-1234-1234-1234-123456789012` | ✅ |
+| `ENTRA_CLIENT_ID` | Azure AD application (client) ID | `87654321-4321-4321-4321-210987654321` | ✅ |
+| `ENTRA_CLIENT_SECRET` | Azure AD client secret value | `abc123~XYZ...` | ✅ |
+
+#### Optional Configuration Variables
+
+| Variable | Description | Example | Default |
+|----------|-------------|---------|---------|
+| `ENTRA_TOKEN_KIND` | Which token to use for user info extraction ('id' or 'access') | `id` | `id` |
+| `ENTRA_GRAPH_URL` | Microsoft Graph API base URL (for sovereign clouds) | `https://graph.microsoft.com` | `https://graph.microsoft.com` |
+| `ENTRA_M2M_SCOPE` | Default scope for M2M authentication | `https://graph.microsoft.com/.default` | `https://graph.microsoft.com/.default` |
+| `ENTRA_USERNAME_CLAIM` | JWT claim to use for username | `preferred_username` | `preferred_username` |
+| `ENTRA_EMAIL_CLAIM` | JWT claim to use for email | `email,upn,preferred_username` | `email` |
+| `ENTRA_NAME_CLAIM` | JWT claim to use for display name | `name` | `name` |
+| `ENTRA_GROUPS_CLAIM` | JWT claim to use for groups | `groups` | `groups` |
+
+**Setup Instructions**
+
+For detailed instructions on obtaining Entra ID credentials and configuring your Azure AD app registration, see the [Microsoft Entra ID Setup Guide](entra-id-setup.md).
+
+**Quick Reference:**
+- **Azure Portal**: [portal.azure.com](https://portal.azure.com) → Azure Active Directory → App registrations
+- **Required Permissions**: `User.Read`, `openid`, `profile`, `email`
+- **Redirect URI**: `https://your-registry-url/auth/callback`
+- **Sovereign Clouds**: Update both `ENTRA_GRAPH_URL` and `ENTRA_M2M_SCOPE` (see setup guide)
+### Session Cookie Security Configuration
+
+**CRITICAL:** These settings control how session cookies are transmitted and shared. Incorrect configuration will cause login failures.
+
+| Variable | Description | Example | Required | Default |
+|----------|-------------|---------|----------|---------|
+| `SESSION_COOKIE_SECURE` | Enable HTTPS-only cookie transmission | `false` (localhost)<br/>`true` (production) | ✅ | `false` |
+| `SESSION_COOKIE_DOMAIN` | Cookie domain for cross-subdomain sharing | `""` (single domain)<br/>`.example.com` (cross-subdomain) | ❌ | Empty |
+
+#### SESSION_COOKIE_SECURE - Critical for Your Environment
+
+**YOU MUST SET THIS CORRECTLY OR LOGIN WILL FAIL:**
+
+**For Local Development (localhost via HTTP):**
+```bash
+SESSION_COOKIE_SECURE=false  # MUST be false
+```
+- Localhost runs over HTTP (not HTTPS)
+- Cookies with `secure=true` are ONLY sent over HTTPS
+- Setting this to `true` on localhost = **login will fail** ❌
+
+**For Production with HTTPS:**
+```bash
+SESSION_COOKIE_SECURE=true  # MUST be true
+```
+- Production deployments use HTTPS
+- Cookies must have `secure=true` to prevent session hijacking
+- Setting this to `false` in production = **security vulnerability** ❌
+
+#### SESSION_COOKIE_DOMAIN - When to Set This
+
+**Most deployments should leave this EMPTY** (default behavior = safest):
+
+```bash
+SESSION_COOKIE_DOMAIN=  # Empty string or unset
+```
+
+**Only set this if you need cross-subdomain authentication:**
+
+| Deployment Type | Example Domains | SESSION_COOKIE_DOMAIN |
+|----------------|-----------------|----------------------|
+| **Single domain** | `mcpgateway.ddns.net` | `""` (empty) |
+| **Cross-subdomain** | `auth.example.com`<br/>`registry.example.com` | `.example.com` |
+| **Multi-level domains** | `registry.region-1.corp.company.internal` | `.corp.company.internal` |
+
+**Important Security Notes:**
+- Empty domain = cookie scoped to exact host only (safest)
+- Set domain only when you control ALL subdomains
+- Never set to public suffixes (`.com`, `.net`, `.ddns.net`)
+- Domain must start with a dot (`.example.com`)
+
+**See Also:** [Cookie Security Design Documentation](design/cookie-security-design.md) for detailed security analysis and deployment scenarios.
 
 ### Optional Variables
 
@@ -420,11 +505,28 @@ When using Keycloak as the authentication provider, the following configuration 
 
 ### Common Issues
 
-1. **Missing environment variables**: Check that all required variables are set in the appropriate `.env` files
-2. **Invalid credentials**: Verify OAuth client IDs and secrets with providers
-3. **Network connectivity**: Ensure firewall rules allow OAuth callback URLs
-4. **Token expiration**: Use the credential refresh scripts to update expired tokens
-5. **Scope mismatches**: Verify requested OAuth scopes match provider configurations
+1. **Login redirects back to login page**
+   - **Most Common Cause:** `SESSION_COOKIE_SECURE=true` but accessing via HTTP
+   - **Solution for localhost:** Set `SESSION_COOKIE_SECURE=false` in `.env`
+   - **Solution for production:** Ensure HTTPS is properly configured
+   - **Check:** Browser dev tools → Application → Cookies (cookie should be present)
+   - **Check:** Server logs for `Auth server setting session cookie: secure=...`
+
+2. **Missing environment variables**: Check that all required variables are set in the appropriate `.env` files
+
+3. **Invalid credentials**: Verify OAuth client IDs and secrets with providers
+
+4. **Network connectivity**: Ensure firewall rules allow OAuth callback URLs
+
+5. **Token expiration**: Use the credential refresh scripts to update expired tokens
+
+6. **Scope mismatches**: Verify requested OAuth scopes match provider configurations
+
+7. **Session cookie not being sent by browser**
+   - Check cookie domain matches your hostname
+   - Verify `SESSION_COOKIE_DOMAIN` is empty for single-domain deployments
+   - Check browser third-party cookie settings
+   - Inspect cookie attributes in browser dev tools
 
 ### Validation Commands
 

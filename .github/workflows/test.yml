@@ -40,19 +40,19 @@ jobs:
 
     - name: 🔍 Check dependencies
       run: |
-        python scripts/test.py check
+        pip check
 
     - name: 🧪 Run unit tests
       run: |
-        python scripts/test.py unit
+        pytest tests/unit -v
 
     - name: 🔗 Run integration tests  
       run: |
-        python scripts/test.py integration
+        pytest tests/integration -v
 
     - name: 📊 Generate coverage report
       run: |
-        python scripts/test.py coverage
+        pytest --cov=registry --cov-report=xml --cov-report=html
 
     - name: 📤 Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -63,13 +63,13 @@ jobs:
         fail_ci_if_error: false
 
     - name: 📄 Upload coverage reports
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: coverage-report-${{ matrix.python-version }}
         path: htmlcov/
 
     - name: 📋 Upload test reports
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: test-reports-${{ matrix.python-version }}
@@ -98,60 +98,60 @@ jobs:
         bandit -r registry/ -f json -o bandit-report.json || true
 
     - name: 📋 Upload security report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: security-report
         path: bandit-report.json
 
-  domain-tests:
-    name: "🏗️ Domain Tests"
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        domain: [auth, servers, search, health, core]
-      fail-fast: false
+  # domain-tests:
+  #   name: "🏗️ Domain Tests"
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     matrix:
+  #       domain: [auth, servers, search, health, core]
+  #     fail-fast: false
 
-    steps:
-    - name: 📥 Checkout code
-      uses: actions/checkout@v4
+  #   steps:
+  #   - name: 📥 Checkout code
+  #     uses: actions/checkout@v4
 
-    - name: 🐍 Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.12"
+  #   - name: 🐍 Set up Python
+  #     uses: actions/setup-python@v4
+  #     with:
+  #       python-version: "3.12"
 
-    - name: 📦 Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e .[dev]
+  #   - name: 📦 Install dependencies
+  #     run: |
+  #       python -m pip install --upgrade pip
+  #       pip install -e .[dev]
 
-    - name: 🏗️ Test ${{ matrix.domain }} domain
-      run: |
-        python scripts/test.py ${{ matrix.domain }}
+  #   - name: 🏗️ Test ${{ matrix.domain }} domain
+  #     run: |
+  #       python scripts/test.py ${{ matrix.domain }}
 
-  fast-feedback:
-    name: "⚡ Fast Feedback"
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+  # fast-feedback:
+  #   name: "⚡ Fast Feedback"
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'pull_request'
 
-    steps:
-    - name: 📥 Checkout code
-      uses: actions/checkout@v4
+  #   steps:
+  #   - name: 📥 Checkout code
+  #     uses: actions/checkout@v4
 
-    - name: 🐍 Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.12"
+  #   - name: 🐍 Set up Python
+  #     uses: actions/setup-python@v4
+  #     with:
+  #       python-version: "3.12"
 
-    - name: 📦 Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e .[dev]
+  #   - name: 📦 Install dependencies
+  #     run: |
+  #       python -m pip install --upgrade pip
+  #       pip install -e .[dev]
 
-    - name: ⚡ Run fast tests
-      run: |
-        python scripts/test.py fast
+  #   - name: ⚡ Run fast tests
+  #     run: |
+  #       python scripts/test.py fast
 
   summary:
     name: "📋 Test Summary"

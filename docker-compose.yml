@@ -2,21 +2,18 @@ version: '3.8'
 
 services:
   # Registry service (includes nginx, SSL, FAISS, models)
-  registry:
+  mcpgateway-registry:
     build:
       context: .
       dockerfile: docker/Dockerfile.registry
+      args:
+        TOOL_DISCOVERY_MODE: ${TOOL_DISCOVERY_MODE:-embedded}
+        BUILD_VERSION: ${BUILD_VERSION:-}
+        SCHEMA_VERSION: ${SCHEMA_VERSION:-}
+        GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     environment:
-      - SECRET_KEY=${SECRET_KEY}
-      - ADMIN_USER=${ADMIN_USER:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      - AUTH_SERVER_URL=${AUTH_SERVER_URL}
-      - AUTH_SERVER_EXTERNAL_URL=${AUTH_SERVER_EXTERNAL_URL}
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
-      - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
-      - COGNITO_CLIENT_SECRET=${COGNITO_CLIENT_SECRET}
-      - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - HEALTH_CHECK_INTERVAL_SECONDS=${HEALTH_CHECK_INTERVAL_SECONDS:-30}
       - SRE_GATEWAY_AUTH_TOKEN=${SRE_GATEWAY_AUTH_TOKEN}
@@ -25,54 +22,79 @@ services:
       - METRICS_SERVICE_URL=http://metrics-service:8890
       - METRICS_API_KEY=${METRICS_API_KEY_REGISTRY}
       - METRICS_API_KEY_NGINX=${METRICS_API_KEY_REGISTRY}
-      # Keycloak configuration
-      - AUTH_PROVIDER=${AUTH_PROVIDER:-cognito}
-      - KEYCLOAK_ENABLED=${KEYCLOAK_ENABLED:-false}
-      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080}
-      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-mcp-gateway}
-      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-mcp-gateway-web}
-      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
-      - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
-      - KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD}
-      - KEYCLOAK_M2M_CLIENT_ID=${KEYCLOAK_M2M_CLIENT_ID}
-      - KEYCLOAK_M2M_CLIENT_SECRET=${KEYCLOAK_M2M_CLIENT_SECRET}
-      - OTEL_SERVICE_NAME=registry
-      - OTEL_OTLP_ENDPOINT=http://otel-collector:4318
+      - AUTH_SERVER_URL=http://auth-server:8888
+      # External Registry Configuration
+      - EXTERNAL_REGISTRY_TAGS=${EXTERNAL_REGISTRY_TAGS:-anthropic-registry,workday-asor}
+      - ASOR_ACCESS_TOKEN=${ASOR_ACCESS_TOKEN}
+      - ASOR_CLIENT_CREDENTIALS=${ASOR_CLIENT_CREDENTIALS}
+      # Security Scanning Configuration
+      - SECURITY_SCAN_ENABLED=${SECURITY_SCAN_ENABLED:-true}
+      - SECURITY_SCAN_ON_REGISTRATION=${SECURITY_SCAN_ON_REGISTRATION:-true}
+      - SECURITY_BLOCK_UNSAFE_SERVERS=${SECURITY_BLOCK_UNSAFE_SERVERS:-true}
+      - SECURITY_ANALYZERS=${SECURITY_ANALYZERS:-yara}
+      - SECURITY_SCAN_TIMEOUT=${SECURITY_SCAN_TIMEOUT:-60}
+      - SECURITY_ADD_PENDING_TAG=${SECURITY_ADD_PENDING_TAG:-true}
+      - MCP_SCANNER_LLM_API_KEY=${MCP_SCANNER_LLM_API_KEY}
+      - MONGO_URI=mongodb://registry-mongodb:27017/jarvis
+      # Embeddings Configuration
+      # - EMBEDDINGS_PROVIDER=${EMBEDDINGS_PROVIDER:-sentence-transformers}
+      # - EMBEDDINGS_MODEL_NAME=${EMBEDDINGS_MODEL_NAME:-all-MiniLM-L6-v2}
+      # - EMBEDDINGS_MODEL_DIMENSIONS=${EMBEDDINGS_MODEL_DIMENSIONS:-384}
+      # - EMBEDDINGS_API_KEY=${EMBEDDINGS_API_KEY}
+      # - EMBEDDINGS_API_BASE=${EMBEDDINGS_API_BASE}
+      # - EMBEDDINGS_AWS_REGION=${EMBEDDINGS_AWS_REGION:-us-east-1}
+    ports:
+      - "7860:7860"
+    volumes:
+      - ${APP_HOME}/mcp-gateway/servers:/app/registry/servers
+      - ${APP_HOME}/mcp-gateway/agents:/app/registry/agents
+      - ${APP_HOME}/mcp-gateway/data/models:/app/data/models
+      - ${APP_HOME}/mcp-gateway/logs:/app/logs
+      - ${APP_HOME}/mcp-gateway/security_scans:/app/security_scans
+      - ${APP_HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
+      - ${APP_HOME}/mcp-gateway/federation.json:/app/config/federation.json
+      - ${APP_HOME}/mcp-gateway/ssl:/etc/ssl:ro
+    depends_on:
+      auth-server:
+        condition: service_started
+      metrics-service:
+        condition: service_healthy
+      weaviate:
+        condition: service_healthy
+      registry-mongodb:
+        condition: service_healthy
+      registry-redis:
+        condition: service_started
+    restart: unless-stopped
+    env_file:
+      - .env
+    profiles:
+      - full
+
+  # Registry Frontend
+  registry-frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.registry-frontend
+    environment:
+      - NGINX_BASE_PATH=${NGINX_BASE_PATH:-}
+      - AUTH_SERVER_URL=http://auth-server:8888
     ports:
       - "80:80"
       - "443:443"
-      - "7860:7860"
-      - "9464:9464"  # Prometheus metrics
-    volumes:
-      - ${HOME}/mcp-gateway/servers:/app/registry/servers
-      - ${HOME}/mcp-gateway/models:/app/registry/models
-      - ${HOME}/mcp-gateway/logs:/app/logs
-      - ${HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
-      - ${HOME}/mcp-gateway/ssl:/etc/ssl:ro
     depends_on:
-      - auth-server
-      - metrics-service
+      - mcpgateway-registry
     restart: unless-stopped
-
-  otel-collector:
-    image: otel/opentelemetry-collector:latest
-    command: ["--config=/etc/otel-collector-config.yaml"]
-    volumes:
-      - ./config/otel-collector-config.yaml:/etc/otel-collector-config.yaml
-    ports:
-      - "1888:1888"   # pprof extension
-      - "9888:8888"   # <--- CHANGED: Host port 9888 maps to container 8888 (Internal metrics)
-      - "8889:8889"   # Prometheus exporter
-      - "13133:13133" # health_check extension
-      - "4317:4317"   # OTLP gRPC receiver
-      - "4318:4318"   # OTLP HTTP receiver
-      - "55679:55679" # zpages extension
-
+    env_file:
+      - .env
+    profiles:
+      - full
+  
   # Metrics Collection Service
   metrics-service:
     build:
-      context: .
-      dockerfile: metrics-service/Dockerfile
+      context: metrics-service
+      dockerfile: Dockerfile
     environment:
       - METRICS_SERVICE_PORT=8890
       - METRICS_SERVICE_HOST=0.0.0.0
@@ -90,15 +112,57 @@ services:
       - "9465:9465"  # Prometheus metrics endpoint
     volumes:
       - metrics-db-data:/var/lib/sqlite
-      - ${HOME}/mcp-gateway/logs:/app/logs
+      - ${APP_HOME}/mcp-gateway/logs:/app/logs
     depends_on:
       - metrics-db
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8890/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:8890/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
+    profiles:
+      - full
+      - dev
+
+  # MongoDB Database
+  registry-mongodb:
+    container_name: registry-mongodb
+    image: mongo:8.0.17
+    restart: always
+    #user: "${UID:-1000}:${GID:-1000}" # The default user does not have permission to run the program on the mount path.
+    environment:
+      - MONGO_INITDB_DATABASE=${MONGODB_DB_NAME:-jarvis}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+      - mongodb-config:/data/configdb
+    command: mongod --noauth
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    profiles:
+      - full
+      - dev
+
+  registry-redis:
+    container_name: registry-redis
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   # Auth service (separate and scalable)
   auth-server:
@@ -106,24 +170,12 @@ services:
       context: .
       dockerfile: docker/Dockerfile.auth
     environment:
-      - REGISTRY_URL=${REGISTRY_URL}
-      - SECRET_KEY=${SECRET_KEY}
-      - ADMIN_USER=${ADMIN_USER:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
-      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
-      - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
-      - COGNITO_CLIENT_SECRET=${COGNITO_CLIENT_SECRET}
-      - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
-      - COGNITO_DOMAIN=${COGNITO_DOMAIN:-auto}
       - AWS_REGION=${AWS_REGION:-us-east-1}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       # Metrics configuration
       - METRICS_SERVICE_URL=http://metrics-service:8890
       - METRICS_API_KEY=${METRICS_API_KEY_AUTH_SERVER}
       # Keycloak configuration
-      - AUTH_PROVIDER=${AUTH_PROVIDER:-cognito}  # 'cognito' or 'keycloak'
+      - AUTH_PROVIDER=${AUTH_PROVIDER:-cognito}  # 'cognito' or 'keycloak' or 'entra'
       - KEYCLOAK_ENABLED=${KEYCLOAK_ENABLED:-false}
       - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080}
       - KEYCLOAK_EXTERNAL_URL=${KEYCLOAK_EXTERNAL_URL:-http://localhost:8080}
@@ -132,78 +184,121 @@ services:
       - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
       - KEYCLOAK_M2M_CLIENT_ID=${KEYCLOAK_M2M_CLIENT_ID:-mcp-gateway-m2m}
       - KEYCLOAK_M2M_CLIENT_SECRET=${KEYCLOAK_M2M_CLIENT_SECRET}
+      # Microsoft Entra ID (Azure AD) configuration
+      - ENTRA_TENANT_ID=${ENTRA_TENANT_ID}
+      - ENTRA_CLIENT_ID=${ENTRA_CLIENT_ID}
+      - ENTRA_CLIENT_SECRET=${ENTRA_CLIENT_SECRET}
+      # Optional: Claim mappings - customize based on your Entra ID setup
+      - ENTRA_USERNAME_CLAIM=${ENTRA_USERNAME_CLAIM:-preferred_username}
+      - ENTRA_GROUPS_CLAIM=${ENTRA_GROUPS_CLAIM:-groups}
+      - ENTRA_EMAIL_CLAIM=${ENTRA_EMAIL_CLAIM:-upn}
+      - ENTRA_NAME_CLAIM=${ENTRA_NAME_CLAIM:-name}
+      - ENTRA_ROLE_TOKEN_KIND=${ENTRA_ROLE_TOKEN_KIND:-id}
     ports:
       - "8888:8888"
     volumes:
-      - ${HOME}/mcp-gateway/logs:/app/logs
-      - ${HOME}/mcp-gateway/auth_server/scopes.yml:/app/scopes.yml
+      - ${APP_HOME}/mcp-gateway/logs:/app/logs
+      - ${APP_HOME}/mcp-gateway/auth_server/scopes.yml:/app/scopes.yml
     restart: unless-stopped
+    env_file:
+      - .env
+    profiles:
+      - full
+      - dev
 
   # Current Time MCP Server
   currenttime-server:
     build:
-      context: .
-      dockerfile: docker/Dockerfile.mcp-server
-      args:
-        SERVER_PATH: servers/currenttime
+      context: servers/currenttime
+      dockerfile: ../../docker/Dockerfile.mcp-server
     environment:
       - PORT=8000
       - MCP_TRANSPORT=streamable-http
     ports:
       - "8000:8000"
     restart: unless-stopped
+    profiles:
+      - full
+      - dev
 
   # Financial Info MCP Server
   fininfo-server:
     build:
-      context: .
-      dockerfile: docker/Dockerfile.mcp-server
-      args:
-        SERVER_PATH: servers/fininfo
+      context: servers/fininfo
+      dockerfile: ../../docker/Dockerfile.mcp-server
     environment:
       - PORT=8001
       - SECRET_KEY=${SECRET_KEY}
     volumes:
-      - ${HOME}/mcp-gateway/secrets/fininfo/:/app/fininfo/
+      - ${APP_HOME}/mcp-gateway/secrets/fininfo/:/app/fininfo/
     ports:
       - "8001:8001"
     restart: unless-stopped
+    profiles:
+      - full
 
   # MCP Gateway Server
   mcpgw-server:
     build:
       context: .
-      dockerfile: docker/Dockerfile.mcp-server
+      dockerfile: docker/Dockerfile.mcpgw
       args:
-        SERVER_PATH: servers/mcpgw
+        TOOL_DISCOVERY_MODE: ${TOOL_DISCOVERY_MODE:-embedded}
+        BUILD_VERSION: ${BUILD_VERSION:-}
+        SCHEMA_VERSION: ${SCHEMA_VERSION:-}
+        GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     environment:
       - PORT=8003
-      - REGISTRY_BASE_URL=http://registry:7860
+      - REGISTRY_BASE_URL=http://mcpgateway-registry:7860
       - REGISTRY_USERNAME=${ADMIN_USER:-admin}
       - REGISTRY_PASSWORD=${ADMIN_PASSWORD}
+      - JWT_SECRET_KEY=${SECRET_KEY}
+      - WEAVIATE_HOST=weaviate
+      # MongoDB configuration
+      - MONGO_URI=mongodb://registry-mongodb:27017/jarvis
     volumes:
-      - ${HOME}/mcp-gateway/servers:/app/registry/servers
-      - ${HOME}/mcp-gateway/models:/app/registry/models
-      - ${HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
+      - ${APP_HOME}/mcp-gateway/servers:/app/registry/servers
+      - ${APP_HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
     ports:
       - "8003:8003"
-    depends_on:
-      - registry
+    #    depends_on:
+    #      - registry
     restart: unless-stopped
+    env_file:
+      - .env
+    profiles:
+      - full
 
   # Real Server Fake Tools MCP Server
   realserverfaketools-server:
     build:
-      context: .
-      dockerfile: docker/Dockerfile.mcp-server
-      args:
-        SERVER_PATH: servers/realserverfaketools
+      context: servers/realserverfaketools
+      dockerfile: ../../docker/Dockerfile.mcp-server
     environment:
       - PORT=8002
     ports:
       - "8002:8002"
     restart: unless-stopped
 
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:latest
+    restart: on-failure:0
+    ports:
+      - 8099:8080
+      - 50051:50051
+    env_file:
+      - .env
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/v1/.well-known/ready" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    profiles:
+      - full
+      - dev
 
   # Atlassian MCP Server
   atlassian-server:
@@ -218,19 +313,24 @@ services:
       - $HOME/.mcp-atlassian:/home/app/.mcp-atlassian
     command: --transport streamable-http --port 8005
     restart: unless-stopped
+    profiles:
+      - full
 
   # SQLite container for metrics database
   metrics-db:
     image: alpine:latest
     volumes:
       - metrics-db-data:/var/lib/sqlite
-    command: ["sh", "-c", "apk add --no-cache sqlite && mkdir -p /var/lib/sqlite && sqlite3 /var/lib/sqlite/metrics.db 'CREATE TABLE IF NOT EXISTS _health (id INTEGER);' && tail -f /dev/null"]
+    command: [ "sh", "-c", "apk add --no-cache sqlite && mkdir -p /var/lib/sqlite && sqlite3 /var/lib/sqlite/metrics.db 'CREATE TABLE IF NOT EXISTS _health (id INTEGER);' && tail -f /dev/null" ]
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "sqlite3", "/var/lib/sqlite/metrics.db", ".tables"]
+      test: [ "CMD", "sqlite3", "/var/lib/sqlite/metrics.db", ".tables" ]
       interval: 30s
       timeout: 10s
       retries: 3
+    profiles:
+      - full
+      - dev
 
   # Prometheus for metrics collection
   prometheus:
@@ -248,6 +348,8 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     restart: unless-stopped
+    profiles:
+      - full
 
   # Grafana for metrics visualization
   grafana:
@@ -264,6 +366,8 @@ services:
     depends_on:
       - prometheus
     restart: unless-stopped
+    profiles:
+      - full
 
   # PostgreSQL database for Keycloak
   keycloak-db:
@@ -276,7 +380,7 @@ services:
       - keycloak_db_data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      test: [ "CMD-SHELL", "pg_isready -U keycloak" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -311,7 +415,7 @@ services:
 
       # Logging
       KC_LOG_LEVEL: INFO
-      
+
     ports:
       - "8080:8080"
     depends_on:
@@ -323,7 +427,7 @@ services:
       - ./keycloak/import:/opt/keycloak/data/import
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/health/ready" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -332,6 +436,14 @@ services:
 volumes:
   ssl_data:
   keycloak_db_data:
+  mongodb-data:
+    driver: local
+  mongodb-config:
+    driver: local
   metrics-db-data:
   prometheus-data:
   grafana-data:
+  weaviate_data:
+    driver: local
+  redis_data:
+    driver: local

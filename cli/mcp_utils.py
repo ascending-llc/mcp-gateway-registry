@@ -132,8 +132,9 @@ class MCPClient:
         self.gateway_url = gateway_url.rstrip('/')
         # Backend token for Authorization header (forwarded to backend servers)
         self.backend_token = access_token
-        # Gateway token for X-Authorization header (gateway auth) - use ingress token
-        self.gateway_token = _get_auth_token(None)  # Always use ingress token for gateway
+        # Gateway token for X-Authorization header (gateway auth) - use provided token or ingress token
+        # Only fall back to ingress token if no explicit token was provided
+        self.gateway_token = _get_auth_token(access_token)  # Use explicit token if provided, else ingress
         # Keep access_token for backwards compatibility
         self.access_token = self.backend_token or self.gateway_token
         self.timeout = timeout

@@ -201,7 +201,8 @@ cp .env.example .env
 
 # Generate a secure SECRET_KEY and set it in the .env file
 SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(64))")
-sed -i "s/# SECRET_KEY=your_secret_key_here/SECRET_KEY=$SECRET_KEY/" .env
+# Replace SECRET_KEY whether it's commented (#) or not
+sed -i "s/^#*\s*SECRET_KEY=.*/SECRET_KEY=$SECRET_KEY/" .env
 
 # Verify the SECRET_KEY was set correctly
 echo "Generated SECRET_KEY: $SECRET_KEY"
@@ -216,23 +217,45 @@ For now, make these additional essential changes in the `.env` file:
 
 ```bash
 # Set authentication provider to Keycloak
-AUTH_PROVIDER=keycloak
+AUTH_PROVIDER=keycloak #Do not change
 
 # Set a secure admin password (change this!)
-KEYCLOAK_ADMIN_PASSWORD=YourSecureAdminPassword123!
+# This is used for Keycloak API authentication during setup
+KEYCLOAK_ADMIN_PASSWORD=YourSecureAdminPassword123! # change me
+
+# CRITICAL: Set INITIAL_ADMIN_PASSWORD to the SAME VALUE as KEYCLOAK_ADMIN_PASSWORD
+# This is used to set the password for the initial admin user in the realm
+# THESE MUST MATCH - see Step 5 for details
+INITIAL_ADMIN_PASSWORD=YourSecureAdminPassword123! # change me
 
 # Set Keycloak database password (change this!)
-KEYCLOAK_DB_PASSWORD=SecureKeycloakDB123!
+KEYCLOAK_DB_PASSWORD=SecureKeycloakDB123! # change me
 
 # Leave other Keycloak settings as default for now
 KEYCLOAK_URL=http://localhost:8080
 KEYCLOAK_REALM=mcp-gateway
 KEYCLOAK_CLIENT_ID=mcp-gateway-client
 
+# Session Cookie Security Configuration
+# CRITICAL: These settings must match your deployment environment
+
+# For LOCAL DEVELOPMENT (accessing via http://localhost):
+SESSION_COOKIE_SECURE=false  # MUST be false for HTTP access
+
+# For PRODUCTION with HTTPS (accessing via https://your-domain.com):
+# SESSION_COOKIE_SECURE=true  # Uncomment and set to true
+
+# Cookie domain (leave empty for most deployments)
+SESSION_COOKIE_DOMAIN=  # Empty = cookie scoped to exact host only
+
 # Save and exit (Ctrl+X, then Y, then Enter)
 ```
 
-**Important**: Remember the passwords you set here - you'll need to use the same ones in Step 5!
+**Important**:
+- Remember the passwords you set here - you'll need to use the same ones in Step 5!
+- **CRITICAL**: `KEYCLOAK_ADMIN_PASSWORD` and `INITIAL_ADMIN_PASSWORD` MUST be set to the same value. See Step 5 for details about why this is important.
+- **SESSION_COOKIE_SECURE**: For local development (HTTP), this MUST be `false`. Setting it to `true` will cause login to fail because cookies with `secure=true` are only sent over HTTPS connections.
+- For production deployments with HTTPS, change `SESSION_COOKIE_SECURE=true` before starting services.
 
 ### Download Required Embeddings Model
 
@@ -272,17 +295,39 @@ echo "DB Password: $KEYCLOAK_DB_PASSWORD"
 
 **Critical**: These passwords MUST match what you set in the `.env` file in Step 4. If they don't match, Keycloak initialization will fail!
 
+### Important: Admin Password Configuration
+
+When you set up Keycloak, you need to configure TWO admin password variables in your `.env` file:
+
+1. **`KEYCLOAK_ADMIN_PASSWORD`** - Used to authenticate with the Keycloak admin API during initialization
+2. **`INITIAL_ADMIN_PASSWORD`** - Used to set the password for the initial admin user created in the mcp-gateway realm
+
+**These MUST be set to the SAME VALUE** for proper Keycloak initialization:
+
+```bash
+# In your .env file (Step 4), set these to the SAME password:
+KEYCLOAK_ADMIN_PASSWORD=YourSecureAdminPassword123!
+INITIAL_ADMIN_PASSWORD=YourSecureAdminPassword123!  # MUST match KEYCLOAK_ADMIN_PASSWORD
+```
+
+If these passwords don't match:
+- The Keycloak admin user will be created with `INITIAL_ADMIN_PASSWORD`
+- But API authentication during setup uses `KEYCLOAK_ADMIN_PASSWORD`
+- This mismatch will cause authentication failures during realm initialization
+
+**Best Practice**: Use the same secure password for both variables during setup.
+
 ### Start Keycloak and PostgreSQL
 
 ```bash
 # Start only the database and Keycloak services first
-docker-compose up -d keycloak-db keycloak
+docker compose up -d keycloak-db keycloak
 
 # Check if services are starting
-docker-compose ps
+docker compose ps
 
 # Monitor logs to see when Keycloak is ready
-docker-compose logs -f keycloak
+docker compose logs -f keycloak
 # Wait for message: "Keycloak 25.x.x started in xxxms"
 # Press Ctrl+C to exit logs when you see this message
 ```
@@ -293,6 +338,21 @@ docker-compose logs -f keycloak
 ```bash
 curl http://localhost:8080/realms/master
 # Should return JSON with realm information
+```
+
+### Disable SSL Requirement for Master Realm
+```bash
+ADMIN_TOKEN=$(curl -s -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "username=${KEYCLOAK_ADMIN}" \
+    -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
+    -d "grant_type=password" \
+    -d "client_id=admin-cli" | \
+    jq -r '.access_token') && \
+curl -X PUT "http://localhost:8080/admin/realms/master" \
+    -H "Authorization: Bearer $ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"sslRequired": "none"}'
 ```
 
 ### Initialize Keycloak Configuration
@@ -318,7 +378,21 @@ chmod +x keycloak/setup/init-keycloak.sh
 # IMPORTANT: The script will tell you to run get-all-client-credentials.sh
 # to retrieve and save the credentials. This is the next required step!
 
-# Step 2: Retrieve and save all client credentials (REQUIRED)
+#Step 2: Disable SSL for Application Realm
+
+ADMIN_TOKEN=$(curl -s -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "username=${KEYCLOAK_ADMIN}" \
+    -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
+    -d "grant_type=password" \
+    -d "client_id=admin-cli" | \
+    jq -r '.access_token') && \
+curl -X PUT "http://localhost:8080/admin/realms/mcp-gateway" \
+    -H "Authorization: Bearer $ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"sslRequired": "none"}'
+
+# Step 3: Retrieve and save all client credentials (REQUIRED)
 chmod +x keycloak/setup/get-all-client-credentials.sh
 ./keycloak/setup/get-all-client-credentials.sh
 
@@ -335,6 +409,33 @@ chmod +x keycloak/setup/get-all-client-credentials.sh
 # ✓ Found and saved: mcp-gateway-m2m
 # Files created in: .oauth-tokens/
 ```
+
+### Set Up Users and Service Accounts
+
+After initializing Keycloak, run the bootstrap script to create default users and M2M service accounts for testing and management:
+
+```bash
+# Make the bootstrap script executable
+chmod +x ./cli/bootstrap_user_and_m2m_setup.sh
+
+# Run the bootstrap script
+./cli/bootstrap_user_and_m2m_setup.sh
+```
+
+This script creates:
+- **3 Keycloak groups**: `registry-users-lob1`, `registry-users-lob2`, `registry-admins`
+- **6 users for different roles**:
+  - **LOB1 users**: `lob1-bot` (M2M service account) and `lob1-user` (human user)
+  - **LOB2 users**: `lob2-bot` (M2M service account) and `lob2-user` (human user)
+  - **Admin users**: `admin-bot` (M2M service account) and `admin-user` (human user)
+
+All credentials are automatically generated and saved to the `.oauth-tokens/` directory. User passwords default to the `INITIAL_USER_PASSWORD` value from your `.env` file.
+
+**Next steps**:
+- Review the generated credentials in `.oauth-tokens/`
+- Configure appropriate access scopes in your `scopes.yml` file
+- Use these credentials for testing M2M client flows and human user authentication
+- Log in to the dashboard with human user accounts to verify access
 
 ### Create Your First AI Agent Account
 
@@ -755,6 +856,65 @@ docker-compose restart keycloak
 # Wait 2-3 minutes and retry initialization
 ./keycloak/setup/init-keycloak.sh
 ```
+
+**Password Mismatch Issue**: If you see authentication failures during initialization:
+1. Verify that `KEYCLOAK_ADMIN_PASSWORD` and `INITIAL_ADMIN_PASSWORD` are set to the SAME VALUE in your `.env` file
+2. If they don't match, fix them:
+   ```bash
+   # Edit your .env file and ensure these match:
+   nano .env
+   # KEYCLOAK_ADMIN_PASSWORD=your-password
+   # INITIAL_ADMIN_PASSWORD=your-password  (MUST be identical)
+   ```
+3. Restart Keycloak and try initialization again:
+   ```bash
+   docker-compose restart keycloak
+   # Wait 2-3 minutes, then:
+   ./keycloak/setup/init-keycloak.sh
+   ```
+
+#### Login Redirects Back to Login Page
+
+**Most Common Cause**: Incorrect `SESSION_COOKIE_SECURE` setting
+
+**Symptoms**:
+- You enter username/password
+- Page redirects back to login page without error message
+- No session cookie is stored in browser
+
+**Solution**:
+1. Check your `.env` file:
+   ```bash
+   grep SESSION_COOKIE_SECURE .env
+   ```
+
+2. **For localhost (HTTP) access**:
+   ```bash
+   # MUST be false
+   SESSION_COOKIE_SECURE=false
+   ```
+
+3. **For HTTPS access**:
+   ```bash
+   # MUST be true
+   SESSION_COOKIE_SECURE=true
+   ```
+
+4. **Verify in browser dev tools**:
+   - Open browser dev tools (F12)
+   - Go to Application → Cookies → Your domain
+   - Check if `mcp_gateway_session` cookie exists
+   - For HTTP: `Secure` flag should be UNCHECKED
+   - For HTTPS: `Secure` flag should be CHECKED
+
+5. **After fixing, rebuild and restart**:
+   ```bash
+   docker compose down
+   docker compose build --no-cache auth-server registry
+   docker compose up -d
+   ```
+
+**Why this happens**: Cookies with `secure=true` are ONLY sent over HTTPS connections. If you access via HTTP (like `http://localhost:7860`), the browser will reject the cookie and login will fail.
 
 #### Authentication Issues
 ```bash

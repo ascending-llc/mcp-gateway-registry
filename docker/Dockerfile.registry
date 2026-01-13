@@ -1,41 +1,23 @@
-# --------------------------------------------------------
-# Stage 1: Frontend Builder
-# --------------------------------------------------------
-# Use a specific Node image instead of installing it via curl later
-FROM node:20-slim AS frontend-builder
-
-WORKDIR /app/frontend
-
-# Copy only package files first to leverage Docker cache for npm install
-COPY frontend/package.json frontend/package-lock.json* ./
-
-# Install dependencies
-RUN npm install --legacy-peer-deps
-
-# Copy the rest of the frontend source code and build
-COPY frontend/ ./
-RUN npm run build
-
-
-# --------------------------------------------------------
-# Stage 2: Final Registry Image
-# --------------------------------------------------------
+# Registry Dockerfile - includes FAISS, models, and registry service
 FROM python:3.12-slim
 
-ENV PYTHONUNBUFFERED=1 \
-    DEBIAN_FRONTEND=noninteractive
+# Build argument to control whether to install discovery dependencies
+ARG TOOL_DISCOVERY_MODE=embedded
+ARG BUILD_VERSION=
+ARG SCHEMA_VERSION=
+ARG GITHUB_TOKEN=
 
+ENV PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    TOOL_DISCOVERY_MODE=${TOOL_DISCOVERY_MODE} \
+    BUILD_VERSION=$BUILD_VERSION
 # Install system dependencies
-# NOTE: We REMOVED Node.js and curl setup from here
+# For embedded mode, we need build-essential for compiling dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    nginx \
-    nginx-extras \
-    lua-cjson \
     curl \
     procps \
-    openssl \
     git \
-    build-essential \
+    $([ "$TOOL_DISCOVERY_MODE" = "embedded" ] && echo "build-essential" || echo "") \
     ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -45,57 +27,58 @@ WORKDIR /app
 # Copy the application code (Python backend)
 COPY . /app/
 
-# --------------------------------------------------------
-# COPY THE BUILD ARTIFACTS
-# This takes the 'build' folder from Stage 1 and places it
-# exactly where the app expects it to be.
-# --------------------------------------------------------
-COPY --from=frontend-builder /app/frontend/build /app/frontend/build
-
-# Copy nginx configurations
-COPY docker/nginx_rev_proxy_http_only.conf /app/docker/nginx_rev_proxy_http_only.conf
-COPY docker/nginx_rev_proxy_http_and_https.conf /app/docker/nginx_rev_proxy_http_and_https.conf
+# Install Python dependencies based on TOOL_DISCOVERY_MODE
+# Step 1: Install packages (shared database ORM) from parent directory
+#         This ensures packages/ directory is installed as "packages" module
+# Step 2: Install registry with appropriate dependencies
+# Default (embedded): installs with ML dependencies (FAISS, torch, sentence-transformers)
+# External: installs only base dependencies
+# Step 3: Import schemas from GitHub release (if SCHEMA_VERSION provided)
+RUN pip install --no-cache-dir uv && \
+    echo "Installing packages (shared db ORM)..." && \
+    cd /app && uv pip install --system -e ./packages && \
+    echo "Installing registry..." && \
+    if [ "$TOOL_DISCOVERY_MODE" = "external" ]; then \
+        echo "Building LIGHTWEIGHT image (external mode) - skipping ML dependencies"; \
+        uv pip install --system -e .; \
+    else \
+        echo "Building FULL image (embedded mode) - installing with ML dependencies"; \
+        uv pip install --system -e ".[embedded-search]"; \
+    fi && \
+    echo "Checking for schema import..." && \
+    if [ -z "$SCHEMA_VERSION" ] || [ -z "$GITHUB_TOKEN" ]; then \
+        echo "ERROR: Schema import is required for registry build"; \
+        echo "Please provide the following build arguments:"; \
+        echo "  --build-arg SCHEMA_VERSION=<version> (e.g., asc0.4.0)"; \
+        echo "  --build-arg GITHUB_TOKEN=<token>"; \
+        exit 1; \
+    fi && \
+    echo "Importing all schemas from GitHub release $SCHEMA_VERSION..." && \
+    cd /app/packages && \
+    uv run import-schemas \
+        --mode remote \
+        --tag "$SCHEMA_VERSION" \
+        --output-dir ./models \
+        --repo ascending-llc/jarvis-api \
+        --token "$GITHUB_TOKEN" && \
+    echo "Schema import completed successfully"
 
 # Create logs directory
 RUN mkdir -p /app/logs
 
-# Install uv and setup Python environment
-RUN pip install uv && \
-    uv venv .venv --python 3.12 && \
-    . .venv/bin/activate && \
-    uv pip install \
-    "fastapi>=0.115.12" \
-    "itsdangerous>=2.2.0" \
-    "jinja2>=3.1.6" \
-    "mcp>=1.6.0" \
-    "pydantic>=2.11.3" \
-    "httpx>=0.27.0" \
-    "python-dotenv>=1.1.0" \
-    "python-multipart>=0.0.20" \
-    "uvicorn[standard]>=0.34.2" \
-    "faiss-cpu>=1.7.4" \
-    "sentence-transformers>=2.2.2" \
-    "websockets>=15.0.1" \
-    "scikit-learn>=1.3.0" \
-    "torch>=1.6.0" \
-    "huggingface-hub[cli,hf_xet]>=0.31.1" \
-    "opentelemetry-api>=1.20.0" \
-    "opentelemetry-sdk>=1.20.0" \
-    "opentelemetry-exporter-prometheus>=0.45b0" \
-    "opentelemetry-exporter-otlp>=1.20.0" \
-    "opentelemetry-instrumentation-fastapi" \
-    "hf_xet>=0.1.0" && \
-    uv pip install -e .
+# Set default environment variables
+ENV EMBEDDINGS_MODEL_NAME=all-MiniLM-L6-v2 \
+    EMBEDDINGS_MODEL_DIMENSIONS=384
 
-# Expose ports
-EXPOSE 80 443 7860 9464
+# Expose port for registry
+EXPOSE 7860
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:7860/health || exit 1
 
-# Entrypoint
-COPY docker/registry-entrypoint.sh /app/registry-entrypoint.sh
-RUN chmod +x /app/registry-entrypoint.sh
+# Copy and set up entrypoint script
+COPY docker/registry-entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
-ENTRYPOINT ["/app/registry-entrypoint.sh"]
+ENTRYPOINT ["/app/entrypoint.sh", "backend"] 

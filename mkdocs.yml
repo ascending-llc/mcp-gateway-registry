@@ -105,6 +105,8 @@ nav:
   - Authentication & Security:
     - Authentication Guide: auth.md
     - Amazon Cognito Setup: cognito.md
+    - Microsoft Entra ID Setup: entra-id-setup.md
+    - Microsoft Entra ID Implementation: entra-id-implementation.md
     - Access Control & Scopes: scopes.md
     - JWT Token Vending: jwt-token-vending.md
     - Security Policy: SECURITY.md
@@ -115,6 +117,7 @@ nav:
     - Detailed Architecture: registry-auth-detailed.md
   - Integration:
     - AI Coding Assistants: ai-coding-assistants-setup.md
+    - MCP-Gateway CLI Guide: mcp-registry-cli.md
   - Contributing:
     - Contributing Guide: CONTRIBUTING.md
     - Code of Conduct: CODE_OF_CONDUCT.md
