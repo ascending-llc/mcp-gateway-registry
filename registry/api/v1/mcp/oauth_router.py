@@ -11,9 +11,7 @@ from registry.utils.utils import load_template
 from registry.auth.oauth.reconnection import get_reconnection_manager
 from registry.constants import REGISTRY_CONSTANTS
 
-router = APIRouter(prefix="/v1", tags=["oauth"])
-
-base_path = REGISTRY_CONSTANTS.NGINX_BASE_PATH.rstrip("/")
+router = APIRouter(prefix="/v1/mcp", tags=["oauth"])
 
 
 @router.get("/{server_name}/oauth/initiate")
@@ -81,16 +79,16 @@ async def oauth_callback(
         # 1. Check for errors returned by OAuth provider
         if error:
             logger.error(f"[MCP OAuth] OAuth error received from provider: {error}")
-            return _redirect_to_error(request, error)
+            return _redirect_to_page(request, server_name, error_msg=error)
 
         # 2. Validate required parameters
         if not code or not isinstance(code, str):
             logger.error("[MCP OAuth] Missing or invalid authorization code")
-            return _redirect_to_error(request, "missing_code")
+            return _redirect_to_page(request, server_name, error_msg="missing_code")
 
         if not state or not isinstance(state, str):
             logger.error("[MCP OAuth] Missing or invalid state parameter")
-            return _redirect_to_error(request, "missing_state")
+            return _redirect_to_page(request, server_name, error_msg="missing_state")
 
         # 3. Decode flow_id from state (state format: flow_id##security_token)
         try:
@@ -100,13 +98,13 @@ async def oauth_callback(
                         f"security_token_length={len(security_token)}")
         except ValueError as e:
             logger.error(f"[MCP OAuth] Failed to decode state: {e}")
-            return _redirect_to_error(request, "invalid_state_format")
+            return _redirect_to_page(request, server_name, error_msg="invalid_state_format")
 
         # Check if flow is already completed
         flow = mcp_service.oauth_service.flow_manager.get_flow(flow_id)
         if flow and flow.status == OAuthFlowStatus.COMPLETED:
             logger.warning(f"[MCP OAuth] Flow already completed, preventing duplicate token exchange: {flow_id}")
-            return _redirect_to_success(request, server_name)
+            return _redirect_to_page(request, server_name, flag="success")
 
         # 4. Complete OAuth flow (validate state + exchange tokens)
         logger.debug(f"[MCP OAuth] Completing OAuth flow for {server_name}")
@@ -118,7 +116,7 @@ async def oauth_callback(
 
         if not success:
             logger.error(f"[MCP OAuth] Failed to complete OAuth flow: {error_msg}")
-            return _redirect_to_error(request, error_msg or "unknown_error")
+            return _redirect_to_page(request, server_name, error_msg=error_msg or "unknown_error")
 
         logger.info(f"[MCP OAuth] OAuth flow completed successfully for {server_name}")
 
@@ -163,11 +161,11 @@ async def oauth_callback(
                          f"but tokens are saved: {error}")
 
         # 6. Redirect to success page
-        return _redirect_to_success(request, server_name)
+        return _redirect_to_page(request, server_name, flag="success")
 
     except Exception as e:
         logger.error(f"[MCP OAuth] OAuth callback error: {str(e)}", exc_info=True)
-        return _redirect_to_error(request, "callback_failed")
+        return _redirect_to_page(request, server_name, error_msg="callback_failed")
 
 
 @router.get("/oauth/tokens/{flow_id}")
@@ -261,7 +259,7 @@ async def cancel_oauth_flow(
     try:
         user_id = current_user.get("user_id")
         logger.info(f"[OAuth Cancel] Cancelling OAuth flow for {server_name} by user {user_id}")
-        
+
         # 1. Cancel the OAuth flow
         success, error_msg = await mcp_service.oauth_service.cancel_oauth_flow(user_id, server_name)
         if not success:
@@ -322,16 +320,16 @@ async def refresh_oauth_tokens(
     try:
         user_id = current_user.get("user_id")
         logger.info(f"[OAuth Refresh] Refreshing OAuth tokens for {server_name} by user {user_id}")
-        
+
         # 1. Refresh OAuth tokens
         success, error_msg = await mcp_service.oauth_service.refresh_tokens(user_id, server_name)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=error_msg or "Failed to refresh tokens")
-        
+
         logger.info(f"[OAuth Refresh] Successfully refreshed tokens for {server_name}")
-        
+
         # 2. Update user connection state to CONNECTED
         try:
             # Check if user connection exists, if not create it
@@ -363,7 +361,7 @@ async def refresh_oauth_tokens(
                 logger.info(f"[OAuth Refresh] Created new connection with CONNECTED state for {server_name}")
         except Exception as e:
             logger.warning(f"[OAuth Refresh] Failed to update connection state: {e}")
-        
+
         # 3. Clear any reconnection attempts
         try:
             reconnection_manager = get_reconnection_manager(
@@ -374,7 +372,7 @@ async def refresh_oauth_tokens(
             logger.debug(f"[OAuth Refresh] Cleared reconnection attempts for {server_name}")
         except Exception as e:
             logger.warning(f"[OAuth Refresh] Could not clear reconnection (manager not initialized): {e}")
-        
+
         return {
             "success": True,
             "message": f"Tokens refreshed successfully for {server_name}",
@@ -392,78 +390,26 @@ async def refresh_oauth_tokens(
 
 # ==================== Helper Functions ====================
 
-def _redirect_to_error(request: Request, error_code: str) -> RedirectResponse:
+def _redirect_to_page(request: Request,
+                      server_name: str,
+                      flag: str = "error",
+                      error_msg: str = None) -> RedirectResponse:
     """
-    Redirecting to an error page
+    Generate a response that redirects to frontend OAuth callback page.
+        /oauth/callback?type=success&serverName=value
+        /oauth/callback?type=error&serverName=value&error=value
     """
-    encoded_error = quote(str(error_code))
-    error_url = f"/{base_path}/api/mcp/v1/oauth/error?error={encoded_error}"
-    logger.debug(f"[OAuth Redirect] Redirecting to error page: {error_url}")
-    return RedirectResponse(url=error_url)
-
-
-def _redirect_to_success(request: Request, server_name: str) -> RedirectResponse:
-    """
-    Generate a response that redirects to the success page.
-    """
+    base_path = REGISTRY_CONSTANTS.NGINX_BASE_PATH.strip("/")
     encoded_server = quote(str(server_name))
-    success_url = f"/{base_path}/api/mcp/v1/oauth/success?serverName={encoded_server}"
-    logger.debug(f"[OAuth Redirect] Redirecting to success page: {success_url}")
-    return RedirectResponse(url=success_url)
 
+    # Build full URL with host if request is provided
+    host = request.headers.get("host", "localhost:7860")
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    redirect_url = f"{proto}://{host}/{base_path}/oauth/callback?type={flag}&serverName={encoded_server}"
 
-@router.get("/oauth/success", name="oauth_success")
-async def oauth_success(
-        serverName: Optional[str] = Query(None, description="Server name")
-) -> HTMLResponse:
-    """
-    OAuth authorization success page
-    
-    Notes: Redirect to /oauth/success?serverName=xxx
-    
-    Provides a friendly HTML page showing success message and automatically closes window
-    """
-    server_display = serverName if serverName else "MCP Server"
+    if error_msg and flag == "error":
+        encoded_error = quote(str(error_msg))
+        redirect_url += f"&error={encoded_error}"
 
-    context = {
-        "server_display": server_display,
-        "server_name": serverName or ""
-    }
-
-    html_content = load_template("oauth_success.html", context)
-    return HTMLResponse(content=html_content, status_code=200)
-
-
-@router.get("/oauth/error", name="oauth_error")
-async def oauth_error(
-        error: Optional[str] = Query(None, description="Error message")
-) -> HTMLResponse:
-    """
-    OAuth authorization failure page
-    
-    Notes: Redirect to /oauth/error?error=xxx
-    
-    Provides a friendly HTML page showing error message
-    """
-    error_message = error if error else "Unknown error"
-
-    error_messages = {
-        "missing_code": "Missing authorization code",
-        "missing_state": "Missing state parameter",
-        "invalid_state_format": "Invalid state parameter format",
-        "invalid_state": "Invalid state parameter",
-        "callback_failed": "Callback processing failed",
-        "access_denied": "User denied authorization",
-        "server_error": "Server error",
-        "temporarily_unavailable": "Service temporarily unavailable",
-    }
-
-    display_error = error_messages.get(error_message, error_message)
-
-    context = {
-        "display_error": display_error,
-        "error_message": error_message
-    }
-
-    html_content = load_template("oauth_error.html", context)
-    return HTMLResponse(content=html_content, status_code=400)
+    logger.info(f"[OAuth Redirect] Redirecting to {flag} page: {redirect_url}")
+    return RedirectResponse(url=redirect_url)

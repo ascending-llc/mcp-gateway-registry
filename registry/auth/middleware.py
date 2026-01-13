@@ -31,7 +31,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/api/{versions}/servers/{path:path}",
             "/api/{versions}/servers",
             "/proxy/{path:path}",
-            "/api/mcp/{path:path}",
+            "/api/{versions}/mcp/{path:path}",
         ])
         self.public_paths_compiled = self._compile_patterns([
             "/",
@@ -40,9 +40,9 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/openapi.json",
             "/static/{path:path}",
             "/api/auth/{path:path}",  # Most auth endpoints are public
-            "/api/mcp/{versions}/{server_name}/oauth/callback",  # OAuth callback is public
-            "/api/mcp/{versions}/oauth/success",  # OAuth success page
-            "/api/mcp/{versions}/oauth/error",  # OAuth error page
+            "/api/{versions}/mcp/{server_name}/oauth/callback",  # OAuth callback is public
+            "/api/{versions}/mcp/oauth/success",  # OAuth success page
+            "/api/{versions}/mcp/oauth/error",  # OAuth error page
         ])
         # note: admin
         self.internal_paths_compiled = self._compile_patterns([
@@ -101,7 +101,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         for original_pattern, path_regex, path_format, param_convertors in compiled_patterns:
             match = path_regex.match(path)
             if match:
-                logger.info(f"Path '{path}' matched pattern '{original_pattern}'")
+                logger.debug(f"Path '{path}' matched pattern '{original_pattern}'")
                 return True
         return False
 
