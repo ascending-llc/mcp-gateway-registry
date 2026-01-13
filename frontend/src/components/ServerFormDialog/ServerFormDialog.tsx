@@ -10,10 +10,11 @@ import type { AuthenticationConfig as AuthConfigType, ServerConfig } from './typ
 
 interface ServerFormDialogProps {
   isOpen: boolean;
+  id?: string | null;
   showToast: (message: string, type: 'success' | 'error') => void;
   refreshData: (notLoading?: boolean) => void;
+  onServerUpdate: (id: string, updates: any) => void;
   onClose: () => void;
-  id?: string | null;
 }
 
 const DEFAULT_AUTH_CONFIG: AuthConfigType = { type: 'auto', source: 'admin', auth_type: 'bearer' };
@@ -29,7 +30,14 @@ const INIT_DATA: ServerConfig = {
   tags: [],
 };
 
-const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, refreshData, onClose, id }) => {
+const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
+  isOpen,
+  id,
+  showToast,
+  refreshData,
+  onServerUpdate,
+  onClose,
+}) => {
   const [loading, setLoading] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [formData, setFormData] = useState<ServerConfig>(INIT_DATA);
@@ -60,7 +68,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
         description: result.description,
         path: result.path,
         url: result.url || '',
-        supported_transports: result.supported_transports?.[0],
+        supported_transports: result.supported_transports?.[0] || result?.type,
         authConfig: { type: 'auto', source: 'admin', auth_type: 'bearer' },
         trustServer: true,
         tags: result.tags || [],
@@ -69,7 +77,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
         formData.authConfig = {
           type: 'apiKey',
           source: result.apiKey?.source,
-          auth_type: result.apiKey?.auth_type,
+          auth_type: result.apiKey?.auth_type || result.apiKey?.authorization_type,
           key: result.apiKey?.key,
           custom_header: result.apiKey?.custom_header,
         };
@@ -117,6 +125,9 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
       if (auth.source === 'admin' && !auth.key?.trim()) {
         newErrors.key = 'API Key is required';
       }
+      if (auth.auth_type === 'custom' && !auth.custom_header?.trim()) {
+        newErrors.custom_header = 'Custom Header Name is required';
+      }
     } else if (auth.type === 'oauth') {
       if (!auth.client_id?.trim()) newErrors.client_id = 'Client ID is required';
       if (!auth.client_secret?.trim()) newErrors.client_secret = 'Client Secret is required';
@@ -139,6 +150,10 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
 
         if (nextErrors.key && newConfig.key?.trim()) {
           nextErrors.key = undefined;
+          hasChanges = true;
+        }
+        if (nextErrors.custom_header && newConfig.custom_header?.trim()) {
+          nextErrors.custom_header = undefined;
           hasChanges = true;
         }
         if (nextErrors.client_id && newConfig.client_id?.trim()) {
@@ -225,18 +240,26 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
     if (!validate()) return;
 
     setLoading(true);
-    const data = processDataByAuthType(formData);
+    const data: any = processDataByAuthType(formData);
     try {
       if (isEditMode) {
-        await SERVICES.SERVER.updateServer(id, data);
+        const result = await SERVICES.SERVER.updateServer(id, data);
         showToast('Server updated successfully', 'success');
         onClose();
+        onServerUpdate(id, {
+          name: data.serverName,
+          description: data.description,
+          path: data.path,
+          url: data.url,
+          tags: data.tags,
+          last_checked_time: result.updatedAt,
+        });
       } else {
         const result = await SERVICES.SERVER.createServer(data);
         setServerData(result);
         setShowSuccessDialog(true);
+        refreshData(true);
       }
-      refreshData(true);
     } catch (error: any) {
       showToast(error?.detail?.[0]?.msg || error, 'error');
     } finally {

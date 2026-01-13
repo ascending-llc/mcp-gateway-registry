@@ -775,6 +775,7 @@ const Dashboard: React.FC = () => {
         id={serverId}
         showToast={showToast}
         refreshData={refreshData}
+        onServerUpdate={handleServerUpdate}
         onClose={() => {
           setServerId(null);
           setShowRegisterModal(false);

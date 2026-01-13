@@ -71,14 +71,15 @@ const ServerCard: React.FC<ServerCardProps> = ({
   const { connection_state, requires_oauth } = server || {};
 
   const getAuthStatusIcon = useCallback(() => {
-    if (requires_oauth && connection_state === SERVER_CONNECTION.CONNECTED) {
+    if (!requires_oauth) return null;
+    if (connection_state === SERVER_CONNECTION.CONNECTED) {
       return <CheckCircleIcon className='h-4 w-4 text-green-500' />;
     }
-    if (requires_oauth && connection_state === SERVER_CONNECTION.DISCONNECTED) {
+    if (connection_state === SERVER_CONNECTION.DISCONNECTED) {
       return <KeyIcon className='h-4 w-4 text-amber-500' />;
     }
-    if (requires_oauth && connection_state === SERVER_CONNECTION.CONNECTING) {
-      return <KeyIcon className='h-4 w-4 text-amber-500' />;
+    if (connection_state === SERVER_CONNECTION.CONNECTING) {
+      return <div className='animate-spin rounded-full h-3 w-3 border-b-2 border-slate-200' />;
     }
   }, [requires_oauth, connection_state]);
 
@@ -207,11 +208,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
                   onClick={() => setShowApiKeyDialog(true)}
                   title='Manage API keys'
                 >
-                  {connection_state === SERVER_CONNECTION.CONNECTING ? (
-                    <div className='animate-spin rounded-full h-3 w-3 border-b-2 border-slate-200' />
-                  ) : (
-                    getAuthStatusIcon()
-                  )}
+                  {getAuthStatusIcon()}
                 </button>
               )}
               {canModify && (

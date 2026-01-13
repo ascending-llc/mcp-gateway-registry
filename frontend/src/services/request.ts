@@ -5,10 +5,20 @@ import UTILS from '@/utils';
 const cancelSources: Record<string, () => void> = {};
 const service = axios.create({ baseURL: '/', timeout: 20000 });
 
-type RequestConfig = AxiosRequestConfig & { cancelTokenKey?: string };
+type RequestConfig = AxiosRequestConfig & { cancelTokenKey?: string; skipTokenBarrier?: boolean };
+
+let tokenInitPromise: Promise<any> | null = null;
+
+export const setTokenInitPromise = (promise: Promise<any> | null) => {
+  tokenInitPromise = promise;
+};
 
 service.interceptors.request.use(
-  (config: any) => {
+  async (config: any) => {
+    if (!config.skipTokenBarrier && tokenInitPromise) {
+      await tokenInitPromise;
+    }
+
     if (config.cancelTokenKey) {
       config.cancelToken = new axios.CancelToken(cancel => {
         cancelSources[config.cancelTokenKey || ''] = cancel;

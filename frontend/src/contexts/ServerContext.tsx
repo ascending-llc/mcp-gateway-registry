@@ -130,7 +130,6 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
 
   useEffect(() => {
     refreshData();
-    fetchServerStatus();
     return () => {
       Object.values(timeoutRef.current).forEach(timeout => {
         clearTimeout(timeout);

@@ -51,7 +51,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                 }`}
               >
-                Auto Detect
+                No Auto
               </button>
               <button
                 type='button'
@@ -73,7 +73,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                 }`}
               >
-                Manual OAuth
+                OAuth
               </button>
             </div>
           </div>
@@ -91,30 +91,16 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                 <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2'>
                   API Key Source
                 </label>
-                <div className='space-y-2'>
-                  <label className='flex items-center'>
-                    <input
-                      type='radio'
-                      name='source'
-                      value='admin'
-                      checked={config.source === 'admin'}
-                      onChange={() => updateConfig({ source: 'admin' })}
-                      className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
-                    />
-                    <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>Provide a key for all users</span>
-                  </label>
-                  <label className='flex items-center'>
-                    <input
-                      type='radio'
-                      name='source'
-                      value='user'
-                      checked={config.source === 'user'}
-                      onChange={() => updateConfig({ source: 'user' })}
-                      className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
-                    />
-                    <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>
-                      Each user provides their own key
-                    </span>
+                <div className='flex items-center space-x-2'>
+                  <input
+                    type='checkbox'
+                    id='apiKeySource'
+                    checked={config.source === 'user'}
+                    onChange={e => updateConfig({ source: e.target.checked ? 'user' : 'admin' })}
+                    className='h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
+                  />
+                  <label htmlFor='apiKeySource' className='text-sm text-gray-900 dark:text-gray-100'>
+                    Each user provides their own key
                   </label>
                 </div>
               </div>
@@ -126,7 +112,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                     <input
                       type={showApiKey ? 'text' : 'password'}
                       className={`${getInputClass('key')} pr-10`}
-                      placeholder='<HIDDEN>'
+                      placeholder='sk-...'
                       value={config.key || ''}
                       onChange={e => updateConfig({ key: e.target.value })}
                     />
@@ -148,49 +134,50 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
 
               <div>
                 <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2'>Header Format</label>
-                <div className='flex items-center space-x-6'>
-                  <label className='flex items-center'>
-                    <input
-                      type='radio'
-                      name='auth_type'
-                      value='bearer'
-                      checked={config.auth_type === 'bearer'}
-                      onChange={() => updateConfig({ auth_type: 'bearer' })}
-                      className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
-                    />
-                    <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>Bearer</span>
-                  </label>
-                  <label className='flex items-center'>
-                    <input
-                      type='radio'
-                      name='auth_type'
-                      value='basic'
-                      checked={config.auth_type === 'basic'}
-                      onChange={() => updateConfig({ auth_type: 'basic' })}
-                      className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
-                    />
-                    <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>Basic</span>
-                  </label>
-                  <label className='flex items-center'>
-                    <input
-                      type='radio'
-                      name='auth_type'
-                      value='custom'
-                      checked={config.auth_type === 'custom'}
-                      onChange={() => updateConfig({ auth_type: 'custom' })}
-                      className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
-                    />
-                    <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>Custom</span>
-                  </label>
+                <div className='flex p-1 bg-gray-200 dark:bg-gray-700/50 rounded-lg'>
+                  <button
+                    type='button'
+                    onClick={() => updateConfig({ auth_type: 'bearer' })}
+                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                      config.auth_type === 'bearer'
+                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    Bearer
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => updateConfig({ auth_type: 'basic' })}
+                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                      config.auth_type === 'basic'
+                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    Basic
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => updateConfig({ auth_type: 'custom' })}
+                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                      config.auth_type === 'custom'
+                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    Custom
+                  </button>
                 </div>
 
                 {config.auth_type === 'custom' && (
                   <div className='mt-4 animate-fadeIn'>
                     <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>
-                      Custom Header Name
+                      Custom Header Name <span className='text-red-500'>*</span>
                     </label>
                     <input
                       type='text'
+                      required
                       className={getInputClass('custom_header')}
                       value={config.custom_header || ''}
                       onChange={e => updateConfig({ custom_header: e.target.value })}
