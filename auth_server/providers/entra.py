@@ -157,6 +157,7 @@ class EntraIdProvider(AuthProvider):
                 raise ValueError(f"Invalid issuer: {token_issuer}. Expected one of: {self.valid_issuers}")
 
             # Validate and decode token with the correct issuer
+            self.issuer = token_issuer
             claims = jwt.decode(
                 token,
                 signing_key,
