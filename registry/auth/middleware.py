@@ -169,17 +169,16 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 return None
             # Forward the request to the auth server with the same Authorization header
             import httpx
-            auth_server_url = os.environ.get("AUTH_SERVER_URL", "http://0.0.0.0:8888")
-            endpoint = f"{auth_server_url}/validate"
-            logger.info(f"MAKING REQUEST TO {endpoint}")
+            auth_validation_endpoint = f"{settings.auth_server_url}/validate"
             async with httpx.AsyncClient() as client:
-                response = await client.get(endpoint, headers=request.headers, timeout=5)
+                response = await client.get(auth_validation_endpoint, headers=request.headers, timeout=5)
                 logger.info("RESPONSE: {response}")
                 if response.status_code == 200:
                     data = response.json()
                     if data.get("valid"):
                         return self._build_user_context(
                             username=data.get("username"),
+                            email=data.get("email"),
                             groups=data.get("groups", []),
                             scopes=data.get("scopes", []),
                             auth_method="entra_id",
@@ -396,8 +395,8 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             return None
 
     def _build_user_context(self, username: str, groups: list, scopes: list,
-                            auth_method: str, provider: str,
-                            auth_source: str = None, user_id: str = None) -> Dict[str, Any]:
+                            auth_method: str, provider: str, email: str,
+                            auth_source: str = None, user_id: str = None,) -> Dict[str, Any]:
         """
             Construct the complete user context (from the original enhanced_auth logic).
         """
@@ -421,6 +420,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             'can_modify_servers': can_modify,
             'is_admin': user_has_wildcard_access(scopes),
             "auth_source": auth_source,
+            "email": email,
         }
         logger.debug(f"User context for {username}: {user_context}")
         return user_context
