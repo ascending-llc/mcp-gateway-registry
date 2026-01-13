@@ -35,9 +35,9 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/api/auth/config",
             "/api/auth/login",
             "/api/auth/providers",
-            "/api/mcp/{versions}/{server_name}/oauth/callback",  # OAuth callback is public
-            "/api/mcp/{versions}/oauth/success",  # OAuth success page
-            "/api/mcp/{versions}/oauth/error",  # OAuth error page
+            "/api/{versions}/mcp/{server_name}/oauth/callback",  # OAuth callback is public
+            "/api/{versions}/mcp/oauth/success",  # OAuth success page
+            "/api/{versions}/mcp/oauth/error",  # OAuth error page
         ])
         # note: admin
         self.internal_paths_compiled = self._compile_patterns([
@@ -48,7 +48,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/api/{versions}/servers/{path:path}",
             "/api/{versions}/servers",
             "/proxy/{path:path}",
-            "/api/mcp/{path:path}",
+            "/api/{versions}/mcp/{path:path}",
         ])
         logger.info(
             f"Auth middleware initialized with Starlette routing: "

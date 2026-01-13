@@ -332,7 +332,7 @@ class FlowStateManager:
         redirect_uri = oauth_config.get("redirect_uri")
         if not redirect_uri:
             base_url = os.environ.get("REGISTRY_URL", "http://127.0.0.1:3080")
-            redirect_uri = f"{base_url}/api/mcp/v1/{server_name}/oauth/callback"
+            redirect_uri = f"{base_url}/api/v1/mcp/{server_name}/oauth/callback"
 
         redirect_uris = [redirect_uri] if redirect_uri else []
 

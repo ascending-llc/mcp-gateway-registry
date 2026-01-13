@@ -217,6 +217,10 @@ class ServerDetailResponse(BaseModel):
     errorMessage: Optional[str] = Field(None, alias="errorMessage")
     createdAt: datetime
     updatedAt: datetime
+
+    connection_state: Optional[str] = Field(default=None, description="Connection state")
+    requires_oauth: Optional[bool] = Field(default=None, description="Whether server requires OAuth")
+    error: Optional[str] = Field(default=None, description="Error message if connection failed")
     
     class ConfigDict:
         from_attributes = True
