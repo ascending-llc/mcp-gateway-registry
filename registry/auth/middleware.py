@@ -25,13 +25,21 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app):
         super().__init__(app)
+        # Paths that require authentication (checked before public paths)
+        self.authenticated_paths_compiled = self._compile_patterns([
+            "/api/auth/me",
+            "/api/{versions}/servers/{path:path}",
+            "/api/{versions}/servers",
+            "/proxy/{path:path}",
+            "/api/mcp/{path:path}",
+        ])
         self.public_paths_compiled = self._compile_patterns([
             "/",
             "/health",
             "/docs",
             "/openapi.json",
             "/static/{path:path}",
-            "/api/auth/{path:path}",
+            "/api/auth/{path:path}",  # Most auth endpoints are public
             "/api/mcp/{versions}/{server_name}/oauth/callback",  # OAuth callback is public
             "/api/mcp/{versions}/oauth/success",  # OAuth success page
             "/api/mcp/{versions}/oauth/error",  # OAuth error page
@@ -40,18 +48,11 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         self.internal_paths_compiled = self._compile_patterns([
             "/api/internal/{path:path}",
         ])
-        # note: jwt auth
-        self.servers_paths_compiled = self._compile_patterns([
-            "/api/{versions}/servers/{path:path}",
-            "/api/{versions}/servers",
-            "/proxy/{path:path}",
-            "/api/mcp/{path:path}",
-        ])
         logger.info(
             f"Auth middleware initialized with Starlette routing: "
+            f"{len(self.authenticated_paths_compiled)} authenticated, "
             f"{len(self.public_paths_compiled)} public, "
             f"{len(self.internal_paths_compiled)} internal, "
-            f"{len(self.servers_paths_compiled)} server patterns"
         )
 
     def _compile_patterns(self, patterns: List[str]) -> List[Tuple]:
@@ -70,7 +71,12 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        if self._match_path(path, self.public_paths_compiled):
+        
+        # Check authenticated paths first (these override public patterns)
+        if self._match_path(path, self.authenticated_paths_compiled):
+            logger.debug(f"Authenticated path: {path}")
+            # Continue to authentication logic below
+        elif self._match_path(path, self.public_paths_compiled):
             logger.debug(f"Public path: {path}")
             return await call_next(request)
 
@@ -104,7 +110,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         Unified authentication logic (simple and efficient)
         
         1. Internal paths (/api/internal/*) → Basic Auth
-        2. Server paths (/api/servers/*, /proxy/*, /api/mcp/*) → JWT Auth
+        2. Authenticated paths (including /api/auth/me, /api/servers/*, /proxy/*, /api/mcp/*) → JWT or Session Auth
         3. Other paths → Session Auth
         """
         path = request.url.path
@@ -115,13 +121,17 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 return user_context
             raise AuthenticationError("Basic authentication required")
 
-        if self._match_path(path, self.servers_paths_compiled):
+        if self._match_path(path, self.authenticated_paths_compiled):
+            # Try JWT first, then fall back to session auth
             user_context = self._try_jwt_auth(request)
             if user_context:
                 return user_context
-            raise AuthenticationError("JWT authentication required")
+            user_context = self._try_session_auth(request)
+            if user_context:
+                return user_context
+            raise AuthenticationError("JWT or session authentication required")
 
-        # session Auth
+        # Default: session Auth
         user_context = self._try_session_auth(request)
         if user_context:
             return user_context
