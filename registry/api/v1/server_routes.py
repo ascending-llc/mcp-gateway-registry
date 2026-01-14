@@ -147,6 +147,7 @@ async def list_servers(
             page=page,
             per_page=per_page,
             user_id=None,
+            username=user_context.get('username')
         )
         
         # Convert to response models
@@ -154,7 +155,6 @@ async def list_servers(
         
         # Get connection status and enrich server items
         try:
-            user_id = user_context.get('user_id')
             mcp_service = await get_mcp_service()
             
             connection_status = await get_servers_connection_status(

@@ -29,6 +29,8 @@ from registry.schemas.server_api_schemas import (
 from registry.utils.crypto_utils import encrypt_auth_fields
 from registry.core.mcp_client import get_tools_from_server_with_server_info
 
+from registry.services.access_control_service import acl_service
+
 logger = logging.getLogger(__name__)
 
 
@@ -289,6 +291,7 @@ class ServerServiceV1:
     
     async def list_servers(
         self,
+        username: str,
         query: Optional[str] = None,
         scope: Optional[str] = None,
         status: Optional[str] = None,
@@ -300,6 +303,7 @@ class ServerServiceV1:
         List servers with filtering and pagination.
         
         Args:
+            username: Current user's username (used for ACL filtering)
             query: Free-text search across server_name, description, tags
             scope: Filter by access level (shared_app, shared_user, private_user)
             status: Filter by operational state (active, inactive, error)
@@ -337,7 +341,27 @@ class ServerServiceV1:
                 ]
             }
             filters.append(text_filter)
-        
+
+        # ACL filtering
+        try:
+            user_obj = await IUser.find_one({"username": username})
+            if user_obj:
+                # TODO: use Enums for principal_type and resource_type
+                accessible_ids = await acl_service.list_accessible_resources(
+                    principal_type="user",
+                    principal_id=user_obj.id, 
+                    resource_type="mcpServer",
+                    required_permissions=1
+                )
+                logger.debug(f"Accessible server IDs for user {user_id}: {accessible_ids}")
+                if accessible_ids:
+                    filters.append({"_id": {"$in": accessible_ids}})
+                else:
+                    # No access, return empty
+                    return [], 0
+        except Exception as e:
+            logger.warning(f"ACL filtering failed: {e}")
+
         # Combine all filters
         if filters:
             query_filter = {"$and": filters} if len(filters) > 1 else filters[0]

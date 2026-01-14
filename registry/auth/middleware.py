@@ -283,7 +283,8 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 scopes=scopes,
                 auth_method='jwt',
                 provider='jwt',
-                auth_source="jwt_auth"
+                auth_source="jwt_auth",
+                email=username or ''
             )
         except Exception as e:
             logger.debug(f"JWT auth failed: {e}")
