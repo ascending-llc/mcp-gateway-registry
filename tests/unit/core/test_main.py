@@ -19,24 +19,49 @@ class TestMainApplication:
         """Mock all services used in lifespan."""
         with patch('registry.main.server_service') as mock_server_service, \
              patch('registry.main.vector_service') as mock_vector_service, \
-             patch('registry.main.health_service') as mock_health_service:
+             patch('registry.main.health_service') as mock_health_service, \
+             patch('registry.main.agent_service') as mock_agent_service, \
+             patch('registry.main.init_mongodb') as mock_init_mongodb, \
+             patch('registry.main.close_mongodb') as mock_close_mongodb, \
+             patch('registry.main.get_federation_service') as mock_get_federation, \
+             patch('registry.main.shutdown_proxy_client') as mock_shutdown_proxy:
             
             # Configure mocks
             mock_server_service.load_servers_and_state = Mock()
             mock_server_service.get_enabled_services.return_value = []
-            mock_server_service.get_all_servers.return_value = []
+            mock_server_service.get_all_servers.return_value = {}
             mock_server_service.get_server_info.return_value = {"name": "test_server"}
             
             mock_vector_service.initialize = AsyncMock()
             mock_vector_service._initialized = False  # Skip index update
             
+            mock_agent_service.load_agents_and_state = Mock()
+            mock_agent_service.list_agents.return_value = []
+            
             mock_health_service.initialize = AsyncMock()
             mock_health_service.shutdown = AsyncMock()
+            
+            # Mock MongoDB connection
+            mock_init_mongodb.return_value = AsyncMock()
+            mock_close_mongodb.return_value = AsyncMock()
+            
+            # Mock federation service
+            mock_federation = Mock()
+            mock_federation.config.is_any_federation_enabled.return_value = False
+            mock_get_federation.return_value = mock_federation
+            
+            # Mock proxy client shutdown
+            mock_shutdown_proxy.return_value = AsyncMock()
             
             yield {
                 'server_service': mock_server_service,
                 'vector_service': mock_vector_service,
-                'health_service': mock_health_service
+                'health_service': mock_health_service,
+                'agent_service': mock_agent_service,
+                'init_mongodb': mock_init_mongodb,
+                'close_mongodb': mock_close_mongodb,
+                'get_federation_service': mock_get_federation,
+                'shutdown_proxy_client': mock_shutdown_proxy
             }
 
     @pytest.mark.asyncio
@@ -143,7 +168,7 @@ class TestMainApplication:
             assert static_mounts[0].path == "/static"
         else:
             # Static files not mounted - this is valid if frontend is served separately
-            assert True
+            pass
 
     def test_routers_included(self):
         """Test that all domain routers are included."""
