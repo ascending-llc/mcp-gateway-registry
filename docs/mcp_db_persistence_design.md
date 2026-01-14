@@ -178,7 +178,7 @@ All server endpoints return a **flattened response structure** for frontend conv
 
 ⚠️ **IMPORTANT FOR ENGINEERS:**
 ```python
-# Storage Layer (MongoDB): Nested config object
+# Storage Layer (MongoDB): Nested config object for api key
 {
   "_id": ObjectId("..."),
   "serverName": "github",
@@ -186,9 +186,104 @@ All server endpoints return a **flattened response structure** for frontend conv
     "title": "GitHub MCP Server",
     "description": "...",
     "type": "streamable-http",
-    "url": "https://...",
-    # ... all transport/auth config
+    "url": "http://github-server:8011",  # ← Server endpoint URL
+    "apiKey": {
+      "source": "admin", #user or admin
+      "authorization_type": "custom", # "bearer" "basic" AuthorizationTypeEnum
+      "custom_header": "tavilyApiKey",
+      "key": "xxxxxxxxx"
+    },
+    "requiresOAuth": false,
+    "capabilities": "{\"experimental\":{},\"prompts\":{\"listChanged\":true},\"resources\":{\"subscribe\":false,\"listChanged\":true},\"tools\":{\"listChanged\":true}}",
+    "toolFunctions": {
+      "tavily_search_mcp_tavilysearchv1": {
+        "type": "function",
+        "function": {
+          "name": "tavily_search_mcp_tavilysearchv1",
+          "description": "xxxx",
+          "parameters": {...},
+          "required": [
+              "query"
+          ],
+        ....
+        }
+      },
+    "tools": "tavily_search, tavily_extract, tavily_crawl, tavily_map",
+    "initDuration": 170
+    }
+      
   },
+  "scope": "shared_app",  # ← Root level
+  "status": "active",  # ← Root level
+  "path": "/mcp/github",  # ← Root level
+  "tags": ["github"],  # ← Root level
+  "author": ObjectId("..."),
+  "createdAt": ISODate("..."),
+  "updatedAt": ISODate("...")
+}
+
+# Storage Layer (MongoDB): Nested config object for oauth
+{
+  "_id": ObjectId("..."),
+  "serverName": "github",
+  "config": {
+    "title": "githubcopliot",
+    "description": "copliot",
+    "oauth": {
+      "authorization_url": "https://github.com/login/oauth/authorize",
+      "token_url": "https://github.com/login/oauth/access_token",
+      "client_id": "Iv23lidC6dSy1q3Yr2sI",
+      "client_secret": "xxxxxxxxxxxx",
+      "scope": "repo user read:org"
+    },
+    "type": "streamable-http",
+    "url": "https://api.githubcopilot.com/mcp/",
+    "requiresOAuth": true,
+    "oauthMetadata": { #it's the data from autodiscovery
+      "resource": "https://api.githubcopilot.com/mcp",
+      "authorization_servers": [
+        "https://github.com/login/oauth"
+      ],
+      "scopes_supported": [
+        "gist",
+        "notifications",
+        "public_repo",
+        "repo",
+        "repo:status",
+        "repo_deployment",
+        "user",
+        "user:email",
+        "user:follow",
+        "read:gpg_key",
+        "read:org",
+        "project"
+      ],
+      "bearer_methods_supported": [
+        "header"
+      ],
+      "resource_name": "GitHub MCP Server"
+    },
+    "capabilities": "{\"experimental\":{},\"prompts\":{\"listChanged\":true},\"resources\":{\"subscribe\":false,\"listChanged\":true},\"tools\":{\"listChanged\":true}}",
+    "toolFunctions": {
+      "tavily_search_mcp_tavilysearchv1": {
+        "type": "function",
+        "function": {
+          "name": "tavily_search_mcp_tavilysearchv1",
+          "description": "xxxx",
+          "parameters": {...},
+          "required": [
+              "query"
+          ],
+        ....
+        }
+      },
+    "tools": "tavily_search, tavily_extract, tavily_crawl, tavily_map",
+    "initDuration": 49
+  },
+  "scope": "shared_app",  # ← Root level
+  "status": "active",  # ← Root level
+  "path": "/mcp/github",  # ← Root level
+  "tags": ["github"],  # ← Root level
   "author": ObjectId("..."),
   "createdAt": ISODate("..."),
   "updatedAt": ISODate("...")
@@ -198,28 +293,32 @@ All server endpoints return a **flattened response structure** for frontend conv
 {
   "id": "674e1a2b3c4d5e6f7a8b9c0d",
   "serverName": "github",
-  # ↓ Config fields flattened to root level
+  # ↓ Config fields flattened from config object to root level
   "title": "GitHub MCP Server",
   "description": "...",
-  "type": "streamable-http",
-  "url": "https://...",
-  "requiresOAuth": false,
-  "capabilities": "{...}",
-  "tools": "tool1, tool2, tool3",
-  # ↓ Additional computed/root-level fields
+  "type": "sse",
+  "url": "http://github-server:8011",  # ← From config.url
+  "apiKey": {...},  # ← From config.apiKey (if present)
+  "requiresOAuth": false,  # ← From config.requiresOAuth
+  # ↓ Fields stored at root level in DB
   "author": "507f1f77bcf86cd799439011",
   "scope": "shared_app",
   "status": "active",
   "path": "/mcp/github",
   "tags": ["github"],
+  "capabilities": "{...}",
+  "tools": "tool1, tool2, tool3",
+  # ↓ Computed fields
   "numTools": 3,  # ← Calculated from tools string split
-  "numStars": 1250,
-  "lastConnected": "2026-01-04T14:30:00Z",
+  "numStars": 1250,  # ← From root in DB
+  "lastConnected": "2026-01-04T14:30:00Z",  # ← From root in DB
   "createdAt": "2026-01-01T10:00:00Z",
   "updatedAt": "2026-01-03T15:45:00Z"
 }
 
 ```
+
+
 
 **Flattened API Response Fields:**
 
@@ -247,7 +346,6 @@ All server endpoints return a **flattened response structure** for frontend conv
 
 **Additional Fields (stored at root or computed):**
 - `path`: string - API path for this server (e.g., "/mcp/github") *[stored at root in DB]*
-- `proxyPassUrl`: string (optional) - Proxy URL for HTTP-based servers *[stored at root in DB]*
 - `tags`: string[] - Array of tags for categorization *[stored at root in DB]*
 - `numTools`: number - **Calculated** from splitting the `tools` string (e.g., "tool1, tool2" → 2)
 - `numStars`: number - Number of stars/favorites *[stored at root in DB]*
@@ -288,22 +386,30 @@ Response 200:
   "servers": [
     {
       "id": "674e1a2b3c4d5e6f7a8b9c0d",
-      "serverName": "github",
-      "title": "GitHub MCP Server",
-      "description": "Interact with GitHub repositories",
+      "serverName": "github-copilot",
+      "title": "GitHub Integration", #this is coming for config.title
+      "description": "GitHub repository management and code search",
       "type": "streamable-http",
-      "url": "https://mcp-github.example.com/",
-      "requiresOAuth": false,
+      "url": "http://github-server:8011",
+      "requiresOAuth": true,
+      "oauth": {
+        "authorization_url": "https://github.com/login/oauth/authorize",
+        "token_url": "https://github.com/login/oauth/access_token",
+        "client_id": "Iv23li8dSy1q3r2sI",
+        "client_secret": "***",
+        "scope": "repo read:user read:org"
+      },
       "capabilities": "{\"experimental\":{},\"prompts\":{\"listChanged\":true},\"resources\":{\"subscribe\":false,\"listChanged\":true},\"tools\":{\"listChanged\":true}}",
-      "tools": "create_repository, create_issue, search_repositories",
+      "tools": "search_code, create_issue, list_repos, get_pull_requests",
       "author": "507f1f77bcf86cd799439011",
       "scope": "shared_app",
       "status": "active",
       "path": "/mcp/github",
-      "tags": ["github", "version-control", "collaboration"],
-      "numTools": 3,
+      "tags": ["github", "version-control", "collaboration", "development"],
+      "numTools": 4,
       "numStars": 1250,
-      "lastConnected": "2026-01-04T14:30:00Z",
+      "initDuration": 49,
+      "lastConnected": "2026-01-03T15:54:22.728+00:00",
       "createdAt": "2026-01-01T10:00:00Z",
       "updatedAt": "2026-01-03T15:45:00Z"
     },
@@ -327,7 +433,6 @@ Response 200:
       "scope": "shared_app",
       "status": "active",
       "path": "/mcp/tavilysearchv1",
-      "proxyPassUrl": "https://mcp.tavily.com",
       "tags": ["search", "web", "tavily"],
       "numTools": 4,
       "numStars": 890,
@@ -355,49 +460,65 @@ Authorization: Bearer <token>
 Response 200:
 {
   "id": "674e1a2b3c4d5e6f7a8b9c0d",
-  "serverName": "github",
-  "title": "GitHub MCP Server",
-  "description": "Interact with GitHub repositories, issues, and pull requests",
+  "serverName": "github-copilot",
+  "title": "GitHub Integration",
+  "description": "GitHub repository management and code search",
   "type": "streamable-http",
-  "url": "https://mcp-github.example.com/",
-  "requiresOAuth": false,
+  "url": "http://github-server:8011",
+  "requiresOAuth": true,
+  "oauth": {
+    "authorization_url": "https://github.com/login/oauth/authorize",
+    "token_url": "https://github.com/login/oauth/access_token",
+    "authorize_url": "https://github.com/login/oauth/authorize",
+    "client_id": "Iv23li8dSy1q3r2sI",
+    "client_secret": "***",
+    "scope": "repo read:user read:org"
+  },
+  "oauthMetadata": {
+    "resource": "https://api.githubcopilot.com/mcp",
+    "authorization_servers": ["https://github.com/login/oauth"],
+    "scopes_supported": ["repo", "user", "read:org", "gist", "notifications"],
+    "bearer_methods_supported": ["header"],
+    "resource_name": "GitHub MCP Server"
+  },
   "capabilities": "{\"experimental\":{},\"prompts\":{\"listChanged\":true},\"resources\":{\"subscribe\":false,\"listChanged\":true},\"tools\":{\"listChanged\":true}}",
-  "tools": "create_repository, create_issue, search_repositories, list_commits, create_pull_request",
+  "tools": "search_code, create_issue, list_repos, get_pull_requests",
   "toolFunctions": {
-    "create_repository_github": {
+    "search_code_mcp_github_copilot": {
       "type": "function",
       "function": {
-        "name": "create_repository_github",
-        "description": "Create a new GitHub repository",
+        "name": "search_code_mcp_github_copilot",
+        "description": "Search for code across GitHub repositories",
         "parameters": {
           "type": "object",
           "properties": {
-            "name": {
+            "query": {
               "type": "string",
-              "description": "Repository name"
+              "description": "The search query"
             },
-            "private": {
-              "type": "boolean",
-              "description": "Whether the repository is private"
+            "language": {
+              "type": "string",
+              "description": "Filter by programming language"
             }
           },
-          "required": ["name"]
+          "required": ["query"]
         }
       }
     },
-    "create_issue_github": {
+    "create_issue_mcp_github_copilot": {
       "type": "function",
       "function": {
-        "name": "create_issue_github",
+        "name": "create_issue_mcp_github_copilot",
         "description": "Create a new issue in a repository",
         "parameters": {
           "type": "object",
           "properties": {
-            "repo": {"type": "string"},
-            "title": {"type": "string"},
-            "body": {"type": "string"}
+            "owner": {"type": "string", "description": "Repository owner"},
+            "repo": {"type": "string", "description": "Repository name"},
+            "title": {"type": "string", "description": "Issue title"},
+            "body": {"type": "string", "description": "Issue body"}
           },
-          "required": ["repo", "title"]
+          "required": ["owner", "repo", "title"]
         }
       }
     }
@@ -406,11 +527,11 @@ Response 200:
   "author": "507f1f77bcf86cd799439011",
   "scope": "shared_app",
   "status": "active",
-  "path": "/mcp/github",
-  "tags": ["github", "version-control", "collaboration", "development"],
-  "numTools": 5,
+  "path": "/mcp/github-copilot",
+  "tags": ["github", "version-control"],
+  "numTools": 4,
   "numStars": 1250,
-  "lastConnected": "2026-01-04T14:30:00Z",
+  "lastConnected": "2026-01-03T15:54:22.728+00:00",
   "lastError": null,
   "errorMessage": null,
   "createdAt": "2026-01-01T10:00:00Z",
@@ -430,11 +551,11 @@ Request:
 {
   "serverName": "custom-api-server",
   "title": "Custom API Server",
-  "description": "My custom API integration",
+  "description": "Internal API integration server",
   "type": "streamable-http",
-  "url": "https://api.example.com/mcp/",
+  "url": "http://api-server:8080/mcp",
   "apiKey": {
-    "key": "user_provided_key",
+    "key": "sk-123456",
     "source": "user",
     "authorization_type": "bearer"
   },
@@ -448,32 +569,46 @@ Response 201:
   "id": "674e1a2b3c4d5e6f7a8b9c0e",
   "serverName": "custom-api-server",
   "title": "Custom API Server",
-  "description": "My custom API integration",
+  "description": "Internal API integration server",
   "type": "streamable-http",
-  "url": "https://api.example.com/mcp/",
+  "url": "http://api-server:8080/mcp",
   "apiKey": {
-    "key": "encrypted_api_key_here",
+    "key": "***",
     "source": "user",
     "authorization_type": "bearer"
   },
   "requiresOAuth": false,
-  "capabilities": "{\"tools\":{}}",
-  "tools": "search, analyze",
+  "capabilities": "{\"tools\":{\"listChanged\":true}}",
+  "tools": "fetch_data, post_data, get_status",
   "toolFunctions": {
     "search_custom_api_server": {
       "type": "function",
       "function": {
-        "name": "search_custom_api_server",
-        "description": "Search through data",
-        "parameters": {"type": "object", "properties": {"query": {"type": "string"}}}
+        "name": "fetch_data_mcp_custom_api_server",
+        "description": "Fetch data from the API",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "endpoint": {"type": "string", "description": "API endpoint path"},
+            "params": {"type": "object", "description": "Query parameters"}
+          },
+          "required": ["endpoint"]
+        }
       }
     },
     "analyze_custom_api_server": {
       "type": "function",
       "function": {
-        "name": "analyze_custom_api_server",
-        "description": "Analyze data",
-        "parameters": {"type": "object", "properties": {"data": {"type": "string"}}}
+        "name": "post_data_mcp_custom_api_server",
+        "description": "Post data to the API",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "endpoint": {"type": "string"},
+            "data": {"type": "object"}
+          },
+          "required": ["endpoint", "data"]
+        }
       }
     }
   },
@@ -483,7 +618,7 @@ Response 201:
   "status": "active",
   "path": "/mcp/custom-api-server",
   "tags": ["api", "custom"],
-  "numTools": 2,
+  "numTools": 3,
   "numStars": 0,
   "lastConnected": "2026-01-04T16:00:00Z",
   "createdAt": "2026-01-04T16:00:00Z",
@@ -506,8 +641,8 @@ Content-Type: application/json
 
 Request:
 {
-  "description": "Updated description - Enhanced GitHub integration",
-  "tags": ["github", "version-control", "collaboration", "enhanced"],
+  "description": "Updated - Enhanced GitHub integration with new features",
+  "tags": ["github", "version-control", "collaboration"],
   "status": "active"
 }
 
@@ -518,17 +653,24 @@ Response 200:
   "title": "GitHub MCP Server",
   "description": "Updated description - Enhanced GitHub integration",
   "type": "streamable-http",
-  "url": "https://mcp-github.example.com/",
-  "requiresOAuth": false,
-  "capabilities": "{\"experimental\":{},\"prompts\":{},\"resources\":{},\"tools\":{}}",
-  "tools": "create_repository, create_issue, search_repositories",
-  "initDuration": 150,
-  "author": "507f1f77bcf86cd799439011",
+  "url": "http://github-server:8011",
+  "requiresOAuth": true,
+  "oauth": {
+    "authorization_url": "https://github.com/login/oauth/authorize",
+    "token_url": "https://github.com/login/oauth/access_token",
+    "client_id": "Iv23li8dSy1q3r2sI",
+    "client_secret": "***",
+    "scope": "repo read:user read:org"
+  },
+  "capabilities": "{\"experimental\":{},\"prompts\":{\"listChanged\":true},\"resources\":{\"subscribe\":false,\"listChanged\":true},\"tools\":{\"listChanged\":true}}",
+  "tools": "search_code, create_issue, list_repos, get_pull_requests",
+  "initDuration": 49,
+  "author": "69593baec59bdd2853ad0ff1",
   "scope": "shared_app",
   "status": "active",
-  "path": "/mcp/github",
-  "tags": ["github", "version-control", "collaboration", "enhanced"],
-  "numTools": 3,
+  "path": "/mcp/github-copilot",
+  "tags": ["github", "version-control", "collaboration"],
+  "numTools": 4,
   "numStars": 1250,
   "lastConnected": "2026-01-04T14:30:00Z",
   "createdAt": "2026-01-01T10:00:00Z",
@@ -597,18 +739,18 @@ Response 200:
   "serverName": "github",
   "tools": [
     {
-      "name": "create_repository_github",
-      "description": "Create a new GitHub repository",
+      "name": "search_code",
+      "description": "Search for code across GitHub repositories",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "name": {
+          "query": {
             "type": "string",
             "description": "Repository name"
           },
-          "private": {
-            "type": "boolean",
-            "description": "Whether the repository is private"
+          "language": {
+            "type": "string",
+            "description": "Filter by programming language"
           }
         },
         "required": ["name"]
@@ -620,15 +762,16 @@ Response 200:
       "inputSchema": {
         "type": "object",
         "properties": {
-          "repo": {"type": "string"},
-          "title": {"type": "string"},
-          "body": {"type": "string"}
+          "owner": {"type": "string", "description": "Repository owner"},
+          "repo": {"type": "string", "description": "Repository name"},
+          "title": {"type": "string", "description": "Issue title"},
+          "body": {"type": "string", "description": "Issue body"}
         },
-        "required": ["repo", "title"]
+        "required": ["owner", "repo", "title"]
       }
     }
   ],
-  "numTools": 15,
+  "numTools": 4,
   "capabilities": {
     "experimental": {},
     "prompts": {"listChanged": true},
@@ -655,10 +798,10 @@ Response 200:
   "lastConnected": "2026-01-04T16:20:00Z",
   "lastError": null,
   "errorMessage": null,
-  "numTools": 3,
-  "capabilities": "{\"experimental\":{},\"prompts\":{},\"resources\":{},\"tools\":{}}",
-  "tools": "create_repository, create_issue, search_repositories",
-  "initDuration": 145,
+  "numTools": 4,
+  "capabilities": "{\"experimental\":{},\"prompts\":{\"listChanged\":true},\"resources\":{\"subscribe\":false,\"listChanged\":true}}",
+  "tools": "tavily_search, tavily_extract, tavily_crawl, tavily_map",
+  "initDuration": 168,
   "message": "Server health check successful",
   "updatedAt": "2026-01-04T16:20:00Z"
 }

@@ -1,11 +1,24 @@
-import { ArrowPathIcon, ClockIcon, CogIcon, PencilIcon, WrenchScrewdriverIcon } from '@heroicons/react/24/outline';
-import axios from 'axios';
+import {
+  ArrowPathIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  CogIcon,
+  KeyIcon,
+  PencilIcon,
+  WrenchScrewdriverIcon,
+} from '@heroicons/react/24/outline';
 import type React from 'react';
 import { useCallback, useState } from 'react';
+
+import SERVICES from '@/services';
+import { SERVER_CONNECTION } from '@/services/mcp/type';
+import UTILS from '@/utils';
+import ServerAuthorizationModal from './ServerAuthorizationModal';
 import ServerConfigModal from './ServerConfigModal';
 import StarRatingWidget from './StarRatingWidget';
 
 export interface Server {
+  id: string;
   name: string;
   path: string;
   description?: string;
@@ -16,93 +29,66 @@ export interface Server {
   usersCount?: number;
   num_stars?: number; // Average rating from backend
   rating_details?: Array<{ user: string; rating: number }>;
-  status?: 'healthy' | 'healthy-auth-expired' | 'unhealthy' | 'unknown';
+  status?: 'active' | 'inactive' | 'error';
   num_tools?: number;
+  connection_state: SERVER_CONNECTION;
+  requires_oauth: boolean;
 }
 
 interface ServerCardProps {
   server: Server;
-  onToggle: (path: string, enabled: boolean) => void;
-  onEdit?: (server: Server) => void;
   canModify?: boolean;
-  onRefreshSuccess?: () => void;
-  onShowToast?: (message: string, type: 'success' | 'error') => void;
-  onServerUpdate?: (path: string, updates: Partial<Server>) => void;
   authToken?: string | null;
+  onEdit?: (server: Server) => void;
+  onShowToast: (message: string, type: 'success' | 'error') => void;
+  onServerUpdate: (id: string, updates: Partial<Server>) => void;
+  onRefreshSuccess?: () => void;
 }
 
 interface Tool {
   name: string;
   description?: string;
-  schema?: any;
+  inputSchema?: any;
 }
-
-// Helper function to format time since last checked
-const formatTimeSince = (timestamp: string | null | undefined): string | null => {
-  if (!timestamp) {
-    console.log('🕐 formatTimeSince: No timestamp provided', timestamp);
-    return null;
-  }
-
-  try {
-    const now = new Date();
-    const lastChecked = new Date(timestamp);
-
-    // Check if the date is valid
-    if (Number.isNaN(lastChecked.getTime())) {
-      console.log('🕐 formatTimeSince: Invalid timestamp', timestamp);
-      return null;
-    }
-
-    const diffMs = now.getTime() - lastChecked.getTime();
-
-    const diffSeconds = Math.floor(diffMs / 1000);
-    const diffMinutes = Math.floor(diffSeconds / 60);
-    const diffHours = Math.floor(diffMinutes / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    let result: string | null = null;
-    if (diffDays > 0) {
-      result = `${diffDays}d ago`;
-    } else if (diffHours > 0) {
-      result = `${diffHours}h ago`;
-    } else if (diffMinutes > 0) {
-      result = `${diffMinutes}m ago`;
-    } else {
-      result = `${diffSeconds}s ago`;
-    }
-
-    console.log(`🕐 formatTimeSince: ${timestamp} -> ${result}`);
-    return result;
-  } catch (error) {
-    console.error('🕐 formatTimeSince error:', error, 'for timestamp:', timestamp);
-    return null;
-  }
-};
 
 const ServerCard: React.FC<ServerCardProps> = ({
   server,
-  onToggle,
-  onEdit,
   canModify,
-  onRefreshSuccess,
+  authToken,
+  onEdit,
   onShowToast,
   onServerUpdate,
-  authToken,
+  onRefreshSuccess,
 }) => {
+  const [loading, setLoading] = useState(false);
   const [tools, setTools] = useState<Tool[]>([]);
   const [loadingTools, setLoadingTools] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [loadingRefresh, setLoadingRefresh] = useState(false);
+  const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
+
+  const { connection_state, requires_oauth } = server || {};
+
+  const getAuthStatusIcon = useCallback(() => {
+    if (requires_oauth && connection_state === SERVER_CONNECTION.CONNECTED) {
+      return <CheckCircleIcon className='h-4 w-4 text-green-500' />;
+    }
+    if (requires_oauth && connection_state === SERVER_CONNECTION.DISCONNECTED) {
+      return <KeyIcon className='h-4 w-4 text-amber-500' />;
+    }
+    if (requires_oauth && connection_state === SERVER_CONNECTION.CONNECTING) {
+      return <KeyIcon className='h-4 w-4 text-amber-500' />;
+    }
+  }, [requires_oauth, connection_state]);
 
   const handleViewTools = useCallback(async () => {
     if (loadingTools) return;
 
     setLoadingTools(true);
     try {
-      const response = await axios.get(`/api/tools${server.path}`);
-      setTools(response.data.tools || []);
+      const result = await SERVICES.SERVER.getServerTools(server.id);
+      setTools(result.tools || []);
       setShowTools(true);
     } catch (error) {
       console.error('Failed to fetch tools:', error);
@@ -119,29 +105,16 @@ const ServerCard: React.FC<ServerCardProps> = ({
 
     setLoadingRefresh(true);
     try {
-      // Extract service name from path (remove leading slash)
-      const serviceName = server.path.replace(/^\//, '');
+      const result = await SERVICES.SERVER.refreshServerHealth(server.id);
 
-      const response = await axios.post(`/api/refresh/${serviceName}`);
-
-      // Update just this server instead of triggering global refresh
-      if (onServerUpdate && response.data) {
+      if (onServerUpdate && result) {
         const updates: Partial<Server> = {
-          status:
-            response.data.status === 'healthy'
-              ? 'healthy'
-              : response.data.status === 'healthy-auth-expired'
-                ? 'healthy-auth-expired'
-                : response.data.status === 'unhealthy'
-                  ? 'unhealthy'
-                  : 'unknown',
-          last_checked_time: response.data.last_checked_iso,
-          num_tools: response.data.num_tools,
+          status: result.status,
+          last_checked_time: result.last_checked,
+          num_tools: result.num_tools,
         };
-
-        onServerUpdate(server.path, updates);
+        onServerUpdate(server.id, updates);
       } else if (onRefreshSuccess) {
-        // Fallback to global refresh if onServerUpdate is not provided
         onRefreshSuccess();
       }
 
@@ -149,14 +122,26 @@ const ServerCard: React.FC<ServerCardProps> = ({
         onShowToast('Health status refreshed successfully', 'success');
       }
     } catch (error: any) {
-      console.error('Failed to refresh health:', error);
       if (onShowToast) {
-        onShowToast(error.response?.data?.detail || 'Failed to refresh health status', 'error');
+        onShowToast(error?.detail || 'Failed to refresh health status', 'error');
       }
     } finally {
       setLoadingRefresh(false);
     }
   }, [server.path, loadingRefresh, onRefreshSuccess, onShowToast, onServerUpdate]);
+
+  const handleToggleServer = async (id: string, enabled: boolean) => {
+    try {
+      setLoading(true);
+      await SERVICES.SERVER.toggleServerStatus(id, { enabled });
+      onServerUpdate(id, { enabled });
+      onShowToast(`Server ${enabled ? 'enabled' : 'disabled'} successfully!`, 'success');
+    } catch (error: any) {
+      onShowToast(error.detail || 'Failed to toggle server', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Generate MCP configuration for the server
   // Check if this is an Anthropic registry server
@@ -164,16 +149,21 @@ const ServerCard: React.FC<ServerCardProps> = ({
 
   // Check if this server has security pending
   const isSecurityPending = server.tags?.includes('security-pending');
-  console.log('isSecurityPending', isSecurityPending);
+
   return (
     <>
       <div
-        className={`group rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 h-full flex flex-col ${
+        className={`group rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 h-full flex flex-col relative ${
           isAnthropicServer
             ? 'bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 border-2 border-purple-200 dark:border-purple-700 hover:border-purple-300 dark:hover:border-purple-600'
             : 'bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600'
         }`}
       >
+        {loading && (
+          <div className='absolute inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10'>
+            <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600'></div>
+          </div>
+        )}
         {/* Header */}
         <div className='p-4 pb-3'>
           <div className='flex items-start justify-between mb-3'>
@@ -211,6 +201,19 @@ const ServerCard: React.FC<ServerCardProps> = ({
             </div>
 
             <div className='flex gap-1'>
+              {requires_oauth && (
+                <button
+                  className='p-1.5 text-amber-500 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-all duration-200 flex-shrink-0'
+                  onClick={() => setShowApiKeyDialog(true)}
+                  title='Manage API keys'
+                >
+                  {connection_state === SERVER_CONNECTION.CONNECTING ? (
+                    <div className='animate-spin rounded-full h-3 w-3 border-b-2 border-slate-200' />
+                  ) : (
+                    getAuthStatusIcon()
+                  )}
+                </button>
+              )}
               {canModify && (
                 <button
                   className='p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-all duration-200 flex-shrink-0'
@@ -270,7 +273,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
               onRatingUpdate={newRating => {
                 // Update local server rating when user submits rating
                 if (onServerUpdate) {
-                  onServerUpdate(server.path, { num_stars: newRating });
+                  onServerUpdate(server.id, { num_stars: newRating });
                 }
               }}
             />
@@ -324,22 +327,22 @@ const ServerCard: React.FC<ServerCardProps> = ({
               <div className='flex items-center gap-1'>
                 <div
                   className={`w-2.5 h-2.5 rounded-full ${
-                    server.status === 'healthy'
+                    server.status === 'active'
                       ? 'bg-emerald-400 shadow-lg shadow-emerald-400/30'
-                      : server.status === 'healthy-auth-expired'
+                      : server.status === 'inactive'
                         ? 'bg-orange-400 shadow-lg shadow-orange-400/30'
-                        : server.status === 'unhealthy'
+                        : server.status === 'error'
                           ? 'bg-red-400 shadow-lg shadow-red-400/30'
                           : 'bg-amber-400 shadow-lg shadow-amber-400/30'
                   }`}
                 />
                 <span className='text-xs font-medium text-gray-700 dark:text-gray-300 max-w-[80px] truncate'>
-                  {server.status === 'healthy'
-                    ? 'Healthy'
-                    : server.status === 'healthy-auth-expired'
-                      ? 'Healthy (Auth Expired)'
-                      : server.status === 'unhealthy'
-                        ? 'Unhealthy'
+                  {server.status === 'active'
+                    ? 'Active'
+                    : server.status === 'inactive'
+                      ? 'Inactive'
+                      : server.status === 'error'
+                        ? 'Error'
                         : 'Unknown'}
                 </span>
               </div>
@@ -349,9 +352,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
             <div className='flex items-center gap-2'>
               {/* Last Checked */}
               {(() => {
-                console.log(`🕐 ServerCard ${server.name}: last_checked_time =`, server.last_checked_time);
-                const timeText = formatTimeSince(server.last_checked_time);
-                console.log(`🕐 ServerCard ${server.name}: timeText =`, timeText);
+                const timeText = UTILS.formatTimeSince(server.last_checked_time);
                 return server.last_checked_time && timeText ? (
                   <div className='text-xs text-gray-500 dark:text-gray-300 flex items-center gap-1 hidden md:flex'>
                     <ClockIcon className='h-3 w-3' />
@@ -375,7 +376,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
                 <input
                   type='checkbox'
                   checked={server.enabled}
-                  onChange={e => onToggle(server.path, e.target.checked)}
+                  onChange={e => handleToggleServer(server.id, e.target.checked)}
                   className='sr-only peer'
                 />
                 <div
@@ -417,11 +418,11 @@ const ServerCard: React.FC<ServerCardProps> = ({
                     {tool.description && (
                       <p className='text-sm text-gray-600 dark:text-gray-300 mb-2'>{tool.description}</p>
                     )}
-                    {tool.schema && (
+                    {tool.inputSchema && (
                       <details className='text-xs'>
                         <summary className='cursor-pointer text-gray-500 dark:text-gray-300'>View Schema</summary>
                         <pre className='mt-2 p-3 bg-gray-50 dark:bg-gray-900 border dark:border-gray-700 rounded overflow-x-auto text-gray-900 dark:text-gray-100'>
-                          {JSON.stringify(tool.schema, null, 2)}
+                          {JSON.stringify(tool.inputSchema, null, 2)}
                         </pre>
                       </details>
                     )}
@@ -441,6 +442,16 @@ const ServerCard: React.FC<ServerCardProps> = ({
         onClose={() => setShowConfig(false)}
         onShowToast={onShowToast}
       />
+
+      {showApiKeyDialog && (
+        <ServerAuthorizationModal
+          name={server.name}
+          status={connection_state}
+          showApiKeyDialog={showApiKeyDialog}
+          setShowApiKeyDialog={setShowApiKeyDialog}
+          onShowToast={onShowToast}
+        />
+      )}
     </>
   );
 };

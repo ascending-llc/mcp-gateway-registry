@@ -6,8 +6,12 @@ from registry.services.oauth.mcp_service import MCPService, get_mcp_service
 from registry.schemas.enums import ConnectionState
 from registry.utils.log import logger
 from registry.services.server_service_v1 import server_service_v1
+from registry.services.oauth.connection_status_service import (
+    get_servers_connection_status,
+    get_single_server_connection_status
+)
 
-router = APIRouter(prefix="/v1", tags=["connection"])
+router = APIRouter(prefix="/v1/mcp", tags=["connection"])
 
 
 @router.post("/{server_name}/reinitialize")
@@ -71,7 +75,7 @@ async def reinitialize_server(
                         "success": False,
                         "message": f"Failed to initiate OAuth: {error}",
                         "server_name": server_name,
-                        "requires_oauth":server_docs.config.get("requires_oauth", False)
+                        "requires_oauth": server_docs.config.get("requires_oauth", False)
                     }
                 )
 
@@ -88,12 +92,11 @@ async def reinitialize_server(
 
     except Exception as e:
         logger.error(f"Unexpected error for {server_name}: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"Internal server error: {str(e)}")
 
 
+@DeprecationWarning
 @router.get("/connection/status")
 async def get_all_connection_status(
         current_user: CurrentUser,
@@ -110,31 +113,27 @@ async def get_all_connection_status(
         user_id = current_user.get('user_id')
         logger.debug(f"Fetching connection status for all servers (user: {user_id})")
 
-        # Get all user connections
-        user_connections = mcp_service.connection_service.get_user_connections(user_id)
+        # Get all active servers
+        all_services, _ = await server_service_v1.list_servers(per_page=1000, status="active")
+        logger.info(f"Found {len(all_services)} servers")
 
-        connection_status = {}
-        for server_name, connection in user_connections.items():
-            connection_status[server_name] = {
-                "connection_state": connection.connection_state.value,
-                "last_activity": connection.last_activity,
-                "error_count": connection.error_count,
-                "details": connection.details
-            }
-
+        connection_status = await get_servers_connection_status(
+            user_id=user_id,
+            servers=all_services,
+            mcp_service=mcp_service
+        )
         return {
             "success": True,
-            "connection_status": connection_status
+            "connectionStatus": connection_status
         }
 
     except Exception as e:
         logger.error(f"Failed to get connection status: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to get connection status"
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail="Failed to get connection status")
 
 
+@DeprecationWarning
 @router.get("/connection/status/{server_name}")
 async def get_server_connection_status(
         server_name: str,
@@ -145,6 +144,7 @@ async def get_server_connection_status(
     Get connection status for a specific MCP server
     
     Returns detailed connection status including state, OAuth requirement, and details.
+    Uses the same logic as /connection/status to ensure consistency.
     
     Notes: GET /connection/status/:serverName (TypeScript reference)
     """
@@ -152,26 +152,25 @@ async def get_server_connection_status(
         user_id = current_user.get('user_id')
         logger.debug(f"Fetching status for {server_name} (user: {user_id})")
 
-        # Get connection for specific server
-        connection = await mcp_service.connection_service.get_connection(user_id, server_name)
-        server_docs = await get_service_config(server_name)
-        if not connection:
-            return {
-                "success": True,
-                "server_name": server_name,
-                "connection_status": "DISCONNECTED",
-                "requires_oauth": server_docs.config.get("requires_oauth", False),
-                "details": {}
-            }
-
+        server_status = await get_single_server_connection_status(
+            user_id=user_id,
+            server_name=server_name,
+            mcp_service=mcp_service
+        )
         return {
             "success": True,
             "server_name": server_name,
-            "connection_status": connection.connection_state.value,
-            "requires_oauth": server_docs.config.get("requires_oauth", False),
-            "details": connection.details
+            "connection_state": server_status["connection_state"],
+            "requires_oauth": server_status["requires_oauth"]
         }
-
+    except ValueError as e:
+        # Server not found
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get status for {server_name}: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

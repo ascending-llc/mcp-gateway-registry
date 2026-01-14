@@ -6,13 +6,13 @@ import {
   FunnelIcon,
   KeyIcon,
 } from '@heroicons/react/24/outline';
-import axios from 'axios';
 import type React from 'react';
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useServer } from '@/contexts/ServerContext';
+import SERVICES from '@/services';
 
 const Content: React.FC<any> = ({ setTokenData, setSidebarOpen, setShowTokenModal }) => {
   const location = useLocation();
@@ -37,18 +37,13 @@ const Content: React.FC<any> = ({ setTokenData, setSidebarOpen, setShowTokenModa
     setLoading(true);
     setError('');
     try {
-      const requestData = { description: 'Generated via sidebar', expires_in_hours: 8 };
-
-      const response = await axios.post('/api/tokens/generate', requestData, {
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      if (response.data.success) {
-        setTokenData(response.data);
+      const result = await SERVICES.TOKEN.getToken({ expires_in_hours: 8, description: 'Generated via sidebar' });
+      if (result.success) {
+        setTokenData(result);
         setShowTokenModal(true);
       }
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to generate token');
+      setError(err?.detail || 'Failed to generate token');
     } finally {
       setLoading(false);
     }

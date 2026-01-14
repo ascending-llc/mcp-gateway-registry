@@ -13,8 +13,8 @@ from registry.models.oauth_models import (
     OAuthClientInformation,
     OAuthMetadata
 )
-from registry.schemas.enums import OAuthFlowStatus
 from registry.utils.log import logger
+from registry.schemas.enums import OAuthFlowStatus
 
 
 class FlowStateManager:
@@ -59,11 +59,9 @@ class FlowStateManager:
 
     def generate_flow_id(self, user_id: str, server_name: str) -> str:
         """
-        Generate unique OAuth flow ID
+        Generate OAuth flow ID
         """
-        timestamp = int(time.time() * 1000)
-        random_hex = secrets.token_hex(4)
-        return f"{user_id}-{server_name}-{timestamp}-{random_hex}"
+        return f"{user_id}:{server_name}"
 
     def encode_state(self, flow_id: str, security_token: Optional[str] = None) -> str:
         """
@@ -135,7 +133,7 @@ class FlowStateManager:
             user_id=user_id,
             code_verifier=code_verifier,
             state=metadata.state,
-            status="pending",
+            status=OAuthFlowStatus.PENDING,
             created_at=time.time(),
             metadata=metadata
         )
@@ -270,7 +268,7 @@ class FlowStateManager:
             try:
                 # Find pending flows for user and server
                 flows = self._redis_storage.find_flows(user_id, server_name)
-                pending_flows = [f for f in flows if f.status == "pending"]
+                pending_flows = [f for f in flows if f.status == OAuthFlowStatus.PENDING]
 
                 if not pending_flows:
                     return False
@@ -291,7 +289,7 @@ class FlowStateManager:
             # Use memory storage
             flow_to_cancel = None
             for flow_id, flow in self._memory_flows.items():
-                if flow.user_id == user_id and flow.server_name == server_name and flow.status == "pending":
+                if flow.user_id == user_id and flow.server_name == server_name and flow.status == OAuthFlowStatus.PENDING:
                     flow_to_cancel = flow
                     break
 
@@ -334,7 +332,7 @@ class FlowStateManager:
         redirect_uri = oauth_config.get("redirect_uri")
         if not redirect_uri:
             base_url = os.environ.get("REGISTRY_URL", "http://127.0.0.1:3080")
-            redirect_uri = f"{base_url}/api/mcp/v1/{server_name}/oauth/callback"
+            redirect_uri = f"{base_url}/api/v1/mcp/{server_name}/oauth/callback"
 
         redirect_uris = [redirect_uri] if redirect_uri else []
 

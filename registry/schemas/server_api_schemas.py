@@ -5,19 +5,21 @@ These schemas define the request and response models for the
 Server Management endpoints based on the API documentation.
 """
 
-from typing import Any, Dict, List, Optional
+import json
+from typing import Any, Dict, List, Optional, Union
 from datetime import datetime
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_serializer
+from registry.utils.crypto_utils import decrypt_auth_fields
 
 
 # ==================== Request Schemas ====================
 
 class ServerCreateRequest(BaseModel):
     """Request schema for creating a new server"""
-    server_name: str = Field(..., description="Name of the MCP server")
+    serverName: str = Field(..., alias="serverName", description="Name of the MCP server")
     path: str = Field(..., description="Unique path/route for the server")
     description: Optional[str] = Field(default="", description="Server description")
-    proxy_pass_url: Optional[str] = Field(default=None, description="Backend proxy URL")
+    url: Optional[str] = Field(default=None, description="Backend proxy URL")
     scope: str = Field(default="private_user", description="Access scope: shared_app, shared_user, or private_user")
     tags: List[str] = Field(default_factory=list, description="Server tags")
     num_tools: int = Field(default=0, description="Number of tools")
@@ -27,7 +29,7 @@ class ServerCreateRequest(BaseModel):
     auth_type: Optional[str] = Field(default=None, description="Authentication type")
     auth_provider: Optional[str] = Field(default=None, description="Authentication provider")
     supported_transports: List[str] = Field(default_factory=list, description="Supported transports")
-    transport: Optional[Dict[str, Any]] = Field(default=None, description="Transport configuration")
+    transport: Optional[Union[str, Dict[str, Any]]] = Field(default=None, description="Transport configuration (string or dict)")
     startup: bool = Field(default=False, description="Start on system startup")
     chat_menu: bool = Field(default=True, description="Show in chat menu")
     tool_list: List[Dict[str, Any]] = Field(default_factory=list, description="List of tools")
@@ -38,6 +40,12 @@ class ServerCreateRequest(BaseModel):
     requires_oauth: bool = Field(default=False, description="Requires OAuth")
     oauth: Optional[Dict[str, Any]] = Field(default=None, description="OAuth configuration")
     custom_user_vars: Optional[Dict[str, Any]] = Field(default=None, description="Custom variables")
+    authentication: Optional[Dict[str, Any]] = Field(default=None, description="Authentication configuration (type, provider, scopes, etc.)")
+    apiKey: Optional[Dict[str, Any]] = Field(default=None, description="API Key authentication configuration")
+    enabled: bool = Field(default=True, description="Whether the server is enabled")
+    
+    class ConfigDict:
+        populate_by_name = True  # Allow both serverName and server_name
     
     @field_validator('tags', mode='before')
     @classmethod
@@ -59,9 +67,9 @@ class ServerCreateRequest(BaseModel):
 
 class ServerUpdateRequest(BaseModel):
     """Request schema for updating a server (partial update)"""
-    server_name: Optional[str] = None
+    serverName: Optional[str] = Field(None, alias="serverName")
     description: Optional[str] = None
-    proxy_pass_url: Optional[str] = None
+    url: Optional[str] = None
     tags: Optional[List[str]] = None
     num_tools: Optional[int] = None
     num_stars: Optional[int] = None
@@ -70,7 +78,7 @@ class ServerUpdateRequest(BaseModel):
     auth_type: Optional[str] = None
     auth_provider: Optional[str] = None
     supported_transports: Optional[List[str]] = None
-    transport: Optional[Dict[str, Any]] = None
+    transport: Optional[Union[str, Dict[str, Any]]] = None
     startup: Optional[bool] = None
     chat_menu: Optional[bool] = None
     tool_list: Optional[List[Dict[str, Any]]] = None
@@ -81,9 +89,14 @@ class ServerUpdateRequest(BaseModel):
     requires_oauth: Optional[bool] = None
     oauth: Optional[Dict[str, Any]] = None
     custom_user_vars: Optional[Dict[str, Any]] = None
+    authentication: Optional[Dict[str, Any]] = None
+    apiKey: Optional[Dict[str, Any]] = None
     status: Optional[str] = None
     scope: Optional[str] = None
-    version: Optional[int] = Field(None, description="Current version for optimistic locking")
+    enabled: Optional[bool] = None
+    
+    class ConfigDict:
+        populate_by_name = True  # Allow both serverName and server_name
     
     @field_validator('tags', mode='before')
     @classmethod
@@ -134,37 +147,106 @@ class ToolSchema(BaseModel):
 class ServerListItemResponse(BaseModel):
     """Response schema for a server in the list"""
     id: str = Field(..., description="Server ID")
-    server_name: str
-    path: str
+    serverName: str = Field(..., alias="serverName")
+    title: Optional[str] = Field(None, description="Display title for the server")
     description: Optional[str] = None
-    proxy_pass_url: Optional[str] = None
-    supported_transports: List[str] = Field(default_factory=list)
-    auth_type: Optional[str] = None
-    tags: List[str] = Field(default_factory=list)
-    num_tools: int = 0
-    num_stars: int = 0
-    is_python: bool = False
-    license: Optional[str] = None
-    tool_list: List[Dict[str, Any]] = Field(default_factory=list)
+    type: Optional[str] = Field(None, description="Transport type (e.g., streamable-http, sse, stdio)")
+    url: Optional[str] = None
+    apiKey: Optional[Dict[str, Any]] = None
+    authentication: Optional[Dict[str, Any]] = None
+    requiresOAuth: bool = Field(False, alias="requiresOAuth", description="Whether OAuth is required")
+    capabilities: Optional[str] = Field(None, description="JSON string of server capabilities")
+    tools: Optional[str] = Field(None, description="Comma-separated list of tool names")
+    author: Optional[str] = Field(None, description="Author user ID")
     scope: str
-    author_id: Optional[str] = None
+    status: str = "active"
+    path: str
+    tags: List[str] = Field(default_factory=list)
+    numTools: int = Field(0, alias="numTools")
+    numStars: int = Field(0, alias="numStars")
+    enabled: bool = Field(default=True, description="Whether the server is enabled")
+    lastConnected: Optional[datetime] = Field(None, alias="lastConnected")
     createdAt: datetime
     updatedAt: datetime
+    # Connection status fields
+    connection_state: Optional[str] = Field(default=None, description="Connection state")
+    requires_oauth: Optional[bool] = Field(default=None, description="Whether server requires OAuth")
+    error: Optional[str] = Field(default=None, description="Error message if connection failed")
     
     class ConfigDict:
         from_attributes = True
+        populate_by_name = True
+    
+    @model_serializer(mode='wrap')
+    def _serialize(self, serializer, info):
+        data = serializer(self)
+        # If authentication exists, remove apiKey from response
+        if data.get('authentication'):
+            data.pop('apiKey', None)
+        # If authentication doesn't exist, remove authentication from response
+        else:
+            data.pop('authentication', None)
+        return data
 
 
 class ServerDetailResponse(BaseModel):
     """Response schema for detailed server information"""
     id: str
-    server_name: str
+    serverName: str = Field(..., alias="serverName")
+    title: Optional[str] = Field(None, description="Display title for the server")
+    description: Optional[str] = None
+    type: Optional[str] = Field(None, description="Transport type (e.g., streamable-http, sse, stdio)")
+    url: Optional[str] = None
+    apiKey: Optional[Dict[str, Any]] = None
+    authentication: Optional[Dict[str, Any]] = None
+    requiresOAuth: bool = Field(False, alias="requiresOAuth", description="Whether OAuth is required")
+    capabilities: Optional[str] = Field(None, description="JSON string of server capabilities")
+    tools: Optional[str] = Field(None, description="Comma-separated list of tool names")
+    toolFunctions: Optional[Dict[str, Any]] = Field(None, alias="toolFunctions", description="Complete OpenAI function schemas")
+    initDuration: Optional[int] = Field(None, alias="initDuration", description="Initialization duration in ms")
+    author: Optional[str] = Field(None, description="Author user ID")
+    scope: str
+    status: str
+    path: str
+    tags: List[str] = Field(default_factory=list)
+    numTools: int = Field(0, alias="numTools")
+    numStars: int = Field(0, alias="numStars")
+    enabled: bool = Field(default=True, description="Whether the server is enabled")
+    lastConnected: Optional[datetime] = Field(None, alias="lastConnected")
+    lastError: Optional[str] = Field(None, alias="lastError")
+    errorMessage: Optional[str] = Field(None, alias="errorMessage")
+    createdAt: datetime
+    updatedAt: datetime
+
+    connection_state: Optional[str] = Field(default=None, description="Connection state")
+    requires_oauth: Optional[bool] = Field(default=None, description="Whether server requires OAuth")
+    error: Optional[str] = Field(default=None, description="Error message if connection failed")
+    
+    class ConfigDict:
+        from_attributes = True
+        populate_by_name = True
+    
+    @model_serializer(mode='wrap')
+    def _serialize(self, serializer, info):
+        data = serializer(self)
+        # If authentication exists, remove apiKey from response
+        if data.get('authentication'):
+            data.pop('apiKey', None)
+        # If authentication doesn't exist, remove authentication from response
+        else:
+            data.pop('authentication', None)
+        return data
+
+
+class ServerCreateResponse(BaseModel):
+    """Response schema for server creation"""
+    id: str
+    serverName: str = Field(..., alias="serverName")
     path: str
     description: Optional[str] = None
-    proxy_pass_url: Optional[str] = None
+    url: Optional[str] = None
     supported_transports: List[str] = Field(default_factory=list)
     auth_type: Optional[str] = None
-    auth_provider: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
     num_tools: int = 0
     num_stars: int = 0
@@ -172,50 +254,37 @@ class ServerDetailResponse(BaseModel):
     license: Optional[str] = None
     tool_list: List[Dict[str, Any]] = Field(default_factory=list)
     scope: str
+    status: str
+    enabled: bool = Field(default=True, description="Whether the server is enabled")
     author_id: Optional[str] = None
-    organization_id: Optional[str] = None
-    startup: bool = False
-    icon_path: Optional[str] = None
-    timeout: Optional[int] = None
-    init_timeout: Optional[int] = None
-    chat_menu: bool = True
-    server_instructions: Optional[str] = None
-    transport: Optional[Dict[str, Any]] = None
+    authentication: Optional[Dict[str, Any]] = None
+    apiKey: Optional[Dict[str, Any]] = None
     requires_oauth: bool = False
-    oauth: Optional[Dict[str, Any]] = None
-    custom_user_vars: Optional[Dict[str, Any]] = None
-    status: str
     last_connected: Optional[datetime] = None
-    last_error: Optional[str] = None
-    error_message: Optional[str] = None
+    init_duration: Optional[int] = None
     createdAt: datetime
     updatedAt: datetime
-    version: int
     
     class ConfigDict:
         from_attributes = True
-
-
-class ServerCreateResponse(BaseModel):
-    """Response schema for server creation"""
-    id: str
-    server_name: str
-    path: str
-    description: Optional[str] = None
-    scope: str
-    status: str
-    createdAt: datetime
-    updatedAt: datetime
-    version: int
+        populate_by_name = True
     
-    class ConfigDict:
-        from_attributes = True
+    @model_serializer(mode='wrap')
+    def _serialize(self, serializer, info):
+        data = serializer(self)
+        # If authentication exists, remove apiKey from response
+        if data.get('authentication'):
+            data.pop('apiKey', None)
+        # If authentication doesn't exist, remove authentication from response
+        else:
+            data.pop('authentication', None)
+        return data
 
 
 class ServerUpdateResponse(BaseModel):
     """Response schema for server update"""
     id: str
-    server_name: str
+    serverName: str = Field(..., alias="serverName")
     path: str
     description: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
@@ -223,16 +292,16 @@ class ServerUpdateResponse(BaseModel):
     num_stars: int = 0
     status: str
     updatedAt: datetime
-    version: int
     
     class ConfigDict:
         from_attributes = True
+        populate_by_name = True
 
 
 class ServerToggleResponse(BaseModel):
     """Response schema for server toggle"""
     id: str
-    server_name: str
+    serverName: str = Field(..., alias="serverName")
     path: str
     enabled: bool
     status: str
@@ -240,12 +309,13 @@ class ServerToggleResponse(BaseModel):
     
     class ConfigDict:
         from_attributes = True
+        populate_by_name = True
 
 
 class ServerToolsResponse(BaseModel):
     """Response schema for server tools"""
     id: str
-    server_name: str
+    serverName: str = Field(..., alias="serverName")
     path: str
     tools: List[Dict[str, Any]]
     num_tools: int
@@ -253,12 +323,13 @@ class ServerToolsResponse(BaseModel):
     
     class ConfigDict:
         from_attributes = True
+        populate_by_name = True
 
 
 class ServerHealthResponse(BaseModel):
     """Response schema for server health refresh"""
     id: str
-    server_name: str
+    serverName: str = Field(..., alias="serverName")
     path: str
     status: str
     last_checked: datetime
@@ -267,6 +338,7 @@ class ServerHealthResponse(BaseModel):
     
     class ConfigDict:
         from_attributes = True
+        populate_by_name = True
 
 
 class PaginationMetadata(BaseModel):
@@ -287,8 +359,23 @@ class ErrorResponse(BaseModel):
     """Error response schema"""
     error: str
     message: str
-    current_version: Optional[int] = None
-    provided_version: Optional[int] = None
+
+
+class ServerStatsResponse(BaseModel):
+    """Response schema for server statistics (Admin only)"""
+    total_servers: int = Field(..., description="Total number of servers")
+    servers_by_scope: Dict[str, int] = Field(..., description="Server count grouped by scope")
+    servers_by_status: Dict[str, int] = Field(..., description="Server count grouped by status")
+    servers_by_transport: Dict[str, int] = Field(..., description="Server count grouped by transport type")
+    total_tokens: int = Field(..., description="Total number of tokens")
+    tokens_by_type: Dict[str, int] = Field(..., description="Token count grouped by type")
+    active_tokens: int = Field(..., description="Number of active (non-expired) tokens")
+    expired_tokens: int = Field(..., description="Number of expired tokens")
+    active_users: int = Field(..., description="Number of users with active tokens")
+    total_tools: int = Field(..., description="Total number of tools across all servers")
+    
+    class ConfigDict:
+        from_attributes = True
 
 
 # ==================== Helper Functions ====================
@@ -304,38 +391,31 @@ def convert_to_list_item(server) -> ServerListItemResponse:
     """Convert MCPServerDocument to ServerListItemResponse"""
     config = server.config or {}
     
-    # Extract author_id from server.author Link object
-    # Use ref.id to avoid fetching the entire user document
-    author_id = str(server.author.ref.id) if server.author else None
+    # Decrypt sensitive authentication fields before returning
+    config = decrypt_auth_fields(config)
     
-    return ServerListItemResponse(
-        id=str(server.id),
-        server_name=server.serverName,
-        path=config.get("path", ""),
-        description=config.get("description"),
-        proxy_pass_url=config.get("proxy_pass_url"),
-        supported_transports=config.get("supported_transports", []),
-        auth_type=config.get("auth_type"),
-        tags=config.get("tags", []),
-        num_tools=config.get("num_tools", 0),
-        num_stars=config.get("num_stars", 0),
-        is_python=config.get("is_python", False),
-        license=config.get("license"),
-        tool_list=config.get("tool_list", []),
-        scope=config.get("scope", "private_user"),
-        author_id=author_id,
-        createdAt=server.createdAt or datetime.now(),
-        updatedAt=server.updatedAt or datetime.now(),
-    )
-
-
-def convert_to_detail(server) -> ServerDetailResponse:
-    """Convert MCPServerDocument to ServerDetailResponse"""
-    config = server.config or {}
+    # Extract author_id from server.author PydanticObjectId
+    author_id = str(server.author) if server.author else None
     
-    # Extract author_id from server.author Link object
-    # Use ref.id to avoid fetching the entire user document
-    author_id = str(server.author.ref.id) if server.author else None
+    # Get transport type (first supported transport or default)
+    supported_transports = config.get("supported_transports", [])
+    transport_type = supported_transports[0] if supported_transports else "streamable-http"
+    
+    # Generate title from serverName if not provided
+    title = config.get("title") or server.serverName
+    
+    # Build tools string from tool_list (comma-separated tool names)
+    tool_list = config.get("tool_list", [])
+    tools_str = None
+    if tool_list:
+        tool_names = [tool.get("name", "") for tool in tool_list if tool.get("name")]
+        tools_str = ", ".join(tool_names) if tool_names else None
+    
+    # Convert capabilities dict to JSON string if present
+    capabilities = config.get("capabilities")
+    capabilities_str = None
+    if capabilities:
+        capabilities_str = json.dumps(capabilities) if isinstance(capabilities, dict) else str(capabilities)
     
     # Parse last_connected if stored as ISO string
     last_connected = None
@@ -348,15 +428,166 @@ def convert_to_detail(server) -> ServerDetailResponse:
         except (ValueError, AttributeError):
             pass
     
+    return ServerListItemResponse(
+        id=str(server.id),
+        serverName=server.serverName,
+        title=title,
+        description=config.get("description"),
+        type=transport_type,
+        url=config.get("url"),
+        apiKey=config.get("apiKey"),
+        authentication=config.get("authentication"),
+        requiresOAuth=config.get("requires_oauth", False),
+        capabilities=capabilities_str,
+        tools=tools_str,
+        author=author_id,
+        scope=config.get("scope", "private_user"),
+        status=config.get("status", "active"),
+        path=config.get("path", ""),
+        tags=config.get("tags", []),
+        numTools=config.get("num_tools", 0),
+        numStars=config.get("num_stars", 0),
+        enabled=config.get("enabled", True),
+        lastConnected=last_connected,
+        createdAt=server.createdAt or datetime.now(),
+        updatedAt=server.updatedAt or datetime.now(),
+    )
+
+
+def convert_to_detail(server) -> ServerDetailResponse:
+    """Convert MCPServerDocument to ServerDetailResponse"""
+    config = server.config or {}
+    
+    # Decrypt sensitive authentication fields before returning
+    config = decrypt_auth_fields(config)
+    
+    # Extract author_id from server.author PydanticObjectId
+    author_id = str(server.author) if server.author else None
+    
+    # Get transport type (first supported transport or default)
+    supported_transports = config.get("supported_transports", [])
+    transport_type = supported_transports[0] if supported_transports else "streamable-http"
+    
+    # Generate title from serverName if not provided
+    title = config.get("title") or server.serverName
+    
+    # Build tools string from tool_list (comma-separated tool names)
+    tool_list = config.get("tool_list", [])
+    tools_str = None
+    if tool_list:
+        tool_names = [tool.get("name", "") for tool in tool_list if tool.get("name")]
+        tools_str = ", ".join(tool_names) if tool_names else None
+    
+    # Build toolFunctions dict with OpenAI function schema format
+    tool_functions = None
+    if tool_list:
+        tool_functions = {}
+        for tool in tool_list:
+            tool_name = tool.get("name")
+            if tool_name:
+                # Create function name with server suffix
+                function_key = f"{tool_name}_{server.serverName}".lower().replace(" ", "_")
+                
+                tool_functions[function_key] = {
+                    "type": "function",
+                    "function": {
+                        "name": function_key,
+                        "description": tool.get("description", ""),
+                        "parameters": tool.get("inputSchema", {
+                            "type": "object",
+                            "properties": {},
+                            "required": []
+                        })
+                    }
+                }
+    
+    # Convert capabilities dict to JSON string if present
+    capabilities = config.get("capabilities")
+    capabilities_str = None
+    if capabilities:
+        capabilities_str = json.dumps(capabilities) if isinstance(capabilities, dict) else str(capabilities)
+    
+    # Parse last_connected if stored as ISO string
+    last_connected = None
+    if config.get("last_connected"):
+        try:
+            if isinstance(config["last_connected"], str):
+                last_connected = datetime.fromisoformat(config["last_connected"].replace('Z', '+00:00'))
+            elif isinstance(config["last_connected"], datetime):
+                last_connected = config["last_connected"]
+        except (ValueError, AttributeError):
+            pass
+    
+    # Parse last_error if stored as ISO string
+    last_error = None
+    if config.get("last_error"):
+        try:
+            if isinstance(config["last_error"], str):
+                last_error = datetime.fromisoformat(config["last_error"].replace('Z', '+00:00'))
+            elif isinstance(config["last_error"], datetime):
+                last_error = config["last_error"]
+        except (ValueError, AttributeError):
+            pass
+    
     return ServerDetailResponse(
         id=str(server.id),
-        server_name=server.serverName,
+        serverName=server.serverName,
+        title=title,
+        description=config.get("description"),
+        type=transport_type,
+        url=config.get("url"),
+        apiKey=config.get("apiKey"),
+        authentication=config.get("authentication"),
+        requiresOAuth=config.get("requires_oauth", False),
+        capabilities=capabilities_str,
+        tools=tools_str,
+        toolFunctions=tool_functions,
+        initDuration=config.get("init_timeout"),
+        author=author_id,
+        scope=config.get("scope", "private_user"),
+        status=config.get("status", "active"),
+        path=config.get("path", ""),
+        tags=config.get("tags", []),
+        numTools=config.get("num_tools", 0),
+        numStars=config.get("num_stars", 0),
+        enabled=config.get("enabled", True),
+        lastConnected=last_connected,
+        lastError=str(last_error.isoformat()) if last_error else None,
+        errorMessage=config.get("error_message"),
+        createdAt=server.createdAt or datetime.now(),
+        updatedAt=server.updatedAt or datetime.now(),
+    )
+
+
+def convert_to_create_response(server) -> ServerCreateResponse:
+    """Convert MCPServerDocument to ServerCreateResponse"""
+    config = server.config or {}
+    
+    # Decrypt sensitive authentication fields before returning
+    config = decrypt_auth_fields(config)
+    
+    # Extract author_id from server.author PydanticObjectId
+    author_id = str(server.author) if server.author else None
+    
+    # Parse last_connected if stored as ISO string
+    last_connected = None
+    if config.get("last_connected"):
+        try:
+            if isinstance(config["last_connected"], str):
+                last_connected = datetime.fromisoformat(config["last_connected"].replace('Z', '+00:00'))
+            elif isinstance(config["last_connected"], datetime):
+                last_connected = config["last_connected"]
+        except (ValueError, AttributeError):
+            pass
+    
+    return ServerCreateResponse(
+        id=str(server.id),
+        serverName=server.serverName,
         path=config.get("path", ""),
         description=config.get("description"),
-        proxy_pass_url=config.get("proxy_pass_url"),
+        url=config.get("url"),
         supported_transports=config.get("supported_transports", []),
         auth_type=config.get("auth_type"),
-        auth_provider=config.get("auth_provider"),
         tags=config.get("tags", []),
         num_tools=config.get("num_tools", 0),
         num_stars=config.get("num_stars", 0),
@@ -364,50 +595,26 @@ def convert_to_detail(server) -> ServerDetailResponse:
         license=config.get("license"),
         tool_list=config.get("tool_list", []),
         scope=config.get("scope", "private_user"),
+        status=config.get("status", "active"),
+        enabled=config.get("enabled", True),
         author_id=author_id,
-        organization_id=config.get("organization_id"),
-        startup=config.get("startup", False),
-        icon_path=config.get("icon_path"),
-        timeout=config.get("timeout"),
-        init_timeout=config.get("init_timeout"),
-        chat_menu=config.get("chat_menu", True),
-        server_instructions=config.get("server_instructions"),
-        transport=config.get("transport"),
+        authentication=config.get("authentication"),
+        apiKey=config.get("apiKey"),
         requires_oauth=config.get("requires_oauth", False),
-        oauth=config.get("oauth"),
-        custom_user_vars=config.get("custom_user_vars"),
-        status=config.get("status", "active"),
         last_connected=last_connected,
-        last_error=config.get("last_error"),
-        error_message=config.get("error_message"),
+        init_duration=config.get("init_timeout"),
         createdAt=server.createdAt or datetime.now(),
         updatedAt=server.updatedAt or datetime.now(),
-        version=config.get("version", 1),
-    )
-
-
-def convert_to_create_response(server) -> ServerCreateResponse:
-    """Convert MCPServerDocument to ServerCreateResponse"""
-    config = server.config or {}
-    return ServerCreateResponse(
-        id=str(server.id),
-        server_name=server.serverName,
-        path=config.get("path", ""),
-        description=config.get("description"),
-        scope=config.get("scope", "private_user"),
-        status=config.get("status", "active"),
-        createdAt=server.createdAt or datetime.now(),
-        updatedAt=server.updatedAt or datetime.now(),
-        version=config.get("version", 1),
     )
 
 
 def convert_to_update_response(server) -> ServerUpdateResponse:
     """Convert MCPServerDocument to ServerUpdateResponse"""
     config = server.config or {}
+    
     return ServerUpdateResponse(
         id=str(server.id),
-        server_name=server.serverName,
+        serverName=server.serverName,
         path=config.get("path", ""),
         description=config.get("description"),
         tags=config.get("tags", []),
@@ -415,7 +622,6 @@ def convert_to_update_response(server) -> ServerUpdateResponse:
         num_stars=config.get("num_stars", 0),
         status=config.get("status", "active"),
         updatedAt=server.updatedAt or datetime.now(),
-        version=config.get("version", 1),
     )
 
 
@@ -424,7 +630,7 @@ def convert_to_toggle_response(server, enabled: bool) -> ServerToggleResponse:
     config = server.config or {}
     return ServerToggleResponse(
         id=str(server.id),
-        server_name=server.serverName,
+        serverName=server.serverName,
         path=config.get("path", ""),
         enabled=enabled,
         status=config.get("status", "active"),
@@ -437,7 +643,7 @@ def convert_to_tools_response(server, tools: List[Dict[str, Any]]) -> ServerTool
     config = server.config or {}
     return ServerToolsResponse(
         id=str(server.id),
-        server_name=server.serverName,
+        serverName=server.serverName,
         path=config.get("path", ""),
         tools=tools,
         num_tools=len(tools),
@@ -450,7 +656,7 @@ def convert_to_health_response(server, health_data: Dict[str, Any]) -> ServerHea
     config = server.config or {}
     return ServerHealthResponse(
         id=str(server.id),
-        server_name=server.serverName,
+        serverName=server.serverName,
         path=config.get("path", ""),
         status=health_data.get("status", "healthy"),
         last_checked=health_data.get("last_checked", datetime.now()),

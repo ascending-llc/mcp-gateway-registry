@@ -29,8 +29,9 @@ from ..schemas.agent_models import (
 )
 from ..auth.dependencies import CurrentUser
 from ..core.config import settings
-from registry.services.search.service import faiss_service
 from pydantic import BaseModel
+from registry.services.search.service import faiss_service
+from registry.services.agent_scanner import agent_scanner_service
 
 # Configure logging with basicConfig
 logging.basicConfig(
@@ -40,14 +41,13 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-
 router = APIRouter()
 
 
 async def _perform_agent_security_scan_on_registration(
-    path: str,
-    agent_card: AgentCard,
-    agent_card_dict: dict,
+        path: str,
+        agent_card: AgentCard,
+        agent_card_dict: dict,
 ) -> bool:
     """Perform security scan on newly registered agent.
 
@@ -67,8 +67,6 @@ async def _perform_agent_security_scan_on_registration(
     Returns:
         bool: True if agent should remain enabled, False if disabled due to scan
     """
-    from ..services.agent_scanner import agent_scanner_service
-    from ..search.service import faiss_service
 
     scan_config = agent_scanner_service.get_scan_config()
     if not (scan_config.enabled and scan_config.scan_on_registration):
@@ -136,8 +134,8 @@ class RatingRequest(BaseModel):
 
 
 def _normalize_path(
-    path: Optional[str],
-    agent_name: Optional[str] = None,
+        path: Optional[str],
+        agent_name: Optional[str] = None,
 ) -> str:
     """
     Normalize agent path format.
@@ -172,9 +170,9 @@ def _normalize_path(
 
 
 def _check_agent_permission(
-    permission: str,
-    agent_name: str,
-    user_context: CurrentUser,
+        permission: str,
+        agent_name: str,
+        user_context: CurrentUser,
 ) -> None:
     """
     Check if user has permission for agent operation.
@@ -190,9 +188,9 @@ def _check_agent_permission(
     from ..auth.dependencies import user_has_ui_permission_for_service
 
     if not user_has_ui_permission_for_service(
-        permission,
-        agent_name,
-        user_context.get("ui_permissions", {}),
+            permission,
+            agent_name,
+            user_context.get("ui_permissions", {}),
     ):
         logger.warning(
             f"User {user_context['username']} attempted to perform {permission} "
@@ -205,8 +203,8 @@ def _check_agent_permission(
 
 
 def _filter_agents_by_access(
-    agents: List[AgentCard],
-    user_context: CurrentUser,
+        agents: List[AgentCard],
+        user_context: CurrentUser,
 ) -> List[AgentCard]:
     """
     Filter agents based on user access permissions.
@@ -257,8 +255,8 @@ def _filter_agents_by_access(
 
 @router.post("/agents/register")
 async def register_agent(
-    request: AgentRegistrationRequest,
-    user_context: CurrentUser,
+        request: AgentRegistrationRequest,
+        user_context: CurrentUser,
 ):
     """
     Register a new A2A agent in the registry.
@@ -407,10 +405,10 @@ async def register_agent(
 
 @router.get("/agents")
 async def list_agents(
-    query: Optional[str] = Query(None, description="Search query string"),
-    enabled_only: bool = Query(False, description="Show only enabled agents"),
-    visibility: Optional[str] = Query(None, description="Filter by visibility"),
-    user_context: CurrentUser = None,
+        query: Optional[str] = Query(None, description="Search query string"),
+        enabled_only: bool = Query(False, description="Show only enabled agents"),
+        visibility: Optional[str] = Query(None, description="Filter by visibility"),
+        user_context: CurrentUser = None,
 ):
     """
     List all agents filtered by user permissions.
@@ -484,13 +482,14 @@ async def list_agents(
         "total_count": len(filtered_agents),
     }
 
+
 # IMPORTANT: Specific routes with path suffixes (/health, /rate, /rating, /toggle)
 # must come BEFORE catch-all {path:path} routes to prevent FastAPI from matching them incorrectly
 
 @router.post("/agents/{path:path}/health")
 async def check_agent_health(
-    path: str,
-    user_context: CurrentUser,
+        path: str,
+        user_context: CurrentUser,
 ):
     """Perform a live /ping health check against an agent endpoint."""
     path = _normalize_path(path)
@@ -567,9 +566,9 @@ async def check_agent_health(
 
 @router.post("/agents/{path:path}/rate")
 async def rate_agent(
-    path: str,
-    request: RatingRequest,
-    user_context: CurrentUser,
+        path: str,
+        request: RatingRequest,
+        user_context: CurrentUser,
 ):
     """Save integer ratings to agent card."""
     path = _normalize_path(path)
@@ -613,8 +612,8 @@ async def rate_agent(
 
 @router.get("/agents/{path:path}/rating")
 async def get_agent_rating(
-    path: str,
-    user_context: CurrentUser,
+        path: str,
+        user_context: CurrentUser,
 ):
     """Get agent rating information."""
     path = _normalize_path(path)
@@ -632,7 +631,7 @@ async def get_agent_rating(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have access to this agent",
         )
-    
+
     return {
         "num_stars": agent_card.num_stars,
         "rating_details": agent_card.rating_details,
@@ -641,9 +640,9 @@ async def get_agent_rating(
 
 @router.post("/agents/{path:path}/toggle")
 async def toggle_agent(
-    path: str,
-    enabled: bool,
-    user_context: CurrentUser,
+        path: str,
+        enabled: bool,
+        user_context: CurrentUser,
 ):
     """
     Enable or disable an agent.
@@ -680,8 +679,6 @@ async def toggle_agent(
             content={"detail": "Failed to toggle agent state"},
         )
 
-    from ..search.service import faiss_service
-
     await faiss_service.add_or_update_entity(
         path,
         agent_card.model_dump(),
@@ -703,8 +700,8 @@ async def toggle_agent(
 
 @router.get("/agents/{path:path}")
 async def get_agent(
-    path: str,
-    user_context: CurrentUser,
+        path: str,
+        user_context: CurrentUser,
 ):
     """
     Get a single agent by path.
@@ -746,17 +743,11 @@ async def get_agent(
     return agent_card.model_dump()
 
 
-
-
-
-
-
-
 @router.put("/agents/{path:path}")
 async def update_agent(
-    path: str,
-    request: AgentRegistrationRequest,
-    user_context: CurrentUser,
+        path: str,
+        request: AgentRegistrationRequest,
+        user_context: CurrentUser,
 ):
     """
     Update an existing agent card.
@@ -869,8 +860,8 @@ async def update_agent(
 
 @router.delete("/agents/{path:path}")
 async def delete_agent(
-    path: str,
-    user_context: CurrentUser,
+        path: str,
+        user_context: CurrentUser,
 ):
     """
     Delete an agent from the registry.
@@ -930,10 +921,10 @@ async def delete_agent(
 
 @router.post("/agents/discover")
 async def discover_agents_by_skills(
-    skills: List[str],
-    tags: Optional[List[str]] = None,
-    max_results: int = Query(10, ge=1, le=100),
-    user_context: CurrentUser = None,
+        skills: List[str],
+        tags: Optional[List[str]] = None,
+        max_results: int = Query(10, ge=1, le=100),
+        user_context: CurrentUser = None,
 ):
     """
     Discover agents by required skills.
@@ -1039,9 +1030,9 @@ async def discover_agents_by_skills(
 
 @router.post("/agents/discover/semantic")
 async def discover_agents_semantic(
-    query: str,
-    max_results: int = Query(10, ge=1, le=100),
-    user_context: CurrentUser = None,
+        query: str,
+        max_results: int = Query(10, ge=1, le=100),
+        user_context: CurrentUser = None,
 ):
     """
     Discover agents using natural language semantic search.

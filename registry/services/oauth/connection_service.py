@@ -1,7 +1,7 @@
 import asyncio
 import time
 from typing import Dict, Optional, Any
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 
 from registry.schemas.enums import ConnectionState
 from registry.services.server_service_v1 import server_service_v1
@@ -16,6 +16,24 @@ class MCPConnection:
     last_activity: float = field(default_factory=time.time)
     error_count: int = 0
     details: Dict[str, Any] = field(default_factory=dict)
+    
+    def is_stale(self, server_updated_at: Optional[float] = None) -> bool:
+        """
+        Check if connection is stale
+        Notes: TypeScript: connection.isStale(config.updatedAt)
+        """
+        # If server config was updated after connection was created, connection is stale
+        if server_updated_at:
+            connection_created_at = self.details.get("created_at", self.last_activity)
+            if server_updated_at > connection_created_at:
+                return True
+        
+        # Connection is stale if it hasn't been active recently (default 1 hour)
+        max_idle_time = 3600  # 1 hour in seconds
+        current_time = time.time()
+        if current_time - self.last_activity > max_idle_time:
+            return True
+        return False
 
 
 class MCPConnectionService:
