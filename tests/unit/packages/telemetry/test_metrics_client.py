@@ -27,7 +27,7 @@ class TestOTelMetricsClient:
         mock_get_meter, meter_instance = mock_meter
         service_name = "test-service"
         
-        client = OTelMetricsClient(service_name)
+        OTelMetricsClient(service_name)
         
         mock_get_meter.assert_called_once_with(service_name)
         
@@ -58,7 +58,6 @@ class TestOTelMetricsClient:
     def test_record_http_request(self, mock_meter):
         """Test recording an HTTP request."""
         _, meter_instance = mock_meter
-        mock_counter = MagicMock()
         
         client = OTelMetricsClient("test-service")
         

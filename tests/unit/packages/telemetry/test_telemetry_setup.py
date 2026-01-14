@@ -1,6 +1,6 @@
 import pytest
 import os
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 
 from packages.telemetry import setup_metrics 
 
