@@ -127,7 +127,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         Unified authentication logic (simple and efficient)
         
         1. Internal paths (/api/internal/*) → Basic Auth
-        2. Authenticated paths (including /api/auth/me, /api/servers/*, /proxy/*, /api/mcp/*) → JWT or Session Auth
+        2. Authenticated paths (including /api/auth/me, /api/servers/*, /proxy/*, /api/mcp/*) →JWT or Session Auth
         3. Other paths → Session Auth
         """
         path = request.url.path
@@ -139,11 +139,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             raise AuthenticationError("Basic authentication required")
 
         if self._match_path(path, self.authenticated_paths_compiled):
-            # Try Entra ID first (forward to auth server)
-            user_context = await self._try_entra_id_auth(request)
-            if user_context:
-                return user_context
-            # Try JWT next
+            # Try JWT first
             user_context = self._try_jwt_auth(request)
             if user_context:
                 return user_context
@@ -151,47 +147,13 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             user_context = self._try_session_auth(request)
             if user_context:
                 return user_context
-            raise AuthenticationError("Entra ID, JWT, or session authentication required")
+            raise AuthenticationError("JWT or session authentication required")
 
         # Default: session Auth
         user_context = self._try_session_auth(request)
         if user_context:
             return user_context
         raise AuthenticationError("Session authentication required")
-
-    async def _try_entra_id_auth(self, request: Request) -> Optional[Dict[str, Any]]:
-        """
-        Forward Entra ID token validation to the auth server and return user context if valid.
-        """
-        try:
-            auth_header = request.headers.get("Authorization")
-            if not auth_header or not auth_header.startswith("Bearer "):
-                return None
-            # Forward the request to the auth server with the same Authorization header
-            import httpx
-            auth_validation_endpoint = f"{settings.auth_server_url}/validate"
-            async with httpx.AsyncClient() as client:
-                response = await client.get(auth_validation_endpoint, headers=request.headers, timeout=5)
-                logger.info("RESPONSE: {response}")
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get("valid"):
-                        return self._build_user_context(
-                            username=data.get("username"),
-                            email=data.get("email"),
-                            groups=data.get("groups", []),
-                            scopes=data.get("scopes", []),
-                            auth_method="entra_id",
-                            provider="entra",
-                            auth_source="entra_id_auth",
-                            user_id=data.get("user_id")
-                        )
-                else:
-                    logger.debug(f"Entra ID auth server response: {response.status_code} {response.text}")
-            return None
-        except Exception as e:
-            logger.info(f"Entra ID auth failed: {e}")
-            return None
 
     def _try_basic_auth(self, request: Request) -> Optional[Dict[str, Any]]:
         """Basic authentication for internal endpoints"""
@@ -407,7 +369,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         can_modify = user_can_modify_servers(groups, scopes)
 
         user_context = {
-            "user_id": user_id,
+            "user_id": user_id, 
             'username': username,
             'groups': groups,
             'scopes': scopes,
