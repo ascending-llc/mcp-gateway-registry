@@ -15,6 +15,7 @@ from registry.auth.dependencies import (map_cognito_groups_to_scopes, signer, ge
                                         user_has_wildcard_access)
 from registry.core.config import settings
 
+from registry.telemetry import metrics
 
 class UnifiedAuthMiddleware(BaseHTTPMiddleware):
     """
@@ -85,10 +86,14 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             request.state.user = user_context
             request.state.is_authenticated = True
             request.state.auth_source = user_context.get('auth_source', 'unknown')
+            
+            metrics.record_auth_request(request.state.auth_source, success=True)
             logger.info(f"User {user_context.get('username')} authenticated via {user_context.get('auth_source')}")
             return await call_next(request)
         except AuthenticationError as e:
             logger.warning(f"Auth failed for {path}: {e}")
+            
+            metrics.record_auth_request("unified_failure", success=False)
             return JSONResponse(status_code=401, content={"detail": str(e)})
         except Exception as e:
             logger.error(f"Auth error for {path}: {e}")

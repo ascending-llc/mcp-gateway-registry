@@ -30,6 +30,7 @@ from registry.api.v1.mcp.connection_router import router as connection_router
 from registry.version import __version__
 from registry.api.proxy_routes import router as proxy_router, shutdown_proxy_client
 from registry.auth.dependencies import CurrentUser
+from packages.telemetry import setup_metrics
 
 # Import services for initialization
 from registry.services.server_service import server_service
@@ -47,6 +48,8 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Starting MCP Gateway Registry...")
 
     try:
+        logger.info("🔭 Initializing Telemetry...")
+        setup_metrics(service_name="mcp-gateway-registry")
         # Initialize MongoDB connection first
         logger.info("🗄️  Initializing MongoDB connection...")
         await init_mongodb()
