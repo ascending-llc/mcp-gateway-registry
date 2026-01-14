@@ -84,6 +84,9 @@ dev = [
     "factory-boy>=3.3.0",
     "faker>=24.0.0",
     "freezegun>=1.4.0",
+    "opentelemetry-exporter-prometheus>=0.60b1",
+    "opentelemetry-exporter-otlp>=1.39.1",
+
 ]
 docs = [
     "mkdocs>=1.5.0",
@@ -188,4 +191,8 @@ members = [
 
 [tool.uv]
 # Dev mode - use local editable install
-dev-dependencies = []
+dev-dependencies = [
+    "pytest-cov>=7.0.0",
+    "pytest-html>=4.1.1",
+    "pytest-json-report>=1.5.0",
+]
