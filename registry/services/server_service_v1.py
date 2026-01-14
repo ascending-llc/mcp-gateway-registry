@@ -19,7 +19,7 @@ from bson import ObjectId
 from beanie import PydanticObjectId
 from beanie.operators import In, RegEx, Or
 
-from packages.models._generated.mcpServer import MCPServerDocument
+from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 from packages.models._generated.user import IUser
 
 from registry.schemas.server_api_schemas import (
@@ -39,49 +39,111 @@ def _extract_config_field(server: MCPServerDocument, field: str, default: Any = 
     return server.config.get(field, default)
 
 
-def _build_config_from_request(data: ServerCreateRequest) -> Dict[str, Any]:
-    """Build config dictionary from ServerCreateRequest"""
+def _convert_tool_list_to_functions(tool_list: List[Dict[str, Any]], server_name: str) -> Dict[str, Any]:
+    """
+    Convert tool_list array to toolFunctions object in OpenAI format.
+    
+    Example output:
+    {
+      "tavily_search_mcp_tavilysearchv1": {
+        "type": "function",
+        "function": {
+          "name": "tavily_search_mcp_tavilysearchv1",
+          "description": "Search the web",
+          "parameters": {
+            "type": "object",
+            "properties": {...},
+            "required": [...]
+          }
+        }
+      }
+    }
+    """
+    if not tool_list:
+        return {}
+    
+    tool_functions = {}
+    for tool in tool_list:
+        tool_name = tool.get("name")
+        if not tool_name:
+            continue
+        
+        # Create function name with server suffix (mcp_servername format)
+        # Normalize: lowercase, replace spaces/hyphens with underscores
+        normalized_server = server_name.lower().replace(" ", "_").replace("-", "_")
+        function_key = f"{tool_name}_mcp_{normalized_server}"
+        
+        tool_functions[function_key] = {
+            "type": "function",
+            "function": {
+                "name": function_key,
+                "description": tool.get("description", ""),
+                "parameters": tool.get("inputSchema", {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                })
+            }
+        }
+    
+    return tool_functions
+
+
+def _build_config_from_request(data: ServerCreateRequest, server_name: str = None) -> Dict[str, Any]:
+    """
+    Build config dictionary from ServerCreateRequest
+    
+    Important: Registry-specific fields (path, tags, scope, status, numStars, lastConnected, etc.)
+    are stored at root level in MongoDB, NOT in config.
+    Config stores MCP-specific configuration only (title, description, type, url, oauth, apiKey, etc.)
+    """
+    # Determine if OAuth is required based on oauth/authentication fields
+    # If oauth field is provided OR authentication has OAuth URLs, set requiresOAuth to True
+    requires_oauth = False
+    if data.oauth is not None:
+        requires_oauth = True
+    elif data.authentication is not None and data.authentication.get('authorize_url'):
+        requires_oauth = True
+    # If user explicitly sets requires_oauth, respect that (for backward compatibility)
+    elif data.requires_oauth:
+        requires_oauth = True
+    
+    # Build MCP-specific configuration (stored in config object)
     config = {
-        "path": data.path,
+        "title": data.serverName,  # Use serverName as default title
         "description": data.description or "",
-        "scope": data.scope,
-        "tags": [tag.lower() for tag in data.tags],
-        "num_tools": data.num_tools,
-        "num_stars": data.num_stars,
-        "is_python": data.is_python,
-        "supported_transports": data.supported_transports,
-        "startup": data.startup,
-        "chat_menu": data.chat_menu,
-        "tool_list": data.tool_list,
-        "status": "active",
-        "enabled": data.enabled,
+        "type": data.supported_transports[0] if data.supported_transports else "streamable-http",
+        "url": data.url,
+        "requiresOAuth": requires_oauth,  # Auto-detect based on oauth/authentication fields
+        "capabilities": "{}",  # Default empty JSON string
     }
     
-    # Add optional fields only if they are provided (not None)
-    if data.url is not None:
-        config["url"] = data.url
-    if data.license is not None:
-        config["license"] = data.license
-    if data.auth_type is not None:
-        config["auth_type"] = data.auth_type
-    if data.auth_provider is not None:
-        config["auth_provider"] = data.auth_provider
-    if data.transport is not None:
-        config["transport"] = data.transport
-    if data.icon_path is not None:
-        config["icon_path"] = data.icon_path
+    # Add optional MCP config fields
     if data.timeout is not None:
         config["timeout"] = data.timeout
     if data.init_timeout is not None:
-        config["init_timeout"] = data.init_timeout
+        config["initDuration"] = data.init_timeout  # Match API doc naming
     if data.server_instructions is not None:
         config["server_instructions"] = data.server_instructions
-    if data.requires_oauth:
-        config["requires_oauth"] = data.requires_oauth
     if data.oauth is not None:
         config["oauth"] = data.oauth
     if data.custom_user_vars is not None:
         config["custom_user_vars"] = data.custom_user_vars
+    
+    # Convert tool_list to toolFunctions in OpenAI format
+    if data.tool_list is not None:
+        use_server_name = server_name or data.serverName
+        config["toolFunctions"] = _convert_tool_list_to_functions(data.tool_list, use_server_name)
+        
+        # Build tools string (comma-separated tool names)
+        tool_names = [tool.get("name", "") for tool in data.tool_list if tool.get("name")]
+        if tool_names:
+            config["tools"] = ", ".join(tool_names)
+        else:
+            config["tools"] = ""
+    else:
+        config["toolFunctions"] = {}
+        config["tools"] = ""
 
     # Handle mutually exclusive authentication fields: apiKey and authentication
     # Only store one of them, with authentication taking priority
@@ -92,16 +154,30 @@ def _build_config_from_request(data: ServerCreateRequest) -> Dict[str, Any]:
         # When only apiKey is provided, store it
         config["apiKey"] = data.apiKey
     
+    # Store enabled field in config
+    config["enabled"] = data.enabled
+    
     return config
 
 
-def _update_config_from_request(config: Dict[str, Any], data: ServerUpdateRequest) -> Dict[str, Any]:
-    """Update config dictionary from ServerUpdateRequest"""
+def _update_config_from_request(config: Dict[str, Any], data: ServerUpdateRequest, server_name: str = None) -> Dict[str, Any]:
+    """
+    Update config dictionary from ServerUpdateRequest
+    
+    Important: Only updates MCP-specific config fields.
+    Registry fields (path, tags, scope, status) are updated at root level separately.
+    Note: enabled field is stored in BOTH config and used to update status at root level.
+    """
     update_dict = data.model_dump(exclude_unset=True)
     
-    # Normalize tags if present
-    if 'tags' in update_dict and update_dict['tags']:
-        update_dict['tags'] = [tag.lower() for tag in update_dict['tags']]
+    # Save enabled field separately before removing it (we'll update config with it)
+    enabled_value = update_dict.get('enabled')
+    
+    # Remove root-level registry fields from update_dict (these are handled at root level)
+    # Note: enabled is removed here but will be added to config separately
+    registry_fields = ['path', 'tags', 'scope', 'status', 'serverName', 'num_stars', 'enabled']
+    for field in registry_fields:
+        update_dict.pop(field, None)
     
     # Handle mutually exclusive authentication fields: apiKey and authentication
     # If one is being updated, remove the other from config
@@ -122,10 +198,50 @@ def _update_config_from_request(config: Dict[str, Any], data: ServerUpdateReques
         # Remove from update_dict to avoid duplicate processing
         del update_dict['apiKey']
     
-    # Update config with remaining fields (only fields that were explicitly set)
+    # Update config with MCP-specific fields only
+    mcp_config_fields = ['url', 'description', 'type', 'timeout', 'init_timeout', 'server_instructions', 
+                         'requires_oauth', 'oauth', 'custom_user_vars', 'tool_list']
     for key, value in update_dict.items():
-        if value is not None:
-            config[key] = value
+        if key in mcp_config_fields and value is not None:
+            # Map init_timeout to initDuration to match API doc
+            if key == 'init_timeout':
+                config['initDuration'] = value
+            else:
+                config[key] = value
+    
+    # Update enabled field in config if provided
+    if enabled_value is not None:
+        config['enabled'] = enabled_value
+    
+    # Update requiresOAuth based on oauth/authentication fields
+    # If oauth or authentication is being updated, recalculate requiresOAuth
+    if 'oauth' in update_dict or 'authentication' in update_dict:
+        requires_oauth = False
+        
+        # Check if oauth field is set in config
+        if config.get('oauth') is not None:
+            requires_oauth = True
+        # Check if authentication has OAuth URLs
+        elif config.get('authentication') and config['authentication'].get('authorize_url'):
+            requires_oauth = True
+        
+        config['requiresOAuth'] = requires_oauth
+        logger.info(f"Updated requiresOAuth to {requires_oauth} based on oauth/authentication fields")
+    
+    # If tool_list is updated, regenerate toolFunctions and tools string
+    if 'tool_list' in update_dict and update_dict['tool_list'] is not None:
+        tool_list = update_dict['tool_list']
+        
+        # Convert to toolFunctions format
+        if server_name:
+            config["toolFunctions"] = _convert_tool_list_to_functions(tool_list, server_name)
+        
+        # Generate tools string
+        tool_names = [tool.get("name", "") for tool in tool_list if tool.get("name")]
+        if tool_names:
+            config["tools"] = ", ".join(tool_names)
+        else:
+            config["tools"] = ""
 
     return config
 
@@ -164,22 +280,22 @@ class ServerServiceV1:
         # Build filter conditions
         filters = []
         
-        # Scope filter
+        # Scope filter (now at root level)
         if scope:
-            filters.append({"config.scope": scope})
+            filters.append({"scope": scope})
         
-        # Status filter
+        # Status filter (now at root level)
         if status:
-            filters.append({"config.status": status})
+            filters.append({"status": status})
         
-        # Text search across multiple fields
+        # Text search across multiple fields (tags now at root level)
         if query:
             query_lower = query.lower()
             text_filter = {
                 "$or": [
                     {"serverName": {"$regex": query, "$options": "i"}},
                     {"config.description": {"$regex": query, "$options": "i"}},
-                    {"config.tags": query_lower}
+                    {"tags": query_lower}
                 ]
             }
             filters.append(text_filter)
@@ -236,7 +352,7 @@ class ServerServiceV1:
         Returns:
             Server document or None if not found
         """
-        return await MCPServerDocument.find_one({"config.path": path})
+        return await MCPServerDocument.find_one({"path": path})
     
     async def create_server(
         self,
@@ -254,12 +370,15 @@ class ServerServiceV1:
             Created server document
             
         Raises:
-            ValueError: If path already exists, server_name already exists, or tags contain duplicates (case-insensitive)
+            ValueError: If path+url combination already exists, server_name already exists, or tags contain duplicates (case-insensitive)
         """
-        # Check if path already exists
-        existing = await self.get_server_by_path(data.path)
-        if existing:
-            raise ValueError(f"Server with path '{data.path}' already exists")
+        # Check if path+url combination already exists
+        # Only reject if BOTH path AND url are the same (to allow same path for different services)
+        existing_servers = await MCPServerDocument.find({"path": data.path}).to_list()
+        for existing in existing_servers:
+            existing_url = existing.config.get("url") if existing.config else None
+            if existing_url == data.url:
+                raise ValueError(f"Server with path '{data.path}' and URL '{data.url}' already exists")
         
         # Check if serverName already exists
         existing_name = await MCPServerDocument.find_one({"serverName": data.serverName})
@@ -271,15 +390,15 @@ class ServerServiceV1:
         if len(normalized_tags) != len(set(normalized_tags)):
             raise ValueError("Duplicate tags are not allowed (case-insensitive)")
         
-        # Build config dictionary
-        config = _build_config_from_request(data)
+        # Build MCP config dictionary (MCP-specific fields only)
+        config = _build_config_from_request(data, server_name=data.serverName)
         
         # Encrypt sensitive authentication fields before storing
         config = encrypt_auth_fields(config)
         
-        # Set user_id for private servers
-        if data.scope == "private_user":
-            config["user_id"] = user_id
+        # Calculate numTools from toolFunctions
+        tool_functions = config.get("toolFunctions", {})
+        num_tools = len(tool_functions) if tool_functions else 0
         
         # Get or create author user reference
         author = await IUser.find_one({"username": user_id})
@@ -313,12 +432,23 @@ class ServerServiceV1:
                 # Fetch the created user
                 author = await IUser.get(result.inserted_id)
         
-        # Create server document with timestamps
+        # Create server document with registry fields at root level
         now = datetime.now(timezone.utc)
         server = MCPServerDocument(
             serverName=data.serverName,
             config=config,
             author=author.id,  # Use PydanticObjectId instead of Link
+            # Registry-specific root-level fields
+            path=data.path,
+            tags=[tag.lower() for tag in data.tags],  # Normalize tags to lowercase
+            scope=data.scope,
+            status="active",  # Default status (independent of enabled field)
+            numTools=num_tools,  # Store calculated numTools at root level
+            numStars=data.num_stars,
+            # Initialize error tracking fields as None
+            lastError=None,
+            errorMessage=None,
+            # Timestamps
             createdAt=now,
             updatedAt=now
         )
@@ -341,12 +471,12 @@ class ServerServiceV1:
                     await server.delete()
                     raise ValueError(f"Server registration rejected: Health check failed - {status_msg}")
                 
-                # Update config with health check results
-                config["last_connected"] = datetime.now(timezone.utc).isoformat()
-                config["status"] = "active"
+                # Update server with health check results (root-level field)
+                server.lastConnected = datetime.now(timezone.utc)
+                server.status = "active"
                 
-                # 2. Tool retrieval - REQUIRED
-                tool_list, tool_error = await self.retrieve_tools_from_server(server)
+                # 2. Tool and capabilities retrieval - REQUIRED
+                tool_list, capabilities, tool_error = await self.retrieve_tools_and_capabilities_from_server(server)
                 
                 if tool_list is None:
                     # Tool retrieval failed - delete the server and reject registration
@@ -354,11 +484,63 @@ class ServerServiceV1:
                     await server.delete()
                     raise ValueError(f"Server registration rejected: Failed to retrieve tools - {tool_error}")
                 
-                config["tool_list"] = tool_list
-                config["num_tools"] = len(tool_list)
+                # Convert tool_list to toolFunctions format
+                tool_functions = _convert_tool_list_to_functions(tool_list, server.serverName)
+                config["toolFunctions"] = tool_functions
+                
+                # Build tools string (comma-separated tool names)
+                tool_names = [tool.get("name", "") for tool in tool_list if tool.get("name")]
+                if tool_names:
+                    config["tools"] = ", ".join(tool_names)
+                else:
+                    config["tools"] = ""
+                
+                # Save capabilities as JSON string
+                if capabilities:
+                    import json
+                    config["capabilities"] = json.dumps(capabilities)
+                    logger.info(f"Saved capabilities for {server.serverName}: {config['capabilities']}")
+                else:
+                    config["capabilities"] = "{}"
+                    logger.warning(f"No capabilities retrieved for {server.serverName}, using empty JSON")
+                
+                # 3. OAuth metadata retrieval - OPTIONAL (only if oauth/authentication is configured)
+                # Check if server has OAuth configuration
+                has_oauth = (
+                    data.oauth is not None or 
+                    (data.authentication is not None and data.authentication.get('authorize_url'))
+                )
+                
+                if has_oauth:
+                    logger.info(f"OAuth configuration detected for {server.serverName}, retrieving OAuth metadata...")
+                    
+                    from registry.core.mcp_client import get_oauth_metadata_from_server
+                    
+                    # Build server_info dict for oauth metadata retrieval
+                    server_info = {
+                        "supported_transports": config.get("supported_transports", ["streamable-http"]),
+                        "tags": config.get("tags", []),
+                    }
+                    
+                    # Add headers if present
+                    if "headers" in config:
+                        server_info["headers"] = config["headers"]
+                    
+                    oauth_metadata = await get_oauth_metadata_from_server(data.url, server_info)
+                    
+                    if oauth_metadata:
+                        import json
+                        config["oauthMetadata"] = oauth_metadata
+                        logger.info(f"Saved OAuth metadata for {server.serverName}: {json.dumps(oauth_metadata)}")
+                    else:
+                        logger.info(f"No OAuth metadata available for {server.serverName} (server may not support OAuth autodiscovery)")
+                
+                # Update numTools at root level
+                server.numTools = len(tool_functions)
+                
                 logger.info(f"Retrieved {len(tool_list)} tools for {server.serverName}")
                 
-                # Save updated config
+                # Save updated server
                 server.config = config
                 server.updatedAt = datetime.now(timezone.utc)
                 await server.save()
@@ -408,16 +590,29 @@ class ServerServiceV1:
             if len(normalized_tags) != len(set(normalized_tags)):
                 raise ValueError("Duplicate tags are not allowed (case-insensitive)")
         
-        # Update serverName if provided
+        # Update root-level registry fields
         if data.serverName is not None:
             server.serverName = data.serverName
+        if data.path is not None:
+            server.path = data.path
+        if data.tags is not None:
+            server.tags = [tag.lower() for tag in data.tags]
+        if data.scope is not None:
+            server.scope = data.scope
+        if data.status is not None:
+            server.status = data.status
         
-        # Update config with new values
-        updated_config = _update_config_from_request(config, data)
+        # Update config with MCP-specific values only
+        updated_config = _update_config_from_request(config, data, server_name=server.serverName)
         
         # Encrypt sensitive authentication fields if they were updated
         if data.authentication is not None or data.apiKey is not None:
             updated_config = encrypt_auth_fields(updated_config)
+        
+        # If toolFunctions was updated, recalculate numTools
+        if "toolFunctions" in updated_config:
+            tool_functions = updated_config.get("toolFunctions", {})
+            server.numTools = len(tool_functions) if tool_functions else 0
         
         server.config = updated_config
         
@@ -487,18 +682,16 @@ class ServerServiceV1:
         if not server:
             raise ValueError("Server not found")
         
-        # Get current config
-        config = server.config or {}
-        
-        # Update enabled field in config
-        config["enabled"] = enabled
-        server.config = config
+        # Update enabled field in config only (do not update status field)
+        if server.config is None:
+            server.config = {}
+        server.config['enabled'] = enabled
         
         # Update the updatedAt timestamp
         server.updatedAt = datetime.now(timezone.utc)
         
         await server.save()
-        logger.info(f"Toggled server {server.serverName} (ID: {server.id}) to {'enabled' if enabled else 'disabled'}")
+        logger.info(f"Toggled server {server.serverName} (ID: {server.id}) enabled to {enabled}")
         
         return server
     
@@ -506,16 +699,16 @@ class ServerServiceV1:
         self,
         server_id: str,
         user_id: Optional[str] = None,
-    ) -> Tuple[MCPServerDocument, List[Dict[str, Any]]]:
+    ) -> Tuple[MCPServerDocument, Dict[str, Any]]:
         """
-        Get server tools.
+        Get server tools in toolFunctions format.
         
         Args:
             server_id: Server document ID
             user_id: Current user's ID (kept for compatibility but not used)
             
         Returns:
-            Tuple of (server, tools list)
+            Tuple of (server, toolFunctions dict)
             
         Raises:
             ValueError: If server not found
@@ -525,8 +718,8 @@ class ServerServiceV1:
         if not server:
             raise ValueError("Server not found")
         
-        tool_list = _extract_config_field(server, "tool_list", [])
-        return server, tool_list
+        tool_functions = _extract_config_field(server, "toolFunctions", {})
+        return server, tool_functions
     
     async def perform_health_check(
         self,
@@ -660,6 +853,58 @@ class ServerServiceV1:
             logger.error(f"Tool retrieval error for server {server.serverName}: {e}")
             return None, error_msg
     
+    async def retrieve_tools_and_capabilities_from_server(
+        self,
+        server: MCPServerDocument,
+    ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[Dict[str, Any]], Optional[str]]:
+        """
+        Retrieve tools and capabilities from a server using MCP client.
+        
+        Args:
+            server: Server document
+            
+        Returns:
+            Tuple of (tool_list, capabilities_dict, error_message)
+            If successful, returns (tool_list, capabilities_dict, None)
+            If failed, returns (None, None, error_message)
+        """
+        config = server.config or {}
+        url = config.get("url")
+        
+        if not url:
+            return None, None, "No URL configured"
+        
+        try:
+            # Build server_info dict for mcp_client
+            server_info = {
+                "supported_transports": config.get("supported_transports", ["streamable-http"]),
+                "tags": config.get("tags", []),
+            }
+            
+            # Add headers if present
+            if "headers" in config:
+                server_info["headers"] = config["headers"]
+            
+            logger.info(f"Retrieving tools and capabilities from {url} for server {server.serverName}")
+            
+            # Import the new function
+            from registry.core.mcp_client import get_tools_and_capabilities_from_server
+            
+            # Use the MCP client to get tools and capabilities
+            tool_list, capabilities = await get_tools_and_capabilities_from_server(url, server_info)
+            
+            if tool_list is None:
+                return None, None, "Failed to retrieve tools from MCP server"
+            
+            logger.info(f"Retrieved {len(tool_list)} tools and capabilities from {server.serverName}")
+            logger.info(f"Server capabilities: {capabilities}")
+            return tool_list, capabilities, None
+            
+        except Exception as e:
+            error_msg = f"Error retrieving tools and capabilities: {type(e).__name__} - {str(e)}"
+            logger.error(f"Tool/capabilities retrieval error for server {server.serverName}: {e}")
+            return None, None, error_msg
+    
     async def refresh_server_health(
         self,
         server_id: str,
@@ -686,21 +931,19 @@ class ServerServiceV1:
         # Perform actual health check
         is_healthy, status_msg, response_time_ms = await self.perform_health_check(server)
         
-        # Update server config with health check results
-        config = server.config or {}
+        # Update server with health check results (root-level fields)
         now = datetime.now(timezone.utc)
-        config["last_connected"] = now.isoformat()
+        server.lastConnected = now
         
         if is_healthy:
-            config["status"] = "active"
-            config["last_error"] = None
-            config["error_message"] = None
+            server.status = "active"
+            server.lastError = None
+            server.errorMessage = None
         else:
-            config["status"] = "error"
-            config["last_error"] = now.isoformat()
-            config["error_message"] = status_msg
+            server.status = "error"
+            server.lastError = now
+            server.errorMessage = status_msg
         
-        server.config = config
         server.updatedAt = now
         
         await server.save()
@@ -741,6 +984,7 @@ class ServerServiceV1:
         # 1. Server Statistics
         try:
             # Use facet to get multiple aggregations in one query
+            # Note: scope and status are now at root level
             server_pipeline = [
                 {
                     "$facet": {
@@ -748,17 +992,27 @@ class ServerServiceV1:
                             {"$count": "count"}
                         ],
                         "by_scope": [
-                            {"$group": {"_id": "$config.scope", "count": {"$sum": 1}}}
+                            {"$group": {"_id": "$scope", "count": {"$sum": 1}}}
                         ],
                         "by_status": [
-                            {"$group": {"_id": "$config.status", "count": {"$sum": 1}}}
+                            {"$group": {"_id": "$status", "count": {"$sum": 1}}}
                         ],
                         "by_transport": [
-                            {"$unwind": "$config.supported_transports"},
-                            {"$group": {"_id": "$config.supported_transports", "count": {"$sum": 1}}}
+                            {"$group": {"_id": "$config.type", "count": {"$sum": 1}}}
                         ],
                         "total_tools": [
-                            {"$group": {"_id": None, "total": {"$sum": "$config.num_tools"}}}
+                            {
+                                "$addFields": {
+                                    "toolCount": {
+                                        "$cond": {
+                                            "if": {"$isArray": "$config.tool_list"},
+                                            "then": {"$size": "$config.tool_list"},
+                                            "else": 0
+                                        }
+                                    }
+                                }
+                            },
+                            {"$group": {"_id": None, "total": {"$sum": "$toolCount"}}}
                         ]
                     }
                 }
