@@ -74,7 +74,8 @@ def mock_settings(test_settings: Settings, monkeypatch):
     """Mock the global settings for tests."""
     monkeypatch.setattr("registry.core.config.settings", test_settings)
     monkeypatch.setattr("registry.services.server_service.settings", test_settings)
-    monkeypatch.setattr("registry.services.search.embedded_service.settings", test_settings)
+    # embedded_service doesn't have settings attribute, skip it
+    # monkeypatch.setattr("registry.services.search.embedded_service.settings", test_settings)
     monkeypatch.setattr("registry.health.service.settings", test_settings)
     return test_settings
 
