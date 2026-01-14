@@ -18,7 +18,7 @@ from registry.main import app
 from registry.core.config import Settings
 from registry.services.server_service import ServerService
 from registry.health.service import HealthMonitoringService
-from registry.services.search import VectorSearchService
+from registry.services.search.base import VectorSearchService
 
 # Import test utilities
 from tests.fixtures.factories import (
@@ -74,7 +74,7 @@ def mock_settings(test_settings: Settings, monkeypatch):
     """Mock the global settings for tests."""
     monkeypatch.setattr("registry.core.config.settings", test_settings)
     monkeypatch.setattr("registry.services.server_service.settings", test_settings)
-    monkeypatch.setattr("registry.search.service.settings", test_settings)
+    monkeypatch.setattr("registry.services.search.embedded_service.settings", test_settings)
     monkeypatch.setattr("registry.health.service.settings", test_settings)
     return test_settings
 

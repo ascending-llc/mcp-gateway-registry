@@ -33,7 +33,7 @@ class TestServerRoutes:
         server_data = ServerInfoFactory()
         
         with patch('registry.api.server_routes.server_service') as mock_service, \
-             patch('registry.search.service.faiss_service') as mock_faiss, \
+             patch('registry.services.search.service.faiss_service') as mock_faiss, \
              patch('registry.health.service.health_service') as mock_health:
             
             mock_service.register_server.return_value = True
@@ -82,7 +82,7 @@ class TestServerRoutes:
         server_data = ServerInfoFactory()
         
         with patch('registry.api.server_routes.server_service') as mock_service, \
-             patch('registry.search.service.faiss_service') as mock_faiss, \
+             patch('registry.services.search.service.faiss_service') as mock_faiss, \
              patch('registry.health.service.health_service') as mock_health:
             
             mock_service.get_server_info.return_value = server_data
@@ -156,7 +156,7 @@ class TestServerRoutes:
         server_data = ServerInfoFactory()
         
         with patch('registry.api.server_routes.server_service') as mock_service, \
-             patch('registry.search.service.faiss_service') as mock_faiss:
+             patch('registry.services.search.service.faiss_service') as mock_faiss:
             
             mock_service.get_server_info.return_value = server_data
             mock_service.is_service_enabled.return_value = True
@@ -204,7 +204,7 @@ class TestServerRoutes:
         server_data = ServerInfoFactory()
         
         with patch('registry.api.server_routes.server_service') as mock_service, \
-             patch('registry.search.service.faiss_service') as mock_faiss:
+             patch('registry.services.search.service.faiss_service') as mock_faiss:
             
             mock_service.get_server_info.return_value = server_data
             mock_service.update_server.return_value = True
