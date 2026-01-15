@@ -116,11 +116,11 @@ def normalize_sse_endpoint_url_for_request(url_str: str) -> str:
 async def detect_server_transport_aware(base_url: str, server_info: dict = None) -> str:
     """
     Detect which transport a server supports by checking configuration and testing endpoints.
-    Uses server_info supported_transports if available, otherwise falls back to auto-detection.
+    Uses server_info type if available, otherwise falls back to auto-detection.
     
     Args:
         base_url: The base URL of the MCP server
-        server_info: Optional server configuration dict containing supported_transports
+        server_info: Optional server configuration dict containing type
         
     Returns:
         The preferred transport type ("sse" or "streamable-http")
@@ -135,19 +135,10 @@ async def detect_server_transport_aware(base_url: str, server_info: dict = None)
     
     # Use server configuration if available
     if server_info:
-        supported_transports = server_info.get("supported_transports", [])
-        logger.debug(f"Server configuration specifies supported transports: {supported_transports}")
-        
-        # Prefer SSE if it's the only option or explicitly listed first
-        if supported_transports == ["sse"]:
-            logger.debug("Server only supports SSE transport")
-            return "sse"
-        elif supported_transports and "sse" in supported_transports and "streamable-http" not in supported_transports:
-            logger.debug("Server supports SSE but not streamable-http")
-            return "sse"
-        elif supported_transports and "streamable-http" in supported_transports:
-            logger.debug("Server supports streamable-http (preferred)")
-            return "streamable-http"
+        transport_type = server_info.get("type")
+        if transport_type:
+            logger.debug(f"Server configuration specifies transport type: {transport_type}")
+            return transport_type
     
     # Fall back to auto-detection
     return await detect_server_transport(base_url)
@@ -224,8 +215,72 @@ async def get_tools_from_server_with_transport(base_url: str, transport: str = "
         return None
 
 
+async def _get_tools_and_capabilities_streamable_http(base_url: str, server_info: dict = None) -> tuple[List[dict] | None, dict | None]:
+    """
+    Get tools and capabilities using streamable-http transport.
+    
+    The URL should contain everything needed. If we can't retrieve capabilities,
+    the server is considered failed. This also serves as a sanity check.
+    
+    Returns:
+        Tuple of (tool_list, capabilities_dict)
+        Returns (None, None) if connection fails or capabilities cannot be retrieved
+    """
+    # Build headers for the server
+    headers = _build_headers_for_server(server_info)
+    
+    # Use the URL as provided - it should contain everything needed
+    mcp_url = base_url
+    
+    # Handle special case for anthropic-registry servers
+    if server_info and 'tags' in server_info and 'anthropic-registry' in server_info.get('tags', []):
+        if '?' not in mcp_url:
+            mcp_url += '?instance_id=default'
+        elif 'instance_id=' not in mcp_url:
+            mcp_url += '&instance_id=default'
+    
+    logger.info(f"Connecting to MCP server: {mcp_url}")
+    
+    try:
+        async with streamablehttp_client(url=mcp_url, headers=headers) as (read, write, get_session_id):
+            async with ClientSession(read, write) as session:
+                init_result = await asyncio.wait_for(session.initialize(), timeout=10.0)
+                tools_response = await asyncio.wait_for(session.list_tools(), timeout=15.0)
+                
+                # Extract capabilities from init_result - REQUIRED
+                capabilities = {}
+                if hasattr(init_result, 'capabilities'):
+                    capabilities_obj = init_result.capabilities
+                    # Convert to dict if it's a Pydantic model or similar
+                    if hasattr(capabilities_obj, 'model_dump'):
+                        capabilities = capabilities_obj.model_dump()
+                    elif hasattr(capabilities_obj, '__dict__'):
+                        capabilities = capabilities_obj.__dict__
+                    else:
+                        capabilities = capabilities_obj if isinstance(capabilities_obj, dict) else {}
+                elif isinstance(init_result, dict) and 'capabilities' in init_result:
+                    capabilities = init_result['capabilities']
+                
+                # If no capabilities retrieved, consider it a failed server
+                if not capabilities:
+                    logger.error(f"Failed to retrieve capabilities from {mcp_url} - server considered failed")
+                    return None, None
+                
+                logger.info(f"Successfully retrieved capabilities from {mcp_url}: {capabilities}")
+                
+                result = _extract_tool_details(tools_response)
+                return result, capabilities
+                
+    except asyncio.TimeoutError:
+        logger.error(f"Timeout connecting to {mcp_url}")
+        return None, None
+    except Exception as e:
+        logger.error(f"Failed to connect to {mcp_url}: {type(e).__name__} - {e}")
+        return None, None
+
+
 async def _get_tools_streamable_http(base_url: str, server_info: dict = None) -> List[dict] | None:
-    """Get tools using streamable-http transport"""
+    """Get tools using streamable-http transport (legacy, without capabilities)"""
     # Build headers for the server
     headers = _build_headers_for_server(server_info)
     
@@ -247,10 +302,24 @@ async def _get_tools_streamable_http(base_url: str, server_info: dict = None) ->
         try:
             async with streamablehttp_client(url=mcp_url, headers=headers) as (read, write, get_session_id):
                 async with ClientSession(read, write) as session:
-                    await asyncio.wait_for(session.initialize(), timeout=10.0)
+                    init_result = await asyncio.wait_for(session.initialize(), timeout=10.0)
                     tools_response = await asyncio.wait_for(session.list_tools(), timeout=15.0)
                     
+                    # Extract capabilities from init_result
+                    capabilities = {}
+                    if hasattr(init_result, 'capabilities'):
+                        capabilities = init_result.capabilities
+                        logger.info(f"Extracted server capabilities: {capabilities}")
+                    elif isinstance(init_result, dict) and 'capabilities' in init_result:
+                        capabilities = init_result['capabilities']
+                        logger.info(f"Extracted server capabilities from dict: {capabilities}")
+                    
+                    # Store capabilities in the result for later retrieval
                     result = _extract_tool_details(tools_response)
+                    # Attach capabilities as metadata (will be handled by caller)
+                    if result is not None:
+                        # Add capabilities to a global context or return as tuple
+                        pass
                     return result
         except Exception as e:
             logger.error(f"MCP Check Error: Streamable-HTTP connection failed to {base_url}: {e}")
@@ -288,8 +357,82 @@ async def _get_tools_streamable_http(base_url: str, server_info: dict = None) ->
     return None
 
 
+async def _get_tools_and_capabilities_sse(base_url: str, server_info: dict = None) -> tuple[List[dict] | None, dict | None]:
+    """
+    Get tools and capabilities using SSE transport.
+    
+    The URL should contain everything needed. If we can't retrieve capabilities,
+    the server is considered failed. This also serves as a sanity check.
+    
+    Returns:
+        Tuple of (tool_list, capabilities_dict)
+        Returns (None, None) if connection fails or capabilities cannot be retrieved
+    """
+    # Use the URL as provided - it should contain everything needed
+    sse_url = base_url
+    
+    secure_prefix = "s" if sse_url.startswith("https://") else ""
+    mcp_server_url = f"http{secure_prefix}://{sse_url[len(f'http{secure_prefix}://'):]}"
+    
+    # Build headers for the server
+    headers = _build_headers_for_server(server_info)
+    
+    logger.info(f"Connecting to SSE server: {mcp_server_url}")
+
+    try:
+        # Monkey patch httpx to fix mount path issues (legacy SSE support)
+        original_request = httpx.AsyncClient.request
+        
+        async def patched_request(self, method, url, **kwargs):
+            if isinstance(url, str) and '/messages/' in url:
+                url = normalize_sse_endpoint_url_for_request(url)
+            elif hasattr(url, '__str__') and '/messages/' in str(url):
+                url = normalize_sse_endpoint_url_for_request(str(url))
+            return await original_request(self, method, url, **kwargs)
+        
+        httpx.AsyncClient.request = patched_request
+        
+        try:
+            async with sse_client(mcp_server_url, headers=headers) as (read, write):
+                async with ClientSession(read, write, sampling_callback=None) as session:
+                    init_result = await asyncio.wait_for(session.initialize(), timeout=10.0)
+                    tools_response = await asyncio.wait_for(session.list_tools(), timeout=15.0)
+                    
+                    # Extract capabilities from init_result - REQUIRED
+                    capabilities = {}
+                    if hasattr(init_result, 'capabilities'):
+                        capabilities_obj = init_result.capabilities
+                        # Convert to dict if it's a Pydantic model or similar
+                        if hasattr(capabilities_obj, 'model_dump'):
+                            capabilities = capabilities_obj.model_dump()
+                        elif hasattr(capabilities_obj, '__dict__'):
+                            capabilities = capabilities_obj.__dict__
+                        else:
+                            capabilities = capabilities_obj if isinstance(capabilities_obj, dict) else {}
+                    elif isinstance(init_result, dict) and 'capabilities' in init_result:
+                        capabilities = init_result['capabilities']
+                    
+                    # If no capabilities retrieved, consider it a failed server
+                    if not capabilities:
+                        logger.error(f"Failed to retrieve capabilities from {mcp_server_url} - server considered failed")
+                        return None, None
+                    
+                    logger.info(f"Successfully retrieved capabilities from {mcp_server_url}: {capabilities}")
+                    
+                    return _extract_tool_details(tools_response), capabilities
+        finally:
+            httpx.AsyncClient.request = original_request
+            
+    except asyncio.TimeoutError:
+        logger.error(f"Timeout connecting to {mcp_server_url}")
+        return None, None
+    except Exception as e:
+        logger.error(f"Failed to connect to {mcp_server_url}: {type(e).__name__} - {e}")
+        return None, None
+
+
 async def _get_tools_sse(base_url: str, server_info: dict = None) -> List[dict] | None:
-    """Get tools using SSE transport (legacy method with patches)"""
+    """Get tools using SSE transport (legacy method with patches, without capabilities)"""
     # If URL already has SSE endpoint, use it directly
     if base_url.endswith('/sse') or '/sse/' in base_url:
         sse_url = base_url
@@ -440,6 +583,109 @@ async def get_tools_from_server_with_server_info(base_url: str, server_info: dic
     except Exception as e:
         logger.error(f"MCP Check Error: Failed to get tool list from {base_url} with {transport}: {type(e).__name__} - {e}")
         return None
+
+
+async def get_tools_and_capabilities_from_server(base_url: str, server_info: dict = None) -> tuple[List[dict] | None, dict | None]:
+    """
+    Get tools and capabilities from server using server configuration.
+    
+    Args:
+        base_url: The base URL of the MCP server (e.g., http://localhost:8000).
+        server_info: Optional server configuration dict containing supported_transports
+        
+    Returns:
+        Tuple of (tool_list, capabilities_dict):
+        - tool_list: List of tool dictionaries or None if failed
+        - capabilities_dict: Server capabilities dictionary or None if failed
+    """
+    
+    if not base_url:
+        logger.error("MCP Check Error: Base URL is empty.")
+        return None, None
+
+    # Use transport-aware detection
+    transport = await detect_server_transport_aware(base_url, server_info)
+    
+    logger.info(f"Attempting to connect to MCP server at {base_url} using {transport} transport (server-info aware)...")
+    
+    try:
+        if transport == "streamable-http":
+            return await _get_tools_and_capabilities_streamable_http(base_url, server_info)
+        elif transport == "sse":
+            return await _get_tools_and_capabilities_sse(base_url, server_info)
+        else:
+            logger.error(f"Unsupported transport type: {transport}")
+            return None, None
+            
+    except Exception as e:
+        logger.error(f"MCP Check Error: Failed to get tools and capabilities from {base_url} with {transport}: {type(e).__name__} - {e}")
+        return None, None
+
+
+async def get_oauth_metadata_from_server(base_url: str, server_info: dict = None) -> dict | None:
+    """
+    Get OAuth metadata from MCP server's well-known endpoint.
+    
+    According to MCP OAuth specification, OAuth metadata can be retrieved from:
+    - /.well-known/oauth-protected-resource (RFC 8725)
+    - /.well-known/oauth-authorization-server (RFC 8414)
+    
+    Args:
+        base_url: The base URL of the MCP server (e.g., http://localhost:8000).
+        server_info: Optional server configuration dict
+        
+    Returns:
+        OAuth metadata dictionary or None if failed/not available
+    """
+    if not base_url:
+        logger.error("OAuth metadata retrieval: Base URL is empty.")
+        return None
+    
+    # Remove trailing slashes and path segments to get the base domain
+    from urllib.parse import urlparse
+    parsed = urlparse(base_url.rstrip('/'))
+    base_domain = f"{parsed.scheme}://{parsed.netloc}"
+    
+    # Try different well-known endpoints
+    wellknown_endpoints = [
+        f"{base_domain}/.well-known/oauth-protected-resource",
+        f"{base_domain}/.well-known/oauth-authorization-server",
+    ]
+    
+    # Build headers
+    headers = _build_headers_for_server(server_info)
+    headers['Accept'] = 'application/json'
+    
+    import httpx
+    
+    for endpoint in wellknown_endpoints:
+        try:
+            logger.info(f"Attempting to retrieve OAuth metadata from {endpoint}")
+            
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+                response = await client.get(endpoint, headers=headers)
+                
+                if response.status_code == 200:
+                    try:
+                        metadata = response.json()
+                        logger.info(f"Successfully retrieved OAuth metadata from {endpoint}")
+                        logger.debug(f"OAuth metadata: {metadata}")
+                        return metadata
+                    except Exception as e:
+                        logger.warning(f"Failed to parse OAuth metadata JSON from {endpoint}: {e}")
+                        continue
+                else:
+                    logger.debug(f"OAuth metadata endpoint returned {response.status_code}: {endpoint}")
+                    
+        except httpx.RequestError as e:
+            logger.debug(f"Failed to connect to OAuth metadata endpoint {endpoint}: {e}")
+            continue
+        except Exception as e:
+            logger.warning(f"Unexpected error retrieving OAuth metadata from {endpoint}: {e}")
+            continue
+    
+    logger.info(f"No OAuth metadata found for {base_url} (this is normal for servers without OAuth autodiscovery)")
+    return None
 
 
 

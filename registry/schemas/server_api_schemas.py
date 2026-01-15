@@ -68,8 +68,10 @@ class ServerCreateRequest(BaseModel):
 class ServerUpdateRequest(BaseModel):
     """Request schema for updating a server (partial update)"""
     serverName: Optional[str] = Field(None, alias="serverName")
+    path: Optional[str] = None
     description: Optional[str] = None
     url: Optional[str] = None
+    type: Optional[str] = None
     tags: Optional[List[str]] = None
     num_tools: Optional[int] = None
     num_stars: Optional[int] = None
@@ -156,6 +158,7 @@ class ServerListItemResponse(BaseModel):
     authentication: Optional[Dict[str, Any]] = None
     requiresOAuth: bool = Field(False, alias="requiresOAuth", description="Whether OAuth is required")
     capabilities: Optional[str] = Field(None, description="JSON string of server capabilities")
+    oauthMetadata: Optional[Dict[str, Any]] = Field(None, alias="oauthMetadata", description="OAuth metadata from autodiscovery")
     tools: Optional[str] = Field(None, description="Comma-separated list of tool names")
     author: Optional[str] = Field(None, description="Author user ID")
     scope: str
@@ -180,11 +183,19 @@ class ServerListItemResponse(BaseModel):
     @model_serializer(mode='wrap')
     def _serialize(self, serializer, info):
         data = serializer(self)
-        # If authentication exists, remove apiKey from response
-        if data.get('authentication'):
+        # Handle mutually exclusive authentication fields
+        has_authentication = data.get('authentication') is not None
+        has_api_key = data.get('apiKey') is not None
+        
+        if has_authentication:
+            # If authentication exists, remove apiKey from response
             data.pop('apiKey', None)
-        # If authentication doesn't exist, remove authentication from response
+        elif has_api_key:
+            # If only apiKey exists, remove authentication from response
+            data.pop('authentication', None)
         else:
+            # If both are None/empty, remove both fields
+            data.pop('apiKey', None)
             data.pop('authentication', None)
         return data
 
@@ -201,6 +212,7 @@ class ServerDetailResponse(BaseModel):
     authentication: Optional[Dict[str, Any]] = None
     requiresOAuth: bool = Field(False, alias="requiresOAuth", description="Whether OAuth is required")
     capabilities: Optional[str] = Field(None, description="JSON string of server capabilities")
+    oauthMetadata: Optional[Dict[str, Any]] = Field(None, alias="oauthMetadata", description="OAuth metadata from autodiscovery")
     tools: Optional[str] = Field(None, description="Comma-separated list of tool names")
     toolFunctions: Optional[Dict[str, Any]] = Field(None, alias="toolFunctions", description="Complete OpenAI function schemas")
     initDuration: Optional[int] = Field(None, alias="initDuration", description="Initialization duration in ms")
@@ -229,39 +241,50 @@ class ServerDetailResponse(BaseModel):
     @model_serializer(mode='wrap')
     def _serialize(self, serializer, info):
         data = serializer(self)
-        # If authentication exists, remove apiKey from response
-        if data.get('authentication'):
+        # Handle mutually exclusive authentication fields
+        has_authentication = data.get('authentication') is not None
+        has_api_key = data.get('apiKey') is not None
+        
+        if has_authentication:
+            # If authentication exists, remove apiKey from response
             data.pop('apiKey', None)
-        # If authentication doesn't exist, remove authentication from response
+        elif has_api_key:
+            # If only apiKey exists, remove authentication from response
+            data.pop('authentication', None)
         else:
+            # If both are None/empty, remove both fields
+            data.pop('apiKey', None)
             data.pop('authentication', None)
         return data
 
 
 class ServerCreateResponse(BaseModel):
-    """Response schema for server creation"""
-    id: str
+    """Response schema for server creation - flattened structure matching API doc"""
     serverName: str = Field(..., alias="serverName")
-    path: str
+    title: Optional[str] = None
     description: Optional[str] = None
+    type: Optional[str] = None
     url: Optional[str] = None
-    supported_transports: List[str] = Field(default_factory=list)
-    auth_type: Optional[str] = None
-    tags: List[str] = Field(default_factory=list)
-    num_tools: int = 0
-    num_stars: int = 0
-    is_python: bool = False
-    license: Optional[str] = None
-    tool_list: List[Dict[str, Any]] = Field(default_factory=list)
+    apiKey: Optional[Dict[str, Any]] = None
+    oauth: Optional[Dict[str, Any]] = None
+    authentication: Optional[Dict[str, Any]] = None
+    requiresOAuth: bool = Field(False, alias="requiresOAuth")
+    capabilities: Optional[str] = None
+    oauthMetadata: Optional[Dict[str, Any]] = Field(None, alias="oauthMetadata", description="OAuth metadata from autodiscovery")
+    tools: Optional[str] = None
+    toolFunctions: Optional[Dict[str, Any]] = Field(None, alias="toolFunctions")
+    initDuration: Optional[int] = Field(None, alias="initDuration")
+    author: Optional[str] = None
     scope: str
     status: str
+    path: str
+    tags: List[str] = Field(default_factory=list)
+    numTools: int = Field(0, alias="numTools")
+    numStars: int = Field(0, alias="numStars")
     enabled: bool = Field(default=True, description="Whether the server is enabled")
-    author_id: Optional[str] = None
-    authentication: Optional[Dict[str, Any]] = None
-    apiKey: Optional[Dict[str, Any]] = None
-    requires_oauth: bool = False
-    last_connected: Optional[datetime] = None
-    init_duration: Optional[int] = None
+    lastConnected: Optional[datetime] = Field(None, alias="lastConnected")
+    lastError: Optional[datetime] = Field(None, alias="lastError")
+    errorMessage: Optional[str] = Field(None, alias="errorMessage")
     createdAt: datetime
     updatedAt: datetime
     
@@ -272,12 +295,32 @@ class ServerCreateResponse(BaseModel):
     @model_serializer(mode='wrap')
     def _serialize(self, serializer, info):
         data = serializer(self)
-        # If authentication exists, remove apiKey from response
-        if data.get('authentication'):
+        
+        # Handle mutually exclusive auth fields
+        # Priority: authentication > oauth > apiKey
+        # If all are None/empty, remove all auth fields
+        has_authentication = data.get('authentication') is not None
+        has_oauth = data.get('oauth') is not None
+        has_api_key = data.get('apiKey') is not None
+        
+        if has_authentication:
+            # Keep authentication, remove others
+            data.pop('oauth', None)
             data.pop('apiKey', None)
-        # If authentication doesn't exist, remove authentication from response
-        else:
+        elif has_oauth:
+            # Keep oauth, remove others
             data.pop('authentication', None)
+            data.pop('apiKey', None)
+        elif has_api_key:
+            # Keep apiKey, remove others
+            data.pop('authentication', None)
+            data.pop('oauth', None)
+        else:
+            # No auth required, remove all auth fields
+            data.pop('authentication', None)
+            data.pop('oauth', None)
+            data.pop('apiKey', None)
+        
         return data
 
 
@@ -330,11 +373,16 @@ class ServerHealthResponse(BaseModel):
     """Response schema for server health refresh"""
     id: str
     serverName: str = Field(..., alias="serverName")
-    path: str
     status: str
-    last_checked: datetime
-    response_time_ms: Optional[int] = None
-    num_tools: int
+    lastConnected: Optional[datetime] = None
+    lastError: Optional[datetime] = None
+    errorMessage: Optional[str] = None
+    numTools: int
+    capabilities: Optional[str] = None  # JSON string
+    tools: Optional[str] = None  # Comma-separated tool names
+    initDuration: Optional[int] = None  # Initialization duration in ms
+    message: str
+    updatedAt: datetime
     
     class ConfigDict:
         from_attributes = True
@@ -388,7 +436,7 @@ def _get_config_field(server, field: str, default=None):
 
 
 def convert_to_list_item(server) -> ServerListItemResponse:
-    """Convert MCPServerDocument to ServerListItemResponse"""
+    """Convert ExtendedMCPServer to ServerListItemResponse matching API documentation"""
     config = server.config or {}
     
     # Decrypt sensitive authentication fields before returning
@@ -397,36 +445,20 @@ def convert_to_list_item(server) -> ServerListItemResponse:
     # Extract author_id from server.author PydanticObjectId
     author_id = str(server.author) if server.author else None
     
-    # Get transport type (first supported transport or default)
-    supported_transports = config.get("supported_transports", [])
-    transport_type = supported_transports[0] if supported_transports else "streamable-http"
+    # Get transport type from config.type
+    transport_type = config.get("type", "streamable-http")
     
-    # Generate title from serverName if not provided
+    # Generate title from config.title or serverName
     title = config.get("title") or server.serverName
     
-    # Build tools string from tool_list (comma-separated tool names)
-    tool_list = config.get("tool_list", [])
-    tools_str = None
-    if tool_list:
-        tool_names = [tool.get("name", "") for tool in tool_list if tool.get("name")]
-        tools_str = ", ".join(tool_names) if tool_names else None
+    # Get tools string from config (already comma-separated)
+    tools_str = config.get("tools", "")
     
-    # Convert capabilities dict to JSON string if present
-    capabilities = config.get("capabilities")
-    capabilities_str = None
-    if capabilities:
-        capabilities_str = json.dumps(capabilities) if isinstance(capabilities, dict) else str(capabilities)
+    # Get capabilities from config (already JSON string)
+    capabilities_str = config.get("capabilities", "{}")
     
-    # Parse last_connected if stored as ISO string
-    last_connected = None
-    if config.get("last_connected"):
-        try:
-            if isinstance(config["last_connected"], str):
-                last_connected = datetime.fromisoformat(config["last_connected"].replace('Z', '+00:00'))
-            elif isinstance(config["last_connected"], datetime):
-                last_connected = config["last_connected"]
-        except (ValueError, AttributeError):
-            pass
+    # Get numTools from root level (already calculated)
+    num_tools = server.numTools if hasattr(server, 'numTools') else 0
     
     return ServerListItemResponse(
         id=str(server.id),
@@ -437,25 +469,27 @@ def convert_to_list_item(server) -> ServerListItemResponse:
         url=config.get("url"),
         apiKey=config.get("apiKey"),
         authentication=config.get("authentication"),
-        requiresOAuth=config.get("requires_oauth", False),
+        requiresOAuth=config.get("requiresOAuth", False),
         capabilities=capabilities_str,
+        oauthMetadata=config.get("oauthMetadata"),
         tools=tools_str,
         author=author_id,
-        scope=config.get("scope", "private_user"),
-        status=config.get("status", "active"),
-        path=config.get("path", ""),
-        tags=config.get("tags", []),
-        numTools=config.get("num_tools", 0),
-        numStars=config.get("num_stars", 0),
-        enabled=config.get("enabled", True),
-        lastConnected=last_connected,
+        # Registry fields from root level
+        scope=server.scope,
+        status=server.status,
+        path=server.path,
+        tags=server.tags,
+        numTools=num_tools,
+        numStars=server.numStars,
+        enabled=config.get("enabled", True),  # Read enabled from config, default to True for backward compatibility
+        lastConnected=server.lastConnected,
         createdAt=server.createdAt or datetime.now(),
         updatedAt=server.updatedAt or datetime.now(),
     )
 
 
 def convert_to_detail(server) -> ServerDetailResponse:
-    """Convert MCPServerDocument to ServerDetailResponse"""
+    """Convert ExtendedMCPServer to ServerDetailResponse matching API documentation"""
     config = server.config or {}
     
     # Decrypt sensitive authentication fields before returning
@@ -464,70 +498,28 @@ def convert_to_detail(server) -> ServerDetailResponse:
     # Extract author_id from server.author PydanticObjectId
     author_id = str(server.author) if server.author else None
     
-    # Get transport type (first supported transport or default)
-    supported_transports = config.get("supported_transports", [])
-    transport_type = supported_transports[0] if supported_transports else "streamable-http"
+    # Get transport type from config.type
+    transport_type = config.get("type", "streamable-http")
     
-    # Generate title from serverName if not provided
+    # Generate title from config.title or serverName
     title = config.get("title") or server.serverName
     
-    # Build tools string from tool_list (comma-separated tool names)
-    tool_list = config.get("tool_list", [])
-    tools_str = None
-    if tool_list:
-        tool_names = [tool.get("name", "") for tool in tool_list if tool.get("name")]
-        tools_str = ", ".join(tool_names) if tool_names else None
+    # Get tools string from config (already comma-separated)
+    tools_str = config.get("tools", "")
     
-    # Build toolFunctions dict with OpenAI function schema format
-    tool_functions = None
-    if tool_list:
-        tool_functions = {}
-        for tool in tool_list:
-            tool_name = tool.get("name")
-            if tool_name:
-                # Create function name with server suffix
-                function_key = f"{tool_name}_{server.serverName}".lower().replace(" ", "_")
-                
-                tool_functions[function_key] = {
-                    "type": "function",
-                    "function": {
-                        "name": function_key,
-                        "description": tool.get("description", ""),
-                        "parameters": tool.get("inputSchema", {
-                            "type": "object",
-                            "properties": {},
-                            "required": []
-                        })
-                    }
-                }
+    # Get toolFunctions directly from config (already in OpenAI format)
+    tool_functions = config.get("toolFunctions")
     
-    # Convert capabilities dict to JSON string if present
-    capabilities = config.get("capabilities")
-    capabilities_str = None
-    if capabilities:
-        capabilities_str = json.dumps(capabilities) if isinstance(capabilities, dict) else str(capabilities)
+    # Get capabilities from config (already JSON string)
+    capabilities_str = config.get("capabilities", "{}")
     
-    # Parse last_connected if stored as ISO string
-    last_connected = None
-    if config.get("last_connected"):
-        try:
-            if isinstance(config["last_connected"], str):
-                last_connected = datetime.fromisoformat(config["last_connected"].replace('Z', '+00:00'))
-            elif isinstance(config["last_connected"], datetime):
-                last_connected = config["last_connected"]
-        except (ValueError, AttributeError):
-            pass
+    # Get numTools from root level (already calculated)
+    num_tools = server.numTools if hasattr(server, 'numTools') else 0
     
-    # Parse last_error if stored as ISO string
-    last_error = None
-    if config.get("last_error"):
-        try:
-            if isinstance(config["last_error"], str):
-                last_error = datetime.fromisoformat(config["last_error"].replace('Z', '+00:00'))
-            elif isinstance(config["last_error"], datetime):
-                last_error = config["last_error"]
-        except (ValueError, AttributeError):
-            pass
+    # Format lastError as ISO string if present
+    last_error_str = None
+    if server.lastError:
+        last_error_str = server.lastError.isoformat() if isinstance(server.lastError, datetime) else str(server.lastError)
     
     return ServerDetailResponse(
         id=str(server.id),
@@ -538,29 +530,31 @@ def convert_to_detail(server) -> ServerDetailResponse:
         url=config.get("url"),
         apiKey=config.get("apiKey"),
         authentication=config.get("authentication"),
-        requiresOAuth=config.get("requires_oauth", False),
+        requiresOAuth=config.get("requiresOAuth", False),
         capabilities=capabilities_str,
+        oauthMetadata=config.get("oauthMetadata"),
         tools=tools_str,
         toolFunctions=tool_functions,
-        initDuration=config.get("init_timeout"),
+        initDuration=config.get("initDuration"),
         author=author_id,
-        scope=config.get("scope", "private_user"),
-        status=config.get("status", "active"),
-        path=config.get("path", ""),
-        tags=config.get("tags", []),
-        numTools=config.get("num_tools", 0),
-        numStars=config.get("num_stars", 0),
-        enabled=config.get("enabled", True),
-        lastConnected=last_connected,
-        lastError=str(last_error.isoformat()) if last_error else None,
-        errorMessage=config.get("error_message"),
+        # Registry fields from root level
+        scope=server.scope,
+        status=server.status,
+        path=server.path,
+        tags=server.tags,
+        numTools=num_tools,
+        numStars=server.numStars,
+        enabled=config.get("enabled", True),  # Read enabled from config, default to True for backward compatibility
+        lastConnected=server.lastConnected,
+        lastError=last_error_str,
+        errorMessage=server.errorMessage if hasattr(server, 'errorMessage') else None,
         createdAt=server.createdAt or datetime.now(),
         updatedAt=server.updatedAt or datetime.now(),
     )
 
 
 def convert_to_create_response(server) -> ServerCreateResponse:
-    """Convert MCPServerDocument to ServerCreateResponse"""
+    """Convert ExtendedMCPServer to ServerCreateResponse - flattened structure"""
     config = server.config or {}
     
     # Decrypt sensitive authentication fields before returning
@@ -569,97 +563,134 @@ def convert_to_create_response(server) -> ServerCreateResponse:
     # Extract author_id from server.author PydanticObjectId
     author_id = str(server.author) if server.author else None
     
-    # Parse last_connected if stored as ISO string
-    last_connected = None
-    if config.get("last_connected"):
-        try:
-            if isinstance(config["last_connected"], str):
-                last_connected = datetime.fromisoformat(config["last_connected"].replace('Z', '+00:00'))
-            elif isinstance(config["last_connected"], datetime):
-                last_connected = config["last_connected"]
-        except (ValueError, AttributeError):
-            pass
+    # Get numTools from root level
+    num_tools = server.numTools if hasattr(server, 'numTools') else 0
+    
+    # Format lastError as ISO string if present
+    last_error = None
+    if server.lastError:
+        last_error = server.lastError if isinstance(server.lastError, datetime) else None
     
     return ServerCreateResponse(
-        id=str(server.id),
         serverName=server.serverName,
-        path=config.get("path", ""),
+        title=config.get("title", server.serverName),
         description=config.get("description"),
+        type=config.get("type", "streamable-http"),
         url=config.get("url"),
-        supported_transports=config.get("supported_transports", []),
-        auth_type=config.get("auth_type"),
-        tags=config.get("tags", []),
-        num_tools=config.get("num_tools", 0),
-        num_stars=config.get("num_stars", 0),
-        is_python=config.get("is_python", False),
-        license=config.get("license"),
-        tool_list=config.get("tool_list", []),
-        scope=config.get("scope", "private_user"),
-        status=config.get("status", "active"),
-        enabled=config.get("enabled", True),
-        author_id=author_id,
-        authentication=config.get("authentication"),
         apiKey=config.get("apiKey"),
-        requires_oauth=config.get("requires_oauth", False),
-        last_connected=last_connected,
-        init_duration=config.get("init_timeout"),
+        oauth=config.get("oauth"),
+        authentication=config.get("authentication"),
+        requiresOAuth=config.get("requiresOAuth", False),
+        capabilities=config.get("capabilities", "{}"),
+        oauthMetadata=config.get("oauthMetadata"),
+        tools=config.get("tools", ""),
+        toolFunctions=config.get("toolFunctions", {}),
+        initDuration=config.get("initDuration"),
+        author=author_id,
+        scope=server.scope,
+        status=server.status,
+        path=server.path,
+        tags=server.tags,
+        numTools=num_tools,
+        numStars=server.numStars,
+        enabled=config.get("enabled", True),  # Read enabled from config, default to True for backward compatibility
+        lastConnected=server.lastConnected,
+        lastError=last_error,
+        errorMessage=server.errorMessage if hasattr(server, 'errorMessage') else None,
         createdAt=server.createdAt or datetime.now(),
         updatedAt=server.updatedAt or datetime.now(),
     )
 
 
 def convert_to_update_response(server) -> ServerUpdateResponse:
-    """Convert MCPServerDocument to ServerUpdateResponse"""
+    """Convert ExtendedMCPServer to ServerUpdateResponse matching API documentation"""
     config = server.config or {}
+    
+    # Get numTools from root level
+    num_tools = server.numTools if hasattr(server, 'numTools') else 0
     
     return ServerUpdateResponse(
         id=str(server.id),
         serverName=server.serverName,
-        path=config.get("path", ""),
+        path=server.path,
         description=config.get("description"),
-        tags=config.get("tags", []),
-        num_tools=config.get("num_tools", 0),
-        num_stars=config.get("num_stars", 0),
-        status=config.get("status", "active"),
+        tags=server.tags,
+        num_tools=num_tools,
+        num_stars=server.numStars,
+        status=server.status,
         updatedAt=server.updatedAt or datetime.now(),
     )
 
 
 def convert_to_toggle_response(server, enabled: bool) -> ServerToggleResponse:
-    """Convert MCPServerDocument to ServerToggleResponse"""
-    config = server.config or {}
+    """Convert ExtendedMCPServer to ServerToggleResponse matching API documentation"""
     return ServerToggleResponse(
         id=str(server.id),
         serverName=server.serverName,
-        path=config.get("path", ""),
+        path=server.path,
         enabled=enabled,
-        status=config.get("status", "active"),
+        status=server.status,
         updatedAt=server.updatedAt or datetime.now(),
     )
 
 
-def convert_to_tools_response(server, tools: List[Dict[str, Any]]) -> ServerToolsResponse:
-    """Convert MCPServerDocument to ServerToolsResponse"""
-    config = server.config or {}
+def convert_to_tools_response(server, tool_functions: Dict[str, Any]) -> ServerToolsResponse:
+    """Convert ExtendedMCPServer to ServerToolsResponse matching API documentation"""
+    # Convert toolFunctions dict to list format for response
+    tools_list = []
+    if tool_functions:
+        for func_key, func_def in tool_functions.items():
+            if isinstance(func_def, dict) and "function" in func_def:
+                func = func_def["function"]
+                tools_list.append({
+                    "name": func.get("name", ""),
+                    "description": func.get("description", ""),
+                    "inputSchema": func.get("parameters", {})
+                })
+    
     return ServerToolsResponse(
         id=str(server.id),
         serverName=server.serverName,
-        path=config.get("path", ""),
-        tools=tools,
-        num_tools=len(tools),
+        path=server.path,
+        tools=tools_list,
+        num_tools=len(tools_list),
         cached=False,
     )
 
 
 def convert_to_health_response(server, health_data: Dict[str, Any]) -> ServerHealthResponse:
-    """Convert MCPServerDocument to ServerHealthResponse"""
+    """Convert ExtendedMCPServer to ServerHealthResponse matching API documentation"""
+    # Get config fields
     config = server.config or {}
+    
+    # Get numTools from root level
+    num_tools = server.numTools if hasattr(server, 'numTools') else 0
+    
+    # Get capabilities and tools from config
+    capabilities = config.get("capabilities", "{}")
+    tools = config.get("tools", "")
+    
+    # Get initDuration from config
+    init_duration = config.get("initDuration")
+    
+    # Build message based on status
+    status = health_data.get("status", "healthy")
+    if status == "healthy":
+        message = "Server health check successful"
+    else:
+        message = health_data.get("status_message", "Server health check failed")
+    
     return ServerHealthResponse(
         id=str(server.id),
         serverName=server.serverName,
-        path=config.get("path", ""),
-        status=health_data.get("status", "healthy"),
-        last_checked=health_data.get("last_checked", datetime.now()),
-        response_time_ms=health_data.get("response_time_ms"),
-        num_tools=config.get("num_tools", 0),
+        status=server.status,  # Use server.status (active/error) from database
+        lastConnected=server.lastConnected,
+        lastError=server.lastError,
+        errorMessage=server.errorMessage,
+        numTools=num_tools,
+        capabilities=capabilities,
+        tools=tools,
+        initDuration=init_duration,
+        message=message,
+        updatedAt=server.updatedAt,
     )
