@@ -10,6 +10,7 @@ import math
 from typing import Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, status as http_status, Depends
 from pydantic import ValidationError
+from beanie import PydanticObjectId
 
 from registry.auth.dependencies import CurrentUser
 from registry.services.server_service_v1 import server_service_v1
@@ -18,6 +19,7 @@ from registry.services.oauth.connection_status_service import (
     get_servers_connection_status,
     get_single_server_connection_status
 )
+from registry.services.access_control_service import acl_service
 from registry.schemas.enums import ConnectionState
 from registry.schemas.server_api_schemas import (
     ServerListResponse,
@@ -40,6 +42,7 @@ from registry.schemas.server_api_schemas import (
     convert_to_tools_response,
     convert_to_health_response,
 )
+from registry.services.constants import PermissionBits
 
 # API Version constant
 API_VERSION = "v1"
@@ -54,29 +57,16 @@ def get_user_context(user_context: CurrentUser):
     logger.info(f'User context: {user_context}')
     return user_context
 
-
 def check_admin_permission(user_context: dict) -> bool:
     """
     Check if user has admin permissions.
-    
-    This is a placeholder function for future permission system.
-    Currently returns True for all users, but provides a hook for
-    implementing role-based access control (RBAC) in the future.
-    
-    Future implementation should check:
-    - user_context.get("role") == "ADMIN"
-    - user_context.get("is_admin") == True
-    
     Args:
         user_context: User context dictionary from authentication
         
     Returns:
         True if user is admin, False otherwise
     """
-    # TODO: Implement actual permission check when RBAC is ready
-    # For now, allow all authenticated users to access stats
-    # Future: return user_context.get("role") == "ADMIN" or user_context.get("is_admin", False)
-    return True
+    return user_context.get("role") == "ADMIN"
 
 
 def apply_connection_status_to_server(
@@ -147,11 +137,10 @@ async def list_servers(
             page=page,
             per_page=per_page,
             user_id=None,
-            acl_accessible_resources=user_context.get('acl_accessible_resources')
         )
         
         # Convert to response models
-        server_items = [convert_to_list_item(server) for server in servers]
+        server_items = [convert_to_list_item(server) for server in servers if server.id in user_context.get('acl_accessible_resources')]
         
         # Get connection status and enrich server items
         try:
@@ -220,7 +209,6 @@ async def get_server_stats(
     will return a simplified version or 501 Not Implemented.
     """
     try:
-        # Check admin permission (currently returns True for all, but reserved for future RBAC)
         if not check_admin_permission(user_context):
             raise HTTPException(
                 status_code=http_status.HTTP_403_FORBIDDEN,
@@ -257,6 +245,11 @@ async def get_server(
 ):
     """Get detailed information about a server by ID, including connection status"""
     try:
+        server_id = PydanticObjectId(server_id)
+        if server_id not in user_context.get("acl_accessible_resources"):
+            logger.warning(f"Access denied to server Id {server_id} by ACL")
+            raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Access denied by ACL")
+        
         server = await server_service_v1.get_server_by_id(
             server_id=server_id,
             user_id=None,
@@ -298,7 +291,7 @@ async def get_server(
             detail="Internal server error while getting server"
         )
 
-
+# Assumes every user can create a server. Verify this
 @router.post(
     f"/{API_VERSION}/servers",
     response_model=ServerCreateResponse,
@@ -318,7 +311,24 @@ async def create_server(
             data=data,
             user_id=user_id,
         )
+
+        if not server:  
+            raise ValueError("Failed to create server")
         
+        acl_entry = await acl_service.grant_permission(
+            principal_type="user",
+            principal_id=user_context.get("user_id"),
+            resource_type="mcpServer",
+            resource_id=server.id,
+            granted_by=user_context.get("user_id"),
+            perm_bits=15  # Apply full permissions for owners
+        )
+        
+        if not acl_entry: 
+            raise ValueError("Failed to create ACL entry for server: {server.id}")
+            # TODO: Delete the server if ACL creation fails
+        
+        logger.info(f"Granted user {user_id} owner permissions for server Id {server.id}")
         return convert_to_create_response(server)
         
     except ValueError as e:
@@ -354,7 +364,19 @@ async def update_server(
     """Update a server with partial data"""
     try:
         user_id = user_context.get("username")
-        
+        acl_resource_permissions = user_context.get("acl_resource_permissions")
+        if acl_resource_permissions:
+            user_permissions = acl_resource_permissions.get(str(server_id), 0)
+
+        if not user_permissions or user_permissions < PermissionBits.EDIT:
+            raise HTTPException(
+                status_code=http_status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "forbidden",
+                    "message": "You do not have EDIT permissions for this server."
+                }
+            )
+
         server = await server_service_v1.update_server(
             server_id=server_id,
             data=data,
@@ -391,7 +413,6 @@ async def update_server(
             detail="Internal server error while updating server"
         )
 
-
 @router.delete(
     f"/{API_VERSION}/servers/{{server_id}}",
     status_code=http_status.HTTP_204_NO_CONTENT,
@@ -404,12 +425,33 @@ async def delete_server(
 ):
     """Delete a server"""
     try:
-        await server_service_v1.delete_server(
+        acl_resource_permissions = user_context.get("acl_resource_permissions")
+        if acl_resource_permissions:
+            user_permissions = acl_resource_permissions.get(str(server_id), 0)
+
+        if not user_permissions or user_permissions < PermissionBits.DELETE:
+            raise HTTPException(
+                status_code=http_status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "forbidden",
+                    "message": "You do not have DELETE permissions for this server."
+                }
+            )
+        did_server_delete = await server_service_v1.delete_server(
             server_id=server_id,
             user_id=None,
         )
-        
-        return None  # 204 No Content
+
+        if did_server_delete: 
+            num_acl_entries_deleted = await acl_service.remove_all_permissions(
+                resource_type="mcpServer",
+                resource_id=PydanticObjectId(server_id),
+            )
+            logger.info(f"Removed {num_acl_entries_deleted} ACL permissions for server Id {server_id}")
+            return None  # 204 No Content
+        else: 
+            raise ValueError("Failed to delete server {server.id}. Skipping ACL cleanup")
+    
         
     except ValueError as e:
         error_msg = str(e)
@@ -438,7 +480,6 @@ async def delete_server(
             detail="Internal server error while deleting server"
         )
 
-
 @router.post(
     f"/{API_VERSION}/servers/{{server_id}}/toggle",
     response_model=ServerToggleResponse,
@@ -452,9 +493,23 @@ async def toggle_server(
 ):
     """Toggle server enabled/disabled status. When enabling, fetches tools from server."""
     try:
+
+        acl_resource_permissions = user_context.get("acl_resource_permissions")
+        if acl_resource_permissions:
+            user_permissions = acl_resource_permissions.get(str(server_id), 0)
+
+        if not user_permissions or user_permissions < PermissionBits.EDIT:
+            raise HTTPException(
+                status_code=http_status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "forbidden",
+                    "message": "You do not have EDIT permissions for this server."
+                }
+            )
+        
         # Get user_id from context for OAuth token retrieval
         user_id = user_context.get("username") or user_context.get("user_id")
-        
+    
         server = await server_service_v1.toggle_server_status(
             server_id=server_id,
             enabled=data.enabled,

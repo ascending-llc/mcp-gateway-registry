@@ -377,7 +377,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             'accessible_agents': accessible_agents, # possibly redudant; should make sure acl_accessible_resources includes the same agent list
             'ui_permissions': ui_permissions,
             'can_modify_servers': can_modify,
-            'is_admin': user_has_wildcard_access(scopes),
+            'is_admin': user_has_wildcard_access(scopes), # relies on user scope; use "role" attribute instead
             "auth_source": auth_source,
         }
         logger.debug(f"User context for {username}: {user_context}")

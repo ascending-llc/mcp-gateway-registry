@@ -289,7 +289,6 @@ class ServerServiceV1:
     
     async def list_servers(
         self,
-        acl_accessible_resources: List[PydanticObjectId],
         query: Optional[str] = None,
         scope: Optional[str] = None,
         status: Optional[str] = None,
@@ -298,7 +297,7 @@ class ServerServiceV1:
         user_id: Optional[str] = None,
     ) -> Tuple[List[MCPServerDocument], int]:
         """
-        List servers with filtering and pagination.
+        List servers with filtering and pagination
         
         Args:
             query: Free-text search across server_name, description, tags
@@ -307,7 +306,6 @@ class ServerServiceV1:
             page: Page number (min: 1)
             per_page: Items per page (min: 1, max: 100)
             user_id: Current user's ID (kept for compatibility but not used for filtering)
-            
         Returns:
             Tuple of (servers list, total count)
         """
@@ -318,16 +316,15 @@ class ServerServiceV1:
         
         # Build filter conditions
         filters = []
-        
-        # Scope filter (now at root level)
+        # Scope filter
         if scope:
-            filters.append({"scope": scope})
-        
-        # Status filter (now at root level)
+            filters.append({"config.scope": scope})
+
+        # Status filter
         if status:
-            filters.append({"status": status})
-        
-        # Text search across multiple fields (tags now at root level)
+            filters.append({"config.status": status})
+
+        # Text search across multiple fields
         if query:
             query_lower = query.lower()
             text_filter = {
@@ -339,15 +336,11 @@ class ServerServiceV1:
             }
             filters.append(text_filter)
 
-        # TODO: Filter servers based on acl_accessible_resources
-        logger.info(f"accessible resources: {acl_accessible_resources}")
-
         # Combine all filters
         if filters:
             query_filter = {"$and": filters} if len(filters) > 1 else filters[0]
         else:
             query_filter = {}
-        
         # Execute query with pagination
         total = await MCPServerDocument.find(query_filter).count()
         servers = await MCPServerDocument.find(query_filter)\
@@ -355,12 +348,11 @@ class ServerServiceV1:
             .skip(skip)\
             .limit(per_page)\
             .to_list()
-        
         return servers, total
     
     async def get_server_by_id(
         self,
-        server_id: str,
+        server_id: PydanticObjectId,
         user_id: Optional[str] = None,
     ) -> Optional[MCPServerDocument]:
         """
@@ -373,15 +365,7 @@ class ServerServiceV1:
         Returns:
             Server document or None if not found
         """
-        try:
-            # Convert string ID to ObjectId
-            obj_id = PydanticObjectId(server_id)
-        except Exception as e:
-            logger.warning(f"Invalid server ID format: {server_id}")
-            return None
-        
-        server = await MCPServerDocument.get(obj_id)
-        
+        server = await MCPServerDocument.get(server_id)        
         return server
     
     async def get_server_by_path(self, path: str) -> Optional[MCPServerDocument]:
@@ -443,7 +427,8 @@ class ServerServiceV1:
         num_tools = len(tool_functions) if tool_functions else 0
         
         # Get or create author user reference
-        author = await IUser.find_one({"username": user_id})
+        # TODO: User_id is set to the users PydanticObjectId; Update to author = user_id
+        author = await IUser.find_one({"id": user_id})
         if not author:
             # Create a minimal user record if not exists
             now = _get_current_utc_time()

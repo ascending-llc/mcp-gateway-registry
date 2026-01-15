@@ -16,49 +16,58 @@ class ACLService:
 		resource_id: PydanticObjectId,
 		granted_by: PydanticObjectId,
 		role_id: Optional[PydanticObjectId] = None,
-		perm_bits: Optional[float] = None,
+		perm_bits: Optional[int] = None,
 	) -> IAclEntry:
 		if principal_type in ["user", "group"] and not principal_id:
 			raise ValueError("principal_id must be set for user/group principal_type")
+
 		if not role_id and not perm_bits:
 			raise ValueError("Permission bits must be set via perm_bits or role_id")
+		
 		if role_id:
 			access_role = await IAccessRole.find_one({"_id": role_id})
 			if not access_role:
 				raise ValueError("Role not found")
 			perm_bits = access_role.permBits
-		# Check if an ACL entry already exists for this principal/resource
-		acl_entry = await IAclEntry.find_one({
-			"principalType": principal_type,
-			"principalId": principal_id,
-			"resourceType": resource_type,
-			"resourceId": resource_id
-		})
-		now = datetime.now(timezone.utc)
-		if acl_entry:
-			acl_entry.permBits = perm_bits
-			acl_entry.roleId = role_id
-			acl_entry.grantedBy = granted_by
-			acl_entry.grantedAt = now
-			acl_entry.updatedAt = now
-			await acl_entry.save()
-			return acl_entry
-		else:
-			new_entry = IAclEntry(
-				principalType=principal_type,
-				principalId=principal_id,
-				resourceType=resource_type,
-				resourceId=resource_id,
-				permBits=perm_bits,
-				roleId=role_id,
-				grantedBy=granted_by,
-				grantedAt=now,
-				createdAt=now,
-				updatedAt=now
-			)
-			await new_entry.insert()
-			return new_entry
 
+		# Check if an ACL entry already exists for this principal/resource
+		try: 
+			acl_entry = await IAclEntry.find_one({
+				"principalType": principal_type,
+				"principalId": principal_id,
+				"resourceType": resource_type,
+				"resourceId": resource_id
+			})
+			now = datetime.now(timezone.utc)
+			if acl_entry:
+				acl_entry.permBits = perm_bits
+				acl_entry.roleId = role_id
+				acl_entry.grantedBy = granted_by
+				acl_entry.grantedAt = now
+				acl_entry.updatedAt = now
+				await acl_entry.save()
+				return acl_entry
+			else:
+				# convert principal_id to str
+				principal_id_str = str(principal_id)
+
+				new_entry = IAclEntry(
+					principalType=principal_type,
+					principalId=principal_id_str,
+					resourceType=resource_type,
+					resourceId=resource_id,
+					permBits=perm_bits,
+					roleId=role_id,
+					# grantedBy=granted_by,
+					grantedAt=now,
+					createdAt=now,
+					updatedAt=now
+				)
+				await new_entry.insert()
+				return new_entry
+		except Exception as e: 
+			logger.error(f"Error finding/inserting ACL entry: {e}")
+	
 	async def check_permission(
 		self,
 		principal_type: str,
@@ -82,29 +91,31 @@ class ACLService:
 		principal_type: str,
 		principal_id: str,
 		resource_type: str,
-		required_permissions: float
+		required_permissions: Optional[int] = 1
 	) -> List[PydanticObjectId]:
 		acl_entries = await IAclEntry.find({
-			"principalType": principal_type,
+			"principalType": {"$in": [principal_type, "public"]}, # check for public and user servers
 			"principalId": str(principal_id),
 			"resourceType": resource_type,
-			"permBits": required_permissions # TODO: Should this check permBits >= required_permissions?
+			"permBits": {"$gte": required_permissions}
 		}).to_list()
-	
-		resource_ids = [entry.resourceId for entry in acl_entries]
-		logger.info(f"Found {len(resource_ids)} accessible resources")
-		return resource_ids
+		logger.info(f"Found {len(acl_entries)} accessible resources")
+		return acl_entries
 
 	async def remove_all_permissions(
 		self,
 		resource_type: str,
 		resource_id: PydanticObjectId
 	) -> int:
-		result = await IAclEntry.find({
-			"resourceType": resource_type,
-			"resourceId": resource_id
-		}).delete()
-		return result.deleted_count
+		try: 
+			result = await IAclEntry.find({
+				"resourceType": resource_type,
+				"resourceId": resource_id
+			}).delete()
+			return result.deleted_count
+		except Exception as e: 
+			logger.error(f"Error deleting ACL entries for resource {resource_type} with ID {resource_id}: {e}")
+			return 0
 
 # Singleton instance
 acl_service = ACLService()

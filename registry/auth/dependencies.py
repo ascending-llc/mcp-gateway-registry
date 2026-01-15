@@ -40,6 +40,7 @@ def get_current_user_by_mid(request: Request) -> Dict[str, Any]:
 async def get_user_acl_permissions(request: Request) -> Dict[str, Any]:
     """
         Example dependency to test adding acl permission info to user context
+        Replaces the need for get_user_by_mid
 
     Args:
         request: FastAPI request object
@@ -66,17 +67,21 @@ async def get_user_acl_permissions(request: Request) -> Dict[str, Any]:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="user not found")
 
         principal_id = getattr(user_obj, "id")
-        viewable_server_ids_for_user = await acl_service.list_accessible_resources(
+        accessible_servers_for_user = await acl_service.list_accessible_resources(
             principal_type="user", # TODO: replace with constant
             principal_id=principal_id,
             resource_type="mcpServer",
-            required_permissions=1
         )
+        resource_ids = [entry.resourceId for entry in accessible_servers_for_user]
 
+        # TODO: This oonly captures servers. It should either be renamed to acl_server_permissions or refactored to be more robust
+        acl_resource_permissions = {str(entry.resourceId): entry.permBits for entry in accessible_servers_for_user}
         return {
             **request.state.user,
-            "acl_accessible_resources": viewable_server_ids_for_user,
-            "role": user_obj.get("role") 
+            "user_id": principal_id,
+            "acl_accessible_resources":  resource_ids,
+            "acl_resource_permissions": acl_resource_permissions, 
+            "role": getattr(user_obj, "role")
             #  other acl fields can be added here
         }
     except Exception as e:
