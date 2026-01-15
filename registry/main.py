@@ -14,6 +14,9 @@ from fastapi.openapi.utils import get_openapi
 
 from packages.database import init_mongodb, close_mongodb
 from registry.auth.middleware import UnifiedAuthMiddleware
+from registry.core.config import settings
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
 # Import domain routers
 from registry.auth.routes import router as auth_router
 from registry.api.server_routes import router as servers_router
@@ -193,6 +196,12 @@ app.add_middleware(
 app.add_middleware(
     UnifiedAuthMiddleware
 )
+
+if hasattr(settings, 'static_dir') and Path(settings.static_dir).exists():
+    app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
+    logger.info(f"Static files mounted from {settings.static_dir}")
+else:
+    logger.warning("Static files directory not found, skipping static files mount")
 
 # Register API routers with /api prefix
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])

@@ -1,0 +1,33 @@
+name: 'Get Schema Version'
+description: 'Get the latest schema version from jarvis-api repository'
+inputs:
+  github-token:
+    description: 'GitHub token with access to jarvis-api repository'
+    required: true
+outputs:
+  schema-version:
+    description: 'The latest schema version from jarvis-api'
+    value: ${{ steps.schema.outputs.schema_version }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Get latest schema version
+      id: schema
+      shell: bash
+      run: |
+        # Get the latest release tag from jarvis-api repo (private repo)
+        # Using PAT for cross-repo access to private repository
+        SCHEMA_VERSION=$(gh api repos/ascending-llc/jarvis-api/releases/latest --jq '.tag_name' || echo "")
+        
+        if [ -z "$SCHEMA_VERSION" ]; then
+          echo "⚠️  Error: Failed to fetch latest release from jarvis-api"
+          echo "This could mean:"
+          echo "  1. The repository has no releases published yet"
+          echo "  2. The PAT doesn't have access to ascending-llc/jarvis-api"
+          exit 1
+        fi
+        
+        echo "schema_version=${SCHEMA_VERSION}" >> $GITHUB_OUTPUT
+        echo "✅ Using SCHEMA_VERSION: ${SCHEMA_VERSION}"
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}

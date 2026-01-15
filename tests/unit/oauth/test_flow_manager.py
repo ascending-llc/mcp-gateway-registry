@@ -7,8 +7,9 @@ from unittest.mock import patch, MagicMock, AsyncMock
 # Add project root to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
-from registry.oauth.flow_manager import FlowStateManager
-from registry.oauth.models import OAuthFlowStatus
+from registry.auth.oauth.flow_state_manager import FlowStateManager
+from registry.schemas.enums import OAuthFlowStatus
+from registry.models.oauth_models import MCPOAuthFlowMetadata, OAuthFlow
 
 
 @pytest.mark.unit
@@ -20,18 +21,16 @@ class TestFlowStateManager:
         """Test initialization with default values."""
         manager = FlowStateManager()
         
-        assert manager.namespace == 'oauth-flows'
-        assert manager.ttl == 600
-        assert manager._cache.maxsize == 1000
-        assert manager._cache.ttl == 600
+        assert manager._flow_ttl == 600
+        assert manager._memory_flows == {}
+        assert manager.DEFAULT_FLOW_TTL == 600
 
-    def test_init_custom_values(self):
-        """Test initialization with custom values."""
-        manager = FlowStateManager(namespace='test-namespace', ttl=300)
+    def test_init_fallback_to_memory(self):
+        """Test initialization with memory fallback."""
+        manager = FlowStateManager(fallback_to_memory=True)
         
-        assert manager.namespace == 'test-namespace'
-        assert manager.ttl == 300
-        assert manager._cache.ttl == 300
+        # Should initialize with memory storage when Redis is unavailable
+        assert manager._memory_flows is not None
 
     def test_generate_flow_id(self):
         """Test flow ID generation."""
@@ -41,329 +40,379 @@ class TestFlowStateManager:
         
         flow_id = manager.generate_flow_id(user_id, server_name)
         
-        # Check format: user_id:server_name:timestamp:uuid_8_chars
-        parts = flow_id.split(':')
-        assert len(parts) == 4
-        assert parts[0] == user_id
-        assert parts[1] == server_name
-        assert parts[2].isdigit()  # timestamp
-        assert len(parts[3]) == 8  # first 8 chars of UUID
+        # Check format: user_id:server_name
+        assert flow_id == f"{user_id}:{server_name}"
 
-    @pytest.mark.asyncio
-    async def test_create_flow_state_success(self):
-        """Test successful creation of flow state."""
+    def test_encode_decode_state(self):
+        """Test encoding and decoding state parameter."""
         manager = FlowStateManager()
         flow_id = "test-flow-id"
-        flow_type = "authorization_code"
-        metadata = {"user_id": "test-user", "server_name": "test-server"}
         
-        with patch('time.time', return_value=1234567890.0):
-            await manager.create_flow_state(flow_id, flow_type, metadata)
+        # Encode state
+        state = manager.encode_state(flow_id)
+        assert manager.STATE_SEPARATOR in state
         
-        # Verify the flow state was created
-        cache_key = f"{manager.namespace}:{flow_type}:{flow_id}"
-        flow_data = manager._cache.get(cache_key)
-        
-        assert flow_data is not None
-        assert flow_data["flow_id"] == flow_id
-        assert flow_data["flow_type"] == flow_type
-        assert flow_data["metadata"] == metadata
-        assert flow_data["status"] == OAuthFlowStatus.PENDING
-        assert flow_data["created_at"] == 1234567890.0
-        assert flow_data["expires_at"] == 1234567890.0 + manager.ttl
+        # Decode state
+        decoded_flow_id, security_token = manager.decode_state(state)
+        assert decoded_flow_id == flow_id
+        assert len(security_token) > 0
 
-    @pytest.mark.asyncio
-    async def test_create_flow_state_with_custom_ttl(self):
-        """Test creation of flow state with custom TTL."""
-        manager = FlowStateManager(ttl=600)
+    def test_decode_state_invalid_format(self):
+        """Test decoding invalid state format."""
+        manager = FlowStateManager()
+        
+        with pytest.raises(ValueError, match="Invalid state format"):
+            manager.decode_state("invalid-state-without-separator")
+
+    def test_create_flow_metadata(self):
+        """Test creating flow metadata."""
+        manager = FlowStateManager()
+        server_name = "test-server"
+        user_id = "test-user"
+        authorize_url = "https://example.com/oauth/authorize"
+        code_verifier = "test-verifier"
         flow_id = "test-flow-id"
-        flow_type = "authorization_code"
-        metadata = {"user_id": "test-user"}
-        custom_ttl = 300
+        oauth_config = {
+            "client_id": "test-client-id",
+            "client_secret": "test-secret",
+            "scopes": ["read", "write"],
+            "authorize_url": authorize_url,
+            "token_url": "https://example.com/oauth/token"
+        }
         
-        with patch('time.time', return_value=1234567890.0):
-            await manager.create_flow_state(flow_id, flow_type, metadata, ttl=custom_ttl)
+        metadata = manager.create_flow_metadata(
+            server_name, user_id, authorize_url, code_verifier, oauth_config, flow_id
+        )
         
-        cache_key = f"{manager.namespace}:{flow_type}:{flow_id}"
-        flow_data = manager._cache.get(cache_key)
-        
-        assert flow_data["expires_at"] == 1234567890.0 + custom_ttl
+        assert metadata.server_name == server_name
+        assert metadata.user_id == user_id
+        assert metadata.authorize_url == authorize_url
+        assert metadata.code_verifier == code_verifier
+        assert metadata.client_info.client_id == "test-client-id"
 
-    @pytest.mark.asyncio
-    async def test_create_flow_state_exception(self):
-        """Test exception handling during flow state creation."""
+    def test_create_flow_success(self):
+        """Test successful flow creation."""
         manager = FlowStateManager()
         flow_id = "test-flow-id"
-        flow_type = "authorization_code"
-        metadata = {"user_id": "test-user"}
+        server_name = "test-server"
+        user_id = "test-user"
+        code_verifier = "test-verifier"
         
-        # Replace the entire cache with a mock that raises an exception
-        mock_cache = MagicMock()
-        mock_cache.__setitem__ = MagicMock(side_effect=Exception("Cache error"))
-        manager._cache = mock_cache
+        # Create minimal metadata
+        oauth_config = {
+            "client_id": "test-client",
+            "scopes": ["read"],
+            "authorize_url": "https://example.com/auth",
+            "token_url": "https://example.com/token"
+        }
+        metadata = manager.create_flow_metadata(
+            server_name, user_id, "https://example.com/auth", 
+            code_verifier, oauth_config, flow_id
+        )
         
-        # The method should catch and re-raise the exception
-        with pytest.raises(Exception, match="Cache error"):
-            await manager.create_flow_state(flow_id, flow_type, metadata)
+        flow = manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
+        
+        assert flow.flow_id == flow_id
+        assert flow.server_name == server_name
+        assert flow.user_id == user_id
+        assert flow.status == OAuthFlowStatus.PENDING
 
-    @pytest.mark.asyncio
-    async def test_get_flow_state_found(self):
-        """Test retrieving an existing flow state."""
+    def test_get_flow_found(self):
+        """Test retrieving an existing flow."""
         manager = FlowStateManager()
         flow_id = "test-flow-id"
-        flow_type = "authorization_code"
-        metadata = {"user_id": "test-user"}
+        server_name = "test-server"
+        user_id = "test-user"
+        code_verifier = "test-verifier"
         
-        # First create a flow state
-        await manager.create_flow_state(flow_id, flow_type, metadata)
+        # Create flow
+        oauth_config = {
+            "client_id": "test-client",
+            "scopes": ["read"],
+            "authorize_url": "https://example.com/auth",
+            "token_url": "https://example.com/token"
+        }
+        metadata = manager.create_flow_metadata(
+            server_name, user_id, "https://example.com/auth",
+            code_verifier, oauth_config, flow_id
+        )
+        manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
         
-        # Then retrieve it
-        result = await manager.get_flow_state(flow_id, flow_type)
+        # Retrieve flow
+        flow = manager.get_flow(flow_id)
         
-        assert result is not None
-        assert result["flow_id"] == flow_id
-        assert result["flow_type"] == flow_type
-        assert result["metadata"] == metadata
-        assert result["status"] == OAuthFlowStatus.PENDING
+        assert flow is not None
+        assert flow.flow_id == flow_id
+        assert flow.status == OAuthFlowStatus.PENDING
 
-    @pytest.mark.asyncio
-    async def test_get_flow_state_not_found(self):
-        """Test retrieving a non-existent flow state."""
+    def test_get_flow_not_found(self):
+        """Test retrieving a non-existent flow."""
         manager = FlowStateManager()
         flow_id = "non-existent-flow"
-        flow_type = "authorization_code"
         
-        result = await manager.get_flow_state(flow_id, flow_type)
-        
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_get_flow_state_expired(self):
-        """Test retrieving an expired flow state."""
-        manager = FlowStateManager(ttl=1)  # Very short TTL
-        flow_id = "test-flow-id"
-        flow_type = "authorization_code"
-        metadata = {"user_id": "test-user"}
-        
-        # Create flow state
-        await manager.create_flow_state(flow_id, flow_type, metadata)
-        
-        # Wait for it to expire
-        time.sleep(1.1)
-        
-        # Try to retrieve (should return None due to TTL cache)
-        result = await manager.get_flow_state(flow_id, flow_type)
+        result = manager.get_flow(flow_id)
         
         assert result is None
 
-    @pytest.mark.asyncio
-    async def test_get_flow_state_exception(self):
-        """Test exception handling during flow state retrieval."""
+    def test_is_flow_expired(self):
+        """Test checking if flow is expired."""
         manager = FlowStateManager()
         flow_id = "test-flow-id"
-        flow_type = "authorization_code"
+        server_name = "test-server"
+        user_id = "test-user"
+        code_verifier = "test-verifier"
         
-        # Mock cache to raise an exception
-        with patch.object(manager._cache, 'get', side_effect=Exception("Cache error")):
-            result = await manager.get_flow_state(flow_id, flow_type)
-            
-            # Should return None on exception
-            assert result is None
+        # Create flow
+        oauth_config = {
+            "client_id": "test-client",
+            "scopes": ["read"],
+            "authorize_url": "https://example.com/auth",
+            "token_url": "https://example.com/token"
+        }
+        metadata = manager.create_flow_metadata(
+            server_name, user_id, "https://example.com/auth",
+            code_verifier, oauth_config, flow_id
+        )
+        flow = manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
+        
+        # Should not be expired immediately
+        assert not manager.is_flow_expired(flow)
+        
+        # Simulate expired flow
+        flow.created_at = time.time() - 700  # More than DEFAULT_FLOW_TTL
+        assert manager.is_flow_expired(flow)
 
-    @pytest.mark.asyncio
-    async def test_complete_flow_success(self):
+    def test_complete_flow_success(self):
         """Test successfully completing a flow."""
         manager = FlowStateManager()
         flow_id = "test-flow-id"
-        flow_type = "authorization_code"
-        metadata = {"user_id": "test-user"}
-        result_data = {"access_token": "test-token"}
+        server_name = "test-server"
+        user_id = "test-user"
+        code_verifier = "test-verifier"
         
-        # Create flow state first
-        await manager.create_flow_state(flow_id, flow_type, metadata)
+        # Create flow
+        oauth_config = {
+            "client_id": "test-client",
+            "scopes": ["read"],
+            "authorize_url": "https://example.com/auth",
+            "token_url": "https://example.com/token"
+        }
+        metadata = manager.create_flow_metadata(
+            server_name, user_id, "https://example.com/auth",
+            code_verifier, oauth_config, flow_id
+        )
+        manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
         
         # Complete the flow
-        with patch('time.time', return_value=1234567890.0):
-            await manager.complete_flow(flow_id, flow_type, result_data)
+        from registry.models.oauth_models import OAuthTokens
+        tokens = OAuthTokens(
+            access_token="test-token",
+            token_type="Bearer",
+            expires_in=3600
+        )
+        manager.complete_flow(flow_id, tokens)
         
         # Verify the flow was updated
-        flow_data = await manager.get_flow_state(flow_id, flow_type)
-        
-        assert flow_data is not None
-        assert flow_data["status"] == OAuthFlowStatus.COMPLETED
-        assert flow_data["result"] == result_data
-        assert flow_data["completed_at"] == 1234567890.0
+        flow = manager.get_flow(flow_id)
+        assert flow is not None
+        assert flow.status == OAuthFlowStatus.COMPLETED
+        assert flow.tokens == tokens
 
-    @pytest.mark.asyncio
-    async def test_complete_flow_not_found(self):
+    def test_complete_flow_not_found(self):
         """Test completing a non-existent flow."""
         manager = FlowStateManager()
         flow_id = "non-existent-flow"
-        flow_type = "authorization_code"
-        result_data = {"access_token": "test-token"}
         
-        # Should not raise an exception, just log warning
-        await manager.complete_flow(flow_id, flow_type, result_data)
+        from registry.models.oauth_models import OAuthTokens
+        tokens = OAuthTokens(
+            access_token="test-token",
+            token_type="Bearer",
+            expires_in=3600
+        )
+        
+        # Should not raise an exception
+        manager.complete_flow(flow_id, tokens)
 
-    @pytest.mark.asyncio
-    async def test_complete_flow_exception(self):
-        """Test exception handling during flow completion."""
-        manager = FlowStateManager()
-        flow_id = "test-flow-id"
-        flow_type = "authorization_code"
-        metadata = {"user_id": "test-user"}
-        
-        # Create flow state first
-        await manager.create_flow_state(flow_id, flow_type, metadata)
-        
-        # Mock cache to raise an exception
-        with patch.object(manager._cache, 'get', side_effect=Exception("Cache error")):
-            # The method catches, logs, and re-raises the original exception
-            with pytest.raises(Exception, match="Cache error"):
-                await manager.complete_flow(flow_id, flow_type, {})
-
-    @pytest.mark.asyncio
-    async def test_fail_flow_success(self):
+    def test_fail_flow_success(self):
         """Test successfully failing a flow."""
         manager = FlowStateManager()
         flow_id = "test-flow-id"
-        flow_type = "authorization_code"
-        metadata = {"user_id": "test-user"}
+        server_name = "test-server"
+        user_id = "test-user"
+        code_verifier = "test-verifier"
         error_message = "Authentication failed"
         
-        # Create flow state first
-        await manager.create_flow_state(flow_id, flow_type, metadata)
+        # Create flow
+        oauth_config = {
+            "client_id": "test-client",
+            "scopes": ["read"],
+            "authorize_url": "https://example.com/auth",
+            "token_url": "https://example.com/token"
+        }
+        metadata = manager.create_flow_metadata(
+            server_name, user_id, "https://example.com/auth",
+            code_verifier, oauth_config, flow_id
+        )
+        manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
         
         # Fail the flow
-        with patch('time.time', return_value=1234567890.0):
-            await manager.fail_flow(flow_id, flow_type, error_message)
+        manager.fail_flow(flow_id, error_message)
         
         # Verify the flow was updated
-        flow_data = await manager.get_flow_state(flow_id, flow_type)
-        
-        assert flow_data is not None
-        assert flow_data["status"] == OAuthFlowStatus.FAILED
-        assert flow_data["error"] == error_message
-        assert flow_data["failed_at"] == 1234567890.0
+        flow = manager.get_flow(flow_id)
+        assert flow is not None
+        assert flow.status == OAuthFlowStatus.FAILED
+        assert flow.error == error_message
 
-    @pytest.mark.asyncio
-    async def test_fail_flow_not_found(self):
+    def test_fail_flow_not_found(self):
         """Test failing a non-existent flow."""
         manager = FlowStateManager()
         flow_id = "non-existent-flow"
-        flow_type = "authorization_code"
         error_message = "Authentication failed"
         
-        # Should not raise an exception, just log warning
-        await manager.fail_flow(flow_id, flow_type, error_message)
+        # Should not raise an exception
+        manager.fail_flow(flow_id, error_message)
 
-    @pytest.mark.asyncio
-    async def test_fail_flow_exception(self):
-        """Test exception handling during flow failure."""
-        manager = FlowStateManager()
-        flow_id = "test-flow-id"
-        flow_type = "authorization_code"
-        metadata = {"user_id": "test-user"}
-        
-        # Create flow state first
-        await manager.create_flow_state(flow_id, flow_type, metadata)
-        
-        # Mock cache to raise an exception
-        with patch.object(manager._cache, 'get', side_effect=Exception("Cache error")):
-            # The method catches, logs, and re-raises the original exception
-            with pytest.raises(Exception, match="Cache error"):
-                await manager.fail_flow(flow_id, flow_type, "error")
-
-    @pytest.mark.asyncio
-    async def test_delete_flow_success(self):
+    def test_delete_flow_success(self):
         """Test successfully deleting a flow."""
         manager = FlowStateManager()
         flow_id = "test-flow-id"
-        flow_type = "authorization_code"
-        metadata = {"user_id": "test-user"}
+        server_name = "test-server"
+        user_id = "test-user"
+        code_verifier = "test-verifier"
         
-        # Create flow state first
-        await manager.create_flow_state(flow_id, flow_type, metadata)
+        # Create flow
+        oauth_config = {
+            "client_id": "test-client",
+            "scopes": ["read"],
+            "authorize_url": "https://example.com/auth",
+            "token_url": "https://example.com/token"
+        }
+        metadata = manager.create_flow_metadata(
+            server_name, user_id, "https://example.com/auth",
+            code_verifier, oauth_config, flow_id
+        )
+        manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
         
         # Verify it exists
-        assert await manager.get_flow_state(flow_id, flow_type) is not None
+        assert manager.get_flow(flow_id) is not None
         
         # Delete the flow
-        result = await manager.delete_flow(flow_id, flow_type)
+        manager.delete_flow(flow_id)
         
-        assert result is True
-        assert await manager.get_flow_state(flow_id, flow_type) is None
+        # Verify it's deleted
+        assert manager.get_flow(flow_id) is None
 
-    @pytest.mark.asyncio
-    async def test_delete_flow_not_found(self):
-        """Test deleting a non-existent flow."""
-        manager = FlowStateManager()
-        flow_id = "non-existent-flow"
-        flow_type = "authorization_code"
-        
-        result = await manager.delete_flow(flow_id, flow_type)
-        
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_delete_flow_exception(self):
-        """Test exception handling during flow deletion."""
+    def test_cancel_user_flow(self):
+        """Test cancelling a user flow."""
         manager = FlowStateManager()
         flow_id = "test-flow-id"
-        flow_type = "authorization_code"
-        metadata = {"user_id": "test-user"}
+        server_name = "test-server"
+        user_id = "test-user"
+        code_verifier = "test-verifier"
         
-        # Create flow state first
-        await manager.create_flow_state(flow_id, flow_type, metadata)
+        # Create flow
+        oauth_config = {
+            "client_id": "test-client",
+            "scopes": ["read"],
+            "authorize_url": "https://example.com/auth",
+            "token_url": "https://example.com/token"
+        }
+        metadata = manager.create_flow_metadata(
+            server_name, user_id, "https://example.com/auth",
+            code_verifier, oauth_config, flow_id
+        )
+        manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
         
-        # Replace the cache with a mock that raises an exception
-        mock_cache = MagicMock()
-        mock_cache.__contains__ = MagicMock(side_effect=Exception("Cache error"))
-        manager._cache = mock_cache
+        # Cancel the flow
+        result = manager.cancel_user_flow(user_id, server_name)
         
-        result = await manager.delete_flow(flow_id, flow_type)
+        assert result is True
         
-        # Should return False on exception
-        assert result is False
+        # Verify flow is marked as failed
+        flow = manager.get_flow(flow_id)
+        assert flow.status == OAuthFlowStatus.FAILED
 
-    def test_get_stats(self):
-        """Test getting statistics."""
-        manager = FlowStateManager(namespace='test-namespace', ttl=300)
-        
-        stats = manager.get_stats()
-        
-        assert stats['active_flows'] == 0
-        assert stats['max_size'] == 1000
-        assert stats['ttl'] == 300
-        assert stats['namespace'] == 'test-namespace'
-
-    def test_get_stats_with_active_flows(self):
-        """Test getting statistics with active flows."""
+    def test_get_user_flows(self):
+        """Test getting user flows."""
         manager = FlowStateManager()
+        server_name = "test-server"
+        user_id = "test-user"
+        code_verifier = "test-verifier"
         
-        # Create some flow states
-        import asyncio
-        asyncio.run(manager.create_flow_state("flow1", "type1", {}))
-        asyncio.run(manager.create_flow_state("flow2", "type2", {}))
+        # Create multiple flows for same user/server
+        oauth_config = {
+            "client_id": "test-client",
+            "scopes": ["read"],
+            "authorize_url": "https://example.com/auth",
+            "token_url": "https://example.com/token"
+        }
         
-        stats = manager.get_stats()
+        for i in range(3):
+            flow_id = f"flow-{i}"
+            metadata = manager.create_flow_metadata(
+                server_name, user_id, "https://example.com/auth",
+                code_verifier, oauth_config, flow_id
+            )
+            manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
         
-        assert stats['active_flows'] == 2
+        # Get user flows
+        flows = manager.get_user_flows(user_id, server_name)
+        
+        assert len(flows) == 3
+        for flow in flows:
+            assert flow.user_id == user_id
+            assert flow.server_name == server_name
 
     def test_singleton_get_flow_manager(self):
         """Test the singleton get_flow_manager function."""
-        from registry.oauth.flow_manager import get_flow_manager
+        from registry.auth.oauth.flow_state_manager import get_flow_state_manager
         
         # First call should create instance
-        manager1 = get_flow_manager()
+        manager1 = get_flow_state_manager()
         assert manager1 is not None
         
         # Second call should return same instance
-        manager2 = get_flow_manager()
+        manager2 = get_flow_state_manager()
         assert manager2 is manager1
         
         # Verify it's a FlowStateManager instance
         assert isinstance(manager1, FlowStateManager)
+
+    @pytest.mark.asyncio
+    async def test_cleanup_expired_flows(self):
+        """Test cleanup of expired flows."""
+        manager = FlowStateManager()
+        
+        # Create some flows
+        flows = []
+        for i in range(3):
+            flow_id = f"flow-{i}"
+            server_name = "test-server"
+            user_id = "test-user"
+            code_verifier = "test-verifier"
+            
+            oauth_config = {
+                "client_id": "test-client",
+                "scopes": ["read"],
+                "authorize_url": "https://example.com/auth",
+                "token_url": "https://example.com/token"
+            }
+            metadata = manager.create_flow_metadata(
+                server_name, user_id, "https://example.com/auth",
+                code_verifier, oauth_config, flow_id
+            )
+            flow = manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
+            # Make first flow expired
+            if i == 0:
+                flow.created_at = time.time() - 700
+            flows.append(flow_id)
+        
+        # Clean up expired flows
+        cleaned = await manager.cleanup_expired_flows()
+        
+        # Should clean up at least 1 expired flow
+        assert cleaned >= 1
 
 
 @pytest.mark.unit
@@ -371,82 +420,90 @@ class TestFlowStateManager:
 class TestFlowStateManagerIntegration:
     """Integration tests for FlowStateManager."""
     
-    @pytest.mark.asyncio
-    async def test_full_flow_lifecycle(self):
+    def test_full_flow_lifecycle(self):
         """Test a complete OAuth flow lifecycle."""
         manager = FlowStateManager()
         user_id = "test-user"
         server_name = "test-server"
-        flow_type = "authorization_code"
         
         # Generate flow ID
         flow_id = manager.generate_flow_id(user_id, server_name)
         
-        # Create flow state
-        metadata = {
-            "user_id": user_id,
-            "server_name": server_name,
-            "redirect_uri": "https://example.com/callback"
+        # Create flow
+        code_verifier = "test-verifier"
+        oauth_config = {
+            "client_id": "test-client",
+            "scopes": ["read"],
+            "authorize_url": "https://example.com/auth",
+            "token_url": "https://example.com/token"
         }
-        await manager.create_flow_state(flow_id, flow_type, metadata)
+        metadata = manager.create_flow_metadata(
+            server_name, user_id, "https://example.com/auth",
+            code_verifier, oauth_config, flow_id
+        )
+        manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
         
-        # Verify flow state exists and is pending
-        flow_state = await manager.get_flow_state(flow_id, flow_type)
-        assert flow_state is not None
-        assert flow_state["status"] == OAuthFlowStatus.PENDING
+        # Verify flow exists and is pending
+        flow = manager.get_flow(flow_id)
+        assert flow is not None
+        assert flow.status == OAuthFlowStatus.PENDING
         
         # Complete the flow
-        result = {
-            "access_token": "test-access-token",
-            "refresh_token": "test-refresh-token",
-            "expires_in": 3600
-        }
-        await manager.complete_flow(flow_id, flow_type, result)
+        from registry.models.oauth_models import OAuthTokens
+        tokens = OAuthTokens(
+            access_token="test-access-token",
+            refresh_token="test-refresh-token",
+            token_type="Bearer",
+            expires_in=3600
+        )
+        manager.complete_flow(flow_id, tokens)
         
         # Verify flow is completed
-        completed_state = await manager.get_flow_state(flow_id, flow_type)
-        assert completed_state["status"] == OAuthFlowStatus.COMPLETED
-        assert completed_state["result"] == result
+        completed_flow = manager.get_flow(flow_id)
+        assert completed_flow.status == OAuthFlowStatus.COMPLETED
+        assert completed_flow.tokens.access_token == "test-access-token"
         
         # Delete the flow
-        delete_result = await manager.delete_flow(flow_id, flow_type)
-        assert delete_result is True
+        manager.delete_flow(flow_id)
         
         # Verify flow is deleted
-        assert await manager.get_flow_state(flow_id, flow_type) is None
+        assert manager.get_flow(flow_id) is None
 
-    @pytest.mark.asyncio
-    async def test_concurrent_flows(self):
+    def test_concurrent_flows(self):
         """Test handling multiple concurrent flows."""
         manager = FlowStateManager()
-        flow_type = "authorization_code"
         
         # Create multiple flows
         flows = []
         for i in range(5):
-            flow_id = f"flow-{i}"
-            metadata = {"user_id": f"user-{i}", "server_name": f"server-{i}"}
-            await manager.create_flow_state(flow_id, flow_type, metadata)
+            user_id = f"user-{i}"
+            server_name = f"server-{i}"
+            flow_id = manager.generate_flow_id(user_id, server_name)
+            code_verifier = "test-verifier"
+            
+            oauth_config = {
+                "client_id": "test-client",
+                "scopes": ["read"],
+                "authorize_url": "https://example.com/auth",
+                "token_url": "https://example.com/token"
+            }
+            metadata = manager.create_flow_metadata(
+                server_name, user_id, "https://example.com/auth",
+                code_verifier, oauth_config, flow_id
+            )
+            manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
             flows.append(flow_id)
         
         # Verify all flows exist
         for flow_id in flows:
-            flow_state = await manager.get_flow_state(flow_id, flow_type)
-            assert flow_state is not None
-            assert flow_state["flow_id"] == flow_id
-        
-        # Verify stats
-        stats = manager.get_stats()
-        assert stats['active_flows'] == 5
+            flow = manager.get_flow(flow_id)
+            assert flow is not None
+            assert flow.flow_id == flow_id
         
         # Delete all flows
         for flow_id in flows:
-            await manager.delete_flow(flow_id, flow_type)
+            manager.delete_flow(flow_id)
         
         # Verify all flows are deleted
         for flow_id in flows:
-            assert await manager.get_flow_state(flow_id, flow_type) is None
-        
-        # Verify stats
-        stats = manager.get_stats()
-        assert stats['active_flows'] == 0
+            assert manager.get_flow(flow_id) is None
