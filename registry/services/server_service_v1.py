@@ -518,8 +518,8 @@ class ServerServiceV1:
                     
                     # Build server_info dict for oauth metadata retrieval
                     server_info = {
-                        "supported_transports": config.get("supported_transports", ["streamable-http"]),
-                        "tags": config.get("tags", []),
+                        "type": config.get("type", "streamable-http"),
+                        "tags": server.tags or [],
                     }
                     
                     # Add headers if present
@@ -740,10 +740,10 @@ class ServerServiceV1:
         if not url:
             return False, "No URL configured", None
         
-        supported_transports = config.get("supported_transports", ["streamable-http"])
+        transport_type = config.get("type", "streamable-http")
         
         # Skip health checks for stdio transport
-        if supported_transports == ["stdio"]:
+        if transport_type == "stdio":
             logger.info(f"Skipping health check for stdio transport: {url}")
             return True, "healthy (stdio transport skipped)", None
         
@@ -756,7 +756,7 @@ class ServerServiceV1:
                 base_url = url.rstrip('/')
                 
                 # Try streamable-http transport first (most common)
-                if "streamable-http" in supported_transports:
+                if transport_type in ["streamable-http", "http"]:
                     endpoint = f"{base_url}/mcp" if not base_url.endswith('/mcp') else base_url
                     
                     try:
@@ -781,7 +781,7 @@ class ServerServiceV1:
                         return False, f"unhealthy: {type(e).__name__}", None
                 
                 # Try SSE transport if configured
-                elif "sse" in supported_transports:
+                elif transport_type == "sse":
                     endpoint = f"{base_url}/sse" if not base_url.endswith('/sse') else base_url
                     
                     try:
@@ -799,7 +799,7 @@ class ServerServiceV1:
                 
                 # Unknown transport
                 else:
-                    return False, f"unsupported transport: {supported_transports}", None
+                    return False, f"unsupported transport: {transport_type}", None
                     
         except Exception as e:
             logger.error(f"Health check error for server {server.serverName}: {e}")
@@ -829,8 +829,8 @@ class ServerServiceV1:
         try:
             # Build server_info dict for mcp_client
             server_info = {
-                "supported_transports": config.get("supported_transports", ["streamable-http"]),
-                "tags": config.get("tags", []),
+                "type": config.get("type", "streamable-http"),
+                "tags": server.tags or [],
             }
             
             # Add headers if present
@@ -877,8 +877,8 @@ class ServerServiceV1:
         try:
             # Build server_info dict for mcp_client
             server_info = {
-                "supported_transports": config.get("supported_transports", ["streamable-http"]),
-                "tags": config.get("tags", []),
+                "type": config.get("type", "streamable-http"),
+                "tags": server.tags or [],
             }
             
             # Add headers if present
@@ -913,6 +913,11 @@ class ServerServiceV1:
         """
         Refresh server health status.
         
+        Uses the same strict validation as registration:
+        - Retrieves tools and capabilities from the server
+        - If capabilities cannot be retrieved, server is considered unhealthy
+        - This serves as a comprehensive sanity check
+        
         Args:
             server_id: Server document ID
             user_id: Current user's ID (kept for compatibility but not used)
@@ -928,33 +933,57 @@ class ServerServiceV1:
         if not server:
             raise ValueError("Server not found")
         
-        # Perform actual health check
-        is_healthy, status_msg, response_time_ms = await self.perform_health_check(server)
-        
-        # Update server with health check results (root-level fields)
         now = datetime.now(timezone.utc)
-        server.lastConnected = now
         
-        if is_healthy:
-            server.status = "active"
-            server.lastError = None
-            server.errorMessage = None
-        else:
+        # Use the same validation as registration: retrieve tools and capabilities
+        # This is a more comprehensive health check than just HTTP GET
+        tool_list, capabilities, tool_error = await self.retrieve_tools_and_capabilities_from_server(server)
+        
+        if tool_list is None or capabilities is None:
+            # Health check failed - cannot retrieve capabilities
+            logger.error(f"Health check failed for {server.serverName}: {tool_error}")
+            
             server.status = "error"
             server.lastError = now
-            server.errorMessage = status_msg
+            server.errorMessage = tool_error or "Failed to retrieve capabilities"
+            server.lastConnected = now
+            server.updatedAt = now
+            
+            await server.save()
+            
+            return {
+                "server": server,
+                "status": "unhealthy",
+                "status_message": tool_error or "Failed to retrieve capabilities",
+                "last_checked": now,
+                "response_time_ms": None,
+            }
         
+        # Health check passed - capabilities retrieved successfully
+        logger.info(f"Health check passed for {server.serverName}: retrieved {len(tool_list)} tools and capabilities")
+        
+        server.status = "active"
+        server.lastError = None
+        server.errorMessage = None
+        server.lastConnected = now
         server.updatedAt = now
+        
+        # Optionally update capabilities in config if they changed
+        import json
+        config = server.config or {}
+        if capabilities:
+            config["capabilities"] = json.dumps(capabilities)
+            server.config = config
         
         await server.save()
         
         # Return health info
         return {
             "server": server,
-            "status": "healthy" if is_healthy else "unhealthy",
-            "status_message": status_msg,
+            "status": "healthy",
+            "status_message": f"healthy (retrieved {len(tool_list)} tools)",
             "last_checked": now,
-            "response_time_ms": response_time_ms,
+            "response_time_ms": None,  # We don't track response time for MCP connections
         }
 
     async def get_server_by_name(self, server_name: str, status: str = "active") -> Optional[MCPServerDocument]:

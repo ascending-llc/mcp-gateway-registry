@@ -373,11 +373,16 @@ class ServerHealthResponse(BaseModel):
     """Response schema for server health refresh"""
     id: str
     serverName: str = Field(..., alias="serverName")
-    path: str
     status: str
-    last_checked: datetime
-    response_time_ms: Optional[int] = None
-    num_tools: int
+    lastConnected: Optional[datetime] = None
+    lastError: Optional[datetime] = None
+    errorMessage: Optional[str] = None
+    numTools: int
+    capabilities: Optional[str] = None  # JSON string
+    tools: Optional[str] = None  # Comma-separated tool names
+    initDuration: Optional[int] = None  # Initialization duration in ms
+    message: str
+    updatedAt: datetime
     
     class ConfigDict:
         from_attributes = True
@@ -655,15 +660,37 @@ def convert_to_tools_response(server, tool_functions: Dict[str, Any]) -> ServerT
 
 def convert_to_health_response(server, health_data: Dict[str, Any]) -> ServerHealthResponse:
     """Convert ExtendedMCPServer to ServerHealthResponse matching API documentation"""
+    # Get config fields
+    config = server.config or {}
+    
     # Get numTools from root level
     num_tools = server.numTools if hasattr(server, 'numTools') else 0
+    
+    # Get capabilities and tools from config
+    capabilities = config.get("capabilities", "{}")
+    tools = config.get("tools", "")
+    
+    # Get initDuration from config
+    init_duration = config.get("initDuration")
+    
+    # Build message based on status
+    status = health_data.get("status", "healthy")
+    if status == "healthy":
+        message = "Server health check successful"
+    else:
+        message = health_data.get("status_message", "Server health check failed")
     
     return ServerHealthResponse(
         id=str(server.id),
         serverName=server.serverName,
-        path=server.path,
-        status=health_data.get("status", "healthy"),
-        last_checked=health_data.get("last_checked", datetime.now()),
-        response_time_ms=health_data.get("response_time_ms"),
-        num_tools=num_tools,
+        status=server.status,  # Use server.status (active/error) from database
+        lastConnected=server.lastConnected,
+        lastError=server.lastError,
+        errorMessage=server.errorMessage,
+        numTools=num_tools,
+        capabilities=capabilities,
+        tools=tools,
+        initDuration=init_duration,
+        message=message,
+        updatedAt=server.updatedAt,
     )
