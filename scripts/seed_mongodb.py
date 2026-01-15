@@ -574,6 +574,105 @@ async def seed_mcp_servers(users):
             "createdAt": datetime.now(timezone.utc),
             "updatedAt": datetime.now(timezone.utc),
         },
+        {
+            "serverName": "google-workspace",
+            "author": users[3].id,  # OAuth User
+            "config": {
+                "name": "Google Workspace",
+                "description": "Google Drive, Docs, Sheets, and Calendar integration",
+                "path": "/google-workspace",
+                "url": "http://google-workspace-server:8014",
+                "transport": "streamable-http",
+                "scope": "private_user",
+                "status": "active",
+                "authentication": {
+                    "type": "oauth",
+                    "provider": "google",
+                    "scopes": [
+                        "https://www.googleapis.com/auth/drive",
+                        "https://www.googleapis.com/auth/documents",
+                        "https://www.googleapis.com/auth/spreadsheets",
+                        "https://www.googleapis.com/auth/calendar",
+                    ],
+                    "token_url": "https://oauth2.googleapis.com/token",
+                    "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
+                    "client_id": "google_client_12345",
+                    "client_secret": "google_secret_abc789xyz",  # Will be encrypted
+                },
+                "capabilities": [
+                    "list_files",
+                    "create_document",
+                    "read_sheet",
+                    "schedule_event",
+                ],
+                "tags": ["google", "oauth", "productivity", "cloud"],
+                "num_tools": 4,
+                "supported_transports": ["streamable-http"],
+                "requires_oauth": True,
+                "enabled": True
+            },
+            "createdAt": datetime.now(timezone.utc),
+            "updatedAt": datetime.now(timezone.utc),
+        },
+        {
+            "serverName": "atlassian-jira",
+            "author": users[2].id,  # Jane Smith
+            "config": {
+                "name": "Atlassian JIRA",
+                "description": "JIRA issue tracking and project management",
+                "path": "/jira",
+                "url": "http://atlassian-server:8005",
+                "transport": "streamable-http",
+                "scope": "shared_user",
+                "status": "active",
+                "authentication": {
+                    "type": "oauth",
+                    "provider": "atlassian",
+                    "scopes": ["read:jira-work", "write:jira-work", "read:jira-user"],
+                    "token_url": "https://auth.atlassian.com/oauth/token",
+                    "authorize_url": "https://auth.atlassian.com/authorize",
+                    "client_id": "jira_client_456",
+                    "client_secret": "jira_secret_def456uvw",  # Will be encrypted
+                },
+                "capabilities": [
+                    "create_issue",
+                    "update_issue",
+                    "search_issues",
+                    "get_project",
+                ],
+                "tags": ["atlassian", "jira", "oauth", "project-management"],
+                "num_tools": 4,
+                "supported_transports": ["streamable-http"],
+                "requires_oauth": True,
+                "enabled": True
+            },
+            "createdAt": datetime.now(timezone.utc),
+            "updatedAt": datetime.now(timezone.utc),
+        },
+        {
+            "serverName": "currenttime-server",
+            "author": users[0].id,  # Admin user
+            "config": {
+                "name": "Current Time Server",
+                "description": "Get current time in various formats and timezones",
+                "path": "/time",
+                "url": "http://currenttime-server:8000",
+                "transport": "streamable-http",
+                "scope": "shared_app",
+                "status": "active",
+                "authentication": {
+                    "type": "auto"
+                },
+                "capabilities": ["get_time", "get_timezone", "convert_time"],
+                "tags": ["time", "utility", "no-auth"],
+                "num_tools": 3,
+                "supported_transports": ["streamable-http"],
+                "requires_oauth": False,
+                "enabled": True
+            },
+            "createdAt": datetime.now(timezone.utc),
+            "updatedAt": datetime.now(timezone.utc),
+        },
     ]
 
     created_servers = []

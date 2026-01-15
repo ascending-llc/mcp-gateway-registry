@@ -291,7 +291,6 @@ class ServerServiceV1:
     
     async def list_servers(
         self,
-        username: str,
         acl_accessible_resources: List[PydanticObjectId],
         query: Optional[str] = None,
         scope: Optional[str] = None,
@@ -304,7 +303,6 @@ class ServerServiceV1:
         List servers with filtering and pagination.
         
         Args:
-            username: Current user's username (used for ACL filtering)
             query: Free-text search across server_name, description, tags
             scope: Filter by access level (shared_app, shared_user, private_user)
             status: Filter by operational state (active, inactive, error)
@@ -343,7 +341,7 @@ class ServerServiceV1:
             }
             filters.append(text_filter)
 
-        # ACL filtering - TODO: filter servers based on the acl_accessible_resources
+        # TODO: Filter servers based on acl_accessible_resources
         logger.info(f"accessible resources: {acl_accessible_resources}")
 
         # Combine all filters

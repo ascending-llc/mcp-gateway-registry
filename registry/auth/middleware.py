@@ -14,8 +14,6 @@ from registry.auth.dependencies import (map_cognito_groups_to_scopes, signer, ge
                                         get_accessible_agents_for_user, user_can_modify_servers,
                                         user_has_wildcard_access)
 from registry.core.config import settings
-from registry.services.access_control_service import acl_service
-
 class UnifiedAuthMiddleware(BaseHTTPMiddleware):
     """
         A unified authentication middleware that encapsulates the functionality of `enhanced_auth` and `nginx_proxied_auth`.
@@ -127,7 +125,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         Unified authentication logic (simple and efficient)
         
         1. Internal paths (/api/internal/*) → Basic Auth
-        2. Authenticated paths (including /api/auth/me, /api/servers/*, /proxy/*, /api/mcp/*) →JWT or Session Auth
+        2. Authenticated paths (including /api/auth/me, /api/servers/*, /proxy/*, /api/mcp/*) → JWT or Session Auth
         3. Other paths → Session Auth
         """
         path = request.url.path
@@ -139,11 +137,10 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             raise AuthenticationError("Basic authentication required")
 
         if self._match_path(path, self.authenticated_paths_compiled):
-            # Try JWT first
+            # Try JWT first, then fall back to session auth
             user_context = self._try_jwt_auth(request)
             if user_context:
                 return user_context
-            # Fallback to session auth
             user_context = self._try_session_auth(request)
             if user_context:
                 return user_context
@@ -203,11 +200,11 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             # Get Authorization header
             auth_header = request.headers.get("Authorization")
             if not auth_header or not auth_header.startswith("Bearer "):
-                logger.info("Missing or invalid Authorization header for JWT auth")
+                logger.debug("Missing or invalid Authorization header for JWT auth")
                 return None
             access_token = auth_header.split(" ")[1]
             if not access_token:
-                logger.info("Empty JWT token")
+                logger.debug("Empty JWT token")
                 return None
             # JWT validation parameters from auth_server/server.py
             try:
@@ -370,7 +367,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         can_modify = user_can_modify_servers(groups, scopes)
 
         user_context = {
-            "user_id": user_id, 
+            "user_id": user_id,
             'username': username,
             'groups': groups,
             'scopes': scopes,

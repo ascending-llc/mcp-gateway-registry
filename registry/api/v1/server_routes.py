@@ -147,7 +147,6 @@ async def list_servers(
             page=page,
             per_page=per_page,
             user_id=None,
-            username=user_context.get('username'),
             acl_accessible_resources=user_context.get('acl_accessible_resources')
         )
         
