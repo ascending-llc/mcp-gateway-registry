@@ -292,6 +292,7 @@ class ServerServiceV1:
     async def list_servers(
         self,
         username: str,
+        acl_accessible_resources: List[PydanticObjectId],
         query: Optional[str] = None,
         scope: Optional[str] = None,
         status: Optional[str] = None,
@@ -342,25 +343,8 @@ class ServerServiceV1:
             }
             filters.append(text_filter)
 
-        # ACL filtering
-        try:
-            user_obj = await IUser.find_one({"username": username})
-            if user_obj:
-                # TODO: use Enums for principal_type and resource_type
-                accessible_ids = await acl_service.list_accessible_resources(
-                    principal_type="user",
-                    principal_id=user_obj.id, 
-                    resource_type="mcpServer",
-                    required_permissions=1
-                )
-                logger.debug(f"Accessible server IDs for user {user_id}: {accessible_ids}")
-                if accessible_ids:
-                    filters.append({"_id": {"$in": accessible_ids}})
-                else:
-                    # No access, return empty
-                    return [], 0
-        except Exception as e:
-            logger.warning(f"ACL filtering failed: {e}")
+        # ACL filtering - TODO: filter servers based on the acl_accessible_resources
+        logger.info(f"accessible resources: {acl_accessible_resources}")
 
         # Combine all filters
         if filters:

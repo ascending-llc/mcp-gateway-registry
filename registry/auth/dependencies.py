@@ -6,6 +6,8 @@ from pathlib import Path
 
 from fastapi import Depends, HTTPException, status, Cookie, Header, Request
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
+from packages.models._generated.user import IUser
+from registry.services.access_control_service import acl_service
 
 from registry.core.config import settings
 
@@ -33,6 +35,54 @@ def get_current_user_by_mid(request: Request) -> Dict[str, Any]:
     if not hasattr(request.state, 'user') or not request.state.is_authenticated:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Is not authenticated")
+    return request.state.user
+
+async def get_user_acl_permissions(request: Request) -> Dict[str, Any]:
+    """
+        Example dependency to test adding acl permission info to user context
+
+    Args:
+        request: FastAPI request object
+
+    Returns:
+        User context dictionary with additional acl details
+
+    Raises:
+        HTTPException: If user is not authenticated
+    """
+    if not hasattr(request.state, 'user') or not request.state.is_authenticated:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Is not authenticated")
+    
+    username = request.state.user.get('username')
+    if not username:
+        logger.warning('No username found in request state')
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="no username found")
+
+    try:
+        user_obj = await IUser.find_one({"email": username})
+        if not user_obj:
+            logger.warning(f'User {username} not found in database')
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="user not found")
+
+        principal_id = getattr(user_obj, "id")
+        viewable_server_ids_for_user = await acl_service.list_accessible_resources(
+            principal_type="user", # TODO: replace with constant
+            principal_id=principal_id,
+            resource_type="mcpServer",
+            required_permissions=1
+        )
+
+        return {
+            **request.state.user,
+            "acl_accessible_resources": viewable_server_ids_for_user,
+            "role": user_obj.get("role") 
+            #  other acl fields can be added here
+        }
+    except Exception as e:
+        logger.info(f'Error fetching user {username} from database: {e}')
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not find user object from db")
+
     return request.state.user
 
 
@@ -709,5 +759,8 @@ def ui_permission_required(permission: str, service_name: str = None):
 
     return check_permission
 
+# Without fine -grained permissions
+# CurrentUser: type[dict[str, Any]] = Annotated[Dict[str, Any], Depends(get_current_user_by_mid)]
 
-CurrentUser: type[dict[str, Any]] = Annotated[Dict[str, Any], Depends(get_current_user_by_mid)]
+# With fine -grained permissions
+CurrentUser: type[dict[str, Any]] = Annotated[Dict[str, Any], Depends(get_user_acl_permissions)]

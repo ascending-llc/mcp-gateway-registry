@@ -14,7 +14,7 @@ from registry.auth.dependencies import (map_cognito_groups_to_scopes, signer, ge
                                         get_accessible_agents_for_user, user_can_modify_servers,
                                         user_has_wildcard_access)
 from registry.core.config import settings
-
+from registry.services.access_control_service import acl_service
 
 class UnifiedAuthMiddleware(BaseHTTPMiddleware):
     """
@@ -376,9 +376,9 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             'scopes': scopes,
             'auth_method': auth_method,
             'provider': provider,
-            'accessible_servers': accessible_servers,
+            'accessible_servers': accessible_servers, # possibly redudant; should make sure acl_accessible_resources includes the same server list
             'accessible_services': accessible_services,
-            'accessible_agents': accessible_agents,
+            'accessible_agents': accessible_agents, # possibly redudant; should make sure acl_accessible_resources includes the same agent list
             'ui_permissions': ui_permissions,
             'can_modify_servers': can_modify,
             'is_admin': user_has_wildcard_access(scopes),

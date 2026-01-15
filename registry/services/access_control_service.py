@@ -81,19 +81,20 @@ class ACLService:
 	async def list_accessible_resources(
 		self,
 		principal_type: str,
-		principal_id: Any,
+		principal_id: str,
 		resource_type: str,
 		required_permissions: float
 	) -> List[PydanticObjectId]:
-		logger.info(f"Listing resources for principal_type: {principal_type}, principal_id: {principal_id}, resource_type: {resource_type}, required_permissions: {required_permissions}")  
-	
-		entries = await IAclEntry.find({
+		acl_entries = await IAclEntry.find({
 			"principalType": principal_type,
-			"principalId": principal_id,
+			"principalId": str(principal_id),
 			"resourceType": resource_type,
-			"permBits": required_permissions
-		})
-		return [entry.resourceId for entry in entries]
+			"permBits": required_permissions # TODO: Should this check permBits >= required_permissions?
+		}).to_list()
+	
+		resource_ids = [entry.resourceId for entry in acl_entries]
+		logger.info(f"Found {len(resource_ids)} accessible resources")
+		return resource_ids
 
 	async def remove_all_permissions(
 		self,

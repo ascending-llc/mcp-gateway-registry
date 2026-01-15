@@ -51,6 +51,7 @@ router = APIRouter()
 
 def get_user_context(user_context: CurrentUser):
     """Extract user context from authentication dependency"""
+    logger.info(f'User context: {user_context}')
     return user_context
 
 
@@ -139,7 +140,6 @@ async def list_servers(
                 detail="Invalid status. Must be one of: active, inactive, error"
             )
         
-        # Get servers from service (no permission filtering)
         servers, total = await server_service_v1.list_servers(
             query=query,
             scope=scope,
@@ -147,7 +147,8 @@ async def list_servers(
             page=page,
             per_page=per_page,
             user_id=None,
-            username=user_context.get('username')
+            username=user_context.get('username'),
+            acl_accessible_resources=user_context.get('acl_accessible_resources')
         )
         
         # Convert to response models
@@ -155,6 +156,7 @@ async def list_servers(
         
         # Get connection status and enrich server items
         try:
+            user_id = user_context.get('user_id')
             mcp_service = await get_mcp_service()
             
             connection_status = await get_servers_connection_status(
