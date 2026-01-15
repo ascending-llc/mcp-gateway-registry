@@ -88,11 +88,19 @@ async def proxy_to_mcp_server(
     request: Request,
     target_url: str,
     auth_context: Dict[str, Any],
-    transport_type: str = "streamable-http"
+    transport_type: str = "streamable-http",
+    server_config: Optional[Dict[str, Any]] = None
 ) -> Response:
     """
     Proxy request to MCP server with auth headers.
     Handles both regular HTTP and SSE streaming.
+    
+    Args:
+        request: Incoming FastAPI request
+        target_url: Backend MCP server URL
+        auth_context: Gateway authentication context
+        transport_type: Transport protocol type
+        server_config: Server configuration including apiKey authentication
     """
     # Build proxy headers
     headers = dict(request.headers)
@@ -109,6 +117,34 @@ async def proxy_to_mcp_server(
     
     # Remove host header to avoid conflicts
     headers.pop("host", None)
+    
+    # Process backend server apiKey authentication if configured
+    if server_config:
+        api_key_config = server_config.get("apiKey")
+        if api_key_config and isinstance(api_key_config, dict):
+            key_value = api_key_config.get("key")
+            authorization_type = api_key_config.get("authorization_type", "bearer").lower()
+            
+            if key_value:
+                if authorization_type == "bearer":
+                    # Bearer token: Authorization: Bearer <key>
+                    headers['Authorization'] = f'Bearer {key_value}'
+                    logger.debug("Added Bearer authentication header for backend server")
+                elif authorization_type == "basic":
+                    # Basic auth: Authorization: Basic <key>
+                    headers['Authorization'] = f'Basic {key_value}'
+                    logger.debug("Added Basic authentication header for backend server")
+                elif authorization_type == "custom":
+                    # Custom header: use custom_header field as header name
+                    custom_header = api_key_config.get("custom_header")
+                    if custom_header:
+                        headers[custom_header] = key_value
+                        logger.debug(f"Added custom authentication header for backend server: {custom_header}")
+                    else:
+                        logger.warning("apiKey with authorization_type='custom' but no custom_header specified")
+                else:
+                    logger.warning(f"Unknown authorization_type: {authorization_type}, defaulting to Bearer")
+                    headers['Authorization'] = f'Bearer {key_value}'
 
     body = await request.body()
     
@@ -292,7 +328,8 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
         request=request,
         target_url=target_url,
         auth_context=auth_context,
-        transport_type=transport_type
+        transport_type=transport_type,
+        server_config=server_info
     )
 
 

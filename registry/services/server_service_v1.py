@@ -475,34 +475,49 @@ class ServerServiceV1:
                 server.lastConnected = datetime.now(timezone.utc)
                 server.status = "active"
                 
-                # 2. Tool and capabilities retrieval - REQUIRED
-                tool_list, capabilities, tool_error = await self.retrieve_tools_and_capabilities_from_server(server)
+                # 2. Retrieve capabilities (but skip tools - they will be fetched on-demand)
+                logger.info(f"Retrieving capabilities for {server.serverName} (skipping tools)")
                 
-                if tool_list is None:
-                    # Tool retrieval failed - delete the server and reject registration
-                    logger.error(f"Tool retrieval failed for {server.serverName}: {tool_error}")
-                    await server.delete()
-                    raise ValueError(f"Server registration rejected: Failed to retrieve tools - {tool_error}")
+                # Initialize empty toolFunctions and tools (will be populated on first use)
+                config["toolFunctions"] = {}
+                config["tools"] = ""
                 
-                # Convert tool_list to toolFunctions format
-                tool_functions = _convert_tool_list_to_functions(tool_list, server.serverName)
-                config["toolFunctions"] = tool_functions
-                
-                # Build tools string (comma-separated tool names)
-                tool_names = [tool.get("name", "") for tool in tool_list if tool.get("name")]
-                if tool_names:
-                    config["tools"] = ", ".join(tool_names)
-                else:
-                    config["tools"] = ""
-                
-                # Save capabilities as JSON string
-                if capabilities:
-                    import json
-                    config["capabilities"] = json.dumps(capabilities)
-                    logger.info(f"Saved capabilities for {server.serverName}: {config['capabilities']}")
-                else:
+                # Try to get capabilities only
+                try:
+                    # Build server_info dict for mcp_client
+                    server_info = {
+                        "type": config.get("type", "streamable-http"),
+                        "tags": server.tags or [],
+                    }
+                    
+                    # Add headers if present
+                    if "headers" in config:
+                        server_info["headers"] = config["headers"]
+                    
+                    # Add apiKey if present (for backend server authentication)
+                    if "apiKey" in config:
+                        server_info["apiKey"] = config["apiKey"]
+                    
+                    from registry.core.mcp_client import get_tools_and_capabilities_from_server
+                    
+                    # Get tools and capabilities (we'll only use capabilities)
+                    tool_list, capabilities = await get_tools_and_capabilities_from_server(data.url, server_info)
+                    
+                    # Save capabilities if retrieved successfully
+                    if capabilities:
+                        import json
+                        config["capabilities"] = json.dumps(capabilities)
+                        logger.info(f"Saved capabilities for {server.serverName}: {config['capabilities']}")
+                    else:
+                        config["capabilities"] = "{}"
+                        logger.warning(f"No capabilities retrieved for {server.serverName}, using empty JSON")
+                    
+                except Exception as e:
+                    # If capabilities retrieval fails, just use empty capabilities
                     config["capabilities"] = "{}"
-                    logger.warning(f"No capabilities retrieved for {server.serverName}, using empty JSON")
+                    logger.warning(f"Failed to retrieve capabilities for {server.serverName}: {e}")
+                
+                logger.info(f"Server {server.serverName} registered successfully. Tools will be fetched on-demand.")
                 
                 # 3. OAuth metadata retrieval - OPTIONAL (only if oauth/authentication is configured)
                 # Check if server has OAuth configuration
@@ -535,10 +550,8 @@ class ServerServiceV1:
                     else:
                         logger.info(f"No OAuth metadata available for {server.serverName} (server may not support OAuth autodiscovery)")
                 
-                # Update numTools at root level
-                server.numTools = len(tool_functions)
-                
-                logger.info(f"Retrieved {len(tool_list)} tools for {server.serverName}")
+                # Update numTools at root level (0 since tools not fetched yet)
+                server.numTools = 0
                 
                 # Save updated server
                 server.config = config
@@ -837,6 +850,10 @@ class ServerServiceV1:
             if "headers" in config:
                 server_info["headers"] = config["headers"]
             
+            # Add apiKey if present (for backend server authentication)
+            if "apiKey" in config:
+                server_info["apiKey"] = config["apiKey"]
+            
             logger.info(f"Retrieving tools from {url} for server {server.serverName}")
             
             # Use the MCP client to get tools
@@ -860,13 +877,17 @@ class ServerServiceV1:
         """
         Retrieve tools and capabilities from a server using MCP client.
         
+        This is a best-effort attempt - failures are logged but don't prevent registration.
+        Tools can be fetched on-demand later.
+        
         Args:
             server: Server document
             
         Returns:
             Tuple of (tool_list, capabilities_dict, error_message)
-            If successful, returns (tool_list, capabilities_dict, None)
-            If failed, returns (None, None, error_message)
+            - If successful, returns (tool_list, capabilities_dict, None)
+            - If failed, returns (None, None, error_message)
+            - Empty results are acceptable for registration
         """
         config = server.config or {}
         url = config.get("url")
@@ -885,7 +906,11 @@ class ServerServiceV1:
             if "headers" in config:
                 server_info["headers"] = config["headers"]
             
-            logger.info(f"Retrieving tools and capabilities from {url} for server {server.serverName}")
+            # Add apiKey if present (for backend server authentication)
+            if "apiKey" in config:
+                server_info["apiKey"] = config["apiKey"]
+            
+            logger.info(f"Attempting to retrieve tools and capabilities from {url} for server {server.serverName}")
             
             # Import the new function
             from registry.core.mcp_client import get_tools_and_capabilities_from_server
@@ -893,16 +918,22 @@ class ServerServiceV1:
             # Use the MCP client to get tools and capabilities
             tool_list, capabilities = await get_tools_and_capabilities_from_server(url, server_info)
             
-            if tool_list is None:
-                return None, None, "Failed to retrieve tools from MCP server"
+            if tool_list is None and capabilities is None:
+                error_msg = "Failed to retrieve tools and capabilities from MCP server"
+                logger.warning(f"{error_msg} for {server.serverName} - will retry on-demand")
+                return None, None, error_msg
             
-            logger.info(f"Retrieved {len(tool_list)} tools and capabilities from {server.serverName}")
-            logger.info(f"Server capabilities: {capabilities}")
+            # Log success
+            tool_count = len(tool_list) if tool_list else 0
+            logger.info(f"Retrieved {tool_count} tools and capabilities from {server.serverName}")
+            if capabilities:
+                logger.info(f"Server capabilities: {capabilities}")
+            
             return tool_list, capabilities, None
             
         except Exception as e:
             error_msg = f"Error retrieving tools and capabilities: {type(e).__name__} - {str(e)}"
-            logger.error(f"Tool/capabilities retrieval error for server {server.serverName}: {e}")
+            logger.warning(f"Tool/capabilities retrieval error for server {server.serverName}: {e} - will retry on-demand")
             return None, None, error_msg
     
     async def refresh_server_health(
