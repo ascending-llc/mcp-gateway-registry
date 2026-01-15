@@ -138,11 +138,7 @@ async def detect_server_transport_aware(base_url: str, server_info: dict = None)
         transport_type = server_info.get("type")
         if transport_type:
             logger.debug(f"Server configuration specifies transport type: {transport_type}")
-            # Map type to transport
-            if transport_type == "sse":
-                return "sse"
-            elif transport_type in ["streamable-http", "http"]:
-                return "streamable-http"
+            return transport_type
     
     # Fall back to auto-detection
     return await detect_server_transport(base_url)
