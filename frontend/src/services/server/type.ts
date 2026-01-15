@@ -24,7 +24,7 @@ export type ApiKeyConfig = {
   key: string;
   source: ApiKeySource;
   authorization_type: ApiKeyHeaderFormat;
-  custom_header: string;
+  custom_header?: string;
 };
 export type StatusType = 'active' | 'inactive' | 'error';
 export type Server = {
@@ -65,7 +65,7 @@ export type GET_SERVERS_RESPONSE = {
   };
 };
 
-export type GET_SERVERS_DETAIL_RESPONSE = {} & Server;
+export type GET_SERVERS_DETAIL_RESPONSE = Server;
 
 export type CREATE_SERVER_REQUEST = {
   serverName: string;

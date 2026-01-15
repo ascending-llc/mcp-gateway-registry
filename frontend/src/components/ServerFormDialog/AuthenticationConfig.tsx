@@ -101,6 +101,9 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                   />
                   <label htmlFor='apiKeySource' className='text-sm text-gray-900 dark:text-gray-100'>
                     Each user provides their own key
+                    <span className='block text-xs text-gray-500 dark:text-gray-400'>
+                      When unchecked, an admin-provided key is used for all users.
+                    </span>
                   </label>
                 </div>
               </div>
