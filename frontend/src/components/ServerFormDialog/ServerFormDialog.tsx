@@ -200,9 +200,13 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
           ...baseData,
           apiKey: {
             source: data.authConfig.source,
-            key: data.authConfig.key,
+            ...(data.authConfig.source !== 'user' && data.authConfig.key
+              ? { key: data.authConfig.key }
+              : {}),
             authorization_type: data.authConfig.authorization_type,
-            custom_header: data.authConfig.custom_header,
+            ...(data.authConfig.authorization_type === 'custom' && data.authConfig.custom_header
+              ? { custom_header: data.authConfig.custom_header }
+              : {}),
           },
         };
       case 'oauth':
