@@ -58,13 +58,14 @@ import httpx
 
 def _build_headers_for_server(server_info: dict = None) -> Dict[str, str]:
     """
-    Build HTTP headers for server requests by merging server-specific headers.
+    Build HTTP headers for server requests by merging server-specific headers
+    and processing apiKey authentication.
 
     Args:
         server_info: Server configuration dictionary
 
     Returns:
-        Headers dictionary with server-specific headers
+        Headers dictionary with server-specific headers and authentication
     """
     # Start with default MCP headers (required by some servers like Cloudflare)
     headers = {
@@ -72,14 +73,43 @@ def _build_headers_for_server(server_info: dict = None) -> Dict[str, str]:
         'Content-Type': 'application/json'
     }
 
-    # Merge server-specific headers if present
-    if server_info:
-        server_headers = server_info.get("headers", [])
-        if server_headers and isinstance(server_headers, list):
-            for header_dict in server_headers:
-                if isinstance(header_dict, dict):
-                    headers.update(header_dict)
-                    logger.debug(f"Added server headers to MCP client: {header_dict}")
+    if not server_info:
+        return headers
+
+    # Process apiKey authentication if present
+    api_key_config = server_info.get("apiKey")
+    if api_key_config and isinstance(api_key_config, dict):
+        key_value = api_key_config.get("key")
+        authorization_type = api_key_config.get("authorization_type", "bearer").lower()
+        
+        if key_value:
+            if authorization_type == "bearer":
+                # Bearer token: Authorization: Bearer <key>
+                headers['Authorization'] = f'Bearer {key_value}'
+                logger.debug("Added Bearer authentication header")
+            elif authorization_type == "basic":
+                # Basic auth: Authorization: Basic <key>
+                headers['Authorization'] = f'Basic {key_value}'
+                logger.debug("Added Basic authentication header")
+            elif authorization_type == "custom":
+                # Custom header: use custom_header field as header name
+                custom_header = api_key_config.get("custom_header")
+                if custom_header:
+                    headers[custom_header] = key_value
+                    logger.debug(f"Added custom authentication header: {custom_header}")
+                else:
+                    logger.warning("apiKey with authorization_type='custom' but no custom_header specified")
+            else:
+                logger.warning(f"Unknown authorization_type: {authorization_type}, defaulting to Bearer")
+                headers['Authorization'] = f'Bearer {key_value}'
+
+    # Merge server-specific headers if present (these can override auth headers if needed)
+    server_headers = server_info.get("headers", [])
+    if server_headers and isinstance(server_headers, list):
+        for header_dict in server_headers:
+            if isinstance(header_dict, dict):
+                headers.update(header_dict)
+                logger.debug(f"Added server headers to MCP client: {header_dict}")
 
     return headers
 

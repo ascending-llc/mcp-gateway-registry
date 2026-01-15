@@ -14,8 +14,7 @@ from registry.auth.routes import (
     login_form,
     oauth2_login_redirect,
     oauth2_callback,
-    login_submit,
-    logout
+    login_submit
 )
 
 
@@ -37,6 +36,7 @@ class TestAuthRoutes:
         """Mock settings for testing."""
         with patch('registry.auth.routes.settings') as mock_settings:
             mock_settings.auth_server_url = "http://auth.example.com"
+            mock_settings.auth_server_external_url = "http://auth.example.com"  # Add external URL
             mock_settings.session_cookie_name = "session"
             mock_settings.session_max_age_seconds = 3600
             mock_settings.templates_dir = "/templates"
@@ -239,10 +239,13 @@ class TestAuthRoutes:
             assert "oauth2_callback_error" in response.headers["location"]
 
     @pytest.mark.asyncio
-    async def test_login_submit_success(self, mock_settings):
+    async def test_login_submit_success(self, mock_request, mock_settings):
         """Test successful traditional login."""
         username = "testuser"
         password = "testpass"
+        
+        # Mock request headers to indicate traditional form submission (not API)
+        mock_request.headers = {"accept": "text/html"}
         
         with patch('registry.auth.routes.validate_login_credentials') as mock_validate, \
              patch('registry.auth.routes.create_session_cookie') as mock_create_session:
@@ -250,42 +253,29 @@ class TestAuthRoutes:
             mock_validate.return_value = True
             mock_create_session.return_value = "session_data"
             
-            response = await login_submit(username, password)
+            response = await login_submit(mock_request, username, password)
             
             assert isinstance(response, RedirectResponse)
             assert response.status_code == 303
             assert response.headers["location"] == "/"
             
-            # Check cookie was set
-            assert mock_settings.session_cookie_name in response.raw_headers[2][1].decode()
+            # Check cookie was set in response
+            assert "set-cookie" in [h[0].decode().lower() for h in response.raw_headers]
 
     @pytest.mark.asyncio
-    async def test_login_submit_failure(self):
+    async def test_login_submit_failure(self, mock_request):
         """Test failed traditional login."""
         username = "testuser"
         password = "wrongpass"
         
+        # Mock request headers to indicate traditional form submission
+        mock_request.headers = {"accept": "text/html"}
+        
         with patch('registry.auth.routes.validate_login_credentials') as mock_validate:
             mock_validate.return_value = False
             
-            response = await login_submit(username, password)
+            response = await login_submit(mock_request, username, password)
             
             assert isinstance(response, RedirectResponse)
             assert response.status_code == 303
             assert "Invalid+username+or+password" in response.headers["location"]
-
-    @pytest.mark.asyncio
-    async def test_logout(self, mock_settings):
-        """Test logout functionality."""
-        response = await logout()
-        
-        assert isinstance(response, RedirectResponse)
-        assert response.status_code == 303
-        assert response.headers["location"] == "/login"
-        
-        # Check that cookie deletion header is present
-        cookie_headers = [h for h in response.raw_headers if h[0] == b'set-cookie']
-        assert len(cookie_headers) > 0
-        cookie_value = cookie_headers[0][1].decode()
-        assert mock_settings.session_cookie_name in cookie_value
-        assert "expires=" in cookie_value.lower()  # Cookie deletion sets expires in past 

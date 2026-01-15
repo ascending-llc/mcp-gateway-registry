@@ -5,13 +5,15 @@ Unit tests for Anthropic MCP Registry API endpoints.
 import pytest
 from typing import Any, Dict
 from unittest.mock import Mock, patch
-from fastapi import status
+from fastapi import status, Request
 from fastapi.testclient import TestClient
 
 from registry.main import app
 from registry.services.server_service import server_service
 from registry.health.service import health_service
 from registry.constants import REGISTRY_CONSTANTS
+from registry.auth.dependencies import create_session_cookie
+from registry.core.config import settings
 
 
 @pytest.fixture
@@ -65,6 +67,22 @@ def mock_enhanced_auth_user():
 
 
 @pytest.fixture
+def admin_session_cookie():
+    """Create a valid admin session cookie."""
+    return create_session_cookie(
+        settings.admin_user,
+        auth_method="traditional",
+        provider="local"
+    )
+
+
+@pytest.fixture
+def authenticated_client(admin_session_cookie):
+    """Create a test client with admin authentication."""
+    return TestClient(app, cookies={settings.session_cookie_name: admin_session_cookie})
+
+
+@pytest.fixture
 def sample_servers_data():
     """Create sample server data for testing."""
     return {
@@ -112,7 +130,7 @@ class TestV0ListServers:
     """Test suite for GET /{api_version}/servers endpoint."""
 
     def test_list_servers_admin_sees_all(
-        self, mock_enhanced_auth_admin, sample_servers_data
+        self, mock_enhanced_auth_admin, sample_servers_data, authenticated_client
     ):
         """Test that admin users see all servers."""
         from registry.auth.dependencies import enhanced_auth
@@ -132,8 +150,7 @@ class TestV0ListServers:
                 "num_tools": 0,
             },
         ):
-            client = TestClient(app)
-            response = client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers")
+            response = authenticated_client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers")
 
             assert response.status_code == status.HTTP_200_OK
             data = response.json()
@@ -149,19 +166,33 @@ class TestV0ListServers:
         self, mock_enhanced_auth_user, sample_servers_data
     ):
         """Test that regular users see only authorized servers."""
-        from registry.auth.dependencies import enhanced_auth
+        from registry.auth.dependencies import create_session_cookie
+        from fastapi.testclient import TestClient
 
-        app.dependency_overrides[enhanced_auth] = mock_enhanced_auth_user
-
+        # Create user context for a regular (non-admin) user
+        user_context = mock_enhanced_auth_user()
+        
+        # Create session cookie for this user
+        user_session_cookie = create_session_cookie(
+            user_context["username"],
+            auth_method=user_context["auth_method"],
+            provider=user_context["provider"],
+            groups=user_context["groups"]
+        )
+        
         # User should only see servers they have permission for
         filtered_servers = {"/mcpgw": sample_servers_data["/mcpgw"]}
+
+        # Ensure is_enabled returns True for the filtered server
+        def mock_is_enabled(path):
+            return path in filtered_servers
 
         with patch.object(
             server_service,
             "get_all_servers_with_permissions",
             return_value=filtered_servers,
         ), patch.object(
-            server_service, "is_service_enabled", return_value=True
+            server_service, "is_service_enabled", side_effect=mock_is_enabled
         ), patch.object(
             health_service,
             "_get_service_health_data",
@@ -172,17 +203,18 @@ class TestV0ListServers:
             },
         ):
             client = TestClient(app)
+            # Set the session cookie in the request
+            client.cookies.set(settings.session_cookie_name, user_session_cookie)
             response = client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers")
 
             assert response.status_code == status.HTTP_200_OK
             data = response.json()
 
+            # Should return 1 server (the filtered server)
             assert len(data["servers"]) == 1
             assert data["servers"][0]["server"]["name"] == "io.mcpgateway/mcpgw"
 
-        app.dependency_overrides.clear()
-
-    def test_list_servers_pagination(self, mock_enhanced_auth_admin, sample_servers_data):
+    def test_list_servers_pagination(self, mock_enhanced_auth_admin, sample_servers_data, authenticated_client):
         """Test server list pagination with limit."""
         from registry.auth.dependencies import enhanced_auth
 
@@ -201,8 +233,7 @@ class TestV0ListServers:
                 "num_tools": 0,
             },
         ):
-            client = TestClient(app)
-            response = client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers?limit=2")
+            response = authenticated_client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers?limit=2")
 
             assert response.status_code == status.HTTP_200_OK
             data = response.json()
@@ -214,7 +245,7 @@ class TestV0ListServers:
         app.dependency_overrides.clear()
 
     def test_list_servers_response_format(
-        self, mock_enhanced_auth_admin, sample_servers_data
+        self, mock_enhanced_auth_admin, sample_servers_data, authenticated_client
     ):
         """Test that response follows Anthropic schema."""
         from registry.auth.dependencies import enhanced_auth
@@ -234,8 +265,7 @@ class TestV0ListServers:
                 "num_tools": 3,
             },
         ):
-            client = TestClient(app)
-            response = client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers")
+            response = authenticated_client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers")
 
             assert response.status_code == status.HTTP_200_OK
             data = response.json()
@@ -274,7 +304,7 @@ class TestV0ListServers:
 class TestV0ListServerVersions:
     """Test suite for GET /{api_version}/servers/{serverName}/versions endpoint."""
 
-    def test_list_versions_success(self, mock_enhanced_auth_admin, sample_servers_data):
+    def test_list_versions_success(self, mock_enhanced_auth_admin, sample_servers_data, authenticated_client):
         """Test listing versions for a server."""
         from registry.auth.dependencies import enhanced_auth
 
@@ -295,9 +325,8 @@ class TestV0ListServerVersions:
                 "num_tools": 3,
             },
         ):
-            client = TestClient(app)
             # URL-encode the server name
-            response = client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fserver-a/versions")
+            response = authenticated_client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fserver-a/versions")
 
             assert response.status_code == status.HTTP_200_OK
             data = response.json()
@@ -308,28 +337,26 @@ class TestV0ListServerVersions:
 
         app.dependency_overrides.clear()
 
-    def test_list_versions_server_not_found(self, mock_enhanced_auth_admin):
+    def test_list_versions_server_not_found(self, mock_enhanced_auth_admin, authenticated_client):
         """Test listing versions for non-existent server."""
         from registry.auth.dependencies import enhanced_auth
 
         app.dependency_overrides[enhanced_auth] = mock_enhanced_auth_admin
 
         with patch.object(server_service, "get_server_info", return_value=None):
-            client = TestClient(app)
-            response = client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fnonexistent/versions")
+            response = authenticated_client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fnonexistent/versions")
 
             assert response.status_code == status.HTTP_404_NOT_FOUND
 
         app.dependency_overrides.clear()
 
-    def test_list_versions_invalid_name_format(self, mock_enhanced_auth_admin):
+    def test_list_versions_invalid_name_format(self, mock_enhanced_auth_admin, authenticated_client):
         """Test listing versions with invalid server name format."""
         from registry.auth.dependencies import enhanced_auth
 
         app.dependency_overrides[enhanced_auth] = mock_enhanced_auth_admin
 
-        client = TestClient(app)
-        response = client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/invalid-format/versions")
+        response = authenticated_client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/invalid-format/versions")
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -339,9 +366,16 @@ class TestV0ListServerVersions:
         self, mock_enhanced_auth_user, sample_servers_data
     ):
         """Test that users cannot access servers they don't have permission for."""
-        from registry.auth.dependencies import enhanced_auth
+        from registry.auth.dependencies import create_session_cookie
+        from fastapi.testclient import TestClient
 
-        app.dependency_overrides[enhanced_auth] = mock_enhanced_auth_user
+        user_context = mock_enhanced_auth_user()
+        user_session_cookie = create_session_cookie(
+            user_context["username"],
+            auth_method=user_context["auth_method"],
+            provider=user_context["provider"],
+            groups=user_context["groups"]
+        )
 
         with patch.object(
             server_service,
@@ -349,6 +383,7 @@ class TestV0ListServerVersions:
             return_value=sample_servers_data["/server-a"],
         ):
             client = TestClient(app)
+            client.cookies.set(settings.session_cookie_name, user_session_cookie)
             response = client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fserver-a/versions")
 
             # User doesn't have permission to Server A
@@ -361,7 +396,7 @@ class TestV0ListServerVersions:
 class TestV0GetServerVersion:
     """Test suite for GET /{api_version}/servers/{serverName}/versions/{version} endpoint."""
 
-    def test_get_version_latest(self, mock_enhanced_auth_admin, sample_servers_data):
+    def test_get_version_latest(self, mock_enhanced_auth_admin, sample_servers_data, authenticated_client):
         """Test getting server details with 'latest' version."""
         from registry.auth.dependencies import enhanced_auth
 
@@ -382,8 +417,7 @@ class TestV0GetServerVersion:
                 "num_tools": 3,
             },
         ):
-            client = TestClient(app)
-            response = client.get(
+            response = authenticated_client.get(
                 f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fserver-a/versions/latest"
             )
 
@@ -397,7 +431,7 @@ class TestV0GetServerVersion:
 
         app.dependency_overrides.clear()
 
-    def test_get_version_specific(self, mock_enhanced_auth_admin, sample_servers_data):
+    def test_get_version_specific(self, mock_enhanced_auth_admin, sample_servers_data, authenticated_client):
         """Test getting server details with specific version."""
         from registry.auth.dependencies import enhanced_auth
 
@@ -418,8 +452,7 @@ class TestV0GetServerVersion:
                 "num_tools": 3,
             },
         ):
-            client = TestClient(app)
-            response = client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fserver-a/versions/1.0.0")
+            response = authenticated_client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fserver-a/versions/1.0.0")
 
             assert response.status_code == status.HTTP_200_OK
             data = response.json()
@@ -428,7 +461,7 @@ class TestV0GetServerVersion:
 
         app.dependency_overrides.clear()
 
-    def test_get_version_unsupported(self, mock_enhanced_auth_admin, sample_servers_data):
+    def test_get_version_unsupported(self, mock_enhanced_auth_admin, sample_servers_data, authenticated_client):
         """Test getting unsupported version returns 404."""
         from registry.auth.dependencies import enhanced_auth
 
@@ -439,22 +472,20 @@ class TestV0GetServerVersion:
             "get_server_info",
             return_value=sample_servers_data["/server-a"],
         ):
-            client = TestClient(app)
-            response = client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fserver-a/versions/2.0.0")
+            response = authenticated_client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fserver-a/versions/2.0.0")
 
             assert response.status_code == status.HTTP_404_NOT_FOUND
 
         app.dependency_overrides.clear()
 
-    def test_get_version_server_not_found(self, mock_enhanced_auth_admin):
+    def test_get_version_server_not_found(self, mock_enhanced_auth_admin, authenticated_client):
         """Test getting version for non-existent server."""
         from registry.auth.dependencies import enhanced_auth
 
         app.dependency_overrides[enhanced_auth] = mock_enhanced_auth_admin
 
         with patch.object(server_service, "get_server_info", return_value=None):
-            client = TestClient(app)
-            response = client.get(
+            response = authenticated_client.get(
                 f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fnonexistent/versions/latest"
             )
 
@@ -463,7 +494,7 @@ class TestV0GetServerVersion:
         app.dependency_overrides.clear()
 
     def test_get_version_response_format(
-        self, mock_enhanced_auth_admin, sample_servers_data
+        self, mock_enhanced_auth_admin, sample_servers_data, authenticated_client
     ):
         """Test that response follows Anthropic ServerResponse schema."""
         from registry.auth.dependencies import enhanced_auth
@@ -485,8 +516,7 @@ class TestV0GetServerVersion:
                 "num_tools": 3,
             },
         ):
-            client = TestClient(app)
-            response = client.get(
+            response = authenticated_client.get(
                 f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fserver-a/versions/latest"
             )
 
