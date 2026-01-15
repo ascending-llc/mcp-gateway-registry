@@ -1,15 +1,17 @@
 import axios, { type AxiosError, type AxiosRequestConfig } from 'axios';
 
+import { getBasePath } from '@/config';
 import UTILS from '@/utils';
+import type { GET_TOKEN_RESPONSE } from './auth/type';
 
 const cancelSources: Record<string, () => void> = {};
-const service = axios.create({ baseURL: '/', timeout: 20000 });
+const service = axios.create({ baseURL: getBasePath() || '/', timeout: 20000 });
 
 type RequestConfig = AxiosRequestConfig & { cancelTokenKey?: string; skipTokenBarrier?: boolean };
 
-let tokenInitPromise: Promise<any> | null = null;
+let tokenInitPromise: Promise<GET_TOKEN_RESPONSE> | null = null;
 
-export const setTokenInitPromise = (promise: Promise<any> | null) => {
+export const setTokenInitPromise = (promise: Promise<GET_TOKEN_RESPONSE> | null) => {
   tokenInitPromise = promise;
 };
 

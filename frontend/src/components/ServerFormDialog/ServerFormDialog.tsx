@@ -3,6 +3,7 @@ import { TrashIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 
+import type { ServerInfo } from '@/contexts/ServerContext';
 import SERVICES from '@/services';
 import MainConfigForm from './MainConfigForm';
 import ServerCreationSuccessDialog from './ServerCreationSuccessDialog';
@@ -13,18 +14,18 @@ interface ServerFormDialogProps {
   id?: string | null;
   showToast: (message: string, type: 'success' | 'error') => void;
   refreshData: (notLoading?: boolean) => void;
-  onServerUpdate: (id: string, updates: any) => void;
+  onServerUpdate: (id: string, updates: Partial<ServerInfo>) => void;
   onClose: () => void;
 }
 
-const DEFAULT_AUTH_CONFIG: AuthConfigType = { type: 'auto', source: 'admin', auth_type: 'bearer' };
+const DEFAULT_AUTH_CONFIG: AuthConfigType = { type: 'auto', source: 'admin', authorization_type: 'bearer' };
 
 const INIT_DATA: ServerConfig = {
   serverName: '',
   description: '',
   path: '',
   url: '',
-  supported_transports: 'streamable-http',
+  type: 'streamable-http',
   authConfig: DEFAULT_AUTH_CONFIG,
   trustServer: false,
   tags: [],
@@ -68,8 +69,8 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
         description: result.description,
         path: result.path,
         url: result.url || '',
-        supported_transports: result.supported_transports?.[0] || result?.type,
-        authConfig: { type: 'auto', source: 'admin', auth_type: 'bearer' },
+        type: result.type,
+        authConfig: { type: 'auto', source: 'admin', authorization_type: 'bearer' },
         trustServer: true,
         tags: result.tags || [],
       };
@@ -77,19 +78,19 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
         formData.authConfig = {
           type: 'apiKey',
           source: result.apiKey?.source,
-          auth_type: result.apiKey?.auth_type || result.apiKey?.authorization_type,
+          authorization_type: result.apiKey?.authorization_type,
           key: result.apiKey?.key,
           custom_header: result.apiKey?.custom_header,
         };
       }
-      if (result?.authentication) {
+      if (result?.oauth) {
         formData.authConfig = {
           type: 'oauth',
-          client_id: result.authentication?.client_id,
-          client_secret: result.authentication?.client_secret,
-          authorize_url: result.authentication?.authorize_url,
-          token_url: result.authentication?.token_url,
-          scope: (result.authentication?.scope || result.authentication?.scopes)?.join(','),
+          client_id: result.oauth?.client_id,
+          client_secret: result.oauth?.client_secret,
+          authorization_url: result.oauth?.authorization_url,
+          token_url: result.oauth?.token_url,
+          scope: result.oauth?.scope,
         };
       }
       setFormData(formData);
@@ -125,13 +126,13 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
       if (auth.source === 'admin' && !auth.key?.trim()) {
         newErrors.key = 'API Key is required';
       }
-      if (auth.auth_type === 'custom' && !auth.custom_header?.trim()) {
+      if (auth.authorization_type === 'custom' && !auth.custom_header?.trim()) {
         newErrors.custom_header = 'Custom Header Name is required';
       }
     } else if (auth.type === 'oauth') {
       if (!auth.client_id?.trim()) newErrors.client_id = 'Client ID is required';
       if (!auth.client_secret?.trim()) newErrors.client_secret = 'Client Secret is required';
-      if (!auth.authorize_url?.trim()) newErrors.authorize_url = 'Authorization URL is required';
+      if (!auth.authorization_url?.trim()) newErrors.authorization_url = 'Authorization URL is required';
       if (!auth.token_url?.trim()) newErrors.token_url = 'Token URL is required';
     }
 
@@ -164,8 +165,8 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
           nextErrors.client_secret = undefined;
           hasChanges = true;
         }
-        if (nextErrors.authorize_url && newConfig.authorize_url?.trim()) {
-          nextErrors.authorize_url = undefined;
+        if (nextErrors.authorization_url && newConfig.authorization_url?.trim()) {
+          nextErrors.authorization_url = undefined;
           hasChanges = true;
         }
         if (nextErrors.token_url && newConfig.token_url?.trim()) {
@@ -189,35 +190,30 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
       url: data.url,
       tags: data.tags,
       enabled: true,
-      supported_transports: [data.supported_transports],
+      type: data.type,
     };
     switch (data.authConfig.type) {
       case 'auto':
-        return {
-          ...baseData,
-          authentication: { type: 'auto' },
-        };
+        return baseData;
       case 'apiKey':
         return {
           ...baseData,
           apiKey: {
-            type: data.authConfig.type,
             source: data.authConfig.source,
             key: data.authConfig.key,
-            auth_type: data.authConfig.auth_type,
+            authorization_type: data.authConfig.authorization_type,
             custom_header: data.authConfig.custom_header,
           },
         };
       case 'oauth':
         return {
           ...baseData,
-          authentication: {
-            type: data.authConfig.type,
+          oauth: {
             client_id: data.authConfig.client_id,
             client_secret: data.authConfig.client_secret,
-            authorize_url: data.authConfig.authorize_url,
+            authorization_url: data.authConfig.authorization_url,
             token_url: data.authConfig.token_url,
-            scope: data.authConfig.scope?.split(','),
+            scope: data.authConfig.scope,
           },
         };
       default:
@@ -226,6 +222,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
   };
 
   const handleDelete = async () => {
+    if (!id) return;
     try {
       await SERVICES.SERVER.deleteServer(id);
       showToast('Server deleted successfully', 'success');
@@ -252,7 +249,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
           path: data.path,
           url: data.url,
           tags: data.tags,
-          last_checked_time: result.updatedAt,
+          last_checked_time: result.updatedAt ?? new Date().toISOString(),
         });
       } else {
         const result = await SERVICES.SERVER.createServer(data);

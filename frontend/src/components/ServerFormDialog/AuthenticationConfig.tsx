@@ -51,7 +51,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                 }`}
               >
-                No Auto
+                No Auth
               </button>
               <button
                 type='button'
@@ -137,9 +137,9 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                 <div className='flex p-1 bg-gray-200 dark:bg-gray-700/50 rounded-lg'>
                   <button
                     type='button'
-                    onClick={() => updateConfig({ auth_type: 'bearer' })}
+                    onClick={() => updateConfig({ authorization_type: 'bearer' })}
                     className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-                      config.auth_type === 'bearer'
+                      config.authorization_type === 'bearer'
                         ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                     }`}
@@ -148,9 +148,9 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                   </button>
                   <button
                     type='button'
-                    onClick={() => updateConfig({ auth_type: 'basic' })}
+                    onClick={() => updateConfig({ authorization_type: 'basic' })}
                     className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-                      config.auth_type === 'basic'
+                      config.authorization_type === 'basic'
                         ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                     }`}
@@ -159,9 +159,9 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                   </button>
                   <button
                     type='button'
-                    onClick={() => updateConfig({ auth_type: 'custom' })}
+                    onClick={() => updateConfig({ authorization_type: 'custom' })}
                     className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-                      config.auth_type === 'custom'
+                      config.authorization_type === 'custom'
                         ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                     }`}
@@ -170,7 +170,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                   </button>
                 </div>
 
-                {config.auth_type === 'custom' && (
+                {config.authorization_type === 'custom' && (
                   <div className='mt-4 animate-fadeIn'>
                     <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>
                       Custom Header Name <span className='text-red-500'>*</span>
@@ -238,11 +238,11 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                 <input
                   type='url'
                   required
-                  className={getInputClass('authorize_url')}
-                  value={config.authorize_url || ''}
-                  onChange={e => updateConfig({ authorize_url: e.target.value })}
+                  className={getInputClass('authorization_url')}
+                  value={config.authorization_url || ''}
+                  onChange={e => updateConfig({ authorization_url: e.target.value })}
                 />
-                {renderError('authorize_url')}
+                {renderError('authorization_url')}
               </div>
               <div>
                 <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>
