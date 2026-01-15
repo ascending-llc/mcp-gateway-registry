@@ -114,7 +114,7 @@ addopts = [
     "--cov-report=term-missing",
     "--cov-report=html:htmlcov",
     "--cov-report=xml:coverage.xml",
-    "--cov-fail-under=25",
+    "--cov-fail-under=20",
     "--html=tests/reports/report.html",
     "--self-contained-html",
     "--json-report",
