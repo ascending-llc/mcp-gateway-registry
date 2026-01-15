@@ -3,13 +3,10 @@ Pytest configuration and shared fixtures.
 """
 import asyncio
 import tempfile
-import shutil
 from pathlib import Path
 from typing import Dict, Any, AsyncGenerator, Generator
 from unittest.mock import Mock, AsyncMock
-
 import pytest
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 
@@ -124,44 +121,82 @@ def server_with_tools() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def test_client() -> TestClient:
-    """Create a test client for the FastAPI application."""
-    return TestClient(app)
+def admin_session_cookie():
+    """Create a valid admin session cookie for testing."""
+    from registry.auth.dependencies import create_session_cookie
+    from registry.core.config import settings
+    return create_session_cookie(
+        settings.admin_user,
+        auth_method="traditional",
+        provider="local"
+    )
 
 
 @pytest.fixture
-async def async_client() -> AsyncGenerator[AsyncClient, None]:
-    """Create an async client for testing."""
-    async with AsyncClient(app=app, base_url="http://test") as client:
+def test_client(admin_session_cookie) -> TestClient:
+    """Create a test client for the FastAPI application with admin authentication."""
+    from registry.core.config import settings
+    return TestClient(app, cookies={settings.session_cookie_name: admin_session_cookie})
+
+
+@pytest.fixture
+async def async_client(admin_session_cookie) -> AsyncGenerator[AsyncClient, None]:
+    """Create an async client for testing with admin authentication."""
+    from registry.core.config import settings
+    async with AsyncClient(
+        app=app, 
+        base_url="http://test",
+        cookies={settings.session_cookie_name: admin_session_cookie}
+    ) as client:
         yield client
 
 
 @pytest.fixture
-def authenticated_headers() -> Dict[str, str]:
+def authenticated_headers(admin_session_cookie) -> Dict[str, str]:
     """Create headers for authenticated requests."""
-    # This would typically include a valid session cookie or JWT token
+    from registry.core.config import settings
     return {
-        "Cookie": "mcp_gateway_session=test-session-token"
+        "Cookie": f"{settings.session_cookie_name}={admin_session_cookie}"
     }
 
 
 @pytest.fixture
-def mock_authenticated_user(monkeypatch):
+def mock_authenticated_user():
     """Mock an authenticated user for testing protected routes."""
-    def mock_auth_dependency(session=None):
-        return "testuser"
+    from registry.auth.dependencies import get_current_user_by_mid
+    from fastapi import Request
     
-    # Override both auth functions and the get_current_user function
-    monkeypatch.setattr("registry.auth.dependencies.web_auth", mock_auth_dependency)
-    monkeypatch.setattr("registry.auth.dependencies.api_auth", mock_auth_dependency)
-    monkeypatch.setattr("registry.auth.dependencies.get_current_user", mock_auth_dependency)
+    # Create admin user context
+    user_context = {
+        "username": "testadmin",
+        "user_id": "testadmin",
+        "groups": ["registry-admins"],
+        "scopes": ["registry-admins"],
+        "is_admin": True,
+        "auth_method": "traditional",
+        "provider": "local",
+        "accessible_servers": ["*"],
+        "accessible_services": ["all"],
+        "accessible_agents": ["all"],
+        "ui_permissions": {
+            "list_service": ["all"],
+            "register_service": ["all"],
+            "toggle_service": ["all"],
+            "modify_service": ["all"],
+            "health_check_service": ["all"],
+        },
+        "can_modify_servers": True,
+    }
     
-    # Also override the FastAPI dependency overrides
-    from registry.auth.dependencies import web_auth, api_auth
-    app.dependency_overrides[web_auth] = mock_auth_dependency
-    app.dependency_overrides[api_auth] = mock_auth_dependency
+    def _mock_get_user(request: Request):
+        request.state.user = user_context
+        request.state.is_authenticated = True
+        return user_context
     
-    yield "testuser"
+    # Override the CurrentUser dependency
+    app.dependency_overrides[get_current_user_by_mid] = _mock_get_user
+    
+    yield user_context
     
     # Clean up dependency overrides
     app.dependency_overrides.clear()

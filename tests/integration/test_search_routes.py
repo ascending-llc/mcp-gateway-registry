@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch, Mock
 
 from registry.main import app
 from registry.auth import dependencies as auth_dependencies
+from fastapi import Request
 
 
 @pytest.mark.integration
@@ -16,17 +17,31 @@ class TestSearchRoutes:
 
     def setup_method(self):
         """Override auth dependency for each test."""
-        app.dependency_overrides[auth_dependencies.nginx_proxied_auth] = (
-            lambda *args, **kwargs: {
-                "username": "test-user",
-                "is_admin": True,
-                "accessible_servers": ["all"],
-            }
-        )
+        user_context = {
+            "username": "test-user",
+            "user_id": "test-user",
+            "is_admin": True,
+            "accessible_servers": ["all"],
+            "accessible_agents": ["all"],
+            "accessible_services": ["all"],
+            "groups": ["registry-admins"],
+            "scopes": ["registry-admins"],
+            "ui_permissions": {},
+            "can_modify_servers": True,
+            "auth_method": "traditional",
+            "provider": "local",
+        }
+
+        def _mock_get_user(request: Request):
+            request.state.user = user_context
+            request.state.is_authenticated = True
+            return user_context
+
+        app.dependency_overrides[auth_dependencies.get_current_user_by_mid] = _mock_get_user
 
     def teardown_method(self):
         """Clean up dependency overrides."""
-        app.dependency_overrides.pop(auth_dependencies.nginx_proxied_auth, None)
+        app.dependency_overrides.clear()
 
     def test_semantic_search_success(self, test_client: TestClient):
         """Successful semantic search returns filtered data."""
@@ -78,7 +93,7 @@ class TestSearchRoutes:
         }
 
         with patch("registry.api.search_routes.faiss_service") as mock_faiss, \
-             patch("registry.api.search_routes.agent_service") as mock_agent_service:
+                patch("registry.api.search_routes.agent_service") as mock_agent_service:
             mock_faiss.search_mixed = AsyncMock(return_value=mock_results)
             mock_agent = Mock()
             mock_agent.model_dump.return_value = {

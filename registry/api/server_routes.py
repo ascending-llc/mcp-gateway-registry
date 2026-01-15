@@ -19,6 +19,7 @@ from ..auth.dependencies import CurrentUser
 from ..health.service import health_service
 from ..utils.scopes_manager import remove_server_scopes
 from ..services.security_scanner import security_scanner_service
+from registry.services.search.service import faiss_service
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +94,6 @@ async def _perform_security_scan_on_registration(
 
             # Disable server if configured
             if scan_config.block_unsafe_servers:
-                from ..search.service import faiss_service
                 from ..core.nginx_service import nginx_service
 
                 server_service.toggle_service(path, False)
@@ -120,20 +120,12 @@ async def _perform_security_scan_on_registration(
 async def read_root(
         request: Request,
         query: str | None = None,
-        session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
+        user_context: CurrentUser = None,
 ):
     """Main dashboard page showing services based on user permissions."""
     # Check authentication first and redirect if not authenticated
-    if not session:
-        logger.info("No session cookie at root route, redirecting to login")
-        return RedirectResponse(url="/login", status_code=302)
-    try:
-        # Get user context
-        user_context = CurrentUser
-    except HTTPException as e:
-        logger.info(
-            f"Authentication failed at root route: {e.detail}, redirecting to login"
-        )
+    if not user_context or not hasattr(request.state, 'is_authenticated') or not request.state.is_authenticated:
+        logger.info("No authentication at root route, redirecting to login")
         return RedirectResponse(url="/login", status_code=302)
 
     # Helper function for templates
