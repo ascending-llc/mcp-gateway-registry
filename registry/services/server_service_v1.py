@@ -29,8 +29,6 @@ from registry.schemas.server_api_schemas import (
 from registry.utils.crypto_utils import encrypt_auth_fields
 from registry.core.mcp_client import get_tools_from_server_with_server_info
 
-from registry.services.access_control_service import acl_service
-
 logger = logging.getLogger(__name__)
 
 

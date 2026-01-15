@@ -281,7 +281,6 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 auth_method='jwt',
                 provider='jwt',
                 auth_source="jwt_auth",
-                email=username or ''
             )
         except Exception as e:
             logger.debug(f"JWT auth failed: {e}")
@@ -355,8 +354,8 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             return None
 
     def _build_user_context(self, username: str, groups: list, scopes: list,
-                            auth_method: str, provider: str, email: str,
-                            auth_source: str = None, user_id: str = None,) -> Dict[str, Any]:
+                            auth_method: str, provider: str,
+                            auth_source: str = None, user_id: str = None) -> Dict[str, Any]:
         """
             Construct the complete user context (from the original enhanced_auth logic).
         """
@@ -380,7 +379,6 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             'can_modify_servers': can_modify,
             'is_admin': user_has_wildcard_access(scopes),
             "auth_source": auth_source,
-            "email": email,
         }
         logger.debug(f"User context for {username}: {user_context}")
         return user_context
