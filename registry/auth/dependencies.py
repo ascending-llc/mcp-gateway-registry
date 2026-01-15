@@ -83,8 +83,6 @@ async def get_user_acl_permissions(request: Request) -> Dict[str, Any]:
         logger.info(f'Error fetching user {username} from database: {e}')
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not find user object from db")
 
-    return request.state.user
-
 
 def get_current_user(
         session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,

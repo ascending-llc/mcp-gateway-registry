@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 from typing import Optional, List, Any
 from packages.models._generated.aclEntry import IAclEntry
 from packages.models._generated.accessRole import IAccessRole
-from packages.models._generated.user import IUser
 from beanie import PydanticObjectId
 import logging
 
