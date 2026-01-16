@@ -351,8 +351,8 @@ class FlowStateManager:
         """
         Build OAuth metadata from server configuration
         """
-        auth_url = oauth_config.get("authorization_url")
-        token_url = oauth_config.get("token_url")
+        auth_url = oauth_config.get("authorization_url", "")
+        token_url = oauth_config.get("token_url", "")
 
         scopes = parse_scope(oauth_config.get("scope"), default=[])
 
