@@ -2,10 +2,10 @@ import { ArrowPathIcon, CogIcon, InformationCircleIcon } from '@heroicons/react/
 import axios from 'axios';
 import type React from 'react';
 import { useState } from 'react';
+import type { ServerInfo } from '@/contexts/ServerContext';
 import type { SemanticAgentHit, SemanticServerHit, SemanticToolHit } from '../hooks/useSemanticSearch';
 import type { Agent as AgentType } from './AgentCard';
 import AgentDetailsModal from './AgentDetailsModal';
-import type { Server } from './ServerCard';
 import ServerConfigModal from './ServerConfigModal';
 
 interface SemanticSearchResultsProps {
@@ -297,7 +297,7 @@ const SemanticSearchResults: React.FC<SemanticSearchResultsProps> = ({
               enabled: configServer.is_enabled ?? true,
               tags: configServer.tags,
               num_tools: configServer.num_tools,
-            } as Server
+            } as ServerInfo
           }
           isOpen
           onClose={() => setConfigServer(null)}

@@ -114,9 +114,9 @@ const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, updateField, 
         <div className='flex p-1 bg-gray-200 dark:bg-gray-700/50 rounded-lg'>
           <button
             type='button'
-            onClick={() => handleUpdateField('supported_transports', 'streamable-http')}
+            onClick={() => handleUpdateField('type', 'streamable-http')}
             className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-              formData.supported_transports === 'streamable-http'
+              formData.type === 'streamable-http'
                 ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
             }`}
@@ -125,9 +125,9 @@ const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, updateField, 
           </button>
           <button
             type='button'
-            onClick={() => handleUpdateField('supported_transports', 'sse')}
+            onClick={() => handleUpdateField('type', 'sse')}
             className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-              formData.supported_transports === 'sse'
+              formData.type === 'sse'
                 ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
             }`}

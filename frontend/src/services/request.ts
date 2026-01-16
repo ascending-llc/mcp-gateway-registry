@@ -1,14 +1,26 @@
 import axios, { type AxiosError, type AxiosRequestConfig } from 'axios';
 
+import { getBasePath } from '@/config';
 import UTILS from '@/utils';
+import type { GET_TOKEN_RESPONSE } from './auth/type';
 
 const cancelSources: Record<string, () => void> = {};
-const service = axios.create({ baseURL: '/', timeout: 20000 });
+const service = axios.create({ baseURL: getBasePath() || '/', timeout: 20000 });
 
-type RequestConfig = AxiosRequestConfig & { cancelTokenKey?: string };
+type RequestConfig = AxiosRequestConfig & { cancelTokenKey?: string; skipTokenBarrier?: boolean };
+
+let tokenInitPromise: Promise<GET_TOKEN_RESPONSE> | null = null;
+
+export const setTokenInitPromise = (promise: Promise<GET_TOKEN_RESPONSE> | null) => {
+  tokenInitPromise = promise;
+};
 
 service.interceptors.request.use(
-  (config: any) => {
+  async (config: any) => {
+    if (!config.skipTokenBarrier && tokenInitPromise) {
+      await tokenInitPromise;
+    }
+
     if (config.cancelTokenKey) {
       config.cancelToken = new axios.CancelToken(cancel => {
         cancelSources[config.cancelTokenKey || ''] = cancel;
