@@ -39,6 +39,63 @@ def _extract_config_field(server: MCPServerDocument, field: str, default: Any = 
     return server.config.get(field, default)
 
 
+def _build_server_info_for_mcp_client(config: Dict[str, Any], tags: List[str]) -> Dict[str, Any]:
+    """
+    Build server_info dictionary for MCP client operations.
+    
+    This helper eliminates duplicate code in create_server, retrieve_tools_from_server,
+    and retrieve_tools_and_capabilities_from_server.
+    
+    Args:
+        config: Server config dictionary
+        tags: Server tags list
+        
+    Returns:
+        server_info dictionary with type, tags, headers, and apiKey (if present)
+    """
+    server_info = {
+        "type": config.get("type", "streamable-http"),
+        "tags": tags or [],
+    }
+    
+    # Add optional fields if present
+    if "headers" in config:
+        server_info["headers"] = config["headers"]
+    
+    if "apiKey" in config:
+        server_info["apiKey"] = config["apiKey"]
+    
+    return server_info
+
+
+def _detect_oauth_requirement(oauth_field: Optional[Any], authentication_field: Optional[Dict[str, Any]]) -> bool:
+    """
+    Detect if OAuth is required based on oauth and authentication fields.
+    
+    This helper eliminates duplicate OAuth detection logic in _build_config_from_request
+    and _update_config_from_request.
+    
+    Args:
+        oauth_field: OAuth configuration object (if present)
+        authentication_field: Authentication configuration dict (if present)
+        
+    Returns:
+        True if OAuth is required, False otherwise
+    """
+    if oauth_field is not None:
+        return True
+    
+    if authentication_field is not None and authentication_field.get('authorize_url'):
+        return True
+    
+    return False
+
+
+def _get_current_utc_time() -> datetime:
+    """Get current UTC time. Centralizes datetime.now(timezone.utc) calls."""
+    return datetime.now(timezone.utc)
+
+
 def _convert_tool_list_to_functions(tool_list: List[Dict[str, Any]], server_name: str) -> Dict[str, Any]:
     """
     Convert tool_list array to toolFunctions object in OpenAI format.
@@ -99,13 +156,9 @@ def _build_config_from_request(data: ServerCreateRequest, server_name: str = Non
     """
     # Determine if OAuth is required based on oauth/authentication fields
     # If oauth field is provided OR authentication has OAuth URLs, set requiresOAuth to True
-    requires_oauth = False
-    if data.oauth is not None:
-        requires_oauth = True
-    elif data.authentication is not None and data.authentication.get('authorize_url'):
-        requires_oauth = True
+    requires_oauth = _detect_oauth_requirement(data.oauth, data.authentication)
     # If user explicitly sets requires_oauth, respect that (for backward compatibility)
-    elif data.requires_oauth:
+    if data.requires_oauth:
         requires_oauth = True
     
     # Build MCP-specific configuration (stored in config object)
@@ -216,15 +269,7 @@ def _update_config_from_request(config: Dict[str, Any], data: ServerUpdateReques
     # Update requiresOAuth based on oauth/authentication fields
     # If oauth or authentication is being updated, recalculate requiresOAuth
     if 'oauth' in update_dict or 'authentication' in update_dict:
-        requires_oauth = False
-        
-        # Check if oauth field is set in config
-        if config.get('oauth') is not None:
-            requires_oauth = True
-        # Check if authentication has OAuth URLs
-        elif config.get('authentication') and config['authentication'].get('authorize_url'):
-            requires_oauth = True
-        
+        requires_oauth = _detect_oauth_requirement(config.get('oauth'), config.get('authentication'))
         config['requiresOAuth'] = requires_oauth
         logger.info(f"Updated requiresOAuth to {requires_oauth} based on oauth/authentication fields")
     
@@ -404,7 +449,7 @@ class ServerServiceV1:
         author = await IUser.find_one({"username": user_id})
         if not author:
             # Create a minimal user record if not exists
-            now = datetime.now(timezone.utc)
+            now = _get_current_utc_time()
             # Generate unique email to avoid conflicts
             email = f"{user_id}@local.mcp-gateway.internal"
             
@@ -433,7 +478,7 @@ class ServerServiceV1:
                 author = await IUser.get(result.inserted_id)
         
         # Create server document with registry fields at root level
-        now = datetime.now(timezone.utc)
+        now = _get_current_utc_time()
         server = MCPServerDocument(
             serverName=data.serverName,
             config=config,
@@ -472,7 +517,7 @@ class ServerServiceV1:
                     raise ValueError(f"Server registration rejected: Health check failed - {status_msg}")
                 
                 # Update server with health check results (root-level field)
-                server.lastConnected = datetime.now(timezone.utc)
+                server.lastConnected = _get_current_utc_time()
                 server.status = "active"
                 
                 # 2. Retrieve capabilities (but skip tools - they will be fetched on-demand)
@@ -485,18 +530,7 @@ class ServerServiceV1:
                 # Try to get capabilities only
                 try:
                     # Build server_info dict for mcp_client
-                    server_info = {
-                        "type": config.get("type", "streamable-http"),
-                        "tags": server.tags or [],
-                    }
-                    
-                    # Add headers if present
-                    if "headers" in config:
-                        server_info["headers"] = config["headers"]
-                    
-                    # Add apiKey if present (for backend server authentication)
-                    if "apiKey" in config:
-                        server_info["apiKey"] = config["apiKey"]
+                    server_info = _build_server_info_for_mcp_client(config, server.tags)
                     
                     from registry.core.mcp_client import get_tools_and_capabilities_from_server
                     
@@ -555,7 +589,7 @@ class ServerServiceV1:
                 
                 # Save updated server
                 server.config = config
-                server.updatedAt = datetime.now(timezone.utc)
+                server.updatedAt = _get_current_utc_time()
                 await server.save()
                 
             except ValueError:
@@ -630,7 +664,7 @@ class ServerServiceV1:
         server.config = updated_config
         
         # Update the updatedAt timestamp
-        server.updatedAt = datetime.now(timezone.utc)
+        server.updatedAt = _get_current_utc_time()
         
         await server.save()
         logger.info(f"Updated server: {server.serverName} (ID: {server.id})")
@@ -701,7 +735,7 @@ class ServerServiceV1:
         server.config['enabled'] = enabled
         
         # Update the updatedAt timestamp
-        server.updatedAt = datetime.now(timezone.utc)
+        server.updatedAt = _get_current_utc_time()
         
         await server.save()
         logger.info(f"Toggled server {server.serverName} (ID: {server.id}) enabled to {enabled}")
@@ -747,44 +781,45 @@ class ServerServiceV1:
         Returns:
             Tuple of (is_healthy, status_message, response_time_ms)
         """
+        from registry.core.mcp_config import mcp_config
+        
         config = server.config or {}
         url = config.get("url")
         
         if not url:
             return False, "No URL configured", None
         
-        transport_type = config.get("type", "streamable-http")
+        transport_type = config.get("type", mcp_config.TRANSPORT_HTTP)
         
         # Skip health checks for stdio transport
-        if transport_type == "stdio":
+        if transport_type == mcp_config.TRANSPORT_STDIO:
             logger.info(f"Skipping health check for stdio transport: {url}")
             return True, "healthy (stdio transport skipped)", None
         
         try:
             # Perform simple HTTP health check
-            start_time = datetime.now(timezone.utc)
+            start_time = _get_current_utc_time()
             
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=mcp_config.HEALTH_CHECK_TIMEOUT) as client:
                 # Try to access the MCP endpoint
                 base_url = url.rstrip('/')
                 
                 # Try streamable-http transport first (most common)
-                if transport_type in ["streamable-http", "http"]:
-                    endpoint = f"{base_url}/mcp" if not base_url.endswith('/mcp') else base_url
+                if transport_type in [mcp_config.TRANSPORT_HTTP, "http"]:
+                    endpoint = f"{base_url}{mcp_config.ENDPOINT_MCP}" if not base_url.endswith(mcp_config.ENDPOINT_MCP) else base_url
                     
                     try:
                         # Try a simple GET request first
                         response = await client.get(endpoint, follow_redirects=True)
                         
                         # Calculate response time
-                        end_time = datetime.now(timezone.utc)
+                        end_time = _get_current_utc_time()
                         response_time_ms = int((end_time - start_time).total_seconds() * 1000)
                         
                         # Check if response indicates a healthy server
-                        # 200, 400 (MCP protocol errors), 405 (method not allowed) are all healthy signs
-                        if response.status_code in [200, 400, 405]:
+                        if response.status_code in mcp_config.HEALTHY_STATUS_CODES:
                             return True, "healthy", response_time_ms
-                        elif response.status_code in [401, 403]:
+                        elif response.status_code in mcp_config.AUTH_REQUIRED_STATUS_CODES:
                             # Auth required but server is responding
                             return True, "healthy (auth required)", response_time_ms
                         else:
@@ -794,15 +829,15 @@ class ServerServiceV1:
                         return False, f"unhealthy: {type(e).__name__}", None
                 
                 # Try SSE transport if configured
-                elif transport_type == "sse":
-                    endpoint = f"{base_url}/sse" if not base_url.endswith('/sse') else base_url
+                elif transport_type == mcp_config.TRANSPORT_SSE:
+                    endpoint = f"{base_url}{mcp_config.ENDPOINT_SSE}" if not base_url.endswith(mcp_config.ENDPOINT_SSE) else base_url
                     
                     try:
                         response = await client.get(endpoint, follow_redirects=True)
-                        end_time = datetime.now(timezone.utc)
+                        end_time = _get_current_utc_time()
                         response_time_ms = int((end_time - start_time).total_seconds() * 1000)
                         
-                        if response.status_code in [200, 400, 405]:
+                        if response.status_code in mcp_config.HEALTHY_STATUS_CODES:
                             return True, "healthy", response_time_ms
                         else:
                             return False, f"unhealthy: status {response.status_code}", response_time_ms
@@ -818,12 +853,75 @@ class ServerServiceV1:
             logger.error(f"Health check error for server {server.serverName}: {e}")
             return False, f"error: {type(e).__name__}", None
     
+    async def retrieve_from_server(
+        self,
+        server: MCPServerDocument,
+        include_capabilities: bool = True,
+    ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[Dict[str, Any]], Optional[str]]:
+        """
+        Consolidated method to retrieve tools and optionally capabilities from a server.
+        
+        This replaces both retrieve_tools_from_server() and retrieve_tools_and_capabilities_from_server().
+        
+        Args:
+            server: Server document
+            include_capabilities: Whether to retrieve capabilities (default: True)
+            
+        Returns:
+            Tuple of (tool_list, capabilities_dict, error_message)
+            - If successful: (tool_list, capabilities_dict, None)
+            - If failed: (None, None, error_message)
+            - If include_capabilities=False: (tool_list, None, None) or (None, None, error_message)
+        """
+        config = server.config or {}
+        url = config.get("url")
+        
+        if not url:
+            return None, None, "No URL configured"
+        
+        try:
+            # Build server_info using helper function
+            server_info = _build_server_info_for_mcp_client(config, server.tags)
+            
+            logger.info(f"Retrieving {'tools and capabilities' if include_capabilities else 'tools only'} from {url} for server {server.serverName}")
+            
+            # Use the appropriate MCP client function
+            if include_capabilities:
+                from registry.core.mcp_client import get_tools_and_capabilities_from_server
+                tool_list, capabilities = await get_tools_and_capabilities_from_server(url, server_info)
+                
+                if tool_list is None or capabilities is None:
+                    error_msg = "Failed to retrieve tools and capabilities from MCP server"
+                    logger.warning(f"{error_msg} for {server.serverName}")
+                    return None, None, error_msg
+                
+                logger.info(f"Retrieved {len(tool_list)} tools and capabilities from {server.serverName}")
+                return tool_list, capabilities, None
+            else:
+                from registry.core.mcp_client import get_tools_from_server_with_server_info
+                tool_list = await get_tools_from_server_with_server_info(url, server_info)
+                
+                if tool_list is None:
+                    error_msg = "Failed to retrieve tools from MCP server"
+                    logger.warning(f"{error_msg} for {server.serverName}")
+                    return None, None, error_msg
+                
+                logger.info(f"Retrieved {len(tool_list)} tools from {server.serverName}")
+                return tool_list, None, None
+            
+        except Exception as e:
+            error_msg = f"Error: {type(e).__name__} - {str(e)}"
+            logger.error(f"Retrieval error for server {server.serverName}: {e}")
+            return None, None, error_msg
+    
     async def retrieve_tools_from_server(
         self,
         server: MCPServerDocument,
     ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
         """
-        Retrieve tools from a server using MCP client.
+        Retrieve tools from a server using MCP client (legacy method).
+        
+        Wraps retrieve_from_server() for backward compatibility.
         
         Args:
             server: Server document
@@ -833,49 +931,17 @@ class ServerServiceV1:
             If successful, returns (tool_list, None)
             If failed, returns (None, error_message)
         """
-        config = server.config or {}
-        url = config.get("url")
-        
-        if not url:
-            return None, "No URL configured"
-        
-        try:
-            # Build server_info dict for mcp_client
-            server_info = {
-                "type": config.get("type", "streamable-http"),
-                "tags": server.tags or [],
-            }
-            
-            # Add headers if present
-            if "headers" in config:
-                server_info["headers"] = config["headers"]
-            
-            # Add apiKey if present (for backend server authentication)
-            if "apiKey" in config:
-                server_info["apiKey"] = config["apiKey"]
-            
-            logger.info(f"Retrieving tools from {url} for server {server.serverName}")
-            
-            # Use the MCP client to get tools
-            tool_list = await get_tools_from_server_with_server_info(url, server_info)
-            
-            if tool_list is None:
-                return None, "Failed to retrieve tools from MCP server"
-            
-            logger.info(f"Retrieved {len(tool_list)} tools from {server.serverName}")
-            return tool_list, None
-            
-        except Exception as e:
-            error_msg = f"Error retrieving tools: {type(e).__name__} - {str(e)}"
-            logger.error(f"Tool retrieval error for server {server.serverName}: {e}")
-            return None, error_msg
+        tool_list, _, error_msg = await self.retrieve_from_server(server, include_capabilities=False)
+        return tool_list, error_msg
     
     async def retrieve_tools_and_capabilities_from_server(
         self,
         server: MCPServerDocument,
     ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[Dict[str, Any]], Optional[str]]:
         """
-        Retrieve tools and capabilities from a server using MCP client.
+        Retrieve tools and capabilities from a server using MCP client (legacy method).
+        
+        Wraps retrieve_from_server() for backward compatibility.
         
         This is a best-effort attempt - failures are logged but don't prevent registration.
         Tools can be fetched on-demand later.
@@ -889,52 +955,7 @@ class ServerServiceV1:
             - If failed, returns (None, None, error_message)
             - Empty results are acceptable for registration
         """
-        config = server.config or {}
-        url = config.get("url")
-        
-        if not url:
-            return None, None, "No URL configured"
-        
-        try:
-            # Build server_info dict for mcp_client
-            server_info = {
-                "type": config.get("type", "streamable-http"),
-                "tags": server.tags or [],
-            }
-            
-            # Add headers if present
-            if "headers" in config:
-                server_info["headers"] = config["headers"]
-            
-            # Add apiKey if present (for backend server authentication)
-            if "apiKey" in config:
-                server_info["apiKey"] = config["apiKey"]
-            
-            logger.info(f"Attempting to retrieve tools and capabilities from {url} for server {server.serverName}")
-            
-            # Import the new function
-            from registry.core.mcp_client import get_tools_and_capabilities_from_server
-            
-            # Use the MCP client to get tools and capabilities
-            tool_list, capabilities = await get_tools_and_capabilities_from_server(url, server_info)
-            
-            if tool_list is None and capabilities is None:
-                error_msg = "Failed to retrieve tools and capabilities from MCP server"
-                logger.warning(f"{error_msg} for {server.serverName} - will retry on-demand")
-                return None, None, error_msg
-            
-            # Log success
-            tool_count = len(tool_list) if tool_list else 0
-            logger.info(f"Retrieved {tool_count} tools and capabilities from {server.serverName}")
-            if capabilities:
-                logger.info(f"Server capabilities: {capabilities}")
-            
-            return tool_list, capabilities, None
-            
-        except Exception as e:
-            error_msg = f"Error retrieving tools and capabilities: {type(e).__name__} - {str(e)}"
-            logger.warning(f"Tool/capabilities retrieval error for server {server.serverName}: {e} - will retry on-demand")
-            return None, None, error_msg
+        return await self.retrieve_from_server(server, include_capabilities=True)
     
     async def refresh_server_health(
         self,
@@ -964,7 +985,7 @@ class ServerServiceV1:
         if not server:
             raise ValueError("Server not found")
         
-        now = datetime.now(timezone.utc)
+        now = _get_current_utc_time()
         
         # Use the same validation as registration: retrieve tools and capabilities
         # This is a more comprehensive health check than just HTTP GET
@@ -1130,7 +1151,7 @@ class ServerServiceV1:
 
         # 2. Token Statistics
         try:
-            now = datetime.now(timezone.utc)
+            now = _get_current_utc_time()
 
             token_pipeline = [
                 {
@@ -1204,7 +1225,7 @@ class ServerServiceV1:
 
         # 3. Active Users Statistics
         try:
-            now = datetime.now(timezone.utc)
+            now = _get_current_utc_time()
 
             # Count unique users with active tokens
             active_users_pipeline = [
