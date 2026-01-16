@@ -24,7 +24,6 @@ export interface ServerInfo {
   is_python?: boolean;
   connection_state: SERVER_CONNECTION;
   requires_oauth: boolean;
-  rating_details?: [];
 }
 
 interface Agent {
@@ -158,7 +157,7 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
         official: serverInfo.is_official || false,
         enabled: serverInfo.enabled !== undefined ? serverInfo.enabled : false,
         tags: serverInfo.tags || [],
-        last_checked_time: serverInfo.updatedAt,
+        last_checked_time: serverInfo.lastConnected,
         usersCount: 0,
         rating: serverInfo.numStars || 0,
         status: serverInfo.status || 'unknown', // undefined

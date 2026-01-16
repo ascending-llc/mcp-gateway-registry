@@ -17,12 +17,10 @@ import type { Tool } from '@/services/server/type';
 import UTILS from '@/utils';
 import ServerAuthorizationModal from './ServerAuthorizationModal';
 import ServerConfigModal from './ServerConfigModal';
-import StarRatingWidget from './StarRatingWidget';
 
 interface ServerCardProps {
   server: ServerInfo;
   canModify?: boolean;
-  authToken?: string | null;
   onEdit?: (server: ServerInfo) => void;
   onShowToast: (message: string, type: 'success' | 'error') => void;
   onServerUpdate: (id: string, updates: Partial<ServerInfo>) => void;
@@ -32,7 +30,6 @@ interface ServerCardProps {
 const ServerCard: React.FC<ServerCardProps> = ({
   server,
   canModify,
-  authToken,
   onEdit,
   onShowToast,
   onServerUpdate,
@@ -89,8 +86,8 @@ const ServerCard: React.FC<ServerCardProps> = ({
       if (onServerUpdate && result) {
         const updates: Partial<ServerInfo> = {
           status: result.status,
-          last_checked_time: result.last_checked,
-          num_tools: result.num_tools,
+          last_checked_time: result.lastConnected,
+          num_tools: result.numTools,
         };
         onServerUpdate(server.id, updates);
       } else if (onRefreshSuccess) {
@@ -238,20 +235,6 @@ const ServerCard: React.FC<ServerCardProps> = ({
         {/* Stats */}
         <div className='px-4 pb-3'>
           <div className='grid grid-cols-2 gap-2'>
-            <StarRatingWidget
-              resourceType='servers'
-              path={server.path}
-              initialRating={server.num_stars || 0}
-              initialCount={server.rating_details?.length || 0}
-              authToken={authToken}
-              onShowToast={onShowToast}
-              onRatingUpdate={newRating => {
-                // Update local server rating when user submits rating
-                if (onServerUpdate) {
-                  onServerUpdate(server.id, { num_stars: newRating });
-                }
-              }}
-            />
             <div className='flex items-center gap-1.5'>
               {(server.num_tools || 0) > 0 ? (
                 <button

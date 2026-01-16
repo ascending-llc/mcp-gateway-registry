@@ -412,7 +412,6 @@ const Dashboard: React.FC = () => {
                       key={server.id}
                       server={server}
                       canModify={user?.can_modify_servers || false}
-                      authToken={agentApiToken}
                       onEdit={handleEditServer}
                       onShowToast={showToast}
                       onServerUpdate={handleServerUpdate}
@@ -518,7 +517,6 @@ const Dashboard: React.FC = () => {
                           key={server.id}
                           server={server}
                           canModify={user?.can_modify_servers || false}
-                          authToken={agentApiToken}
                           onEdit={handleEditServer}
                           onShowToast={showToast}
                           onServerUpdate={handleServerUpdate}
