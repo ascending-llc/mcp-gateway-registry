@@ -295,6 +295,7 @@ class ServerServiceV1:
         page: int = 1,
         per_page: int = 20,
         user_id: Optional[str] = None,
+        accessible_server_ids: List[PydanticObjectId] = [],
     ) -> Tuple[List[MCPServerDocument], int]:
         """
         List servers with filtering and pagination
@@ -306,6 +307,7 @@ class ServerServiceV1:
             page: Page number (min: 1)
             per_page: Items per page (min: 1, max: 100)
             user_id: Current user's ID (kept for compatibility but not used for filtering)
+            accessible_server_ids: List of server IDs the user has access to based on ACL permissions
         Returns:
             Tuple of (servers list, total count)
         """
@@ -335,6 +337,10 @@ class ServerServiceV1:
                 ]
             }
             filters.append(text_filter)
+
+        # Access control filter
+        if accessible_server_ids:
+            filters.append({"_id": {"$in": accessible_server_ids}})
 
         # Combine all filters
         if filters:

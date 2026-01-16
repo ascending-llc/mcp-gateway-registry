@@ -68,19 +68,19 @@ async def get_user_acl_permissions(request: Request) -> Dict[str, Any]:
 
         principal_id = getattr(user_obj, "id")
         accessible_servers_for_user = await acl_service.list_accessible_resources(
-            principal_type="user", # TODO: replace with constant
+            principal_type="user", 
             principal_id=principal_id,
             resource_type="mcpServer",
         )
-        resource_ids = [entry.resourceId for entry in accessible_servers_for_user]
 
-        # TODO: This oonly captures servers. It should either be renamed to acl_server_permissions or refactored to be more robust
-        acl_resource_permissions = {str(entry.resourceId): entry.permBits for entry in accessible_servers_for_user}
+        resource_ids = {entry.resourceId for entry in accessible_servers_for_user}
+        acl_server_permissions = {str(entry.resourceId): entry.permBits for entry in accessible_servers_for_user}
+        
         return {
             **request.state.user,
             "user_id": principal_id,
-            "acl_accessible_resources":  resource_ids,
-            "acl_resource_permissions": acl_resource_permissions, 
+            "acl_accessible_servers":  resource_ids,
+            "acl_server_permissions": acl_server_permissions, 
             "role": getattr(user_obj, "role")
             #  other acl fields can be added here
         }

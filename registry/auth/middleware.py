@@ -372,12 +372,12 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             'scopes': scopes,
             'auth_method': auth_method,
             'provider': provider,
-            'accessible_servers': accessible_servers, # possibly redudant; should make sure acl_accessible_resources includes the same server list
+            'accessible_servers': accessible_servers, 
             'accessible_services': accessible_services,
-            'accessible_agents': accessible_agents, # possibly redudant; should make sure acl_accessible_resources includes the same agent list
+            'accessible_agents': accessible_agents,
             'ui_permissions': ui_permissions,
             'can_modify_servers': can_modify,
-            'is_admin': user_has_wildcard_access(scopes), # relies on user scope; use "role" attribute instead
+            'is_admin': user_has_wildcard_access(scopes),
             "auth_source": auth_source,
         }
         logger.debug(f"User context for {username}: {user_context}")
