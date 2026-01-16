@@ -35,7 +35,7 @@ export type Server = {
   url: string;
   enabled: boolean;
   requiresOAuth: boolean;
-  connection_state: SERVER_CONNECTION;
+  connectionState: SERVER_CONNECTION;
   capabilities: string;
   tools: string;
   author: string;

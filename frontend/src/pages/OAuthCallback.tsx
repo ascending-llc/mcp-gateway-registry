@@ -1,7 +1,7 @@
 import { CheckCircleIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import logo from '@/assets/logo.svg';
 
@@ -25,26 +25,22 @@ const Footer: React.FC = () => (
 const OAuthCallback: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [countdown, setCountdown] = useState(5);
+  const navigate = useNavigate();
 
   // Get URL parameters with memoization
   const type = useMemo(() => searchParams.get('type') || 'success', [searchParams]);
   const serverName = useMemo(() => searchParams.get('serverName') || 'Connectors', [searchParams]);
   const error = useMemo(() => searchParams.get('error') || 'Unknown error occurred', [searchParams]);
 
-  const closeWindow = useCallback(() => {
-    try {
-      if (window.opener) window.opener.focus();
-      window.close();
-    } catch {
-      console.log('Could not close window automatically');
-    }
-  }, []);
+  const goToDashboard = useCallback(() => {
+    navigate('/');
+  }, [navigate]);
 
   useEffect(() => {
     const timer = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
-          closeWindow();
+          goToDashboard();
           return 0;
         }
         return prev - 1;
@@ -55,7 +51,7 @@ const OAuthCallback: React.FC = () => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
         if (timerCloseWindow) clearTimeout(timerCloseWindow);
-        timerCloseWindow = setTimeout(closeWindow, 1000);
+        timerCloseWindow = setTimeout(goToDashboard, 1000);
       }
     };
 
@@ -66,7 +62,7 @@ const OAuthCallback: React.FC = () => {
       if (timerCloseWindow) clearTimeout(timerCloseWindow);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [closeWindow]);
+  }, [goToDashboard]);
 
   // Render error state
   if (type === 'error') {
@@ -94,10 +90,10 @@ const OAuthCallback: React.FC = () => {
               Retry Authorization
             </Link>
             <button
-              onClick={closeWindow}
+              onClick={goToDashboard}
               className='bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-6 py-3 rounded-lg font-semibold hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200'
             >
-              Close Window
+              Go to the Dashboard page
             </button>
           </div>
 
@@ -134,10 +130,10 @@ const OAuthCallback: React.FC = () => {
         </p>
 
         <button
-          onClick={closeWindow}
+          onClick={goToDashboard}
           className='btn-primary w-full mt-6 hover:transform hover:-translate-y-0.5 transition-all duration-200 shadow-md hover:shadow-lg'
         >
-          Close Window
+          Go to the Dashboard page
         </button>
 
         <div className='text-xs text-gray-500 dark:text-gray-400 mt-6 opacity-80'>

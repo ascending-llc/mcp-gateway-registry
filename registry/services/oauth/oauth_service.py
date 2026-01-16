@@ -1,5 +1,5 @@
 from typing import Dict, Optional, Any, Tuple
-from registry.auth.oauth import OAuthHttpClient, get_flow_state_manager, FlowStateManager
+from registry.auth.oauth import OAuthHttpClient, get_flow_state_manager, FlowStateManager, parse_scope
 from registry.models.oauth_models import OAuthTokens
 from registry.schemas.enums import OAuthFlowStatus
 from registry.utils.utils import generate_code_verifier, generate_code_challenge
@@ -39,11 +39,11 @@ class MCPOAuthService:
                 return None, None, "Server not found"
 
             # Check if server requires OAuth
-            if not mcp_server.config.get("requires_oauth"):
+            if not mcp_server.config.get("requiresOAuth"):
                 return None, None, f"Server '{server_name}' does not require OAuth"
 
             # Get OAuth config from authentication
-            authentication = mcp_server.config.get("authentication")
+            authentication = mcp_server.config.get("oauth")
             if not authentication:
                 return None, None, f"Server '{server_name}' authentication configuration not found"
             
@@ -52,10 +52,10 @@ class MCPOAuthService:
             
             # Debug logs: verify OAuth configuration
             logger.debug(f"OAuth config keys: {list(oauth_config.keys())}")
-            logger.debug(f"authorize_url: {oauth_config.get('authorize_url')}")
+            logger.debug(f"authorization_url: {oauth_config.get('authorization_url')}")
             logger.debug(f"token_url: {oauth_config.get('token_url')}")
             logger.debug(f"client_id: {oauth_config.get('client_id')}")
-            logger.debug(f"scopes: {oauth_config.get('scopes')}")
+            logger.debug(f"scope: {oauth_config.get('scope')}")
 
             # Generate PKCE parameters
             code_verifier = generate_code_verifier()
@@ -63,10 +63,11 @@ class MCPOAuthService:
             flow_id = self.flow_manager.generate_flow_id(user_id, server_name)
 
             # Create OAuth flow metadata (using flow_id as state)
+            authorization_url = oauth_config.get("authorization_url")
             flow_metadata = self.flow_manager.create_flow_metadata(
                 server_name=server_name,
                 user_id=user_id,
-                authorize_url=oauth_config.get("authorize_url", ""),
+                authorization_url=authorization_url,
                 code_verifier=code_verifier,
                 oauth_config=oauth_config,
                 flow_id=flow_id
@@ -259,12 +260,12 @@ class MCPOAuthService:
             if not mcp_server:
                 return False, f"Server '{server_name}' not found"
             
-            # Get OAuth config from authentication
-            authentication = mcp_server.config.get("authentication")
+            # Get OAuth config from oauth
+            authentication = mcp_server.config.get("oauth")
             if not authentication:
-                return False, f"Server '{server_name}' authentication configuration not found"
+                return False, f"Server '{server_name}' OAuth configuration not found"
             
-            # OAuth configuration is directly under authentication
+            # OAuth configuration is directly under oauth
             oauth_config = authentication
 
             # Refresh tokens
@@ -277,11 +278,14 @@ class MCPOAuthService:
                 return False, "Failed to refresh tokens"
 
             # Persist refreshed tokens to database with metadata
+            auth_url = oauth_config.get("authorization_url")
+            scopes = parse_scope(oauth_config.get("scope"), default=[])
+            
             metadata = {
-                "authorization_endpoint": oauth_config.get("authorize_url"),
+                "authorization_endpoint": auth_url,
                 "token_endpoint": oauth_config.get("token_url"),
                 "issuer": oauth_config.get("issuer"),
-                "scopes_supported": oauth_config.get("scopes", []),
+                "scopes_supported": scopes,
                 "grant_types_supported": ["authorization_code", "refresh_token"],
                 "response_types_supported": ["code"],
             }

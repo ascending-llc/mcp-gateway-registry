@@ -37,7 +37,7 @@ async def get_servers_connection_status(
             "config": server.config,
             "updated_at": server.updatedAt.timestamp() if server.updatedAt else None,
         }
-        if server.config.get("requires_oauth", False):
+        if server.config.get("requiresOAuth", False):
             oauth_servers.add(server_name)
     
     # Get status for each server
