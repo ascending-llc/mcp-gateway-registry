@@ -678,7 +678,6 @@ class ServerServiceV1:
         
         # Check authentication type
         has_oauth = config.get("oauth") is not None
-        has_api_key = config.get("apiKey") is not None
         
         tool_list = None
         error_msg = None
