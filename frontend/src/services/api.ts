@@ -3,6 +3,8 @@ const MCP_BASE_URL = `${BASE_URL}/mcp`;
 const SERVER_BASE_URL = `${BASE_URL}/servers`;
 
 const API = {
+  // auth
+  getAuthMe: '/api/auth/me',
   getToken: '/api/tokens/generate',
 
   getVersion: '/api/version',

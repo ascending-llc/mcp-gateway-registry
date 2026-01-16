@@ -4,6 +4,7 @@ import { createContext, type ReactNode, useContext, useEffect, useState } from '
 
 import { getBasePath } from '@/config';
 import SERVICES from '@/services';
+import { setTokenInitPromise } from '@/services/request';
 import UTILS from '@/utils';
 
 // Configure axios to include credentials (cookies) with all requests
@@ -58,19 +59,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const token = UTILS.getSessionConfig('accessToken');
       if (token) return;
 
-      const result = await SERVICES.TOKEN.getToken({ expires_in_hours: 8, description: 'Generated via sidebar' });
+      const promise = SERVICES.AUTH.getToken({ expires_in_hours: 8, description: 'Generated via sidebar' });
+      setTokenInitPromise(promise);
+      const result = await promise;
       if (result.success) {
         UTILS.setSessionConfig('accessToken', result?.token_data.access_token, 480);
       }
     } catch (error) {
       console.error('Failed to fetch token:', error);
+    } finally {
+      setTokenInitPromise(null);
     }
   };
 
   const checkAuth = async () => {
     try {
-      const response = await axios.get('/api/auth/me');
-      const userData = response.data;
+      const userData = await SERVICES.AUTH.getAuthMe();
       setUser({
         username: userData.username,
         email: userData.email,

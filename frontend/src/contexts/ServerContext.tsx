@@ -4,8 +4,9 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 
 import SERVICES from '@/services';
 import { SERVER_CONNECTION } from '@/services/mcp/type';
+import type { Server } from '@/services/server/type';
 
-export interface Server {
+export interface ServerInfo {
   id: string;
   name: string;
   path: string;
@@ -18,8 +19,7 @@ export interface Server {
   rating?: number;
   status?: 'active' | 'inactive' | 'error';
   num_tools?: number;
-  proxy_pass_url?: string;
-  license?: string;
+  url?: string;
   num_stars?: number;
   is_python?: boolean;
   connection_state: SERVER_CONNECTION;
@@ -58,8 +58,8 @@ interface AgentStats {
 
 interface ServerContextType {
   // Server state
-  servers: Server[];
-  setServers: React.Dispatch<React.SetStateAction<Server[]>>;
+  servers: ServerInfo[];
+  setServers: React.Dispatch<React.SetStateAction<ServerInfo[]>>;
   stats: ServerStats;
 
   // Agent state
@@ -78,7 +78,7 @@ interface ServerContextType {
   // Actions
   refreshData: (notLoading?: boolean) => Promise<void>;
   toggleAgent: (path: string, enabled: boolean) => Promise<void>;
-  refreshServerStatus: () => Promise<Server[]>;
+  refreshServerStatus: () => Promise<ServerInfo[]>;
   getServerStatusByPolling: (serverNames: string) => void;
   cancelPolling: (serverName?: string) => void;
 }
@@ -98,7 +98,7 @@ interface ServerProviderProps {
 }
 
 export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
-  const [servers, setServers] = useState<Server[]>([]);
+  const [servers, setServers] = useState<ServerInfo[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [viewMode, setViewMode] = useState<'all' | 'servers' | 'agents'>('all');
   const [activeFilter, setActiveFilter] = useState<string>('all');
@@ -130,7 +130,6 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
 
   useEffect(() => {
     refreshData();
-    fetchServerStatus();
     return () => {
       Object.values(timeoutRef.current).forEach(timeout => {
         clearTimeout(timeout);
@@ -148,29 +147,26 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     return 'unknown';
   };
 
-  const constructServerData = (serversList: any): Server[] => {
-    return serversList.map((serverInfo: any) => {
-      console.log(`🕐 Server ${serverInfo.display_name}: last_checked_iso =`, serverInfo.last_checked_iso);
-
+  const constructServerData = (serversList: Server[]): ServerInfo[] => {
+    return serversList.map((serverInfo: Server) => {
       return {
         id: serverInfo.id,
-        name: serverInfo.serverName || serverInfo.server_name || 'Unknown Server',
+        name: serverInfo.serverName || 'Unknown Server',
         path: serverInfo.path,
         description: serverInfo.description || '',
-        official: serverInfo.is_official || false, // undefined
+        official: serverInfo.is_official || false,
         enabled: serverInfo.enabled !== undefined ? serverInfo.enabled : false,
         tags: serverInfo.tags || [],
-        last_checked_time: serverInfo.updatedAt,
+        last_checked_time: serverInfo.lastConnected,
         usersCount: 0,
-        rating: serverInfo.num_stars || 0,
+        rating: serverInfo.numStars || 0,
         status: serverInfo.status || 'unknown', // undefined
-        num_tools: serverInfo.num_tools || 0,
-        proxy_pass_url: serverInfo.proxy_pass_url,
-        license: serverInfo.license,
-        num_stars: serverInfo.num_stars || 0,
+        num_tools: serverInfo.numTools || 0,
+        url: serverInfo.url,
+        num_stars: serverInfo.numStars || 0,
         is_python: serverInfo.is_python || false,
-        connection_state: serverInfo.connection_state,
-        requires_oauth: serverInfo.requires_oauth,
+        requires_oauth: serverInfo.requiresOAuth,
+        connection_state: serverInfo.connectionState,
       };
     });
   };
@@ -194,7 +190,7 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
       console.log('🔍 Server filtering debug info:');
       console.log(`📊 Total servers returned from API: ${serversList.length}`);
 
-      const transformedServers: Server[] = constructServerData(serversList);
+      const transformedServers: ServerInfo[] = constructServerData(serversList);
 
       // Process agents
       const agentsData = agentsResponse.data || {};
@@ -249,11 +245,11 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     [refreshData],
   );
 
-  const fetchServerStatus = useCallback(async (): Promise<Server[]> => {
+  const fetchServerStatus = useCallback(async (): Promise<ServerInfo[]> => {
     try {
       const result = await SERVICES.SERVER.getServers();
       const serversList = result.servers || [];
-      const transformedServers: Server[] = constructServerData(serversList);
+      const transformedServers: ServerInfo[] = constructServerData(serversList);
       setServers(transformedServers);
       return transformedServers;
     } catch (error: any) {
@@ -271,11 +267,13 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
       }
 
       console.log(`🔄 Polling server status for`, serverName);
-      const initialState = servers.find((server: Server) => server.name === serverName)?.connection_state;
+      const initialState = servers.find((server: ServerInfo) => server.name === serverName)?.connection_state;
 
       const poll = async () => {
-        const latestStatusData: Server[] = await fetchServerStatus();
-        const currentState = latestStatusData.find((server: Server) => server.name === serverName)?.connection_state;
+        const latestStatusData: ServerInfo[] = await fetchServerStatus();
+        const currentState = latestStatusData.find(
+          (server: ServerInfo) => server.name === serverName,
+        )?.connection_state;
 
         if (currentState === initialState || currentState === SERVER_CONNECTION.CONNECTING) {
           timeoutRef.current[serverName] = setTimeout(() => {

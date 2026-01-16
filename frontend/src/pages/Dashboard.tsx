@@ -11,31 +11,13 @@ import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ServerFormDialog } from '@/components/ServerFormDialog';
+import type { ServerInfo } from '@/contexts/ServerContext';
 import AgentCard from '../components/AgentCard';
 import SemanticSearchResults from '../components/SemanticSearchResults';
 import ServerCard from '../components/ServerCard';
 import { useAuth } from '../contexts/AuthContext';
 import { useServer } from '../contexts/ServerContext';
 import { useSemanticSearch } from '../hooks/useSemanticSearch';
-
-interface Server {
-  id: string;
-  name: string;
-  path: string;
-  description?: string;
-  official?: boolean;
-  enabled: boolean;
-  tags?: string[];
-  last_checked_time?: string;
-  usersCount?: number;
-  rating?: number;
-  status?: 'active' | 'inactive' | 'error';
-  num_tools?: number;
-  proxy_pass_url?: string;
-  license?: string;
-  num_stars?: number;
-  is_python?: boolean;
-}
 
 interface Agent {
   name: string;
@@ -314,7 +296,7 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleEditServer = async (server: Server) => {
+  const handleEditServer = async (server: ServerInfo) => {
     setServerId((server as any).id);
     setShowRegisterModal(true);
   };
@@ -378,7 +360,7 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleServerUpdate = (id: string, updates: Partial<Server>) => {
+  const handleServerUpdate = (id: string, updates: Partial<ServerInfo>) => {
     setServers(prevServers => prevServers.map(server => (server.id === id ? { ...server, ...updates } : server)));
   };
 
@@ -430,7 +412,6 @@ const Dashboard: React.FC = () => {
                       key={server.id}
                       server={server}
                       canModify={user?.can_modify_servers || false}
-                      authToken={agentApiToken}
                       onEdit={handleEditServer}
                       onShowToast={showToast}
                       onServerUpdate={handleServerUpdate}
@@ -536,7 +517,6 @@ const Dashboard: React.FC = () => {
                           key={server.id}
                           server={server}
                           canModify={user?.can_modify_servers || false}
-                          authToken={agentApiToken}
                           onEdit={handleEditServer}
                           onShowToast={showToast}
                           onServerUpdate={handleServerUpdate}
@@ -610,6 +590,18 @@ const Dashboard: React.FC = () => {
       </div>
     );
   }
+
+  const getCardNumber = () => {
+    const serverLength = semanticSectionVisible ? semanticServers.length : filteredServers?.length || 0;
+    const agentLength = semanticSectionVisible ? semanticAgents.length : filteredAgents?.length || 0;
+    if (viewFilter === 'all') {
+      return `Showing ${serverLength} servers and ${agentLength} agents`;
+    } else if (viewFilter === 'servers') {
+      return `Showing ${serverLength} servers`;
+    } else if (viewFilter === 'agents') {
+      return `Showing ${agentLength} agents`;
+    }
+  };
 
   return (
     <>
@@ -709,22 +701,7 @@ const Dashboard: React.FC = () => {
 
           {/* Results count */}
           <div className='flex items-center justify-between'>
-            <p className='text-sm text-gray-500 dark:text-gray-300'>
-              {semanticSectionVisible ? (
-                <>
-                  Showing {semanticServers.length} servers and {semanticAgents.length} agents
-                </>
-              ) : (
-                <>
-                  Showing {filteredServers.length} servers and {filteredAgents.length} agents
-                </>
-              )}
-              {activeFilter !== 'all' && (
-                <span className='ml-2 px-2 py-1 text-xs bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300 rounded-full'>
-                  {activeFilter} filter active
-                </span>
-              )}
-            </p>
+            <p className='text-sm text-gray-500 dark:text-gray-300'>{getCardNumber()}</p>
             <p className='text-xs text-gray-400 dark:text-gray-500'>
               Press Enter to run semantic search; typing filters locally.
             </p>
@@ -775,6 +752,7 @@ const Dashboard: React.FC = () => {
         id={serverId}
         showToast={showToast}
         refreshData={refreshData}
+        onServerUpdate={handleServerUpdate}
         onClose={() => {
           setServerId(null);
           setShowRegisterModal(false);

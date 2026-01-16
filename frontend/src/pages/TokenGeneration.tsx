@@ -1,7 +1,8 @@
 import { CheckIcon, ClipboardIcon, ExclamationTriangleIcon, KeyIcon } from '@heroicons/react/24/outline';
-import axios from 'axios';
 import type React from 'react';
 import { useState } from 'react';
+
+import SERVICES from '@/services';
 import { useAuth } from '../contexts/AuthContext';
 
 const TokenGeneration: React.FC = () => {
@@ -52,16 +53,11 @@ const TokenGeneration: React.FC = () => {
         }
       }
       // If using current scopes, we don't need to set requested_scopes - it will default to user's current scopes
+      const response = await SERVICES.AUTH.getToken(requestData);
 
-      const response = await axios.post('/api/tokens/generate', requestData, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.data.success) {
-        setGeneratedToken(response.data.token_data.access_token);
-        setTokenDetails(response.data);
+      if (response.success) {
+        setGeneratedToken(response.token_data.access_token);
+        setTokenDetails(response);
       } else {
         throw new Error('Token generation failed');
       }

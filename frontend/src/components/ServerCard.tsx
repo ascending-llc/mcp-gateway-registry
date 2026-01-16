@@ -10,51 +10,26 @@ import {
 import type React from 'react';
 import { useCallback, useState } from 'react';
 
+import type { ServerInfo } from '@/contexts/ServerContext';
 import SERVICES from '@/services';
 import { SERVER_CONNECTION } from '@/services/mcp/type';
+import type { Tool } from '@/services/server/type';
 import UTILS from '@/utils';
 import ServerAuthorizationModal from './ServerAuthorizationModal';
 import ServerConfigModal from './ServerConfigModal';
-import StarRatingWidget from './StarRatingWidget';
-
-export interface Server {
-  id: string;
-  name: string;
-  path: string;
-  description?: string;
-  official?: boolean;
-  enabled: boolean;
-  tags?: string[];
-  last_checked_time?: string;
-  usersCount?: number;
-  num_stars?: number; // Average rating from backend
-  rating_details?: Array<{ user: string; rating: number }>;
-  status?: 'active' | 'inactive' | 'error';
-  num_tools?: number;
-  connection_state: SERVER_CONNECTION;
-  requires_oauth: boolean;
-}
 
 interface ServerCardProps {
-  server: Server;
+  server: ServerInfo;
   canModify?: boolean;
-  authToken?: string | null;
-  onEdit?: (server: Server) => void;
+  onEdit?: (server: ServerInfo) => void;
   onShowToast: (message: string, type: 'success' | 'error') => void;
-  onServerUpdate: (id: string, updates: Partial<Server>) => void;
+  onServerUpdate: (id: string, updates: Partial<ServerInfo>) => void;
   onRefreshSuccess?: () => void;
-}
-
-interface Tool {
-  name: string;
-  description?: string;
-  inputSchema?: any;
 }
 
 const ServerCard: React.FC<ServerCardProps> = ({
   server,
   canModify,
-  authToken,
   onEdit,
   onShowToast,
   onServerUpdate,
@@ -71,14 +46,15 @@ const ServerCard: React.FC<ServerCardProps> = ({
   const { connection_state, requires_oauth } = server || {};
 
   const getAuthStatusIcon = useCallback(() => {
-    if (requires_oauth && connection_state === SERVER_CONNECTION.CONNECTED) {
+    if (!requires_oauth) return null;
+    if (connection_state === SERVER_CONNECTION.CONNECTED) {
       return <CheckCircleIcon className='h-4 w-4 text-green-500' />;
     }
-    if (requires_oauth && connection_state === SERVER_CONNECTION.DISCONNECTED) {
+    if (connection_state === SERVER_CONNECTION.DISCONNECTED) {
       return <KeyIcon className='h-4 w-4 text-amber-500' />;
     }
-    if (requires_oauth && connection_state === SERVER_CONNECTION.CONNECTING) {
-      return <KeyIcon className='h-4 w-4 text-amber-500' />;
+    if (connection_state === SERVER_CONNECTION.CONNECTING) {
+      return <div className='animate-spin rounded-full h-3 w-3 border-b-2 border-slate-200' />;
     }
   }, [requires_oauth, connection_state]);
 
@@ -108,10 +84,10 @@ const ServerCard: React.FC<ServerCardProps> = ({
       const result = await SERVICES.SERVER.refreshServerHealth(server.id);
 
       if (onServerUpdate && result) {
-        const updates: Partial<Server> = {
+        const updates: Partial<ServerInfo> = {
           status: result.status,
-          last_checked_time: result.last_checked,
-          num_tools: result.num_tools,
+          last_checked_time: result.lastConnected,
+          num_tools: result.numTools,
         };
         onServerUpdate(server.id, updates);
       } else if (onRefreshSuccess) {
@@ -207,11 +183,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
                   onClick={() => setShowApiKeyDialog(true)}
                   title='Manage API keys'
                 >
-                  {connection_state === SERVER_CONNECTION.CONNECTING ? (
-                    <div className='animate-spin rounded-full h-3 w-3 border-b-2 border-slate-200' />
-                  ) : (
-                    getAuthStatusIcon()
-                  )}
+                  {getAuthStatusIcon()}
                 </button>
               )}
               {canModify && (
@@ -263,20 +235,6 @@ const ServerCard: React.FC<ServerCardProps> = ({
         {/* Stats */}
         <div className='px-4 pb-3'>
           <div className='grid grid-cols-2 gap-2'>
-            <StarRatingWidget
-              resourceType='servers'
-              path={server.path}
-              initialRating={server.num_stars || 0}
-              initialCount={server.rating_details?.length || 0}
-              authToken={authToken}
-              onShowToast={onShowToast}
-              onRatingUpdate={newRating => {
-                // Update local server rating when user submits rating
-                if (onServerUpdate) {
-                  onServerUpdate(server.id, { num_stars: newRating });
-                }
-              }}
-            />
             <div className='flex items-center gap-1.5'>
               {(server.num_tools || 0) > 0 ? (
                 <button

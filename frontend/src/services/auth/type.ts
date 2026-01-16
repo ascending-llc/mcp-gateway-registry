@@ -1,3 +1,14 @@
+export type GET_AUTH_ME_RESPONSE = {
+  username: string;
+  email: string;
+  scopes: string[];
+  groups: string[];
+  auth_method: string;
+  provider: string;
+  can_modify_servers: boolean;
+  is_admin: boolean;
+};
+
 export type GET_TOKEN_REQUEST = {
   expires_in_hours: number;
   description: string;

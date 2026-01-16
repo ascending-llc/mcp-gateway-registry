@@ -8,12 +8,12 @@ export interface AuthenticationConfig {
   // API Key specific props
   source?: ApiKeySource;
   key?: string;
-  auth_type?: ApiKeyHeaderFormat;
+  authorization_type?: ApiKeyHeaderFormat;
   custom_header?: string;
   // OAuth specific props
   client_id?: string;
   client_secret?: string;
-  authorize_url?: string;
+  authorization_url?: string;
   token_url?: string;
   scope?: string;
 }
@@ -23,7 +23,7 @@ export interface ServerConfig {
   description: string;
   path: string;
   url: string;
-  supported_transports: ServerType;
+  type: ServerType;
   authConfig: AuthenticationConfig;
   trustServer: boolean;
   tags?: string[];
