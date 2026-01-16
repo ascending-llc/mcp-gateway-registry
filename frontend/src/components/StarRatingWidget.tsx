@@ -45,10 +45,8 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
 
   // Load current rating on mount
   useEffect(() => {
-    if (authToken) {
-      loadCurrentRating();
-    }
-  }, [resourceType, path, authToken]);
+    loadCurrentRating();
+  }, [resourceType, path]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -69,6 +67,7 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
 
   const loadCurrentRating = async () => {
     try {
+      // Build headers - use Bearer token if provided, otherwise rely on cookies
       const headers = authToken ? { Authorization: `Bearer ${authToken}` } : undefined;
       // Both servers and agents now use consistent path parameter pattern
       const url = `/api/${resourceType}${path}/rating`;
@@ -77,11 +76,11 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
       setAverageRating(response.data.num_stars);
       setRatingCount(response.data.rating_details.length);
 
-      // Find current user's rating
-      // Extract username from JWT token (simplified - in production use proper JWT parsing)
-      if (authToken && response.data.rating_details) {
-        // For now, check if any rating exists - in production, match by username
-        const userRating = response.data.rating_details[0]; // Simplified
+      // Find current user's rating from the rating details
+      // The backend should return rating_details for the current authenticated user
+      if (response.data.rating_details && response.data.rating_details.length > 0) {
+        // For now, use the first rating (should be the current user's rating from backend)
+        const userRating = response.data.rating_details[0];
         if (userRating) {
           setCurrentUserRating(userRating.rating);
           setSelectedRating(userRating.rating);
@@ -94,19 +93,20 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
 
   const handleSubmitRating = async () => {
     console.log('handleSubmitRating called', { selectedRating, authToken: !!authToken });
-    if (!selectedRating || !authToken) {
-      console.log('Validation failed - no rating or token');
+    if (!selectedRating) {
+      console.log('Validation failed - no rating selected');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const headers = { Authorization: `Bearer ${authToken}` };
+      // Build headers - use Bearer token if provided, otherwise rely on cookies
+      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : undefined;
       // Both servers and agents now use consistent path parameter pattern
       const url = `/api/${resourceType}${path}/rate`;
       console.log('Submitting rating to:', url, { rating: selectedRating });
 
-      const response = await axios.post(url, { rating: selectedRating }, { headers });
+      const response = await axios.post(url, { rating: selectedRating }, headers ? { headers } : undefined);
 
       console.log('Rating response:', response.data);
       const newAverageRating = response.data.average_rating;
@@ -207,7 +207,6 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
                   fill='none'
                   stroke='currentColor'
                   viewBox='0 0 24 24'
-                  aria-hidden='true'
                 >
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 13l4 4L19 7' />
                 </svg>
@@ -227,7 +226,7 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
             // Loading State
             <div className='text-center py-6'>
               <div className='inline-flex items-center justify-center w-12 h-12 mb-3'>
-                <svg className='animate-spin h-8 w-8 text-cyan-600' fill='none' viewBox='0 0 24 24' aria-hidden='true'>
+                <svg className='animate-spin h-8 w-8 text-cyan-600' fill='none' viewBox='0 0 24 24'>
                   <circle className='opacity-25' cx='12' cy='12' r='10' stroke='currentColor' strokeWidth='4'></circle>
                   <path
                     className='opacity-75'
@@ -288,7 +287,7 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
                 >
                   {currentUserRating ? 'Update Rating' : 'Submit Rating'}
                   {selectedRating && (
-                    <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24' aria-hidden='true'>
+                    <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
                       <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 13l4 4L19 7' />
                     </svg>
                   )}

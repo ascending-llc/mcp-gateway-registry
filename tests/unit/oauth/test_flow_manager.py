@@ -69,24 +69,24 @@ class TestFlowStateManager:
         manager = FlowStateManager()
         server_name = "test-server"
         user_id = "test-user"
-        authorize_url = "https://example.com/oauth/authorize"
+        authorization_url = "https://example.com/oauth/authorize"
         code_verifier = "test-verifier"
         flow_id = "test-flow-id"
         oauth_config = {
             "client_id": "test-client-id",
             "client_secret": "test-secret",
-            "scopes": ["read", "write"],
-            "authorize_url": authorize_url,
+            "scope": ["read", "write"],
+            "authorization_url": authorization_url,
             "token_url": "https://example.com/oauth/token"
         }
         
         metadata = manager.create_flow_metadata(
-            server_name, user_id, authorize_url, code_verifier, oauth_config, flow_id
+            server_name, user_id, authorization_url, code_verifier, oauth_config, flow_id
         )
         
         assert metadata.server_name == server_name
         assert metadata.user_id == user_id
-        assert metadata.authorize_url == authorize_url
+        assert metadata.authorization_url == authorization_url
         assert metadata.code_verifier == code_verifier
         assert metadata.client_info.client_id == "test-client-id"
 
@@ -101,8 +101,8 @@ class TestFlowStateManager:
         # Create minimal metadata
         oauth_config = {
             "client_id": "test-client",
-            "scopes": ["read"],
-            "authorize_url": "https://example.com/auth",
+            "scope": ["read"],
+            "authorization_url": "https://example.com/auth",
             "token_url": "https://example.com/token"
         }
         metadata = manager.create_flow_metadata(
@@ -128,8 +128,8 @@ class TestFlowStateManager:
         # Create flow
         oauth_config = {
             "client_id": "test-client",
-            "scopes": ["read"],
-            "authorize_url": "https://example.com/auth",
+            "scope": ["read"],
+            "authorization_url": "https://example.com/auth",
             "token_url": "https://example.com/token"
         }
         metadata = manager.create_flow_metadata(
@@ -165,8 +165,8 @@ class TestFlowStateManager:
         # Create flow
         oauth_config = {
             "client_id": "test-client",
-            "scopes": ["read"],
-            "authorize_url": "https://example.com/auth",
+            "scope": ["read"],
+            "authorization_url": "https://example.com/auth",
             "token_url": "https://example.com/token"
         }
         metadata = manager.create_flow_metadata(
@@ -193,8 +193,8 @@ class TestFlowStateManager:
         # Create flow
         oauth_config = {
             "client_id": "test-client",
-            "scopes": ["read"],
-            "authorize_url": "https://example.com/auth",
+            "scope": ["read"],
+            "authorization_url": "https://example.com/auth",
             "token_url": "https://example.com/token"
         }
         metadata = manager.create_flow_metadata(
@@ -245,8 +245,8 @@ class TestFlowStateManager:
         # Create flow
         oauth_config = {
             "client_id": "test-client",
-            "scopes": ["read"],
-            "authorize_url": "https://example.com/auth",
+            "scope": ["read"],
+            "authorization_url": "https://example.com/auth",
             "token_url": "https://example.com/token"
         }
         metadata = manager.create_flow_metadata(
@@ -284,8 +284,8 @@ class TestFlowStateManager:
         # Create flow
         oauth_config = {
             "client_id": "test-client",
-            "scopes": ["read"],
-            "authorize_url": "https://example.com/auth",
+            "scope": ["read"],
+            "authorization_url": "https://example.com/auth",
             "token_url": "https://example.com/token"
         }
         metadata = manager.create_flow_metadata(
@@ -314,8 +314,8 @@ class TestFlowStateManager:
         # Create flow
         oauth_config = {
             "client_id": "test-client",
-            "scopes": ["read"],
-            "authorize_url": "https://example.com/auth",
+            "scope": ["read"],
+            "authorization_url": "https://example.com/auth",
             "token_url": "https://example.com/token"
         }
         metadata = manager.create_flow_metadata(
@@ -343,8 +343,8 @@ class TestFlowStateManager:
         # Create multiple flows for same user/server
         oauth_config = {
             "client_id": "test-client",
-            "scopes": ["read"],
-            "authorize_url": "https://example.com/auth",
+            "scope": ["read"],
+            "authorization_url": "https://example.com/auth",
             "token_url": "https://example.com/token"
         }
         
@@ -433,8 +433,8 @@ class TestFlowStateManagerIntegration:
         code_verifier = "test-verifier"
         oauth_config = {
             "client_id": "test-client",
-            "scopes": ["read"],
-            "authorize_url": "https://example.com/auth",
+            "scope": ["read"],
+            "authorization_url": "https://example.com/auth",
             "token_url": "https://example.com/token"
         }
         metadata = manager.create_flow_metadata(

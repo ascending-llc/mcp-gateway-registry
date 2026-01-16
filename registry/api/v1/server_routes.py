@@ -88,12 +88,13 @@ def apply_connection_status_to_server(
 ) -> None:
     """Apply connection status to server response"""
     if status:
-        server_item.connection_state = status.get("connection_state")
-        server_item.requires_oauth = status.get("requires_oauth", False)
+        server_item.connectionState = status.get("connection_state")
+        server_item.requiresOAuth = status.get("requiresOAuth", False)
         server_item.error = status.get("error")
     else:
-        server_item.connection_state = ConnectionState.ERROR.value
-        server_item.requires_oauth = fallback_requires_oauth
+        # Fallback if status not found
+        server_item.connectionState = ConnectionState.ERROR.value
+        server_item.requiresOAuth = fallback_requires_oauth
         server_item.error = "Connection status not available"
 
 
@@ -169,40 +170,32 @@ async def list_servers(
             per_page=per_page,
             user_id=None,
         )
-
+        
         # Convert to response models
         server_items = [convert_to_list_item(server) for server in servers]
-
+        
         # Get connection status and enrich server items
-        connection_status = {}
         try:
             user_id = user_context.get('user_id')
             mcp_service = await get_mcp_service()
-
+            
             connection_status = await get_servers_connection_status(
                 user_id=user_id,
                 servers=servers,
                 mcp_service=mcp_service
             )
-
             # Enrich each server item with connection status
             for server_item in server_items:
                 server_name = server_item.serverName
                 status = connection_status.get(server_name)
                 apply_connection_status_to_server(server_item, status, fallback_requires_oauth=False)
-
-            # Trigger background reconnection for disconnected OAuth servers
-            asyncio.create_task(
-                _reconnect_oauth_servers(
-                    user_id, mcp_service, servers, connection_status
-                )
-            )
+        
         except Exception as e:
             logger.warning(f"Error getting connection status: {e}", exc_info=True)
 
         # Calculate pagination metadata
         total_pages = math.ceil(total / per_page) if total > 0 else 0
-
+        
         return ServerListResponse(
             servers=server_items,
             pagination=PaginationMetadata(
@@ -212,7 +205,7 @@ async def list_servers(
                 total_pages=total_pages,
             )
         )
-
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -230,7 +223,7 @@ async def list_servers(
     description="Get system-wide statistics (Admin only). Includes server, token, and user metrics using MongoDB aggregation pipelines.",
 )
 async def get_server_stats(
-        user_context: dict = Depends(get_user_context),
+    user_context: dict = Depends(get_user_context),
 ):
     """
     Get system-wide statistics.
@@ -257,12 +250,12 @@ async def get_server_stats(
                     "message": "Admin access required to view system statistics",
                 }
             )
-
+        
         # Get statistics from service
         stats = await server_service_v1.get_stats()
-
+        
         return ServerStatsResponse(**stats)
-
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -280,8 +273,8 @@ async def get_server_stats(
     description="Get detailed information about a specific server, including connection status",
 )
 async def get_server(
-        server_id: str,
-        user_context: dict = Depends(get_user_context),
+    server_id: str,
+    user_context: dict = Depends(get_user_context),
 ):
     """Get detailed information about a server by ID, including connection status"""
     try:
@@ -289,13 +282,13 @@ async def get_server(
             server_id=server_id,
             user_id=None,
         )
-
+        
         if not server:
             raise HTTPException(
                 status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Server not found"
             )
-
+        
         # Convert to response model
         server_detail = convert_to_detail(server)
         try:
@@ -307,16 +300,16 @@ async def get_server(
                 mcp_service=mcp_service
             )
             apply_connection_status_to_server(server_detail, server_status)
-
+        
         except Exception as e:
             logger.warning(f"Error getting connection status for {server.serverName}: {e}", exc_info=True)
             # Apply error state with custom error message
             fallback_requires_oauth = server.config.get("requires_oauth", False)
             apply_connection_status_to_server(server_detail, None, fallback_requires_oauth)
             server_detail.error = f"Failed to get connection status: {str(e)}"
-
+        
         return server_detail
-
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -335,20 +328,20 @@ async def get_server(
     description="Register a new MCP server",
 )
 async def create_server(
-        data: ServerCreateRequest,
-        user_context: dict = Depends(get_user_context),
+    data: ServerCreateRequest,
+    user_context: dict = Depends(get_user_context),
 ):
     """Create a new server"""
     try:
         user_id = user_context.get("username")
-
+        
         server = await server_service_v1.create_server(
             data=data,
             user_id=user_id,
         )
-
+        
         return convert_to_create_response(server)
-
+        
     except ValueError as e:
         # Business logic errors (e.g., duplicate path, duplicate tags)
         raise HTTPException(
@@ -375,25 +368,25 @@ async def create_server(
     description="Update server configuration",
 )
 async def update_server(
-        server_id: str,
-        data: ServerUpdateRequest,
-        user_context: dict = Depends(get_user_context),
+    server_id: str,
+    data: ServerUpdateRequest,
+    user_context: dict = Depends(get_user_context),
 ):
     """Update a server with partial data"""
     try:
         user_id = user_context.get("username")
-
+        
         server = await server_service_v1.update_server(
             server_id=server_id,
             data=data,
             user_id=user_id,
         )
-
+        
         return convert_to_update_response(server)
-
+        
     except ValueError as e:
         error_msg = str(e)
-
+        
         # Check if server not found
         if "not found" in error_msg.lower():
             raise HTTPException(
@@ -403,13 +396,13 @@ async def update_server(
                     "message": error_msg,
                 }
             )
-
+        
         # Other validation errors
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=error_msg
         )
-
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -427,8 +420,8 @@ async def update_server(
     description="Delete a server",
 )
 async def delete_server(
-        server_id: str,
-        user_context: dict = Depends(get_user_context),
+    server_id: str,
+    user_context: dict = Depends(get_user_context),
 ):
     """Delete a server"""
     try:
@@ -436,12 +429,12 @@ async def delete_server(
             server_id=server_id,
             user_id=None,
         )
-
+        
         return None  # 204 No Content
-
+        
     except ValueError as e:
         error_msg = str(e)
-
+        
         # Not found
         if "not found" in error_msg.lower():
             raise HTTPException(
@@ -451,12 +444,12 @@ async def delete_server(
                     "message": "Server not found",
                 }
             )
-
+        
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=error_msg
         )
-
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -474,9 +467,9 @@ async def delete_server(
     description="Enable or disable a server",
 )
 async def toggle_server(
-        server_id: str,
-        data: ServerToggleRequest,
-        user_context: dict = Depends(get_user_context),
+    server_id: str,
+    data: ServerToggleRequest,
+    user_context: dict = Depends(get_user_context),
 ):
     """Toggle server enabled/disabled status"""
     try:
@@ -485,12 +478,12 @@ async def toggle_server(
             enabled=data.enabled,
             user_id=None,
         )
-
+        
         return convert_to_toggle_response(server, data.enabled)
-
+        
     except ValueError as e:
         error_msg = str(e)
-
+        
         if "not found" in error_msg.lower():
             raise HTTPException(
                 status_code=http_status.HTTP_404_NOT_FOUND,
@@ -499,12 +492,12 @@ async def toggle_server(
                     "message": "Server not found",
                 }
             )
-
+        
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=error_msg
         )
-
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -522,8 +515,8 @@ async def toggle_server(
     description="Get the list of tools provided by a server",
 )
 async def get_server_tools(
-        server_id: str,
-        user_context: dict = Depends(get_user_context),
+    server_id: str,
+    user_context: dict = Depends(get_user_context),
 ):
     """Get server tools"""
     try:
@@ -531,12 +524,12 @@ async def get_server_tools(
             server_id=server_id,
             user_id=None,
         )
-
+        
         return convert_to_tools_response(server, tools)
-
+        
     except ValueError as e:
         error_msg = str(e)
-
+        
         if "access denied" in error_msg.lower():
             raise HTTPException(
                 status_code=http_status.HTTP_403_FORBIDDEN,
@@ -545,7 +538,7 @@ async def get_server_tools(
                     "message": error_msg,
                 }
             )
-
+        
         if "not found" in error_msg.lower():
             raise HTTPException(
                 status_code=http_status.HTTP_404_NOT_FOUND,
@@ -554,12 +547,12 @@ async def get_server_tools(
                     "message": "Server not found",
                 }
             )
-
+        
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=error_msg
         )
-
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -577,8 +570,8 @@ async def get_server_tools(
     description="Refresh server health status and check connectivity",
 )
 async def refresh_server_health(
-        server_id: str,
-        user_context: dict = Depends(get_user_context),
+    server_id: str,
+    user_context: dict = Depends(get_user_context),
 ):
     """Refresh server health status"""
     try:
@@ -586,14 +579,14 @@ async def refresh_server_health(
             server_id=server_id,
             user_id=None,
         )
-
+        
         server = health_info["server"]
-
+        
         return convert_to_health_response(server, health_info)
-
+        
     except ValueError as e:
         error_msg = str(e)
-
+        
         if "not found" in error_msg.lower():
             raise HTTPException(
                 status_code=http_status.HTTP_404_NOT_FOUND,
@@ -602,12 +595,12 @@ async def refresh_server_health(
                     "message": "Server not found",
                 }
             )
-
+        
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=error_msg
         )
-
+        
     except HTTPException:
         raise
     except Exception as e:

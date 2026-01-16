@@ -6,6 +6,7 @@ from typing import Dict, Optional, Any, List
 
 from registry.config.redis_config import init_redis_connection
 from registry.auth.oauth.redis_flow_storage import RedisFlowStorage
+from registry.auth.oauth.oauth_utils import parse_scope, scope_to_string
 from registry.models.oauth_models import (
     OAuthFlow, 
     MCPOAuthFlowMetadata, 
@@ -95,7 +96,7 @@ class FlowStateManager:
             self,
             server_name: str,
             user_id: str,
-            authorize_url: str,
+            authorization_url: str,
             code_verifier: str,
             oauth_config: Dict[str, Any],
             flow_id: str
@@ -108,7 +109,7 @@ class FlowStateManager:
         return MCPOAuthFlowMetadata(
             server_name=server_name,
             user_id=user_id,
-            authorize_url=authorize_url,
+            authorization_url=authorization_url,
             state=state,
             code_verifier=code_verifier,
             client_info=self._create_client_info(oauth_config, server_name),
@@ -336,12 +337,7 @@ class FlowStateManager:
 
         redirect_uris = [redirect_uri] if redirect_uri else []
 
-        # Get scopes from config (can be list or string)
-        scopes = oauth_config.get("scopes", [])
-        if isinstance(scopes, list):
-            scope_string = " ".join(scopes)
-        else:
-            scope_string = scopes
+        scope_string = scope_to_string(oauth_config.get("scope"))
         logger.debug(f"Client info - redirect_uris: {redirect_uris}, scopes: {scope_string}")
         return OAuthClientInformation(
             client_id=oauth_config.get("client_id", ""),
@@ -355,13 +351,10 @@ class FlowStateManager:
         """
         Build OAuth metadata from server configuration
         """
-        auth_url = oauth_config.get("authorize_url") or oauth_config.get("auth_url", "")
+        auth_url = oauth_config.get("authorization_url", "")
         token_url = oauth_config.get("token_url", "")
 
-        # Get scopes (ensure it's a list)
-        scopes = oauth_config.get("scopes", [])
-        if isinstance(scopes, str):
-            scopes = [s.strip() for s in scopes.split()]
+        scopes = parse_scope(oauth_config.get("scope"), default=[])
 
         return OAuthMetadata(
             authorization_endpoint=auth_url,

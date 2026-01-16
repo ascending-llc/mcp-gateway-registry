@@ -189,7 +189,6 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
       path: data.path,
       url: data.url,
       tags: data.tags,
-      enabled: true,
       type: data.type,
     };
     switch (data.authConfig.type) {
@@ -200,9 +199,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
           ...baseData,
           apiKey: {
             source: data.authConfig.source,
-            ...(data.authConfig.source !== 'user' && data.authConfig.key
-              ? { key: data.authConfig.key }
-              : {}),
+            ...(data.authConfig.source !== 'user' && data.authConfig.key ? { key: data.authConfig.key } : {}),
             authorization_type: data.authConfig.authorization_type,
             ...(data.authConfig.authorization_type === 'custom' && data.authConfig.custom_header
               ? { custom_header: data.authConfig.custom_header }
