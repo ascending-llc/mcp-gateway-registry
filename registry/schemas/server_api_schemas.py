@@ -170,8 +170,7 @@ class ServerListItemResponse(BaseModel):
     createdAt: datetime
     updatedAt: datetime
     # Connection status fields
-    connection_state: Optional[str] = Field(default=None, description="Connection state")
-    requires_oauth: Optional[bool] = Field(default=None, description="Whether server requires OAuth")
+    connectionState: Optional[str] = Field(default=None, description="Connection state")
     error: Optional[str] = Field(default=None, description="Error message if connection failed")
     
     class ConfigDict:
@@ -228,8 +227,7 @@ class ServerDetailResponse(BaseModel):
     createdAt: datetime
     updatedAt: datetime
 
-    connection_state: Optional[str] = Field(default=None, description="Connection state")
-    requires_oauth: Optional[bool] = Field(default=None, description="Whether server requires OAuth")
+    connectionState: Optional[str] = Field(default=None, description="Connection state")
     error: Optional[str] = Field(default=None, description="Error message if connection failed")
     
     class ConfigDict:
