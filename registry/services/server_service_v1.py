@@ -922,15 +922,18 @@ class ServerServiceV1:
         self,
         server: MCPServerDocument,
         include_capabilities: bool = True,
+        user_id: Optional[str] = None,
     ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[Dict[str, Any]], Optional[str]]:
         """
         Consolidated method to retrieve tools and optionally capabilities from a server.
         
         This replaces both retrieve_tools_from_server() and retrieve_tools_and_capabilities_from_server().
+        Handles both apiKey and OAuth authentication automatically.
         
         Args:
             server: Server document
             include_capabilities: Whether to retrieve capabilities (default: True)
+            user_id: User ID for OAuth token retrieval (required for OAuth servers)
             
         Returns:
             Tuple of (tool_list, capabilities_dict, error_message)
@@ -944,6 +947,12 @@ class ServerServiceV1:
         if not url:
             return None, None, "No URL configured"
         
+        # Check if server requires OAuth
+        has_oauth = config.get("oauth") is not None
+        
+        if has_oauth and not user_id:
+            return None, None, "OAuth server requires user_id for token retrieval"
+        
         try:
             # Decrypt apiKey if present (key field is encrypted in MongoDB)
             from registry.utils.crypto_utils import decrypt_auth_fields
@@ -951,6 +960,25 @@ class ServerServiceV1:
             
             # Build server_info using helper function with decrypted config
             server_info = _build_server_info_for_mcp_client(decrypted_config, server.tags)
+            
+            # Add OAuth token to headers if server requires OAuth
+            if has_oauth and user_id:
+                from registry.services.v1.token_service import token_service
+                
+                oauth_tokens = await token_service.get_oauth_tokens(user_id, server.serverName)
+                
+                if not oauth_tokens or not oauth_tokens.access_token:
+                    return None, None, f"No OAuth tokens found for user {user_id}"
+                
+                # Add OAuth Authorization header to server_info
+                if "headers" not in server_info:
+                    server_info["headers"] = []
+                
+                server_info["headers"].append(
+                    {"Authorization": f"Bearer {oauth_tokens.access_token}"}
+                )
+                
+                logger.info(f"Added OAuth token to request for {server.serverName}")
             
             logger.info(f"Retrieving {'tools and capabilities' if include_capabilities else 'tools only'} from {url} for server {server.serverName}")
             
@@ -1112,6 +1140,7 @@ class ServerServiceV1:
     async def retrieve_tools_and_capabilities_from_server(
         self,
         server: MCPServerDocument,
+        user_id: Optional[str] = None,
     ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[Dict[str, Any]], Optional[str]]:
         """
         Retrieve tools and capabilities from a server using MCP client (legacy method).
@@ -1123,6 +1152,7 @@ class ServerServiceV1:
         
         Args:
             server: Server document
+            user_id: User ID for OAuth token retrieval (required for OAuth servers)
             
         Returns:
             Tuple of (tool_list, capabilities_dict, error_message)
@@ -1130,7 +1160,7 @@ class ServerServiceV1:
             - If failed, returns (None, None, error_message)
             - Empty results are acceptable for registration
         """
-        return await self.retrieve_from_server(server, include_capabilities=True)
+        return await self.retrieve_from_server(server, include_capabilities=True, user_id=user_id)
     
     async def refresh_server_health(
         self,
@@ -1164,7 +1194,7 @@ class ServerServiceV1:
         
         # Use the same validation as registration: retrieve tools and capabilities
         # This is a more comprehensive health check than just HTTP GET
-        tool_list, capabilities, tool_error = await self.retrieve_tools_and_capabilities_from_server(server)
+        tool_list, capabilities, tool_error = await self.retrieve_tools_and_capabilities_from_server(server, user_id)
         
         if tool_list is None or capabilities is None:
             # Health check failed - cannot retrieve capabilities

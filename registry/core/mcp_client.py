@@ -294,33 +294,38 @@ async def _get_from_streamable_http(
     
     logger.info(f"Connecting to MCP server: {mcp_url}")
     
+    # Import httpx for custom client
+    import httpx
+    
     try:
-        async with streamable_http_client(url=mcp_url, headers=headers) as (read, write, get_session_id):
-            async with ClientSession(read, write) as session:
-                init_result = await asyncio.wait_for(
-                    session.initialize(), 
-                    timeout=mcp_config.INIT_TIMEOUT
-                )
-                tools_response = await asyncio.wait_for(
-                    session.list_tools(), 
-                    timeout=mcp_config.TOOLS_TIMEOUT
-                )
-                
-                # Extract capabilities if requested
-                capabilities = None
-                if include_capabilities:
-                    capabilities = _extract_capabilities(init_result)
+        # Create custom httpx client with headers
+        async with httpx.AsyncClient(headers=headers, timeout=30.0) as http_client:
+            async with streamable_http_client(url=mcp_url, http_client=http_client) as (read, write, get_session_id):
+                async with ClientSession(read, write) as session:
+                    init_result = await asyncio.wait_for(
+                        session.initialize(), 
+                        timeout=mcp_config.INIT_TIMEOUT
+                    )
+                    tools_response = await asyncio.wait_for(
+                        session.list_tools(), 
+                        timeout=mcp_config.TOOLS_TIMEOUT
+                    )
                     
-                    # If capabilities required but not retrieved, consider it a failed server
-                    if not capabilities:
-                        logger.error(f"Failed to retrieve capabilities from {mcp_url} - server considered failed")
-                        return None, None
+                    # Extract capabilities if requested
+                    capabilities = None
+                    if include_capabilities:
+                        capabilities = _extract_capabilities(init_result)
+                        
+                        # If capabilities required but not retrieved, consider it a failed server
+                        if not capabilities:
+                            logger.error(f"Failed to retrieve capabilities from {mcp_url} - server considered failed")
+                            return None, None
+                        
+                        logger.info(f"Successfully retrieved capabilities from {mcp_url}: {capabilities}")
                     
-                    logger.info(f"Successfully retrieved capabilities from {mcp_url}: {capabilities}")
-                
-                # Extract tool details
-                tool_list = _extract_tool_details(tools_response)
-                return tool_list, capabilities
+                    # Extract tool details
+                    tool_list = _extract_tool_details(tools_response)
+                    return tool_list, capabilities
                 
     except asyncio.TimeoutError:
         logger.error(f"Timeout connecting to {mcp_url}")
@@ -372,6 +377,9 @@ async def _get_from_sse(
     
     logger.info(f"Connecting to SSE server: {mcp_server_url}")
 
+    # Import httpx for custom client and monkey patching
+    import httpx
+
     try:
         # Monkey patch httpx to fix mount path issues (legacy SSE support)
         original_request = httpx.AsyncClient.request
@@ -386,32 +394,34 @@ async def _get_from_sse(
         httpx.AsyncClient.request = patched_request
         
         try:
-            async with sse_client(mcp_server_url, headers=headers) as (read, write):
-                async with ClientSession(read, write, sampling_callback=None) as session:
-                    init_result = await asyncio.wait_for(
-                        session.initialize(), 
-                        timeout=mcp_config.INIT_TIMEOUT
-                    )
-                    tools_response = await asyncio.wait_for(
-                        session.list_tools(), 
-                        timeout=mcp_config.TOOLS_TIMEOUT
-                    )
-                    
-                    # Extract capabilities if requested
-                    capabilities = None
-                    if include_capabilities:
-                        capabilities = _extract_capabilities(init_result)
+            # Create custom httpx client with headers
+            async with httpx.AsyncClient(headers=headers, timeout=30.0) as http_client:
+                async with sse_client(mcp_server_url, http_client=http_client) as (read, write):
+                    async with ClientSession(read, write, sampling_callback=None) as session:
+                        init_result = await asyncio.wait_for(
+                            session.initialize(), 
+                            timeout=mcp_config.INIT_TIMEOUT
+                        )
+                        tools_response = await asyncio.wait_for(
+                            session.list_tools(), 
+                            timeout=mcp_config.TOOLS_TIMEOUT
+                        )
                         
-                        # If capabilities required but not retrieved, consider it a failed server
-                        if not capabilities:
-                            logger.error(f"Failed to retrieve capabilities from {mcp_server_url} - server considered failed")
-                            return None, None
+                        # Extract capabilities if requested
+                        capabilities = None
+                        if include_capabilities:
+                            capabilities = _extract_capabilities(init_result)
+                            
+                            # If capabilities required but not retrieved, consider it a failed server
+                            if not capabilities:
+                                logger.error(f"Failed to retrieve capabilities from {mcp_server_url} - server considered failed")
+                                return None, None
+                            
+                            logger.info(f"Successfully retrieved capabilities from {mcp_server_url}: {capabilities}")
                         
-                        logger.info(f"Successfully retrieved capabilities from {mcp_server_url}: {capabilities}")
-                    
-                    # Extract tool details
-                    tool_list = _extract_tool_details(tools_response)
-                    return tool_list, capabilities
+                        # Extract tool details
+                        tool_list = _extract_tool_details(tools_response)
+                        return tool_list, capabilities
         finally:
             httpx.AsyncClient.request = original_request
             
