@@ -24,6 +24,8 @@ def parse_scope(scope: Union[str, List[str], None], default: List[str] = None) -
         else:
             return [s.strip() for s in scope.split() if s.strip()]
 
+    return []
+
 
 def scope_to_string(scope: Union[str, List[str], None]) -> str:
     """
