@@ -87,13 +87,13 @@ def apply_connection_status_to_server(
     Apply connection status to a server response object.
     """
     if status:
-        server_item.connection_state = status.get("connection_state")
-        server_item.requires_oauth = status.get("requires_oauth", False)
+        server_item.connectionState = status.get("connection_state")
+        server_item.requiresOAuth = status.get("requiresOAuth", False)
         server_item.error = status.get("error")
     else:
         # Fallback if status not found
-        server_item.connection_state = ConnectionState.ERROR.value
-        server_item.requires_oauth = fallback_requires_oauth
+        server_item.connectionState = ConnectionState.ERROR.value
+        server_item.requiresOAuth = fallback_requires_oauth
         server_item.error = "Connection status not available"
 
 
