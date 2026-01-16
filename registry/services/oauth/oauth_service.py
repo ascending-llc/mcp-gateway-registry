@@ -1,5 +1,5 @@
 from typing import Dict, Optional, Any, Tuple
-from registry.auth.oauth import OAuthHttpClient, get_flow_state_manager, FlowStateManager
+from registry.auth.oauth import OAuthHttpClient, get_flow_state_manager, FlowStateManager, parse_scope
 from registry.models.oauth_models import OAuthTokens
 from registry.schemas.enums import OAuthFlowStatus
 from registry.utils.utils import generate_code_verifier, generate_code_challenge
@@ -63,11 +63,11 @@ class MCPOAuthService:
             flow_id = self.flow_manager.generate_flow_id(user_id, server_name)
 
             # Create OAuth flow metadata (using flow_id as state)
-            authorize_url = oauth_config.get("authorization_url")
+            authorization_url = oauth_config.get("authorization_url")
             flow_metadata = self.flow_manager.create_flow_metadata(
                 server_name=server_name,
                 user_id=user_id,
-                authorize_url=authorize_url,
+                authorization_url=authorization_url,
                 code_verifier=code_verifier,
                 oauth_config=oauth_config,
                 flow_id=flow_id
@@ -279,9 +279,7 @@ class MCPOAuthService:
 
             # Persist refreshed tokens to database with metadata
             auth_url = oauth_config.get("authorization_url")
-            scopes = oauth_config.get("scope", [])
-            if isinstance(scopes, str):
-                scopes = [s.strip() for s in scopes.split()]
+            scopes = parse_scope(oauth_config.get("scope"), default=[])
             
             metadata = {
                 "authorization_endpoint": auth_url,
