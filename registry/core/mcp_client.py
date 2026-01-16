@@ -85,14 +85,28 @@ def _build_headers_for_server(server_info: dict = None) -> Dict[str, str]:
         if key_value:
             if authorization_type == "bearer":
                 # Bearer token: Authorization: Bearer <key>
+                # Ignore custom_header field for bearer type
                 headers['Authorization'] = f'Bearer {key_value}'
                 logger.debug("Added Bearer authentication header")
             elif authorization_type == "basic":
-                # Basic auth: Authorization: Basic <key>
-                headers['Authorization'] = f'Basic {key_value}'
-                logger.debug("Added Basic authentication header")
+                # Basic auth: Authorization: Basic <base64(key)>
+                # Ignore custom_header field for basic type
+                # Note: The key should already be base64 encoded or in username:password format
+                import base64
+                # Check if key is already base64 encoded by trying to decode it
+                try:
+                    base64.b64decode(key_value, validate=True)
+                    # Already base64 encoded
+                    headers['Authorization'] = f'Basic {key_value}'
+                    logger.debug("Added Basic authentication header (pre-encoded)")
+                except Exception:
+                    # Not base64 encoded, encode it
+                    encoded_key = base64.b64encode(key_value.encode()).decode()
+                    headers['Authorization'] = f'Basic {encoded_key}'
+                    logger.debug("Added Basic authentication header (auto-encoded)")
             elif authorization_type == "custom":
                 # Custom header: use custom_header field as header name
+                # Only use custom_header when authorization_type is "custom"
                 custom_header = api_key_config.get("custom_header")
                 if custom_header:
                     headers[custom_header] = key_value
@@ -682,9 +696,11 @@ async def get_oauth_metadata_from_server(base_url: str, server_info: dict = None
         f"{base_domain}/.well-known/oauth-authorization-server",
     ]
     
-    # Build headers
-    headers = _build_headers_for_server(server_info)
-    headers['Accept'] = 'application/json'
+    # Build basic headers (no authentication needed for OAuth metadata)
+    headers = {
+        'Accept': 'application/json',
+        'User-Agent': 'MCP-Gateway-Registry/1.0'
+    }
     
     import httpx
     
