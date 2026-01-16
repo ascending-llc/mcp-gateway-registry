@@ -168,7 +168,7 @@ class OAuthHttpClient:
                 data["client_secret"] = oauth_config["client_secret"]
 
             # Add scope if exists (handle both list and string formats)
-            scopes = oauth_config.get("scopes")
+            scopes = oauth_config.get("scope")
             if scopes:
                 if isinstance(scopes, list):
                     data["scope"] = " ".join(scopes)

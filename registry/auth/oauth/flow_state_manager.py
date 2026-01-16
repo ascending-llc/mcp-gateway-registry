@@ -337,11 +337,9 @@ class FlowStateManager:
         redirect_uris = [redirect_uri] if redirect_uri else []
 
         # Get scopes from config (can be list or string)
-        scopes = oauth_config.get("scopes", [])
+        scopes = oauth_config.get("scope", [])
         if isinstance(scopes, list):
             scope_string = " ".join(scopes)
-        else:
-            scope_string = scopes
         logger.debug(f"Client info - redirect_uris: {redirect_uris}, scopes: {scope_string}")
         return OAuthClientInformation(
             client_id=oauth_config.get("client_id", ""),
@@ -355,11 +353,10 @@ class FlowStateManager:
         """
         Build OAuth metadata from server configuration
         """
-        auth_url = oauth_config.get("authorize_url") or oauth_config.get("auth_url", "")
-        token_url = oauth_config.get("token_url", "")
+        auth_url = oauth_config.get("authorization_url")
+        token_url = oauth_config.get("token_url")
 
-        # Get scopes (ensure it's a list)
-        scopes = oauth_config.get("scopes", [])
+        scopes = oauth_config.get("scope", [])
         if isinstance(scopes, str):
             scopes = [s.strip() for s in scopes.split()]
 
