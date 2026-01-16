@@ -61,14 +61,14 @@ class MCPConnectionService:
                 # 为不需要 OAuth 的服务器创建应用级连接
                 for server in servers:
                     # 检查服务器是否需要 OAuth
-                    if not server.config.requiresOAuth:
+                    if not server.config.get("requiresOAuth"):
                         self.app_connections[server.serverName] = MCPConnection(
                             server_name=server.serverName,
                             connection_state=ConnectionState.CONNECTED,
                             details={
                                 "type": "app_connection",
                                 "server_id": str(server.id),
-                                "url": server.url,
+                                "url": server.config.get("url"),
                                 "config": server.config,
                                 "created_at": time.time(),
                                 "last_health_check": time.time()

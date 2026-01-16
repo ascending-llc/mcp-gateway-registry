@@ -166,7 +166,7 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
         num_stars: serverInfo.numStars || 0,
         is_python: serverInfo.is_python || false,
         requires_oauth: serverInfo.requiresOAuth,
-        connection_state: serverInfo.connection_state,
+        connection_state: serverInfo.connectionState,
       };
     });
   };
