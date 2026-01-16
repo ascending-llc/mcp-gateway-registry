@@ -280,7 +280,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 scopes=scopes,
                 auth_method='jwt',
                 provider='jwt',
-                auth_source="jwt_auth",
+                auth_source="jwt_auth"
             )
         except Exception as e:
             logger.debug(f"JWT auth failed: {e}")
@@ -372,7 +372,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             'scopes': scopes,
             'auth_method': auth_method,
             'provider': provider,
-            'accessible_servers': accessible_servers, 
+            'accessible_servers': accessible_servers,
             'accessible_services': accessible_services,
             'accessible_agents': accessible_agents,
             'ui_permissions': ui_permissions,

@@ -58,7 +58,7 @@ class ACLService:
 					resourceId=resource_id,
 					permBits=perm_bits,
 					roleId=role_id,
-					# grantedBy=granted_by,
+					grantedBy=principal_id,
 					grantedAt=now,
 					createdAt=now,
 					updatedAt=now
@@ -67,6 +67,7 @@ class ACLService:
 				return new_entry
 		except Exception as e: 
 			logger.error(f"Error finding/inserting ACL entry: {e}")
+			raise ValueError(f"Error granting ACL permissions: {e}")
 	
 	async def check_permission(
 		self,

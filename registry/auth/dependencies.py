@@ -8,7 +8,7 @@ from fastapi import Depends, HTTPException, status, Cookie, Header, Request
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 from packages.models._generated.user import IUser
 from registry.services.access_control_service import acl_service
-
+from registry.services.constants import PrincipalType, ResourceType
 from registry.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -68,9 +68,9 @@ async def get_user_acl_permissions(request: Request) -> Dict[str, Any]:
 
         principal_id = getattr(user_obj, "id")
         accessible_servers_for_user = await acl_service.list_accessible_resources(
-            principal_type="user", 
+            principal_type=PrincipalType.USER, 
             principal_id=principal_id,
-            resource_type="mcpServer",
+            resource_type=ResourceType.MCPSERVER
         )
 
         resource_ids = {entry.resourceId for entry in accessible_servers_for_user}
@@ -761,9 +761,6 @@ def ui_permission_required(permission: str, service_name: str = None):
         return user_context
 
     return check_permission
-
-# Without fine -grained permissions
-# CurrentUser: type[dict[str, Any]] = Annotated[Dict[str, Any], Depends(get_current_user_by_mid)]
 
 # With fine -grained permissions
 CurrentUser: type[dict[str, Any]] = Annotated[Dict[str, Any], Depends(get_user_acl_permissions)]

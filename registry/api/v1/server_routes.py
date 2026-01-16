@@ -20,6 +20,7 @@ from registry.services.oauth.connection_status_service import (
     get_single_server_connection_status
 )
 from registry.services.access_control_service import acl_service
+from registry.services.constants import PrincipalType, ResourceType
 from registry.schemas.enums import ConnectionState
 from registry.schemas.server_api_schemas import (
     ServerListResponse,
@@ -54,7 +55,6 @@ router = APIRouter()
 
 def get_user_context(user_context: CurrentUser):
     """Extract user context from authentication dependency"""
-    logger.info(f'User context: {user_context}')
     return user_context
 
 def check_admin_permission(user_context: dict) -> bool:
@@ -249,7 +249,7 @@ async def get_server(
     try:
         server_id = PydanticObjectId(server_id)
         if server_id not in user_context.get("acl_accessible_servers"):
-            logger.warning(f"Access denied to server Id {server_id} by ACL")
+            logger.error(f"Access denied to server Id {server_id} by ACL")
             raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Access denied by ACL")
         
         server = await server_service_v1.get_server_by_id(
@@ -319,9 +319,9 @@ async def create_server(
             raise ValueError("Failed to create server")
         
         acl_entry = await acl_service.grant_permission(
-            principal_type="user",
+            principal_type=PrincipalType.USER,
             principal_id=user_context.get("user_id"),
-            resource_type="mcpServer",
+            resource_type=ResourceType.MCPSERVER,
             resource_id=server.id,
             granted_by=user_context.get("user_id"),
             perm_bits=15  # Apply full permissions for owners
@@ -449,7 +449,7 @@ async def delete_server(
 
         if did_server_delete: 
             num_acl_entries_deleted = await acl_service.remove_all_permissions(
-                resource_type="mcpServer",
+                resource_type=ResourceType.MCPSERVER,
                 resource_id=PydanticObjectId(server_id),
             )
             logger.info(f"Removed {num_acl_entries_deleted} ACL permissions for server Id {server_id}")
@@ -563,7 +563,7 @@ async def get_server_tools(
     """Get server tools"""
     try:
         if server_id not in user_context.get("acl_accessible_servers"):
-            logger.warning(f"Access denied to server Id {server_id} by ACL")
+            logger.error(f"Access denied to server Id {server_id} by ACL")
             raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Access denied by ACL")
         
         server, tools = await server_service_v1.get_server_tools(

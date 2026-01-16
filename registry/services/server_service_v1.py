@@ -298,7 +298,7 @@ class ServerServiceV1:
         accessible_server_ids: List[PydanticObjectId] = [],
     ) -> Tuple[List[MCPServerDocument], int]:
         """
-        List servers with filtering and pagination
+        List servers with filtering and pagination.
         
         Args:
             query: Free-text search across server_name, description, tags
@@ -318,6 +318,7 @@ class ServerServiceV1:
         
         # Build filter conditions
         filters = []
+
         # Scope filter
         if scope:
             filters.append({"config.scope": scope})
@@ -347,6 +348,7 @@ class ServerServiceV1:
             query_filter = {"$and": filters} if len(filters) > 1 else filters[0]
         else:
             query_filter = {}
+
         # Execute query with pagination
         total = await MCPServerDocument.find(query_filter).count()
         servers = await MCPServerDocument.find(query_filter)\
@@ -433,7 +435,6 @@ class ServerServiceV1:
         num_tools = len(tool_functions) if tool_functions else 0
         
         # Get or create author user reference
-        # TODO: User_id is set to the users PydanticObjectId; Update to author = user_id
         author = await IUser.find_one({"id": user_id})
         if not author:
             # Create a minimal user record if not exists

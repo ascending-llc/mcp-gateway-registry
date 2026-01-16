@@ -149,12 +149,12 @@ gh auth login
 cd /path/to/mcp-gateway-registry/packages
 
 # Import ALL schemas from a specific release version (recommended)
-uv run import-schemas --tag asc0.4.0 \
+uv run import-schemas --tag asc0.4.2 \
   --output-dir ./models \
   --token $(gh auth token)
 
 # Or import specific files only
-uv run import-schemas --tag asc0.4.0 \
+uv run import-schemas --tag asc0.4.2 \
   --files user.json token.json mcpServer.json session.json \
   --output-dir ./models \
   --token $(gh auth token)
