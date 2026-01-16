@@ -34,7 +34,7 @@ const OAuthCallback: React.FC = () => {
 
   const goToDashboard = useCallback(() => {
     navigate('/');
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     const timer = setInterval(() => {

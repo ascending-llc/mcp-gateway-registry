@@ -106,7 +106,7 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
       const url = `/api/${resourceType}${path}/rate`;
       console.log('Submitting rating to:', url, { rating: selectedRating });
 
-      const response = await axios.post(url, { rating: selectedRating }, headers ? { headers } : undefined);
+      const response = await axios.post(url, { rating: selectedRating }, { ...(headers && { headers }) });
 
       console.log('Rating response:', response.data);
       const newAverageRating = response.data.average_rating;
@@ -226,7 +226,12 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
             // Loading State
             <div className='text-center py-6'>
               <div className='inline-flex items-center justify-center w-12 h-12 mb-3'>
-                <svg className='animate-spin h-8 w-8 text-cyan-600' fill='none' viewBox='0 0 24 24'>
+                <svg
+                  className='animate-spin h-8 w-8 text-cyan-600'
+                  fill='none'
+                  viewBox='0 0 24 24'
+                  aria-hidden='true'
+                >
                   <circle className='opacity-25' cx='12' cy='12' r='10' stroke='currentColor' strokeWidth='4'></circle>
                   <path
                     className='opacity-75'
