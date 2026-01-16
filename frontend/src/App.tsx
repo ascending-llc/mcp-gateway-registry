@@ -18,7 +18,14 @@ function App() {
           <Router basename={getBasePath() || '/'}>
             <Routes>
               <Route path='/login' element={<Login />} />
-              <Route path='/oauth/callback' element={<OAuthCallback />} />
+              <Route
+                path='/oauth-callback'
+                element={
+                  <ProtectedRoute>
+                    <OAuthCallback />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path='/'
                 element={
