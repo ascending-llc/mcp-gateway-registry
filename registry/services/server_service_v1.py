@@ -68,27 +68,20 @@ def _build_server_info_for_mcp_client(config: Dict[str, Any], tags: List[str]) -
     return server_info
 
 
-def _detect_oauth_requirement(oauth_field: Optional[Any], authentication_field: Optional[Dict[str, Any]]) -> bool:
+def _detect_oauth_requirement(oauth_field: Optional[Any]) -> bool:
     """
-    Detect if OAuth is required based on oauth and authentication fields.
+    Detect if OAuth is required based on oauth field.
     
     This helper eliminates duplicate OAuth detection logic in _build_config_from_request
     and _update_config_from_request.
     
     Args:
         oauth_field: OAuth configuration object (if present)
-        authentication_field: Authentication configuration dict (if present)
         
     Returns:
         True if OAuth is required, False otherwise
     """
-    if oauth_field is not None:
-        return True
-    
-    if authentication_field is not None and authentication_field.get('authorize_url'):
-        return True
-    
-    return False
+    return oauth_field is not None
 
 
 def _get_current_utc_time() -> datetime:
@@ -154,11 +147,11 @@ def _build_config_from_request(data: ServerCreateRequest, server_name: str = Non
     are stored at root level in MongoDB, NOT in config.
     Config stores MCP-specific configuration only (title, description, type, url, oauth, apiKey, etc.)
     """
-    # Determine if OAuth is required based on oauth/authentication fields
-    # If oauth field is provided OR authentication has OAuth URLs, set requiresOAuth to True
-    requires_oauth = _detect_oauth_requirement(data.oauth, data.authentication)
+    # Determine if OAuth is required based on oauth field
+    # If oauth field is provided, set requiresOAuth to True
+    requires_oauth = _detect_oauth_requirement(getattr(data, 'oauth', None))
     # If user explicitly sets requires_oauth, respect that (for backward compatibility)
-    if data.requires_oauth:
+    if getattr(data, 'requires_oauth', False):
         requires_oauth = True
     
     # Build MCP-specific configuration (stored in config object)
@@ -266,12 +259,12 @@ def _update_config_from_request(config: Dict[str, Any], data: ServerUpdateReques
     if enabled_value is not None:
         config['enabled'] = enabled_value
     
-    # Update requiresOAuth based on oauth/authentication fields
-    # If oauth or authentication is being updated, recalculate requiresOAuth
-    if 'oauth' in update_dict or 'authentication' in update_dict:
-        requires_oauth = _detect_oauth_requirement(config.get('oauth'), config.get('authentication'))
+    # Update requiresOAuth based on oauth field
+    # If oauth is being updated, recalculate requiresOAuth
+    if 'oauth' in update_dict:
+        requires_oauth = _detect_oauth_requirement(config.get('oauth'))
         config['requiresOAuth'] = requires_oauth
-        logger.info(f"Updated requiresOAuth to {requires_oauth} based on oauth/authentication fields")
+        logger.info(f"Updated requiresOAuth to {requires_oauth} based on oauth field")
     
     # If tool_list is updated, regenerate toolFunctions and tools string
     if 'tool_list' in update_dict and update_dict['tool_list'] is not None:
