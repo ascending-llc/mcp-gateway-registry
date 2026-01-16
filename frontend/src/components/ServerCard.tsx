@@ -6,11 +6,13 @@ import {
   KeyIcon,
   PencilIcon,
   WrenchScrewdriverIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import type React from 'react';
 import { useCallback, useState } from 'react';
 
 import type { ServerInfo } from '@/contexts/ServerContext';
+import { useServer } from '@/contexts/ServerContext';
 import SERVICES from '@/services';
 import { SERVER_CONNECTION } from '@/services/mcp/type';
 import type { Tool } from '@/services/server/type';
@@ -35,6 +37,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
   onServerUpdate,
   onRefreshSuccess,
 }) => {
+  const { cancelPolling, refreshServerStatus } = useServer();
   const [loading, setLoading] = useState(false);
   const [tools, setTools] = useState<Tool[]>([]);
   const [loadingTools, setLoadingTools] = useState(false);
@@ -54,9 +57,32 @@ const ServerCard: React.FC<ServerCardProps> = ({
       return <KeyIcon className='h-4 w-4 text-amber-500' />;
     }
     if (connection_state === SERVER_CONNECTION.CONNECTING) {
-      return <div className='animate-spin rounded-full h-3 w-3 border-b-2 border-slate-200' />;
+      return (
+        <>
+          <div className='group-hover/auth:hidden animate-spin rounded-full h-3 w-3 border-b-2 border-slate-200' />
+          <XMarkIcon className='hidden group-hover/auth:block h-4 w-4 text-red-500' />
+        </>
+      );
     }
   }, [requires_oauth, connection_state]);
+
+  const handleAuth = async () => {
+    if (connection_state === SERVER_CONNECTION.CONNECTING) {
+      try {
+        const result = await SERVICES.MCP.cancelAuth(server.name);
+        if (result.success) {
+          onShowToast?.(result?.message || 'OAuth flow cancelled', 'success');
+          refreshServerStatus();
+        } else {
+          onShowToast?.(result?.message || 'Unknown error', 'error');
+        }
+      } finally {
+        cancelPolling?.(server.id);
+      }
+    } else {
+      setShowApiKeyDialog(true);
+    }
+  };
 
   const handleViewTools = useCallback(async () => {
     if (loadingTools) return;
@@ -179,8 +205,8 @@ const ServerCard: React.FC<ServerCardProps> = ({
             <div className='flex gap-1'>
               {requires_oauth && (
                 <button
-                  className='p-1.5 text-amber-500 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-all duration-200 flex-shrink-0'
-                  onClick={() => setShowApiKeyDialog(true)}
+                  className='group/auth p-1.5 text-amber-500 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-all duration-200 flex-shrink-0'
+                  onClick={handleAuth}
                   title='Manage API keys'
                 >
                   {getAuthStatusIcon()}
@@ -404,6 +430,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
       {showApiKeyDialog && (
         <ServerAuthorizationModal
           name={server.name}
+          serverId={server.id}
           status={connection_state}
           showApiKeyDialog={showApiKeyDialog}
           setShowApiKeyDialog={setShowApiKeyDialog}
