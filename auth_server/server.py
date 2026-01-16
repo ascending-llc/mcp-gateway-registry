@@ -1154,7 +1154,7 @@ async def validate_request(request: Request):
             'method': validation_result.get('method') or '',
             'groups': validation_result.get('groups', []),
             'server_name': server_name,
-            'tool_name': tool_name,
+            'tool_name': tool_name
         }
         logger.info(f"Full validation result: {json.dumps(validation_result, indent=2)}")
         logger.info(f"Response data being sent: {json.dumps(response_data, indent=2)}")
