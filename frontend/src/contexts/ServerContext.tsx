@@ -77,10 +77,11 @@ interface ServerContextType {
 
   // Actions
   refreshData: (notLoading?: boolean) => Promise<void>;
+  handleServerUpdate: (id: string, updates: Partial<ServerInfo>) => void;
   toggleAgent: (path: string, enabled: boolean) => Promise<void>;
   refreshServerStatus: () => Promise<ServerInfo[]>;
-  getServerStatusByPolling: (serverNames: string) => void;
-  cancelPolling: (serverName?: string) => void;
+  getServerStatusByPolling: (serverId: string) => void;
+  cancelPolling: (serverId?: string) => void;
 }
 
 const ServerContext = createContext<ServerContextType | undefined>(undefined);
@@ -145,6 +146,10 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     if (healthStatus.includes('unhealthy') || healthStatus.includes('error') || healthStatus.includes('timeout'))
       return 'unhealthy';
     return 'unknown';
+  };
+
+  const handleServerUpdate = (id: string, updates: Partial<ServerInfo>) => {
+    setServers(prevServers => prevServers.map(server => (server.id === id ? { ...server, ...updates } : server)));
   };
 
   const constructServerData = (serversList: Server[]): ServerInfo[] => {
@@ -259,31 +264,36 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
   }, []);
 
   const getServerStatusByPolling = useCallback(
-    async (serverName: string) => {
+    async (serverId: string) => {
       // Clear existing timeout for this specific server if it exists
-      if (timeoutRef.current[serverName]) {
-        clearTimeout(timeoutRef.current[serverName]);
-        delete timeoutRef.current[serverName];
+      if (timeoutRef.current[serverId]) {
+        clearTimeout(timeoutRef.current[serverId]);
+        delete timeoutRef.current[serverId];
       }
 
-      console.log(`🔄 Polling server status for`, serverName);
-      const initialState = servers.find((server: ServerInfo) => server.name === serverName)?.connection_state;
+      console.log(`🔄 Polling server status for`, serverId);
+      const initialState = servers.find((server: ServerInfo) => server.id === serverId)?.connection_state;
 
       const poll = async () => {
         const latestStatusData: ServerInfo[] = await fetchServerStatus();
-        const currentState = latestStatusData.find(
-          (server: ServerInfo) => server.name === serverName,
-        )?.connection_state;
+        const currentState = latestStatusData.find((server: ServerInfo) => server.id === serverId)?.connection_state;
 
         if (currentState === initialState || currentState === SERVER_CONNECTION.CONNECTING) {
-          timeoutRef.current[serverName] = setTimeout(() => {
+          timeoutRef.current[serverId] = setTimeout(() => {
             poll();
           }, 5000);
         } else {
           // Stop polling for this server
-          if (timeoutRef.current[serverName]) {
-            clearTimeout(timeoutRef.current[serverName]);
-            delete timeoutRef.current[serverName];
+          if (timeoutRef.current[serverId]) {
+            clearTimeout(timeoutRef.current[serverId]);
+            delete timeoutRef.current[serverId];
+
+            const result = await SERVICES.SERVER.refreshServerHealth(serverId);
+            handleServerUpdate(serverId, {
+              last_checked_time: result.lastConnected,
+              num_tools: result.numTools,
+              status: result.status || 'unknown',
+            });
           }
         }
       };
@@ -293,11 +303,11 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     [fetchServerStatus, servers],
   );
 
-  const cancelPolling = useCallback((serverName?: string) => {
-    if (serverName) {
-      if (timeoutRef.current[serverName]) {
-        clearTimeout(timeoutRef.current[serverName]);
-        delete timeoutRef.current[serverName];
+  const cancelPolling = useCallback((serverId?: string) => {
+    if (serverId) {
+      if (timeoutRef.current[serverId]) {
+        clearTimeout(timeoutRef.current[serverId]);
+        delete timeoutRef.current[serverId];
       }
     } else {
       Object.values(timeoutRef.current).forEach(timeout => {
@@ -321,6 +331,7 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     loading,
     error,
     refreshData,
+    handleServerUpdate,
     toggleAgent,
     refreshServerStatus: fetchServerStatus,
     getServerStatusByPolling,

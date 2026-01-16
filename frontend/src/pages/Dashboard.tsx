@@ -74,8 +74,18 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
 };
 
 const Dashboard: React.FC = () => {
-  const { servers, agents, viewMode, setViewMode, activeFilter, loading, error, refreshData, setServers, setAgents } =
-    useServer();
+  const {
+    servers,
+    agents,
+    viewMode,
+    setViewMode,
+    activeFilter,
+    loading,
+    error,
+    refreshData,
+    handleServerUpdate,
+    setAgents,
+  } = useServer();
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [committedQuery, setCommittedQuery] = useState('');
@@ -358,10 +368,6 @@ const Dashboard: React.FC = () => {
 
       showToast(error.response?.data?.detail || 'Failed to toggle agent', 'error');
     }
-  };
-
-  const handleServerUpdate = (id: string, updates: Partial<ServerInfo>) => {
-    setServers(prevServers => prevServers.map(server => (server.id === id ? { ...server, ...updates } : server)));
   };
 
   const handleRegisterServer = useCallback(() => {

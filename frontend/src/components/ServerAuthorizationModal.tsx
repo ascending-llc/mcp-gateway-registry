@@ -9,6 +9,7 @@ import { SERVER_CONNECTION } from '../services/mcp/type';
 
 interface ServerAuthorizationModalProps {
   name: string;
+  serverId: string;
   status: SERVER_CONNECTION | undefined;
   showApiKeyDialog: boolean;
   setShowApiKeyDialog: (show: boolean) => void;
@@ -17,6 +18,7 @@ interface ServerAuthorizationModalProps {
 
 const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
   name,
+  serverId,
   status,
   showApiKeyDialog,
   setShowApiKeyDialog,
@@ -30,7 +32,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
   const isAuthenticated = status === SERVER_CONNECTION.CONNECTED;
 
   const onCancel = () => {
-    cancelPolling?.(name);
+    cancelPolling?.(serverId);
     refreshServerStatus?.();
     setShowApiKeyDialog(false);
   };
@@ -71,7 +73,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
         const result = await SERVICES.MCP.getOauthInitiate(name);
         if (result?.authorization_url) {
           window.open(result.authorization_url, '_blank');
-          getServerStatusByPolling?.(name);
+          getServerStatusByPolling?.(serverId);
           setShowApiKeyDialog(false);
         } else {
           onShowToast?.('Failed to get auth URL', 'error');
