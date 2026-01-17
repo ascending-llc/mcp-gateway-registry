@@ -163,7 +163,9 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-
+    profiles:
+        - full
+        - dev
   # Auth service (separate and scalable)
   auth-server:
     build:
@@ -268,18 +270,7 @@ services:
       - .env
     profiles:
       - full
-
-  # Real Server Fake Tools MCP Server
-  realserverfaketools-server:
-    build:
-      context: servers/realserverfaketools
-      dockerfile: ../../docker/Dockerfile.mcp-server
-    environment:
-      - PORT=8002
-    ports:
-      - "8002:8002"
-    restart: unless-stopped
-
+      - dev
   weaviate:
     image: cr.weaviate.io/semitechnologies/weaviate:latest
     restart: on-failure:0
@@ -299,22 +290,6 @@ services:
     profiles:
       - full
       - dev
-
-  # Atlassian MCP Server
-  atlassian-server:
-    image: ghcr.io/sooperset/mcp-atlassian:latest
-    environment:
-      - ATLASSIAN_OAUTH_ENABLE=true
-      - MCP_VERY_VERBOSE=true
-      - MCP_LOGGING_STDOUT=true
-    ports:
-      - "8005:8005"
-    volumes:
-      - $HOME/.mcp-atlassian:/home/app/.mcp-atlassian
-    command: --transport streamable-http --port 8005
-    restart: unless-stopped
-    profiles:
-      - full
 
   # SQLite container for metrics database
   metrics-db:
