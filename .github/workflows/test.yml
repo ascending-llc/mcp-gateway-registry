@@ -149,9 +149,7 @@ jobs:
         echo "| Code Quality | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         
-        if [[ "${{ needs.test.result }}" == "success" && "${{ needs.lint
-        
-        if [[ "${{ needs.test.result }}" == "success" && "${{ needs.lint.result }}" == "success" && "${{ needs.domain-tests.result }}" == "success" ]]; then
+        if [[ "${{ needs.test.result }}" == "success" && "${{ needs.lint.result }}" == "success" ]]; then
           echo "✅ All tests passed! 🎉" >> $GITHUB_STEP_SUMMARY
         else
           echo "❌ Some tests failed. Please check the logs." >> $GITHUB_STEP_SUMMARY
