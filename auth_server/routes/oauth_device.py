@@ -33,6 +33,9 @@ user_codes_storage = {}    # user_code -> device_code (for quick lookup)
 # Client registration storage (in-memory, consider using Redis or DB in production)
 registered_clients: Dict[str, Dict[str, Any]] = {}
 
+# Authorization code storage for OAuth 2.0 Authorization Code Flow
+authorization_codes_storage: Dict[str, Dict[str, Any]] = {}  # code -> {token_data, user_info, client_id, expires_at, used, code_challenge}
+
 # Device flow configuration
 DEVICE_CODE_EXPIRY_SECONDS = 600  # 10 minutes
 DEVICE_CODE_POLL_INTERVAL = 5     # Poll every 5 seconds
@@ -244,6 +247,24 @@ def cleanup_expired_device_codes():
     
     if expired_codes:
         logger.info(f"Cleaned up {len(expired_codes)} expired device codes")
+
+
+def cleanup_expired_authorization_codes():
+    """
+    Remove expired authorization codes from in-memory storage.
+    Called periodically during authorization code operations.
+    """
+    current_time = int(time.time())
+    expired_codes = [
+        code for code, data in authorization_codes_storage.items()
+        if current_time > data["expires_at"]
+    ]
+    
+    for code in expired_codes:
+        del authorization_codes_storage[code]
+    
+    if expired_codes:
+        logger.info(f"Cleaned up {len(expired_codes)} expired authorization codes")
 
 
 @router.post("/oauth2/device/code", response_model=DeviceCodeResponse)
@@ -473,7 +494,7 @@ async def approve_device(user_code: str = Form(...)):
     
     # TODO: In production, validate user session and generate proper token
     # For now, generate a simple token
-    from ..server import SECRET_KEY, JWT_ISSUER, JWT_AUDIENCE
+    from ..server import SECRET_KEY, JWT_ISSUER, JWT_AUDIENCE, JWT_SELF_SIGNED_KID
     
     token_payload = {
         "iss": JWT_ISSUER,
@@ -486,7 +507,13 @@ async def approve_device(user_code: str = Form(...)):
         "token_use": "access"
     }
     
-    access_token = jwt.encode(token_payload, SECRET_KEY, algorithm="HS256")
+    headers = {
+        "kid": JWT_SELF_SIGNED_KID,
+        "typ": "JWT",
+        "alg": "HS256"
+    }
+    
+    access_token = jwt.encode(token_payload, SECRET_KEY, algorithm="HS256", headers=headers)
     
     device_data["status"] = "approved"
     device_data["token"] = access_token
@@ -500,66 +527,226 @@ async def approve_device(user_code: str = Form(...)):
 @router.post("/oauth2/token", response_model=DeviceTokenResponse)
 async def device_token(
     grant_type: str = Form(...),
-    device_code: str = Form(...),
-    client_id: str = Form(...)
+    device_code: str = Form(None),
+    client_id: str = Form(...),
+    code: str = Form(None),
+    code_verifier: str = Form(None),
+    redirect_uri: str = Form(None)
 ):
     """
-    OAuth 2.0 Token Endpoint for Device Flow (RFC 8628).
+    OAuth 2.0 Token Endpoint (RFC 6749, RFC 8628).
     
-    Client polls this endpoint to check if the user has approved the device.
+    Supports:
+    - Device Flow (RFC 8628): grant_type=urn:ietf:params:oauth:grant-type:device_code
+    - Authorization Code Flow (RFC 6749 + PKCE RFC 7636): grant_type=authorization_code
+    
+    For Device Flow:
+        - device_code: Required
+        - client_id: Required
+        
+    For Authorization Code Flow:
+        - code: Required authorization code
+        - client_id: Required
+        - redirect_uri: Required (must match the one used in /oauth2/login)
+        - code_verifier: Required for PKCE validation
     """
-    cleanup_expired_device_codes()
     
-    if grant_type != "urn:ietf:params:oauth:grant-type:device_code":
+    # Handle Authorization Code Flow (RFC 6749)
+    if grant_type == "authorization_code":
+        cleanup_expired_authorization_codes()
+        
+        if not code or not redirect_uri:
+            raise HTTPException(
+                status_code=400,
+                detail="invalid_request: code and redirect_uri are required"
+            )
+        
+        # Retrieve authorization code data
+        auth_code_data = authorization_codes_storage.get(code)
+        
+        if not auth_code_data:
+            raise HTTPException(
+                status_code=400,
+                detail="invalid_grant: authorization code not found or expired"
+            )
+        
+        # Check if already used
+        if auth_code_data.get("used"):
+            logger.warning(f"Authorization code reuse attempt by client {client_id}")
+            # Delete the code to prevent further attempts
+            del authorization_codes_storage[code]
+            raise HTTPException(
+                status_code=400,
+                detail="invalid_grant: authorization code already used"
+            )
+        
+        # Validate client_id
+        if auth_code_data["client_id"] != client_id:
+            raise HTTPException(
+                status_code=400,
+                detail="invalid_client: client_id mismatch"
+            )
+        
+        # Validate redirect_uri
+        if auth_code_data["redirect_uri"] != redirect_uri:
+            raise HTTPException(
+                status_code=400,
+                detail="invalid_grant: redirect_uri mismatch"
+            )
+        
+        # Check expiration
+        current_time = int(time.time())
+        if current_time > auth_code_data["expires_at"]:
+            del authorization_codes_storage[code]
+            raise HTTPException(
+                status_code=400,
+                detail="invalid_grant: authorization code expired"
+            )
+        
+        # Validate PKCE code_verifier if code_challenge was provided
+        code_challenge = auth_code_data.get("code_challenge")
+        if code_challenge:
+            if not code_verifier:
+                raise HTTPException(
+                    status_code=400,
+                    detail="invalid_request: code_verifier required for PKCE"
+                )
+            
+            # Validate code_verifier against code_challenge
+            import hashlib
+            import base64
+            
+            code_challenge_method = auth_code_data.get("code_challenge_method", "S256")
+            
+            if code_challenge_method == "S256":
+                # SHA256 hash of code_verifier
+                computed_challenge = base64.urlsafe_b64encode(
+                    hashlib.sha256(code_verifier.encode()).digest()
+                ).decode().rstrip("=")
+            elif code_challenge_method == "plain":
+                computed_challenge = code_verifier
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="invalid_request: unsupported code_challenge_method"
+                )
+            
+            if computed_challenge != code_challenge:
+                logger.warning(f"PKCE validation failed for client {client_id}")
+                raise HTTPException(
+                    status_code=400,
+                    detail="invalid_grant: code_verifier validation failed"
+                )
+            
+            logger.info(f"PKCE validation successful for client {client_id}")
+        
+        # Mark code as used
+        auth_code_data["used"] = True
+        
+        # Generate access token using stored user info
+        user_info = auth_code_data["user_info"]
+        from ..server import SECRET_KEY, JWT_ISSUER, JWT_AUDIENCE, JWT_SELF_SIGNED_KID
+        
+        token_payload = {
+            "iss": JWT_ISSUER,
+            "aud": JWT_AUDIENCE,
+            "sub": user_info["username"],
+            "client_id": client_id,
+            "scope": " ".join(user_info.get("groups", [])),  # Map groups to scopes
+            "groups": user_info.get("groups", []),
+            "exp": current_time + 3600,  # 1 hour
+            "iat": current_time,
+            "token_use": "access"
+        }
+        
+        headers = {
+            "kid": JWT_SELF_SIGNED_KID,
+            "typ": "JWT",
+            "alg": "HS256"
+        }
+        
+        access_token = jwt.encode(token_payload, SECRET_KEY, algorithm="HS256", headers=headers)
+        
+        # Clean up used authorization code after successful token generation
+        del authorization_codes_storage[code]
+        
+        logger.info(f"Issued access token via authorization code flow for client {client_id}, user {user_info['username']}")
+        
+        return DeviceTokenResponse(
+            access_token=access_token,
+            token_type="Bearer",
+            expires_in=3600,
+            scope=" ".join(user_info.get("groups", []))
+        )
+    
+    # Handle Device Flow (RFC 8628)
+    elif grant_type == "urn:ietf:params:oauth:grant-type:device_code":
+        cleanup_expired_device_codes()
+        
+        if not device_code:
+            raise HTTPException(
+                status_code=400,
+                detail="invalid_request: device_code is required"
+            )
+        cleanup_expired_device_codes()
+        
+        if not device_code:
+            raise HTTPException(
+                status_code=400,
+                detail="invalid_request: device_code is required"
+            )
+        
+        device_data = device_codes_storage.get(device_code)
+        
+        if not device_data:
+            raise HTTPException(
+                status_code=400,
+                detail="invalid_grant"
+            )
+        
+        if device_data["client_id"] != client_id:
+            raise HTTPException(
+                status_code=400,
+                detail="invalid_client"
+            )
+        
+        current_time = int(time.time())
+        if current_time > device_data["expires_at"]:
+            raise HTTPException(
+                status_code=400,
+                detail="expired_token"
+            )
+        
+        if device_data["status"] == "pending":
+            raise HTTPException(
+                status_code=400,
+                detail="authorization_pending"
+            )
+        
+        if device_data["status"] == "denied":
+            raise HTTPException(
+                status_code=400,
+                detail="access_denied"
+            )
+        
+        if device_data["status"] == "approved" and device_data["token"]:
+            logger.info(f"Token issued for device_code: {device_code}")
+            
+            return DeviceTokenResponse(
+                access_token=device_data["token"],
+                token_type="Bearer",
+                expires_in=3600,
+                scope=device_data["scope"]
+            )
+        
+        raise HTTPException(
+            status_code=500,
+            detail="server_error"
+        )
+    
+    # Unsupported grant type
+    else:
         raise HTTPException(
             status_code=400,
             detail="unsupported_grant_type"
         )
-    
-    device_data = device_codes_storage.get(device_code)
-    
-    if not device_data:
-        raise HTTPException(
-            status_code=400,
-            detail="invalid_grant"
-        )
-    
-    if device_data["client_id"] != client_id:
-        raise HTTPException(
-            status_code=400,
-            detail="invalid_client"
-        )
-    
-    current_time = int(time.time())
-    if current_time > device_data["expires_at"]:
-        raise HTTPException(
-            status_code=400,
-            detail="expired_token"
-        )
-    
-    if device_data["status"] == "pending":
-        raise HTTPException(
-            status_code=400,
-            detail="authorization_pending"
-        )
-    
-    if device_data["status"] == "denied":
-        raise HTTPException(
-            status_code=400,
-            detail="access_denied"
-        )
-    
-    if device_data["status"] == "approved" and device_data["token"]:
-        logger.info(f"Token issued for device_code: {device_code}")
-        
-        return DeviceTokenResponse(
-            access_token=device_data["token"],
-            token_type="Bearer",
-            expires_in=3600,
-            scope=device_data["scope"]
-        )
-    
-    raise HTTPException(
-        status_code=500,
-        detail="server_error"
-    )

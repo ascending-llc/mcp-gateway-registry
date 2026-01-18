@@ -956,9 +956,11 @@ async def validate_request(request: Request):
             # Extract token
             access_token = authorization.split(" ")[1]
             
-            # FIRST: Check if this is a self-signed token (fast path detection by kid header)
+            # FIRST: Check if this is a self-signed token (fast path detection by kid header OR issuer)
             # This must happen BEFORE provider-specific validation to avoid sending HS256 tokens to RS256 providers
+            validation_result = None
             try:
+                # Try to get the kid from header
                 unverified_header = jwt.get_unverified_header(access_token)
                 header_kid = unverified_header.get('kid')
                 
@@ -967,12 +969,19 @@ async def validate_request(request: Request):
                     logger.info("Detected self-signed token by kid header, validating...")
                     validation_result = validator.validate_self_signed_token(access_token)
                     logger.info(f"Self-signed token validation successful for user: {hash_username(validation_result.get('username', ''))}")
-                else:
-                    # Not a self-signed token, continue to provider validation
-                    validation_result = None
             except Exception as e:
-                logger.debug(f"Could not check JWT header for self-signed detection: {e}")
-                validation_result = None
+                logger.debug(f"Could not check JWT header kid: {e}")
+            
+            # If kid check didn't work, try checking issuer in payload
+            if not validation_result:
+                try:
+                    unverified_claims = jwt.decode(access_token, options={"verify_signature": False})
+                    if unverified_claims.get('iss') == JWT_ISSUER:
+                        logger.info("Detected self-signed token by issuer, validating...")
+                        validation_result = validator.validate_self_signed_token(access_token)
+                        logger.info(f"Self-signed token validation successful for user: {hash_username(validation_result.get('username', ''))}")
+                except Exception as e:
+                    logger.debug(f"Could not check JWT issuer for self-signed detection: {e}")
             
             # If not a self-signed token, use provider-specific validation
             if not validation_result:
@@ -1515,8 +1524,27 @@ async def get_oauth2_providers():
         return {"providers": [], "error": str(e)}
 
 @app.get("/oauth2/login/{provider}")
-async def oauth2_login(provider: str, request: Request, redirect_uri: str = None):
-    """Initiate OAuth2 login flow"""
+async def oauth2_login(
+    provider: str, 
+    request: Request, 
+    redirect_uri: str = None,
+    client_id: str = None,
+    code_challenge: str = None,
+    code_challenge_method: str = None,
+    response_type: str = None
+):
+    """
+    Initiate OAuth2 login flow.
+    
+    Supports both web browser sessions and OAuth Authorization Code Flow for clients.
+    
+    Query Parameters:
+    - redirect_uri: Where to redirect after authentication
+    - client_id: OAuth client ID (for authorization code flow)
+    - code_challenge: PKCE code challenge (for authorization code flow)
+    - code_challenge_method: PKCE method (S256 or plain)
+    - response_type: OAuth response type (code for authorization code flow)
+    """
     try:
         if provider not in OAUTH2_CONFIG.get("providers", {}):
             raise HTTPException(status_code=404, detail=f"Provider {provider} not found")
@@ -1534,6 +1562,14 @@ async def oauth2_login(provider: str, request: Request, redirect_uri: str = None
             "provider": provider,
             "redirect_uri": redirect_uri or OAUTH2_CONFIG.get("registry", {}).get("success_redirect", "/")
         }
+        
+        # If OAuth client parameters are present, store them for authorization code flow
+        if client_id and response_type == "code":
+            logger.info(f"OAuth Authorization Code Flow initiated for client_id={client_id}")
+            session_data["client_id"] = client_id
+            session_data["client_redirect_uri"] = redirect_uri
+            session_data["code_challenge"] = code_challenge
+            session_data["code_challenge_method"] = code_challenge_method or "S256"
         
         # Create temporary session for OAuth2 flow
         temp_session = signer.dumps(session_data)
@@ -1739,7 +1775,56 @@ async def oauth2_callback(
             mapped_user = map_user_info(user_info, provider_config)
             logger.info(f"Mapped user info: {mapped_user}")
         
-        # Create session cookie compatible with registry
+        # Check if this is an OAuth client request (has client_id and code_challenge in temp session)
+        client_id = temp_session_data.get("client_id")
+        code_challenge = temp_session_data.get("code_challenge")
+        code_challenge_method = temp_session_data.get("code_challenge_method", "S256")
+        client_redirect_uri = temp_session_data.get("client_redirect_uri")
+        
+        if client_id and client_redirect_uri:
+            # OAuth Authorization Code Flow - return authorization code to client
+            logger.info(f"OAuth client detected (client_id={client_id}), generating authorization code")
+            
+            from .routes.oauth_device import authorization_codes_storage, cleanup_expired_authorization_codes
+            
+            # Cleanup expired codes
+            cleanup_expired_authorization_codes()
+            
+            # Generate authorization code
+            authorization_code = secrets.token_urlsafe(32)
+            current_time = int(time.time())
+            expires_at = current_time + 600  # 10 minutes expiration
+            
+            # Store authorization code with token and user data
+            authorization_codes_storage[authorization_code] = {
+                "token_data": token_data,
+                "user_info": mapped_user,
+                "client_id": client_id,
+                "expires_at": expires_at,
+                "used": False,
+                "code_challenge": code_challenge,
+                "code_challenge_method": code_challenge_method,
+                "redirect_uri": client_redirect_uri,
+                "created_at": current_time
+            }
+            
+            logger.info(f"Generated authorization code for client {client_id}, expires in 600s")
+            
+            # Redirect to client's redirect_uri with authorization code and state
+            redirect_params = {
+                "code": authorization_code,
+                "state": state
+            }
+            redirect_url = f"{client_redirect_uri}?{urllib.parse.urlencode(redirect_params)}"
+            
+            response = RedirectResponse(url=redirect_url, status_code=302)
+            # Clear temporary OAuth2 session
+            response.delete_cookie("oauth2_temp_session")
+            
+            logger.info(f"Redirecting OAuth client to: {client_redirect_uri}")
+            return response
+        
+        # Web browser session flow - create session cookie
         session_data = {
             "username": mapped_user["username"],
             "email": mapped_user.get("email"),

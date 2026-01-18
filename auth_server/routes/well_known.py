@@ -51,9 +51,12 @@ async def oauth_authorization_server_metadata():
     """
     auth_server_url = _get_auth_server_url()
     
+    # Get current auth provider from environment
+    auth_provider = os.environ.get('AUTH_PROVIDER', 'keycloak')
+    
     return {
         "issuer": auth_server_url,
-        "authorization_endpoint": f"{auth_server_url}/oauth2/login",
+        "authorization_endpoint": f"{auth_server_url}/oauth2/login/{auth_provider}",
         "token_endpoint": f"{auth_server_url}/oauth2/token",
         "device_authorization_endpoint": f"{auth_server_url}/oauth2/device/code",
         "registration_endpoint": f"{auth_server_url}/oauth2/register",
@@ -84,9 +87,12 @@ async def openid_configuration():
     """
     auth_server_url = _get_auth_server_url()
     
+    # Get current auth provider from environment
+    auth_provider = os.environ.get('AUTH_PROVIDER', 'keycloak')
+    
     return {
         "issuer": auth_server_url,
-        "authorization_endpoint": f"{auth_server_url}/oauth2/login",
+        "authorization_endpoint": f"{auth_server_url}/oauth2/login/{auth_provider}",
         "token_endpoint": f"{auth_server_url}/oauth2/token",
         "device_authorization_endpoint": f"{auth_server_url}/oauth2/device/code",
         "registration_endpoint": f"{auth_server_url}/oauth2/register",

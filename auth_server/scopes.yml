@@ -133,6 +133,23 @@ group_mappings:
   - mcp-servers-unrestricted/execute
 
 # ==================== MCP SERVER SCOPES ====================
+# MCP Registry Admin: Full admin access (same as unrestricted/execute)
+mcp-registry-admin:
+- server: '*'
+  methods:
+  - initialize
+  - notifications/initialized
+  - ping
+  - tools/list
+  - tools/call
+  - resources/list
+  - resources/templates/list
+  - GET
+  - POST
+  - PUT
+  - DELETE
+  tools: '*'
+
 # Unrestricted read access: Wildcard access to all servers with all methods and tools
 mcp-servers-unrestricted/read:
 - server: '*'
