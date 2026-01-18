@@ -46,6 +46,9 @@ class AuthSettings(BaseSettings):
     # API Prefix (e.g., "/auth", "/gateway", or empty string for no prefix)
     auth_server_api_prefix: str = ""
     
+    # ==================== CORS Configuration ====================
+    cors_origins: str = "*"  # Comma-separated list of allowed origins, or "*" for all
+    
     # ==================== Scopes Configuration ====================
     scopes_config_path: Optional[str] = None
     

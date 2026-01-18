@@ -324,6 +324,10 @@ async def device_verification_page(user_code: Optional[str] = None):
     """
     Device verification page where users enter their user code.
     """
+    # Get auth server URL with API prefix for form action
+    auth_server_url = settings.auth_server_external_url.rstrip('/')
+    approve_url = f"{auth_server_url}/oauth2/device/approve"
+    
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -425,7 +429,7 @@ async def device_verification_page(user_code: Optional[str] = None):
                 successDiv.style.display = 'none';
                 
                 try {{
-                    const response = await fetch('/oauth2/device/approve', {{
+                    const response = await fetch('{approve_url}', {{
                         method: 'POST',
                         headers: {{
                             'Content-Type': 'application/json',

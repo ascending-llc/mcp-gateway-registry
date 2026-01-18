@@ -21,6 +21,7 @@ from functools import lru_cache
 from botocore.exceptions import ClientError
 from fastapi import FastAPI, Header, HTTPException, Request, Cookie
 from fastapi.responses import JSONResponse, Response, RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from pydantic import BaseModel
 from pathlib import Path
@@ -477,6 +478,20 @@ app = FastAPI(
     docs_url=f"{api_prefix}/docs" if api_prefix else "/docs",
     redoc_url=f"{api_prefix}/redoc" if api_prefix else "/redoc",
     openapi_url=f"{api_prefix}/openapi.json" if api_prefix else "/openapi.json"
+)
+
+# Add CORS middleware to support browser-based OAuth clients (like Claude Desktop)
+# Parse CORS origins from settings (comma-separated list or "*")
+cors_origins_list = [origin.strip() for origin in settings.cors_origins.split(",")] if settings.cors_origins != "*" else ["*"]
+logger.info(f"CORS origins configured: {cors_origins_list}")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins_list,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["WWW-Authenticate", "X-User", "X-Username", "X-Client-Id"],
 )
 
 # Add metrics collection middleware
