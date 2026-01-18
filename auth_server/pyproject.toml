@@ -22,16 +22,32 @@ dependencies = [
     "cryptography>=40.0.0",
     "pyyaml>=6.0.0",
     "httpx>=0.25.0",
-    "itsdangerous>=2.1.0"
+    "itsdangerous>=2.1.0",
+    "python-multipart>=0.0.6"
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
+    "pytest-cov>=4.1.0",
     "black>=23.0.0",
-    "isort>=5.12.0"
+    "isort>=5.12.0",
+    "poethepoet>=0.24.0"
 ]
 
 [tool.uv]
 # Local-only project - never resolve from PyPI
 package = false
+
+[tool.poe.tasks]
+# Run all tests
+test = "pytest tests/ -v"
+test-cov = "pytest tests/ -v --cov=auth_server --cov-report=html --cov-report=term --cov-report=xml"
+
+# Run unit tests only
+test-unit = "pytest tests/ -v -m unit"
+test-unit-cov = "pytest tests/ -v -m unit --cov=auth_server --cov-report=html --cov-report=term"
+
+# Run integration tests only
+test-integration = "pytest tests/ -v -m integration"
+test-integration-cov = "pytest tests/ -v -m integration --cov=auth_server --cov-report=html --cov-report=term --cov-report=xml"

@@ -38,6 +38,18 @@ from .providers.factory import get_auth_provider
 # Import OAuth2 config loader
 from .utils.config_loader import OAuth2ConfigLoader, get_oauth2_config
 
+# Import .well-known routes
+from .routes.well_known import router as well_known_router
+
+# Import device flow routes
+from .routes.device_flow import router as device_flow_router
+
+# Import models
+from .models import (
+    GenerateTokenRequest,
+    GenerateTokenResponse
+)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,  # Set the log level to INFO
@@ -455,6 +467,7 @@ def check_rate_limit(username: str) -> bool:
     user_token_generation_counts[rate_key] = current_count + 1
     return True
 
+
 # Create FastAPI app
 app = FastAPI(
     title="Simplified Auth Server",
@@ -465,32 +478,12 @@ app = FastAPI(
 # Add metrics collection middleware
 add_auth_metrics_middleware(app)
 
-class TokenValidationResponse(BaseModel):
-    """Response model for token validation"""
-    valid: bool
-    scopes: List[str] = []
-    error: Optional[str] = None
-    method: Optional[str] = None
-    client_id: Optional[str] = None
-    username: Optional[str] = None
+# Include .well-known routes
+app.include_router(well_known_router)
 
-class GenerateTokenRequest(BaseModel):
-    """Request model for token generation"""
-    user_context: Dict[str, Any]
-    requested_scopes: List[str] = []
-    expires_in_hours: int = DEFAULT_TOKEN_LIFETIME_HOURS
-    description: Optional[str] = None
+# Include device flow routes
+app.include_router(device_flow_router)
 
-class GenerateTokenResponse(BaseModel):
-    """Response model for token generation"""
-    access_token: str
-    refresh_token: Optional[str] = None
-    token_type: str = "Bearer"
-    expires_in: int
-    refresh_expires_in: Optional[int] = None
-    scope: str
-    issued_at: int
-    description: Optional[str] = None
 
 class SimplifiedCognitoValidator:
     """
@@ -1887,6 +1880,7 @@ def map_user_info(user_info: dict, provider_config: dict) -> dict:
             logger.warning(f"No groups found in user_info. Available fields: {list(user_info.keys())}")
     
     return mapped
+
 
 @app.get("/oauth2/logout/{provider}")
 async def oauth2_logout(provider: str, request: Request, redirect_uri: str = None):
