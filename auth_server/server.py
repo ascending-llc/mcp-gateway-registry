@@ -41,8 +41,8 @@ from .utils.config_loader import OAuth2ConfigLoader, get_oauth2_config
 # Import .well-known routes
 from .routes.well_known import router as well_known_router
 
-# Import device flow routes
-from .routes.device_flow import router as device_flow_router
+# Import OAuth device flow and client registration routes
+from .routes.oauth_device import router as oauth_device_router
 
 # Import models
 from .models import (
@@ -481,8 +481,8 @@ add_auth_metrics_middleware(app)
 # Include .well-known routes
 app.include_router(well_known_router)
 
-# Include device flow routes
-app.include_router(device_flow_router)
+# Include OAuth device flow and client registration routes
+app.include_router(oauth_device_router)
 
 
 class SimplifiedCognitoValidator:

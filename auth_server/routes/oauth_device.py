@@ -1,7 +1,9 @@
 """
-OAuth 2.0 Device Flow routes for auth server.
+OAuth 2.0 Device Flow and Dynamic Client Registration.
 
-Implements RFC 8628 (OAuth 2.0 Device Authorization Grant).
+Implements:
+- RFC 8628 (OAuth 2.0 Device Authorization Grant)
+- RFC 7591 (OAuth 2.0 Dynamic Client Registration)
 """
 
 import os
@@ -9,9 +11,11 @@ import time
 import secrets
 import random
 import logging
-from typing import Optional
+import jwt
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Form, Request
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, Field
 
 from ..models.device_flow import (
     DeviceCodeResponse,
@@ -26,10 +30,184 @@ router = APIRouter()
 device_codes_storage = {}  # device_code -> {user_code, status, token, ...}
 user_codes_storage = {}    # user_code -> device_code (for quick lookup)
 
+# Client registration storage (in-memory, consider using Redis or DB in production)
+registered_clients: Dict[str, Dict[str, Any]] = {}
+
 # Device flow configuration
 DEVICE_CODE_EXPIRY_SECONDS = 600  # 10 minutes
 DEVICE_CODE_POLL_INTERVAL = 5     # Poll every 5 seconds
 
+
+# ============================================================================
+# OAuth 2.0 Dynamic Client Registration (RFC 7591)
+# ============================================================================
+
+class ClientRegistrationRequest(BaseModel):
+    """OAuth 2.0 Dynamic Client Registration Request (RFC 7591)."""
+    
+    client_name: Optional[str] = Field(None, description="Human-readable name of the client")
+    client_uri: Optional[str] = Field(None, description="URL of the client's home page")
+    redirect_uris: Optional[List[str]] = Field(None, description="Array of redirection URIs")
+    grant_types: Optional[List[str]] = Field(
+        default=["authorization_code", "urn:ietf:params:oauth:grant-type:device_code"],
+        description="Array of OAuth 2.0 grant types"
+    )
+    response_types: Optional[List[str]] = Field(
+        default=["code"],
+        description="Array of OAuth 2.0 response types"
+    )
+    scope: Optional[str] = Field(None, description="Space-separated list of scopes")
+    contacts: Optional[List[str]] = Field(None, description="Array of contact email addresses")
+    token_endpoint_auth_method: Optional[str] = Field(
+        default="client_secret_post",
+        description="Requested authentication method for the token endpoint"
+    )
+
+
+class ClientRegistrationResponse(BaseModel):
+    """OAuth 2.0 Dynamic Client Registration Response (RFC 7591)."""
+    
+    client_id: str = Field(..., description="OAuth 2.0 client identifier")
+    client_secret: Optional[str] = Field(None, description="OAuth 2.0 client secret")
+    client_id_issued_at: int = Field(..., description="Time at which the client identifier was issued")
+    client_secret_expires_at: int = Field(
+        default=0,
+        description="Time at which the client secret will expire (0 = never expires)"
+    )
+    client_name: Optional[str] = None
+    client_uri: Optional[str] = None
+    redirect_uris: Optional[List[str]] = None
+    grant_types: List[str] = Field(default_factory=list)
+    response_types: List[str] = Field(default_factory=list)
+    scope: Optional[str] = None
+    token_endpoint_auth_method: str = "client_secret_post"
+
+
+@router.post("/oauth2/register", response_model=ClientRegistrationResponse)
+async def register_client(
+    registration: ClientRegistrationRequest,
+    request: Request
+) -> ClientRegistrationResponse:
+    """
+    OAuth 2.0 Dynamic Client Registration endpoint (RFC 7591).
+    
+    Allows MCP clients to dynamically register and obtain client credentials.
+    This is required for Claude Desktop and other MCP clients that don't have
+    pre-configured client credentials.
+    """
+    try:
+        # Generate client credentials
+        client_id = f"mcp-client-{secrets.token_urlsafe(16)}"
+        client_secret = secrets.token_urlsafe(32)
+        issued_at = int(time.time())
+        
+        # Build client metadata
+        client_metadata = {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "client_id_issued_at": issued_at,
+            "client_secret_expires_at": 0,  # Never expires
+            "client_name": registration.client_name or "MCP Client",
+            "client_uri": registration.client_uri,
+            "redirect_uris": registration.redirect_uris or [],
+            "grant_types": registration.grant_types or [
+                "authorization_code",
+                "urn:ietf:params:oauth:grant-type:device_code"
+            ],
+            "response_types": registration.response_types or ["code"],
+            "scope": registration.scope or "mcp-servers-unrestricted/read mcp-servers-unrestricted/execute",
+            "token_endpoint_auth_method": registration.token_endpoint_auth_method or "client_secret_post",
+            "contacts": registration.contacts or [],
+            "registered_at": issued_at,
+            "ip_address": request.client.host if request.client else "unknown"
+        }
+        
+        # Store client in memory
+        registered_clients[client_id] = client_metadata
+        
+        logger.info(
+            f"Registered new OAuth client: "
+            f"client_id={client_id}, "
+            f"name={client_metadata['client_name']}, "
+            f"grant_types={client_metadata['grant_types']}"
+        )
+        
+        # Return registration response
+        return ClientRegistrationResponse(
+            client_id=client_id,
+            client_secret=client_secret,
+            client_id_issued_at=issued_at,
+            client_secret_expires_at=0,
+            client_name=client_metadata["client_name"],
+            client_uri=client_metadata["client_uri"],
+            redirect_uris=client_metadata["redirect_uris"],
+            grant_types=client_metadata["grant_types"],
+            response_types=client_metadata["response_types"],
+            scope=client_metadata["scope"],
+            token_endpoint_auth_method=client_metadata["token_endpoint_auth_method"]
+        )
+        
+    except Exception as e:
+        logger.error(f"Client registration failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Client registration failed"
+        )
+
+
+def get_client(client_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve registered client by client_id.
+    
+    Args:
+        client_id: OAuth 2.0 client identifier
+        
+    Returns:
+        Client metadata dictionary or None if not found
+    """
+    return registered_clients.get(client_id)
+
+
+def validate_client_credentials(client_id: str, client_secret: str) -> bool:
+    """
+    Validate client credentials.
+    
+    Args:
+        client_id: OAuth 2.0 client identifier
+        client_secret: OAuth 2.0 client secret
+        
+    Returns:
+        True if credentials are valid, False otherwise
+    """
+    client = registered_clients.get(client_id)
+    if not client:
+        return False
+    
+    return client.get("client_secret") == client_secret
+
+
+def list_registered_clients() -> List[Dict[str, Any]]:
+    """
+    List all registered clients (for admin purposes).
+    
+    Returns:
+        List of client metadata (without secrets)
+    """
+    return [
+        {
+            "client_id": client_id,
+            "client_name": metadata.get("client_name"),
+            "grant_types": metadata.get("grant_types"),
+            "registered_at": metadata.get("registered_at"),
+            "ip_address": metadata.get("ip_address")
+        }
+        for client_id, metadata in registered_clients.items()
+    ]
+
+
+# ============================================================================
+# OAuth 2.0 Device Flow (RFC 8628)
+# ============================================================================
 
 def generate_user_code() -> str:
     """
@@ -296,7 +474,6 @@ async def approve_device(user_code: str = Form(...)):
     # TODO: In production, validate user session and generate proper token
     # For now, generate a simple token
     from ..server import SECRET_KEY, JWT_ISSUER, JWT_AUDIENCE
-    import jwt
     
     token_payload = {
         "iss": JWT_ISSUER,

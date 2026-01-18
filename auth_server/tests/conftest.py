@@ -49,21 +49,27 @@ def mock_auth_provider():
 
 @pytest.fixture
 def clear_device_storage():
-    """Clear device flow storage before and after each test."""
-    from auth_server.routes.device_flow import device_codes_storage, user_codes_storage
+    """Clear device flow and client registration storage before and after each test."""
+    from auth_server.routes.oauth_device import (
+        device_codes_storage,
+        user_codes_storage,
+        registered_clients
+    )
     
     device_codes_storage.clear()
     user_codes_storage.clear()
+    registered_clients.clear()
     
     yield
     
     device_codes_storage.clear()
     user_codes_storage.clear()
+    registered_clients.clear()
 
 
 # Test markers
 pytest.mark.auth = pytest.mark.auth
-pytest.mark.device_flow = pytest.mark.device_flow
+pytest.mark.oauth_device = pytest.mark.oauth_device
 pytest.mark.well_known = pytest.mark.well_known
 pytest.mark.integration = pytest.mark.integration
 pytest.mark.unit = pytest.mark.unit

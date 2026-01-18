@@ -56,6 +56,7 @@ async def oauth_authorization_server_metadata():
         "authorization_endpoint": f"{auth_server_url}/oauth2/login",
         "token_endpoint": f"{auth_server_url}/oauth2/token",
         "device_authorization_endpoint": f"{auth_server_url}/oauth2/device/code",
+        "registration_endpoint": f"{auth_server_url}/oauth2/register",
         "jwks_uri": f"{auth_server_url}/.well-known/jwks.json",
         "response_types_supported": ["code"],
         "grant_types_supported": [
@@ -88,6 +89,7 @@ async def openid_configuration():
         "authorization_endpoint": f"{auth_server_url}/oauth2/login",
         "token_endpoint": f"{auth_server_url}/oauth2/token",
         "device_authorization_endpoint": f"{auth_server_url}/oauth2/device/code",
+        "registration_endpoint": f"{auth_server_url}/oauth2/register",
         "userinfo_endpoint": f"{auth_server_url}/oauth2/userinfo",
         "jwks_uri": f"{auth_server_url}/.well-known/jwks.json",
         "response_types_supported": ["code"],
