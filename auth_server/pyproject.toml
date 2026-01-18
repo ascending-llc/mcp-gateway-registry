@@ -40,6 +40,9 @@ dev = [
 package = false
 
 [tool.poe.tasks]
+# Development server (runs from parent directory)
+dev = { shell = "cd .. && uvicorn auth_server.server:app --reload --host 0.0.0.0 --port 8888" }
+
 # Run all tests
 test = "pytest tests/ -v"
 test-cov = "pytest tests/ -v --cov=auth_server --cov-report=html --cov-report=term --cov-report=xml"

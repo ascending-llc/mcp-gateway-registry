@@ -33,11 +33,8 @@ Create a `.env` file in the `auth_server` directory:
 ### Running the Server
 
 ```bash
-# Development mode with auto-reload
-uvicorn auth_server.server:app --reload --host 0.0.0.0 --port 8888
-
-# Or using Python module
-python -m uvicorn auth_server.server:app --reload --port 8888
+# Development mode with auto-reload (recommended)
+uv run poe dev
 ```
 
 The server will be available at:
