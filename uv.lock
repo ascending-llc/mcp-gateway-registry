@@ -1563,12 +1563,12 @@ dependencies = [
     { name = "litellm" },
     { name = "matplotlib" },
     { name = "mcp" },
-    { name = "motor" },
     { name = "protobuf" },
     { name = "psutil" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pyjwt" },
+    { name = "pymongo" },
     { name = "pytest" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
@@ -1621,7 +1621,7 @@ requires-dist = [
     { name = "async-lru", specifier = ">=2.0.5" },
     { name = "awscli", specifier = ">=1.36.0" },
     { name = "bandit", specifier = ">=1.8.3" },
-    { name = "beanie", specifier = ">=1.26.0" },
+    { name = "beanie", specifier = ">=2.0.0" },
     { name = "boto3", specifier = ">=1.35.0" },
     { name = "cachetools", specifier = ">=6.2.4" },
     { name = "cisco-ai-a2a-scanner", git = "https://github.com/cisco-ai-defense/a2a-scanner.git?rev=main" },
@@ -1658,13 +1658,13 @@ requires-dist = [
     { name = "mkdocs-git-revision-date-localized-plugin", marker = "extra == 'docs'", specifier = ">=1.2.0" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.4.0" },
     { name = "mkdocs-minify-plugin", marker = "extra == 'docs'", specifier = ">=0.7.0" },
-    { name = "motor", specifier = ">=3.3.0" },
     { name = "protobuf", specifier = ">=5.29.5" },
     { name = "psutil", specifier = ">=6.1.0" },
     { name = "pydantic", specifier = ">=2.11.3" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "pyjwt", specifier = ">=2.10.1" },
     { name = "pymdown-extensions", marker = "extra == 'docs'", specifier = ">=10.0.0" },
+    { name = "pymongo", specifier = ">=4.15.5" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
@@ -1810,18 +1810,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/52/67/fe4b77e7a8ae7628392e28b14122588beaf6078b53eb91c7ed000fd158ac/mkdocs-minify-plugin-0.8.0.tar.gz", hash = "sha256:bc11b78b8120d79e817308e2b11539d790d21445eb63df831e393f76e52e753d", size = 8366, upload-time = "2024-01-29T16:11:32.982Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1b/cd/2e8d0d92421916e2ea4ff97f10a544a9bd5588eb747556701c983581df13/mkdocs_minify_plugin-0.8.0-py3-none-any.whl", hash = "sha256:5fba1a3f7bd9a2142c9954a6559a57e946587b21f133165ece30ea145c66aee6", size = 6723, upload-time = "2024-01-29T16:11:31.851Z" },
-]
-
-[[package]]
-name = "motor"
-version = "3.7.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pymongo" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/93/ae/96b88362d6a84cb372f7977750ac2a8aed7b2053eed260615df08d5c84f4/motor-3.7.1.tar.gz", hash = "sha256:27b4d46625c87928f331a6ca9d7c51c2f518ba0e270939d395bc1ddc89d64526", size = 280997, upload-time = "2025-05-14T18:56:33.653Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/01/9a/35e053d4f442addf751ed20e0e922476508ee580786546d699b0567c4c67/motor-3.7.1-py3-none-any.whl", hash = "sha256:8a63b9049e38eeeb56b4fdd57c3312a6d1f25d01db717fe7d82222393c410298", size = 74996, upload-time = "2025-05-14T18:56:31.665Z" },
 ]
 
 [[package]]

@@ -6,7 +6,7 @@ and Beanie ODM initialization for the MCP Gateway Registry.
 """
 
 from typing import Optional
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 from beanie import init_beanie
 import os
 from urllib.parse import quote_plus
@@ -24,7 +24,7 @@ from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDo
 
 class MongoDB:
     """MongoDB connection manager with connection pooling."""
-    client: Optional[AsyncIOMotorClient] = None
+    client: Optional[AsyncMongoClient] = None
 
     @classmethod
     async def connect_db(cls, db_name: Optional[str] = None):
@@ -59,8 +59,8 @@ class MongoDB:
             mongodb_url = base_uri
         cls.database_name = db_name
         try:
-            # Create Motor client with connection pool settings
-            cls.client = AsyncIOMotorClient(
+            # Create PyMongo async client with connection pool settings
+            cls.client = AsyncMongoClient(
                 mongodb_url,
                 maxPoolSize=50,  # Maximum number of connections in the pool
                 minPoolSize=10,  # Minimum number of connections in the pool
@@ -116,13 +116,13 @@ class MongoDB:
             return
 
         try:
-            cls.client.close()
+            await cls.client.close()
             cls.client = None
         except Exception as e:
             raise
 
     @classmethod
-    def get_client(cls) -> AsyncIOMotorClient:
+    def get_client(cls) -> AsyncMongoClient:
         """
         Get the MongoDB client instance.
         
@@ -145,7 +145,7 @@ class MongoDB:
         Get the MongoDB database instance.
         
         Returns:
-            Database: The Motor database instance.
+            Database: The PyMongo async database instance.
             
         Raises:
             RuntimeError: If the database connection is not initialized.

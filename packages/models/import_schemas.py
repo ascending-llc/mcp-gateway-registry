@@ -2,7 +2,7 @@
 """
 JSON Schema to Beanie ODM Model Generator
 
-This script converts JSON schemas to Python Beanie Document models for Motor + Beanie ODM.
+This script converts JSON schemas to Python Beanie Document models for PyMongo + Beanie ODM.
 Supports two modes: Local (read from local files) and Remote (download from GitHub Release).
 
 Usage:

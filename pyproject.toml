@@ -52,9 +52,9 @@ dependencies = [
     "grpcio>=1.76.0",
     "cachetools>=6.2.4",
     "litellm>=1.50.0",
-    "beanie>=1.26.0",
-    "motor>=3.3.0",
+    "beanie>=2.0.0",
     "redis>=7.1.0",
+    "pymongo>=4.15.5",
 ]
 
 [project.scripts]
