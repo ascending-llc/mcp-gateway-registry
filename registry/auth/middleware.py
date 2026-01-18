@@ -90,7 +90,23 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         except AuthenticationError as e:
             logger.warning(f"Auth failed for {path}: {e}")
-            return JSONResponse(status_code=401, content={"detail": str(e)})
+            # Add WWW-Authenticate header for MCP OAuth discovery
+            # Extract server name from path for MCP proxy requests
+            server_name = None
+            if path.startswith("/proxy/"):
+                server_name = path.split("/")[2] if len(path.split("/")) > 2 else None
+            
+            headers = {"Connection": "close"}
+            if server_name:
+                # For MCP proxy paths, point to server-specific OAuth discovery
+                registry_url = settings.registry_client_url.rstrip('/')
+                oauth_discovery = f"{registry_url}/.well-known/oauth-protected-resource/proxy/{server_name}"
+                headers["WWW-Authenticate"] = f'Bearer realm="mcp-registry", oauth_discovery="{oauth_discovery}"'
+            else:
+                # For other authenticated paths, use general OAuth discovery
+                headers["WWW-Authenticate"] = 'Bearer realm="mcp-registry"'
+            
+            return JSONResponse(status_code=401, content={"detail": str(e)}, headers=headers)
         except Exception as e:
             logger.error(f"Auth error for {path}: {e}")
             return JSONResponse(status_code=500, content={"detail": "Authentication error"})
