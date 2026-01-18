@@ -66,6 +66,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         },
+        '/proxy': {
+          target: backendURL,
+          changeOrigin: true,
+          secure: false,
+        },
         '/v0': {
           target: backendURL,
           changeOrigin: true,
