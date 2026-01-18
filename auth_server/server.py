@@ -29,6 +29,9 @@ import secrets
 import urllib.parse
 import httpx
 
+# Import settings
+from .core.config import settings
+
 # Import metrics middleware
 from .metrics_middleware import add_auth_metrics_middleware
 
@@ -58,28 +61,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configuration for token generation
-JWT_ISSUER = "mcp-auth-server"
-JWT_AUDIENCE = "mcp-registry"
-JWT_SELF_SIGNED_KID = "self-signed-key-v1"
-MAX_TOKEN_LIFETIME_HOURS = 24
-DEFAULT_TOKEN_LIFETIME_HOURS = 8
+# Configuration for token generation (from settings)
+JWT_ISSUER = settings.jwt_issuer
+JWT_AUDIENCE = settings.jwt_audience
+JWT_SELF_SIGNED_KID = settings.jwt_self_signed_kid
+MAX_TOKEN_LIFETIME_HOURS = settings.max_token_lifetime_hours
+DEFAULT_TOKEN_LIFETIME_HOURS = settings.default_token_lifetime_hours
 
 # Rate limiting for token generation (simple in-memory counter)
 user_token_generation_counts = {}
-MAX_TOKENS_PER_USER_PER_HOUR = int(os.environ.get('MAX_TOKENS_PER_USER_PER_HOUR', '100'))
+MAX_TOKENS_PER_USER_PER_HOUR = settings.max_tokens_per_user_per_hour
 
 # Load scopes configuration
 def load_scopes_config():
     """Load the scopes configuration from scopes.yml"""
     try:
-        # Check for environment variable first (for EFS-mounted config)
-        scopes_path = os.environ.get('SCOPES_CONFIG_PATH')
-        if scopes_path:
-            scopes_file = Path(scopes_path)
-        else:
-            # Fall back to default location (baked into image)
-            scopes_file = Path(__file__).parent / "scopes.yml"
+        # Get scopes file path from settings
+        scopes_file = settings.scopes_file_path
 
         with open(scopes_file, 'r') as f:
             config = yaml.safe_load(f)
@@ -1359,16 +1357,9 @@ async def reload_scopes(
             headers={"WWW-Authenticate": "Basic"}
         )
 
-    # Verify admin credentials from environment
-    admin_user = os.environ.get("ADMIN_USER", "admin")
-    admin_password = os.environ.get("ADMIN_PASSWORD")
-
-    if not admin_password:
-        logger.error("ADMIN_PASSWORD environment variable not set")
-        raise HTTPException(
-            status_code=500,
-            detail="Server configuration error"
-        )
+    # Verify admin credentials from settings
+    admin_user = settings.admin_user
+    admin_password = settings.admin_password
 
     if username != admin_user or password != admin_password:
         logger.warning(f"Failed admin authentication attempt for reload-scopes from {username}")
@@ -1446,15 +1437,8 @@ if __name__ == "__main__":
 # This will use the singleton OAuth2ConfigLoader instance
 OAUTH2_CONFIG = get_oauth2_config()
 
-# Initialize SECRET_KEY and signer for session management
-SECRET_KEY = os.environ.get('SECRET_KEY')
-if not SECRET_KEY:
-    # Generate a secure random key (32 bytes = 256 bits of entropy)
-    SECRET_KEY = secrets.token_hex(32)
-    logger.warning("No SECRET_KEY environment variable found. Using a randomly generated key. "
-                   "While this is more secure than a hardcoded default, it will change on restart. "
-                   "Set a permanent SECRET_KEY environment variable for production.")
-
+# Initialize SECRET_KEY and signer for session management (from settings)
+SECRET_KEY = settings.secret_key
 signer = URLSafeTimedSerializer(SECRET_KEY)
 
 def get_enabled_providers():
@@ -1462,7 +1446,7 @@ def get_enabled_providers():
     enabled = []
 
     # Check if AUTH_PROVIDER env var is set to filter to only one provider
-    auth_provider_env = os.getenv("AUTH_PROVIDER")
+    auth_provider_env = settings.auth_provider if settings.auth_provider else None
 
     # First, collect all enabled providers from YAML
     yaml_enabled_providers = []
@@ -1893,7 +1877,7 @@ async def oauth2_callback(
 async def exchange_code_for_token(provider: str, code: str, provider_config: dict, auth_server_url: str = None) -> dict:
     """Exchange authorization code for access token"""
     if auth_server_url is None:
-        auth_server_url = os.environ.get('AUTH_SERVER_URL', 'http://localhost:8888')
+        auth_server_url = settings.auth_server_url
         
     async with httpx.AsyncClient() as client:
         token_data = {
@@ -1986,7 +1970,7 @@ async def oauth2_logout(provider: str, request: Request, redirect_uri: str = Non
         full_redirect_uri = redirect_uri or "/logout"
         if not full_redirect_uri.startswith("http"):
             # Make it a full URL - extract registry URL from request's referer or use environment
-            registry_base = os.environ.get('REGISTRY_URL')
+            registry_base = settings.registry_url
             if not registry_base:
                 # Try to derive from the request
                 referer = request.headers.get("referer", "")

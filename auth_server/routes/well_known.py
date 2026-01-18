@@ -11,6 +11,9 @@ import os
 import logging
 from fastapi import APIRouter, HTTPException
 
+# Import settings
+from ..core.config import settings
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -21,7 +24,7 @@ from ..providers.factory import get_auth_provider
 
 def _get_auth_server_url():
     """
-    Get required AUTH_SERVER_EXTERNAL_URL environment variable.
+    Get AUTH_SERVER_EXTERNAL_URL from settings.
     
     Returns:
         Auth server URL string
@@ -29,10 +32,10 @@ def _get_auth_server_url():
     Raises:
         HTTPException: If AUTH_SERVER_EXTERNAL_URL is not set
     """
-    auth_server_url = os.environ.get('AUTH_SERVER_EXTERNAL_URL')
+    auth_server_url = settings.auth_server_external_url
     
     if not auth_server_url:
-        logger.error("AUTH_SERVER_EXTERNAL_URL environment variable is not set")
+        logger.error("AUTH_SERVER_EXTERNAL_URL is not configured in settings")
         raise HTTPException(
             status_code=500,
             detail="Server configuration error: AUTH_SERVER_EXTERNAL_URL not configured"

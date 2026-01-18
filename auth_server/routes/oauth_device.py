@@ -17,6 +17,9 @@ from fastapi import APIRouter, HTTPException, Form, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
+# Import settings
+from ..core.config import settings
+
 from ..models.device_flow import (
     DeviceCodeResponse,
     DeviceTokenResponse
@@ -35,10 +38,6 @@ registered_clients: Dict[str, Dict[str, Any]] = {}
 
 # Authorization code storage for OAuth 2.0 Authorization Code Flow
 authorization_codes_storage: Dict[str, Dict[str, Any]] = {}  # code -> {token_data, user_info, client_id, expires_at, used, code_challenge}
-
-# Device flow configuration
-DEVICE_CODE_EXPIRY_SECONDS = 600  # 10 minutes
-DEVICE_CODE_POLL_INTERVAL = 5     # Poll every 5 seconds
 
 
 # ============================================================================
@@ -284,7 +283,7 @@ async def device_authorization(
     device_code = secrets.token_urlsafe(32)
     user_code = generate_user_code()
     
-    auth_server_url = os.environ.get('AUTH_SERVER_EXTERNAL_URL')
+    auth_server_url = settings.auth_server_external_url
     if not auth_server_url:
         host = req.headers.get("host", "localhost:8888")
         scheme = "https" if req.headers.get("x-forwarded-proto") == "https" or req.url.scheme == "https" else "http"
@@ -294,7 +293,7 @@ async def device_authorization(
     verification_uri_complete = f"{verification_uri}?user_code={user_code}"
     
     current_time = int(time.time())
-    expires_at = current_time + DEVICE_CODE_EXPIRY_SECONDS
+    expires_at = current_time + settings.device_code_expiry_seconds
     
     device_codes_storage[device_code] = {
         "user_code": user_code,
@@ -315,8 +314,8 @@ async def device_authorization(
         user_code=user_code,
         verification_uri=verification_uri,
         verification_uri_complete=verification_uri_complete,
-        expires_in=DEVICE_CODE_EXPIRY_SECONDS,
-        interval=DEVICE_CODE_POLL_INTERVAL
+        expires_in=settings.device_code_expiry_seconds,
+        interval=settings.device_code_poll_interval
     )
 
 
