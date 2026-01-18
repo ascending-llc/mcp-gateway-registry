@@ -28,7 +28,7 @@ class TestWellKnownRoutes:
         
         # Verify endpoint URLs are properly formatted
         assert data["issuer"] == "http://localhost:8888"
-        assert data["authorization_endpoint"] == "http://localhost:8888/oauth2/login"
+        assert data["authorization_endpoint"] == "http://localhost:8888/oauth2/login/keycloak"
         assert data["token_endpoint"] == "http://localhost:8888/oauth2/token"
         assert data["jwks_uri"] == "http://localhost:8888/.well-known/jwks.json"
         
@@ -156,15 +156,12 @@ class TestWellKnownRoutes:
         assert oauth_data["device_authorization_endpoint"] == oidc_data["device_authorization_endpoint"]
 
     def test_well_known_endpoints_without_env_var(self, test_client: TestClient):
-        """Test .well-known endpoints when AUTH_SERVER_EXTERNAL_URL is not set."""
-        import os
+        """Test .well-known endpoints when AUTH_SERVER_EXTERNAL_URL is not configured in settings."""
         from unittest.mock import patch
         
-        # Temporarily remove the environment variable
-        with patch.dict(os.environ, {"AUTH_SERVER_EXTERNAL_URL": ""}, clear=False):
-            # Clear the variable
-            if "AUTH_SERVER_EXTERNAL_URL" in os.environ:
-                del os.environ["AUTH_SERVER_EXTERNAL_URL"]
+        # Mock settings to have empty auth_server_external_url
+        with patch('auth_server.routes.well_known.settings') as mock_settings:
+            mock_settings.auth_server_external_url = ""
             
             response = test_client.get("/.well-known/oauth-authorization-server")
             

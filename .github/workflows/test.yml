@@ -37,6 +37,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -e .[dev]
+        cd auth_server && pip install -e .[dev]
 
     - name: 🔍 Check dependencies
       run: |
@@ -68,9 +69,15 @@ jobs:
       run: |
         pytest tests/integration -v
 
+    - name: � Run auth_server tests
+      run: |
+        cd auth_server
+        pytest tests/integration -v
+
     - name: 📊 Generate coverage report
       run: |
         pytest --cov=registry --cov-report=xml --cov-report=html
+        cd auth_server && pytest --cov=auth_server --cov-report=xml --cov-report=html --cov-append
 
     - name: 📤 Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -113,13 +120,16 @@ jobs:
 
     - name: 🔒 Security check with bandit
       run: |
+        bandit -r auth_server/ -f json -o bandit-report-auth.json || true
         bandit -r registry/ -f json -o bandit-report.json || true
 
     - name: 📋 Upload security report
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: security-report
+        name: |
+          bandit-report.json
+          bandit-report-authrt
         path: bandit-report.json
 
   
@@ -134,12 +144,12 @@ jobs:
       run: |
         echo "## 🧪 Test Results Summary" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
-        echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-        echo "| Main Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Registry Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Auth Server Tests | Included in Registry Tests |" >> $GITHUB_STEP_SUMMARY
         echo "| Code Quality | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Domain Tests | ${{ needs.domain-tests.result }} |" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [[ "${{ needs.test.result }}" == "success" && "${{ needs.lint
         
         if [[ "${{ needs.test.result }}" == "success" && "${{ needs.lint.result }}" == "success" && "${{ needs.domain-tests.result }}" == "success" ]]; then
           echo "✅ All tests passed! 🎉" >> $GITHUB_STEP_SUMMARY
