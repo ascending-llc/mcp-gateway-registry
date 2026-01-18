@@ -1032,10 +1032,10 @@ Response 200:
 
 MongoDB integration provides a scalable, multi-tenant storage backend for MCP server configurations and OAuth tokens, replacing the file-based JSON storage. This design enables sharing the database with other applications (e.g., jarvis-api) using a unified schema.
 
-### Database Selection: Motor + Beanie ODM(TBD)
+### Database Selection: PyMongo + Beanie ODM(TBD)
 
 **Selected Stack:**
-- **Motor**: Async MongoDB driver for Python (required for FastAPI async endpoints)
+- **PyMongo**: Async MongoDB driver for Python (required for FastAPI async endpoints)
 - **Beanie**: Async ODM built on Pydantic models (native FastAPI integration)
 
 **Rationale:**
@@ -1043,7 +1043,6 @@ MongoDB integration provides a scalable, multi-tenant storage backend for MCP se
 - Seamless integration with FastAPI's dependency injection and request/response models
 - Built-in support for async operations (critical for high-concurrency scenarios)
 - Automatic index management and migration support
-- Simpler than PyMongo for common CRUD operations while maintaining access to Motor when needed
 
 ### Data Models
 

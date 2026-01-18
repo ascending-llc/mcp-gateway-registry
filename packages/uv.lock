@@ -1217,7 +1217,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "beanie", specifier = ">=1.26.0" },
+    { name = "beanie", specifier = ">=2.0.0" },
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "langchain-aws", specifier = ">=1.1.0" },
     { name = "langchain-classic", specifier = ">=1.0.0" },

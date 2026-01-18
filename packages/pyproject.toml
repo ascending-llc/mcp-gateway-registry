@@ -11,8 +11,8 @@ dependencies = [
     "python-dotenv>=1.0.0",
     
     # Database
-    "beanie>=1.26.0",
-    "motor>=3.3.0",
+    "beanie>=2.0.0",
+    "pymongo>4.0.0",
     "redis>=7.1.0",
     
     # Vector search and AI
@@ -55,6 +55,7 @@ dev = [
     "factory-boy>=3.3.0",
     "faker>=24.0.0",
     "poethepoet>=0.24.0",
+    "beanie>=2.0.0",
 ]
 
 [project.scripts]
