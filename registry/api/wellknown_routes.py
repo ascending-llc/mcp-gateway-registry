@@ -235,7 +235,7 @@ async def mcp_oauth_metadata() -> JSONResponse:
     auth_server_url, registry_url = _get_required_env_vars()
     
     data = {
-        "resource": f"{registry_url}/gateway/proxy",
+        "resource": f"{registry_url}/proxy",
         "authorization_server": auth_server_url,
         "device_authorization_endpoint": f"{auth_server_url}/oauth2/device/code",
         "token_endpoint": f"{auth_server_url}/oauth2/token",
