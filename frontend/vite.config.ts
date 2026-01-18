@@ -71,6 +71,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         },
+        '/.well-known': {
+          target: backendURL,
+          changeOrigin: true,
+          secure: false,
+        },
         '/v0': {
           target: backendURL,
           changeOrigin: true,

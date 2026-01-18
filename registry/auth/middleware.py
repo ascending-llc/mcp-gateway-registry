@@ -43,6 +43,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/api/{versions}/mcp/{server_name}/oauth/callback",  # OAuth callback is public
             "/api/{versions}/mcp/oauth/success",  # OAuth success page
             "/api/{versions}/mcp/oauth/error",  # OAuth error page
+            "/.well-known/{path:path}",  # OAuth discovery endpoints must be public
         ])
         # note: admin
         self.internal_paths_compiled = self._compile_patterns([

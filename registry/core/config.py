@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     session_cookie_domain: Optional[str] = None  # e.g., ".example.com" for cross-subdomain sharing
     auth_server_url: str = "http://localhost:8888"
     auth_server_external_url: str = "http://localhost:8888"  # External URL for OAuth redirects
-
+    registry_client_url: str = "http://localhost:5173"  # Registry URL for OAuth protected resource metadata
+    registry_url: str = "http://localhost:7860"
     # Embeddings settings
     embeddings_model_name: str = "all-MiniLM-L6-v2"
     embeddings_model_dimensions: int = 384
