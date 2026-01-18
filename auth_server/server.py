@@ -467,20 +467,26 @@ def check_rate_limit(username: str) -> bool:
 
 
 # Create FastAPI app
+api_prefix = settings.auth_server_api_prefix.rstrip('/') if settings.auth_server_api_prefix else ""
+logger.info(f"Auth server API prefix: '{api_prefix}'")
+
 app = FastAPI(
-    title="Simplified Auth Server",
-    description="Authentication server for validating JWT tokens against Amazon Cognito with header-based configuration",
-    version="0.1.0"
+    title="Jarvis Auth Server",
+    description="Authentication server to integrate with Identity Providers like Cognito, Keycloak, Entra ID",
+    version="0.1.0",
+    docs_url=f"{api_prefix}/docs" if api_prefix else "/docs",
+    redoc_url=f"{api_prefix}/redoc" if api_prefix else "/redoc",
+    openapi_url=f"{api_prefix}/openapi.json" if api_prefix else "/openapi.json"
 )
 
 # Add metrics collection middleware
 add_auth_metrics_middleware(app)
 
-# Include .well-known routes
-app.include_router(well_known_router)
+# Include .well-known routes with prefix
+app.include_router(well_known_router, prefix=api_prefix)
 
-# Include OAuth device flow and client registration routes
-app.include_router(oauth_device_router)
+# Include OAuth device flow and client registration routes with prefix
+app.include_router(oauth_device_router, prefix=api_prefix)
 
 
 class SimplifiedCognitoValidator:
@@ -830,13 +836,13 @@ class SimplifiedCognitoValidator:
 # Create global validator instance
 validator = SimplifiedCognitoValidator()
 
-@app.get("/health")
+@app.get(f"{api_prefix}/health")
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "simplified-auth-server"}
 
 
-@app.get("/validate")
+@app.get(f"{api_prefix}/validate")
 async def validate_request(request: Request):
     """
     Validate a request by extracting configuration from headers and validating the bearer token.
@@ -1161,7 +1167,7 @@ async def validate_request(request: Request):
     finally:
         pass
 
-@app.get("/config")
+@app.get(f"{api_prefix}/config")
 async def get_auth_config():
     """Return the authentication configuration info"""
     try:
@@ -1200,7 +1206,7 @@ async def get_auth_config():
             "error": str(e)
         }
 
-@app.post("/internal/tokens", response_model=GenerateTokenResponse)
+@app.post(f"{api_prefix}/internal/tokens", response_model=GenerateTokenResponse)
 async def generate_user_token(
     request: GenerateTokenRequest
 ):
@@ -1324,7 +1330,7 @@ async def generate_user_token(
             headers={"Connection": "close"}
         )
 
-@app.post("/internal/reload-scopes")
+@app.post(f"{api_prefix}/internal/reload-scopes")
 async def reload_scopes(
     request: Request,
     authorization: Optional[str] = Header(None)
@@ -1493,7 +1499,7 @@ def get_enabled_providers():
     logger.info(f"Returning {len(enabled)} enabled providers: {[p['name'] for p in enabled]}")
     return enabled
 
-@app.get("/oauth2/providers")
+@app.get(f"{api_prefix}/oauth2/providers")
 async def get_oauth2_providers():
     """Get list of enabled OAuth2 providers for the login page"""
     try:
@@ -1507,7 +1513,7 @@ async def get_oauth2_providers():
         logger.error(f"Error getting OAuth2 providers: {e}")
         return {"providers": [], "error": str(e)}
 
-@app.get("/oauth2/login/{provider}")
+@app.get(f"{api_prefix}/oauth2/login/{{provider}}")
 async def oauth2_login(
     provider: str, 
     request: Request, 
@@ -1559,22 +1565,13 @@ async def oauth2_login(
         temp_session = signer.dumps(session_data)
         
         # Use configured external URL or build dynamically
-        auth_server_external_url = os.environ.get('AUTH_SERVER_EXTERNAL_URL')
+        auth_server_external_url = settings.auth_server_external_url
         if auth_server_external_url:
             # Use configured external URL (recommended for production)
             auth_server_url = auth_server_external_url.rstrip('/')
             logger.info(f"Using configured AUTH_SERVER_EXTERNAL_URL: {auth_server_url}")
         else:
-            # Fall back to dynamic construction (for development)
-            host = request.headers.get("host", "localhost:8888")
-            scheme = "https" if request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https" else "http"
-            
-            # Special case for localhost to include port
-            if "localhost" in host and ":" not in host:
-                auth_server_url = f"{scheme}://localhost:8888"
-            else:
-                auth_server_url = f"{scheme}://{host}"
-            
+            auth_server_url = settings.auth_server_url.rstrip('/')
             logger.warning(f"AUTH_SERVER_EXTERNAL_URL not set, using dynamic URL: {auth_server_url}")
         
         callback_uri = f"{auth_server_url}/oauth2/callback/{provider}"
@@ -1610,7 +1607,7 @@ async def oauth2_login(
         error_url = OAUTH2_CONFIG.get("registry", {}).get("error_redirect", "/login")
         return RedirectResponse(url=f"{error_url}?error=oauth2_init_failed", status_code=302)
 
-@app.get("/oauth2/callback/{provider}")
+@app.get(f"{api_prefix}/oauth2/callback/{{provider}}")
 async def oauth2_callback(
     provider: str,
     request: Request,
@@ -1647,22 +1644,13 @@ async def oauth2_callback(
         
         # Exchange authorization code for access token
         # Use configured external URL or build dynamically
-        auth_server_external_url = os.environ.get('AUTH_SERVER_EXTERNAL_URL')
+        auth_server_external_url = settings.auth_server_external_url
         if auth_server_external_url:
             # Use configured external URL (recommended for production)
             auth_server_url = auth_server_external_url.rstrip('/')
             logger.info(f"Using configured AUTH_SERVER_EXTERNAL_URL for token exchange: {auth_server_url}")
         else:
-            # Fall back to dynamic construction (for development)
-            host = request.headers.get("host", "localhost:8888")
-            scheme = "https" if request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https" else "http"
-            
-            # Special case for localhost to include port
-            if "localhost" in host and ":" not in host:
-                auth_server_url = f"{scheme}://localhost:8888"
-            else:
-                auth_server_url = f"{scheme}://{host}"
-            
+            auth_server_url = settings.auth_server_url.rstrip('/')           
             logger.warning(f"AUTH_SERVER_EXTERNAL_URL not set, using dynamic URL for token exchange: {auth_server_url}")
             
         token_data = await exchange_code_for_token(provider, code, provider_config, auth_server_url)
@@ -1878,6 +1866,9 @@ async def exchange_code_for_token(provider: str, code: str, provider_config: dic
     """Exchange authorization code for access token"""
     if auth_server_url is None:
         auth_server_url = settings.auth_server_url
+    
+    redirect_uri = f"{auth_server_url}/oauth2/callback/{provider}"
+    logger.info(f"Token exchange redirect_uri: {redirect_uri}")
         
     async with httpx.AsyncClient() as client:
         token_data = {
@@ -1885,7 +1876,7 @@ async def exchange_code_for_token(provider: str, code: str, provider_config: dic
             "client_id": provider_config["client_id"],
             "client_secret": provider_config["client_secret"],
             "code": code,
-            "redirect_uri": f"{auth_server_url}/oauth2/callback/{provider}"
+            "redirect_uri": redirect_uri
         }
         
         headers = {"Accept": "application/json"}
@@ -1951,7 +1942,7 @@ def map_user_info(user_info: dict, provider_config: dict) -> dict:
     return mapped
 
 
-@app.get("/oauth2/logout/{provider}")
+@app.get(f"{api_prefix}/oauth2/logout/{{provider}}")
 async def oauth2_logout(provider: str, request: Request, redirect_uri: str = None):
     """Initiate OAuth2 logout flow to clear provider session"""
     try:

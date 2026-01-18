@@ -43,6 +43,9 @@ class AuthSettings(BaseSettings):
     auth_server_external_url: str = "http://localhost:8888"
     registry_url: str = "http://localhost:7860"
     
+    # API Prefix (e.g., "/auth", "/gateway", or empty string for no prefix)
+    auth_server_api_prefix: str = ""
+    
     # ==================== Scopes Configuration ====================
     scopes_config_path: Optional[str] = None
     
@@ -97,6 +100,16 @@ class AuthSettings(BaseSettings):
         # Set keycloak_external_url to keycloak_url if not provided
         if self.keycloak_url and not self.keycloak_external_url:
             self.keycloak_external_url = self.keycloak_url
+        
+        # Automatically append API prefix to auth server URLs if configured
+        # This allows setting AUTH_SERVER_URL=http://localhost:8888 and AUTH_SERVER_API_PREFIX=/auth
+        # to automatically get http://localhost:8888/auth
+        if self.auth_server_api_prefix:
+            prefix = self.auth_server_api_prefix.rstrip('/')
+            if not self.auth_server_url.endswith(prefix):
+                self.auth_server_url = f"{self.auth_server_url.rstrip('/')}{prefix}"
+            if not self.auth_server_external_url.endswith(prefix):
+                self.auth_server_external_url = f"{self.auth_server_external_url.rstrip('/')}{prefix}"
     
     @field_validator('auth_provider')
     @classmethod
