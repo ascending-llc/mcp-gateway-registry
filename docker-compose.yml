@@ -223,22 +223,6 @@ services:
       - full
       - dev
 
-  # Financial Info MCP Server
-  fininfo-server:
-    build:
-      context: servers/fininfo
-      dockerfile: ../../docker/Dockerfile.mcp-server
-    environment:
-      - PORT=8001
-      - SECRET_KEY=${SECRET_KEY}
-    volumes:
-      - ${APP_HOME}/mcp-gateway/secrets/fininfo/:/app/fininfo/
-    ports:
-      - "8001:8001"
-    restart: unless-stopped
-    profiles:
-      - full
-
   # MCP Gateway Server
   mcpgw-server:
     build:

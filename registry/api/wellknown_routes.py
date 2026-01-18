@@ -125,16 +125,13 @@ def _format_server_discovery(server_info: dict, request: Request) -> dict:
 def _get_server_url(server_path: str, request: Request) -> str:
     """Generate full URL for MCP server based on request host"""
     # Get host from request headers
-    host = request.headers.get("host", "localhost:7860")
-
-    # Get protocol (http/https) from X-Forwarded-Proto or scheme
-    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    registry_url = settings.registry_client_url.rstrip('/')
 
     # Clean up server path (remove leading and trailing slashes)
     clean_path = server_path.strip('/')
 
     # Return formatted URL
-    return f"{proto}://{host}/{clean_path}/mcp"
+    return f"{registry_url}/{clean_path}/mcp"
 
 
 def _get_transport_type(server_config: dict) -> str:
