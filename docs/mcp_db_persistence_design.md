@@ -1404,9 +1404,47 @@ $ python -c "from packages.models import MCPServer; print('✅ Schemas ready')"
 >    - Only updated when user/admin changes it
 >    - Persisted for configuration purposes
 >
-> 2. **`connection_state`** (stored in MongoDB):
+> 2. **`connection_state`** (stored in-memory, NOT MongoDB):
 >    - Runtime state (`disconnected`, `connecting`, `connected`, `error`)
->
+>    - **Stored in-memory only** (no MongoDB writes for state transitions)
+>    - User-level state tracked in `MCPConnectionService.user_connections[user_id][server_name]`
+>    - App-level state tracked in `MCPConnectionService.app_connections[server_name]`
+>    
+>    **Connection Lookup Flow (when frontend requests status):**
+>    1. **Check in-memory first**: 
+>       - App-level connections (for non-OAuth servers)
+>       - User-level connections (for OAuth servers)
+>    2. **If connected in-memory**: Return `connected` immediately
+>    3. **If not in memory or stale**:
+>       - Try existing access token → reconnect → store in memory
+>       - If failed, try refresh token → reconnect → store in memory
+>       - If both fail: Return `disconnected` (trigger OAuth or API key update)
+>    4. **During OAuth flow**: Return `connecting` state (tracked by reconnection manager)
+>    
+>    **State Resolution Priority** (matches jarvis pattern):
+>    ```python
+>    # 1. Base state from connection object
+>    base_state = connection.connection_state if connection and not connection.is_stale() else 'disconnected'
+>    
+>    # 2. OAuth-specific overrides (for OAuth servers only)
+>    if base_state == 'disconnected' and is_oauth_server:
+>        if reconnection_manager.is_reconnecting(user_id, server_name):
+>            return 'connecting'
+>        elif flow_state_manager.has_failed_flow(user_id, server_name):
+>            return 'error'
+>        elif flow_state_manager.has_active_flow(user_id, server_name):
+>            return 'connecting'
+>    
+>    # 3. Return final state
+>    return base_state
+>    ```
+>    
+>    **Design Rationale:**
+>    - ✅ Avoids excessive MongoDB writes (thousands per minute avoided)
+>    - ✅ Fast lookups (in-memory dictionary access)
+>    - ✅ User-level isolation (each user has independent connection state)
+>    - ✅ Stale detection (reconnect if server config updated or connection idle)
+>    - ✅ OAuth flow awareness (connecting/error states during OAuth)
 > 3. **`last_connected`** (stored in MongoDB):
 >    - Timestamp of last successful connection
 >    - Updated **only on successful connections** (not on every state change)
