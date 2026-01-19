@@ -87,9 +87,7 @@ def get_server_strategy(server_info: Dict) -> ServerBehaviorStrategy:
         logger.debug("Using AnthropicRegistryStrategy for server")
         return AnthropicRegistryStrategy()
     
-    # Add more strategy checks here as needed
-    # elif 'other-special-tag' in tags:
-    #     return OtherSpecialStrategy()
+    # Additional strategy checks based on tags can be added here.
     
     # Default strategy for standard servers
     return DefaultStrategy()
