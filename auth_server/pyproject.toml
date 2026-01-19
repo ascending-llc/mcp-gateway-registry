@@ -11,33 +11,31 @@ packages = {find = {exclude = ["tests*", "*.tests*"]}}
 
 [project]
 name = "auth_server"
-version = "0.1.0"
-description = "Authentication server for validating JWT tokens against Amazon Cognito"
-requires-python = ">=3.9"
+version = "0.2.0"
+description = "OAuth2/OIDC Authentication Server for MCP Gateway Registry"
+requires-python = ">=3.12"
 dependencies = [
+    # Web framework
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.34.0",
+    "httpx>=0.25.0",
+    "python-multipart>=0.0.6",
+    
+    # Core dependencies
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
-    "requests>=2.28.0",
-    "python-jose>=3.3.0",
     "python-dotenv>=1.0.0",
-    "boto3>=1.28.0",
-    "pyjwt>=2.6.0",
-    "cryptography>=40.0.0",
     "pyyaml>=6.0.0",
-    "httpx>=0.25.0",
+    
+    # Auth and security
+    "pyjwt>=2.6.0",
+    "python-jose>=3.3.0",
+    "cryptography>=40.0.0",
     "itsdangerous>=2.1.0",
-    "python-multipart>=0.0.6"
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0",
-    "pytest-cov>=4.1.0",
-    "black>=23.0.0",
-    "isort>=5.12.0",
-    "poethepoet>=0.24.0"
+    
+    # OAuth providers
+    "boto3>=1.28.0",  # For Cognito
+    "requests>=2.28.0",
 ]
 
 [tool.uv]
@@ -46,16 +44,25 @@ package = false
 
 [tool.poe.tasks]
 # Development server (runs from parent directory)
-dev = { shell = "cd .. && uvicorn auth_server.server:app --reload --host 0.0.0.0 --port 8888" }
+dev = { shell = "cd .. && uv run uvicorn auth_server.server:app --reload --host 0.0.0.0 --port 8888" }
 
-# Run all tests
-test = "pytest tests/ -v"
-test-cov = "pytest tests/ -v --cov=auth_server --cov-report=html --cov-report=term --cov-report=xml"
+# Run all tests (use parent's environment)
+test = { shell = "cd .. && uv run pytest auth_server/tests/ -v" }
+test-cov = { shell = "cd .. && uv run pytest auth_server/tests/ -v --cov=auth_server --cov-report=html --cov-report=term --cov-report=xml" }
 
 # Run unit tests only
-test-unit = "pytest tests/ -v -m unit"
-test-unit-cov = "pytest tests/ -v -m unit --cov=auth_server --cov-report=html --cov-report=term"
+test-unit = { shell = "cd .. && uv run pytest auth_server/tests/ -v -m unit" }
 
 # Run integration tests only
-test-integration = "pytest tests/ -v -m integration"
-test-integration-cov = "pytest tests/ -v -m integration --cov=auth_server --cov-report=html --cov-report=term --cov-report=xml"
+test-integration = { shell = "cd .. && uv run pytest auth_server/tests/ -v -m integration" }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "poethepoet>=0.24.0",
+]

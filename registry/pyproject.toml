@@ -1,0 +1,88 @@
+[project]
+name = "registry"
+version = "0.2.0"
+description = "MCP Server Registry Service"
+requires-python = ">=3.12"
+dependencies = [
+    # Shared packages
+    "packages",
+    
+    # Web framework
+    "fastapi>=0.115.12",
+    "uvicorn[standard]>=0.34.2",
+    "httpx>=0.27.0",
+    "python-multipart>=0.0.20",
+    "itsdangerous>=2.2.0",
+    "jinja2>=3.1.6",
+    "websockets>=15.0.1",
+    
+    # Auth
+    "pyjwt>=2.10.1",
+    
+    # MCP and Agents  
+    "mcp>=1.9.3",
+    "langchain-mcp-adapters>=0.0.11",
+    "langgraph>=0.4.3",
+    "langchain-anthropic>=0.3.17",
+    "strands-agents>=0.1.6",
+    "strands-agents-tools>=0.1.4",
+    
+    # Utilities
+    "pytz>=2025.2",
+    "typing-extensions>=4.8.0",
+    "httpcore[asyncio]>=1.0.9",
+    "pyyaml>=6.0.0",
+    "matplotlib>=3.10.5",
+    "psutil>=6.1.0",
+    "email-validator>=2.2.0",
+    "aiohttp>=3.8.0",
+    "rich>=13.0.0",
+    "requests>=2.31.0",
+    "cachetools>=6.2.4",
+    "litellm>=1.50.0",
+    
+    # AWS (if needed for registry specifically)
+    "awscli>=1.36.0",
+    "boto3>=1.35.0",
+    
+    # Security scanning
+    "bandit>=1.8.3",
+    "cisco-ai-mcp-scanner>=3.0.1",
+    "cisco-ai-a2a-scanner @ git+https://github.com/cisco-ai-defense/a2a-scanner.git@main",
+]
+
+[tool.uv.sources]
+packages = { workspace = true }
+
+[tool.uv]
+# Local-only project - never resolve from PyPI
+package = false
+
+[tool.poe.tasks]
+# Development server (runs from parent directory with parent's env)
+dev = { shell = "cd .. && uv run uvicorn registry.main:app --reload --host 0.0.0.0 --port 8000" }
+
+# Run all tests (use parent's uv environment)
+test = { shell = "cd .. && uv run pytest registry/tests/ -v" }
+test-cov = { shell = "cd .. && uv run pytest registry/tests/ -v --cov=registry --cov-report=html --cov-report=term --cov-report=xml" }
+
+# Run unit tests only
+test-unit = { shell = "cd .. && uv run pytest registry/tests/unit -v -m unit" }
+
+# Run integration tests only
+test-integration = { shell = "cd .. && uv run pytest registry/tests/integration -v -m integration" }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "pytest-xdist>=3.5.0",
+    "coverage[toml]>=7.4.0",
+    "pytest-html>=4.1.1",
+    "pytest-json-report>=1.5.0",
+    "factory-boy>=3.3.0",
+    "faker>=24.0.0",
+    "poethepoet>=0.40.0",
+]

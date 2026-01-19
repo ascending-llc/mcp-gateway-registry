@@ -10,7 +10,7 @@ from unittest.mock import patch, mock_open, Mock
 
 from registry.services.server_service import ServerService
 from registry.core.config import settings
-from tests.fixtures.factories import ServerInfoFactory, create_multiple_servers
+from registry.tests.fixtures.factories import ServerInfoFactory, create_multiple_servers
 
 
 @pytest.mark.unit
