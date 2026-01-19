@@ -7,7 +7,6 @@ OIDC Discovery specifications.
 Note: RFC 8705 Protected Resource endpoints are implemented in mcpgw.
 """
 
-import os
 import logging
 from fastapi import APIRouter, HTTPException
 

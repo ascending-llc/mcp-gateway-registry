@@ -328,8 +328,7 @@ class TestDeviceFlowRoutes:
         device_response = test_client.post(
             f"{API_PREFIX}/oauth2/device/code",
             data={"client_id": "test-client", "scope": "openid"}
-        )
-        device_code = device_response.json()["device_code"]
+        )    
         user_code = device_response.json()["user_code"]
         
         # Approve the device
