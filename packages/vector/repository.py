@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, List, Dict, Any, TypeVar, Generic, Type, TYPE_CHECKING, Union
+from typing import Optional, List, Dict, Any, TypeVar, Generic, Type, TYPE_CHECKING
 from langchain_classic.retrievers.contextual_compression import ContextualCompressionRetriever
 
 from .batch_result import BatchResult
