@@ -40,7 +40,7 @@ jobs:
 
     - name: 🔧 Install dependencies with uv
       run: |
-        uv sync --extra dev
+        uv sync --all-groups
 
     - name: Get latest schema version
       id: get-schema

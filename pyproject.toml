@@ -34,9 +34,8 @@ members = [
     "servers/mcpgw",
 ]
 
-[tool.uv]
-# Dev mode - use local editable install
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "poethepoet>=0.40.0",
 ]
 
