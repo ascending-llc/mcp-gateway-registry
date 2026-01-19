@@ -4,6 +4,8 @@ Integration tests for OAuth 2.0 Device Flow and Dynamic Client Registration.
 Tests:
 - RFC 7591 (OAuth 2.0 Dynamic Client Registration)
 - RFC 8628 (OAuth 2.0 Device Authorization Grant)
+
+Note: All OAuth endpoints are served under /auth prefix when AUTH_SERVER_API_PREFIX=/auth
 """
 import time
 import pytest
@@ -21,6 +23,9 @@ from auth_server.routes.oauth_device import (
     cleanup_expired_device_codes
 )
 
+# API prefix for OAuth endpoints (set in conftest.py via AUTH_SERVER_API_PREFIX env var)
+API_PREFIX = "/auth"
+
 
 @pytest.mark.integration
 @pytest.mark.device_flow
@@ -30,7 +35,7 @@ class TestDynamicClientRegistration:
     def test_register_client_minimal(self, test_client: TestClient, clear_device_storage):
         """Test client registration with minimal required fields."""
         response = test_client.post(
-            "/oauth2/register",
+            f"{API_PREFIX}/oauth2/register",
             json={}
         )
         
@@ -71,7 +76,7 @@ class TestDynamicClientRegistration:
             "token_endpoint_auth_method": "client_secret_basic"
         }
         
-        response = test_client.post("/oauth2/register", json=registration_data)
+        response = test_client.post(f"{API_PREFIX}/oauth2/register", json=registration_data)
         
         assert response.status_code == 200
         data = response.json()
@@ -87,8 +92,8 @@ class TestDynamicClientRegistration:
     
     def test_register_multiple_clients(self, test_client: TestClient, clear_device_storage):
         """Test registering multiple clients generates unique credentials."""
-        response1 = test_client.post("/oauth2/register", json={"client_name": "Client 1"})
-        response2 = test_client.post("/oauth2/register", json={"client_name": "Client 2"})
+        response1 = test_client.post(f"{API_PREFIX}/oauth2/register", json={"client_name": "Client 1"})
+        response2 = test_client.post(f"{API_PREFIX}/oauth2/register", json={"client_name": "Client 2"})
         
         assert response1.status_code == 200
         assert response2.status_code == 200
@@ -108,7 +113,7 @@ class TestDynamicClientRegistration:
     def test_get_client(self, test_client: TestClient, clear_device_storage):
         """Test retrieving registered client by ID."""
         # Register a client
-        response = test_client.post("/oauth2/register", json={"client_name": "Test Client"})
+        response = test_client.post(f"{API_PREFIX}/oauth2/register", json={"client_name": "Test Client"})
         assert response.status_code == 200
         
         client_id = response.json()["client_id"]
@@ -129,7 +134,7 @@ class TestDynamicClientRegistration:
     def test_validate_client_credentials_valid(self, test_client: TestClient, clear_device_storage):
         """Test validating correct client credentials."""
         # Register a client
-        response = test_client.post("/oauth2/register", json={"client_name": "Test Client"})
+        response = test_client.post(f"{API_PREFIX}/oauth2/register", json={"client_name": "Test Client"})
         assert response.status_code == 200
         
         data = response.json()
@@ -142,7 +147,7 @@ class TestDynamicClientRegistration:
     def test_validate_client_credentials_invalid_secret(self, test_client: TestClient, clear_device_storage):
         """Test validating incorrect client secret."""
         # Register a client
-        response = test_client.post("/oauth2/register", json={"client_name": "Test Client"})
+        response = test_client.post(f"{API_PREFIX}/oauth2/register", json={"client_name": "Test Client"})
         assert response.status_code == 200
         
         client_id = response.json()["client_id"]
@@ -157,9 +162,9 @@ class TestDynamicClientRegistration:
     def test_list_registered_clients(self, test_client: TestClient, clear_device_storage):
         """Test listing all registered clients (admin function)."""
         # Register multiple clients
-        test_client.post("/oauth2/register", json={"client_name": "Client 1"})
-        test_client.post("/oauth2/register", json={"client_name": "Client 2"})
-        test_client.post("/oauth2/register", json={"client_name": "Client 3"})
+        test_client.post(f"{API_PREFIX}/oauth2/register", json={"client_name": "Client 1"})
+        test_client.post(f"{API_PREFIX}/oauth2/register", json={"client_name": "Client 2"})
+        test_client.post(f"{API_PREFIX}/oauth2/register", json={"client_name": "Client 3"})
         
         # List clients
         clients_list = list_registered_clients()
@@ -212,7 +217,7 @@ class TestDeviceFlowRoutes:
         """Test cleanup_expired_device_codes utility function."""
         # Create device code
         device_response = test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={"client_id": "test-client"}
         )
         data = device_response.json()
@@ -236,7 +241,7 @@ class TestDeviceFlowRoutes:
     def test_device_authorization_success(self, test_client: TestClient, clear_device_storage):
         """Test successful device code generation."""
         response = test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={
                 "client_id": "test-client",
                 "scope": "openid profile"
@@ -268,7 +273,7 @@ class TestDeviceFlowRoutes:
     def test_device_authorization_without_scope(self, test_client: TestClient, clear_device_storage):
         """Test device code generation without scope parameter."""
         response = test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={"client_id": "test-client"}
         )
         
@@ -280,7 +285,7 @@ class TestDeviceFlowRoutes:
     def test_device_authorization_missing_client_id(self, test_client: TestClient, clear_device_storage):
         """Test device code generation without required client_id."""
         response = test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={"scope": "openid"}
         )
         
@@ -290,13 +295,13 @@ class TestDeviceFlowRoutes:
         """Test device verification HTML page rendering."""
         # First, generate a device code
         device_response = test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={"client_id": "test-client"}
         )
         user_code = device_response.json()["user_code"]
         
         # Access verification page
-        response = test_client.get(f"/oauth2/device/verify?user_code={user_code}")
+        response = test_client.get(f"{API_PREFIX}/oauth2/device/verify?user_code={user_code}")
         
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
@@ -308,7 +313,7 @@ class TestDeviceFlowRoutes:
 
     def test_device_verification_page_without_user_code(self, test_client: TestClient):
         """Test verification page without user_code parameter."""
-        response = test_client.get("/oauth2/device/verify")
+        response = test_client.get(f"{API_PREFIX}/oauth2/device/verify")
         
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
@@ -321,7 +326,7 @@ class TestDeviceFlowRoutes:
         """Test successful device approval."""
         # Generate device code
         device_response = test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={"client_id": "test-client", "scope": "openid"}
         )
         device_code = device_response.json()["device_code"]
@@ -329,7 +334,7 @@ class TestDeviceFlowRoutes:
         
         # Approve the device
         approval_response = test_client.post(
-            "/oauth2/device/approve",
+            f"{API_PREFIX}/oauth2/device/approve",
             data={"user_code": user_code}
         )
         
@@ -341,7 +346,7 @@ class TestDeviceFlowRoutes:
     def test_device_approval_invalid_user_code(self, test_client: TestClient, clear_device_storage):
         """Test device approval with invalid user code."""
         response = test_client.post(
-            "/oauth2/device/approve",
+            f"{API_PREFIX}/oauth2/device/approve",
             data={"user_code": "INVALID-CODE"}
         )
         
@@ -351,7 +356,7 @@ class TestDeviceFlowRoutes:
     def test_device_approval_missing_user_code(self, test_client: TestClient):
         """Test device approval without user_code parameter."""
         response = test_client.post(
-            "/oauth2/device/approve",
+            f"{API_PREFIX}/oauth2/device/approve",
             data={}
         )
         
@@ -361,14 +366,14 @@ class TestDeviceFlowRoutes:
         """Test token polling when authorization is pending."""
         # Generate device code
         device_response = test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={"client_id": "test-client"}
         )
         device_code = device_response.json()["device_code"]
         
         # Poll for token before approval
         token_response = test_client.post(
-            "/oauth2/token",
+            f"{API_PREFIX}/oauth2/token",
             data={
                 "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                 "device_code": device_code,
@@ -384,7 +389,7 @@ class TestDeviceFlowRoutes:
         """Test successful token retrieval after approval."""
         # Generate device code
         device_response = test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={"client_id": "test-client", "scope": "openid profile"}
         )
         device_code = device_response.json()["device_code"]
@@ -392,13 +397,13 @@ class TestDeviceFlowRoutes:
         
         # Approve the device
         test_client.post(
-            "/oauth2/device/approve",
+            f"{API_PREFIX}/oauth2/device/approve",
             data={"user_code": user_code}
         )
         
         # Poll for token after approval
         token_response = test_client.post(
-            "/oauth2/token",
+            f"{API_PREFIX}/oauth2/token",
             data={
                 "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                 "device_code": device_code,
@@ -423,7 +428,7 @@ class TestDeviceFlowRoutes:
     def test_device_token_invalid_grant_type(self, test_client: TestClient, clear_device_storage):
         """Test token request with invalid grant type."""
         response = test_client.post(
-            "/oauth2/token",
+            f"{API_PREFIX}/oauth2/token",
             data={
                 "grant_type": "invalid_grant_type",
                 "device_code": "test-code",
@@ -438,7 +443,7 @@ class TestDeviceFlowRoutes:
     def test_device_token_invalid_device_code(self, test_client: TestClient, clear_device_storage):
         """Test token request with invalid device code."""
         response = test_client.post(
-            "/oauth2/token",
+            f"{API_PREFIX}/oauth2/token",
             data={
                 "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                 "device_code": "invalid-device-code",
@@ -454,14 +459,14 @@ class TestDeviceFlowRoutes:
         """Test token request with mismatched client_id."""
         # Generate device code with one client
         device_response = test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={"client_id": "client-1"}
         )
         device_code = device_response.json()["device_code"]
         
         # Try to poll with different client
         response = test_client.post(
-            "/oauth2/token",
+            f"{API_PREFIX}/oauth2/token",
             data={
                 "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                 "device_code": device_code,
@@ -477,7 +482,7 @@ class TestDeviceFlowRoutes:
         """Test token request with expired device code."""
         # Generate device code
         device_response = test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={"client_id": "test-client"}
         )
         device_code = device_response.json()["device_code"]
@@ -488,13 +493,13 @@ class TestDeviceFlowRoutes:
         
         # Trigger cleanup to remove expired code
         test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={"client_id": "test-client"}
         )
         
         # Try to poll with expired code (now removed)
         response = test_client.post(
-            "/oauth2/token",
+            f"{API_PREFIX}/oauth2/token",
             data={
                 "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                 "device_code": device_code,
@@ -510,14 +515,14 @@ class TestDeviceFlowRoutes:
         """Test polling behavior (slow_down not implemented yet, returns authorization_pending)."""
         # Generate device code
         device_response = test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={"client_id": "test-client"}
         )
         device_code = device_response.json()["device_code"]
         
         # First poll
         response1 = test_client.post(
-            "/oauth2/token",
+            f"{API_PREFIX}/oauth2/token",
             data={
                 "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                 "device_code": device_code,
@@ -527,7 +532,7 @@ class TestDeviceFlowRoutes:
         
         # Second poll immediately (too fast)
         response2 = test_client.post(
-            "/oauth2/token",
+            f"{API_PREFIX}/oauth2/token",
             data={
                 "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                 "device_code": device_code,
@@ -545,7 +550,7 @@ class TestDeviceFlowRoutes:
         """Test the complete device authorization flow end-to-end."""
         # Step 1: Client requests device code
         device_response = test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={
                 "client_id": "test-client",
                 "scope": "openid profile email"
@@ -562,14 +567,14 @@ class TestDeviceFlowRoutes:
         
         # Step 3: User approves device
         approve_response = test_client.post(
-            "/oauth2/device/approve",
+            f"{API_PREFIX}/oauth2/device/approve",
             data={"user_code": user_code}
         )
         assert approve_response.status_code == 200
         
         # Step 4: Client polls for token
         token_response = test_client.post(
-            "/oauth2/token",
+            f"{API_PREFIX}/oauth2/token",
             data={
                 "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                 "device_code": device_code,
@@ -585,7 +590,7 @@ class TestDeviceFlowRoutes:
         
         # Step 5: Verify token can't be reused
         second_token_response = test_client.post(
-            "/oauth2/token",
+            f"{API_PREFIX}/oauth2/token",
             data={
                 "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                 "device_code": device_code,
@@ -600,7 +605,7 @@ class TestDeviceFlowRoutes:
         # Generate multiple codes to verify format consistency
         for _ in range(5):
             response = test_client.post(
-                "/oauth2/device/code",
+                f"{API_PREFIX}/oauth2/device/code",
                 data={"client_id": "test-client"}
             )
             user_code = response.json()["user_code"]
@@ -627,7 +632,7 @@ class TestDeviceFlowRoutes:
         # Generate multiple device codes
         for _ in range(10):
             response = test_client.post(
-                "/oauth2/device/code",
+                f"{API_PREFIX}/oauth2/device/code",
                 data={"client_id": "test-client"}
             )
             data = response.json()
@@ -644,7 +649,7 @@ class TestDeviceFlowRoutes:
         
         # Generate device code
         response = test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={"client_id": "test-client"}
         )
         device_code = response.json()["device_code"]
@@ -659,7 +664,7 @@ class TestDeviceFlowRoutes:
         
         # Trigger cleanup by making another request
         test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={"client_id": "test-client"}
         )
         
@@ -680,14 +685,14 @@ class TestDeviceFlowWithMocking:
         
         # Create device code
         device_response = test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={"client_id": "test-client", "scope": "test-scope"}
         )
         user_code = device_response.json()["user_code"]
         
         # Approve device
         response = test_client.post(
-            "/oauth2/device/approve",
+            f"{API_PREFIX}/oauth2/device/approve",
             data={"user_code": user_code}
         )
         
@@ -707,17 +712,17 @@ class TestDeviceFlowWithMocking:
         
         # Create and approve device
         device_response = test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={"client_id": "test-client"}
         )
         user_code = device_response.json()["user_code"]
         
         # First approval
-        test_client.post("/oauth2/device/approve", data={"user_code": user_code})
+        test_client.post(f"{API_PREFIX}/oauth2/device/approve", data={"user_code": user_code})
         
         # Second approval (should be idempotent)
         response = test_client.post(
-            "/oauth2/device/approve",
+            f"{API_PREFIX}/oauth2/device/approve",
             data={"user_code": user_code}
         )
         
@@ -731,7 +736,7 @@ class TestDeviceFlowWithMocking:
         
         # Create device code
         device_response = test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={"client_id": "test-client", "scope": "test-scope"}
         )
         data = device_response.json()
@@ -739,11 +744,11 @@ class TestDeviceFlowWithMocking:
         user_code = data["user_code"]
         
         # Approve device
-        test_client.post("/oauth2/device/approve", data={"user_code": user_code})
+        test_client.post(f"{API_PREFIX}/oauth2/device/approve", data={"user_code": user_code})
         
         # Poll token endpoint
         response = test_client.post(
-            "/oauth2/token",
+            f"{API_PREFIX}/oauth2/token",
             data={
                 "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                 "device_code": device_code,
@@ -766,7 +771,7 @@ class TestDeviceFlowWithMocking:
         """Test token endpoint rejects expired device codes."""
         # Create device code
         device_response = test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={"client_id": "test-client"}
         )
         device_code = device_response.json()["device_code"]
@@ -776,7 +781,7 @@ class TestDeviceFlowWithMocking:
         
         # Try to get token
         response = test_client.post(
-            "/oauth2/token",
+            f"{API_PREFIX}/oauth2/token",
             data={
                 "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                 "device_code": device_code,
@@ -801,7 +806,7 @@ class TestEndToEndIntegration:
         
         # Step 1: Register client
         reg_response = test_client.post(
-            "/oauth2/register",
+            f"{API_PREFIX}/oauth2/register",
             json={
                 "client_name": "Integration Test Client",
                 "grant_types": ["urn:ietf:params:oauth:grant-type:device_code"]
@@ -813,7 +818,7 @@ class TestEndToEndIntegration:
         
         # Step 2: Initiate device flow
         device_response = test_client.post(
-            "/oauth2/device/code",
+            f"{API_PREFIX}/oauth2/device/code",
             data={
                 "client_id": client_id,
                 "scope": "mcp-servers-unrestricted/read mcp-servers-unrestricted/execute"
@@ -825,14 +830,14 @@ class TestEndToEndIntegration:
         
         # Step 3: User approves device
         approve_response = test_client.post(
-            "/oauth2/device/approve",
+            f"{API_PREFIX}/oauth2/device/approve",
             data={"user_code": user_code}
         )
         assert approve_response.status_code == 200
         
         # Step 4: Client polls for token
         token_response = test_client.post(
-            "/oauth2/token",
+            f"{API_PREFIX}/oauth2/token",
             data={
                 "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                 "device_code": device_code,

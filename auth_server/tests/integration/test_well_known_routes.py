@@ -27,14 +27,17 @@ class TestWellKnownRoutes:
         assert "jwks_uri" in data
         
         # Verify endpoint URLs are properly formatted
+        # Issuer is at root (per RFC 8414)
         assert data["issuer"] == "http://localhost:8888"
-        assert data["authorization_endpoint"] == "http://localhost:8888/oauth2/login/keycloak"
-        assert data["token_endpoint"] == "http://localhost:8888/oauth2/token"
+        # OAuth endpoints include the /auth prefix when AUTH_SERVER_API_PREFIX is set
+        assert data["authorization_endpoint"] == "http://localhost:8888/auth/oauth2/login/keycloak"
+        assert data["token_endpoint"] == "http://localhost:8888/auth/oauth2/token"
+        # JWKS is at root level
         assert data["jwks_uri"] == "http://localhost:8888/.well-known/jwks.json"
         
         # Verify device flow support
         assert "device_authorization_endpoint" in data
-        assert data["device_authorization_endpoint"] == "http://localhost:8888/oauth2/device/code"
+        assert data["device_authorization_endpoint"] == "http://localhost:8888/auth/oauth2/device/code"
         
         # Verify grant types
         assert "grant_types_supported" in data
@@ -72,8 +75,8 @@ class TestWellKnownRoutes:
         assert "userinfo_endpoint" in data
         assert "jwks_uri" in data
         
-        # Verify OIDC-specific endpoints
-        assert data["userinfo_endpoint"] == "http://localhost:8888/oauth2/userinfo"
+        # Verify OIDC-specific endpoints (include /auth prefix when AUTH_SERVER_API_PREFIX is set)
+        assert data["userinfo_endpoint"] == "http://localhost:8888/auth/oauth2/userinfo"
         
         # Verify subject types
         assert "subject_types_supported" in data
@@ -243,7 +246,7 @@ class TestWellKnownRoutes:
         data = response.json()
         
         assert "service_documentation" in data
-        assert data["service_documentation"] == "http://localhost:8888/docs"
+        assert data["service_documentation"] == "http://localhost:8888/auth/docs"
 
     def test_pkce_support_in_metadata(self, test_client: TestClient):
         """Test that PKCE (Proof Key for Code Exchange) support is advertised."""

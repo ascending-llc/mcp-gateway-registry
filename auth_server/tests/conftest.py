@@ -7,15 +7,17 @@ from typing import Generator
 from unittest.mock import Mock, patch
 from fastapi.testclient import TestClient
 
+# Set environment variables BEFORE importing the app
+# This ensures settings are loaded with correct values
+os.environ["AUTH_SERVER_EXTERNAL_URL"] = "http://localhost:8888"
+os.environ["AUTH_SERVER_API_PREFIX"] = "/auth"
+os.environ["AUTH_PROVIDER"] = "keycloak"
+os.environ["SECRET_KEY"] = "test-secret-key-for-testing"
+
 
 @pytest.fixture
 def auth_server_app():
     """Import and return the auth server FastAPI app."""
-    # Set required environment variables
-    os.environ["AUTH_SERVER_EXTERNAL_URL"] = "http://localhost:8888"
-    os.environ["AUTH_PROVIDER"] = "keycloak"
-    os.environ["SECRET_KEY"] = "test-secret-key-for-testing"
-    
     from auth_server.server import app
     return app
 

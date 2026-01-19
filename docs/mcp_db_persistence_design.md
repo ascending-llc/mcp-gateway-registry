@@ -1404,10 +1404,8 @@ $ python -c "from packages.models import MCPServer; print('✅ Schemas ready')"
 >    - Only updated when user/admin changes it
 >    - Persisted for configuration purposes
 >
-> 2. **`connection_state`** (NOT stored in MongoDB):
+> 2. **`connection_state`** (stored in MongoDB):
 >    - Runtime state (`disconnected`, `connecting`, `connected`, `error`)
->    - Maintained in **memory cache** or **Redis**
->    - Changes frequently, doesn't need persistence
 >
 > 3. **`last_connected`** (stored in MongoDB):
 >    - Timestamp of last successful connection
