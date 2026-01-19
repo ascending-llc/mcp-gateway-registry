@@ -620,8 +620,9 @@ class TestDeviceFlowRoutes:
             assert len(parts[1]) == 4
             assert parts[0].isalnum()
             assert parts[1].isalnum()
-            assert parts[0].isupper()
-            assert parts[1].isupper()
+            # Each character should be either uppercase letter or digit
+            assert all(c.isupper() or c.isdigit() for c in parts[0])
+            assert all(c.isupper() or c.isdigit() for c in parts[1])
 
     def test_device_code_uniqueness(self, test_client: TestClient, clear_device_storage):
         """Test that device codes and user codes are unique."""
