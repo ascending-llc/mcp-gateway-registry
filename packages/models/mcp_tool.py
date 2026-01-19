@@ -14,6 +14,7 @@ import uuid
 from typing import List, Dict, Any
 from langchain_core.documents import Document
 import logging
+from models import MCPServerDocument
 
 logger = logging.getLogger(__name__)
 
@@ -311,6 +312,37 @@ class McpTool:
             'tags': self.tags,
             'is_enabled': self.is_enabled,
             'content': self.content
+        }
+
+    @staticmethod
+    def from_server_document(server: MCPServerDocument) -> Dict[str, Any]:
+        """
+        Convert MCPServerDocument to server_info format for search indexing.
+        """
+        config = server.config or {}
+
+        # Extract tool_list from toolFunctions or use empty list
+        tool_functions = config.get("toolFunctions", {})
+        tool_list = []
+
+        # Convert toolFunctions back to tool_list format
+        for func_key, func_data in tool_functions.items():
+            if isinstance(func_data, dict) and "function" in func_data:
+                func = func_data["function"]
+                tool_list.append({
+                    "name": func.get("name", func_key),
+                    "description": func.get("description", ""),
+                    "inputSchema": func.get("parameters", {})
+                })
+
+        return {
+            "server_name": server.serverName,
+            "description": config.get("description", ""),
+            "path": server.path,
+            "tags": server.tags or [],
+            "entity_type": "mcp_server",
+            "tool_list": tool_list,
+            "is_enabled": config.get("enabled", True),
         }
 
     def __str__(self):

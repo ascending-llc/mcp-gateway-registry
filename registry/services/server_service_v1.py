@@ -16,16 +16,16 @@ import httpx
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
 from beanie import PydanticObjectId
+from models import McpTool
 from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 from packages.models._generated.user import IUser
-from packages.services import get_search_index_manager
-
 from registry.schemas.server_api_schemas import (
     ServerCreateRequest,
     ServerUpdateRequest,
 )
 from registry.utils.crypto_utils import encrypt_auth_fields
 from registry.core.mcp_client import get_tools_from_server_with_server_info
+from vector.search_manager import get_search_index_manager
 
 logger = logging.getLogger(__name__)
 
@@ -252,42 +252,6 @@ class ServerServiceV1:
         """Initialize server service with search index manager."""
         self.search_mgr = get_search_index_manager()
         logger.info("ServerServiceV1 initialized with search index manager")
-
-    def _to_server_info(self, server: MCPServerDocument) -> Dict[str, Any]:
-        """
-        Convert MCPServerDocument to server_info format for search indexing.
-        
-        Args:
-            server: MCPServerDocument instance
-            
-        Returns:
-            server_info dictionary compatible with SearchIndexManager
-        """
-        config = server.config or {}
-
-        # Extract tool_list from toolFunctions or use empty list
-        tool_functions = config.get("toolFunctions", {})
-        tool_list = []
-
-        # Convert toolFunctions back to tool_list format
-        for func_key, func_data in tool_functions.items():
-            if isinstance(func_data, dict) and "function" in func_data:
-                func = func_data["function"]
-                tool_list.append({
-                    "name": func.get("name", func_key),
-                    "description": func.get("description", ""),
-                    "inputSchema": func.get("parameters", {})
-                })
-
-        return {
-            "server_name": server.serverName,
-            "description": config.get("description", ""),
-            "path": server.path,
-            "tags": server.tags or [],
-            "entity_type": "mcp_server",
-            "tool_list": tool_list,
-            "is_enabled": config.get("enabled", True),
-        }
 
     async def list_servers(
             self,
@@ -601,7 +565,7 @@ class ServerServiceV1:
                 await server.save()
 
                 # Sync search index after successful registration and tool retrieval
-                server_info = self._to_server_info(server)
+                server_info = McpTool.from_server_document(server)
                 await self.search_mgr.add_or_update_entity(
                     entity_path=server.path,
                     entity_info=server_info,
