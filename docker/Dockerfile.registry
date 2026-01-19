@@ -29,17 +29,19 @@ COPY . /app/
 
 # Install Python dependencies based on TOOL_DISCOVERY_MODE
 # Step 1: Install uv package manager
-# Step 2: Sync workspace dependencies (includes packages, registry, and all deps)
+# Step 2: Install workspace members (packages + registry) from parent directory
 # Step 3: Import schemas from GitHub release (if SCHEMA_VERSION provided)
 RUN pip install --no-cache-dir uv && \
-    echo "Syncing workspace dependencies..." && \
+    echo "Installing workspace dependencies to system Python..." && \
     cd /app && \
     if [ "$TOOL_DISCOVERY_MODE" = "external" ]; then \
         echo "Building LIGHTWEIGHT image (external mode) - skipping ML dependencies"; \
-        uv sync --no-dev; \
+        uv pip install --system -e ./packages && \
+        uv pip install --system -e ./registry; \
     else \
         echo "Building FULL image (embedded mode) - installing with ML dependencies"; \
-        uv sync --no-dev --extra embedded-search; \
+        uv pip install --system -e ./packages && \
+        uv pip install --system -e "./registry[embedded-search]"; \
     fi && \
     echo "Checking for schema import..." && \
     if [ -z "$SCHEMA_VERSION" ] || [ -z "$GITHUB_TOKEN" ]; then \
@@ -68,10 +70,6 @@ ENV EMBEDDINGS_MODEL_NAME=all-MiniLM-L6-v2 \
 
 # Expose port for registry
 EXPOSE 7860
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:7860/health || exit 1
 
 # Copy and set up entrypoint script
 COPY docker/registry-entrypoint.sh /app/entrypoint.sh

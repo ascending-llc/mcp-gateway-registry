@@ -150,8 +150,8 @@ EOF
 
         # Start the registry
         echo "Starting MCP Registry on port 7860..."
-        cd /app
-        exec uv run uvicorn registry.main:app --host 0.0.0.0 --port 7860
+        cd /app/registry
+        exec uvicorn registry.main:app --host 0.0.0.0 --port 7860
         ;;
     *)
         echo "Unknown MODE: $MODE"
