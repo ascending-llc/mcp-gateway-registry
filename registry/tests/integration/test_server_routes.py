@@ -1,9 +1,8 @@
-"""
-Integration tests for server routes.
+"""                                                                                                                                                                Integration tests for server routes.
 """
 import pytest
 from unittest.mock import patch, AsyncMock
-from tests.fixtures.factories import ServerInfoFactory
+from registry.tests.fixtures.factories import ServerInfoFactory
 from fastapi.testclient import TestClient
 from registry.main import app
 

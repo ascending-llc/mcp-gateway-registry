@@ -18,7 +18,7 @@ from registry.health.service import HealthMonitoringService
 from registry.services.search.base import VectorSearchService
 
 # Import test utilities
-from tests.fixtures.factories import (
+from registry.tests.fixtures.factories import (
     ServerInfoFactory,
     create_multiple_servers,
     create_server_with_tools,

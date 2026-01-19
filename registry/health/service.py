@@ -201,10 +201,14 @@ class HealthMonitoringService:
         """Initialize the health monitoring service."""
         logger.info("Initializing health monitoring service...")
         
+        # DEPRECATED: Background health checks disabled in favor of MongoDB-based monitoring
+        # TODO: Refactor to support WebSocket updates from MongoDB change streams
         # Start background health checks
-        self.health_check_task = asyncio.create_task(self._run_health_checks())
+        # self.health_check_task = asyncio.create_task(self._run_health_checks())
+        logger.info("Background health checks DISABLED - using MongoDB for health monitoring")
         
         logger.info("Health monitoring service initialized!")
+
         
     async def shutdown(self):
         """Shutdown the health monitoring service."""
