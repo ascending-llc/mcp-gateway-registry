@@ -334,7 +334,7 @@ class TestDeviceFlowRoutes:
         # Approve the device
         approval_response = test_client.post(
             f"{API_PREFIX}/oauth2/device/approve",
-            data={"user_code": user_code}
+            json={"user_code": user_code}
         )
         
         assert approval_response.status_code == 200
@@ -346,7 +346,7 @@ class TestDeviceFlowRoutes:
         """Test device approval with invalid user code."""
         response = test_client.post(
             f"{API_PREFIX}/oauth2/device/approve",
-            data={"user_code": "INVALID-CODE"}
+            json={"user_code": "INVALID-CODE"}
         )
         
         assert response.status_code == 404
@@ -356,7 +356,7 @@ class TestDeviceFlowRoutes:
         """Test device approval without user_code parameter."""
         response = test_client.post(
             f"{API_PREFIX}/oauth2/device/approve",
-            data={}
+            json={}
         )
         
         assert response.status_code == 422  # Validation error
@@ -397,7 +397,7 @@ class TestDeviceFlowRoutes:
         # Approve the device
         test_client.post(
             f"{API_PREFIX}/oauth2/device/approve",
-            data={"user_code": user_code}
+            json={"user_code": user_code}
         )
         
         # Poll for token after approval
@@ -567,7 +567,7 @@ class TestDeviceFlowRoutes:
         # Step 3: User approves device
         approve_response = test_client.post(
             f"{API_PREFIX}/oauth2/device/approve",
-            data={"user_code": user_code}
+            json={"user_code": user_code}
         )
         assert approve_response.status_code == 200
         
@@ -693,7 +693,7 @@ class TestDeviceFlowWithMocking:
         # Approve device
         response = test_client.post(
             f"{API_PREFIX}/oauth2/device/approve",
-            data={"user_code": user_code}
+            json={"user_code": user_code}
         )
         
         assert response.status_code == 200
@@ -718,12 +718,12 @@ class TestDeviceFlowWithMocking:
         user_code = device_response.json()["user_code"]
         
         # First approval
-        test_client.post(f"{API_PREFIX}/oauth2/device/approve", data={"user_code": user_code})
+        test_client.post(f"{API_PREFIX}/oauth2/device/approve", json={"user_code": user_code})
         
         # Second approval (should be idempotent)
         response = test_client.post(
             f"{API_PREFIX}/oauth2/device/approve",
-            data={"user_code": user_code}
+            json={"user_code": user_code}
         )
         
         assert response.status_code == 200
@@ -744,7 +744,7 @@ class TestDeviceFlowWithMocking:
         user_code = data["user_code"]
         
         # Approve device
-        test_client.post(f"{API_PREFIX}/oauth2/device/approve", data={"user_code": user_code})
+        test_client.post(f"{API_PREFIX}/oauth2/device/approve", json={"user_code": user_code})
         
         # Poll token endpoint
         response = test_client.post(
@@ -831,7 +831,7 @@ class TestEndToEndIntegration:
         # Step 3: User approves device
         approve_response = test_client.post(
             f"{API_PREFIX}/oauth2/device/approve",
-            data={"user_code": user_code}
+            json={"user_code": user_code}
         )
         assert approve_response.status_code == 200
         
