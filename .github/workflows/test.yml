@@ -25,34 +25,29 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: 📦 Cache dependencies
+    - name: 📦 Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: 📦 Cache uv dependencies
       uses: actions/cache@v3
       with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
+        path: ~/.cache/uv
+        key: ${{ runner.os }}-uv-${{ hashFiles('**/pyproject.toml') }}
         restore-keys: |
-          ${{ runner.os }}-pip-
+          ${{ runner.os }}-uv-
 
-    - name: 🔧 Install dependencies
+    - name: 🔧 Install dependencies with uv
       run: |
-        python -m pip install --upgrade pip
-        pip install -e .[dev]
-        pip install -e ./auth_server[dev]
-
-    - name: 🔍 Check dependencies
-      run: |
-        pip check
+        uv sync --extra dev
+        cd auth_server && uv sync --extra dev
 
     - name: Get latest schema version
       id: get-schema
       uses: ./.github/actions/get-schema-version
       with:
         github-token: ${{ secrets.JARVIS_RELEASE_ACCESS_TOKEN }}
-
-    - name: 📦 Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
     - name: Import schema
       id: import-schema
@@ -63,21 +58,21 @@ jobs:
 
     - name: 🧪 Run unit tests
       run: |
-        pytest tests/unit -v
+        uv run pytest tests/unit -v
 
     - name: 🔗 Run integration tests  
       run: |
-        pytest tests/integration -v
+        uv run pytest tests/integration -v
 
-    - name: � Run auth_server tests
+    - name: 🔐 Run auth_server tests
       run: |
         cd auth_server
-        pytest tests/integration -v
+        uv run poe test
 
     - name: 📊 Generate coverage report
       run: |
-        pytest --cov=registry --cov-report=xml --cov-report=html
-        cd auth_server && pytest --cov=auth_server --cov-report=xml --cov-report=html --cov-append
+        uv run pytest --cov=registry --cov-report=xml --cov-report=html
+        cd auth_server && uv run pytest --cov=auth_server --cov-report=xml --cov-report=html --cov-append
 
     - name: 📤 Upload coverage to Codecov
       uses: codecov/codecov-action@v3
