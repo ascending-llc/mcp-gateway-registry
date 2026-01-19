@@ -449,12 +449,15 @@ async def toggle_server(
     data: ServerToggleRequest,
     user_context: dict = Depends(get_user_context),
 ):
-    """Toggle server enabled/disabled status"""
+    """Toggle server enabled/disabled status. When enabling, fetches tools from server."""
     try:
+        # Get user_id from context for OAuth token retrieval
+        user_id = user_context.get("username") or user_context.get("user_id")
+        
         server = await server_service_v1.toggle_server_status(
             server_id=server_id,
             enabled=data.enabled,
-            user_id=None,
+            user_id=user_id,
         )
         
         return convert_to_toggle_response(server, data.enabled)
@@ -551,12 +554,25 @@ async def refresh_server_health(
     server_id: str,
     user_context: dict = Depends(get_user_context),
 ):
-    """Refresh server health status"""
+    """Refresh server health status. Updates tools if server becomes active."""
     try:
+        # Get user_id from context for OAuth token retrieval
+        user_id = user_context.get("username") or user_context.get("user_id")
+        
         health_info = await server_service_v1.refresh_server_health(
             server_id=server_id,
-            user_id=None,
+            user_id=user_id,
         )
+        
+        # Check if health check failed
+        if health_info["status"] == "unhealthy":
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "health_check_failed",
+                    "message": health_info.get("status_message", "Failed to retrieve tools from server"),
+                }
+            )
         
         server = health_info["server"]
         

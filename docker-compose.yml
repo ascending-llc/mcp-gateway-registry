@@ -163,7 +163,9 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-
+    profiles:
+        - full
+        - dev
   # Auth service (separate and scalable)
   auth-server:
     build:
@@ -221,22 +223,6 @@ services:
       - full
       - dev
 
-  # Financial Info MCP Server
-  fininfo-server:
-    build:
-      context: servers/fininfo
-      dockerfile: ../../docker/Dockerfile.mcp-server
-    environment:
-      - PORT=8001
-      - SECRET_KEY=${SECRET_KEY}
-    volumes:
-      - ${APP_HOME}/mcp-gateway/secrets/fininfo/:/app/fininfo/
-    ports:
-      - "8001:8001"
-    restart: unless-stopped
-    profiles:
-      - full
-
   # MCP Gateway Server
   mcpgw-server:
     build:
@@ -257,7 +243,6 @@ services:
       # MongoDB configuration
       - MONGO_URI=mongodb://registry-mongodb:27017/jarvis
     volumes:
-      - ${APP_HOME}/mcp-gateway/servers:/app/registry/servers
       - ${APP_HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
     ports:
       - "8003:8003"
@@ -268,18 +253,7 @@ services:
       - .env
     profiles:
       - full
-
-  # Real Server Fake Tools MCP Server
-  realserverfaketools-server:
-    build:
-      context: servers/realserverfaketools
-      dockerfile: ../../docker/Dockerfile.mcp-server
-    environment:
-      - PORT=8002
-    ports:
-      - "8002:8002"
-    restart: unless-stopped
-
+      - dev
   weaviate:
     image: cr.weaviate.io/semitechnologies/weaviate:latest
     restart: on-failure:0
@@ -299,22 +273,6 @@ services:
     profiles:
       - full
       - dev
-
-  # Atlassian MCP Server
-  atlassian-server:
-    image: ghcr.io/sooperset/mcp-atlassian:latest
-    environment:
-      - ATLASSIAN_OAUTH_ENABLE=true
-      - MCP_VERY_VERBOSE=true
-      - MCP_LOGGING_STDOUT=true
-    ports:
-      - "8005:8005"
-    volumes:
-      - $HOME/.mcp-atlassian:/home/app/.mcp-atlassian
-    command: --transport streamable-http --port 8005
-    restart: unless-stopped
-    profiles:
-      - full
 
   # SQLite container for metrics database
   metrics-db:

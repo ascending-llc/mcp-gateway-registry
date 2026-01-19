@@ -95,8 +95,7 @@ class RegistryConstants(BaseModel):
     REDIS_URI: str = os.getenv("REDIS_URI", "redis://redis:6379/1")
     REDIS_KEY_PREFIX: str = os.getenv("REDIS_KEY_PREFIX", "jarvis-registry")
     
-    # API Base Path (for reverse proxy deployments)
-    NGINX_BASE_PATH: str = os.getenv("NGINX_BASE_PATH", "gateway")
+    REGISTRY_CLIENT_URL: str = os.getenv("REGISTRY_CLIENT_URL", "http://localhost:5173")
 
 
 # Global instance

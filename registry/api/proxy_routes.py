@@ -10,7 +10,7 @@ from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 from starlette.background import BackgroundTask
 
-from registry.services.server_service import server_service
+from registry.services.server_service_v1 import server_service_v1
 from registry.health.service import health_service
 from registry.constants import HealthStatus
 from registry.core.config import settings
@@ -245,23 +245,33 @@ async def proxy_to_mcp_server(
         )
 
 
-def find_matching_mcp_server(path: str) -> Optional[tuple[str, Dict[str, Any]]]:
-    """Find MCP server configuration matching the request path."""
-    all_servers = server_service.get_all_servers()
+async def extract_server_path_from_request(request_path: str) -> Optional[str]:
+    """
+    Extract registered server path prefix from request URL.
     
-    # Sort by path length (longest first) to match most specific route
-    sorted_servers = sorted(
-        all_servers.items(),
-        key=lambda x: len(x[0]),
-        reverse=True
-    )
+    Tries progressively shorter path segments until finding a registered server.
+    For example, "/github/repos/list" will check:
+    1. /github/repos/list
+    2. /github/repos  
+    3. /github
     
-    for service_path, server_info in sorted_servers:
-        if not server_service.is_service_enabled(service_path):
-            continue
+    Args:
+        request_path: Full incoming request path (e.g., /github/repos/list)
         
-        if path.startswith(service_path):
-            return (service_path, server_info)
+    Returns:
+        Registered server path if found, None otherwise
+    """
+    # Split path into segments
+    segments = [s for s in request_path.split('/') if s]
+    
+    # Try progressively shorter paths (longest first for specificity)
+    for i in range(len(segments), 0, -1):
+        candidate_path = '/' + '/'.join(segments[:i])
+        
+        # Query database for this exact path
+        server = await server_service_v1.get_server_by_path(candidate_path)
+        if server:
+            return candidate_path
     
     return None
 
@@ -276,26 +286,26 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
     """
     path = f"/{full_path}"
        
-    # Find matching MCP server
-    match = find_matching_mcp_server(path)
-    if match is None:
-        # Not an MCP route
+    # Extract registered server path from request URL
+    server_path = await extract_server_path_from_request(path)
+    if not server_path:
         raise HTTPException(status_code=404, detail="Not found")
     
-    service_path, server_info = match
+    # Get server by the extracted path (guaranteed unique in database)
+    server = await server_service_v1.get_server_by_path(server_path)
+    if not server:
+        raise HTTPException(status_code=404, detail="Not found")
     
-    # Check if server is healthy
-    health_status = health_service.server_health_status.get(service_path, HealthStatus.UNKNOWN)
-    if not HealthStatus.is_healthy(health_status):
+    # Check if server is enabled
+    config = server.config or {}
+    if not config.get("enabled", False):
         return JSONResponse(
             status_code=503,
             content={
-                "error": "Service unavailable",
-                "status": str(health_status),
-                "service": service_path
+                "error": "Service disabled",
+                "service": server.path
             }
         )
-    
     # Validate authentication
     try:
         auth_context = await validate_auth(request)
@@ -303,24 +313,28 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
         logger.warning(f"Auth failed for {path}: {e.detail}")
         raise
     
-    # Get target URL and transport type
-    proxy_pass_url = server_info.get("proxy_pass_url")
+    # Get target URL from server config
+    proxy_pass_url = config.get("url")
     if not proxy_pass_url:
-        logger.error(f"No proxy_pass_url configured for {service_path}")
+        logger.error(f"No URL configured for {server.path}")
         raise HTTPException(status_code=500, detail="Server misconfigured")
     
     # Ensure proxy_pass_url has trailing slash
     if not proxy_pass_url.endswith('/'):
         proxy_pass_url += '/'
     
-    remaining_path = path[len(service_path):].lstrip('/')
+    remaining_path = path[len(server.path):].lstrip('/')
     
     # Build full target URL
     target_url = proxy_pass_url + remaining_path
     
-    # Determine transport type
-    supported_transports = server_info.get("supported_transports", ["streamable-http"])
-    transport_type = "sse" if "sse" in supported_transports else "streamable-http"
+    # Determine transport type from server config
+    transport_type = config.get("type", "streamable-http")
+    
+    # Build server_config for authentication
+    server_config = {}
+    if "apiKey" in config:
+        server_config["apiKey"] = config["apiKey"]
     
     # Proxy the request
     logger.info(f"Proxying {request.method} {path} → {target_url} (transport: {transport_type})")
@@ -329,7 +343,7 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
         target_url=target_url,
         auth_context=auth_context,
         transport_type=transport_type,
-        server_config=server_info
+        server_config=server_config
     )
 
 

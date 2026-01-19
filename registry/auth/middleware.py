@@ -43,6 +43,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/api/{versions}/mcp/{server_name}/oauth/callback",  # OAuth callback is public
             "/api/{versions}/mcp/oauth/success",  # OAuth success page
             "/api/{versions}/mcp/oauth/error",  # OAuth error page
+            "/.well-known/{path:path}",  # OAuth discovery endpoints must be public
         ])
         # note: admin
         self.internal_paths_compiled = self._compile_patterns([
@@ -89,7 +90,23 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         except AuthenticationError as e:
             logger.warning(f"Auth failed for {path}: {e}")
-            return JSONResponse(status_code=401, content={"detail": str(e)})
+            # Add WWW-Authenticate header for MCP OAuth discovery
+            # Extract server name from path for MCP proxy requests
+            server_name = None
+            if path.startswith("/proxy/"):
+                server_name = path.split("/")[2] if len(path.split("/")) > 2 else None
+            
+            headers = {"Connection": "close"}
+            if server_name:
+                # For MCP proxy paths, RFC 9728 (OAuth 2.0 Protected Resource Metadata) - the official specification
+                registry_url = settings.registry_client_url.rstrip('/')
+                oauth_discovery = f"{registry_url}/.well-known/oauth-protected-resource/proxy/{server_name}"
+                headers["WWW-Authenticate"] = f'Bearer realm="mcp-registry", resource_metadata="{oauth_discovery}"'
+            else:
+                # For other authenticated paths, use general OAuth discovery
+                headers["WWW-Authenticate"] = 'Bearer realm="mcp-registry"'
+            
+            return JSONResponse(status_code=401, content={"detail": str(e)}, headers=headers)
         except Exception as e:
             logger.error(f"Auth error for {path}: {e}")
             return JSONResponse(status_code=500, content={"detail": "Authentication error"})

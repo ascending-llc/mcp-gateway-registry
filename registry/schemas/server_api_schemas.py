@@ -40,9 +40,8 @@ class ServerCreateRequest(BaseModel):
     requires_oauth: bool = Field(default=False, description="Requires OAuth")
     oauth: Optional[Dict[str, Any]] = Field(default=None, description="OAuth configuration")
     custom_user_vars: Optional[Dict[str, Any]] = Field(default=None, description="Custom variables")
-    authentication: Optional[Dict[str, Any]] = Field(default=None, description="Authentication configuration (type, provider, scopes, etc.)")
     apiKey: Optional[Dict[str, Any]] = Field(default=None, description="API Key authentication configuration")
-    enabled: bool = Field(default=True, description="Whether the server is enabled")
+    enabled: Optional[bool] = Field(default=None, description="Whether the server is enabled (auto-set to False during registration)")
     
     class ConfigDict:
         populate_by_name = True  # Allow both serverName and server_name
@@ -91,7 +90,6 @@ class ServerUpdateRequest(BaseModel):
     requires_oauth: Optional[bool] = None
     oauth: Optional[Dict[str, Any]] = None
     custom_user_vars: Optional[Dict[str, Any]] = None
-    authentication: Optional[Dict[str, Any]] = None
     apiKey: Optional[Dict[str, Any]] = None
     status: Optional[str] = None
     scope: Optional[str] = None
@@ -155,7 +153,7 @@ class ServerListItemResponse(BaseModel):
     type: Optional[str] = Field(None, description="Transport type (e.g., streamable-http, sse, stdio)")
     url: Optional[str] = None
     apiKey: Optional[Dict[str, Any]] = None
-    authentication: Optional[Dict[str, Any]] = None
+    oauth: Optional[Dict[str, Any]] = None
     requiresOAuth: bool = Field(False, alias="requiresOAuth", description="Whether OAuth is required")
     capabilities: Optional[str] = Field(None, description="JSON string of server capabilities")
     oauthMetadata: Optional[Dict[str, Any]] = Field(None, alias="oauthMetadata", description="OAuth metadata from autodiscovery")
@@ -182,20 +180,20 @@ class ServerListItemResponse(BaseModel):
     @model_serializer(mode='wrap')
     def _serialize(self, serializer, info):
         data = serializer(self)
-        # Handle mutually exclusive authentication fields
-        has_authentication = data.get('authentication') is not None
+        # Handle mutually exclusive authentication fields: oauth and apiKey
+        has_oauth = data.get('oauth') is not None
         has_api_key = data.get('apiKey') is not None
         
-        if has_authentication:
-            # If authentication exists, remove apiKey from response
+        if has_oauth:
+            # If oauth exists, remove apiKey from response
             data.pop('apiKey', None)
         elif has_api_key:
-            # If only apiKey exists, remove authentication from response
-            data.pop('authentication', None)
+            # If only apiKey exists, remove oauth from response
+            data.pop('oauth', None)
         else:
             # If both are None/empty, remove both fields
+            data.pop('oauth', None)
             data.pop('apiKey', None)
-            data.pop('authentication', None)
         return data
 
 
@@ -208,7 +206,7 @@ class ServerDetailResponse(BaseModel):
     type: Optional[str] = Field(None, description="Transport type (e.g., streamable-http, sse, stdio)")
     url: Optional[str] = None
     apiKey: Optional[Dict[str, Any]] = None
-    authentication: Optional[Dict[str, Any]] = None
+    oauth: Optional[Dict[str, Any]] = None
     requiresOAuth: bool = Field(False, alias="requiresOAuth", description="Whether OAuth is required")
     capabilities: Optional[str] = Field(None, description="JSON string of server capabilities")
     oauthMetadata: Optional[Dict[str, Any]] = Field(None, alias="oauthMetadata", description="OAuth metadata from autodiscovery")
@@ -239,20 +237,20 @@ class ServerDetailResponse(BaseModel):
     @model_serializer(mode='wrap')
     def _serialize(self, serializer, info):
         data = serializer(self)
-        # Handle mutually exclusive authentication fields
-        has_authentication = data.get('authentication') is not None
+        # Handle mutually exclusive authentication fields: oauth and apiKey
+        has_oauth = data.get('oauth') is not None
         has_api_key = data.get('apiKey') is not None
         
-        if has_authentication:
-            # If authentication exists, remove apiKey from response
+        if has_oauth:
+            # If oauth exists, remove apiKey from response
             data.pop('apiKey', None)
         elif has_api_key:
-            # If only apiKey exists, remove authentication from response
-            data.pop('authentication', None)
+            # If only apiKey exists, remove oauth from response
+            data.pop('oauth', None)
         else:
             # If both are None/empty, remove both fields
+            data.pop('oauth', None)
             data.pop('apiKey', None)
-            data.pop('authentication', None)
         return data
 
 
@@ -265,7 +263,6 @@ class ServerCreateResponse(BaseModel):
     url: Optional[str] = None
     apiKey: Optional[Dict[str, Any]] = None
     oauth: Optional[Dict[str, Any]] = None
-    authentication: Optional[Dict[str, Any]] = None
     requiresOAuth: bool = Field(False, alias="requiresOAuth")
     capabilities: Optional[str] = None
     oauthMetadata: Optional[Dict[str, Any]] = Field(None, alias="oauthMetadata", description="OAuth metadata from autodiscovery")
@@ -294,28 +291,20 @@ class ServerCreateResponse(BaseModel):
     def _serialize(self, serializer, info):
         data = serializer(self)
         
-        # Handle mutually exclusive auth fields
-        # Priority: authentication > oauth > apiKey
+        # Handle mutually exclusive auth fields: oauth and apiKey
+        # Priority: oauth > apiKey
         # If all are None/empty, remove all auth fields
-        has_authentication = data.get('authentication') is not None
         has_oauth = data.get('oauth') is not None
         has_api_key = data.get('apiKey') is not None
         
-        if has_authentication:
-            # Keep authentication, remove others
-            data.pop('oauth', None)
-            data.pop('apiKey', None)
-        elif has_oauth:
-            # Keep oauth, remove others
-            data.pop('authentication', None)
+        if has_oauth:
+            # Keep oauth, remove apiKey
             data.pop('apiKey', None)
         elif has_api_key:
-            # Keep apiKey, remove others
-            data.pop('authentication', None)
+            # Keep apiKey, remove oauth
             data.pop('oauth', None)
         else:
             # No auth required, remove all auth fields
-            data.pop('authentication', None)
             data.pop('oauth', None)
             data.pop('apiKey', None)
         
@@ -433,12 +422,70 @@ def _get_config_field(server, field: str, default=None):
     return server.config.get(field, default)
 
 
+def _mask_oauth_client_secret(oauth_config: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """
+    Mask OAuth client_secret to show only the last 6 characters.
+    
+    Args:
+        oauth_config: OAuth configuration dictionary
+        
+    Returns:
+        OAuth config with masked client_secret (only last 6 characters visible)
+    """
+    if not oauth_config or not isinstance(oauth_config, dict):
+        return oauth_config
+    
+    # Create a copy to avoid modifying the original
+    masked_oauth = oauth_config.copy()
+    
+    if "client_secret" in masked_oauth and masked_oauth["client_secret"]:
+        client_secret = str(masked_oauth["client_secret"])
+        # Only show last 6 characters
+        if len(client_secret) > 6:
+            masked_oauth["client_secret"] = "************" + client_secret[-6:]
+        # If secret is 6 chars or less, just show it as is (edge case)
+    
+    return masked_oauth
+
+
+def _mask_apikey(apikey_config: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """
+    Mask API Key to show only the last 6 characters.
+    
+    Args:
+        apikey_config: API Key configuration dictionary
+        
+    Returns:
+        API Key config with masked key (only last 6 characters visible)
+    """
+    if not apikey_config or not isinstance(apikey_config, dict):
+        return apikey_config
+    
+    # Create a copy to avoid modifying the original
+    masked_apikey = apikey_config.copy()
+    
+    if "key" in masked_apikey and masked_apikey["key"]:
+        key_value = str(masked_apikey["key"])
+        # Only show last 6 characters
+        if len(key_value) > 6:
+            masked_apikey["key"] = "************" + key_value[-6:]
+        # If key is 6 chars or less, just show it as is (edge case)
+    
+    return masked_apikey
+
+
 def convert_to_list_item(server) -> ServerListItemResponse:
     """Convert ExtendedMCPServer to ServerListItemResponse matching API documentation"""
     config = server.config or {}
     
     # Decrypt sensitive authentication fields before returning
     config = decrypt_auth_fields(config)
+    
+    # Mask OAuth client_secret to only show last 6 characters
+    oauth_config = _mask_oauth_client_secret(config.get("oauth"))
+    
+    # Mask API Key to only show last 6 characters
+    apikey_config = _mask_apikey(config.get("apiKey"))
     
     # Extract author_id from server.author PydanticObjectId
     author_id = str(server.author) if server.author else None
@@ -465,8 +512,8 @@ def convert_to_list_item(server) -> ServerListItemResponse:
         description=config.get("description"),
         type=transport_type,
         url=config.get("url"),
-        apiKey=config.get("apiKey"),
-        authentication=config.get("authentication"),
+        apiKey=apikey_config,
+        oauth=oauth_config,
         requiresOAuth=config.get("requiresOAuth", False),
         capabilities=capabilities_str,
         oauthMetadata=config.get("oauthMetadata"),
@@ -492,6 +539,12 @@ def convert_to_detail(server) -> ServerDetailResponse:
     
     # Decrypt sensitive authentication fields before returning
     config = decrypt_auth_fields(config)
+    
+    # Mask OAuth client_secret to only show last 6 characters
+    oauth_config = _mask_oauth_client_secret(config.get("oauth"))
+    
+    # Mask API Key to only show last 6 characters
+    apikey_config = _mask_apikey(config.get("apiKey"))
     
     # Extract author_id from server.author PydanticObjectId
     author_id = str(server.author) if server.author else None
@@ -526,8 +579,8 @@ def convert_to_detail(server) -> ServerDetailResponse:
         description=config.get("description"),
         type=transport_type,
         url=config.get("url"),
-        apiKey=config.get("apiKey"),
-        authentication=config.get("authentication"),
+        apiKey=apikey_config,
+        oauth=oauth_config,
         requiresOAuth=config.get("requiresOAuth", False),
         capabilities=capabilities_str,
         oauthMetadata=config.get("oauthMetadata"),
@@ -558,6 +611,12 @@ def convert_to_create_response(server) -> ServerCreateResponse:
     # Decrypt sensitive authentication fields before returning
     config = decrypt_auth_fields(config)
     
+    # Mask OAuth client_secret to only show last 6 characters
+    oauth_config = _mask_oauth_client_secret(config.get("oauth"))
+    
+    # Mask API Key to only show last 6 characters
+    apikey_config = _mask_apikey(config.get("apiKey"))
+    
     # Extract author_id from server.author PydanticObjectId
     author_id = str(server.author) if server.author else None
     
@@ -575,9 +634,8 @@ def convert_to_create_response(server) -> ServerCreateResponse:
         description=config.get("description"),
         type=config.get("type", "streamable-http"),
         url=config.get("url"),
-        apiKey=config.get("apiKey"),
-        oauth=config.get("oauth"),
-        authentication=config.get("authentication"),
+        apiKey=apikey_config,
+        oauth=oauth_config,
         requiresOAuth=config.get("requiresOAuth", False),
         capabilities=config.get("capabilities", "{}"),
         oauthMetadata=config.get("oauthMetadata"),
