@@ -23,16 +23,17 @@ class TestHealthMonitoringService:
 
     @pytest.mark.asyncio
     async def test_initialize(self, health_service: HealthMonitoringService):
-        """Test service initialization."""
+        """Test service initialization - background task disabled."""
         with patch('asyncio.create_task') as mock_create_task:
             mock_task = AsyncMock()
             mock_create_task.return_value = mock_task
             
             await health_service.initialize()
             
-            # Just check that create_task was called - don't check exact args
-            assert mock_create_task.called
-            assert health_service.health_check_task == mock_task
+            # DEPRECATED: Background health checks disabled in favor of MongoDB
+            # Verify that create_task is NOT called (task creation is commented out)
+            assert not mock_create_task.called
+            assert health_service.health_check_task is None
 
     @pytest.mark.asyncio
     async def test_shutdown(self, health_service: HealthMonitoringService):
