@@ -497,8 +497,9 @@ app.add_middleware(
 # Add metrics collection middleware
 add_auth_metrics_middleware(app)
 
-# Include .well-known routes with prefix
-app.include_router(well_known_router, prefix=api_prefix)
+# Include .well-known routes at root level (for mcp-remote RFC 8414 compliance)
+# mcp-remote strips path when building /.well-known/oauth-authorization-server URL
+app.include_router(well_known_router, prefix="", tags=["well-known-root"])
 
 # Include OAuth device flow and client registration routes with prefix
 app.include_router(oauth_device_router, prefix=api_prefix)
