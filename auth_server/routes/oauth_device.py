@@ -5,8 +5,6 @@ Implements:
 - RFC 8628 (OAuth 2.0 Device Authorization Grant)
 - RFC 7591 (OAuth 2.0 Dynamic Client Registration)
 """
-
-import os
 import time
 import secrets
 import random
@@ -684,13 +682,6 @@ async def device_token(
     
     # Handle Device Flow (RFC 8628)
     elif grant_type == "urn:ietf:params:oauth:grant-type:device_code":
-        cleanup_expired_device_codes()
-        
-        if not device_code:
-            raise HTTPException(
-                status_code=400,
-                detail="invalid_request: device_code is required"
-            )
         cleanup_expired_device_codes()
         
         if not device_code:
