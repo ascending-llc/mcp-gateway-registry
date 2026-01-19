@@ -110,6 +110,8 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
 
     if (!formData.path.trim()) {
       newErrors.path = 'Path is required';
+    } else if (!/^\//.test(formData.path)) {
+      newErrors.path = 'Path must start with /';
     }
 
     if (!formData.url?.trim()) {
@@ -255,7 +257,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
       } else {
         const result = await SERVICES.SERVER.createServer(data);
         setServerData(result);
-        setShowSuccessDialog(true);
+        if (data?.oauth) setShowSuccessDialog(true);
         refreshData(true);
       }
     } catch (error: any) {
