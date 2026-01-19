@@ -48,6 +48,9 @@ from .routes.well_known import router as well_known_router
 # Import OAuth device flow and client registration routes
 from .routes.oauth_device import router as oauth_device_router
 
+# Import root-level authorize endpoint
+from .routes.authorize import router as authorize_router
+
 # Import models
 from .models import (
     GenerateTokenRequest,
@@ -498,8 +501,9 @@ app.add_middleware(
 add_auth_metrics_middleware(app)
 
 # Include .well-known routes at root level (for mcp-remote RFC 8414 compliance)
-# mcp-remote strips path when building /.well-known/oauth-authorization-server URL
+# mcp-remote strips path when building /.well-known/oauth-authorization-server URL /authorize
 app.include_router(well_known_router, prefix="", tags=["well-known-root"])
+app.include_router(authorize_router, prefix="", tags=["authorize-root"])
 
 # Include OAuth device flow and client registration routes with prefix
 app.include_router(oauth_device_router, prefix=api_prefix)
@@ -852,7 +856,7 @@ class SimplifiedCognitoValidator:
 # Create global validator instance
 validator = SimplifiedCognitoValidator()
 
-@app.get(f"{api_prefix}/health")
+@app.get(f"/health")
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "simplified-auth-server"}
