@@ -1,12 +1,12 @@
-import logging
 from typing import Dict, Any, Optional, List
-
 from packages.vector import initialize_database
 from packages.vector.enum.enums import SearchType, RerankerProvider
 from packages.models.mcp_tool import McpTool
+from packages.services import get_search_index_manager
 from .base import VectorSearchService
+from registry.utils.log import logger
 
-logger = logging.getLogger(__name__)
+search_mgr = get_search_index_manager()
 
 
 class ExternalVectorSearchService(VectorSearchService):
@@ -109,57 +109,26 @@ class ExternalVectorSearchService(VectorSearchService):
         """
         Add or update tools for a service with vector database.
 
-        Automatically removes existing tools and batch creates new ones.
-
         Args:
             service_path: Service path (e.g., /weather)
             server_info: Server info with tool_list
             is_enabled: Whether service is enabled
 
         Returns:
-            {"indexed_tools": count, "failed": count} or None if unavailable
+            {"indexed_tools": count, "failed_tools": count} or None if unavailable
         """
-        if not self._initialized:
-            logger.warning(f"Vector search not initialized, skipping '{service_path}'")
-            return None
-
-        tool_count = len(server_info.get("tool_list", []))
-        logger.info(f"Indexing '{service_path}': {tool_count} tools, enabled={is_enabled}")
-
-        try:
-            # Remove existing tools
-            deleted_count = await self.remove_service(service_path)
-            if deleted_count and deleted_count.get('deleted_tools', 0) > 0:
-                logger.info(f"Removed {deleted_count['deleted_tools']} old tools")
-
-            # Create tools from server info
-            tools = McpTool.create_tools_from_server_info(
-                service_path=service_path,
-                server_info=server_info,
-                is_enabled=is_enabled
-            )
-            # Bulk save
-            result = self._mcp_tools.bulk_save(tools)
-            logger.info(f"Indexed {result.successful}/{result.total} "
-                        f"tools for '{service_path}' "
-                        f"(success rate: {result.success_rate:.1f}%)")
-
-            if result.has_errors:
-                logger.warning(f"{result.failed} tools failed to index:")
-                for error in result.errors[:3]:  # Log first 3 errors
-                    logger.warning(f"   - {error.get('message', 'unknown')}")
-
-            return {
-                "indexed_tools": result.successful,
-                "failed_tools": result.failed
-            }
-        except Exception as e:
-            logger.error(f"Indexing failed for '{service_path}': {e}", exc_info=True)
-            return None
+        return await search_mgr.add_or_update_entity(
+            entity_path=service_path,
+            entity_info=server_info,
+            entity_type="mcp_server",
+            is_enabled=is_enabled
+        )
 
     async def remove_service(self, service_path: str) -> Optional[Dict[str, int]]:
         """
         Remove all tools for a service.
+        
+        **Delegates to SearchIndexManager for efficient index management.**
 
         Args:
             service_path: Service path identifier
@@ -167,17 +136,7 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             {"deleted_tools": count} or None if service unavailable
         """
-        if not self._initialized:
-            return None
-        try:
-            # Use simple dict filter (auto-converted by adapter)
-            filters = {"server_path": service_path}
-            deleted_count = self._mcp_tools.delete_by_filter(filters)
-            logger.info(f"Removed {deleted_count} tools for '{service_path}'")
-            return {"deleted_tools": deleted_count}
-        except Exception as e:
-            logger.error(f"Removal failed for '{service_path}': {e}")
-            return None
+        return await search_mgr.remove_entity(service_path)
 
     async def search(
             self,
@@ -343,7 +302,6 @@ class ExternalVectorSearchService(VectorSearchService):
         Add or update an entity (agent or server) in the search index.
         
         Unified interface compatible with EmbeddedFaissService.
-        Routes entities to appropriate methods based on entity_type.
         
         Args:
             entity_path: Entity path identifier
@@ -357,14 +315,23 @@ class ExternalVectorSearchService(VectorSearchService):
         if entity_type == "a2a_agent":
             # Convert AgentCard to server_info format
             server_info = self._agent_to_server_info(entity_info, entity_path)
-            # Override is_enabled from parameter
             server_info["is_enabled"] = is_enabled
-            return await self.add_or_update_service(entity_path, server_info, is_enabled)
+            return await search_mgr.add_or_update_entity(
+                entity_path=entity_path,
+                entity_info=server_info,
+                entity_type="a2a_agent",
+                is_enabled=is_enabled
+            )
         elif entity_type == "mcp_server":
-            # Ensure entity_type is set in server_info
+            # Ensure entity_type is set
             if "entity_type" not in entity_info:
                 entity_info["entity_type"] = "mcp_server"
-            return await self.add_or_update_service(entity_path, entity_info, is_enabled)
+            return await search_mgr.add_or_update_entity(
+                entity_path=entity_path,
+                entity_info=entity_info,
+                entity_type="mcp_server",
+                is_enabled=is_enabled
+            )
         else:
             logger.warning(f"Unknown entity_type '{entity_type}', skipping indexing")
             return None
@@ -377,7 +344,6 @@ class ExternalVectorSearchService(VectorSearchService):
         Remove an entity (agent or server) from the search index.
         
         Unified interface compatible with EmbeddedFaissService.
-        Uses remove_service which works for both agents and servers.
         
         Args:
             entity_path: Entity path identifier
@@ -385,7 +351,7 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             Result dictionary or None if unavailable
         """
-        return await self.remove_service(entity_path)
+        return await search_mgr.remove_entity(entity_path)
 
     async def cleanup(self):
         """

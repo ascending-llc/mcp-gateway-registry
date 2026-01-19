@@ -4,8 +4,6 @@ from typing import Dict, Any, List, Optional
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 import weaviate.classes.config as wvc
-from weaviate.collections.classes.grpc import MetadataQuery
-
 from ..adapters.adapter import VectorStoreAdapter
 from ..enum.enums import SearchType, EmbeddingProvider
 
@@ -397,6 +395,95 @@ class WeaviateStore(VectorStoreAdapter):
             return self.near_text(query, k, filters, collection_name, **kwargs)
         else:
             logger.error(f"Unknown search type: {search_type}")
+
+    def batch_update_properties(
+            self,
+            doc_ids: List[str],
+            update_data: Dict[str, Any],
+            collection_name: str
+    ) -> int:
+        """
+        Batch update properties for multiple documents (no re-vectorization).
+        
+        Efficiently updates metadata fields without triggering vector re-computation.
+        Uses Weaviate's data object update API for optimal performance.
+        
+        Args:
+            doc_ids: List of document UUIDs to update
+            update_data: Dictionary of properties to update (shallow fields only)
+            collection_name: Collection name
+            
+        Returns:
+            Number of successfully updated documents
+        """
+        if not doc_ids:
+            return 0
+            
+        collection = self.get_collection(collection_name)
+        updated_count = 0
+        
+        try:
+            # Filter out vector fields to avoid re-vectorization
+            safe_update_data = {k: v for k, v in update_data.items() if k != 'content'}
+            
+            if not safe_update_data:
+                logger.warning("No safe fields to update (content field excluded)")
+                return 0
+            
+            # Update properties one by one (Weaviate doesn't have true batch update)
+            for doc_id in doc_ids:
+                try:
+                    collection.data.update(
+                        uuid=doc_id,
+                        properties=safe_update_data
+                    )
+                    updated_count += 1
+                except Exception as e:
+                    logger.warning(f"Failed to update document {doc_id}: {e}")
+                        
+            logger.info(f"Batch updated {updated_count}/{len(doc_ids)} documents")
+            return updated_count
+            
+        except Exception as e:
+            logger.error(f"Batch update failed: {e}")
+            return 0
+
+    def batch_delete_by_ids(
+            self,
+            doc_ids: List[str],
+            collection_name: str
+    ) -> int:
+        """
+        Batch delete documents by IDs for better performance.
+        
+        Args:
+            doc_ids: List of document UUIDs to delete
+            collection_name: Collection name
+            
+        Returns:
+            Number of successfully deleted documents
+        """
+        if not doc_ids:
+            return 0
+            
+        collection = self.get_collection(collection_name)
+        deleted_count = 0
+        
+        try:
+            # Delete documents one by one (Weaviate v4 API)
+            for doc_id in doc_ids:
+                try:
+                    collection.data.delete_by_id(uuid=doc_id)
+                    deleted_count += 1
+                except Exception as e:
+                    logger.warning(f"Failed to delete document {doc_id}: {e}")
+                    
+            logger.info(f"Batch deleted {deleted_count}/{len(doc_ids)} documents")
+            return deleted_count
+            
+        except Exception as e:
+            logger.error(f"Batch delete failed: {e}")
+            return 0
 
     @staticmethod
     def get_document_response(response):

@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, List, Dict, Any, TypeVar, Generic, Type, TYPE_CHECKING
+from typing import Optional, List, Dict, Any, TypeVar, Generic, Type, TYPE_CHECKING, Union
 from langchain_classic.retrievers.contextual_compression import ContextualCompressionRetriever
 
 from .batch_result import BatchResult
@@ -252,13 +252,75 @@ class Repository(Generic[T]):
         """
         try:
             instances = self.filter(filters=filters, limit=1000)
-            deleted_count = 0
-            for inst in instances:
-                if self.delete(inst.id):
-                    deleted_count += 1
-            return deleted_count
+            
+            # Use batch delete if adapter supports it
+            if hasattr(self.adapter, 'batch_delete_by_ids'):
+                doc_ids = [inst.id for inst in instances]
+                return self.adapter.batch_delete_by_ids(doc_ids, self.collection)
+            else:
+                # Fallback to individual deletes
+                deleted_count = 0
+                for inst in instances:
+                    if self.delete(inst.id):
+                        deleted_count += 1
+                return deleted_count
         except Exception as e:
             logger.error(f"Delete by filter failed: {e}")
+            return 0
+
+    def batch_update_by_filter(
+            self,
+            filters: Any,
+            update_data: Dict[str, Any],
+            limit: int = 1000
+    ) -> int:
+        """
+        Batch update fields without triggering re-vectorization.
+        
+        Args:
+            filters: Database-specific filter object
+            update_data: Dictionary of fields to update (metadata only, not vector fields)
+            limit: Maximum number of documents to update
+            
+        Returns:
+            Number of successfully updated documents
+        """
+        try:
+            # 1. Query matching documents
+            instances = self.filter(filters=filters, limit=limit)
+            
+            if not instances:
+                logger.info("No documents found matching filters")
+                return 0
+            
+            # 2. Extract IDs
+            doc_ids = [inst.id for inst in instances]
+            
+            # 3. Use adapter's batch update if available
+            if hasattr(self.adapter, 'batch_update_properties'):
+                updated_count = self.adapter.batch_update_properties(
+                    doc_ids=doc_ids,
+                    update_data=update_data,
+                    collection_name=self.collection
+                )
+                logger.info(f"Batch updated {updated_count} documents")
+                return updated_count
+            else:
+                # Fallback: update individually (slower but works)
+                logger.warning("Adapter doesn't support batch updates, using fallback")
+                updated_count = 0
+                for inst in instances:
+                    # Update instance fields
+                    for key, value in update_data.items():
+                        if hasattr(inst, key):
+                            setattr(inst, key, value)
+                    # Save updated instance
+                    if self.update(inst):
+                        updated_count += 1
+                return updated_count
+                
+        except Exception as e:
+            logger.error(f"Batch update by filter failed: {e}")
             return 0
 
     def get_retriever(self,
