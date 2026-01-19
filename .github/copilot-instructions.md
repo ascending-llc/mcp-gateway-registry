@@ -121,6 +121,20 @@ tests/                # Test suite (80% coverage required)
 - ✅ **Integration tests** for API endpoints (`tests/integration/`)
 - ✅ **Domain markers**: Use `@pytest.mark.{domain}` (auth, servers, search, health, core)
 
+### Test Review Guidelines
+
+**🎯 Focus on application code quality, not test code perfection:**
+
+- **Be lenient with test code** - Minor issues in tests (unused imports, unused variables, minor style) are acceptable if tests pass
+- **Prioritize test functionality** - Tests that verify correct behavior are more important than perfect test code style
+- **Ignore minor test issues** - Don't flag: unused fixtures, verbose assertions, test data duplication, minor formatting
+- **Focus review on production code** - Routes, services, models, auth logic, and business logic require strict review
+- **Test code exceptions allowed**:
+  - Unused mock imports (if tests pass)
+  - Duplicate test data setup (acceptable for readability)
+  - Long test functions (comprehensive testing is good)
+  - Minor linting issues in test files
+
 ### Test Commands
 
 ```bash
@@ -164,8 +178,10 @@ pytest -m auth -v                       # Domain-specific tests
 
 ### ✅ Testing & Security
 
-- Unit tests written for new services
-- Integration tests for new endpoints
-- Bandit scan passes (no security issues)
-- No sensitive data in logs
-- Environment variables for configuration
+- **Production code**: Unit tests written for new services
+- **Production code**: Integration tests for new endpoints
+- **Production code**: Bandit scan passes (no security issues)
+- **Production code**: No sensitive data in logs
+- **Production code**: Environment variables for configuration
+- **Test code**: Be lenient - passing tests are priority over perfect test code
+- **Test code**: Minor issues (unused imports, verbose tests) are acceptable
