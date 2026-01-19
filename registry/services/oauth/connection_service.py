@@ -17,22 +17,26 @@ class MCPConnection:
     error_count: int = 0
     details: Dict[str, Any] = field(default_factory=dict)
     
-    def is_stale(self, server_updated_at: Optional[float] = None) -> bool:
+    def is_stale(self, max_idle_time: Optional[float] = None) -> bool:
         """
-        Check if connection is stale
-        Notes: TypeScript: connection.isStale(config.updatedAt)
-        """
-        # If server config was updated after connection was created, connection is stale
-        if server_updated_at:
-            connection_created_at = self.details.get("created_at", self.last_activity)
-            if server_updated_at > connection_created_at:
-                return True
+        Check if connection is stale based on idle time.
         
-        # Connection is stale if it hasn't been active recently (default 1 hour)
-        max_idle_time = 3600  # 1 hour in seconds
+        Args:
+            max_idle_time: Maximum idle time in seconds. If None, defaults to 3600 (1 hour).
+                          Should be passed from server config's timeout field.
+        
+        A connection is stale if it hasn't been active for longer than max_idle_time.
+        """
+        # Use provided max_idle_time or default to 1 hour
+        if max_idle_time is None:
+            max_idle_time = 3600
+        
         current_time = time.time()
-        if current_time - self.last_activity > max_idle_time:
+        idle_time = current_time - self.last_activity
+        
+        if idle_time > max_idle_time:
             return True
+        
         return False
 
 

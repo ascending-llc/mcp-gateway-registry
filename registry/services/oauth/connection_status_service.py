@@ -32,14 +32,15 @@ async def get_servers_connection_status(
     
     for server in servers:
         server_name = server.serverName
+        
+        idle_timeout_seconds = 3600
+        oauth_servers.add(server_name)
+
         mcp_config[server_name] = {
             "name": server_name,
             "config": server.config,
-            "updated_at": server.updatedAt.timestamp() if server.updatedAt else None,
+            "idle_timeout": idle_timeout_seconds,
         }
-        if server.config.get("requiresOAuth", False):
-            oauth_servers.add(server_name)
-    
     # Get status for each server
     connection_status = {}
     for server_name, config_data in mcp_config.items():
@@ -86,17 +87,24 @@ async def get_single_server_connection_status(
     app_connections = mcp_service.connection_service.app_connections
     user_connections = mcp_service.connection_service.get_user_connections(user_id)
     
+    # Determine if this is an OAuth server
+    requires_oauth = server_docs.config.get("requires_oauth", False) or server_docs.config.get("requiresOAuth", False)
+    oauth_servers = set()
+    if requires_oauth:
+        oauth_servers.add(server_name)
+        # OAuth connections should have longer idle timeout (default 1 hour)
+        idle_timeout_seconds = 3600  # 1 hour
+    else:
+        # Non-OAuth connections can use shorter timeout
+        timeout_ms = server_docs.config.get("timeout", 60000)  # Default 60 seconds
+        idle_timeout_seconds = timeout_ms / 1000.0
+    
     # Build server config data
     server_config = {
         "name": server_name,
         "config": server_docs.config,
-        "updated_at": server_docs.updatedAt.timestamp() if server_docs.updatedAt else None,
+        "idle_timeout": idle_timeout_seconds,
     }
-    
-    # Determine if this is an OAuth server
-    oauth_servers = set()
-    if server_docs.config.get("requires_oauth", False):
-        oauth_servers.add(server_name)
     
     # Get status using the shared helper
     server_status = await get_server_status_helper(

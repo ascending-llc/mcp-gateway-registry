@@ -107,9 +107,9 @@ async def get_server_connection_status(
     connection = app_connections.get(server_name) or user_connections.get(server_name)
 
     # Check if connection is stale or doesn't exist
-    server_updated_at = server_config.get("updated_at")
+    idle_timeout = server_config.get("idle_timeout", 3600)  # Default 1 hour
     is_stale_or_does_not_exist = (
-        connection.is_stale(server_updated_at) if connection else True
+        connection.is_stale(max_idle_time=idle_timeout) if connection else True
     )
 
     # Base connection state
