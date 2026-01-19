@@ -98,10 +98,10 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             
             headers = {"Connection": "close"}
             if server_name:
-                # For MCP proxy paths, point to server-specific OAuth discovery
+                # For MCP proxy paths, RFC 9728 (OAuth 2.0 Protected Resource Metadata) - the official specification
                 registry_url = settings.registry_client_url.rstrip('/')
                 oauth_discovery = f"{registry_url}/.well-known/oauth-protected-resource/proxy/{server_name}"
-                headers["WWW-Authenticate"] = f'Bearer realm="mcp-registry", oauth_discovery="{oauth_discovery}"'
+                headers["WWW-Authenticate"] = f'Bearer realm="mcp-registry", resource_metadata="{oauth_discovery}"'
             else:
                 # For other authenticated paths, use general OAuth discovery
                 headers["WWW-Authenticate"] = 'Bearer realm="mcp-registry"'
