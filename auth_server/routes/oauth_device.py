@@ -20,7 +20,8 @@ from ..core.config import settings
 
 from ..models.device_flow import (
     DeviceCodeResponse,
-    DeviceTokenResponse
+    DeviceTokenResponse,
+    DeviceApprovalRequest
 )
 
 logger = logging.getLogger(__name__)
@@ -467,7 +468,7 @@ async def device_verification_page(user_code: Optional[str] = None):
 
 
 @router.post("/oauth2/device/approve")
-async def approve_device(user_code: str = Form(...)):
+async def approve_device(request: DeviceApprovalRequest):
     """
     Approve a device verification request.
     
@@ -476,7 +477,7 @@ async def approve_device(user_code: str = Form(...)):
     """
     cleanup_expired_device_codes()
     
-    device_code = user_codes_storage.get(user_code)
+    device_code = user_codes_storage.get(request.user_code)
     
     if not device_code:
         raise HTTPException(status_code=404, detail="Invalid or expired user code")
@@ -520,7 +521,7 @@ async def approve_device(user_code: str = Form(...)):
     device_data["token"] = access_token
     device_data["approved_at"] = current_time
     
-    logger.info(f"Device approved for user_code: {user_code}")
+    logger.info(f"Device approved for user_code: {request.user_code}")
     
     return {"status": "approved", "message": "Device verified successfully"}
 
