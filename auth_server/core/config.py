@@ -5,7 +5,6 @@ Centralized configuration management using Pydantic Settings.
 All environment variables are loaded here and accessed through the global `settings` instance.
 """
 
-import os
 import secrets
 from pathlib import Path
 from typing import Optional
