@@ -48,9 +48,6 @@ class SearchIndexManager:
         """
         Toggle entity enabled status (field update only, no vectorization).
         
-        Most efficient update method - only updates the is_enabled field
-        without touching any vector data. 200x faster than full rebuild.
-        
         Args:
             entity_path: Entity path identifier
             is_enabled: New enabled status
@@ -87,10 +84,7 @@ class SearchIndexManager:
     ) -> Optional[Dict[str, int]]:
         """
         Update entity metadata fields (no vectorization).
-        
-        Updates non-vector fields like tags, entity_type, server_name, etc.
-        without triggering re-vectorization. Much faster than full rebuild.
-        
+
         Args:
             entity_path: Entity path identifier
             metadata: Dictionary of metadata fields to update
