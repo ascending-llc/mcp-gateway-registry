@@ -9,7 +9,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 import type React from 'react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import type { ServerInfo } from '@/contexts/ServerContext';
 import { useServer } from '@/contexts/ServerContext';
@@ -45,6 +45,19 @@ const ServerCard: React.FC<ServerCardProps> = ({
   const [showConfig, setShowConfig] = useState(false);
   const [loadingRefresh, setLoadingRefresh] = useState(false);
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && showTools) {
+        setShowTools(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showTools]);
 
   const { connection_state, requires_oauth } = server || {};
 
@@ -135,6 +148,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
   const handleToggleServer = async (id: string, enabled: boolean) => {
     try {
       setLoading(true);
+      await SERVICES.SERVER.refreshServerHealth(id);
       await SERVICES.SERVER.toggleServerStatus(id, { enabled });
       onServerUpdate(id, { enabled });
       onShowToast(`Server ${enabled ? 'enabled' : 'disabled'} successfully!`, 'success');
@@ -258,7 +272,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
           )}
         </div>
 
-        {/* Stats */}
+        {/* Tools */}
         <div className='px-4 pb-3'>
           <div className='grid grid-cols-2 gap-2'>
             <div className='flex items-center gap-1.5'>
@@ -383,18 +397,18 @@ const ServerCard: React.FC<ServerCardProps> = ({
       {/* Tools Modal */}
       {showTools && (
         <div className='fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50'>
-          <div className='bg-white dark:bg-gray-800 rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto'>
-            <div className='flex items-center justify-between mb-4'>
+          <div className='bg-white dark:bg-gray-800 rounded-xl p-6 pt-0 max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto'>
+            <div className='flex items-center justify-between mb-4 sticky top-0 bg-white dark:bg-gray-800 z-10 pb-2 border-b border-gray-100 dark:border-gray-700 -mx-6 px-6 -mt-6 pt-6'>
               <h3 className='text-lg font-semibold text-gray-900 dark:text-white'>Tools for {server.name}</h3>
               <button
                 onClick={() => setShowTools(false)}
                 className='text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
               >
-                ✕
+                <XMarkIcon className='h-6 w-6' />
               </button>
             </div>
 
-            <div className='space-y-4'>
+            <div className='space-y-4 mt-[2.8rem]'>
               {tools.length > 0 ? (
                 tools.map((tool, index) => (
                   <div key={index} className='border border-gray-200 dark:border-gray-700 rounded-lg p-4'>
