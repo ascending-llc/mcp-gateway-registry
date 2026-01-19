@@ -41,7 +41,6 @@ jobs:
     - name: 🔧 Install dependencies with uv
       run: |
         uv sync --extra dev
-        cd auth_server && uv sync --extra dev
 
     - name: Get latest schema version
       id: get-schema
@@ -56,23 +55,13 @@ jobs:
         cd packages/models
         uv run import-schemas --tag ${{ steps.get-schema.outputs.schema-version }} --output-dir . --token ${{ secrets.JARVIS_RELEASE_ACCESS_TOKEN }}
 
-    - name: 🧪 Run unit tests
+    - name: 🧪 Run all tests (registry + auth_server + packages)
       run: |
-        uv run pytest tests/unit -v
-
-    - name: 🔗 Run integration tests  
-      run: |
-        uv run pytest tests/integration -v
-
-    - name: 🔐 Run auth_server tests
-      run: |
-        cd auth_server
-        uv run poe test
+        uv run poe test-all
 
     - name: 📊 Generate coverage report
       run: |
-        uv run pytest --cov=registry --cov-report=xml --cov-report=html
-        cd auth_server && uv run pytest --cov=auth_server --cov-report=xml --cov-report=html --cov-append
+        uv run poe test-all-cov
 
     - name: 📤 Upload coverage to Codecov
       uses: codecov/codecov-action@v3
