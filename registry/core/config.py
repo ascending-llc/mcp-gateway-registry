@@ -26,7 +26,9 @@ class Settings(BaseSettings):
     session_cookie_domain: Optional[str] = None  # e.g., ".example.com" for cross-subdomain sharing
     auth_server_url: str = "http://localhost:8888"
     auth_server_external_url: str = "http://localhost:8888"  # External URL for OAuth redirects
-
+    auth_server_api_prefix: str = ""  # API prefix for auth server routes (e.g., "/auth")
+    registry_client_url: str = "http://localhost:5173"  # Registry URL for OAuth protected resource metadata
+    registry_url: str = "http://localhost:7860"
     # Embeddings settings
     embeddings_model_name: str = "all-MiniLM-L6-v2"
     embeddings_model_dimensions: int = 384
@@ -89,6 +91,14 @@ class Settings(BaseSettings):
         # Generate secret key if not provided
         if not self.secret_key:
             self.secret_key = secrets.token_hex(32)
+
+        # Automatically append API prefix to auth server URLs if configured
+        if self.auth_server_api_prefix:
+            prefix = self.auth_server_api_prefix.rstrip('/')
+            if not self.auth_server_url.endswith(prefix):
+                self.auth_server_url = f"{self.auth_server_url.rstrip('/')}{prefix}"
+            if not self.auth_server_external_url.endswith(prefix):
+                self.auth_server_external_url = f"{self.auth_server_external_url.rstrip('/')}{prefix}"
 
         # Validate tool_discovery_mode
         if self.tool_discovery_mode not in ["embedded", "external"]:

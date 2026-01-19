@@ -223,22 +223,6 @@ services:
       - full
       - dev
 
-  # Financial Info MCP Server
-  fininfo-server:
-    build:
-      context: servers/fininfo
-      dockerfile: ../../docker/Dockerfile.mcp-server
-    environment:
-      - PORT=8001
-      - SECRET_KEY=${SECRET_KEY}
-    volumes:
-      - ${APP_HOME}/mcp-gateway/secrets/fininfo/:/app/fininfo/
-    ports:
-      - "8001:8001"
-    restart: unless-stopped
-    profiles:
-      - full
-
   # MCP Gateway Server
   mcpgw-server:
     build:
@@ -259,7 +243,6 @@ services:
       # MongoDB configuration
       - MONGO_URI=mongodb://registry-mongodb:27017/jarvis
     volumes:
-      - ${APP_HOME}/mcp-gateway/servers:/app/registry/servers
       - ${APP_HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
     ports:
       - "8003:8003"

@@ -1,9 +1,13 @@
 [build-system]
-requires = ["setuptools>=42.0", "wheel"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["auth_server"]
+# Auto-discover packages, excluding tests
+packages = {find = {exclude = ["tests*", "*.tests*"]}}
+
+[tool.setuptools.package-data]
+"*" = ["*.yml", "*.yaml", "*.json"]
 
 [project]
 name = "auth_server"
@@ -14,6 +18,7 @@ dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.34.0",
     "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
     "requests>=2.28.0",
     "python-jose>=3.3.0",
     "python-dotenv>=1.0.0",
@@ -22,16 +27,35 @@ dependencies = [
     "cryptography>=40.0.0",
     "pyyaml>=6.0.0",
     "httpx>=0.25.0",
-    "itsdangerous>=2.1.0"
+    "itsdangerous>=2.1.0",
+    "python-multipart>=0.0.6"
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
+    "pytest-cov>=4.1.0",
     "black>=23.0.0",
-    "isort>=5.12.0"
+    "isort>=5.12.0",
+    "poethepoet>=0.24.0"
 ]
 
 [tool.uv]
 # Local-only project - never resolve from PyPI
 package = false
+
+[tool.poe.tasks]
+# Development server (runs from parent directory)
+dev = { shell = "cd .. && uvicorn auth_server.server:app --reload --host 0.0.0.0 --port 8888" }
+
+# Run all tests
+test = "pytest tests/ -v"
+test-cov = "pytest tests/ -v --cov=auth_server --cov-report=html --cov-report=term --cov-report=xml"
+
+# Run unit tests only
+test-unit = "pytest tests/ -v -m unit"
+test-unit-cov = "pytest tests/ -v -m unit --cov=auth_server --cov-report=html --cov-report=term"
+
+# Run integration tests only
+test-integration = "pytest tests/ -v -m integration"
+test-integration-cov = "pytest tests/ -v -m integration --cov=auth_server --cov-report=html --cov-report=term --cov-report=xml"
