@@ -13,8 +13,9 @@ import json
 import uuid
 from typing import List, Dict, Any
 from langchain_core.documents import Document
+from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+
 import logging
-from models import MCPServerDocument
 
 logger = logging.getLogger(__name__)
 
