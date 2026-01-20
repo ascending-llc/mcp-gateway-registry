@@ -150,7 +150,7 @@ EOF
 
         # Start the registry
         echo "Starting MCP Registry on port 7860..."
-        cd /app
+        cd /app/registry
         exec uvicorn registry.main:app --host 0.0.0.0 --port 7860
         ;;
     *)

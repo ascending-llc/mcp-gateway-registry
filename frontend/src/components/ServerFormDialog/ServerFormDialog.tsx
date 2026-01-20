@@ -3,6 +3,7 @@ import { TrashIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import type React from 'react';
 import { useEffect, useState } from 'react';
 
+import type { ServerInfo } from '@/contexts/ServerContext';
 import SERVICES from '@/services';
 import MainConfigForm from './MainConfigForm';
 import ServerCreationSuccessDialog from './ServerCreationSuccessDialog';
@@ -10,26 +11,34 @@ import type { AuthenticationConfig as AuthConfigType, ServerConfig } from './typ
 
 interface ServerFormDialogProps {
   isOpen: boolean;
+  id?: string | null;
   showToast: (message: string, type: 'success' | 'error') => void;
   refreshData: (notLoading?: boolean) => void;
+  onServerUpdate: (id: string, updates: Partial<ServerInfo>) => void;
   onClose: () => void;
-  id?: string | null;
 }
 
-const DEFAULT_AUTH_CONFIG: AuthConfigType = { type: 'auto', source: 'admin', auth_type: 'bearer' };
+const DEFAULT_AUTH_CONFIG: AuthConfigType = { type: 'auto', source: 'admin', authorization_type: 'bearer' };
 
 const INIT_DATA: ServerConfig = {
   serverName: '',
   description: '',
   path: '',
   url: '',
-  supported_transports: 'streamable-http',
+  type: 'streamable-http',
   authConfig: DEFAULT_AUTH_CONFIG,
   trustServer: false,
   tags: [],
 };
 
-const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, refreshData, onClose, id }) => {
+const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
+  isOpen,
+  id,
+  showToast,
+  refreshData,
+  onServerUpdate,
+  onClose,
+}) => {
   const [loading, setLoading] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [formData, setFormData] = useState<ServerConfig>(INIT_DATA);
@@ -60,8 +69,8 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
         description: result.description,
         path: result.path,
         url: result.url || '',
-        supported_transports: result.supported_transports?.[0],
-        authConfig: { type: 'auto', source: 'admin', auth_type: 'bearer' },
+        type: result.type,
+        authConfig: { type: 'auto', source: 'admin', authorization_type: 'bearer' },
         trustServer: true,
         tags: result.tags || [],
       };
@@ -69,19 +78,19 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
         formData.authConfig = {
           type: 'apiKey',
           source: result.apiKey?.source,
-          auth_type: result.apiKey?.auth_type,
+          authorization_type: result.apiKey?.authorization_type,
           key: result.apiKey?.key,
           custom_header: result.apiKey?.custom_header,
         };
       }
-      if (result?.authentication) {
+      if (result?.oauth) {
         formData.authConfig = {
           type: 'oauth',
-          client_id: result.authentication?.client_id,
-          client_secret: result.authentication?.client_secret,
-          authorize_url: result.authentication?.authorize_url,
-          token_url: result.authentication?.token_url,
-          scope: (result.authentication?.scope || result.authentication?.scopes)?.join(','),
+          client_id: result.oauth?.client_id,
+          client_secret: result.oauth?.client_secret,
+          authorization_url: result.oauth?.authorization_url,
+          token_url: result.oauth?.token_url,
+          scope: result.oauth?.scope,
         };
       }
       setFormData(formData);
@@ -101,6 +110,8 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
 
     if (!formData.path.trim()) {
       newErrors.path = 'Path is required';
+    } else if (!/^\//.test(formData.path)) {
+      newErrors.path = 'Path must start with /';
     }
 
     if (!formData.url?.trim()) {
@@ -117,10 +128,13 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
       if (auth.source === 'admin' && !auth.key?.trim()) {
         newErrors.key = 'API Key is required';
       }
+      if (auth.authorization_type === 'custom' && !auth.custom_header?.trim()) {
+        newErrors.custom_header = 'Custom Header Name is required';
+      }
     } else if (auth.type === 'oauth') {
       if (!auth.client_id?.trim()) newErrors.client_id = 'Client ID is required';
       if (!auth.client_secret?.trim()) newErrors.client_secret = 'Client Secret is required';
-      if (!auth.authorize_url?.trim()) newErrors.authorize_url = 'Authorization URL is required';
+      if (!auth.authorization_url?.trim()) newErrors.authorization_url = 'Authorization URL is required';
       if (!auth.token_url?.trim()) newErrors.token_url = 'Token URL is required';
     }
 
@@ -141,6 +155,10 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
           nextErrors.key = undefined;
           hasChanges = true;
         }
+        if (nextErrors.custom_header && newConfig.custom_header?.trim()) {
+          nextErrors.custom_header = undefined;
+          hasChanges = true;
+        }
         if (nextErrors.client_id && newConfig.client_id?.trim()) {
           nextErrors.client_id = undefined;
           hasChanges = true;
@@ -149,8 +167,8 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
           nextErrors.client_secret = undefined;
           hasChanges = true;
         }
-        if (nextErrors.authorize_url && newConfig.authorize_url?.trim()) {
-          nextErrors.authorize_url = undefined;
+        if (nextErrors.authorization_url && newConfig.authorization_url?.trim()) {
+          nextErrors.authorization_url = undefined;
           hasChanges = true;
         }
         if (nextErrors.token_url && newConfig.token_url?.trim()) {
@@ -159,6 +177,13 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
         }
         return hasChanges ? nextErrors : prev;
       });
+    } else if (field === 'path') {
+      const pathValue = value as string;
+      if (pathValue && !/^\//.test(pathValue)) {
+        setErrors(prev => ({ ...prev, path: 'Path must start with /' }));
+      } else {
+        setErrors(prev => ({ ...prev, path: undefined }));
+      }
     } else {
       if (errors[field as string]) {
         setErrors(prev => ({ ...prev, [field as string]: undefined }));
@@ -173,36 +198,32 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
       path: data.path,
       url: data.url,
       tags: data.tags,
-      enabled: true,
-      supported_transports: [data.supported_transports],
+      type: data.type,
     };
     switch (data.authConfig.type) {
       case 'auto':
-        return {
-          ...baseData,
-          authentication: { type: 'auto' },
-        };
+        return baseData;
       case 'apiKey':
         return {
           ...baseData,
           apiKey: {
-            type: data.authConfig.type,
             source: data.authConfig.source,
-            key: data.authConfig.key,
-            auth_type: data.authConfig.auth_type,
-            custom_header: data.authConfig.custom_header,
+            ...(data.authConfig.source !== 'user' && data.authConfig.key ? { key: data.authConfig.key } : {}),
+            authorization_type: data.authConfig.authorization_type,
+            ...(data.authConfig.authorization_type === 'custom' && data.authConfig.custom_header
+              ? { custom_header: data.authConfig.custom_header }
+              : {}),
           },
         };
       case 'oauth':
         return {
           ...baseData,
-          authentication: {
-            type: data.authConfig.type,
+          oauth: {
             client_id: data.authConfig.client_id,
             client_secret: data.authConfig.client_secret,
-            authorize_url: data.authConfig.authorize_url,
+            authorization_url: data.authConfig.authorization_url,
             token_url: data.authConfig.token_url,
-            scope: data.authConfig.scope?.split(','),
+            scope: data.authConfig.scope,
           },
         };
       default:
@@ -211,6 +232,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
   };
 
   const handleDelete = async () => {
+    if (!id) return;
     try {
       await SERVICES.SERVER.deleteServer(id);
       showToast('Server deleted successfully', 'success');
@@ -225,22 +247,31 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
     if (!validate()) return;
 
     setLoading(true);
-    const data = processDataByAuthType(formData);
+    const data: any = processDataByAuthType(formData);
     try {
       if (isEditMode) {
-        await SERVICES.SERVER.updateServer(id, data);
+        const result = await SERVICES.SERVER.updateServer(id, data);
         showToast('Server updated successfully', 'success');
         onClose();
+        onServerUpdate(id, {
+          name: data.serverName,
+          description: data.description,
+          path: data.path,
+          url: data.url,
+          tags: data.tags,
+          last_checked_time: result.updatedAt ?? new Date().toISOString(),
+        });
       } else {
         const result = await SERVICES.SERVER.createServer(data);
         setServerData(result);
-        setShowSuccessDialog(true);
+        if (data?.oauth) setShowSuccessDialog(true);
+        refreshData(true);
       }
-      refreshData(true);
     } catch (error: any) {
       showToast(error?.detail?.[0]?.msg || error, 'error');
     } finally {
       setLoading(false);
+      onClose();
     }
   };
 
@@ -272,7 +303,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({ isOpen, showToast, 
                 <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600'></div>
               </div>
             ) : (
-              <MainConfigForm formData={formData} updateField={updateField} errors={errors} />
+              <MainConfigForm formData={formData} updateField={updateField} errors={errors} isEditMode={isEditMode} />
             )}
           </div>
 

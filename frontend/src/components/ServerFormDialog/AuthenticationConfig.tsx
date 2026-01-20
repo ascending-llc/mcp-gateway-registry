@@ -5,13 +5,21 @@ import type { AuthenticationConfig as AuthConfigType } from './types';
 
 interface AuthenticationConfigProps {
   config: AuthConfigType;
+  isEditMode?: boolean;
   onChange: (config: AuthConfigType) => void;
   errors?: Record<string, string | undefined>;
 }
 
-const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onChange, errors = {} }) => {
+const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
+  config,
+  isEditMode = false,
+  onChange,
+  errors = {},
+}) => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [showClientSecret, setShowClientSecret] = useState(false);
+  const [isApiKeyDirty, setIsApiKeyDirty] = useState(false);
+  const [isClientSecretDirty, setIsClientSecretDirty] = useState(false);
 
   const updateConfig = (updates: Partial<AuthConfigType>) => {
     onChange({ ...config, ...updates });
@@ -51,7 +59,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                 }`}
               >
-                Auto Detect
+                No Auth
               </button>
               <button
                 type='button'
@@ -73,7 +81,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                 }`}
               >
-                Manual OAuth
+                OAuth
               </button>
             </div>
           </div>
@@ -91,29 +99,18 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                 <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2'>
                   API Key Source
                 </label>
-                <div className='space-y-2'>
-                  <label className='flex items-center'>
-                    <input
-                      type='radio'
-                      name='source'
-                      value='admin'
-                      checked={config.source === 'admin'}
-                      onChange={() => updateConfig({ source: 'admin' })}
-                      className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
-                    />
-                    <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>Provide a key for all users</span>
-                  </label>
-                  <label className='flex items-center'>
-                    <input
-                      type='radio'
-                      name='source'
-                      value='user'
-                      checked={config.source === 'user'}
-                      onChange={() => updateConfig({ source: 'user' })}
-                      className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
-                    />
-                    <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>
-                      Each user provides their own key
+                <div className='flex items-center space-x-2'>
+                  <input
+                    type='checkbox'
+                    id='apiKeySource'
+                    checked={config.source === 'user'}
+                    onChange={e => updateConfig({ source: e.target.checked ? 'user' : 'admin' })}
+                    className='h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
+                  />
+                  <label htmlFor='apiKeySource' className='text-sm text-gray-900 dark:text-gray-100'>
+                    Each user provides their own key
+                    <span className='block text-xs text-gray-500 dark:text-gray-400'>
+                      When unchecked, an admin-provided key is used for all users.
                     </span>
                   </label>
                 </div>
@@ -126,21 +123,27 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                     <input
                       type={showApiKey ? 'text' : 'password'}
                       className={`${getInputClass('key')} pr-10`}
-                      placeholder='<HIDDEN>'
-                      value={config.key || ''}
-                      onChange={e => updateConfig({ key: e.target.value })}
+                      style={{ fontFamily: 'Menlo, Consolas, Courier New, monospace' }}
+                      value={isEditMode && !isApiKeyDirty ? '' : config.key || ''}
+                      placeholder={isEditMode && !isApiKeyDirty ? config.key : '...'}
+                      onChange={e => {
+                        setIsApiKeyDirty(true);
+                        updateConfig({ key: e.target.value });
+                      }}
                     />
-                    <button
-                      type='button'
-                      onClick={() => setShowApiKey(!showApiKey)}
-                      className='absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 focus:outline-none'
-                    >
-                      {showApiKey ? (
-                        <EyeSlashIcon className='h-5 w-5' aria-hidden='true' />
-                      ) : (
-                        <EyeIcon className='h-5 w-5' aria-hidden='true' />
-                      )}
-                    </button>
+                    {(!isEditMode || isApiKeyDirty) && (
+                      <button
+                        type='button'
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className='absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 focus:outline-none'
+                      >
+                        {showApiKey ? (
+                          <EyeSlashIcon className='h-5 w-5' aria-hidden='true' />
+                        ) : (
+                          <EyeIcon className='h-5 w-5' aria-hidden='true' />
+                        )}
+                      </button>
+                    )}
                   </div>
                   {renderError('key')}
                 </div>
@@ -148,49 +151,50 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
 
               <div>
                 <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2'>Header Format</label>
-                <div className='flex items-center space-x-6'>
-                  <label className='flex items-center'>
-                    <input
-                      type='radio'
-                      name='auth_type'
-                      value='bearer'
-                      checked={config.auth_type === 'bearer'}
-                      onChange={() => updateConfig({ auth_type: 'bearer' })}
-                      className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
-                    />
-                    <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>Bearer</span>
-                  </label>
-                  <label className='flex items-center'>
-                    <input
-                      type='radio'
-                      name='auth_type'
-                      value='basic'
-                      checked={config.auth_type === 'basic'}
-                      onChange={() => updateConfig({ auth_type: 'basic' })}
-                      className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
-                    />
-                    <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>Basic</span>
-                  </label>
-                  <label className='flex items-center'>
-                    <input
-                      type='radio'
-                      name='auth_type'
-                      value='custom'
-                      checked={config.auth_type === 'custom'}
-                      onChange={() => updateConfig({ auth_type: 'custom' })}
-                      className='h-4 w-4 border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
-                    />
-                    <span className='ml-2 text-sm text-gray-900 dark:text-gray-100'>Custom</span>
-                  </label>
+                <div className='flex p-1 bg-gray-200 dark:bg-gray-700/50 rounded-lg'>
+                  <button
+                    type='button'
+                    onClick={() => updateConfig({ authorization_type: 'bearer' })}
+                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                      config.authorization_type === 'bearer'
+                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    Bearer
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => updateConfig({ authorization_type: 'basic' })}
+                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                      config.authorization_type === 'basic'
+                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    Basic
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => updateConfig({ authorization_type: 'custom' })}
+                    className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                      config.authorization_type === 'custom'
+                        ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    Custom
+                  </button>
                 </div>
 
-                {config.auth_type === 'custom' && (
+                {config.authorization_type === 'custom' && (
                   <div className='mt-4 animate-fadeIn'>
                     <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>
-                      Custom Header Name
+                      Custom Header Name <span className='text-red-500'>*</span>
                     </label>
                     <input
                       type='text'
+                      required
                       className={getInputClass('custom_header')}
                       value={config.custom_header || ''}
                       onChange={e => updateConfig({ custom_header: e.target.value })}
@@ -227,20 +231,27 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                     type={showClientSecret ? 'text' : 'password'}
                     required
                     className={`${getInputClass('client_secret')} pr-10`}
-                    value={config.client_secret || ''}
-                    onChange={e => updateConfig({ client_secret: e.target.value })}
+                    style={{ fontFamily: 'Menlo, Consolas, Courier New, monospace' }}
+                    value={isEditMode && !isClientSecretDirty ? '' : config.client_secret || ''}
+                    placeholder={isEditMode && !isClientSecretDirty ? config.client_secret : ''}
+                    onChange={e => {
+                      setIsClientSecretDirty(true);
+                      updateConfig({ client_secret: e.target.value });
+                    }}
                   />
-                  <button
-                    type='button'
-                    onClick={() => setShowClientSecret(!showClientSecret)}
-                    className='absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 focus:outline-none'
-                  >
-                    {showClientSecret ? (
-                      <EyeSlashIcon className='h-5 w-5' aria-hidden='true' />
-                    ) : (
-                      <EyeIcon className='h-5 w-5' aria-hidden='true' />
-                    )}
-                  </button>
+                  {(!isEditMode || isClientSecretDirty) && (
+                    <button
+                      type='button'
+                      onClick={() => setShowClientSecret(!showClientSecret)}
+                      className='absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 focus:outline-none'
+                    >
+                      {showClientSecret ? (
+                        <EyeSlashIcon className='h-5 w-5' aria-hidden='true' />
+                      ) : (
+                        <EyeIcon className='h-5 w-5' aria-hidden='true' />
+                      )}
+                    </button>
+                  )}
                 </div>
                 {renderError('client_secret')}
               </div>
@@ -251,11 +262,11 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                 <input
                   type='url'
                   required
-                  className={getInputClass('authorize_url')}
-                  value={config.authorize_url || ''}
-                  onChange={e => updateConfig({ authorize_url: e.target.value })}
+                  className={getInputClass('authorization_url')}
+                  value={config.authorization_url || ''}
+                  onChange={e => updateConfig({ authorization_url: e.target.value })}
                 />
-                {renderError('authorize_url')}
+                {renderError('authorization_url')}
               </div>
               <div>
                 <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>

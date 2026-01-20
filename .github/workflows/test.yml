@@ -2,9 +2,9 @@ name: 🧪 Test Suite
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main]
   workflow_dispatch:
 
 jobs:
@@ -25,34 +25,43 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: 📦 Cache dependencies
+    - name: 📦 Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: 📦 Cache uv dependencies
       uses: actions/cache@v3
       with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
+        path: ~/.cache/uv
+        key: ${{ runner.os }}-uv-${{ hashFiles('**/pyproject.toml') }}
         restore-keys: |
-          ${{ runner.os }}-pip-
+          ${{ runner.os }}-uv-
 
-    - name: 🔧 Install dependencies
+    - name: 🔧 Install dependencies with uv
       run: |
-        python -m pip install --upgrade pip
-        pip install -e .[dev]
+        uv sync --all-groups
 
-    - name: 🔍 Check dependencies
-      run: |
-        pip check
+    - name: Get latest schema version
+      id: get-schema
+      uses: ./.github/actions/get-schema-version
+      with:
+        github-token: ${{ secrets.JARVIS_RELEASE_ACCESS_TOKEN }}
 
-    - name: 🧪 Run unit tests
+    - name: Import schema
+      id: import-schema
       run: |
-        pytest tests/unit -v
+        echo "Using SCHEMA_VERSION: ${{ steps.get-schema.outputs.schema-version }}"
+        cd packages/models
+        uv run import-schemas --tag ${{ steps.get-schema.outputs.schema-version }} --output-dir . --token ${{ secrets.JARVIS_RELEASE_ACCESS_TOKEN }}
 
-    - name: 🔗 Run integration tests  
+    - name: 🧪 Run all tests (registry + auth_server + packages)
       run: |
-        pytest tests/integration -v
+        uv run poe test-all
 
     - name: 📊 Generate coverage report
       run: |
-        pytest --cov=registry --cov-report=xml --cov-report=html
+        uv run poe test-all-cov
 
     - name: 📤 Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -95,68 +104,23 @@ jobs:
 
     - name: 🔒 Security check with bandit
       run: |
+        bandit -r auth_server/ -f json -o bandit-report-auth.json || true
         bandit -r registry/ -f json -o bandit-report.json || true
 
     - name: 📋 Upload security report
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: security-report
-        path: bandit-report.json
+        name: bandit-reports
+        path: |
+          bandit-report.json
+          bandit-report-auth.json
 
-  # domain-tests:
-  #   name: "🏗️ Domain Tests"
-  #   runs-on: ubuntu-latest
-  #   strategy:
-  #     matrix:
-  #       domain: [auth, servers, search, health, core]
-  #     fail-fast: false
-
-  #   steps:
-  #   - name: 📥 Checkout code
-  #     uses: actions/checkout@v4
-
-  #   - name: 🐍 Set up Python
-  #     uses: actions/setup-python@v4
-  #     with:
-  #       python-version: "3.12"
-
-  #   - name: 📦 Install dependencies
-  #     run: |
-  #       python -m pip install --upgrade pip
-  #       pip install -e .[dev]
-
-  #   - name: 🏗️ Test ${{ matrix.domain }} domain
-  #     run: |
-  #       python scripts/test.py ${{ matrix.domain }}
-
-  # fast-feedback:
-  #   name: "⚡ Fast Feedback"
-  #   runs-on: ubuntu-latest
-  #   if: github.event_name == 'pull_request'
-
-  #   steps:
-  #   - name: 📥 Checkout code
-  #     uses: actions/checkout@v4
-
-  #   - name: 🐍 Set up Python
-  #     uses: actions/setup-python@v4
-  #     with:
-  #       python-version: "3.12"
-
-  #   - name: 📦 Install dependencies
-  #     run: |
-  #       python -m pip install --upgrade pip
-  #       pip install -e .[dev]
-
-  #   - name: ⚡ Run fast tests
-  #     run: |
-  #       python scripts/test.py fast
-
+  
   summary:
     name: "📋 Test Summary"
     runs-on: ubuntu-latest
-    needs: [test, lint, domain-tests]
+    needs: [test, lint]
     if: always()
 
     steps:
@@ -164,14 +128,12 @@ jobs:
       run: |
         echo "## 🧪 Test Results Summary" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
-        echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-        echo "| Main Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Registry Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Auth Server Tests | Included in Registry Tests |" >> $GITHUB_STEP_SUMMARY
         echo "| Code Quality | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Domain Tests | ${{ needs.domain-tests.result }} |" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         
-        if [[ "${{ needs.test.result }}" == "success" && "${{ needs.lint.result }}" == "success" && "${{ needs.domain-tests.result }}" == "success" ]]; then
+        if [[ "${{ needs.test.result }}" == "success" && "${{ needs.lint.result }}" == "success" ]]; then
           echo "✅ All tests passed! 🎉" >> $GITHUB_STEP_SUMMARY
         else
           echo "❌ Some tests failed. Please check the logs." >> $GITHUB_STEP_SUMMARY

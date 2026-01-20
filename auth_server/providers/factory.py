@@ -8,6 +8,7 @@ from .cognito import CognitoProvider
 from .keycloak import KeycloakProvider
 from .entra import EntraIdProvider
 from ..utils.config_loader import get_provider_config
+from ..core.config import settings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -48,16 +49,16 @@ def get_auth_provider(
 
 def _create_keycloak_provider() -> KeycloakProvider:
     """Create and configure Keycloak provider."""
-    # Required configuration
-    keycloak_url = os.environ.get('KEYCLOAK_URL')
-    keycloak_external_url = os.environ.get('KEYCLOAK_EXTERNAL_URL', keycloak_url)
-    realm = os.environ.get('KEYCLOAK_REALM', 'mcp-gateway')
-    client_id = os.environ.get('KEYCLOAK_CLIENT_ID')
-    client_secret = os.environ.get('KEYCLOAK_CLIENT_SECRET')
+    # Get configuration from settings
+    keycloak_url = settings.keycloak_url
+    keycloak_external_url = settings.keycloak_external_url or keycloak_url
+    realm = settings.keycloak_realm
+    client_id = settings.keycloak_client_id
+    client_secret = settings.keycloak_client_secret
 
     # Optional M2M configuration
-    m2m_client_id = os.environ.get('KEYCLOAK_M2M_CLIENT_ID')
-    m2m_client_secret = os.environ.get('KEYCLOAK_M2M_CLIENT_SECRET')
+    m2m_client_id = settings.keycloak_m2m_client_id
+    m2m_client_secret = settings.keycloak_m2m_client_secret
 
     # Validate required configuration
     missing_vars = []

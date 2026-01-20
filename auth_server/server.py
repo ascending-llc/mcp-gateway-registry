@@ -21,6 +21,7 @@ from functools import lru_cache
 from botocore.exceptions import ClientError
 from fastapi import FastAPI, Header, HTTPException, Request, Cookie
 from fastapi.responses import JSONResponse, Response, RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from pydantic import BaseModel
 from pathlib import Path
@@ -28,6 +29,9 @@ from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 import secrets
 import urllib.parse
 import httpx
+
+# Import settings
+from .core.config import settings
 
 # Import metrics middleware
 from .metrics_middleware import add_auth_metrics_middleware
@@ -38,6 +42,21 @@ from .providers.factory import get_auth_provider
 # Import OAuth2 config loader
 from .utils.config_loader import OAuth2ConfigLoader, get_oauth2_config
 
+# Import .well-known routes
+from .routes.well_known import router as well_known_router
+
+# Import OAuth device flow and client registration routes
+from .routes.oauth_device import router as oauth_device_router
+
+# Import root-level authorize endpoint
+from .routes.authorize import router as authorize_router
+
+# Import models
+from .models import (
+    GenerateTokenRequest,
+    GenerateTokenResponse
+)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,  # Set the log level to INFO
@@ -46,28 +65,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configuration for token generation
-JWT_ISSUER = "mcp-auth-server"
-JWT_AUDIENCE = "mcp-registry"
-JWT_SELF_SIGNED_KID = "self-signed-key-v1"
-MAX_TOKEN_LIFETIME_HOURS = 24
-DEFAULT_TOKEN_LIFETIME_HOURS = 8
+# Configuration for token generation (from settings)
+JWT_ISSUER = settings.jwt_issuer
+JWT_AUDIENCE = settings.jwt_audience
+JWT_SELF_SIGNED_KID = settings.jwt_self_signed_kid
+MAX_TOKEN_LIFETIME_HOURS = settings.max_token_lifetime_hours
+DEFAULT_TOKEN_LIFETIME_HOURS = settings.default_token_lifetime_hours
 
 # Rate limiting for token generation (simple in-memory counter)
 user_token_generation_counts = {}
-MAX_TOKENS_PER_USER_PER_HOUR = int(os.environ.get('MAX_TOKENS_PER_USER_PER_HOUR', '100'))
+MAX_TOKENS_PER_USER_PER_HOUR = settings.max_tokens_per_user_per_hour
 
 # Load scopes configuration
 def load_scopes_config():
     """Load the scopes configuration from scopes.yml"""
     try:
-        # Check for environment variable first (for EFS-mounted config)
-        scopes_path = os.environ.get('SCOPES_CONFIG_PATH')
-        if scopes_path:
-            scopes_file = Path(scopes_path)
-        else:
-            # Fall back to default location (baked into image)
-            scopes_file = Path(__file__).parent / "scopes.yml"
+        # Get scopes file path from settings
+        scopes_file = settings.scopes_file_path
 
         with open(scopes_file, 'r') as f:
             config = yaml.safe_load(f)
@@ -455,42 +469,45 @@ def check_rate_limit(username: str) -> bool:
     user_token_generation_counts[rate_key] = current_count + 1
     return True
 
+
 # Create FastAPI app
+api_prefix = settings.auth_server_api_prefix.rstrip('/') if settings.auth_server_api_prefix else ""
+logger.info(f"Auth server API prefix: '{api_prefix}'")
+
 app = FastAPI(
-    title="Simplified Auth Server",
-    description="Authentication server for validating JWT tokens against Amazon Cognito with header-based configuration",
-    version="0.1.0"
+    title="Jarvis Auth Server",
+    description="Authentication server to integrate with Identity Providers like Cognito, Keycloak, Entra ID",
+    version="0.1.0",
+    docs_url=f"{api_prefix}/docs" if api_prefix else "/docs",
+    redoc_url=f"{api_prefix}/redoc" if api_prefix else "/redoc",
+    openapi_url=f"{api_prefix}/openapi.json" if api_prefix else "/openapi.json"
+)
+
+# Add CORS middleware to support browser-based OAuth clients (like Claude Desktop)
+# Parse CORS origins from settings (comma-separated list or "*")
+cors_origins_list = [origin.strip() for origin in settings.cors_origins.split(",")] if settings.cors_origins != "*" else ["*"]
+logger.info(f"CORS origins configured: {cors_origins_list}")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins_list,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["WWW-Authenticate", "X-User", "X-Username", "X-Client-Id"],
 )
 
 # Add metrics collection middleware
 add_auth_metrics_middleware(app)
 
-class TokenValidationResponse(BaseModel):
-    """Response model for token validation"""
-    valid: bool
-    scopes: List[str] = []
-    error: Optional[str] = None
-    method: Optional[str] = None
-    client_id: Optional[str] = None
-    username: Optional[str] = None
+# Include .well-known routes at root level (for mcp-remote RFC 8414 compliance)
+# mcp-remote strips path when building /.well-known/oauth-authorization-server URL /authorize
+app.include_router(well_known_router, prefix="", tags=["well-known-root"])
+app.include_router(authorize_router, prefix="", tags=["authorize-root"])
 
-class GenerateTokenRequest(BaseModel):
-    """Request model for token generation"""
-    user_context: Dict[str, Any]
-    requested_scopes: List[str] = []
-    expires_in_hours: int = DEFAULT_TOKEN_LIFETIME_HOURS
-    description: Optional[str] = None
+# Include OAuth device flow and client registration routes with prefix
+app.include_router(oauth_device_router, prefix=api_prefix)
 
-class GenerateTokenResponse(BaseModel):
-    """Response model for token generation"""
-    access_token: str
-    refresh_token: Optional[str] = None
-    token_type: str = "Bearer"
-    expires_in: int
-    refresh_expires_in: Optional[int] = None
-    scope: str
-    issued_at: int
-    description: Optional[str] = None
 
 class SimplifiedCognitoValidator:
     """
@@ -839,13 +856,13 @@ class SimplifiedCognitoValidator:
 # Create global validator instance
 validator = SimplifiedCognitoValidator()
 
-@app.get("/health")
+@app.get(f"/health")
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "simplified-auth-server"}
 
 
-@app.get("/validate")
+@app.get(f"{api_prefix}/validate")
 async def validate_request(request: Request):
     """
     Validate a request by extracting configuration from headers and validating the bearer token.
@@ -963,9 +980,11 @@ async def validate_request(request: Request):
             # Extract token
             access_token = authorization.split(" ")[1]
             
-            # FIRST: Check if this is a self-signed token (fast path detection by kid header)
+            # FIRST: Check if this is a self-signed token (fast path detection by kid header OR issuer)
             # This must happen BEFORE provider-specific validation to avoid sending HS256 tokens to RS256 providers
+            validation_result = None
             try:
+                # Try to get the kid from header
                 unverified_header = jwt.get_unverified_header(access_token)
                 header_kid = unverified_header.get('kid')
                 
@@ -974,12 +993,19 @@ async def validate_request(request: Request):
                     logger.info("Detected self-signed token by kid header, validating...")
                     validation_result = validator.validate_self_signed_token(access_token)
                     logger.info(f"Self-signed token validation successful for user: {hash_username(validation_result.get('username', ''))}")
-                else:
-                    # Not a self-signed token, continue to provider validation
-                    validation_result = None
             except Exception as e:
-                logger.debug(f"Could not check JWT header for self-signed detection: {e}")
-                validation_result = None
+                logger.debug(f"Could not check JWT header kid: {e}")
+            
+            # If kid check didn't work, try checking issuer in payload
+            if not validation_result:
+                try:
+                    unverified_claims = jwt.decode(access_token, options={"verify_signature": False})
+                    if unverified_claims.get('iss') == JWT_ISSUER:
+                        logger.info("Detected self-signed token by issuer, validating...")
+                        validation_result = validator.validate_self_signed_token(access_token)
+                        logger.info(f"Self-signed token validation successful for user: {hash_username(validation_result.get('username', ''))}")
+                except Exception as e:
+                    logger.debug(f"Could not check JWT issuer for self-signed detection: {e}")
             
             # If not a self-signed token, use provider-specific validation
             if not validation_result:
@@ -1161,7 +1187,7 @@ async def validate_request(request: Request):
     finally:
         pass
 
-@app.get("/config")
+@app.get(f"{api_prefix}/config")
 async def get_auth_config():
     """Return the authentication configuration info"""
     try:
@@ -1200,7 +1226,7 @@ async def get_auth_config():
             "error": str(e)
         }
 
-@app.post("/internal/tokens", response_model=GenerateTokenResponse)
+@app.post(f"{api_prefix}/internal/tokens", response_model=GenerateTokenResponse)
 async def generate_user_token(
     request: GenerateTokenRequest
 ):
@@ -1324,7 +1350,7 @@ async def generate_user_token(
             headers={"Connection": "close"}
         )
 
-@app.post("/internal/reload-scopes")
+@app.post(f"{api_prefix}/internal/reload-scopes")
 async def reload_scopes(
     request: Request,
     authorization: Optional[str] = Header(None)
@@ -1357,16 +1383,9 @@ async def reload_scopes(
             headers={"WWW-Authenticate": "Basic"}
         )
 
-    # Verify admin credentials from environment
-    admin_user = os.environ.get("ADMIN_USER", "admin")
-    admin_password = os.environ.get("ADMIN_PASSWORD")
-
-    if not admin_password:
-        logger.error("ADMIN_PASSWORD environment variable not set")
-        raise HTTPException(
-            status_code=500,
-            detail="Server configuration error"
-        )
+    # Verify admin credentials from settings
+    admin_user = settings.admin_user
+    admin_password = settings.admin_password
 
     if username != admin_user or password != admin_password:
         logger.warning(f"Failed admin authentication attempt for reload-scopes from {username}")
@@ -1444,15 +1463,8 @@ if __name__ == "__main__":
 # This will use the singleton OAuth2ConfigLoader instance
 OAUTH2_CONFIG = get_oauth2_config()
 
-# Initialize SECRET_KEY and signer for session management
-SECRET_KEY = os.environ.get('SECRET_KEY')
-if not SECRET_KEY:
-    # Generate a secure random key (32 bytes = 256 bits of entropy)
-    SECRET_KEY = secrets.token_hex(32)
-    logger.warning("No SECRET_KEY environment variable found. Using a randomly generated key. "
-                   "While this is more secure than a hardcoded default, it will change on restart. "
-                   "Set a permanent SECRET_KEY environment variable for production.")
-
+# Initialize SECRET_KEY and signer for session management (from settings)
+SECRET_KEY = settings.secret_key
 signer = URLSafeTimedSerializer(SECRET_KEY)
 
 def get_enabled_providers():
@@ -1460,7 +1472,7 @@ def get_enabled_providers():
     enabled = []
 
     # Check if AUTH_PROVIDER env var is set to filter to only one provider
-    auth_provider_env = os.getenv("AUTH_PROVIDER")
+    auth_provider_env = settings.auth_provider if settings.auth_provider else None
 
     # First, collect all enabled providers from YAML
     yaml_enabled_providers = []
@@ -1507,7 +1519,7 @@ def get_enabled_providers():
     logger.info(f"Returning {len(enabled)} enabled providers: {[p['name'] for p in enabled]}")
     return enabled
 
-@app.get("/oauth2/providers")
+@app.get(f"{api_prefix}/oauth2/providers")
 async def get_oauth2_providers():
     """Get list of enabled OAuth2 providers for the login page"""
     try:
@@ -1521,9 +1533,28 @@ async def get_oauth2_providers():
         logger.error(f"Error getting OAuth2 providers: {e}")
         return {"providers": [], "error": str(e)}
 
-@app.get("/oauth2/login/{provider}")
-async def oauth2_login(provider: str, request: Request, redirect_uri: str = None):
-    """Initiate OAuth2 login flow"""
+@app.get(f"{api_prefix}/oauth2/login/{{provider}}")
+async def oauth2_login(
+    provider: str, 
+    request: Request, 
+    redirect_uri: str = None,
+    client_id: str = None,
+    code_challenge: str = None,
+    code_challenge_method: str = None,
+    response_type: str = None
+):
+    """
+    Initiate OAuth2 login flow.
+    
+    Supports both web browser sessions and OAuth Authorization Code Flow for clients.
+    
+    Query Parameters:
+    - redirect_uri: Where to redirect after authentication
+    - client_id: OAuth client ID (for authorization code flow)
+    - code_challenge: PKCE code challenge (for authorization code flow)
+    - code_challenge_method: PKCE method (S256 or plain)
+    - response_type: OAuth response type (code for authorization code flow)
+    """
     try:
         if provider not in OAUTH2_CONFIG.get("providers", {}):
             raise HTTPException(status_code=404, detail=f"Provider {provider} not found")
@@ -1542,26 +1573,25 @@ async def oauth2_login(provider: str, request: Request, redirect_uri: str = None
             "redirect_uri": redirect_uri or OAUTH2_CONFIG.get("registry", {}).get("success_redirect", "/")
         }
         
+        # If OAuth client parameters are present, store them for authorization code flow
+        if client_id and response_type == "code":
+            logger.info(f"OAuth Authorization Code Flow initiated for client_id={client_id}")
+            session_data["client_id"] = client_id
+            session_data["client_redirect_uri"] = redirect_uri
+            session_data["code_challenge"] = code_challenge
+            session_data["code_challenge_method"] = code_challenge_method or "S256"
+        
         # Create temporary session for OAuth2 flow
         temp_session = signer.dumps(session_data)
         
         # Use configured external URL or build dynamically
-        auth_server_external_url = os.environ.get('AUTH_SERVER_EXTERNAL_URL')
+        auth_server_external_url = settings.auth_server_external_url
         if auth_server_external_url:
             # Use configured external URL (recommended for production)
             auth_server_url = auth_server_external_url.rstrip('/')
             logger.info(f"Using configured AUTH_SERVER_EXTERNAL_URL: {auth_server_url}")
         else:
-            # Fall back to dynamic construction (for development)
-            host = request.headers.get("host", "localhost:8888")
-            scheme = "https" if request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https" else "http"
-            
-            # Special case for localhost to include port
-            if "localhost" in host and ":" not in host:
-                auth_server_url = f"{scheme}://localhost:8888"
-            else:
-                auth_server_url = f"{scheme}://{host}"
-            
+            auth_server_url = settings.auth_server_url.rstrip('/')
             logger.warning(f"AUTH_SERVER_EXTERNAL_URL not set, using dynamic URL: {auth_server_url}")
         
         callback_uri = f"{auth_server_url}/oauth2/callback/{provider}"
@@ -1597,7 +1627,7 @@ async def oauth2_login(provider: str, request: Request, redirect_uri: str = None
         error_url = OAUTH2_CONFIG.get("registry", {}).get("error_redirect", "/login")
         return RedirectResponse(url=f"{error_url}?error=oauth2_init_failed", status_code=302)
 
-@app.get("/oauth2/callback/{provider}")
+@app.get(f"{api_prefix}/oauth2/callback/{{provider}}")
 async def oauth2_callback(
     provider: str,
     request: Request,
@@ -1634,22 +1664,13 @@ async def oauth2_callback(
         
         # Exchange authorization code for access token
         # Use configured external URL or build dynamically
-        auth_server_external_url = os.environ.get('AUTH_SERVER_EXTERNAL_URL')
+        auth_server_external_url = settings.auth_server_external_url
         if auth_server_external_url:
             # Use configured external URL (recommended for production)
             auth_server_url = auth_server_external_url.rstrip('/')
             logger.info(f"Using configured AUTH_SERVER_EXTERNAL_URL for token exchange: {auth_server_url}")
         else:
-            # Fall back to dynamic construction (for development)
-            host = request.headers.get("host", "localhost:8888")
-            scheme = "https" if request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https" else "http"
-            
-            # Special case for localhost to include port
-            if "localhost" in host and ":" not in host:
-                auth_server_url = f"{scheme}://localhost:8888"
-            else:
-                auth_server_url = f"{scheme}://{host}"
-            
+            auth_server_url = settings.auth_server_url.rstrip('/')           
             logger.warning(f"AUTH_SERVER_EXTERNAL_URL not set, using dynamic URL for token exchange: {auth_server_url}")
             
         token_data = await exchange_code_for_token(provider, code, provider_config, auth_server_url)
@@ -1746,7 +1767,56 @@ async def oauth2_callback(
             mapped_user = map_user_info(user_info, provider_config)
             logger.info(f"Mapped user info: {mapped_user}")
         
-        # Create session cookie compatible with registry
+        # Check if this is an OAuth client request (has client_id and code_challenge in temp session)
+        client_id = temp_session_data.get("client_id")
+        code_challenge = temp_session_data.get("code_challenge")
+        code_challenge_method = temp_session_data.get("code_challenge_method", "S256")
+        client_redirect_uri = temp_session_data.get("client_redirect_uri")
+        
+        if client_id and client_redirect_uri:
+            # OAuth Authorization Code Flow - return authorization code to client
+            logger.info(f"OAuth client detected (client_id={client_id}), generating authorization code")
+            
+            from .routes.oauth_device import authorization_codes_storage, cleanup_expired_authorization_codes
+            
+            # Cleanup expired codes
+            cleanup_expired_authorization_codes()
+            
+            # Generate authorization code
+            authorization_code = secrets.token_urlsafe(32)
+            current_time = int(time.time())
+            expires_at = current_time + 600  # 10 minutes expiration
+            
+            # Store authorization code with token and user data
+            authorization_codes_storage[authorization_code] = {
+                "token_data": token_data,
+                "user_info": mapped_user,
+                "client_id": client_id,
+                "expires_at": expires_at,
+                "used": False,
+                "code_challenge": code_challenge,
+                "code_challenge_method": code_challenge_method,
+                "redirect_uri": client_redirect_uri,
+                "created_at": current_time
+            }
+            
+            logger.info(f"Generated authorization code for client {client_id}, expires in 600s")
+            
+            # Redirect to client's redirect_uri with authorization code and state
+            redirect_params = {
+                "code": authorization_code,
+                "state": state
+            }
+            redirect_url = f"{client_redirect_uri}?{urllib.parse.urlencode(redirect_params)}"
+            
+            response = RedirectResponse(url=redirect_url, status_code=302)
+            # Clear temporary OAuth2 session
+            response.delete_cookie("oauth2_temp_session")
+            
+            logger.info(f"Redirecting OAuth client to: {client_redirect_uri}")
+            return response
+        
+        # Web browser session flow - create session cookie
         session_data = {
             "username": mapped_user["username"],
             "email": mapped_user.get("email"),
@@ -1815,7 +1885,10 @@ async def oauth2_callback(
 async def exchange_code_for_token(provider: str, code: str, provider_config: dict, auth_server_url: str = None) -> dict:
     """Exchange authorization code for access token"""
     if auth_server_url is None:
-        auth_server_url = os.environ.get('AUTH_SERVER_URL', 'http://localhost:8888')
+        auth_server_url = settings.auth_server_url
+    
+    redirect_uri = f"{auth_server_url}/oauth2/callback/{provider}"
+    logger.info(f"Token exchange redirect_uri: {redirect_uri}")
         
     async with httpx.AsyncClient() as client:
         token_data = {
@@ -1823,7 +1896,7 @@ async def exchange_code_for_token(provider: str, code: str, provider_config: dic
             "client_id": provider_config["client_id"],
             "client_secret": provider_config["client_secret"],
             "code": code,
-            "redirect_uri": f"{auth_server_url}/oauth2/callback/{provider}"
+            "redirect_uri": redirect_uri
         }
         
         headers = {"Accept": "application/json"}
@@ -1888,7 +1961,8 @@ def map_user_info(user_info: dict, provider_config: dict) -> dict:
     
     return mapped
 
-@app.get("/oauth2/logout/{provider}")
+
+@app.get(f"{api_prefix}/oauth2/logout/{{provider}}")
 async def oauth2_logout(provider: str, request: Request, redirect_uri: str = None):
     """Initiate OAuth2 logout flow to clear provider session"""
     try:
@@ -1907,7 +1981,7 @@ async def oauth2_logout(provider: str, request: Request, redirect_uri: str = Non
         full_redirect_uri = redirect_uri or "/logout"
         if not full_redirect_uri.startswith("http"):
             # Make it a full URL - extract registry URL from request's referer or use environment
-            registry_base = os.environ.get('REGISTRY_URL')
+            registry_base = settings.registry_url
             if not registry_base:
                 # Try to derive from the request
                 referer = request.headers.get("referer", "")

@@ -80,8 +80,6 @@ ls -la
 ```bash
 # Create and activate Python virtual environment
 uv sync
-# Create extra embedded-search dependency
-uv sync --extra embedded-search
 source .venv/bin/activate
 
 # Verify virtual environment is active

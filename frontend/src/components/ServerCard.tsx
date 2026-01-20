@@ -6,60 +6,38 @@ import {
   KeyIcon,
   PencilIcon,
   WrenchScrewdriverIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import type React from 'react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
+import type { ServerInfo } from '@/contexts/ServerContext';
+import { useServer } from '@/contexts/ServerContext';
 import SERVICES from '@/services';
 import { SERVER_CONNECTION } from '@/services/mcp/type';
+import type { Tool } from '@/services/server/type';
 import UTILS from '@/utils';
 import ServerAuthorizationModal from './ServerAuthorizationModal';
 import ServerConfigModal from './ServerConfigModal';
-import StarRatingWidget from './StarRatingWidget';
-
-export interface Server {
-  id: string;
-  name: string;
-  path: string;
-  description?: string;
-  official?: boolean;
-  enabled: boolean;
-  tags?: string[];
-  last_checked_time?: string;
-  usersCount?: number;
-  num_stars?: number; // Average rating from backend
-  rating_details?: Array<{ user: string; rating: number }>;
-  status?: 'active' | 'inactive' | 'error';
-  num_tools?: number;
-  connection_state: SERVER_CONNECTION;
-  requires_oauth: boolean;
-}
 
 interface ServerCardProps {
-  server: Server;
+  server: ServerInfo;
   canModify?: boolean;
-  authToken?: string | null;
-  onEdit?: (server: Server) => void;
+  onEdit?: (server: ServerInfo) => void;
   onShowToast: (message: string, type: 'success' | 'error') => void;
-  onServerUpdate: (id: string, updates: Partial<Server>) => void;
+  onServerUpdate: (id: string, updates: Partial<ServerInfo>) => void;
   onRefreshSuccess?: () => void;
-}
-
-interface Tool {
-  name: string;
-  description?: string;
-  inputSchema?: any;
 }
 
 const ServerCard: React.FC<ServerCardProps> = ({
   server,
   canModify,
-  authToken,
   onEdit,
   onShowToast,
   onServerUpdate,
   onRefreshSuccess,
 }) => {
+  const { cancelPolling, refreshServerData } = useServer();
   const [loading, setLoading] = useState(false);
   const [tools, setTools] = useState<Tool[]>([]);
   const [loadingTools, setLoadingTools] = useState(false);
@@ -68,19 +46,56 @@ const ServerCard: React.FC<ServerCardProps> = ({
   const [loadingRefresh, setLoadingRefresh] = useState(false);
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && showTools) {
+        setShowTools(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showTools]);
+
   const { connection_state, requires_oauth } = server || {};
 
   const getAuthStatusIcon = useCallback(() => {
-    if (requires_oauth && connection_state === SERVER_CONNECTION.CONNECTED) {
+    if (!requires_oauth) return null;
+    if (connection_state === SERVER_CONNECTION.CONNECTED) {
       return <CheckCircleIcon className='h-4 w-4 text-green-500' />;
     }
-    if (requires_oauth && connection_state === SERVER_CONNECTION.DISCONNECTED) {
+    if (connection_state === SERVER_CONNECTION.DISCONNECTED) {
       return <KeyIcon className='h-4 w-4 text-amber-500' />;
     }
-    if (requires_oauth && connection_state === SERVER_CONNECTION.CONNECTING) {
-      return <KeyIcon className='h-4 w-4 text-amber-500' />;
+    if (connection_state === SERVER_CONNECTION.CONNECTING) {
+      return (
+        <>
+          <div className='group-hover/auth:hidden animate-spin rounded-full h-3 w-3 border-b-2 border-slate-200' />
+          <XMarkIcon className='hidden group-hover/auth:block h-4 w-4 text-red-500' />
+        </>
+      );
     }
   }, [requires_oauth, connection_state]);
+
+  const handleAuth = async () => {
+    if (connection_state === SERVER_CONNECTION.CONNECTING) {
+      try {
+        const result = await SERVICES.MCP.cancelAuth(server.name);
+        if (result.success) {
+          onShowToast?.(result?.message || 'OAuth flow cancelled', 'success');
+          refreshServerData();
+        } else {
+          onShowToast?.(result?.message || 'Unknown error', 'error');
+        }
+      } finally {
+        cancelPolling?.(server.id);
+      }
+    } else {
+      setShowApiKeyDialog(true);
+    }
+  };
 
   const handleViewTools = useCallback(async () => {
     if (loadingTools) return;
@@ -108,10 +123,10 @@ const ServerCard: React.FC<ServerCardProps> = ({
       const result = await SERVICES.SERVER.refreshServerHealth(server.id);
 
       if (onServerUpdate && result) {
-        const updates: Partial<Server> = {
+        const updates: Partial<ServerInfo> = {
           status: result.status,
-          last_checked_time: result.last_checked,
-          num_tools: result.num_tools,
+          last_checked_time: result.lastConnected,
+          num_tools: result.numTools,
         };
         onServerUpdate(server.id, updates);
       } else if (onRefreshSuccess) {
@@ -133,11 +148,13 @@ const ServerCard: React.FC<ServerCardProps> = ({
   const handleToggleServer = async (id: string, enabled: boolean) => {
     try {
       setLoading(true);
+      await SERVICES.SERVER.refreshServerHealth(id);
       await SERVICES.SERVER.toggleServerStatus(id, { enabled });
       onServerUpdate(id, { enabled });
       onShowToast(`Server ${enabled ? 'enabled' : 'disabled'} successfully!`, 'success');
     } catch (error: any) {
-      onShowToast(error.detail || 'Failed to toggle server', 'error');
+      const errorMessage = error.detail?.message || typeof error.detail === 'string' ? error.detail : '';
+      onShowToast(errorMessage || 'Failed to toggle server', 'error');
     } finally {
       setLoading(false);
     }
@@ -203,15 +220,11 @@ const ServerCard: React.FC<ServerCardProps> = ({
             <div className='flex gap-1'>
               {requires_oauth && (
                 <button
-                  className='p-1.5 text-amber-500 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-all duration-200 flex-shrink-0'
-                  onClick={() => setShowApiKeyDialog(true)}
+                  className='group/auth p-1.5 text-amber-500 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-all duration-200 flex-shrink-0'
+                  onClick={handleAuth}
                   title='Manage API keys'
                 >
-                  {connection_state === SERVER_CONNECTION.CONNECTING ? (
-                    <div className='animate-spin rounded-full h-3 w-3 border-b-2 border-slate-200' />
-                  ) : (
-                    getAuthStatusIcon()
-                  )}
+                  {getAuthStatusIcon()}
                 </button>
               )}
               {canModify && (
@@ -260,23 +273,9 @@ const ServerCard: React.FC<ServerCardProps> = ({
           )}
         </div>
 
-        {/* Stats */}
+        {/* Tools */}
         <div className='px-4 pb-3'>
           <div className='grid grid-cols-2 gap-2'>
-            <StarRatingWidget
-              resourceType='servers'
-              path={server.path}
-              initialRating={server.num_stars || 0}
-              initialCount={server.rating_details?.length || 0}
-              authToken={authToken}
-              onShowToast={onShowToast}
-              onRatingUpdate={newRating => {
-                // Update local server rating when user submits rating
-                if (onServerUpdate) {
-                  onServerUpdate(server.id, { num_stars: newRating });
-                }
-              }}
-            />
             <div className='flex items-center gap-1.5'>
               {(server.num_tools || 0) > 0 ? (
                 <button
@@ -399,18 +398,18 @@ const ServerCard: React.FC<ServerCardProps> = ({
       {/* Tools Modal */}
       {showTools && (
         <div className='fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50'>
-          <div className='bg-white dark:bg-gray-800 rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto'>
-            <div className='flex items-center justify-between mb-4'>
+          <div className='bg-white dark:bg-gray-800 rounded-xl p-6 pt-0 max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto'>
+            <div className='flex items-center justify-between mb-4 sticky top-0 bg-white dark:bg-gray-800 z-10 pb-2 border-b border-gray-100 dark:border-gray-700 -mx-6 px-6 -mt-6 pt-6'>
               <h3 className='text-lg font-semibold text-gray-900 dark:text-white'>Tools for {server.name}</h3>
               <button
                 onClick={() => setShowTools(false)}
                 className='text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
               >
-                ✕
+                <XMarkIcon className='h-6 w-6' />
               </button>
             </div>
 
-            <div className='space-y-4'>
+            <div className='space-y-4 mt-[2.8rem]'>
               {tools.length > 0 ? (
                 tools.map((tool, index) => (
                   <div key={index} className='border border-gray-200 dark:border-gray-700 rounded-lg p-4'>
@@ -446,6 +445,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
       {showApiKeyDialog && (
         <ServerAuthorizationModal
           name={server.name}
+          serverId={server.id}
           status={connection_state}
           showApiKeyDialog={showApiKeyDialog}
           setShowApiKeyDialog={setShowApiKeyDialog}

@@ -16,7 +16,7 @@ services:
       - full
 
   # Registry service (includes nginx, SSL, FAISS, models)
-  mcpgateway-registry:
+  registry:
     build:
       context: .
       dockerfile: docker/Dockerfile.registry
@@ -25,6 +25,10 @@ services:
         BUILD_VERSION: ${BUILD_VERSION:-}
         SCHEMA_VERSION: ${SCHEMA_VERSION:-}
         GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    networks:
+      default:
+        aliases:
+          - mcpgateway-registry
     environment:
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
@@ -64,14 +68,11 @@ services:
     ports:
       - "7860:7860"
     volumes:
-      - ${APP_HOME}/mcp-gateway/servers:/app/registry/servers
-      - ${APP_HOME}/mcp-gateway/agents:/app/registry/agents
-      - ${APP_HOME}/mcp-gateway/data/models:/app/data/models
-      - ${APP_HOME}/mcp-gateway/logs:/app/logs
-      - ${APP_HOME}/mcp-gateway/security_scans:/app/security_scans
-      - ${APP_HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
+      - ./registry/logs:/app/logs
+      - ./security_scans:/app/security_scans
+      - ./auth_server/scopes.yml:/app/auth_server/scopes.yml
+      - ./auth_server/oauth2_providers.yml:/app/oauth2_providers.yml
       - ${APP_HOME}/mcp-gateway/federation.json:/app/config/federation.json
-      - ${APP_HOME}/mcp-gateway/ssl:/etc/ssl:ro
     depends_on:
       auth-server:
         condition: service_started
@@ -101,7 +102,7 @@ services:
       - "80:80"
       - "443:443"
     depends_on:
-      - mcpgateway-registry
+      - registry
     restart: unless-stopped
     env_file:
       - .env
@@ -181,7 +182,9 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-
+    profiles:
+        - full
+        - dev
   # Auth service (separate and scalable)
   auth-server:
     build:
@@ -215,8 +218,9 @@ services:
     ports:
       - "8888:8888"
     volumes:
-      - ${APP_HOME}/mcp-gateway/logs:/app/logs
-      - ${APP_HOME}/mcp-gateway/auth_server/scopes.yml:/app/scopes.yml
+      - ./auth_server/logs:/app/logs
+      - ./auth_server/scopes.yml:/app/scopes.yml
+      - ./auth_server/oauth2_providers.yml:/app/oauth2_providers.yml
     restart: unless-stopped
     env_file:
       - .env
@@ -239,22 +243,6 @@ services:
       - full
       - dev
 
-  # Financial Info MCP Server
-  fininfo-server:
-    build:
-      context: servers/fininfo
-      dockerfile: ../../docker/Dockerfile.mcp-server
-    environment:
-      - PORT=8001
-      - SECRET_KEY=${SECRET_KEY}
-    volumes:
-      - ${APP_HOME}/mcp-gateway/secrets/fininfo/:/app/fininfo/
-    ports:
-      - "8001:8001"
-    restart: unless-stopped
-    profiles:
-      - full
-
   # MCP Gateway Server
   mcpgw-server:
     build:
@@ -267,7 +255,7 @@ services:
         GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     environment:
       - PORT=8003
-      - REGISTRY_BASE_URL=http://mcpgateway-registry:7860
+      - REGISTRY_BASE_URL=http://registry:7860
       - REGISTRY_USERNAME=${ADMIN_USER:-admin}
       - REGISTRY_PASSWORD=${ADMIN_PASSWORD}
       - JWT_SECRET_KEY=${SECRET_KEY}
@@ -275,8 +263,7 @@ services:
       # MongoDB configuration
       - MONGO_URI=mongodb://registry-mongodb:27017/jarvis
     volumes:
-      - ${APP_HOME}/mcp-gateway/servers:/app/registry/servers
-      - ${APP_HOME}/mcp-gateway/auth_server/scopes.yml:/app/auth_server/scopes.yml
+      - ./auth_server/scopes.yml:/app/auth_server/scopes.yml
     ports:
       - "8003:8003"
     #    depends_on:
@@ -286,18 +273,7 @@ services:
       - .env
     profiles:
       - full
-
-  # Real Server Fake Tools MCP Server
-  realserverfaketools-server:
-    build:
-      context: servers/realserverfaketools
-      dockerfile: ../../docker/Dockerfile.mcp-server
-    environment:
-      - PORT=8002
-    ports:
-      - "8002:8002"
-    restart: unless-stopped
-
+      - dev
   weaviate:
     image: cr.weaviate.io/semitechnologies/weaviate:latest
     restart: on-failure:0
@@ -317,22 +293,6 @@ services:
     profiles:
       - full
       - dev
-
-  # Atlassian MCP Server
-  atlassian-server:
-    image: ghcr.io/sooperset/mcp-atlassian:latest
-    environment:
-      - ATLASSIAN_OAUTH_ENABLE=true
-      - MCP_VERY_VERBOSE=true
-      - MCP_LOGGING_STDOUT=true
-    ports:
-      - "8005:8005"
-    volumes:
-      - $HOME/.mcp-atlassian:/home/app/.mcp-atlassian
-    command: --transport streamable-http --port 8005
-    restart: unless-stopped
-    profiles:
-      - full
 
   # SQLite container for metrics database
   metrics-db:

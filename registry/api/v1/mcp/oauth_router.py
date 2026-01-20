@@ -396,16 +396,14 @@ def _redirect_to_page(request: Request,
                       error_msg: str = None) -> RedirectResponse:
     """
     Generate a response that redirects to frontend OAuth callback page.
-        /oauth/callback?type=success&serverName=value
-        /oauth/callback?type=error&serverName=value&error=value
+        /oauth-callback?type=success&serverName=value
+        /oauth-callback?type=error&serverName=value&error=value
     """
-    base_path = REGISTRY_CONSTANTS.NGINX_BASE_PATH.strip("/")
+    host = REGISTRY_CONSTANTS.REGISTRY_CLIENT_URL
     encoded_server = quote(str(server_name))
 
     # Build full URL with host if request is provided
-    host = request.headers.get("host", "localhost:7860")
-    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
-    redirect_url = f"{proto}://{host}/{base_path}/oauth/callback?type={flag}&serverName={encoded_server}"
+    redirect_url = f"{host}/oauth-callback?type={flag}&serverName={encoded_server}"
 
     if error_msg and flag == "error":
         encoded_error = quote(str(error_msg))

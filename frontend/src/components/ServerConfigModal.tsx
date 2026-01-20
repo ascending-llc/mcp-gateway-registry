@@ -1,12 +1,12 @@
 import { ClipboardDocumentIcon } from '@heroicons/react/24/outline';
 import type React from 'react';
 import { useCallback, useState } from 'react';
-import type { Server } from './ServerCard';
+import type { ServerInfo } from '@/contexts/ServerContext';
 
 type IDE = 'vscode' | 'cursor' | 'cline' | 'claude-code';
 
 interface ServerConfigModalProps {
-  server: Server;
+  server: ServerInfo;
   isOpen: boolean;
   onClose: () => void;
   onShowToast?: (message: string, type: 'success' | 'error') => void;

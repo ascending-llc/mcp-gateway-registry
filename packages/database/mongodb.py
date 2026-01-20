@@ -15,11 +15,11 @@ from packages.models._generated import (
     IAclEntry,
     IAction,
     IGroup,
-    MCPServerDocument,
     IUser,
     Token,
     Key
 )
+from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 
 
 class MongoDB:

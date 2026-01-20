@@ -37,7 +37,7 @@ const Content: React.FC<any> = ({ setTokenData, setSidebarOpen, setShowTokenModa
     setLoading(true);
     setError('');
     try {
-      const result = await SERVICES.TOKEN.getToken({ expires_in_hours: 8, description: 'Generated via sidebar' });
+      const result = await SERVICES.AUTH.getToken({ expires_in_hours: 8, description: 'Generated via sidebar' });
       if (result.success) {
         setTokenData(result);
         setShowTokenModal(true);

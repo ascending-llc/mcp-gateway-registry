@@ -4,8 +4,9 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 
 import SERVICES from '@/services';
 import { SERVER_CONNECTION } from '@/services/mcp/type';
+import type { Server } from '@/services/server/type';
 
-export interface Server {
+export interface ServerInfo {
   id: string;
   name: string;
   path: string;
@@ -18,8 +19,7 @@ export interface Server {
   rating?: number;
   status?: 'active' | 'inactive' | 'error';
   num_tools?: number;
-  proxy_pass_url?: string;
-  license?: string;
+  url?: string;
   num_stars?: number;
   is_python?: boolean;
   connection_state: SERVER_CONNECTION;
@@ -58,29 +58,31 @@ interface AgentStats {
 
 interface ServerContextType {
   // Server state
-  servers: Server[];
-  setServers: React.Dispatch<React.SetStateAction<Server[]>>;
+  servers: ServerInfo[];
+  setServers: React.Dispatch<React.SetStateAction<ServerInfo[]>>;
   stats: ServerStats;
+  serverLoading: boolean;
+  serverError: string | null;
 
   // Agent state
   agents: Agent[];
   setAgents: React.Dispatch<React.SetStateAction<Agent[]>>;
   agentStats: AgentStats;
+  agentLoading: boolean;
+  agentError: string | null;
 
   // Shared state
   viewMode: 'all' | 'servers' | 'agents';
   setViewMode: (mode: 'all' | 'servers' | 'agents') => void;
   activeFilter: string;
   setActiveFilter: (filter: string) => void;
-  loading: boolean;
-  error: string | null;
 
   // Actions
-  refreshData: (notLoading?: boolean) => Promise<void>;
-  toggleAgent: (path: string, enabled: boolean) => Promise<void>;
-  refreshServerStatus: () => Promise<Server[]>;
-  getServerStatusByPolling: (serverNames: string) => void;
-  cancelPolling: (serverName?: string) => void;
+  refreshServerData: (notLoading?: boolean) => Promise<ServerInfo[]>;
+  refreshAgentData: (notLoading?: boolean) => Promise<void>;
+  handleServerUpdate: (id: string, updates: Partial<ServerInfo>) => void;
+  getServerStatusByPolling: (serverId: string) => void;
+  cancelPolling: (serverId?: string) => void;
 }
 
 const ServerContext = createContext<ServerContextType | undefined>(undefined);
@@ -98,12 +100,14 @@ interface ServerProviderProps {
 }
 
 export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
-  const [servers, setServers] = useState<Server[]>([]);
+  const [servers, setServers] = useState<ServerInfo[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [viewMode, setViewMode] = useState<'all' | 'servers' | 'agents'>('all');
   const [activeFilter, setActiveFilter] = useState<string>('all');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [serverLoading, setServerLoading] = useState(true);
+  const [agentLoading, setAgentLoading] = useState(true);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [agentError, setAgentError] = useState<string | null>(null);
   const timeoutRef = useRef<Record<string, NodeJS.Timeout>>({});
 
   // Calculate server stats
@@ -129,8 +133,8 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
   );
 
   useEffect(() => {
-    refreshData();
-    fetchServerStatus();
+    refreshServerData();
+    refreshAgentData();
     return () => {
       Object.values(timeoutRef.current).forEach(timeout => {
         clearTimeout(timeout);
@@ -148,60 +152,57 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     return 'unknown';
   };
 
-  const constructServerData = (serversList: any): Server[] => {
-    return serversList.map((serverInfo: any) => {
-      console.log(`🕐 Server ${serverInfo.display_name}: last_checked_iso =`, serverInfo.last_checked_iso);
+  const handleServerUpdate = (id: string, updates: Partial<ServerInfo>) => {
+    setServers(prevServers => prevServers.map(server => (server.id === id ? { ...server, ...updates } : server)));
+  };
 
+  const constructServerData = (serversList: Server[]): ServerInfo[] => {
+    return serversList.map((serverInfo: Server) => {
       return {
         id: serverInfo.id,
-        name: serverInfo.serverName || serverInfo.server_name || 'Unknown Server',
+        name: serverInfo.serverName || 'Unknown Server',
         path: serverInfo.path,
         description: serverInfo.description || '',
-        official: serverInfo.is_official || false, // undefined
+        official: serverInfo.is_official || false,
         enabled: serverInfo.enabled !== undefined ? serverInfo.enabled : false,
         tags: serverInfo.tags || [],
-        last_checked_time: serverInfo.updatedAt,
+        last_checked_time: serverInfo.lastConnected,
         usersCount: 0,
-        rating: serverInfo.num_stars || 0,
+        rating: serverInfo.numStars || 0,
         status: serverInfo.status || 'unknown', // undefined
-        num_tools: serverInfo.num_tools || 0,
-        proxy_pass_url: serverInfo.proxy_pass_url,
-        license: serverInfo.license,
-        num_stars: serverInfo.num_stars || 0,
+        num_tools: serverInfo.numTools || 0,
+        url: serverInfo.url,
+        num_stars: serverInfo.numStars || 0,
         is_python: serverInfo.is_python || false,
-        connection_state: serverInfo.connection_state,
-        requires_oauth: serverInfo.requires_oauth,
+        requires_oauth: serverInfo.requiresOAuth,
+        connection_state: serverInfo.connectionState,
       };
     });
   };
 
-  const refreshData = useCallback(async (notLoading?: boolean) => {
+  const refreshServerData = useCallback(async (notLoading?: boolean): Promise<ServerInfo[]> => {
     try {
-      if (!notLoading) setLoading(true);
-      setError(null);
+      if (!notLoading) setServerLoading(true);
+      setServerError(null);
+      const result = await SERVICES.SERVER.getServers();
+      const transformedServers: ServerInfo[] = constructServerData(result?.servers || []);
+      setServers(transformedServers);
+      return transformedServers;
+    } catch (error: any) {
+      setServerError(error?.data?.detail || 'Failed to fetch servers');
+      return [];
+    } finally {
+      setServerLoading(false);
+    }
+  }, []);
 
-      // Fetch both servers and agents in parallel
-      const [serversResponse, agentsResponse] = await Promise.all([
-        SERVICES.SERVER.getServers(),
-        axios
-          .get('/api/agents')
-          .catch(() => ({ data: { agents: [] } })), // Graceful fallback for agents
-      ]);
-
-      // Process servers
-      const serversList = serversResponse.servers || [];
-
-      console.log('🔍 Server filtering debug info:');
-      console.log(`📊 Total servers returned from API: ${serversList.length}`);
-
-      const transformedServers: Server[] = constructServerData(serversList);
-
-      // Process agents
+  const refreshAgentData = useCallback(async (notLoading?: boolean) => {
+    try {
+      if (!notLoading) setAgentLoading(true);
+      setAgentError(null);
+      const agentsResponse = await axios.get('/api/agents').catch(() => ({ data: { agents: [] } }));
       const agentsData = agentsResponse.data || {};
       const agentsList = agentsData.agents || [];
-
-      console.log('🔍 Agent filtering debug info:');
-      console.log(`📊 Total agents returned from API: ${agentsList.length}`);
 
       const transformedAgents: Agent[] = agentsList.map((agentInfo: any) => ({
         name: agentInfo.display_name || agentInfo.name || 'Unknown Agent',
@@ -218,88 +219,69 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
         rating: agentInfo.num_stars || 0,
         status: mapHealthStatus(agentInfo.health_status || 'unknown'),
       }));
-
-      setServers(transformedServers);
       setAgents(transformedAgents);
-    } catch (err: any) {
-      console.error('Failed to fetch data:', err);
-      setError(err?.detail || 'Failed to fetch data');
-      setServers([]);
-      setAgents([]);
+    } catch (error: any) {
+      setAgentError(error?.detail || 'Failed to fetch agents');
     } finally {
-      setLoading(false);
+      setAgentLoading(false);
     }
   }, []);
 
-  // Toggle agent
-  const toggleAgent = useCallback(
-    async (path: string, enabled: boolean) => {
-      // Optimistic update
-      setAgents(prev => prev.map(a => (a.path === path ? { ...a, enabled } : a)));
-
-      try {
-        await axios.post(`/api/agents${path}/toggle`, { enabled });
-      } catch (err) {
-        console.error('Error toggling agent:', err);
-        // Revert on error
-        await refreshData();
-        throw err;
-      }
-    },
-    [refreshData],
-  );
-
-  const fetchServerStatus = useCallback(async (): Promise<Server[]> => {
+  const getServerStatusById = useCallback(async (serverId: string): Promise<SERVER_CONNECTION | undefined> => {
     try {
-      const result = await SERVICES.SERVER.getServers();
-      const serversList = result.servers || [];
-      const transformedServers: Server[] = constructServerData(serversList);
-      setServers(transformedServers);
-      return transformedServers;
+      const result = await SERVICES.MCP.getServerStatusById(serverId);
+      handleServerUpdate(serverId, { connection_state: result.connectionState });
+      return result.connectionState;
     } catch (error: any) {
-      console.error('Failed to fetch server status:', error.data?.detail || 'error');
-      return [];
+      console.log('error', error);
     }
   }, []);
 
   const getServerStatusByPolling = useCallback(
-    async (serverName: string) => {
+    async (serverId: string) => {
       // Clear existing timeout for this specific server if it exists
-      if (timeoutRef.current[serverName]) {
-        clearTimeout(timeoutRef.current[serverName]);
-        delete timeoutRef.current[serverName];
+      if (timeoutRef.current[serverId]) {
+        clearTimeout(timeoutRef.current[serverId]);
+        delete timeoutRef.current[serverId];
       }
 
-      console.log(`🔄 Polling server status for`, serverName);
-      const initialState = servers.find((server: Server) => server.name === serverName)?.connection_state;
+      const initialServer: ServerInfo | undefined = servers.find((server: ServerInfo) => server.id === serverId);
+      const initialState = initialServer?.connection_state;
+      if (!initialServer) return;
 
       const poll = async () => {
-        const latestStatusData: Server[] = await fetchServerStatus();
-        const currentState = latestStatusData.find((server: Server) => server.name === serverName)?.connection_state;
+        const currentState = await getServerStatusById(serverId);
 
         if (currentState === initialState || currentState === SERVER_CONNECTION.CONNECTING) {
-          timeoutRef.current[serverName] = setTimeout(() => {
+          timeoutRef.current[serverId] = setTimeout(() => {
             poll();
           }, 5000);
         } else {
           // Stop polling for this server
-          if (timeoutRef.current[serverName]) {
-            clearTimeout(timeoutRef.current[serverName]);
-            delete timeoutRef.current[serverName];
+          if (timeoutRef.current[serverId]) {
+            clearTimeout(timeoutRef.current[serverId]);
+            delete timeoutRef.current[serverId];
+
+            const result = await SERVICES.SERVER.refreshServerHealth(serverId);
+            handleServerUpdate(serverId, {
+              last_checked_time: result.lastConnected,
+              num_tools: result.numTools,
+              status: result.status || 'unknown',
+            });
           }
         }
       };
 
       await poll();
     },
-    [fetchServerStatus, servers],
+    [refreshServerData, servers],
   );
 
-  const cancelPolling = useCallback((serverName?: string) => {
-    if (serverName) {
-      if (timeoutRef.current[serverName]) {
-        clearTimeout(timeoutRef.current[serverName]);
-        delete timeoutRef.current[serverName];
+  const cancelPolling = useCallback((serverId?: string) => {
+    if (serverId) {
+      if (timeoutRef.current[serverId]) {
+        clearTimeout(timeoutRef.current[serverId]);
+        delete timeoutRef.current[serverId];
       }
     } else {
       Object.values(timeoutRef.current).forEach(timeout => {
@@ -313,18 +295,23 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     servers,
     setServers,
     stats,
+    serverLoading,
+    serverError,
+
     agents,
     setAgents,
     agentStats,
+    agentLoading,
+    agentError,
+
     viewMode,
     setViewMode,
     activeFilter,
     setActiveFilter,
-    loading,
-    error,
-    refreshData,
-    toggleAgent,
-    refreshServerStatus: fetchServerStatus,
+
+    refreshServerData,
+    refreshAgentData,
+    handleServerUpdate,
     getServerStatusByPolling,
     cancelPolling,
   };
