@@ -321,6 +321,14 @@ class McpTool:
             if not name:
                 logger.warning("Skipping tool definition without 'name': %s", tool_def)
                 continue
+            if name in new_map:
+                logger.warning(
+                    "Duplicate tool name '%s' encountered in new_tool_list; "
+                    "keeping the first definition and skipping this one: %s",
+                    name,
+                    tool_def,
+                )
+                continue
             new_map[name] = tool_def
 
         # Find tools to delete (exist in old but not in new)
