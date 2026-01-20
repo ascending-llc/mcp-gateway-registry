@@ -135,7 +135,7 @@ async def get_all_connection_status(
 
 
 @router.get("/connection/status/{server_id}")
-async def get_server_connection_status_by_server_id(
+async def get_server_connection_status(
         server_id: str,
         current_user: CurrentUser,
         mcp_service: MCPService = Depends(get_mcp_service)
