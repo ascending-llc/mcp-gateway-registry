@@ -11,7 +11,7 @@ New code should use the generated models from _generated/ folder.
 
 import json
 import uuid
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Set
 from langchain_core.documents import Document
 from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 
@@ -345,7 +345,7 @@ class McpTool:
         }
 
     @staticmethod
-    def get_safe_metadata_fields() -> set:
+    def get_safe_metadata_fields() -> Set[str]:
         """
         Get safe metadata fields that can be updated without re-vectorization.
         

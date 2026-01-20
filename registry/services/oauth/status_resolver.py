@@ -137,8 +137,8 @@ class ConnectionStatusResolver:
                     return ConnectionState.CONNECTING.value
 
             # 2. Check OAuth flow state
-            if self.reconnection_manager:
-                oauth_state = await self.reconnection_manager.get_oauth_state_override(
+            if self.flow_state_manager:
+                oauth_state = await self.flow_state_manager.get_oauth_state_override(
                     user_id,
                     server_name
                 )

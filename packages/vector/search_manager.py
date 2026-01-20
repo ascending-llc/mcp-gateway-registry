@@ -4,6 +4,7 @@ from typing import Dict, Any, Optional
 from packages.vector import initialize_database
 from packages.models.mcp_tool import McpTool
 from packages.vector.repository import Repository
+from packages.vector import DatabaseClient
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +14,7 @@ class SearchIndexManager:
     Manager for search index operations.
     """
 
-    def __init__(self, db_client=None):
+    def __init__(self, db_client: Optional[DatabaseClient] = None):
         """
         Initialize search index manager.
         
@@ -231,6 +232,7 @@ class SearchIndexManager:
         )
 
     async def update_enabled(self, entity_path: str, is_enabled: bool):
+        """Update enabled status (async, blocks until complete)."""
         try:
             updated = await self.tools.abatch_update_by_filter(
                 filters={"server_path": entity_path},
@@ -239,7 +241,42 @@ class SearchIndexManager:
             logger.info(f"Updated {updated} tools enabled={is_enabled} for '{entity_path}'")
             return updated
         except Exception as e:
-            logger.error(f"Background update failed for '{entity_path}': {e}")
+            logger.error(f"Update enabled failed for '{entity_path}': {e}")
+            return 0
+
+    async def update_metadata(
+            self,
+            entity_path: str,
+            metadata: Dict[str, Any]
+    ) -> int:
+        """
+        Update metadata fields (async, blocks until complete).
+        
+        Only updates safe fields that don't trigger re-vectorization.
+        
+        Args:
+            entity_path: Entity path identifier
+            metadata: Dictionary of metadata fields to update
+            
+        Returns:
+            Number of updated tools
+        """
+        try:
+            # Filter to only safe metadata fields
+            safe_fields = McpTool.get_safe_metadata_fields()
+            safe_updates = {k: v for k, v in metadata.items() if k in safe_fields}
+            
+            if not safe_updates:
+                logger.warning(f"No safe metadata fields to update for '{entity_path}'")
+                return 0
+            updated = await self.tools.abatch_update_by_filter(
+                filters={"server_path": entity_path},
+                update_data=safe_updates
+            )
+            logger.info(f"Updated {updated} tools metadata for '{entity_path}': {safe_updates}")
+            return updated
+        except Exception as e:
+            logger.error(f"Update metadata failed for '{entity_path}': {e}")
             return 0
 
     def update_enabled_background(
@@ -262,6 +299,28 @@ class SearchIndexManager:
         return self._run_background(
             self.update_enabled(entity_path, is_enabled),
             f"enabled={is_enabled} for '{entity_path}'"
+        )
+
+    def update_metadata_background(
+            self,
+            entity_path: str,
+            metadata: Dict[str, Any]
+    ) -> asyncio.Task:
+        """
+        Update metadata fields in background (non-blocking).
+        
+        Only updates safe fields. API returns immediately.
+        
+        Args:
+            entity_path: Entity path identifier
+            metadata: Dictionary of metadata fields to update
+            
+        Returns:
+            asyncio.Task (can be ignored)
+        """
+        return self._run_background(
+            self.update_metadata(entity_path, metadata),
+            f"metadata update for '{entity_path}'"
         )
 
 

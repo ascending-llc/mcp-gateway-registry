@@ -13,6 +13,7 @@ ODM Schema:
 
 import logging
 import httpx
+import asyncio
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
 from beanie import PydanticObjectId
@@ -707,22 +708,11 @@ class ServerServiceV1:
                     metadata_updates["server_name"] = server.serverName
 
                 if metadata_updates:
-                    # Only update safe metadata fields (no re-vectorization) in background
-                    safe_fields = McpTool.get_safe_metadata_fields()
-                    safe_updates = {k: v for k, v in metadata_updates.items() if k in safe_fields}
-                    if safe_updates:
-                        # Background update - doesn't block API response
-                        async def _update_metadata():
-                            try:
-                                await self.search_mgr.tools.abatch_update_by_filter(
-                                    filters={"server_path": server.path},
-                                    update_data=safe_updates
-                                )
-                            except Exception as e:
-                                logger.error(f"Background metadata update failed: {e}")
-
-                        import asyncio
-                        asyncio.create_task(_update_metadata())
+                    # Update safe metadata fields in background
+                    self.search_mgr.update_metadata_background(
+                        entity_path=server.path,
+                        metadata=metadata_updates
+                    )
             else:
                 logger.debug(f"No index-relevant changes for '{server.path}'")
 
