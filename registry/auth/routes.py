@@ -9,7 +9,6 @@ import httpx
 
 from ..core.config import settings
 from .dependencies import create_session_cookie, validate_login_credentials
-from packages.models._generated import IUser
 
 logger = logging.getLogger(__name__)
 
