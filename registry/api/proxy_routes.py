@@ -8,8 +8,8 @@ import httpx
 from typing import Dict, Any, Optional
 from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
-from starlette.background import BackgroundTask
 
+from registry.utils.log import metrics
 from registry.services.server_service import server_service
 from registry.health.service import health_service
 from registry.constants import HealthStatus
@@ -122,7 +122,7 @@ async def proxy_to_mcp_server(
         
         # Always use streaming mode if client accepts SSE
         if client_accepts_sse:
-            logger.info(f"Using SSE streaming mode")
+            logger.info("Using SSE streaming mode")
             
             # We need to peek at response to get headers before starting the stream
             # Open the stream context but keep it alive
@@ -174,7 +174,7 @@ async def proxy_to_mcp_server(
             )
         else:
             # Regular HTTP request
-            logger.info(f"Using regular HTTP mode")
+            logger.info("Using regular HTTP mode")
             response = await proxy_client.request(
                 method=request.method,
                 url=target_url,
@@ -186,7 +186,7 @@ async def proxy_to_mcp_server(
                 content_str = response.content.decode('utf-8')
                 logger.info(f"Response body: {content_str[:1000]}")
             except:
-                logger.info(f"Response body: [binary data]")
+                logger.info("Response body: [binary data]")
             
             return Response(
                 content=response.content,
@@ -239,7 +239,6 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
     NOTE: This must be registered LAST in main.py so other routes take precedence.
     """
     path = f"/{full_path}"
-       
     # Find matching MCP server
     match = find_matching_mcp_server(path)
     if match is None:
@@ -288,6 +287,9 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
     
     # Proxy the request
     logger.info(f"Proxying {request.method} {path} → {target_url} (transport: {transport_type})")
+    
+    metrics.record_server_request(server_name=full_path)
+    
     return await proxy_to_mcp_server(
         request=request,
         target_url=target_url,

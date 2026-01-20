@@ -29,6 +29,11 @@ class OTelMetricsClient:
             description="Total number of tools discovered/registered",
             unit="1"
         )
+        self.server_requests = self.meter.create_counter(
+            name="mcp_server_requests_total",
+            description="Total number of requests to MCP servers",
+            unit="1"
+        )
 
     def record_http_request(self, method: str, route: str, status_code: int):
         """Record an incoming HTTP request."""
@@ -58,6 +63,15 @@ class OTelMetricsClient:
         }
         self.auth_requests.add(1, attributes)
 
+    def record_tool_used(self, tool_name: str):
+        """
+        Record when a tool is used.
+        """
+        attributes = {
+            "tool_name": tool_name
+        }
+        self.tool_discovery.add(1, attributes)
+            
     def record_tool_discovery(self, tool_name: str, source: str = "registry"):
         """
         Record when a tool is discovered or registered.
@@ -67,3 +81,12 @@ class OTelMetricsClient:
             "source": source
         }
         self.tool_discovery.add(1, attributes)
+
+    def record_server_request(self, server_name: str):
+        """
+        Record a request to a specific MCP server.
+        """
+        attributes = {
+            "server_name": server_name
+        }
+        self.server_requests.add(1, attributes)
