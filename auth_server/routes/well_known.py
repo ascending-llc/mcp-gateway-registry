@@ -169,7 +169,8 @@ async def jwks_endpoint():
 @router.get("/.well-known/oauth-protected-resource")
 async def oauth_protected_resource_metadata():
     """
-    OAuth 2.0 Protected Resource Metadata (RFC 8705).
+    OAuth 2.0 protected resource metadata for MCP clients (MCP-specific,
+    conceptually aligned with RFC 8707 OAuth 2.0 Resource Indicators).
     
     This endpoint describes the auth server itself as a protected resource.
     Used by MCP clients (like Claude Desktop) when OAuth session expires
