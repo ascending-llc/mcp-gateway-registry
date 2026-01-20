@@ -1816,16 +1816,64 @@ async def oauth2_callback(
             logger.info(f"Redirecting OAuth client to: {client_redirect_uri}")
             return response
         
-        # Web browser session flow - create session cookie
+        # Web browser session flow - create session cookie with user id
+        user_id = None
+        registry_url = os.environ.get('REGISTRY_URL', 'http://localhost:7860')
+        email = user_info.get("username")
+        if email:
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    # Generate short-lived token to retrieve user_id from registry
+                    current_time = int(time.time())
+                    expires_at = current_time + 5 * 60  # 5 minutes = 300 seconds
+
+                    access_payload = {
+                        "iss": JWT_ISSUER,
+                        "aud": JWT_AUDIENCE,
+                        "sub": mapped_user['username'],
+                        "username": mapped_user['username'],
+                        "scope": " ".join(['auth-server/read:user_id']),
+                        "groups": [],  
+                        "exp": expires_at,
+                        "iat": current_time,
+                        "jti": str(uuid.uuid4()),
+                        "token_use": "access",
+                        "client_id": "user-generated",
+                        "token_type": "user_generated"
+                    }
+
+                    # Sign the access token using HS256 with shared SECRET_KEY
+                    # Add kid (Key ID) to JWT header for consistency with RS256 tokens
+                    headers = {
+                        "kid": JWT_SELF_SIGNED_KID, 
+                        "typ": "JWT",
+                        "alg": "HS256"
+                    }
+
+                    import jwt
+                    access_token = jwt.encode(access_payload, SECRET_KEY, algorithm='HS256' , headers=headers)
+                    headers = {"Authorization": f"Bearer {access_token}"}
+                    resp = await client.get(f"{registry_url}/api/auth/userInfo?email={email}", headers=headers)
+
+                    if resp.status_code == 200:
+                        user_id = resp.json().get("user_id")
+                        logger.info(f"Fetched user_id from registry for {user_id}")
+                    else:
+                        logger.info(f"Failed to fetch user_id from registry: {resp.status_code} {resp.text}")
+            except Exception as e:
+                logger.info(f"Error fetching user_id from registry: {e}")
+
         session_data = {
             "username": mapped_user["username"],
             "email": mapped_user.get("email"),
             "name": mapped_user.get("name"),
             "groups": mapped_user.get("groups", []),
             "provider": provider,
-            "auth_method": "oauth2"
+            "auth_method": "oauth2",
+            "user_id": user_id
         }
-        
+
+        # Create session cookie compatible with registry
         registry_session = signer.dumps(session_data)
         
         # Redirect to registry with session cookie
