@@ -231,16 +231,16 @@ class OAuthReconnectionManager:
             server_name: str
     ) -> Optional[str]:
         """
-        获取 OAuth 流程状态覆盖
+        Get OAuth flow state override
 
-        用于 ConnectionStatusResolver 调用
+        Used for ConnectionStatusResolver calls
 
         Args:
-            user_id: 用户 ID
-            server_name: 服务器名称
+            user_id: User ID
+            server_name: Server name
 
         Returns:
-            Optional[str]: "active", "failed", 或 None
+            Optional[str]: "active", "failed", or None
         """
         try:
             flow_manager = get_flow_state_manager()
@@ -253,9 +253,9 @@ class OAuthReconnectionManager:
             flow_age_seconds = time.time() - flow_state.created_at
             flow_ttl_seconds = flow_manager._flow_ttl
 
-            # 检查是否失败或超时
+            # Check if failed or timed out
             if flow_state.status == "failed" or flow_age_seconds > flow_ttl_seconds:
-                # 检查是否被取消
+                # Check if it was cancelled
                 was_cancelled = flow_state.error and "cancelled" in flow_state.error.lower()
                 if not was_cancelled:
                     logger.debug(
@@ -265,7 +265,7 @@ class OAuthReconnectionManager:
                     return "failed"
                 return None
 
-            # 检查是否处于待处理状态（活动中）
+            # Check if pending (active)
             if flow_state.status == "pending":
                 logger.debug(f"OAuth flow active for {server_name}")
                 return "active"
@@ -278,14 +278,14 @@ class OAuthReconnectionManager:
 
     def is_flow_active(self, user_id: str, server_name: str) -> bool:
         """
-        检查 OAuth 流程是否活动
+        Check if OAuth flow is active
 
         Args:
-            user_id: 用户 ID
-            server_name: 服务器名称
+            user_id: User ID
+            server_name: Server name
 
         Returns:
-            bool: 流程是否活动
+            bool: Whether the flow is active
         """
         try:
             flow_manager = get_flow_state_manager()
@@ -298,7 +298,7 @@ class OAuthReconnectionManager:
             flow_age_seconds = time.time() - flow_state.created_at
             flow_ttl_seconds = flow_manager._flow_ttl
 
-            # 活动条件：状态为 pending 且未超时
+            # Active condition: status is pending and not timed out
             return (flow_state.status == "pending" and
                     flow_age_seconds <= flow_ttl_seconds)
 
@@ -308,14 +308,14 @@ class OAuthReconnectionManager:
 
     def is_flow_failed(self, user_id: str, server_name: str) -> bool:
         """
-        检查 OAuth 流程是否失败
+        Check if OAuth flow has failed
 
         Args:
-            user_id: 用户 ID
-            server_name: 服务器名称
+            user_id: User ID
+            server_name: Server name
 
         Returns:
-            bool: 流程是否失败
+            bool: Whether the flow has failed
         """
         try:
             flow_manager = get_flow_state_manager()
@@ -328,7 +328,7 @@ class OAuthReconnectionManager:
             flow_age_seconds = time.time() - flow_state.created_at
             flow_ttl_seconds = flow_manager._flow_ttl
 
-            # 失败条件：明确失败或超时（且未被取消）
+            # Failure conditions: Explicit failure or timeout (and cancellation)
             if flow_state.status == "failed" or flow_age_seconds > flow_ttl_seconds:
                 was_cancelled = flow_state.error and "cancelled" in flow_state.error.lower()
                 return not was_cancelled

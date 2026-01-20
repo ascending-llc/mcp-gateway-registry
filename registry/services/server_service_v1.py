@@ -603,6 +603,15 @@ class ServerServiceV1:
                 raise
             except Exception as e:
                 # Unexpected error during health check or tool retrieval
+                logger.error(
+                    "Unexpected error during post-registration health check and tool "
+                    "retrieval for server %s (ID: %s, Path: %s): %s",
+                    server.serverName,
+                    server.id,
+                    server.path,
+                    str(e),
+                    exc_info=True,
+                )
                 await server.delete()
         else:
             # No URL - sync search index immediately (for stdio or other transports)

@@ -92,4 +92,4 @@ class ConnectionStateContext:
     server_config: Dict[str, Any]
     connection: Optional[Connection] = None
     is_oauth_server: bool = False
-    idle_timeout: Optional[float] = None  # 从 server_config 传入的 idle_timeout
+    idle_timeout: Optional[float] = None  # idle_timeout value provided from server_config
