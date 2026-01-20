@@ -288,13 +288,15 @@ def cleanup_expired_authorization_codes():
 async def device_authorization(
     req: Request,
     client_id: str = Form(...),
-    scope: Optional[str] = Form(None)
+    scope: Optional[str] = Form(None),
+    resource: Optional[str] = Form(None)  # RFC 8707 Resource Indicators
 ):
     """
     OAuth 2.0 Device Authorization Endpoint (RFC 8628).
     
     Initiates the device flow by generating a device code and user code.
     Accepts application/x-www-form-urlencoded as per RFC 8628.
+    Supports RFC 8707 Resource Indicators via optional 'resource' parameter.
     """
     cleanup_expired_device_codes()
     
@@ -317,6 +319,7 @@ async def device_authorization(
         "user_code": user_code,
         "client_id": client_id,
         "scope": scope or "",
+        "resource": resource,  # RFC 8707 Resource Indicators
         "status": "pending",
         "created_at": current_time,
         "expires_at": expires_at,
@@ -325,7 +328,7 @@ async def device_authorization(
     
     user_codes_storage[user_code] = device_code
     
-    logger.info(f"Generated device code for client_id: {client_id}, user_code: {user_code}")
+    logger.info(f"Generated device code for client_id: {client_id}, user_code: {user_code}, resource: {resource}")
     
     return DeviceCodeResponse(
         device_code=device_code,
