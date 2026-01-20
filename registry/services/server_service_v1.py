@@ -16,7 +16,7 @@ import httpx
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
 from beanie import PydanticObjectId
-from models import McpTool
+from packages.models import McpTool
 from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 from packages.models._generated.user import IUser
 from registry.schemas.server_api_schemas import (
@@ -25,7 +25,7 @@ from registry.schemas.server_api_schemas import (
 )
 from registry.utils.crypto_utils import encrypt_auth_fields
 from registry.core.mcp_client import get_tools_from_server_with_server_info
-from vector.search_manager import get_search_index_manager
+from packages.vector.search_manager import get_search_index_manager
 
 logger = logging.getLogger(__name__)
 

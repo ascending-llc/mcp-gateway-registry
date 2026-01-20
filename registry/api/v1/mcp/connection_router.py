@@ -133,49 +133,47 @@ async def get_all_connection_status(
                             detail="Failed to get connection status")
 
 
-@DeprecationWarning
-@router.get("/connection/status/{server_name}")
-async def get_server_connection_status(
-        server_name: str,
+
+@router.get("/connection/status/{server_id}")
+async def get_server_connection_status_by_server_id(
+        server_id: str,
         current_user: CurrentUser,
         mcp_service: MCPService = Depends(get_mcp_service)
 ) -> Dict[str, Any]:
     """
-    Get connection status for a specific MCP server
-    
+    Get connection status for a specific MCP server by server ID
+
     Returns detailed connection status including state, OAuth requirement, and details.
     Uses the same logic as /connection/status to ensure consistency.
-    
-    Notes: GET /connection/status/:serverName (TypeScript reference)
     """
     try:
         user_id = current_user.get('user_id')
-        logger.debug(f"Fetching status for {server_name} (user: {user_id})")
+        logger.debug(f"Fetching status for {server_id} (user: {user_id})")
+
+        server = await server_service_v1.get_server_by_id(server_id)
+        if not server:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Server '{server_id}' not found"
+            )
 
         server_status = await get_single_server_connection_status(
             user_id=user_id,
-            server_name=server_name,
+            server_name=server.serverName,
             mcp_service=mcp_service
         )
         return {
             "success": True,
-            "server_name": server_name,
-            "connection_state": server_status["connection_state"],
-            "requires_oauth": server_status["requires_oauth"]
+            "serverName": server.serverName,
+            "connectionState": server_status["connection_state"],
+            "requiresOauth": server_status["requires_oauth"]
         }
-    except ValueError as e:
-        # Server not found
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get status for {server_name}: {e}", exc_info=True)
+        logger.error(f"Failed to get status for {server_id}: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"Failed to get connection status for {server_name}")
-
+                            detail=f"Failed to get connection status for {server_id}")
 
 @router.get("/{server_name}/auth-values")
 async def check_auth_values(
