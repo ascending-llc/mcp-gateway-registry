@@ -84,6 +84,12 @@ class AuthSettings(BaseSettings):
     device_code_expiry_seconds: int = 600  # 10 minutes
     device_code_poll_interval: int = 5  # Poll every 5 seconds
     
+    # ==================== OAuth Session Settings ====================
+    oauth_session_ttl_seconds: int = 600  # 10 minutes for OAuth2 flow (default)
+    # Note: This is the maximum time between initiating OAuth flow and completing the callback.
+    # For security (CSRF protection), this should not be too long.
+    # If Claude Desktop reconnection fails with "session_expired", user must re-authenticate.
+    
     # ==================== Paths ====================
     @property
     def scopes_file_path(self) -> Path:

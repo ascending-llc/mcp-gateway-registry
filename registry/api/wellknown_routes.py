@@ -1,5 +1,6 @@
 import logging
 from typing import Optional
+import httpx
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
@@ -215,9 +216,31 @@ async def oauth_protected_resource_metadata() -> JSONResponse:
     OAuth 2.0 Protected Resource Metadata (RFC 8705).
     
     Describes the protected resource (MCP Registry/Gateway) and its authentication
-    requirements. This endpoint helps MCP clients discover the authentication
-    requirements for accessing the registry's proxied MCP servers.
+    requirements. Fetches metadata from auth server as single source of truth.
+    
+    This endpoint helps MCP clients discover the authentication requirements 
+    for accessing the registry's proxied MCP servers.
     """
+    try:
+        # Fetch from auth server (single source of truth)
+        auth_server_url = settings.auth_server_external_url or settings.auth_server_url
+        metadata_url = f"{auth_server_url.rstrip('/')}/.well-known/oauth-protected-resource"
+        
+        logger.info(f"Fetching OAuth protected resource metadata from {metadata_url}")
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(metadata_url, timeout=5.0)
+            
+            if response.status_code == 200:
+                data = response.json()
+                logger.debug(f"Successfully fetched OAuth protected resource metadata")
+                return JSONResponse(content=data)
+            else:
+                logger.warning(f"Auth server returned {response.status_code}, falling back to local config")
+    except Exception as e:
+        logger.warning(f"Failed to fetch OAuth metadata from auth server: {e}, using fallback")
+    
+    # Fallback: Generate locally if auth server is unavailable
     base_url, auth_server_url, registry_url = _get_required_env_vars()
     
     data = {

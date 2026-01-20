@@ -1612,7 +1612,7 @@ async def oauth2_login(
         response.set_cookie(
             key="oauth2_temp_session",
             value=temp_session,
-            max_age=600,  # 10 minutes for OAuth2 flow
+            max_age=settings.oauth_session_ttl_seconds,  # Configurable OAuth2 flow timeout
             httponly=True,
             samesite="lax"
         )
@@ -1648,12 +1648,35 @@ async def oauth2_callback(
         
         # Validate temporary session
         try:
-            temp_session_data = signer.loads(oauth2_temp_session, max_age=600)
-        except (SignatureExpired, BadSignature):
-            raise HTTPException(status_code=400, detail="Invalid or expired OAuth2 session")
+            temp_session_data = signer.loads(oauth2_temp_session, max_age=settings.oauth_session_ttl_seconds)
+        except SignatureExpired:
+            logger.warning(f"OAuth2 session expired for provider {provider} (state={state[:8]}...)")
+            logger.info(f"Returning 401 to trigger fresh OAuth flow for Claude Desktop reconnection")
+            
+            # Per MCP specification: Return 401 with WWW-Authenticate header
+            # This triggers Claude Desktop to automatically initiate a new OAuth flow
+            # with fresh state instead of showing an error to the user
+            base_url = settings.auth_server_external_url or settings.auth_server_url
+            auth_server_url = base_url.rstrip('/')
+            
+            # Build WWW-Authenticate header with OAuth metadata endpoints
+            www_authenticate = (
+                f'Bearer realm="mcp-auth-server", '
+                f'resource_metadata="{auth_server_url}/.well-known/oauth-protected-resource"'
+            )
+            
+            raise HTTPException(
+                status_code=401,
+                detail="OAuth session expired - please re-authenticate",
+                headers={"WWW-Authenticate": www_authenticate}
+            )
+        except BadSignature:
+            logger.error(f"Invalid OAuth2 session signature for provider {provider}")
+            raise HTTPException(status_code=400, detail="Invalid OAuth2 session")
         
         # Validate state parameter
         if state != temp_session_data.get("state"):
+            logger.error(f"State mismatch for provider {provider}: expected={temp_session_data.get('state')[:8]}..., got={state[:8]}...")
             raise HTTPException(status_code=400, detail="Invalid state parameter")
         
         # Validate provider
