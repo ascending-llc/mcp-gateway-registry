@@ -5,13 +5,21 @@ import type { AuthenticationConfig as AuthConfigType } from './types';
 
 interface AuthenticationConfigProps {
   config: AuthConfigType;
+  isEditMode?: boolean;
   onChange: (config: AuthConfigType) => void;
   errors?: Record<string, string | undefined>;
 }
 
-const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onChange, errors = {} }) => {
+const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
+  config,
+  isEditMode = false,
+  onChange,
+  errors = {},
+}) => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [showClientSecret, setShowClientSecret] = useState(false);
+  const [isApiKeyDirty, setIsApiKeyDirty] = useState(false);
+  const [isClientSecretDirty, setIsClientSecretDirty] = useState(false);
 
   const updateConfig = (updates: Partial<AuthConfigType>) => {
     onChange({ ...config, ...updates });
@@ -115,21 +123,27 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                     <input
                       type={showApiKey ? 'text' : 'password'}
                       className={`${getInputClass('key')} pr-10`}
-                      placeholder='sk-...'
-                      value={config.key || ''}
-                      onChange={e => updateConfig({ key: e.target.value })}
+                      style={{ fontFamily: 'Menlo, Consolas, Courier New, monospace' }}
+                      value={isEditMode && !isApiKeyDirty ? '' : config.key || ''}
+                      placeholder={isEditMode && !isApiKeyDirty ? config.key : '...'}
+                      onChange={e => {
+                        setIsApiKeyDirty(true);
+                        updateConfig({ key: e.target.value });
+                      }}
                     />
-                    <button
-                      type='button'
-                      onClick={() => setShowApiKey(!showApiKey)}
-                      className='absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 focus:outline-none'
-                    >
-                      {showApiKey ? (
-                        <EyeSlashIcon className='h-5 w-5' aria-hidden='true' />
-                      ) : (
-                        <EyeIcon className='h-5 w-5' aria-hidden='true' />
-                      )}
-                    </button>
+                    {(!isEditMode || isApiKeyDirty) && (
+                      <button
+                        type='button'
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className='absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 focus:outline-none'
+                      >
+                        {showApiKey ? (
+                          <EyeSlashIcon className='h-5 w-5' aria-hidden='true' />
+                        ) : (
+                          <EyeIcon className='h-5 w-5' aria-hidden='true' />
+                        )}
+                      </button>
+                    )}
                   </div>
                   {renderError('key')}
                 </div>
@@ -217,20 +231,27 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({ config, onC
                     type={showClientSecret ? 'text' : 'password'}
                     required
                     className={`${getInputClass('client_secret')} pr-10`}
-                    value={config.client_secret || ''}
-                    onChange={e => updateConfig({ client_secret: e.target.value })}
+                    style={{ fontFamily: 'Menlo, Consolas, Courier New, monospace' }}
+                    value={isEditMode && !isClientSecretDirty ? '' : config.client_secret || ''}
+                    placeholder={isEditMode && !isClientSecretDirty ? config.client_secret : ''}
+                    onChange={e => {
+                      setIsClientSecretDirty(true);
+                      updateConfig({ client_secret: e.target.value });
+                    }}
                   />
-                  <button
-                    type='button'
-                    onClick={() => setShowClientSecret(!showClientSecret)}
-                    className='absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 focus:outline-none'
-                  >
-                    {showClientSecret ? (
-                      <EyeSlashIcon className='h-5 w-5' aria-hidden='true' />
-                    ) : (
-                      <EyeIcon className='h-5 w-5' aria-hidden='true' />
-                    )}
-                  </button>
+                  {(!isEditMode || isClientSecretDirty) && (
+                    <button
+                      type='button'
+                      onClick={() => setShowClientSecret(!showClientSecret)}
+                      className='absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400 focus:outline-none'
+                    >
+                      {showClientSecret ? (
+                        <EyeSlashIcon className='h-5 w-5' aria-hidden='true' />
+                      ) : (
+                        <EyeIcon className='h-5 w-5' aria-hidden='true' />
+                      )}
+                    </button>
+                  )}
                 </div>
                 {renderError('client_secret')}
               </div>

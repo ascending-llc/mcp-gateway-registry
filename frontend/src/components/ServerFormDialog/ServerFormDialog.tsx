@@ -177,6 +177,13 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
         }
         return hasChanges ? nextErrors : prev;
       });
+    } else if (field === 'path') {
+      const pathValue = value as string;
+      if (pathValue && !/^\//.test(pathValue)) {
+        setErrors(prev => ({ ...prev, path: 'Path must start with /' }));
+      } else {
+        setErrors(prev => ({ ...prev, path: undefined }));
+      }
     } else {
       if (errors[field as string]) {
         setErrors(prev => ({ ...prev, [field as string]: undefined }));
@@ -264,6 +271,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
       showToast(error?.detail?.[0]?.msg || error, 'error');
     } finally {
       setLoading(false);
+      onClose();
     }
   };
 
@@ -295,7 +303,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
                 <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600'></div>
               </div>
             ) : (
-              <MainConfigForm formData={formData} updateField={updateField} errors={errors} />
+              <MainConfigForm formData={formData} updateField={updateField} errors={errors} isEditMode={isEditMode} />
             )}
           </div>
 
