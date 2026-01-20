@@ -55,12 +55,6 @@ export default defineConfig(({ mode }) => {
           cookieDomainRewrite: 'localhost',
           cookiePathRewrite: '/',
         },
-        '/api/auth/providers': {
-          target: authURL,
-          changeOrigin: true,
-          secure: false,
-          rewrite: path => path.replace(/^\/api\/auth\/providers/, '/oauth2/providers'),
-        },
         '/api': {
           target: backendURL,
           changeOrigin: true,
