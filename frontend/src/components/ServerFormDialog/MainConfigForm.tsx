@@ -5,12 +5,12 @@ import type { ServerConfig } from './types';
 
 interface MainConfigFormProps {
   formData: ServerConfig;
+  isEditMode?: boolean;
   updateField: (field: keyof ServerConfig, value: any) => void;
-
   errors?: Record<string, string | undefined>;
 }
 
-const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, updateField, errors }) => {
+const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, isEditMode, updateField, errors }) => {
   const handleUpdateField = (field: keyof ServerConfig, value: any) => {
     updateField(field, value);
   };
@@ -138,7 +138,12 @@ const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, updateField, 
       </div>
 
       {/* Authentication */}
-      <AuthenticationConfig config={formData.authConfig} onChange={handleAuthChange} errors={errors} />
+      <AuthenticationConfig
+        config={formData.authConfig}
+        isEditMode={isEditMode}
+        onChange={handleAuthChange}
+        errors={errors}
+      />
 
       {/* Tags */}
       <div>

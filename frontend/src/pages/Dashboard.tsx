@@ -76,13 +76,17 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
 const Dashboard: React.FC = () => {
   const {
     servers,
+    serverLoading,
+
     agents,
+    agentLoading,
+
     viewMode,
     setViewMode,
     activeFilter,
-    loading,
-    error,
-    refreshData,
+
+    refreshServerData,
+    refreshAgentData,
     handleServerUpdate,
     setAgents,
   } = useServer();
@@ -95,7 +99,6 @@ const Dashboard: React.FC = () => {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Agent state management
-  const [agentsError, setAgentsError] = useState<string | null>(null);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
   const [agentApiToken, setAgentApiToken] = useState<string | null>(null);
 
@@ -300,7 +303,14 @@ const Dashboard: React.FC = () => {
   const handleRefreshHealth = async () => {
     setRefreshing(true);
     try {
-      await refreshData(); // Refresh both servers and agents from useServerStats
+      if (viewFilter === 'servers') {
+        await refreshServerData();
+      } else if (viewFilter === 'agents') {
+        await refreshAgentData();
+      } else {
+        await refreshServerData();
+        await refreshAgentData();
+      }
     } finally {
       setRefreshing(false);
     }
@@ -345,7 +355,6 @@ const Dashboard: React.FC = () => {
       setEditAgentLoading(true);
       showToast('Agent editing is not yet implemented', 'error');
     } catch (error: any) {
-      console.error('Failed to update agent:', error);
       showToast(error.response?.data?.detail || 'Failed to update agent', 'error');
     } finally {
       setEditAgentLoading(false);
@@ -353,19 +362,12 @@ const Dashboard: React.FC = () => {
   };
 
   const handleToggleAgent = async (path: string, enabled: boolean) => {
-    // Optimistically update the UI first
     setAgents(prevAgents => prevAgents.map(agent => (agent.path === path ? { ...agent, enabled } : agent)));
-
     try {
       await axios.post(`/api/agents${path}/toggle?enabled=${enabled}`);
-
       showToast(`Agent ${enabled ? 'enabled' : 'disabled'} successfully!`, 'success');
     } catch (error: any) {
-      console.error('Failed to toggle agent:', error);
-
-      // Revert the optimistic update on error
       setAgents(prevAgents => prevAgents.map(agent => (agent.path === path ? { ...agent, enabled: !enabled } : agent)));
-
       showToast(error.response?.data?.detail || 'Failed to toggle agent', 'error');
     }
   };
@@ -382,7 +384,7 @@ const Dashboard: React.FC = () => {
           <div className='mb-8'>
             <h2 className='text-xl font-bold text-gray-900 dark:text-white mb-4'>MCP Servers</h2>
             <div className='relative'>
-              {loading && (
+              {serverLoading && (
                 <div className='absolute inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10'>
                   <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600'></div>
                 </div>
@@ -421,7 +423,7 @@ const Dashboard: React.FC = () => {
                       onEdit={handleEditServer}
                       onShowToast={showToast}
                       onServerUpdate={handleServerUpdate}
-                      onRefreshSuccess={refreshData}
+                      onRefreshSuccess={refreshServerData}
                     />
                   ))}
                 </div>
@@ -436,17 +438,12 @@ const Dashboard: React.FC = () => {
           <div className='mb-8'>
             <h2 className='text-xl font-bold text-gray-900 dark:text-white mb-4'>A2A Agents</h2>
             <div className='relative'>
-              {loading && (
+              {agentLoading && (
                 <div className='absolute inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10'>
                   <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600'></div>
                 </div>
               )}
-              {agentsError ? (
-                <div className='text-center py-12 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800'>
-                  <div className='text-red-500 text-lg mb-2'>Failed to load agents</div>
-                  <p className='text-red-600 dark:text-red-400 text-sm'>{agentsError}</p>
-                </div>
-              ) : filteredAgents.length === 0 ? (
+              {filteredAgents.length === 0 ? (
                 <div className='text-center py-12 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800'>
                   <div className='text-gray-400 text-lg mb-2'>No agents found</div>
                   <p className='text-gray-500 dark:text-gray-300 text-sm'>
@@ -470,7 +467,7 @@ const Dashboard: React.FC = () => {
                       onToggle={handleToggleAgent}
                       onEdit={handleEditAgent}
                       canModify={user?.can_modify_servers || false}
-                      onRefreshSuccess={refreshData}
+                      onRefreshSuccess={refreshAgentData}
                       onShowToast={showToast}
                       onAgentUpdate={handleAgentUpdate}
                       authToken={agentApiToken}
@@ -487,7 +484,7 @@ const Dashboard: React.FC = () => {
         <div className='mb-8'>
           <h2 className='text-xl font-bold text-gray-900 dark:text-white mb-4'>External Registries</h2>
           <div className='relative'>
-            {loading && (
+            {serverLoading && agentLoading && (
               <div className='absolute inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10'>
                 <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600'></div>
               </div>
@@ -526,7 +523,7 @@ const Dashboard: React.FC = () => {
                           onEdit={handleEditServer}
                           onShowToast={showToast}
                           onServerUpdate={handleServerUpdate}
-                          onRefreshSuccess={refreshData}
+                          onRefreshSuccess={refreshServerData}
                         />
                       ))}
                     </div>
@@ -551,7 +548,7 @@ const Dashboard: React.FC = () => {
                           onToggle={handleToggleAgent}
                           onEdit={handleEditAgent}
                           canModify={user?.can_modify_servers || false}
-                          onRefreshSuccess={refreshData}
+                          onRefreshSuccess={refreshAgentData}
                           onShowToast={showToast}
                           onAgentUpdate={handleAgentUpdate}
                         />
@@ -579,23 +576,6 @@ const Dashboard: React.FC = () => {
         )}
     </>
   );
-
-  // Show error state
-  if (error && agentsError) {
-    return (
-      <div className='flex flex-col items-center justify-center h-64 space-y-4'>
-        <div className='text-red-500 text-lg'>Failed to load servers and agents</div>
-        <p className='text-gray-500 text-center'>{error}</p>
-        <p className='text-gray-500 text-center'>{agentsError}</p>
-        <button
-          onClick={handleRefreshHealth}
-          className='px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors'
-        >
-          Try Again
-        </button>
-      </div>
-    );
-  }
 
   const getCardNumber = () => {
     const serverLength = semanticSectionVisible ? semanticServers.length : filteredServers?.length || 0;
@@ -757,7 +737,7 @@ const Dashboard: React.FC = () => {
         isOpen={showRegisterModal}
         id={serverId}
         showToast={showToast}
-        refreshData={refreshData}
+        refreshData={refreshServerData}
         onServerUpdate={handleServerUpdate}
         onClose={() => {
           setServerId(null);
