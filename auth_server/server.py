@@ -1672,13 +1672,15 @@ async def oauth2_callback(
         # Validate temporary session
         try:
             temp_session_data = signer.loads(oauth2_temp_session, max_age=settings.oauth_session_ttl_seconds)
-        except SignatureExpired:
-            logger.warning(f"OAuth2 session expired for provider {provider} (state={state[:8]}...)")
+        except (SignatureExpired, BadSignature) as e:
+            # Session expired or invalid - return 401 to trigger fresh OAuth flow
+            error_type = "expired" if isinstance(e, SignatureExpired) else "invalid"
+            logger.warning(f"OAuth2 session {error_type} for provider {provider} (state={state[:8] if state else 'none'}...)")
             logger.info(f"Returning 401 to trigger fresh OAuth flow for Claude Desktop reconnection")
             
             # Per MCP specification: Return 401 with WWW-Authenticate header
             # This triggers Claude Desktop to automatically initiate a new OAuth flow
-            # If we have the resource parameter from the URL, include resource_metadata
+            # If we have the resource parameter from state, include resource_metadata
             # pointing to the original protected resource (MCP server)
             www_authenticate_parts = ['Bearer realm="mcp-auth-server"']
             
@@ -1703,7 +1705,7 @@ async def oauth2_callback(
                             resource_metadata_url = f"{base}/.well-known/oauth-protected-resource/{server_name}"
                         
                         www_authenticate_parts.append(f'resource_metadata="{resource_metadata_url}"')
-                        logger.info(f"Session expired, redirecting client back to resource: {resource_metadata_url}")
+                        logger.info(f"Session {error_type}, redirecting client back to resource: {resource_metadata_url}")
                 except Exception as e:
                     logger.warning(f"Could not construct resource_metadata from resource URL: {e}")
             
@@ -1711,12 +1713,9 @@ async def oauth2_callback(
             
             raise HTTPException(
                 status_code=401,
-                detail="OAuth session expired - please re-authenticate",
+                detail=f"OAuth session {error_type} - please re-authenticate",
                 headers={"WWW-Authenticate": www_authenticate}
             )
-        except BadSignature:
-            logger.error(f"Invalid OAuth2 session signature for provider {provider}")
-            raise HTTPException(status_code=400, detail="Invalid OAuth2 session")
         
         # Validate state parameter
         if state != temp_session_data.get("state"):
