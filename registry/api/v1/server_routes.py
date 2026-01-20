@@ -130,7 +130,6 @@ async def list_servers(
                 detail="Invalid status. Must be one of: active, inactive, error"
             )
         
-        accessible_server_ids = user_context.get('acl_accessible_servers', [])
         servers, total = await server_service_v1.list_servers(
             query=query,
             scope=scope,
@@ -138,7 +137,7 @@ async def list_servers(
             page=page,
             per_page=per_page,
             user_id=None,
-            accessible_server_ids=list(accessible_server_ids) # MongoDB query expects an array
+            acl_permissions_map=user_context.get('acl_permission_map', {})
         )
         
         # Convert to response models
@@ -247,8 +246,8 @@ async def get_server(
 ):
     """Get detailed information about a server by ID, including connection status"""
     try:
-        server_id = PydanticObjectId(server_id)
-        if server_id not in user_context.get("acl_accessible_servers"):
+        accessible_server_ids = list(user_context.get('acl_permission_map', {}).get(ResourceType.MCPSERVER.value, {}).keys())
+        if server_id not in accessible_server_ids:
             logger.error(f"Access denied to server Id {server_id} by ACL")
             raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Access denied by ACL")
         
@@ -293,8 +292,6 @@ async def get_server(
             detail="Internal server error while getting server"
         )
 
-# TODO Transactions: Update packages/database/mongodb.py to expose db client
-# db_session: any = Depends(get_mongo_session)
 @router.post(
     f"/{API_VERSION}/servers",
     response_model=ServerCreateResponse,
@@ -320,16 +317,16 @@ async def create_server(
         
         acl_entry = await acl_service.grant_permission(
             principal_type=PrincipalType.USER,
-            principal_id=user_context.get("user_id"),
+            principal_id={"userId: ": user_context.get("user_id")},
             resource_type=ResourceType.MCPSERVER,
             resource_id=server.id,
-            granted_by=user_context.get("user_id"),
             perm_bits=15  # Apply full permissions for owners
         )
         
         if not acl_entry: 
+            # Transaction rollback will be implemented here
+            await server.delete()
             raise ValueError("Failed to create ACL entry for server: {server.id}")
-            # TODO: Delete the server if ACL creation fails
         
         logger.info(f"Granted user {user_id} owner permissions for server Id {server.id}")
         return convert_to_create_response(server)
@@ -367,18 +364,15 @@ async def update_server(
     """Update a server with partial data"""
     try:
         user_id = user_context.get("username")
-        acl_server_permissions = user_context.get("acl_server_permissions")
-        if acl_server_permissions:
-            user_permissions = acl_server_permissions.get(str(server_id), 0)
-
-        if not user_permissions or user_permissions < PermissionBits.EDIT:
+        acl_permission_map = user_context.get("acl_permission_map", {})
+        user_perms_for_server = acl_permission_map.get(ResourceType.MCPSERVER.value, {}).get(str(server_id), {})
+        if not user_perms_for_server.get("EDIT", False):
             raise HTTPException(
-                status_code=http_status.HTTP_403_FORBIDDEN,
-                detail={
-                    "error": "forbidden",
-                    "message": "You do not have edit permissions for this server."
-                }
-            )
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "forbidden",
+                "message": "You do not have edit permissions for this server."
+            })
 
         server = await server_service_v1.update_server(
             server_id=server_id,
@@ -416,8 +410,6 @@ async def update_server(
             detail="Internal server error while updating server"
         )
 
-# TODO Transactions: Update packages/database/mongodb.py to expose db client
-# db_session: any = Depends(get_mongo_session)
 @router.delete(
     f"/{API_VERSION}/servers/{{server_id}}",
     status_code=http_status.HTTP_204_NO_CONTENT,
@@ -430,11 +422,10 @@ async def delete_server(
 ):
     """Delete a server"""
     try:
-        acl_server_permissions = user_context.get("acl_server_permissions")
-        if acl_server_permissions:
-            user_permissions = acl_server_permissions.get(str(server_id), 0)
+        acl_permission_map = user_context.get("acl_permission_map", {})
+        user_perms_for_server = acl_permission_map.get(ResourceType.MCPSERVER.value, {}).get(str(server_id), {})
 
-        if not user_permissions or user_permissions < PermissionBits.DELETE:
+        if not user_perms_for_server.get("DELETE", False):
             raise HTTPException(
                 status_code=http_status.HTTP_403_FORBIDDEN,
                 detail={
@@ -448,7 +439,7 @@ async def delete_server(
         )
 
         if did_server_delete: 
-            num_acl_entries_deleted = await acl_service.remove_all_permissions(
+            num_acl_entries_deleted = await acl_service.remove_permissions_for_resource(
                 resource_type=ResourceType.MCPSERVER,
                 resource_id=PydanticObjectId(server_id),
             )
@@ -498,12 +489,10 @@ async def toggle_server(
 ):
     """Toggle server enabled/disabled status. When enabling, fetches tools from server."""
     try:
+        acl_permission_map = user_context.get("acl_permission_map", {})
+        user_perms_for_server = acl_permission_map.get(ResourceType.MCPSERVER.value, {}).get(str(server_id), {})
 
-        acl_resource_permissions = user_context.get("acl_resource_permissions")
-        if acl_resource_permissions:
-            user_permissions = acl_resource_permissions.get(str(server_id), 0)
-
-        if not user_permissions or user_permissions < PermissionBits.EDIT:
+        if not user_perms_for_server.get("EDIT", False):
             raise HTTPException(
                 status_code=http_status.HTTP_403_FORBIDDEN,
                 detail={
@@ -562,7 +551,8 @@ async def get_server_tools(
 ):
     """Get server tools"""
     try:
-        if server_id not in user_context.get("acl_accessible_servers"):
+        accessible_server_ids = list(user_context.get('acl_permission_map', {}).get(ResourceType.MCPSERVER.value, {}).keys())
+        if server_id not in accessible_server_ids:
             logger.error(f"Access denied to server Id {server_id} by ACL")
             raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Access denied by ACL")
         

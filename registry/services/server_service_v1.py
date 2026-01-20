@@ -28,6 +28,7 @@ from registry.schemas.server_api_schemas import (
 )
 from registry.utils.crypto_utils import encrypt_auth_fields
 from registry.core.mcp_client import get_tools_from_server_with_server_info
+from registry.services.constants import ResourceType
 
 logger = logging.getLogger(__name__)
 
@@ -295,7 +296,7 @@ class ServerServiceV1:
         page: int = 1,
         per_page: int = 20,
         user_id: Optional[str] = None,
-        accessible_server_ids: List[PydanticObjectId] = [],
+        acl_permissions_map: Dict[str, Any] = [],
     ) -> Tuple[List[MCPServerDocument], int]:
         """
         List servers with filtering and pagination.
@@ -340,6 +341,8 @@ class ServerServiceV1:
             filters.append(text_filter)
 
         # Access control filter
+        accessible_servers = acl_permissions_map.get(ResourceType.MCPSERVER.value).keys()
+        accessible_server_ids = [PydanticObjectId(sid) for sid in accessible_servers]
         if accessible_server_ids:
             filters.append({"_id": {"$in": accessible_server_ids}})
 

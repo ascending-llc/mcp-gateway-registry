@@ -38,8 +38,8 @@ def get_current_user_by_mid(request: Request) -> Dict[str, Any]:
     return request.state.user
 
 async def get_user_acl_permissions(request: Request) -> Dict[str, Any]:
-    """
-        Example dependency to test adding acl permission info to user context
+    """ 
+        Get current authenticated user from request state with ACL permissions
         Replaces the need for get_user_by_mid
 
     Args:
@@ -66,26 +66,20 @@ async def get_user_acl_permissions(request: Request) -> Dict[str, Any]:
             logger.warning(f'User {username} not found in database')
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="user not found")
 
-        principal_id = getattr(user_obj, "id")
-        accessible_servers_for_user = await acl_service.list_accessible_resources(
-            principal_type=PrincipalType.USER, 
-            principal_id=principal_id,
-            resource_type=ResourceType.MCPSERVER
+        user_id = getattr(user_obj, "id")
+        acl_permission_map = await acl_service.get_permissions_map_for_user_id(
+            principal_type=PrincipalType.USER.value, 
+            principal_id=user_id,
         )
-
-        resource_ids = {entry.resourceId for entry in accessible_servers_for_user}
-        acl_server_permissions = {str(entry.resourceId): entry.permBits for entry in accessible_servers_for_user}
-        
         return {
             **request.state.user,
-            "user_id": principal_id,
-            "acl_accessible_servers":  resource_ids,
-            "acl_server_permissions": acl_server_permissions, 
+            "user_id": user_id,
+            "acl_permission_map": acl_permission_map,
             "role": getattr(user_obj, "role")
             #  other acl fields can be added here
         }
     except Exception as e:
-        logger.info(f'Error fetching user {username} from database: {e}')
+        logger.info(f'Error fetching user ACL permissions {username} from database: {e}')
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not find user object from db")
 
 
