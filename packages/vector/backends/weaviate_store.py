@@ -479,11 +479,10 @@ class WeaviateStore(VectorStoreAdapter):
             return 0
 
         collection = self.get_collection(collection_name)
-        deleted_count = 0
 
         try:
             where = Filter.by_id().contains_any(doc_ids)
-            collection.data.delete_many(where=where)
+            deleted_count = collection.data.delete_many(where=where)
             logger.info(f"Batch deleted {deleted_count}/{len(doc_ids)} documents")
             return deleted_count
 
