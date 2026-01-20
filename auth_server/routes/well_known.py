@@ -164,8 +164,3 @@ async def jwks_endpoint():
         return {
             "keys": []
         }
-
-
-# Removed: This endpoint was causing mcp-remote to think the auth server itself is a protected resource
-# Protected resource metadata should only be served by the actual resources (MCP servers), not the auth server
-# The registry and mcpgw servers have their own /.well-known/oauth-protected-resource endpoints
