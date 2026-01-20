@@ -5,8 +5,8 @@ class OTelMetricsClient:
     Unified client for defining and recording OpenTelemetry metrics.
     """
     
-    def __init__(self, service_name: str):
-        self.meter = metrics.get_meter(service_name)
+    def __init__(self):
+        self.meter = metrics.get_meter(__name__)
         
         self.http_requests = self.meter.create_counter(
             name="http_requests_total",

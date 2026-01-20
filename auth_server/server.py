@@ -1458,7 +1458,7 @@ def main():
     args = parse_arguments()
     
     logger.info("🔭 Initializing Telemetry...")
-    setup_metrics()
+    setup_metrics("auth-server")
 
     # Update global validator with default region
     global validator

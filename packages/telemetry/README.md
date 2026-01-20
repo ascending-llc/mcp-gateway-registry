@@ -11,8 +11,8 @@ from packages.telemetry import setup_metrics
 
 # Call this function during your application's startup phase
 setup_metrics(
-    service_name="your-service-name",
-    otlp_endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"), # Optional, will use env var or default
+    service_name="your-service-name", # REQUIRED: Name of your service
+    otlp_endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
     enable_metrics=True, # Set to False to disable metrics
     enable_logs=True # Set to False to disable logs
 )
@@ -27,9 +27,9 @@ To record custom metrics, you need to import and instantiate the `OTelMetricsCli
 ```python
 from packages.telemetry.metrics_client import OTelMetricsClient
 
-# Instantiate the client with your service name
+# Instantiate the client
 # This should typically be done once per service/application
-metrics_client = OTelMetricsClient(service_name="your-service-name")
+metrics_client = OTelMetricsClient()
 
 # Example of recording an HTTP request metric
 metrics_client.record_http_request(method="GET", route="/api/data", status_code=200)
