@@ -117,7 +117,7 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             {"indexed_tools": count, "failed_tools": count} or None if unavailable
         """
-        return await search_mgr.sync_full(
+        return await search_mgr.sync_full_background(
             entity_path=service_path,
             entity_info=server_info,
             is_enabled=is_enabled
@@ -316,7 +316,7 @@ class ExternalVectorSearchService(VectorSearchService):
             # Convert AgentCard to server_info format
             server_info = self._agent_to_server_info(entity_info, entity_path)
             server_info["is_enabled"] = is_enabled
-            return await search_mgr.sync_full(
+            return await search_mgr.sync_full_background(
                 entity_path=entity_path,
                 entity_info=server_info,
                 is_enabled=is_enabled
@@ -325,7 +325,7 @@ class ExternalVectorSearchService(VectorSearchService):
             # Ensure entity_type is set
             if "entity_type" not in entity_info:
                 entity_info["entity_type"] = "mcp_server"
-            return await search_mgr.sync_full(
+            return await search_mgr.sync_full_background(
                 entity_path=entity_path,
                 entity_info=entity_info,
                 is_enabled=is_enabled

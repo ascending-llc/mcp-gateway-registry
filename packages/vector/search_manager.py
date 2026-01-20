@@ -22,7 +22,25 @@ class SearchIndexManager:
         """
         self._client = db_client or initialize_database()
         self.tools = Repository(self._client, McpTool)
+        self._background_tasks = set()  # Track background tasks
         logger.info("SearchIndexManager initialized")
+
+    def _run_background(self, coro, description: str) -> asyncio.Task:
+        """
+        Helper to run coroutine as background task.
+        
+        Args:
+            coro: Coroutine to run
+            description: Task description for logging
+            
+        Returns:
+            asyncio.Task
+        """
+        task = asyncio.create_task(coro)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        logger.info(f"Started background task: {description}")
+        return task
 
     async def sync_full(
             self,
@@ -70,6 +88,30 @@ class SearchIndexManager:
         except Exception as e:
             logger.error(f"Full sync failed for '{entity_path}': {e}", exc_info=True)
             return None
+
+    def sync_full_background(
+            self,
+            entity_path: str,
+            entity_info: Dict[str, Any],
+            is_enabled: bool = True
+    ) -> asyncio.Task:
+        """
+        Full rebuild in background (non-blocking).
+        
+        API returns immediately while indexing runs in background.
+        
+        Args:
+            entity_path: Entity path identifier
+            entity_info: Entity info with tool_list
+            is_enabled: Whether tools are enabled
+            
+        Returns:
+            asyncio.Task (can be ignored)
+        """
+        return self._run_background(
+            self.sync_full(entity_path, entity_info, is_enabled),
+            f"full sync for '{entity_path}'"
+        )
 
     async def sync_incremental(
             self,
@@ -163,6 +205,64 @@ class SearchIndexManager:
             logger.error(f"Incremental sync failed for '{entity_path}': {e}", exc_info=True)
             logger.info(f"Falling back to full sync")
             return await self.sync_full(entity_path, entity_info, is_enabled)
+
+    def sync_incremental_background(
+            self,
+            entity_path: str,
+            entity_info: Dict[str, Any],
+            is_enabled: bool = True
+    ) -> asyncio.Task:
+        """
+        Incremental update in background (non-blocking).
+        
+        Only re-vectorizes changed tools. API returns immediately.
+        
+        Args:
+            entity_path: Entity path identifier
+            entity_info: Entity info with tool_list
+            is_enabled: Whether tools are enabled
+            
+        Returns:
+            asyncio.Task (can be ignored)
+        """
+        return self._run_background(
+            self.sync_incremental(entity_path, entity_info, is_enabled),
+            f"incremental sync for '{entity_path}'"
+        )
+
+    async def update_enabled(self, entity_path: str, is_enabled: bool):
+        try:
+            updated = await self.tools.abatch_update_by_filter(
+                filters={"server_path": entity_path},
+                update_data={"is_enabled": is_enabled}
+            )
+            logger.info(f"Updated {updated} tools enabled={is_enabled} for '{entity_path}'")
+            return updated
+        except Exception as e:
+            logger.error(f"Background update failed for '{entity_path}': {e}")
+            return 0
+
+    def update_enabled_background(
+            self,
+            entity_path: str,
+            is_enabled: bool
+    ) -> asyncio.Task:
+        """
+        Update enabled status in background (non-blocking).
+        
+        Fast metadata-only update. API returns immediately.
+        
+        Args:
+            entity_path: Entity path identifier
+            is_enabled: New enabled status
+            
+        Returns:
+            asyncio.Task (can be ignored)
+        """
+        return self._run_background(
+            self.update_enabled(entity_path, is_enabled),
+            f"enabled={is_enabled} for '{entity_path}'"
+        )
 
 
 _manager_instance: Optional[SearchIndexManager] = None

@@ -579,7 +579,8 @@ class ServerServiceV1:
                     else:
                         # Save empty oauthMetadata if retrieval failed
                         config["oauthMetadata"] = {}
-                        logger.info(f"No OAuth metadata available for {server.serverName} (server may not support OAuth autodiscovery), saved empty oauthMetadata")
+                        logger.info(
+                            f"No OAuth metadata available for {server.serverName} (server may not support OAuth autodiscovery), saved empty oauthMetadata")
 
                 # Update numTools at root level (0 since tools not fetched yet)
                 server.numTools = 0
@@ -588,15 +589,6 @@ class ServerServiceV1:
                 server.config = config
                 server.updatedAt = _get_current_utc_time()
                 await server.save()
-
-                # Sync search index after successful registration and tool retrieval
-                server_info = McpTool.from_server_document(server)
-                await self.search_mgr.sync_full(
-                    entity_path=server.path,
-                    entity_info=server_info,
-                    is_enabled=config.get("enabled", True)
-                )
-
             except ValueError:
                 # Re-raise ValueError (our validation errors)
                 raise
@@ -615,7 +607,7 @@ class ServerServiceV1:
         else:
             # No URL - sync search index immediately (for stdio or other transports)
             server_info = McpTool.from_server_document(server)
-            await self.search_mgr.sync_full(
+            self.search_mgr.sync_full_background(
                 entity_path=server.path,
                 entity_info=server_info,
                 is_enabled=config.get("enabled", True)
@@ -700,7 +692,7 @@ class ServerServiceV1:
                 # Tools changed - use incremental update
                 logger.info(f"Tools changed for '{server.path}', using incremental update")
                 server_info = McpTool.from_server_document(server)
-                await self.search_mgr.sync_incremental(
+                await self.search_mgr.sync_incremental_background(
                     entity_path=server.path,
                     entity_info=server_info,
                     is_enabled=updated_config.get("enabled", True)
@@ -715,14 +707,22 @@ class ServerServiceV1:
                     metadata_updates["server_name"] = server.serverName
 
                 if metadata_updates:
-                    # Only update safe metadata fields (no re-vectorization)
+                    # Only update safe metadata fields (no re-vectorization) in background
                     safe_fields = McpTool.get_safe_metadata_fields()
                     safe_updates = {k: v for k, v in metadata_updates.items() if k in safe_fields}
                     if safe_updates:
-                        await self.search_mgr.tools.abatch_update_by_filter(
-                            filters={"server_path": server.path},
-                            update_data=safe_updates
-                        )
+                        # Background update - doesn't block API response
+                        async def _update_metadata():
+                            try:
+                                await self.search_mgr.tools.abatch_update_by_filter(
+                                    filters={"server_path": server.path},
+                                    update_data=safe_updates
+                                )
+                            except Exception as e:
+                                logger.error(f"Background metadata update failed: {e}")
+
+                        import asyncio
+                        asyncio.create_task(_update_metadata())
             else:
                 logger.debug(f"No index-relevant changes for '{server.path}'")
 
@@ -868,18 +868,24 @@ class ServerServiceV1:
                 server.config['enabled'] = False
                 await server.save()
                 raise ValueError("Failed to fetch tools from server. Server remains disabled.")
-
+            else:
+                # Sync search index after successful registration and tool retrieval
+                server_info = McpTool.from_server_document(server)
+                self.search_mgr.sync_full_background(
+                    entity_path=server.path,
+                    entity_info=server_info,
+                    is_enabled=enabled
+                )
+        else:
+            # Update search index enabled status in background
+            self.search_mgr.update_enabled_background(
+                entity_path=server.path,
+                is_enabled=enabled
+            )
         # Update the updatedAt timestamp
         server.updatedAt = _get_current_utc_time()
-
         await server.save()
         logger.info(f"Toggled server {server.serverName} (ID: {server.id}) enabled to {enabled}")
-
-        # Update search index enabled status
-        await self.search_mgr.tools.abatch_update_by_filter(
-            filters={"server_path": server.path},
-            update_data={"is_enabled": enabled}
-        )
         return server
 
     async def get_server_tools(
