@@ -28,6 +28,13 @@ dependencies = [
     # gRPC and protocols
     "protobuf>=5.29.5",
     "grpcio>=1.76.0",
+
+    # Open Telemetry Package
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-prometheus",
+    "opentelemetry-exporter-otlp-proto-http",
+
 ]
 
 [project.optional-dependencies]
@@ -43,10 +50,6 @@ embedded-search = [
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
-    "opentelemetry-api>=1.20.0",
-    "opentelemetry-sdk>=1.20.0",
-    "opentelemetry-exporter-prometheus",
-    "opentelemetry-exporter-otlp-proto-http",
     "pytest-cov>=4.1.0",
     "pytest-mock>=3.12.0",
     "factory-boy>=3.3.0",
