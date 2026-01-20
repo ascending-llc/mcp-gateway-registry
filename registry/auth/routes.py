@@ -265,7 +265,7 @@ async def get_auth_config():
 
 
 @router.get("/userInfo")
-async def get_user_id_by_email(email: str):
+async def get_user_info(email: str):
     """Fetch user_id (ObjectId as str) by email. Requires Bearer token in Authorization header."""
 
     if not email or "@" not in email:

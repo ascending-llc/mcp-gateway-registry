@@ -469,6 +469,19 @@ def check_rate_limit(username: str) -> bool:
     user_token_generation_counts[rate_key] = current_count + 1
     return True
 
+def _create_self_signed_jwt(access_payload: dict) -> str: 
+    try: 
+        headers = {
+            "kid": JWT_SELF_SIGNED_KID,  # Static key ID for self-signed tokens
+            "typ": "JWT",
+            "alg": "HS256"
+        }
+        access_token = jwt.encode(access_payload, SECRET_KEY, algorithm='HS256' , headers=headers)
+        return access_token
+    except Exception as e:
+        logger.error(f"Failed to create self-signed JWT: {e}")
+        raise ValueError(f"Failed to create self-signed JWT: {e}")
+
 
 # Create FastAPI app
 api_prefix = settings.auth_server_api_prefix.rstrip('/') if settings.auth_server_api_prefix else ""
@@ -1314,15 +1327,7 @@ async def generate_user_token(
         if request.description:
             access_payload["description"] = request.description
 
-        # Sign the access token using HS256 with shared SECRET_KEY
-        # Add kid (Key ID) to JWT header for consistency with RS256 tokens
-        headers = {
-            "kid": JWT_SELF_SIGNED_KID,  # Static key ID for self-signed tokens
-            "typ": "JWT",
-            "alg": "HS256"
-        }
-        # Sign the access token using HS256 with shared SECRET_KEY
-        access_token = jwt.encode(access_payload, SECRET_KEY, algorithm='HS256' , headers=headers)
+        access_token = _create_self_signed_jwt(access_payload)
 
         # No refresh tokens - users should configure longer token lifetimes in Keycloak if needed
         refresh_token = None
@@ -1776,7 +1781,6 @@ async def oauth2_callback(
         if client_id and client_redirect_uri:
             # OAuth Authorization Code Flow - return authorization code to client
             logger.info(f"OAuth client detected (client_id={client_id}), generating authorization code")
-            
             from .routes.oauth_device import authorization_codes_storage, cleanup_expired_authorization_codes
             
             # Cleanup expired codes
@@ -1818,7 +1822,6 @@ async def oauth2_callback(
         
         # Web browser session flow - create session cookie with user id
         user_id = None
-        registry_url = os.environ.get('REGISTRY_URL', 'http://localhost:7860')
         email = user_info.get("username")
         if email:
             try:
@@ -1826,7 +1829,7 @@ async def oauth2_callback(
                     # Generate short-lived token to retrieve user_id from registry
                     current_time = int(time.time())
                     expires_at = current_time + 5 * 60  # 5 minutes = 300 seconds
-
+                    registry_url = settings.registry_url
                     access_payload = {
                         "iss": JWT_ISSUER,
                         "aud": JWT_AUDIENCE,
@@ -1842,16 +1845,7 @@ async def oauth2_callback(
                         "token_type": "user_generated"
                     }
 
-                    # Sign the access token using HS256 with shared SECRET_KEY
-                    # Add kid (Key ID) to JWT header for consistency with RS256 tokens
-                    headers = {
-                        "kid": JWT_SELF_SIGNED_KID, 
-                        "typ": "JWT",
-                        "alg": "HS256"
-                    }
-
-                    import jwt
-                    access_token = jwt.encode(access_payload, SECRET_KEY, algorithm='HS256', headers=headers)
+                    access_token = _create_self_signed_jwt(access_payload)
                     headers = {"Authorization": f"Bearer {access_token}"}
                     resp = await client.get(
                         f"{registry_url}/api/auth/userInfo",
