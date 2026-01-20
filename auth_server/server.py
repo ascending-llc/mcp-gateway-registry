@@ -6,6 +6,7 @@ Configuration is passed via headers instead of environment variables.
 import argparse
 import logging
 import os
+import base64
 import boto3
 import jwt
 import requests
@@ -1566,7 +1567,12 @@ async def oauth2_login(
             raise HTTPException(status_code=400, detail=f"Provider {provider} is disabled")
         
         # Generate state parameter for security
-        state = secrets.token_urlsafe(32)
+        # Encode resource parameter in state so we can recover it even if session expires
+        state_data = {
+            "nonce": secrets.token_urlsafe(24),
+            "resource": resource  # RFC 8707 - preserve for session expiration handling
+        }
+        state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode().rstrip('=')
         
         # Store state and redirect URI in session for callback validation
         session_data = {
@@ -1652,6 +1658,17 @@ async def oauth2_callback(
         if not code or not state or not oauth2_temp_session:
             raise HTTPException(status_code=400, detail="Missing required OAuth2 parameters")
         
+        # Decode state to extract resource parameter (RFC 8707)
+        resource = None
+        try:
+            # Add padding if needed
+            state_padded = state + '=' * (4 - len(state) % 4)
+            state_decoded = json.loads(base64.urlsafe_b64decode(state_padded).decode())
+            resource = state_decoded.get("resource")
+            logger.info(f"Extracted resource from state: {resource}")
+        except Exception as e:
+            logger.warning(f"Could not decode state parameter: {e}")
+        
         # Validate temporary session
         try:
             temp_session_data = signer.loads(oauth2_temp_session, max_age=settings.oauth_session_ttl_seconds)
@@ -1661,15 +1678,36 @@ async def oauth2_callback(
             
             # Per MCP specification: Return 401 with WWW-Authenticate header
             # This triggers Claude Desktop to automatically initiate a new OAuth flow
-            # with fresh state instead of showing an error to the user
-            base_url = settings.auth_server_external_url or settings.auth_server_url
-            auth_server_url = base_url.rstrip('/')
+            # If we have the resource parameter from the URL, include resource_metadata
+            # pointing to the original protected resource (MCP server)
+            www_authenticate_parts = ['Bearer realm="mcp-auth-server"']
             
-            # Build WWW-Authenticate header with OAuth metadata endpoints
-            www_authenticate = (
-                f'Bearer realm="mcp-auth-server", '
-                f'resource_metadata="{auth_server_url}/.well-known/oauth-protected-resource"'
-            )
+            if resource:
+                # Extract server path from resource URL for protected resource metadata
+                # Example: https://jarvis-demo.com/gateway/proxy/mcpgw -> /gateway/.well-known/oauth-protected-resource/proxy/mcpgw
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(resource)
+                    # Get the path without leading/trailing slashes
+                    path_parts = parsed.path.strip('/').split('/')
+                    if len(path_parts) >= 2:
+                        # Reconstruct: scheme://host/path/.well-known/oauth-protected-resource/server
+                        base = f"{parsed.scheme}://{parsed.netloc}"
+                        # Everything before the last part is the base path, last part is server name
+                        if len(path_parts) > 2:
+                            base_path = '/'.join(path_parts[:-2])
+                            server_name = '/'.join(path_parts[-2:])
+                            resource_metadata_url = f"{base}/{base_path}/.well-known/oauth-protected-resource/{server_name}"
+                        else:
+                            server_name = '/'.join(path_parts)
+                            resource_metadata_url = f"{base}/.well-known/oauth-protected-resource/{server_name}"
+                        
+                        www_authenticate_parts.append(f'resource_metadata="{resource_metadata_url}"')
+                        logger.info(f"Session expired, redirecting client back to resource: {resource_metadata_url}")
+                except Exception as e:
+                    logger.warning(f"Could not construct resource_metadata from resource URL: {e}")
+            
+            www_authenticate = ', '.join(www_authenticate_parts)
             
             raise HTTPException(
                 status_code=401,
