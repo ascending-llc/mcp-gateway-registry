@@ -164,3 +164,33 @@ async def jwks_endpoint():
         return {
             "keys": []
         }
+
+
+@router.get("/.well-known/oauth-protected-resource")
+async def oauth_protected_resource_metadata():
+    """
+    OAuth 2.0 protected resource metadata for MCP clients (MCP-specific,
+    conceptually aligned with RFC 8707 OAuth 2.0 Resource Indicators).
+    
+    This endpoint describes the auth server itself as a protected resource.
+    Used by MCP clients (like Claude Desktop) when OAuth session expires
+    to automatically discover authorization endpoints and initiate fresh OAuth flow.
+    
+    Per MCP specification, when a 401 response includes:
+      WWW-Authenticate: Bearer resource_metadata="<this-endpoint>"
+    
+    The client will fetch this metadata to discover how to re-authenticate.
+    """
+    base_url, auth_server_url = _get_auth_server_urls()
+    
+    return {
+        "resource": auth_server_url,
+        "authorization_servers": [base_url],
+        "scopes_supported": [
+            "mcp-registry-admin",
+            "mcp-servers-unrestricted/read",
+            "mcp-servers-unrestricted/execute"
+        ],
+        "bearer_methods_supported": ["header"],
+        "resource_signing_alg_values_supported": ["HS256", "RS256"]
+    }

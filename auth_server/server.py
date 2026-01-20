@@ -474,6 +474,19 @@ def check_rate_limit(username: str) -> bool:
     user_token_generation_counts[rate_key] = current_count + 1
     return True
 
+def _create_self_signed_jwt(access_payload: dict) -> str: 
+    try: 
+        headers = {
+            "kid": JWT_SELF_SIGNED_KID,  # Static key ID for self-signed tokens
+            "typ": "JWT",
+            "alg": "HS256"
+        }
+        access_token = jwt.encode(access_payload, SECRET_KEY, algorithm='HS256' , headers=headers)
+        return access_token
+    except Exception as e:
+        logger.error(f"Failed to create self-signed JWT: {e}")
+        raise ValueError(f"Failed to create self-signed JWT: {e}")
+
 
 # Create FastAPI app
 api_prefix = settings.auth_server_api_prefix.rstrip('/') if settings.auth_server_api_prefix else ""
@@ -1319,15 +1332,7 @@ async def generate_user_token(
         if request.description:
             access_payload["description"] = request.description
 
-        # Sign the access token using HS256 with shared SECRET_KEY
-        # Add kid (Key ID) to JWT header for consistency with RS256 tokens
-        headers = {
-            "kid": JWT_SELF_SIGNED_KID,  # Static key ID for self-signed tokens
-            "typ": "JWT",
-            "alg": "HS256"
-        }
-        # Sign the access token using HS256 with shared SECRET_KEY
-        access_token = jwt.encode(access_payload, SECRET_KEY, algorithm='HS256' , headers=headers)
+        access_token = _create_self_signed_jwt(access_payload)
 
         # No refresh tokens - users should configure longer token lifetimes in Keycloak if needed
         refresh_token = None
@@ -1617,7 +1622,7 @@ async def oauth2_login(
         response.set_cookie(
             key="oauth2_temp_session",
             value=temp_session,
-            max_age=600,  # 10 minutes for OAuth2 flow
+            max_age=settings.oauth_session_ttl_seconds,  # Configurable OAuth2 flow timeout
             httponly=True,
             samesite="lax"
         )
@@ -1653,12 +1658,35 @@ async def oauth2_callback(
         
         # Validate temporary session
         try:
-            temp_session_data = signer.loads(oauth2_temp_session, max_age=600)
-        except (SignatureExpired, BadSignature):
-            raise HTTPException(status_code=400, detail="Invalid or expired OAuth2 session")
+            temp_session_data = signer.loads(oauth2_temp_session, max_age=settings.oauth_session_ttl_seconds)
+        except SignatureExpired:
+            logger.warning(f"OAuth2 session expired for provider {provider} (state={state[:8]}...)")
+            logger.info(f"Returning 401 to trigger fresh OAuth flow for Claude Desktop reconnection")
+            
+            # Per MCP specification: Return 401 with WWW-Authenticate header
+            # This triggers Claude Desktop to automatically initiate a new OAuth flow
+            # with fresh state instead of showing an error to the user
+            base_url = settings.auth_server_external_url or settings.auth_server_url
+            auth_server_url = base_url.rstrip('/')
+            
+            # Build WWW-Authenticate header with OAuth metadata endpoints
+            www_authenticate = (
+                f'Bearer realm="mcp-auth-server", '
+                f'resource_metadata="{auth_server_url}/.well-known/oauth-protected-resource"'
+            )
+            
+            raise HTTPException(
+                status_code=401,
+                detail="OAuth session expired - please re-authenticate",
+                headers={"WWW-Authenticate": www_authenticate}
+            )
+        except BadSignature:
+            logger.error(f"Invalid OAuth2 session signature for provider {provider}")
+            raise HTTPException(status_code=400, detail="Invalid OAuth2 session")
         
         # Validate state parameter
         if state != temp_session_data.get("state"):
+            logger.error(f"State mismatch for provider {provider}: expected={temp_session_data.get('state')[:8]}..., got={state[:8]}...")
             raise HTTPException(status_code=400, detail="Invalid state parameter")
         
         # Validate provider
@@ -1781,7 +1809,6 @@ async def oauth2_callback(
         if client_id and client_redirect_uri:
             # OAuth Authorization Code Flow - return authorization code to client
             logger.info(f"OAuth client detected (client_id={client_id}), generating authorization code")
-            
             from .routes.oauth_device import authorization_codes_storage, cleanup_expired_authorization_codes
             
             # Cleanup expired codes
@@ -1821,16 +1848,57 @@ async def oauth2_callback(
             logger.info(f"Redirecting OAuth client to: {client_redirect_uri}")
             return response
         
-        # Web browser session flow - create session cookie
+        # Web browser session flow - create session cookie with user id
+        user_id = None
+        email = user_info.get("username")
+        if email:
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    # Generate short-lived token to retrieve user_id from registry
+                    current_time = int(time.time())
+                    expires_at = current_time + 5 * 60  # 5 minutes = 300 seconds
+                    registry_url = settings.registry_url
+                    access_payload = {
+                        "iss": JWT_ISSUER,
+                        "aud": JWT_AUDIENCE,
+                        "sub": mapped_user['username'],
+                        "username": mapped_user['username'],
+                        "scope": " ".join(['auth-server/read:user_id']),
+                        "groups": [],  
+                        "exp": expires_at,
+                        "iat": current_time,
+                        "jti": str(uuid.uuid4()),
+                        "token_use": "access",
+                        "client_id": "user-generated",
+                        "token_type": "user_generated"
+                    }
+
+                    access_token = _create_self_signed_jwt(access_payload)
+                    headers = {"Authorization": f"Bearer {access_token}"}
+                    resp = await client.get(
+                        f"{registry_url}/api/auth/me",
+                        headers=headers,
+                    )
+
+                    if resp.status_code == 200:
+                        user_id = resp.json().get("user_id")
+                        logger.info(f"Fetched user_id {user_id} from registry for {email}")
+                    else:
+                        logger.info(f"Failed to fetch user_id from registry: {resp.status_code} {resp.text}")
+            except Exception as e:
+                logger.info(f"Error fetching user_id from registry: {e}")
+
         session_data = {
             "username": mapped_user["username"],
             "email": mapped_user.get("email"),
             "name": mapped_user.get("name"),
             "groups": mapped_user.get("groups", []),
             "provider": provider,
-            "auth_method": "oauth2"
+            "auth_method": "oauth2",
+            "user_id": user_id
         }
-        
+
+        # Create session cookie compatible with registry
         registry_session = signer.dumps(session_data)
         
         # Redirect to registry with session cookie

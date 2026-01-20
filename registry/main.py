@@ -34,6 +34,7 @@ from registry.version import __version__
 from registry.api.proxy_routes import router as proxy_router, shutdown_proxy_client
 from registry.auth.dependencies import CurrentUser
 from packages.telemetry import setup_metrics
+from packages.models._generated import IUser
 
 # Import services for initialization
 from registry.services.server_service import server_service
@@ -271,7 +272,14 @@ app.openapi = custom_openapi
 @app.get("/api/auth/me")
 async def get_current_user(user_context: CurrentUser):
     """Get current user information for React auth context"""
-    # Return user info with scopes for token generation
+ 
+    try:
+        user_obj = await IUser.find_one({"email": user_context["username"]})
+        if user_obj:
+            user_id = user_obj.id
+    except Exception as e:
+        logger.info(f"Error fetching user for email {user_context["username"]}: {e}")
+
     return {
         "username": user_context["username"],
         "auth_method": user_context.get("auth_method", "basic"),
@@ -279,7 +287,8 @@ async def get_current_user(user_context: CurrentUser):
         "scopes": user_context.get("scopes", []),
         "groups": user_context.get("groups", []),
         "can_modify_servers": user_context.get("can_modify_servers", False),
-        "is_admin": user_context.get("is_admin", False)
+        "is_admin": user_context.get("is_admin", False),
+        "user_id": str(user_id)
     }
 
 

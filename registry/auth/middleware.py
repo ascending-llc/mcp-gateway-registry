@@ -303,6 +303,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             username = session_data['username']
             groups = session_data.get('groups', [])
             auth_method = session_data.get('auth_method', 'traditional')
+            user_id = session_data.get('user_id')
 
             logger.info(f"Enhanced auth debug for {username}: groups={groups}, auth_method={auth_method}")
 
@@ -327,6 +328,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 auth_method=auth_method,
                 provider=session_data.get('provider', 'local'),
                 auth_source='session_auth',
+                user_id=user_id
             )
 
         except Exception as e:
