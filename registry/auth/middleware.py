@@ -30,6 +30,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/api/{versions}/servers",
             "/proxy/{path:path}",
             "/api/{versions}/mcp/{path:path}",
+            "/api/{versions}/permissions/{path:path}"
         ])
         self.public_paths_compiled = self._compile_patterns([
             "/",

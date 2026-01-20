@@ -1,10 +1,12 @@
 from datetime import datetime, timezone
 from typing import Optional, List, Any
-from packages.models._generated.aclEntry import IAclEntry
-from packages.models._generated.accessRole import IAccessRole
+from packages.models._generated import (
+	IAclEntry,
+	IAccessRole,
+)
 from beanie import PydanticObjectId
-from registry.services.constants import ResourceType, PermissionBits
-import logging
+from registry.services.constants import ResourceType, PermissionBits, PrincipalType
+import logging 
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +62,8 @@ class ACLService:
 				await new_entry.insert()
 				return new_entry
 		except Exception as e: 
-			logger.error(f"Error finding/inserting ACL entry: {e}")
-			raise ValueError(f"Error granting ACL permissions: {e}")
+			logger.error(f"Error upserting ACL entry: {e}")
+			raise ValueError(f"Error upserting ACL permissions: {e}")
 	
 	async def check_permission(
 		self,
@@ -81,7 +83,6 @@ class ACLService:
 			return (acl_entry.permBits & required_permission) == required_permission
 		return False
 
-	# Not used currently
 	async def list_accessible_resources(
 		self,
 		principal_type: str,
@@ -90,7 +91,7 @@ class ACLService:
 		required_permissions: Optional[int] = 1
 	) -> List[PydanticObjectId]:
 		acl_entries = await IAclEntry.find({
-			"principalType": {"$in": [principal_type]}, # TODO: Check for public servers (principal_type "public")
+			"principalType": {"$in": [principal_type, PrincipalType.PUBLIC.value]},
 			"principalId": {"userId": principal_id},
 			"resourceType": resource_type,
 			"permBits": {"$gte": required_permissions}
@@ -133,12 +134,17 @@ class ACLService:
 		}
 		"""
 
-		try: 
-			acl_entries = await IAclEntry.find({
-				"principalType": principal_type,
-				"principalId": {"userId": principal_id},
-				"resourceType": {"$in": [rt.value for rt in ResourceType]}
-			}).to_list()
+		try:
+			resource_types = [rt.value for rt in ResourceType]
+			query = {
+				"principalType": {"$in": [principal_type, PrincipalType.PUBLIC.value]},
+				"resourceType": {"$in": resource_types},
+				"$or": [
+					{"principalId": {"userId": principal_id}},
+					{"principalId": None}
+				]
+			}
+			acl_entries = await IAclEntry.find(query).to_list()
 
 			result = {}
 			for entry in acl_entries:
@@ -152,7 +158,6 @@ class ACLService:
 					"DELETE": entry.permBits >= PermissionBits.DELETE,
 					"SHARE": entry.permBits >= PermissionBits.SHARE,
 				}
-			logger.info(f"ACL permissions map for user id {principal_id}: {result}")
 			return result
 		except Exception as e: 
 			logger.error(f"Error fetching ACL permissions map for user id: {principal_id}: {e}")

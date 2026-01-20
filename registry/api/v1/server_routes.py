@@ -43,7 +43,7 @@ from registry.schemas.server_api_schemas import (
     convert_to_tools_response,
     convert_to_health_response,
 )
-from registry.services.constants import PermissionBits
+
 
 # API Version constant
 API_VERSION = "v1"

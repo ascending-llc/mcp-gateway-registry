@@ -30,6 +30,7 @@ from registry.api.management_routes import router as management_router
 from registry.health.routes import router as health_router
 from registry.api.v1.mcp.oauth_router import router as oauth_router
 from registry.api.v1.mcp.connection_router import router as connection_router
+from registry.api.v1.permissions_routes import router as permissions_router
 from registry.version import __version__
 from registry.api.proxy_routes import router as proxy_router, shutdown_proxy_client
 from registry.auth.dependencies import CurrentUser
@@ -215,6 +216,7 @@ app.include_router(search_router, prefix="/api/search", tags=["Semantic Search"]
 app.include_router(health_router, prefix="/api/health", tags=["Health Monitoring"])
 app.include_router(oauth_router, prefix="/api", tags=["MCP  Oauth Management"])
 app.include_router(connection_router, prefix="/api", tags=["MCP  Connection Management"])
+app.include_router(permissions_router, prefix="/api", tags=["Permission Management"])
 
 # Register Anthropic MCP Registry API (public API for MCP servers only)
 app.include_router(registry_router, tags=["Anthropic Registry API"])
