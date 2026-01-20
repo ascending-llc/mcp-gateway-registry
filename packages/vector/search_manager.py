@@ -239,8 +239,14 @@ class SearchIndexManager:
             - to_update: List of tool dicts to update (description changed)
         """
         old_map = {t.tool_name: t for t in old_tools}
-        # Safe extraction of tool names
-        new_map = {t.get("name", ""): t for t in new_tool_list if t.get("name")}
+        # Safe extraction of tool names, with logging for skipped tools
+        new_map: Dict[str, Dict[str, Any]] = {}
+        for tool_def in new_tool_list:
+            name = tool_def.get("name")
+            if not name:
+                logger.warning("Skipping tool definition without a 'name' field: %s", tool_def)
+                continue
+            new_map[name] = tool_def
 
         # Find differences
         to_delete = [name for name in old_map if name not in new_map]
