@@ -209,6 +209,8 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 logger.debug("Empty JWT token")
                 return None
             # JWT validation parameters from auth_server/server.py
+            # Extract kid from header first
+            kid = None
             try:
                 unverified_header = jwt.get_unverified_header(access_token)
                 kid = unverified_header.get('kid')
@@ -219,24 +221,42 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                     return None
             except Exception as e:
                 logger.debug(f"Failed to decode JWT header: {e}")
+                return None
 
             # Validate and decode token
             try:
+                # For self-signed tokens (kid='mcp-self-signed'), skip audience validation
+                # because the audience is now the resource URL (RFC 8707 Resource Indicators)
+                # which varies per endpoint (/proxy/mcpgw, /proxy/server2, etc.)
+                # Issuer validation provides sufficient security for self-signed tokens
+                is_self_signed = (kid == settings.JWT_SELF_SIGNED_KID)
+                
+                decode_options = {
+                    "verify_exp": True,
+                    "verify_iat": True,
+                    "verify_iss": True,
+                    "verify_aud": not is_self_signed  # Skip aud check for self-signed tokens
+                }
+                
+                decode_kwargs = {
+                    "algorithms": ['HS256'],
+                    "issuer": settings.JWT_ISSUER,
+                    "options": decode_options,
+                    "leeway": 30  # 30 second leeway for clock skew
+                }
+                
+                # Only validate audience for provider tokens (not self-signed)
+                if not is_self_signed:
+                    decode_kwargs["audience"] = settings.JWT_AUDIENCE
+                else:
+                    logger.info("Skipping audience validation for self-signed token (RFC 8707 Resource Indicators)")
+                
                 claims = jwt.decode(
                     access_token,
                     settings.secret_key,
-                    algorithms=['HS256'],
-                    issuer=settings.JWT_ISSUER,
-                    audience=settings.JWT_AUDIENCE,
-                    options={
-                        "verify_exp": True,
-                        "verify_iat": True,
-                        "verify_iss": True,
-                        "verify_aud": True
-                    },
-                    leeway=30  # 30 second leeway for clock skew
+                    **decode_kwargs
                 )
-                logger.info(f"JWT claims: {claims}")
+                logger.info(f"JWT claims validated: sub={claims.get('sub')}, aud={claims.get('aud')}, scope={claims.get('scope')}")
             except jwt.ExpiredSignatureError:
                 logger.debug("JWT token has expired")
                 return None

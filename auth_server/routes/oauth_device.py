@@ -12,7 +12,7 @@ import logging
 import jwt
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 # Import settings
@@ -27,6 +27,25 @@ from ..models.device_flow import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def oauth_error_response(error: str, error_description: str = None, status_code: int = 400) -> JSONResponse:
+    """
+    Return OAuth 2.0 spec-compliant error response (RFC 6749 Section 5.2).
+    
+    Args:
+        error: OAuth error code (e.g., 'invalid_grant', 'invalid_request')
+        error_description: Human-readable error description
+        status_code: HTTP status code (default 400)
+    
+    Returns:
+        JSONResponse with proper OAuth error format
+    """
+    content = {"error": error}
+    if error_description:
+        content["error_description"] = error_description
+    return JSONResponse(status_code=status_code, content=content)
+
 
 # Device flow storage (in-memory, will migrate to Redis/MongoDB later)
 device_codes_storage = {}  # device_code -> {user_code, status, token, ...}
@@ -269,13 +288,15 @@ def cleanup_expired_authorization_codes():
 async def device_authorization(
     req: Request,
     client_id: str = Form(...),
-    scope: Optional[str] = Form(None)
+    scope: Optional[str] = Form(None),
+    resource: Optional[str] = Form(None)  # RFC 8707 Resource Indicators
 ):
     """
     OAuth 2.0 Device Authorization Endpoint (RFC 8628).
     
     Initiates the device flow by generating a device code and user code.
     Accepts application/x-www-form-urlencoded as per RFC 8628.
+    Supports RFC 8707 Resource Indicators via optional 'resource' parameter.
     """
     cleanup_expired_device_codes()
     
@@ -298,6 +319,7 @@ async def device_authorization(
         "user_code": user_code,
         "client_id": client_id,
         "scope": scope or "",
+        "resource": resource,  # RFC 8707 Resource Indicators
         "status": "pending",
         "created_at": current_time,
         "expires_at": expires_at,
@@ -306,7 +328,7 @@ async def device_authorization(
     
     user_codes_storage[user_code] = device_code
     
-    logger.info(f"Generated device code for client_id: {client_id}, user_code: {user_code}")
+    logger.info(f"Generated device code for client_id: {client_id}, user_code: {user_code}, resource: {resource}")
     
     return DeviceCodeResponse(
         device_code=device_code,
@@ -498,9 +520,13 @@ async def approve_device(request: DeviceApprovalRequest):
     # For now, generate a simple token
     from ..server import SECRET_KEY, JWT_ISSUER, JWT_AUDIENCE, JWT_SELF_SIGNED_KID
     
+    # Use resource parameter from device code request as audience (RFC 8707)
+    audience = device_data.get("resource") or JWT_AUDIENCE
+    logger.info(f"Generating device token with audience: {audience} (resource from device request: {device_data.get('resource')})")
+    
     token_payload = {
         "iss": JWT_ISSUER,
-        "aud": JWT_AUDIENCE,
+        "aud": audience,
         "sub": "device_user",
         "client_id": device_data["client_id"],
         "scope": device_data["scope"],
@@ -558,60 +584,65 @@ async def device_token(
         cleanup_expired_authorization_codes()
         
         if not code or not redirect_uri:
-            raise HTTPException(
-                status_code=400,
-                detail="invalid_request: code and redirect_uri are required"
+            return oauth_error_response(
+                "invalid_request",
+                "code and redirect_uri are required"
             )
         
         # Retrieve authorization code data
         auth_code_data = authorization_codes_storage.get(code)
         
         if not auth_code_data:
-            raise HTTPException(
-                status_code=400,
-                detail="invalid_grant: authorization code not found or expired"
+            return oauth_error_response(
+                "invalid_grant",
+                "authorization code not found or expired"
             )
         
-        # Check if already used
+        # Check if already used (and mark as used atomically to prevent race conditions)
         if auth_code_data.get("used"):
             logger.warning(f"Authorization code reuse attempt by client {client_id}")
             # Delete the code to prevent further attempts
             del authorization_codes_storage[code]
-            raise HTTPException(
-                status_code=400,
-                detail="invalid_grant: authorization code already used"
+            return oauth_error_response(
+                "invalid_grant",
+                "authorization code already used"
             )
+        
+        # IMMEDIATELY mark as used to prevent race conditions (before any other validation)
+        # This acts as a lock - once marked, no other request can use this code
+        auth_code_data["used"] = True
+        logger.debug(f"Authorization code marked as used for client {client_id}")
         
         # Validate client_id
         if auth_code_data["client_id"] != client_id:
-            raise HTTPException(
-                status_code=400,
-                detail="invalid_client: client_id mismatch"
+            return oauth_error_response(
+                "invalid_client",
+                "client_id mismatch"
             )
         
         # Validate redirect_uri
         if auth_code_data["redirect_uri"] != redirect_uri:
-            raise HTTPException(
-                status_code=400,
-                detail="invalid_grant: redirect_uri mismatch"
+            return oauth_error_response(
+                "invalid_grant",
+                "redirect_uri mismatch"
             )
         
         # Check expiration
         current_time = int(time.time())
         if current_time > auth_code_data["expires_at"]:
             del authorization_codes_storage[code]
-            raise HTTPException(
-                status_code=400,
-                detail="invalid_grant: authorization code expired"
+            return oauth_error_response(
+                "invalid_grant",
+                "authorization code expired"
             )
         
         # Validate PKCE code_verifier if code_challenge was provided
         code_challenge = auth_code_data.get("code_challenge")
         if code_challenge:
             if not code_verifier:
-                raise HTTPException(
-                    status_code=400,
-                    detail="invalid_request: code_verifier required for PKCE"
+                return oauth_error_response(
+                    "invalid_request",
+                    "code_verifier required for PKCE"
                 )
             
             # Validate code_verifier against code_challenge
@@ -628,30 +659,32 @@ async def device_token(
             elif code_challenge_method == "plain":
                 computed_challenge = code_verifier
             else:
-                raise HTTPException(
-                    status_code=400,
-                    detail="invalid_request: unsupported code_challenge_method"
+                return oauth_error_response(
+                    "invalid_request",
+                    "unsupported code_challenge_method"
                 )
             
             if computed_challenge != code_challenge:
                 logger.warning(f"PKCE validation failed for client {client_id}")
-                raise HTTPException(
-                    status_code=400,
-                    detail="invalid_grant: code_verifier validation failed"
+                return oauth_error_response(
+                    "invalid_grant",
+                    "code_verifier validation failed"
                 )
             
             logger.info(f"PKCE validation successful for client {client_id}")
-        
-        # Mark code as used
-        auth_code_data["used"] = True
         
         # Generate access token using stored user info
         user_info = auth_code_data["user_info"]
         from ..server import SECRET_KEY, JWT_ISSUER, JWT_AUDIENCE, JWT_SELF_SIGNED_KID
         
+        # Use resource parameter from auth request as audience, fallback to default
+        # This is RFC 8707 (Resource Indicators for OAuth 2.0)
+        audience = auth_code_data.get("resource") or JWT_AUDIENCE
+        logger.info(f"Generating token with audience: {audience} (resource from request: {auth_code_data.get('resource')})")
+        
         token_payload = {
             "iss": JWT_ISSUER,
-            "aud": JWT_AUDIENCE,
+            "aud": audience,
             "sub": user_info["username"],
             "client_id": client_id,
             "scope": " ".join(user_info.get("groups", [])),  # Map groups to scopes
@@ -686,42 +719,42 @@ async def device_token(
         cleanup_expired_device_codes()
         
         if not device_code:
-            raise HTTPException(
-                status_code=400,
-                detail="invalid_request: device_code is required"
+            return oauth_error_response(
+                "invalid_request",
+                "device_code is required"
             )
         
         device_data = device_codes_storage.get(device_code)
         
         if not device_data:
-            raise HTTPException(
-                status_code=400,
-                detail="invalid_grant"
+            return oauth_error_response(
+                "invalid_grant",
+                "device_code not found"
             )
         
         if device_data["client_id"] != client_id:
-            raise HTTPException(
-                status_code=400,
-                detail="invalid_client"
+            return oauth_error_response(
+                "invalid_client",
+                "client_id mismatch"
             )
         
         current_time = int(time.time())
         if current_time > device_data["expires_at"]:
-            raise HTTPException(
-                status_code=400,
-                detail="expired_token"
+            return oauth_error_response(
+                "expired_token",
+                "device_code has expired"
             )
         
         if device_data["status"] == "pending":
-            raise HTTPException(
-                status_code=400,
-                detail="authorization_pending"
+            return oauth_error_response(
+                "authorization_pending",
+                "user has not yet authorized this request"
             )
         
         if device_data["status"] == "denied":
-            raise HTTPException(
-                status_code=400,
-                detail="access_denied"
+            return oauth_error_response(
+                "access_denied",
+                "user denied authorization"
             )
         
         if device_data["status"] == "approved" and device_data["token"]:
@@ -734,14 +767,15 @@ async def device_token(
                 scope=device_data["scope"]
             )
         
-        raise HTTPException(
-            status_code=500,
-            detail="server_error"
+        return oauth_error_response(
+            "server_error",
+            "unexpected server state",
+            500
         )
     
     # Unsupported grant type
     else:
-        raise HTTPException(
-            status_code=400,
-            detail="unsupported_grant_type"
+        return oauth_error_response(
+            "unsupported_grant_type",
+            f"grant_type '{grant_type}' is not supported"
         )
