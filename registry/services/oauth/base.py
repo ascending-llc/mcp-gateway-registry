@@ -20,7 +20,7 @@ class Connection(ABC):
 
     @abstractmethod
     def is_stale(self, max_idle_time: Optional[float] = None) -> bool:
-        """Check if the connection has expired."""
+        """Return True if the connection is stale based on idle time and optional max_idle_time."""
         pass
 
     def update_activity(self) -> None:
