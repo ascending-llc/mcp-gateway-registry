@@ -24,7 +24,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
   setShowApiKeyDialog,
   onShowToast,
 }) => {
-  const { refreshServerStatus, getServerStatusByPolling, cancelPolling } = useServer();
+  const { refreshServerData, getServerStatusByPolling, cancelPolling } = useServer();
 
   const [loading, setLoading] = useState(false);
 
@@ -33,7 +33,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
 
   const onCancel = () => {
     cancelPolling?.(serverId);
-    refreshServerStatus?.();
+    refreshServerData?.();
     setShowApiKeyDialog(false);
   };
 
@@ -52,7 +52,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
         onShowToast?.(error instanceof Error ? error.message : 'Unknown error', 'error');
       } finally {
         setLoading(false);
-        refreshServerStatus?.();
+        refreshServerData?.();
       }
     }
     setShowApiKeyDialog(false);
