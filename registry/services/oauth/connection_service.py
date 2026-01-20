@@ -5,26 +5,22 @@ from dataclasses import dataclass, field
 
 from registry.schemas.enums import ConnectionState
 from registry.services.server_service_v1 import server_service_v1
+from registry.services.oauth.base import MCPConnection, ConnectionManager
 from registry.utils.log import logger
 
 
 @dataclass
-class MCPConnection:
+class MCPConnection(MCPConnection):
     """MCP connection"""
-    server_name: str
-    connection_state: ConnectionState
-    last_activity: float = field(default_factory=time.time)
-    error_count: int = 0
-    details: Dict[str, Any] = field(default_factory=dict)
-    
+
     def is_stale(self, max_idle_time: Optional[float] = None) -> bool:
         """
         Check if connection is stale based on idle time.
-        
+
         Args:
             max_idle_time: Maximum idle time in seconds. If None, defaults to 3600 (1 hour).
                           Should be passed from server config's timeout field.
-        
+
         A connection is stale if it hasn't been active for longer than max_idle_time.
         """
         # Use provided max_idle_time or default to 1 hour
@@ -40,7 +36,7 @@ class MCPConnection:
         return False
 
 
-class MCPConnectionService:
+class MCPConnectionService(ConnectionManager):
     """MCP connection service"""
 
     def __init__(self):
@@ -61,10 +57,8 @@ class MCPConnectionService:
                     status="active"
                 )
                 logger.info(f"Found {total} active servers in MongoDB")
-                
-                # 为不需要 OAuth 的服务器创建应用级连接
+
                 for server in servers:
-                    # 检查服务器是否需要 OAuth
                     if not server.config.get("requiresOAuth"):
                         self.app_connections[server.serverName] = MCPConnection(
                             server_name=server.serverName,

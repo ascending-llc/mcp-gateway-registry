@@ -6,7 +6,7 @@ from registry.models.oauth_models import OAuthTokens
 from .tracker import OAuthReconnectionTracker
 from registry.schemas.enums import ConnectionState
 from registry.services.server_service_v1 import server_service_v1
-
+from registry.auth.oauth.flow_state_manager import get_flow_state_manager
 
 class OAuthReconnectionManager:
     """
@@ -223,6 +223,121 @@ class OAuthReconnectionManager:
             status[server_name] = server_status
 
         return status
+
+
+    async def get_oauth_state_override(
+            self,
+            user_id: str,
+            server_name: str
+    ) -> Optional[str]:
+        """
+        获取 OAuth 流程状态覆盖
+
+        用于 ConnectionStatusResolver 调用
+
+        Args:
+            user_id: 用户 ID
+            server_name: 服务器名称
+
+        Returns:
+            Optional[str]: "active", "failed", 或 None
+        """
+        try:
+            flow_manager = get_flow_state_manager()
+            flow_id = flow_manager.generate_flow_id(user_id, server_name)
+            flow_state = flow_manager.get_flow(flow_id)
+
+            if not flow_state:
+                return None
+
+            flow_age_seconds = time.time() - flow_state.created_at
+            flow_ttl_seconds = flow_manager._flow_ttl
+
+            # 检查是否失败或超时
+            if flow_state.status == "failed" or flow_age_seconds > flow_ttl_seconds:
+                # 检查是否被取消
+                was_cancelled = flow_state.error and "cancelled" in flow_state.error.lower()
+                if not was_cancelled:
+                    logger.debug(
+                        f"OAuth flow failed for {server_name}: "
+                        f"status={flow_state.status}, age={flow_age_seconds}s"
+                    )
+                    return "failed"
+                return None
+
+            # 检查是否处于待处理状态（活动中）
+            if flow_state.status == "pending":
+                logger.debug(f"OAuth flow active for {server_name}")
+                return "active"
+
+            return None
+
+        except Exception as error:
+            logger.error(f"Error checking OAuth state for {server_name}: {error}")
+            return None
+
+    def is_flow_active(self, user_id: str, server_name: str) -> bool:
+        """
+        检查 OAuth 流程是否活动
+
+        Args:
+            user_id: 用户 ID
+            server_name: 服务器名称
+
+        Returns:
+            bool: 流程是否活动
+        """
+        try:
+            flow_manager = get_flow_state_manager()
+            flow_id = flow_manager.generate_flow_id(user_id, server_name)
+            flow_state = flow_manager.get_flow(flow_id)
+
+            if not flow_state:
+                return False
+
+            flow_age_seconds = time.time() - flow_state.created_at
+            flow_ttl_seconds = flow_manager._flow_ttl
+
+            # 活动条件：状态为 pending 且未超时
+            return (flow_state.status == "pending" and
+                    flow_age_seconds <= flow_ttl_seconds)
+
+        except Exception as e:
+            logger.error(f"Error checking if flow is active: {e}")
+            return False
+
+    def is_flow_failed(self, user_id: str, server_name: str) -> bool:
+        """
+        检查 OAuth 流程是否失败
+
+        Args:
+            user_id: 用户 ID
+            server_name: 服务器名称
+
+        Returns:
+            bool: 流程是否失败
+        """
+        try:
+            flow_manager = get_flow_state_manager()
+            flow_id = flow_manager.generate_flow_id(user_id, server_name)
+            flow_state = flow_manager.get_flow(flow_id)
+
+            if not flow_state:
+                return False
+
+            flow_age_seconds = time.time() - flow_state.created_at
+            flow_ttl_seconds = flow_manager._flow_ttl
+
+            # 失败条件：明确失败或超时（且未被取消）
+            if flow_state.status == "failed" or flow_age_seconds > flow_ttl_seconds:
+                was_cancelled = flow_state.error and "cancelled" in flow_state.error.lower()
+                return not was_cancelled
+
+            return False
+
+        except Exception as e:
+            logger.error(f"Error checking if flow failed: {e}")
+            return False
 
     # Private methods
 
