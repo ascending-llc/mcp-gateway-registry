@@ -1,7 +1,7 @@
 from typing import Dict, Any, Optional
 from registry.utils.log import logger
 from registry.schemas.enums import ConnectionState
-from registry.services.oauth.base import MCPConnection, ConnectionStateContext
+from registry.services.oauth.base import Connection, ConnectionStateContext
 
 
 class ConnectionStatusResolver:
@@ -86,7 +86,7 @@ class ConnectionStatusResolver:
 
     def _get_base_connection_state(
             self,
-            connection: Optional[MCPConnection],
+            connection: Optional[Connection],
             is_stale_or_missing: bool
     ) -> str:
         """

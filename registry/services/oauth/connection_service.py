@@ -5,12 +5,12 @@ from dataclasses import dataclass, field
 
 from registry.schemas.enums import ConnectionState
 from registry.services.server_service_v1 import server_service_v1
-from registry.services.oauth.base import MCPConnection, ConnectionManager
+from registry.services.oauth.base import Connection, ConnectionManager
 from registry.utils.log import logger
 
 
 @dataclass
-class MCPConnection(MCPConnection):
+class MCPConnection(Connection):
     """MCP connection"""
 
     def is_stale(self, max_idle_time: Optional[float] = None) -> bool:

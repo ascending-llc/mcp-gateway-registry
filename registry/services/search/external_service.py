@@ -2,7 +2,7 @@ from typing import Dict, Any, Optional, List
 from packages.vector import initialize_database
 from packages.vector.enum.enums import SearchType, RerankerProvider
 from packages.models.mcp_tool import McpTool
-from vector import get_search_index_manager
+from packages.vector import get_search_index_manager
 from .base import VectorSearchService
 from registry.utils.log import logger
 

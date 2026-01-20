@@ -10,7 +10,7 @@ from registry.schemas.enums import ConnectionState
 
 
 @dataclass
-class MCPConnection(ABC):
+class Connection(ABC):
     """Basic connection interface"""
     server_name: str
     connection_state: ConnectionState
@@ -44,7 +44,7 @@ class ConnectionManager(ABC):
             self,
             user_id: str,
             server_name: str
-    ) -> Optional[MCPConnection]:
+    ) -> Optional[Connection]:
         pass
 
     @abstractmethod
@@ -65,7 +65,7 @@ class ConnectionManager(ABC):
             server_name: str,
             initial_state: ConnectionState = ConnectionState.CONNECTING,
             details: Optional[Dict[str, Any]] = None
-    ) -> MCPConnection:
+    ) -> Connection:
         """Create new user-level connection"""
         pass
 
@@ -79,7 +79,7 @@ class ConnectionManager(ABC):
         pass
 
     @abstractmethod
-    def get_user_connections(self, user_id: str) -> Dict[str, MCPConnection]:
+    def get_user_connections(self, user_id: str) -> Dict[str, Connection]:
         """Get all connections for the user"""
         pass
 
@@ -90,6 +90,6 @@ class ConnectionStateContext:
     user_id: str
     server_name: str
     server_config: Dict[str, Any]
-    connection: Optional[MCPConnection] = None
+    connection: Optional[Connection] = None
     is_oauth_server: bool = False
     idle_timeout: Optional[float] = None  # 从 server_config 传入的 idle_timeout
