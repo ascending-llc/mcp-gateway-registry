@@ -517,9 +517,13 @@ async def approve_device(request: DeviceApprovalRequest):
     # For now, generate a simple token
     from ..server import SECRET_KEY, JWT_ISSUER, JWT_AUDIENCE, JWT_SELF_SIGNED_KID
     
+    # Use resource parameter from device code request as audience (RFC 8707)
+    audience = device_data.get("resource") or JWT_AUDIENCE
+    logger.info(f"Generating device token with audience: {audience} (resource from device request: {device_data.get('resource')})")
+    
     token_payload = {
         "iss": JWT_ISSUER,
-        "aud": JWT_AUDIENCE,
+        "aud": audience,
         "sub": "device_user",
         "client_id": device_data["client_id"],
         "scope": device_data["scope"],
