@@ -166,7 +166,7 @@ async def get_server_connection_status_by_server_id(
             "success": True,
             "serverName": server.serverName,
             "connectionState": server_status["connection_state"],
-            "requiresOauth": server_status["requires_oauth"]
+            "requiresOAuth": server_status["requires_oauth"]
         }
     except HTTPException:
         raise
