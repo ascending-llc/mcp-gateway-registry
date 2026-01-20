@@ -227,18 +227,15 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
     }
   }, []);
 
-  const getServerStatusById = useCallback(
-    async (serverId: string, serverName: string): Promise<SERVER_CONNECTION | undefined> => {
-      try {
-        const result = await SERVICES.MCP.getServerStatusById(serverName);
-        handleServerUpdate(serverId, { connection_state: result.connection_state });
-        return result.connection_state;
-      } catch (error: any) {
-        console.log('error', error);
-      }
-    },
-    [],
-  );
+  const getServerStatusById = useCallback(async (serverId: string): Promise<SERVER_CONNECTION | undefined> => {
+    try {
+      const result = await SERVICES.MCP.getServerStatusById(serverId);
+      handleServerUpdate(serverId, { connection_state: result.connectionState });
+      return result.connectionState;
+    } catch (error: any) {
+      console.log('error', error);
+    }
+  }, []);
 
   const getServerStatusByPolling = useCallback(
     async (serverId: string) => {
@@ -248,14 +245,12 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
         delete timeoutRef.current[serverId];
       }
 
-      console.log(`🔄 Polling server status for`, serverId);
       const initialServer: ServerInfo | undefined = servers.find((server: ServerInfo) => server.id === serverId);
       const initialState = initialServer?.connection_state;
+      if (!initialServer) return;
 
       const poll = async () => {
-        // const currentState = await getServerStatusById(initialServer.id, initialServer.name);
-        const latestStatusData: ServerInfo[] = await refreshServerData();
-        const currentState = latestStatusData.find((server: ServerInfo) => server.id === serverId)?.connection_state;
+        const currentState = await getServerStatusById(serverId);
 
         if (currentState === initialState || currentState === SERVER_CONNECTION.CONNECTING) {
           timeoutRef.current[serverId] = setTimeout(() => {

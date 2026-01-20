@@ -20,8 +20,8 @@ export type GET_SERVER_STATUS_RESPONSE = {
 
 export type GET_SERVER_STATUS_BY_ID_RESPONSE = {
   success: boolean;
-  connection_state: SERVER_CONNECTION;
-  requires_oauth: boolean;
+  connectionState: SERVER_CONNECTION;
+  requiresOAuth: boolean;
 };
 
 export type GET_OAUTH_INITIATE_RESPONSE = {
