@@ -1848,8 +1848,7 @@ async def oauth2_callback(
                     access_token = _create_self_signed_jwt(access_payload)
                     headers = {"Authorization": f"Bearer {access_token}"}
                     resp = await client.get(
-                        f"{registry_url}/api/auth/userInfo",
-                        params={"email": email},
+                        f"{registry_url}/api/auth/me",
                         headers=headers,
                     )
 

@@ -28,7 +28,6 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         # Paths that require authentication (checked before public paths)
         self.authenticated_paths_compiled = self._compile_patterns([
             "/api/auth/me",
-            "/api/auth/userInfo",
             "/api/{versions}/servers/{path:path}",
             "/api/{versions}/servers",
             "/proxy/{path:path}",

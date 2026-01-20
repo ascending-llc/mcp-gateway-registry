@@ -262,19 +262,3 @@ async def get_providers_api():
 async def get_auth_config():
     """API endpoint to get auth configuration for React frontend"""
     return {"auth_server_url": settings.auth_server_external_url}
-
-
-@router.get("/userInfo")
-async def get_user_info(email: str):
-    """Fetch user_id (ObjectId as str) by email. Requires Bearer token in Authorization header."""
-
-    if not email or "@" not in email:
-        raise HTTPException(status_code=400, detail="Invalid email")
-
-    try:
-        user_obj = await IUser.find_one({"email": email})
-        if user_obj:
-            return {"user_id": str(user_obj.id)}
-    except Exception as e:
-        logger.info(f"Error fetching user for email {email}: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
