@@ -1851,13 +1851,17 @@ async def oauth2_callback(
                     }
 
                     import jwt
-                    access_token = jwt.encode(access_payload, SECRET_KEY, algorithm='HS256' , headers=headers)
+                    access_token = jwt.encode(access_payload, SECRET_KEY, algorithm='HS256', headers=headers)
                     headers = {"Authorization": f"Bearer {access_token}"}
-                    resp = await client.get(f"{registry_url}/api/auth/userInfo?email={email}", headers=headers)
+                    resp = await client.get(
+                        f"{registry_url}/api/auth/userInfo",
+                        params={"email": email},
+                        headers=headers,
+                    )
 
                     if resp.status_code == 200:
                         user_id = resp.json().get("user_id")
-                        logger.info(f"Fetched user_id from registry for {user_id}")
+                        logger.info(f"Fetched user_id {user_id} from registry for {email}")
                     else:
                         logger.info(f"Failed to fetch user_id from registry: {resp.status_code} {resp.text}")
             except Exception as e:

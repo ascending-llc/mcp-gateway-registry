@@ -271,10 +271,10 @@ async def get_user_id_by_email(email: str):
     if not email or "@" not in email:
         raise HTTPException(status_code=400, detail="Invalid email")
 
-    try: 
+    try:
         user_obj = await IUser.find_one({"email": email})
         if user_obj:
             return {"user_id": str(user_obj.id)}
-    except Exception as e: 
-        logger.info(f"Error fetching or creating user for email {email}: {e}")
+    except Exception as e:
+        logger.info(f"Error fetching user for email {email}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
