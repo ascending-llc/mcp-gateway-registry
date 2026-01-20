@@ -55,6 +55,20 @@ export default defineConfig(({ mode }) => {
           cookieDomainRewrite: 'localhost',
           cookiePathRewrite: '/',
         },
+        '/authorize': {
+          target: authURL,
+          changeOrigin: true,
+          secure: false,
+          cookieDomainRewrite: 'localhost',
+          cookiePathRewrite: '/',
+        },
+        '/auth': {
+          target: authURL,
+          changeOrigin: true,
+          secure: false,
+          cookieDomainRewrite: 'localhost',
+          cookiePathRewrite: '/',
+        },
         '/api': {
           target: backendURL,
           changeOrigin: true,

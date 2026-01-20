@@ -1541,7 +1541,8 @@ async def oauth2_login(
     client_id: str = None,
     code_challenge: str = None,
     code_challenge_method: str = None,
-    response_type: str = None
+    response_type: str = None,
+    resource: str = None
 ):
     """
     Initiate OAuth2 login flow.
@@ -1554,6 +1555,7 @@ async def oauth2_login(
     - code_challenge: PKCE code challenge (for authorization code flow)
     - code_challenge_method: PKCE method (S256 or plain)
     - response_type: OAuth response type (code for authorization code flow)
+    - resource: Protected resource URL (for RFC 8707 Resource Indicators)
     """
     try:
         if provider not in OAUTH2_CONFIG.get("providers", {}):
@@ -1580,6 +1582,10 @@ async def oauth2_login(
             session_data["client_redirect_uri"] = redirect_uri
             session_data["code_challenge"] = code_challenge
             session_data["code_challenge_method"] = code_challenge_method or "S256"
+            # Store resource parameter for JWT audience claim (RFC 8707)
+            if resource:
+                session_data["resource"] = resource
+                logger.info(f"Resource parameter captured: {resource}")
         
         # Create temporary session for OAuth2 flow
         temp_session = signer.dumps(session_data)
@@ -1820,6 +1826,7 @@ async def oauth2_callback(
                 "code_challenge": code_challenge,
                 "code_challenge_method": code_challenge_method,
                 "redirect_uri": client_redirect_uri,
+                "resource": temp_session_data.get("resource"),  # RFC 8707 Resource Indicators
                 "created_at": current_time
             }
             
