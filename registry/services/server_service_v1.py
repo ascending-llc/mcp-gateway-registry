@@ -591,10 +591,9 @@ class ServerServiceV1:
 
                 # Sync search index after successful registration and tool retrieval
                 server_info = McpTool.from_server_document(server)
-                await self.search_mgr.add_or_update_entity(
+                await self.search_mgr.sync_full(
                     entity_path=server.path,
                     entity_info=server_info,
-                    entity_type="mcp_server",
                     is_enabled=config.get("enabled", True)
                 )
 
@@ -616,10 +615,9 @@ class ServerServiceV1:
         else:
             # No URL - sync search index immediately (for stdio or other transports)
             server_info = McpTool.from_server_document(server)
-            await self.search_mgr.add_or_update_entity(
+            await self.search_mgr.sync_full(
                 entity_path=server.path,
                 entity_info=server_info,
-                entity_type="mcp_server",
                 is_enabled=config.get("enabled", True)
             )
         return server
@@ -702,10 +700,9 @@ class ServerServiceV1:
                 # Tools changed - use incremental update
                 logger.info(f"Tools changed for '{server.path}', using incremental update")
                 server_info = McpTool.from_server_document(server)
-                await self.search_mgr.update_entity_incremental(
+                await self.search_mgr.sync_incremental(
                     entity_path=server.path,
                     entity_info=server_info,
-                    entity_type="mcp_server",
                     is_enabled=updated_config.get("enabled", True)
                 )
             elif metadata_changed:
@@ -718,10 +715,14 @@ class ServerServiceV1:
                     metadata_updates["server_name"] = server.serverName
 
                 if metadata_updates:
-                    await self.search_mgr.update_entity_metadata(
-                        entity_path=server.path,
-                        metadata=metadata_updates
-                    )
+                    # Only update safe metadata fields (no re-vectorization)
+                    safe_fields = McpTool.get_safe_metadata_fields()
+                    safe_updates = {k: v for k, v in metadata_updates.items() if k in safe_fields}
+                    if safe_updates:
+                        await self.search_mgr.tools.abatch_update_by_filter(
+                            filters={"server_path": server.path},
+                            update_data=safe_updates
+                        )
             else:
                 logger.debug(f"No index-relevant changes for '{server.path}'")
 
@@ -760,8 +761,10 @@ class ServerServiceV1:
 
         # Remove from search index before deleting
         try:
-            await self.search_mgr.remove_entity(server.path)
-            logger.info(f"Removed search index for '{server.path}'")
+            deleted_count = await self.search_mgr.tools.adelete_by_filter(
+                filters={"server_path": server.path}
+            )
+            logger.info(f"Removed {deleted_count} tools from search index for '{server.path}'")
         except Exception as e:
             logger.warning(f"Failed to remove search index for '{server.path}': {e}")
 
@@ -872,10 +875,10 @@ class ServerServiceV1:
         await server.save()
         logger.info(f"Toggled server {server.serverName} (ID: {server.id}) enabled to {enabled}")
 
-        # update search index
-        await self.search_mgr.toggle_entity_status(
-            entity_path=server.path,
-            is_enabled=enabled
+        # Update search index enabled status
+        await self.search_mgr.tools.abatch_update_by_filter(
+            filters={"server_path": server.path},
+            update_data={"is_enabled": enabled}
         )
         return server
 

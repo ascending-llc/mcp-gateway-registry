@@ -117,26 +117,26 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             {"indexed_tools": count, "failed_tools": count} or None if unavailable
         """
-        return await search_mgr.add_or_update_entity(
+        return await search_mgr.sync_full(
             entity_path=service_path,
             entity_info=server_info,
-            entity_type="mcp_server",
             is_enabled=is_enabled
         )
 
     async def remove_service(self, service_path: str) -> Optional[Dict[str, int]]:
         """
         Remove all tools for a service.
-        
-        **Delegates to SearchIndexManager for efficient index management.**
 
         Args:
             service_path: Service path identifier
 
         Returns:
-            {"deleted_tools": count} or None if service unavailable
+            {"deleted_tools": count}
         """
-        return await search_mgr.remove_entity(service_path)
+        deleted_count = await search_mgr.tools.adelete_by_filter(
+            filters={"server_path": service_path}
+        )
+        return {"deleted_tools": deleted_count}
 
     async def search(
             self,
@@ -316,20 +316,18 @@ class ExternalVectorSearchService(VectorSearchService):
             # Convert AgentCard to server_info format
             server_info = self._agent_to_server_info(entity_info, entity_path)
             server_info["is_enabled"] = is_enabled
-            return await search_mgr.add_or_update_entity(
+            return await search_mgr.sync_full(
                 entity_path=entity_path,
                 entity_info=server_info,
-                entity_type="a2a_agent",
                 is_enabled=is_enabled
             )
         elif entity_type == "mcp_server":
             # Ensure entity_type is set
             if "entity_type" not in entity_info:
                 entity_info["entity_type"] = "mcp_server"
-            return await search_mgr.add_or_update_entity(
+            return await search_mgr.sync_full(
                 entity_path=entity_path,
                 entity_info=entity_info,
-                entity_type="mcp_server",
                 is_enabled=is_enabled
             )
         else:
@@ -349,9 +347,12 @@ class ExternalVectorSearchService(VectorSearchService):
             entity_path: Entity path identifier
             
         Returns:
-            Result dictionary or None if unavailable
+            Result dictionary
         """
-        return await search_mgr.remove_entity(entity_path)
+        deleted_count = await search_mgr.tools.adelete_by_filter(
+            filters={"server_path": entity_path}
+        )
+        return {"deleted_tools": deleted_count}
 
     async def cleanup(self):
         """

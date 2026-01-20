@@ -93,7 +93,7 @@ async def get_single_server_connection_status(
     """
     server_docs = await server_service_v1.get_server_by_name(server_name)
     if not server_docs or not server_docs.config:
-        raise ValueError(f"server '{server_name}' not found")
+        raise ValueError(f"Server '{server_name}' not found")
 
     if mcp_service is None:
         mcp_service = await get_mcp_service()
