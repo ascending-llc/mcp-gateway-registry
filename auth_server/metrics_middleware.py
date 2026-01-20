@@ -18,6 +18,7 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 import os
 import sys
+from auth_server.utils.logs import metrics
 
 # Import metrics client - use HTTP API instead of local import
 import httpx
@@ -232,6 +233,8 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
         finally:
             # Calculate duration
             duration_ms = (time.perf_counter() - start_time) * 1000
+            
+            metrics.record_auth_request(auth_method, success=success)
             
             # Emit comprehensive metrics asynchronously (fire and forget)
             # 1. Main auth metric

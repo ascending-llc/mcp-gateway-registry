@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
 
     try:
         logger.info("🔭 Initializing Telemetry...")
-        setup_metrics(service_name="mcp-gateway-registry")
+        setup_metrics()
         # Initialize MongoDB connection first
         logger.info("🗄️  Initializing MongoDB connection...")
         await init_mongodb()

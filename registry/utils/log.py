@@ -1,5 +1,6 @@
 # Configure logging with file and console handlers
 import logging
+import os
 import sys
 
 from registry.core.config import settings
@@ -58,4 +59,4 @@ def setup_logging():
 logger = setup_logging()
 
 from packages.telemetry.metrics_client import OTelMetricsClient
-metrics = OTelMetricsClient("mcp-gateway-registry")
+metrics = OTelMetricsClient(os.getenv("OTEL_SERVICE_NAME", "unknown-service"))

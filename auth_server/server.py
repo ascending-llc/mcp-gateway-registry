@@ -22,6 +22,7 @@ from botocore.exceptions import ClientError
 from fastapi import FastAPI, Header, HTTPException, Request, Cookie
 from fastapi.responses import JSONResponse, Response, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
+from packages.telemetry import setup_metrics
 import uvicorn
 from pydantic import BaseModel
 from pathlib import Path
@@ -64,6 +65,10 @@ logging.basicConfig(
     format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# Initialize SECRET_KEY and signer for session management (from settings)
+SECRET_KEY = settings.secret_key
+signer = URLSafeTimedSerializer(SECRET_KEY)
 
 # Configuration for token generation (from settings)
 JWT_ISSUER = settings.jwt_issuer
@@ -1447,6 +1452,9 @@ def main():
     """Run the server"""
     args = parse_arguments()
     
+    logger.info("🔭 Initializing Telemetry...")
+    setup_metrics()
+
     # Update global validator with default region
     global validator
     validator = SimplifiedCognitoValidator(region=args.region)
@@ -1463,9 +1471,6 @@ if __name__ == "__main__":
 # This will use the singleton OAuth2ConfigLoader instance
 OAUTH2_CONFIG = get_oauth2_config()
 
-# Initialize SECRET_KEY and signer for session management (from settings)
-SECRET_KEY = settings.secret_key
-signer = URLSafeTimedSerializer(SECRET_KEY)
 
 def get_enabled_providers():
     """Get list of enabled OAuth2 providers, filtered by AUTH_PROVIDER env var if set"""

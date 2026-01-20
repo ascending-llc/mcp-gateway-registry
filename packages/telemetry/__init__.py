@@ -15,7 +15,7 @@ from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 logger = logging.getLogger(__name__)
 
 def setup_metrics(
-    service_name: str,
+    service_name: str = None, 
     otlp_endpoint: str = None,  # e.g., "http://otel-collector:4318"
     enable_metrics: bool = True,
     enable_logs: bool = True
@@ -24,7 +24,7 @@ def setup_metrics(
     Configures OTel Metrics AND Logs to send to a collector.
     """
     otlp_endpoint = otlp_endpoint or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector:4318")
-    resource = Resource.create(attributes={SERVICE_NAME: service_name})
+    resource = Resource.create(attributes={SERVICE_NAME: service_name or os.getenv("OTEL_SERVICE_NAME", "unknown-service")})
 
     if enable_metrics:
         readers = []

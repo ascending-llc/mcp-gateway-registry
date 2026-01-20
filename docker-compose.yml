@@ -215,6 +215,9 @@ services:
       - ENTRA_EMAIL_CLAIM=${ENTRA_EMAIL_CLAIM:-upn}
       - ENTRA_NAME_CLAIM=${ENTRA_NAME_CLAIM:-name}
       - ENTRA_ROLE_TOKEN_KIND=${ENTRA_ROLE_TOKEN_KIND:-id}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_SERVICE_NAME=auth-server
+
     ports:
       - "8888:8888"
     volumes:

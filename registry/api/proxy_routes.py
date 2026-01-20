@@ -339,7 +339,7 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
     # Proxy the request
     logger.info(f"Proxying {request.method} {path} → {target_url} (transport: {transport_type})")
     
-    metrics.record_server_request(server_name=full_path)
+    metrics.record_server_request(server_name=server.serverName)
     
     return await proxy_to_mcp_server(
         request=request,
