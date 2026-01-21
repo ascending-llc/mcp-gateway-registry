@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TypeVar, Generic, Type
 from packages.vector import initialize_database
 from packages.models.mcp_tool import McpTool
 from packages.vector.repository import Repository
@@ -8,23 +8,44 @@ from packages.vector import DatabaseClient
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar('T')
 
-class SearchIndexManager:
+
+class SearchIndexManager(Generic[T]):
     """
-    Manager for search index operations.
+    Generic manager for search index operations.
+    
+    Type Parameters:
+        T: The model class type (e.g., McpTool, McpServer)
     """
 
-    def __init__(self, db_client: Optional[DatabaseClient] = None):
+    def __init__(
+        self, 
+        db_client: Optional[DatabaseClient] = None,
+        model_class: Optional[Type[T]] = None
+    ):
         """
         Initialize search index manager.
         
         Args:
             db_client: Optional database client for dependency injection
+            model_class: The model class to use for this manager
         """
         self.client = db_client or initialize_database()
-        self.tools = Repository(self.client, McpTool)
+        self.model_class = model_class
+        self.repository = Repository(self.client, self.model_class)
         self._background_tasks = set()  # Track background tasks
-        logger.info("SearchIndexManager initialized")
+        logger.info(f"SearchIndexManager initialized for {self.model_class.__name__}")
+    
+    @property
+    def tools(self):
+        """
+        Backward compatibility property for accessing the repository.
+        
+        Returns:
+            Repository instance
+        """
+        return self.repository
 
     def _run_background(self, coro, description: str) -> asyncio.Task:
         """
@@ -62,20 +83,20 @@ class SearchIndexManager:
         """
         try:
             # 1. Delete old tools
-            deleted = await self.tools.adelete_by_filter({"server_path": entity_path})
+            deleted = await self.repository.adelete_by_filter({"server_path": entity_path})
             if deleted > 0:
                 logger.info(f"Deleted {deleted} old tools from '{entity_path}'")
 
             # 2. Create new tools
             tools = await asyncio.to_thread(
-                McpTool.create_tools_from_server_info,
+                self.model_class.create_tools_from_server_info,
                 service_path=entity_path,
                 server_info=entity_info,
                 is_enabled=is_enabled
             )
 
             # 3. Bulk save
-            result = await self.tools.abulk_save(tools)
+            result = await self.repository.abulk_save(tools)
             logger.info(
                 f"Indexed {result.successful}/{result.total} tools for '{entity_path}' "
                 f"(success rate: {result.success_rate:.1f}%)"
@@ -139,14 +160,14 @@ class SearchIndexManager:
         """
         try:
             # 1. Get existing tools
-            old_tools = await self.tools.afilter(
+            old_tools = await self.repository.afilter(
                 filters={"server_path": entity_path},
                 limit=1000
             )
 
-            # 2. Compare changes (use McpTool's comparison logic)
+            # 2. Compare changes (use model's comparison logic)
             new_tool_list = entity_info.get("tool_list", [])
-            changes = McpTool.compare_tools(old_tools, new_tool_list)
+            changes = self.model_class.compare_tools(old_tools, new_tool_list)
 
             added_count = 0
             updated_count = 0
@@ -156,19 +177,19 @@ class SearchIndexManager:
             if changes["to_delete"]:
                 for tool_name in changes["to_delete"]:
                     old_tool = next((t for t in old_tools if t.tool_name == tool_name), None)
-                    if old_tool and await self.tools.adelete(old_tool.id):
+                    if old_tool and await self.repository.adelete(old_tool.id):
                         deleted_count += 1
                 logger.info(f"Deleted {deleted_count} tools")
 
             # 4. Add new tools
             if changes["to_add"]:
                 new_tools = await asyncio.to_thread(
-                    McpTool.create_tools_from_server_info,
+                    self.model_class.create_tools_from_server_info,
                     service_path=entity_path,
                     server_info={**entity_info, "tool_list": changes["to_add"]},
                     is_enabled=is_enabled
                 )
-                result = await self.tools.abulk_save(new_tools)
+                result = await self.repository.abulk_save(new_tools)
                 added_count = result.successful
                 logger.info(f"Added {added_count} new tools")
 
@@ -179,15 +200,15 @@ class SearchIndexManager:
                     if tool_name:
                         old_tool = next((t for t in old_tools if t.tool_name == tool_name), None)
                         if old_tool:
-                            await self.tools.adelete(old_tool.id)
+                            await self.repository.adelete(old_tool.id)
 
                 updated_tools = await asyncio.to_thread(
-                    McpTool.create_tools_from_server_info,
+                    self.model_class.create_tools_from_server_info,
                     service_path=entity_path,
                     server_info={**entity_info, "tool_list": changes["to_update"]},
                     is_enabled=is_enabled
                 )
-                result = await self.tools.abulk_save(updated_tools)
+                result = await self.repository.abulk_save(updated_tools)
                 updated_count = result.successful
                 logger.info(f"Updated {updated_count} tools")
 
@@ -234,7 +255,7 @@ class SearchIndexManager:
     async def update_enabled(self, entity_path: str, is_enabled: bool):
         """Update enabled status (async, blocks until complete)."""
         try:
-            updated = await self.tools.abatch_update_by_filter(
+            updated = await self.repository.abatch_update_by_filter(
                 filters={"server_path": entity_path},
                 update_data={"is_enabled": is_enabled}
             )
@@ -263,13 +284,13 @@ class SearchIndexManager:
         """
         try:
             # Filter to only safe metadata fields
-            safe_fields = McpTool.get_safe_metadata_fields()
+            safe_fields = self.model_class.get_safe_metadata_fields()
             safe_updates = {k: v for k, v in metadata.items() if k in safe_fields}
             
             if not safe_updates:
                 logger.warning(f"No safe metadata fields to update for '{entity_path}'")
                 return 0
-            updated = await self.tools.abatch_update_by_filter(
+            updated = await self.repository.abatch_update_by_filter(
                 filters={"server_path": entity_path},
                 update_data=safe_updates
             )
@@ -324,11 +345,4 @@ class SearchIndexManager:
         )
 
 
-_manager_instance: Optional[SearchIndexManager] = None
-
-
-def get_search_index_manager() -> SearchIndexManager:
-    global _manager_instance
-    if _manager_instance is None:
-        _manager_instance = SearchIndexManager()
-    return _manager_instance
+mcpToolSearchIndexManager = SearchIndexManager(model_class=McpTool)

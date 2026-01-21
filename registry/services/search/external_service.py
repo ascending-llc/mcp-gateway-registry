@@ -1,7 +1,7 @@
 from typing import Dict, Any, Optional, List
 from packages.vector.enum.enums import SearchType, RerankerProvider
 from packages.models.mcp_tool import McpTool
-from packages.vector import get_search_index_manager
+from packages.vector.search_manager import mcpToolSearchIndexManager
 from .base import VectorSearchService
 from registry.utils.log import logger
 
@@ -30,9 +30,8 @@ class ExternalVectorSearchService(VectorSearchService):
         self.reranker_model = reranker_model
 
         try:
-            search_mgr = get_search_index_manager()
-            self.client = search_mgr.client
-            self.mcp_tools = search_mgr.tools
+            self.client = mcpToolSearchIndexManager.client
+            self.mcp_tools = mcpToolSearchIndexManager.tools
             self._initialized = True
 
             logger.info(f"Registry vector search service initialized (shared connection): "
@@ -137,8 +136,7 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             {"indexed_tools": count, "failed_tools": count} or None if unavailable
         """
-        search_mgr = get_search_index_manager()
-        return await search_mgr.sync_full_background(
+        return await mcpToolSearchIndexManager.sync_full_background(
             entity_path=service_path,
             entity_info=server_info,
             is_enabled=is_enabled
@@ -154,8 +152,7 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             {"deleted_tools": count}
         """
-        search_mgr = get_search_index_manager()
-        deleted_count = await search_mgr.tools.adelete_by_filter(
+        deleted_count = await mcpToolSearchIndexManager.tools.adelete_by_filter(
             filters={"server_path": service_path}
         )
         return {"deleted_tools": deleted_count}
@@ -334,12 +331,11 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             Result dictionary or None if unavailable
         """
-        search_mgr = get_search_index_manager()
         if entity_type == "a2a_agent":
             # Convert AgentCard to server_info format
             server_info = self._agent_to_server_info(entity_info, entity_path)
             server_info["is_enabled"] = is_enabled
-            return await search_mgr.sync_full_background(
+            return await mcpToolSearchIndexManager.sync_full_background(
                 entity_path=entity_path,
                 entity_info=server_info,
                 is_enabled=is_enabled
@@ -348,7 +344,7 @@ class ExternalVectorSearchService(VectorSearchService):
             # Ensure entity_type is set
             if "entity_type" not in entity_info:
                 entity_info["entity_type"] = "mcp_server"
-            return await search_mgr.sync_full_background(
+            return await mcpToolSearchIndexManager.sync_full_background(
                 entity_path=entity_path,
                 entity_info=entity_info,
                 is_enabled=is_enabled
@@ -372,8 +368,7 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             Result dictionary
         """
-        search_mgr = get_search_index_manager()
-        deleted_count = await search_mgr.tools.adelete_by_filter(
+        deleted_count = await mcpToolSearchIndexManager.tools.adelete_by_filter(
             filters={"server_path": entity_path}
         )
         return {"deleted_tools": deleted_count}

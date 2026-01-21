@@ -203,8 +203,8 @@ class BackendConfig(BaseModel):
         Raises:
             ValueError: If required env vars missing or invalid
         """
-        vector_store_type = os.getenv("VECTOR_STORE_TYPE")
-        embedding_provider = os.getenv("EMBEDDING_PROVIDER")
+        vector_store_type = os.getenv("VECTOR_STORE_TYPE", "weaviate")
+        embedding_provider = os.getenv("EMBEDDING_PROVIDER","aws_bedrock")
         
         # Required validation
         if not vector_store_type or vector_store_type.strip() == "":
