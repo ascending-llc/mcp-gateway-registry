@@ -7,16 +7,15 @@ from registry.auth.dependencies import CurrentUser
 from registry.services.oauth.mcp_service import get_mcp_service, MCPService
 from registry.schemas.enums import ConnectionState, OAuthFlowStatus
 from registry.utils.log import logger
-from registry.utils.utils import load_template
 from registry.auth.oauth.reconnection import get_reconnection_manager
 from registry.constants import REGISTRY_CONSTANTS
 
 router = APIRouter(prefix="/v1/mcp", tags=["oauth"])
 
 
-@router.get("/{server_name}/oauth/initiate")
+@router.get("/{server_id}/oauth/initiate")
 async def initiate_oauth_flow(
-        server_name: str,
+        server_id: str,
         user_context: CurrentUser,
         mcp_service: MCPService = Depends(get_mcp_service)
 ) -> JSONResponse:
@@ -31,7 +30,7 @@ async def initiate_oauth_flow(
         logger.info(f"Oauth initiate for user id : {user_id}")
         flow_id, auth_url, error = await mcp_service.oauth_service.initiate_oauth_flow(
             user_id=user_id,
-            server_name=server_name
+            server_id=server_id
         )
         if error:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
@@ -43,7 +42,7 @@ async def initiate_oauth_flow(
         return JSONResponse(status_code=status.HTTP_200_OK,
                             content={"flow_id": flow_id,
                                      "authorization_url": auth_url,
-                                     "server_name": server_name,
+                                     "server_id": server_id,
                                      "user_id": user_id})
     except HTTPException:
         # Re-raise HTTP exceptions with their original status code
@@ -122,16 +121,17 @@ async def oauth_callback(
 
         # 5. Create user connection and setup server
         try:
-            # Get user_id from flow
+            # Get user_id and server_id from flow
             flow = mcp_service.oauth_service.flow_manager.get_flow(flow_id)
             if flow and flow.user_id:
                 user_id = flow.user_id
-                logger.debug(f"[MCP OAuth] Attempting to reconnect {server_name} with new OAuth tokens")
+                server_id = flow.server_id  # Extract server_id from flow
+                logger.debug(f"[MCP OAuth] Attempting to reconnect {server_name} (server_id: {server_id}) with new OAuth tokens")
 
                 # Create user connection with CONNECTED state
                 await mcp_service.connection_service.create_user_connection(
                     user_id=user_id,
-                    server_name=server_name,
+                    server_id=server_id,  # Use server_id instead of server_name
                     initial_state=ConnectionState.CONNECTED,
                     details={
                         "oauth_completed": True,
@@ -139,7 +139,7 @@ async def oauth_callback(
                         "created_at": time.time()
                     }
                 )
-                logger.info(f"[MCP OAuth] Successfully reconnected {server_name} for user {user_id}")
+                logger.info(f"[MCP OAuth] Successfully reconnected {server_name} (server_id: {server_id}) for user {user_id}")
 
                 # Clear any reconnection attempts
                 try:
@@ -147,8 +147,8 @@ async def oauth_callback(
                         mcp_service=mcp_service,
                         oauth_service=mcp_service.oauth_service
                     )
-                    reconnection_manager.clear_reconnection(user_id, server_name)
-                    logger.debug(f"[MCP OAuth] Cleared reconnection attempts for {server_name}")
+                    reconnection_manager.clear_reconnection(user_id, server_id)  # Use server_id instead of server_name
+                    logger.debug(f"[MCP OAuth] Cleared reconnection attempts for {server_name} (server_id: {server_id})")
                 except Exception as e:
                     logger.error(f"[MCP OAuth] Could not clear reconnection (manager not initialized): {e}")
 
@@ -240,9 +240,9 @@ async def get_oauth_status(
         )
 
 
-@router.post("/oauth/cancel/{server_name}")
+@router.post("/oauth/cancel/{server_id}")
 async def cancel_oauth_flow(
-        server_name: str,
+        server_id: str,
         current_user: CurrentUser,
         mcp_service: MCPService = Depends(get_mcp_service)
 ) -> Dict[str, Any]:
@@ -258,10 +258,10 @@ async def cancel_oauth_flow(
     """
     try:
         user_id = current_user.get("user_id")
-        logger.info(f"[OAuth Cancel] Cancelling OAuth flow for {server_name} by user {user_id}")
+        logger.info(f"[OAuth Cancel] Cancelling OAuth flow for {server_id} by user {user_id}")
 
         # 1. Cancel the OAuth flow
-        success, error_msg = await mcp_service.oauth_service.cancel_oauth_flow(user_id, server_name)
+        success, error_msg = await mcp_service.oauth_service.cancel_oauth_flow(user_id, server_id)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -271,7 +271,7 @@ async def cancel_oauth_flow(
         try:
             await mcp_service.connection_service.update_connection_state(
                 user_id=user_id,
-                server_name=server_name,
+                server_id=server_id,
                 state=ConnectionState.DISCONNECTED,
                 details={
                     "oauth_cancelled": True,
@@ -279,14 +279,14 @@ async def cancel_oauth_flow(
                     "reason": "User cancelled OAuth flow"
                 }
             )
-            logger.info(f"[OAuth Cancel] Updated connection state to DISCONNECTED for {server_name}")
+            logger.info(f"[OAuth Cancel] Updated connection state to DISCONNECTED for {server_id}")
         except Exception as e:
             logger.warning(f"[OAuth Cancel] Failed to update connection state: {e}")
 
         return {
             "success": True,
-            "message": f"OAuth flow for {server_name} cancelled successfully",
-            "server_name": server_name,
+            "message": f"OAuth flow for {server_id} cancelled successfully",
+            "server_id": server_id,
             "user_id": user_id
         }
     except HTTPException:
@@ -300,9 +300,9 @@ async def cancel_oauth_flow(
         )
 
 
-@router.post("/oauth/refresh/{server_name}")
+@router.post("/oauth/refresh/{server_id}")
 async def refresh_oauth_tokens(
-        server_name: str,
+        server_id: str,
         current_user: CurrentUser,
         mcp_service: MCPService = Depends(get_mcp_service)
 ) -> Dict[str, Any]:
@@ -319,38 +319,38 @@ async def refresh_oauth_tokens(
     """
     try:
         user_id = current_user.get("user_id")
-        logger.info(f"[OAuth Refresh] Refreshing OAuth tokens for {server_name} by user {user_id}")
+        logger.info(f"[OAuth Refresh] Refreshing OAuth tokens for {server_id} by user {user_id}")
 
         # 1. Refresh OAuth tokens
-        success, error_msg = await mcp_service.oauth_service.refresh_tokens(user_id, server_name)
+        success, error_msg = await mcp_service.oauth_service.refresh_tokens(user_id, server_id)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=error_msg or "Failed to refresh tokens")
 
-        logger.info(f"[OAuth Refresh] Successfully refreshed tokens for {server_name}")
+        logger.info(f"[OAuth Refresh] Successfully refreshed tokens for {server_id}")
 
         # 2. Update user connection state to CONNECTED
         try:
             # Check if user connection exists, if not create it
-            connection = await mcp_service.connection_service.get_connection(user_id, server_name)
+            connection = await mcp_service.connection_service.get_connection(user_id, server_id)
             if connection:
                 # Update existing connection
                 await mcp_service.connection_service.update_connection_state(
                     user_id=user_id,
-                    server_name=server_name,
+                    server_id=server_id,
                     state=ConnectionState.CONNECTED,
                     details={
                         "oauth_refreshed": True,
                         "refreshed_at": time.time()
                     }
                 )
-                logger.info(f"[OAuth Refresh] Updated connection state to CONNECTED for {server_name}")
+                logger.info(f"[OAuth Refresh] Updated connection state to CONNECTED for {server_id}")
             else:
                 # Create new connection if it doesn't exist
                 await mcp_service.connection_service.create_user_connection(
                     user_id=user_id,
-                    server_name=server_name,
+                    server_id=server_id,
                     initial_state=ConnectionState.CONNECTED,
                     details={
                         "oauth_refreshed": True,
@@ -358,7 +358,7 @@ async def refresh_oauth_tokens(
                         "refreshed_at": time.time()
                     }
                 )
-                logger.info(f"[OAuth Refresh] Created new connection with CONNECTED state for {server_name}")
+                logger.info(f"[OAuth Refresh] Created new connection with CONNECTED state for {server_id}")
         except Exception as e:
             logger.warning(f"[OAuth Refresh] Failed to update connection state: {e}")
 
@@ -368,15 +368,15 @@ async def refresh_oauth_tokens(
                 mcp_service=mcp_service,
                 oauth_service=mcp_service.oauth_service
             )
-            reconnection_manager.clear_reconnection(user_id, server_name)
-            logger.debug(f"[OAuth Refresh] Cleared reconnection attempts for {server_name}")
+            reconnection_manager.clear_reconnection(user_id, server_id)
+            logger.debug(f"[OAuth Refresh] Cleared reconnection attempts for {server_id}")
         except Exception as e:
             logger.warning(f"[OAuth Refresh] Could not clear reconnection (manager not initialized): {e}")
 
         return {
             "success": True,
-            "message": f"Tokens refreshed successfully for {server_name}",
-            "server_name": server_name,
+            "message": f"Tokens refreshed successfully for {server_id}",
+            "server_id": server_id,
             "user_id": user_id
         }
     except HTTPException:

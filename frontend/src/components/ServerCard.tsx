@@ -37,7 +37,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
   onServerUpdate,
   onRefreshSuccess,
 }) => {
-  const { cancelPolling, refreshServerStatus } = useServer();
+  const { cancelPolling, refreshServerData } = useServer();
   const [loading, setLoading] = useState(false);
   const [tools, setTools] = useState<Tool[]>([]);
   const [loadingTools, setLoadingTools] = useState(false);
@@ -82,10 +82,10 @@ const ServerCard: React.FC<ServerCardProps> = ({
   const handleAuth = async () => {
     if (connection_state === SERVER_CONNECTION.CONNECTING) {
       try {
-        const result = await SERVICES.MCP.cancelAuth(server.name);
+        const result = await SERVICES.MCP.cancelAuth(server.id);
         if (result.success) {
           onShowToast?.(result?.message || 'OAuth flow cancelled', 'success');
-          refreshServerStatus();
+          refreshServerData();
         } else {
           onShowToast?.(result?.message || 'Unknown error', 'error');
         }
@@ -153,7 +153,8 @@ const ServerCard: React.FC<ServerCardProps> = ({
       onServerUpdate(id, { enabled });
       onShowToast(`Server ${enabled ? 'enabled' : 'disabled'} successfully!`, 'success');
     } catch (error: any) {
-      onShowToast(error.detail || 'Failed to toggle server', 'error');
+      const errorMessage = error.detail?.message || typeof error.detail === 'string' ? error.detail : '';
+      onShowToast(errorMessage || 'Failed to toggle server', 'error');
     } finally {
       setLoading(false);
     }

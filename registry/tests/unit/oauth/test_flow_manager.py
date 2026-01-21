@@ -68,6 +68,7 @@ class TestFlowStateManager:
         """Test creating flow metadata."""
         manager = FlowStateManager()
         server_name = "test-server"
+        server_id = "test-server"
         user_id = "test-user"
         authorization_url = "https://example.com/oauth/authorize"
         code_verifier = "test-verifier"
@@ -81,7 +82,7 @@ class TestFlowStateManager:
         }
         
         metadata = manager.create_flow_metadata(
-            server_name, user_id, authorization_url, code_verifier, oauth_config, flow_id
+            server_name, server_id, user_id, authorization_url, code_verifier, oauth_config, flow_id
         )
         
         assert metadata.server_name == server_name
@@ -95,6 +96,7 @@ class TestFlowStateManager:
         manager = FlowStateManager()
         flow_id = "test-flow-id"
         server_name = "test-server"
+        server_id = "test-server"
         user_id = "test-user"
         code_verifier = "test-verifier"
         
@@ -106,11 +108,11 @@ class TestFlowStateManager:
             "token_url": "https://example.com/token"
         }
         metadata = manager.create_flow_metadata(
-            server_name, user_id, "https://example.com/auth", 
+            server_name, server_id, user_id, "https://example.com/auth", 
             code_verifier, oauth_config, flow_id
         )
         
-        flow = manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
+        flow = manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
         
         assert flow.flow_id == flow_id
         assert flow.server_name == server_name
@@ -122,6 +124,7 @@ class TestFlowStateManager:
         manager = FlowStateManager()
         flow_id = "test-flow-id"
         server_name = "test-server"
+        server_id = "test-server"
         user_id = "test-user"
         code_verifier = "test-verifier"
         
@@ -133,10 +136,10 @@ class TestFlowStateManager:
             "token_url": "https://example.com/token"
         }
         metadata = manager.create_flow_metadata(
-            server_name, user_id, "https://example.com/auth",
+            server_name, server_id, user_id, "https://example.com/auth",
             code_verifier, oauth_config, flow_id
         )
-        manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
+        manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
         
         # Retrieve flow
         flow = manager.get_flow(flow_id)
@@ -159,6 +162,7 @@ class TestFlowStateManager:
         manager = FlowStateManager()
         flow_id = "test-flow-id"
         server_name = "test-server"
+        server_id = "test-server"
         user_id = "test-user"
         code_verifier = "test-verifier"
         
@@ -170,10 +174,10 @@ class TestFlowStateManager:
             "token_url": "https://example.com/token"
         }
         metadata = manager.create_flow_metadata(
-            server_name, user_id, "https://example.com/auth",
+            server_name, server_id, user_id, "https://example.com/auth",
             code_verifier, oauth_config, flow_id
         )
-        flow = manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
+        flow = manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
         
         # Should not be expired immediately
         assert not manager.is_flow_expired(flow)
@@ -187,6 +191,7 @@ class TestFlowStateManager:
         manager = FlowStateManager()
         flow_id = "test-flow-id"
         server_name = "test-server"
+        server_id = "test-server"
         user_id = "test-user"
         code_verifier = "test-verifier"
         
@@ -198,10 +203,10 @@ class TestFlowStateManager:
             "token_url": "https://example.com/token"
         }
         metadata = manager.create_flow_metadata(
-            server_name, user_id, "https://example.com/auth",
+            server_name, server_id, user_id, "https://example.com/auth",
             code_verifier, oauth_config, flow_id
         )
-        manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
+        manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
         
         # Complete the flow
         from registry.models.oauth_models import OAuthTokens
@@ -238,6 +243,7 @@ class TestFlowStateManager:
         manager = FlowStateManager()
         flow_id = "test-flow-id"
         server_name = "test-server"
+        server_id = "test-server"
         user_id = "test-user"
         code_verifier = "test-verifier"
         error_message = "Authentication failed"
@@ -250,10 +256,10 @@ class TestFlowStateManager:
             "token_url": "https://example.com/token"
         }
         metadata = manager.create_flow_metadata(
-            server_name, user_id, "https://example.com/auth",
+            server_name, server_id, user_id, "https://example.com/auth",
             code_verifier, oauth_config, flow_id
         )
-        manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
+        manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
         
         # Fail the flow
         manager.fail_flow(flow_id, error_message)
@@ -278,6 +284,7 @@ class TestFlowStateManager:
         manager = FlowStateManager()
         flow_id = "test-flow-id"
         server_name = "test-server"
+        server_id = "test-server"
         user_id = "test-user"
         code_verifier = "test-verifier"
         
@@ -289,10 +296,10 @@ class TestFlowStateManager:
             "token_url": "https://example.com/token"
         }
         metadata = manager.create_flow_metadata(
-            server_name, user_id, "https://example.com/auth",
+            server_name, server_id, user_id, "https://example.com/auth",
             code_verifier, oauth_config, flow_id
         )
-        manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
+        manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
         
         # Verify it exists
         assert manager.get_flow(flow_id) is not None
@@ -308,6 +315,7 @@ class TestFlowStateManager:
         manager = FlowStateManager()
         flow_id = "test-flow-id"
         server_name = "test-server"
+        server_id = "test-server"
         user_id = "test-user"
         code_verifier = "test-verifier"
         
@@ -319,13 +327,13 @@ class TestFlowStateManager:
             "token_url": "https://example.com/token"
         }
         metadata = manager.create_flow_metadata(
-            server_name, user_id, "https://example.com/auth",
+            server_name, server_id, user_id, "https://example.com/auth",
             code_verifier, oauth_config, flow_id
         )
-        manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
+        manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
         
         # Cancel the flow
-        result = manager.cancel_user_flow(user_id, server_name)
+        result = manager.cancel_user_flow(user_id, server_id)
         
         assert result is True
         
@@ -337,6 +345,7 @@ class TestFlowStateManager:
         """Test getting user flows."""
         manager = FlowStateManager()
         server_name = "test-server"
+        server_id = "test-server"
         user_id = "test-user"
         code_verifier = "test-verifier"
         
@@ -351,13 +360,13 @@ class TestFlowStateManager:
         for i in range(3):
             flow_id = f"flow-{i}"
             metadata = manager.create_flow_metadata(
-                server_name, user_id, "https://example.com/auth",
+                server_name, server_id, user_id, "https://example.com/auth",
                 code_verifier, oauth_config, flow_id
             )
-            manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
+            manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
         
         # Get user flows
-        flows = manager.get_user_flows(user_id, server_name)
+        flows = manager.get_user_flows(user_id, server_id)
         
         assert len(flows) == 3
         for flow in flows:
@@ -389,20 +398,21 @@ class TestFlowStateManager:
         for i in range(3):
             flow_id = f"flow-{i}"
             server_name = "test-server"
+            server_id = "test-server"
             user_id = "test-user"
             code_verifier = "test-verifier"
             
             oauth_config = {
                 "client_id": "test-client",
-                "scopes": ["read"],
-                "authorize_url": "https://example.com/auth",
+                "scope": ["read"],
+                "authorization_url": "https://example.com/auth",
                 "token_url": "https://example.com/token"
             }
             metadata = manager.create_flow_metadata(
-                server_name, user_id, "https://example.com/auth",
+                server_name, server_id, user_id, "https://example.com/auth",
                 code_verifier, oauth_config, flow_id
             )
-            flow = manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
+            flow = manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
             # Make first flow expired
             if i == 0:
                 flow.created_at = time.time() - 700
@@ -425,9 +435,10 @@ class TestFlowStateManagerIntegration:
         manager = FlowStateManager()
         user_id = "test-user"
         server_name = "test-server"
+        server_id = "test-server"
         
         # Generate flow ID
-        flow_id = manager.generate_flow_id(user_id, server_name)
+        flow_id = manager.generate_flow_id(user_id, server_id)
         
         # Create flow
         code_verifier = "test-verifier"
@@ -438,10 +449,10 @@ class TestFlowStateManagerIntegration:
             "token_url": "https://example.com/token"
         }
         metadata = manager.create_flow_metadata(
-            server_name, user_id, "https://example.com/auth",
+            server_name, server_id, user_id, "https://example.com/auth",
             code_verifier, oauth_config, flow_id
         )
-        manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
+        manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
         
         # Verify flow exists and is pending
         flow = manager.get_flow(flow_id)
@@ -478,20 +489,21 @@ class TestFlowStateManagerIntegration:
         for i in range(5):
             user_id = f"user-{i}"
             server_name = f"server-{i}"
-            flow_id = manager.generate_flow_id(user_id, server_name)
+            server_id = f"server-{i}"
+            flow_id = manager.generate_flow_id(user_id, server_id)
             code_verifier = "test-verifier"
             
             oauth_config = {
                 "client_id": "test-client",
-                "scopes": ["read"],
-                "authorize_url": "https://example.com/auth",
+                "scope": ["read"],
+                "authorization_url": "https://example.com/auth",
                 "token_url": "https://example.com/token"
             }
             metadata = manager.create_flow_metadata(
-                server_name, user_id, "https://example.com/auth",
+                server_name, server_id, user_id, "https://example.com/auth",
                 code_verifier, oauth_config, flow_id
             )
-            manager.create_flow(flow_id, server_name, user_id, code_verifier, metadata)
+            manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
             flows.append(flow_id)
         
         # Verify all flows exist

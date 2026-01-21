@@ -382,7 +382,7 @@ class TestDeviceFlowRoutes:
         
         assert token_response.status_code == 400
         data = token_response.json()
-        assert data["detail"] == "authorization_pending"
+        assert data["error"] == "authorization_pending"
 
     def test_device_token_success(self, test_client: TestClient, clear_device_storage):
         """Test successful token retrieval after approval."""
@@ -437,7 +437,7 @@ class TestDeviceFlowRoutes:
         
         assert response.status_code == 400
         data = response.json()
-        assert data["detail"] == "unsupported_grant_type"
+        assert data["error"] == "unsupported_grant_type"
 
     def test_device_token_invalid_device_code(self, test_client: TestClient, clear_device_storage):
         """Test token request with invalid device code."""
@@ -452,7 +452,7 @@ class TestDeviceFlowRoutes:
         
         assert response.status_code == 400
         data = response.json()
-        assert data["detail"] == "invalid_grant"
+        assert data["error"] == "invalid_grant"
 
     def test_device_token_client_mismatch(self, test_client: TestClient, clear_device_storage):
         """Test token request with mismatched client_id."""
@@ -475,7 +475,7 @@ class TestDeviceFlowRoutes:
         
         assert response.status_code == 400
         data = response.json()
-        assert data["detail"] == "invalid_client"
+        assert data["error"] == "invalid_client"
 
     def test_device_token_expired(self, test_client: TestClient, clear_device_storage):
         """Test token request with expired device code."""
@@ -508,7 +508,7 @@ class TestDeviceFlowRoutes:
         
         assert response.status_code == 400
         data = response.json()
-        assert data["detail"] == "invalid_grant"  # Code no longer exists after cleanup
+        assert data["error"] == "invalid_grant"  # Code no longer exists after cleanup
 
     def test_device_token_slow_down(self, test_client: TestClient, clear_device_storage):
         """Test polling behavior (slow_down not implemented yet, returns authorization_pending)."""
@@ -541,9 +541,9 @@ class TestDeviceFlowRoutes:
         
         # Both should return authorization_pending (slow_down not yet implemented)
         assert response1.status_code == 400
-        assert response1.json()["detail"] == "authorization_pending"
+        assert response1.json()["error"] == "authorization_pending"
         assert response2.status_code == 400
-        assert response2.json()["detail"] == "authorization_pending"
+        assert response2.json()["error"] == "authorization_pending"
 
     def test_complete_device_flow(self, test_client: TestClient, clear_device_storage):
         """Test the complete device authorization flow end-to-end."""
@@ -791,7 +791,7 @@ class TestDeviceFlowWithMocking:
         
         assert response.status_code == 400
         # After cleanup, expired codes may return invalid_grant or expired_token
-        assert response.json()["detail"] in ["expired_token", "invalid_grant"]
+        assert response.json()["error"] in ["expired_token", "invalid_grant"]
 
 
 @pytest.mark.integration

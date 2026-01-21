@@ -81,19 +81,34 @@ class CustomJWTVerifier(TokenVerifier):
                     return None
 
             # Decode and verify JWT token
+            # For self-signed tokens (kid='mcp-self-signed'), skip audience validation
+            # because the audience is now the resource URL (RFC 8707 Resource Indicators)
+            is_self_signed = (token_kid == self.expected_kid)
+            
+            decode_options = {
+                "verify_signature": True,
+                "verify_exp": True,
+                "verify_iss": True,
+                "verify_aud": not is_self_signed,  # Skip aud check for self-signed tokens
+                "require": ["exp", "iss", "aud", "sub"]
+            }
+            
+            decode_kwargs = {
+                "algorithms": self.algorithms,
+                "issuer": self.issuer,
+                "options": decode_options
+            }
+            
+            # Only validate audience for provider tokens (not self-signed)
+            if not is_self_signed:
+                decode_kwargs["audience"] = self.audience
+            else:
+                logger.info("Skipping audience validation for self-signed token (RFC 8707 Resource Indicators)")
+            
             claims = jwt.decode(
                 token,
                 self.secret_key,
-                algorithms=self.algorithms,
-                issuer=self.issuer,
-                audience=self.audience,
-                options={
-                    "verify_signature": True,
-                    "verify_exp": True,
-                    "verify_iss": True,
-                    "verify_aud": True,
-                    "require": ["exp", "iss", "aud", "sub"]
-                }
+                **decode_kwargs
             )
 
             # Extract user information

@@ -24,7 +24,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
   setShowApiKeyDialog,
   onShowToast,
 }) => {
-  const { refreshServerStatus, getServerStatusByPolling, cancelPolling } = useServer();
+  const { refreshServerData, getServerStatusByPolling, cancelPolling } = useServer();
 
   const [loading, setLoading] = useState(false);
 
@@ -33,7 +33,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
 
   const onCancel = () => {
     cancelPolling?.(serverId);
-    refreshServerStatus?.();
+    refreshServerData?.();
     setShowApiKeyDialog(false);
   };
 
@@ -41,7 +41,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
     if (isConnecting || isAuthenticated) {
       try {
         setLoading(true);
-        const result = await SERVICES.MCP.cancelAuth(name);
+        const result = await SERVICES.MCP.cancelAuth(serverId);
         if (result.success) {
           onShowToast?.(result?.message || 'OAuth flow cancelled', 'success');
           setShowApiKeyDialog(false);
@@ -52,7 +52,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
         onShowToast?.(error instanceof Error ? error.message : 'Unknown error', 'error');
       } finally {
         setLoading(false);
-        refreshServerStatus?.();
+        refreshServerData?.();
       }
     }
     setShowApiKeyDialog(false);
@@ -62,7 +62,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
     try {
       setLoading(true);
       if (isAuthenticated) {
-        const result = await SERVICES.MCP.getSOauthReinit(name);
+        const result = await SERVICES.MCP.getSOauthReinit(serverId);
         if (result.success) {
           onShowToast?.(result?.message || 'Server reinitialized successfully', 'success');
           setShowApiKeyDialog(false);
@@ -70,7 +70,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
           onShowToast?.(result?.message || 'Server reinitialized failed', 'error');
         }
       } else {
-        const result = await SERVICES.MCP.getOauthInitiate(name);
+        const result = await SERVICES.MCP.getOauthInitiate(serverId);
         if (result?.authorization_url) {
           window.open(result.authorization_url, '_blank');
           getServerStatusByPolling?.(serverId);

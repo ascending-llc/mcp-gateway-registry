@@ -6,6 +6,7 @@ Configuration is passed via headers instead of environment variables.
 import argparse
 import logging
 import os
+import base64
 import boto3
 import jwt
 import requests
@@ -468,6 +469,19 @@ def check_rate_limit(username: str) -> bool:
     # Increment counter
     user_token_generation_counts[rate_key] = current_count + 1
     return True
+
+def _create_self_signed_jwt(access_payload: dict) -> str: 
+    try: 
+        headers = {
+            "kid": JWT_SELF_SIGNED_KID,  # Static key ID for self-signed tokens
+            "typ": "JWT",
+            "alg": "HS256"
+        }
+        access_token = jwt.encode(access_payload, SECRET_KEY, algorithm='HS256' , headers=headers)
+        return access_token
+    except Exception as e:
+        logger.error(f"Failed to create self-signed JWT: {e}")
+        raise ValueError(f"Failed to create self-signed JWT: {e}")
 
 
 # Create FastAPI app
@@ -1314,15 +1328,7 @@ async def generate_user_token(
         if request.description:
             access_payload["description"] = request.description
 
-        # Sign the access token using HS256 with shared SECRET_KEY
-        # Add kid (Key ID) to JWT header for consistency with RS256 tokens
-        headers = {
-            "kid": JWT_SELF_SIGNED_KID,  # Static key ID for self-signed tokens
-            "typ": "JWT",
-            "alg": "HS256"
-        }
-        # Sign the access token using HS256 with shared SECRET_KEY
-        access_token = jwt.encode(access_payload, SECRET_KEY, algorithm='HS256' , headers=headers)
+        access_token = _create_self_signed_jwt(access_payload)
 
         # No refresh tokens - users should configure longer token lifetimes in Keycloak if needed
         refresh_token = None
@@ -1541,7 +1547,8 @@ async def oauth2_login(
     client_id: str = None,
     code_challenge: str = None,
     code_challenge_method: str = None,
-    response_type: str = None
+    response_type: str = None,
+    resource: str = None
 ):
     """
     Initiate OAuth2 login flow.
@@ -1554,6 +1561,7 @@ async def oauth2_login(
     - code_challenge: PKCE code challenge (for authorization code flow)
     - code_challenge_method: PKCE method (S256 or plain)
     - response_type: OAuth response type (code for authorization code flow)
+    - resource: Protected resource URL (for RFC 8707 Resource Indicators)
     """
     try:
         if provider not in OAUTH2_CONFIG.get("providers", {}):
@@ -1564,7 +1572,12 @@ async def oauth2_login(
             raise HTTPException(status_code=400, detail=f"Provider {provider} is disabled")
         
         # Generate state parameter for security
-        state = secrets.token_urlsafe(32)
+        # Encode resource parameter in state so we can recover it even if session expires
+        state_data = {
+            "nonce": secrets.token_urlsafe(24),
+            "resource": resource  # RFC 8707 - preserve for session expiration handling
+        }
+        state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode().rstrip('=')
         
         # Store state and redirect URI in session for callback validation
         session_data = {
@@ -1580,6 +1593,10 @@ async def oauth2_login(
             session_data["client_redirect_uri"] = redirect_uri
             session_data["code_challenge"] = code_challenge
             session_data["code_challenge_method"] = code_challenge_method or "S256"
+            # Store resource parameter for JWT audience claim (RFC 8707)
+            if resource:
+                session_data["resource"] = resource
+                logger.info(f"Resource parameter captured: {resource}")
         
         # Create temporary session for OAuth2 flow
         temp_session = signer.dumps(session_data)
@@ -1612,7 +1629,7 @@ async def oauth2_login(
         response.set_cookie(
             key="oauth2_temp_session",
             value=temp_session,
-            max_age=600,  # 10 minutes for OAuth2 flow
+            max_age=settings.oauth_session_ttl_seconds,  # Configurable OAuth2 flow timeout
             httponly=True,
             samesite="lax"
         )
@@ -1646,14 +1663,68 @@ async def oauth2_callback(
         if not code or not state or not oauth2_temp_session:
             raise HTTPException(status_code=400, detail="Missing required OAuth2 parameters")
         
+        # Decode state to extract resource parameter (RFC 8707)
+        resource = None
+        try:
+            # Add padding if needed
+            state_padded = state + '=' * (4 - len(state) % 4)
+            state_decoded = json.loads(base64.urlsafe_b64decode(state_padded).decode())
+            resource = state_decoded.get("resource")
+            logger.info(f"Extracted resource from state: {resource}")
+        except Exception as e:
+            logger.warning(f"Could not decode state parameter: {e}")
+        
         # Validate temporary session
         try:
-            temp_session_data = signer.loads(oauth2_temp_session, max_age=600)
-        except (SignatureExpired, BadSignature):
-            raise HTTPException(status_code=400, detail="Invalid or expired OAuth2 session")
+            temp_session_data = signer.loads(oauth2_temp_session, max_age=settings.oauth_session_ttl_seconds)
+        except (SignatureExpired, BadSignature) as e:
+            # Session expired or invalid - return 401 to trigger fresh OAuth flow
+            error_type = "expired" if isinstance(e, SignatureExpired) else "invalid"
+            logger.warning(f"OAuth2 session {error_type} for provider {provider} (state={state[:8] if state else 'none'}...)")
+            logger.info(f"Returning 401 to trigger fresh OAuth flow for Claude Desktop reconnection")
+            
+            # Per MCP specification: Return 401 with WWW-Authenticate header
+            # This triggers Claude Desktop to automatically initiate a new OAuth flow
+            # If we have the resource parameter from state, include resource_metadata
+            # pointing to the original protected resource (MCP server)
+            www_authenticate_parts = ['Bearer realm="mcp-auth-server"']
+            
+            if resource:
+                # Extract server path from resource URL for protected resource metadata
+                # Example: https://jarvis-demo.com/gateway/proxy/mcpgw -> /gateway/.well-known/oauth-protected-resource/proxy/mcpgw
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(resource)
+                    # Get the path without leading/trailing slashes
+                    path_parts = parsed.path.strip('/').split('/')
+                    if len(path_parts) >= 2:
+                        # Reconstruct: scheme://host/path/.well-known/oauth-protected-resource/server
+                        base = f"{parsed.scheme}://{parsed.netloc}"
+                        # Everything before the last part is the base path, last part is server name
+                        if len(path_parts) > 2:
+                            base_path = '/'.join(path_parts[:-2])
+                            server_name = '/'.join(path_parts[-2:])
+                            resource_metadata_url = f"{base}/{base_path}/.well-known/oauth-protected-resource/{server_name}"
+                        else:
+                            server_name = '/'.join(path_parts)
+                            resource_metadata_url = f"{base}/.well-known/oauth-protected-resource/{server_name}"
+                        
+                        www_authenticate_parts.append(f'resource_metadata="{resource_metadata_url}"')
+                        logger.info(f"Session {error_type}, redirecting client back to resource: {resource_metadata_url}")
+                except Exception as e:
+                    logger.warning(f"Could not construct resource_metadata from resource URL: {e}")
+            
+            www_authenticate = ', '.join(www_authenticate_parts)
+            
+            raise HTTPException(
+                status_code=401,
+                detail=f"OAuth session {error_type} - please re-authenticate",
+                headers={"WWW-Authenticate": www_authenticate}
+            )
         
         # Validate state parameter
         if state != temp_session_data.get("state"):
+            logger.error(f"State mismatch for provider {provider}: expected={temp_session_data.get('state')[:8]}..., got={state[:8]}...")
             raise HTTPException(status_code=400, detail="Invalid state parameter")
         
         # Validate provider
@@ -1776,7 +1847,6 @@ async def oauth2_callback(
         if client_id and client_redirect_uri:
             # OAuth Authorization Code Flow - return authorization code to client
             logger.info(f"OAuth client detected (client_id={client_id}), generating authorization code")
-            
             from .routes.oauth_device import authorization_codes_storage, cleanup_expired_authorization_codes
             
             # Cleanup expired codes
@@ -1797,6 +1867,7 @@ async def oauth2_callback(
                 "code_challenge": code_challenge,
                 "code_challenge_method": code_challenge_method,
                 "redirect_uri": client_redirect_uri,
+                "resource": temp_session_data.get("resource"),  # RFC 8707 Resource Indicators
                 "created_at": current_time
             }
             
@@ -1816,16 +1887,57 @@ async def oauth2_callback(
             logger.info(f"Redirecting OAuth client to: {client_redirect_uri}")
             return response
         
-        # Web browser session flow - create session cookie
+        # Web browser session flow - create session cookie with user id
+        user_id = None
+        email = user_info.get("username")
+        if email:
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    # Generate short-lived token to retrieve user_id from registry
+                    current_time = int(time.time())
+                    expires_at = current_time + 5 * 60  # 5 minutes = 300 seconds
+                    registry_url = settings.registry_url
+                    access_payload = {
+                        "iss": JWT_ISSUER,
+                        "aud": JWT_AUDIENCE,
+                        "sub": mapped_user['username'],
+                        "username": mapped_user['username'],
+                        "scope": " ".join(['auth-server/read:user_id']),
+                        "groups": [],  
+                        "exp": expires_at,
+                        "iat": current_time,
+                        "jti": str(uuid.uuid4()),
+                        "token_use": "access",
+                        "client_id": "user-generated",
+                        "token_type": "user_generated"
+                    }
+
+                    access_token = _create_self_signed_jwt(access_payload)
+                    headers = {"Authorization": f"Bearer {access_token}"}
+                    resp = await client.get(
+                        f"{registry_url}/api/auth/me",
+                        headers=headers,
+                    )
+
+                    if resp.status_code == 200:
+                        user_id = resp.json().get("user_id")
+                        logger.info(f"Fetched user_id {user_id} from registry for {email}")
+                    else:
+                        logger.info(f"Failed to fetch user_id from registry: {resp.status_code} {resp.text}")
+            except Exception as e:
+                logger.info(f"Error fetching user_id from registry: {e}")
+
         session_data = {
             "username": mapped_user["username"],
             "email": mapped_user.get("email"),
             "name": mapped_user.get("name"),
             "groups": mapped_user.get("groups", []),
             "provider": provider,
-            "auth_method": "oauth2"
+            "auth_method": "oauth2",
+            "user_id": user_id
         }
-        
+
+        # Create session cookie compatible with registry
         registry_session = signer.dumps(session_data)
         
         # Redirect to registry with session cookie

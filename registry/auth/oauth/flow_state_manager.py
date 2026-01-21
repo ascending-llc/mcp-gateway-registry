@@ -8,9 +8,9 @@ from registry.core.config import init_redis_connection
 from registry.auth.oauth.redis_flow_storage import RedisFlowStorage
 from registry.auth.oauth.oauth_utils import parse_scope, scope_to_string
 from registry.models.oauth_models import (
-    OAuthFlow, 
-    MCPOAuthFlowMetadata, 
-    OAuthTokens, 
+    OAuthFlow,
+    MCPOAuthFlowMetadata,
+    OAuthTokens,
     OAuthClientInformation,
     OAuthMetadata
 )
@@ -43,10 +43,10 @@ class FlowStateManager:
         try:
             redis_conn = init_redis_connection()
             redis_conn.ping()
-            
+
             self._redis_storage = RedisFlowStorage(redis_conn)
             self._use_redis = True
-            
+
             logger.info("FlowStateManager initialized with Redis storage")
 
         except Exception as e:
@@ -58,11 +58,11 @@ class FlowStateManager:
                 logger.error(f"Failed to initialize FlowStateManager: {e}")
                 raise
 
-    def generate_flow_id(self, user_id: str, server_name: str) -> str:
+    def generate_flow_id(self, user_id: str, server_id: str) -> str:
         """
         Generate OAuth flow ID
         """
-        return f"{user_id}:{server_name}"
+        return f"{user_id}:{server_id}"
 
     def encode_state(self, flow_id: str, security_token: Optional[str] = None) -> str:
         """
@@ -95,6 +95,7 @@ class FlowStateManager:
     def create_flow_metadata(
             self,
             server_name: str,
+            server_id: str,
             user_id: str,
             authorization_url: str,
             code_verifier: str,
@@ -107,8 +108,9 @@ class FlowStateManager:
         state = self.encode_state(flow_id, security_token)
 
         return MCPOAuthFlowMetadata(
-            server_name=server_name,
-            user_id=user_id,
+            server_id=server_id.strip(),
+            server_name=server_name.strip(),
+            user_id=user_id.strip(),
             authorization_url=authorization_url,
             state=state,
             code_verifier=code_verifier,
@@ -119,7 +121,7 @@ class FlowStateManager:
     def create_flow(
             self,
             flow_id: str,
-            server_name: str,
+            server_id: str,
             user_id: str,
             code_verifier: str,
             metadata: MCPOAuthFlowMetadata
@@ -130,7 +132,8 @@ class FlowStateManager:
         # Create dataclass flow object
         flow = OAuthFlow(
             flow_id=flow_id,
-            server_name=server_name,
+            server_id=server_id,
+            server_name=metadata.server_name,
             user_id=user_id,
             code_verifier=code_verifier,
             state=metadata.state,
@@ -261,14 +264,14 @@ class FlowStateManager:
                 flow.error = error
                 logger.debug(f"Marked flow as failed in memory: {flow_id}")
 
-    def cancel_user_flow(self, user_id: str, server_name: str) -> bool:
+    def cancel_user_flow(self, user_id: str, server_id: str) -> bool:
         """
         Cancel pending OAuth flow for user and server
         """
         if self._use_redis and self._redis_storage:
             try:
                 # Find pending flows for user and server
-                flows = self._redis_storage.find_flows(user_id, server_name)
+                flows = self._redis_storage.find_flows(user_id, server_id)
                 pending_flows = [f for f in flows if f.status == OAuthFlowStatus.PENDING]
 
                 if not pending_flows:
@@ -290,7 +293,7 @@ class FlowStateManager:
             # Use memory storage
             flow_to_cancel = None
             for flow_id, flow in self._memory_flows.items():
-                if flow.user_id == user_id and flow.server_name == server_name and flow.status == OAuthFlowStatus.PENDING:
+                if flow.user_id == user_id and flow.server_id == server_id and flow.status == OAuthFlowStatus.PENDING:
                     flow_to_cancel = flow
                     break
 
@@ -302,15 +305,15 @@ class FlowStateManager:
             logger.debug(f"Cancelled flow in memory: {flow_to_cancel.flow_id}")
             return True
 
-    def get_user_flows(self, user_id: str, server_name: str) -> List[OAuthFlow]:
+    def get_user_flows(self, user_id: str, server_id: str) -> List[OAuthFlow]:
         """
         Get all OAuth flows for specific user and server
         
         """
         if self._use_redis and self._redis_storage:
             try:
-                user_flows = self._redis_storage.find_flows(user_id, server_name)
-                logger.debug(f"Found {len(user_flows)} flows in Redis for {user_id}/{server_name}")
+                user_flows = self._redis_storage.find_flows(user_id, server_id)
+                logger.debug(f"Found {len(user_flows)} flows in Redis for {user_id}/{server_id}")
                 return user_flows
 
             except Exception as e:
@@ -320,10 +323,10 @@ class FlowStateManager:
             # Use memory storage
             user_flows = []
             for flow_id, flow in self._memory_flows.items():
-                if flow.user_id == user_id and flow.server_name == server_name:
+                if flow.user_id == user_id and flow.server_id == server_id:
                     user_flows.append(flow)
 
-            logger.debug(f"Found {len(user_flows)} flows in memory for {user_id}/{server_name}")
+            logger.debug(f"Found {len(user_flows)} flows in memory for {user_id}/{server_id}")
             return user_flows
 
     def _create_client_info(self, oauth_config: Dict[str, Any], server_name: str) -> OAuthClientInformation:
@@ -340,8 +343,8 @@ class FlowStateManager:
         scope_string = scope_to_string(oauth_config.get("scope"))
         logger.debug(f"Client info - redirect_uris: {redirect_uris}, scopes: {scope_string}")
         return OAuthClientInformation(
-            client_id=oauth_config.get("client_id", ""),
-            client_secret=oauth_config.get("client_secret"),
+            client_id=str(oauth_config.get("client_id", "")).strip(),
+            client_secret=str(oauth_config.get("client_secret")).strip(),
             redirect_uris=redirect_uris,
             scope=scope_string,
             additional_params=oauth_config.get("additional_params")
