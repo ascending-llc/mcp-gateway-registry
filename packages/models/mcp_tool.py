@@ -11,8 +11,10 @@ New code should use the generated models from _generated/ folder.
 
 import json
 import uuid
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Set
 from langchain_core.documents import Document
+from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -290,6 +292,76 @@ class McpTool:
 
         return tools
 
+    @classmethod
+    def compare_tools(
+            cls,
+            old_tools: List['McpTool'],
+            new_tool_list: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Compare old and new tools to determine changes for incremental updates.
+        
+        This is the core logic for efficient incremental indexing.
+        
+        Args:
+            old_tools: Existing McpTool instances
+            new_tool_list: New tool definitions from server
+            
+        Returns:
+            Dictionary with:
+            - to_delete: List of tool names to delete
+            - to_add: List of tool dicts to add
+            - to_update: List of tool dicts to update (description changed)
+        """
+        old_map = {t.tool_name: t for t in old_tools}
+        new_map: Dict[str, Dict[str, Any]] = {}
+        
+        for tool_def in new_tool_list:
+            name = tool_def.get("name")
+            if not name:
+                logger.warning("Skipping tool definition without 'name': %s", tool_def)
+                continue
+            if name in new_map:
+                logger.warning(
+                    "Duplicate tool name '%s' encountered in new_tool_list; "
+                    "keeping the first definition and skipping this one: %s",
+                    name,
+                    tool_def,
+                )
+                continue
+            new_map[name] = tool_def
+
+        # Find tools to delete (exist in old but not in new)
+        to_delete = [name for name in old_map if name not in new_map]
+        
+        # Find tools to add (exist in new but not in old)
+        to_add = [t for name, t in new_map.items() if name not in old_map]
+
+        # Find tools to update (description changed - triggers re-vectorization)
+        to_update = []
+        for name, new_tool in new_map.items():
+            if name in old_map:
+                old_tool = old_map[name]
+                new_desc = new_tool.get("description", "")
+                if old_tool.description_main != new_desc:
+                    to_update.append(new_tool)
+
+        return {
+            "to_delete": to_delete,
+            "to_add": to_add,
+            "to_update": to_update
+        }
+
+    @staticmethod
+    def get_safe_metadata_fields() -> Set[str]:
+        """
+        Get safe metadata fields that can be updated without re-vectorization.
+        
+        Returns:
+            Set of safe field names
+        """
+        return {'is_enabled', 'tags', 'entity_type', 'server_name'}
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Convert MCP Tool instance to dictionary.
@@ -311,6 +383,37 @@ class McpTool:
             'tags': self.tags,
             'is_enabled': self.is_enabled,
             'content': self.content
+        }
+
+    @staticmethod
+    def from_server_document(server: MCPServerDocument) -> Dict[str, Any]:
+        """
+        Convert MCPServerDocument to server_info format for search indexing.
+        """
+        config = server.config or {}
+
+        # Extract tool_list from toolFunctions or use empty list
+        tool_functions = config.get("toolFunctions", {})
+        tool_list = []
+
+        # Convert toolFunctions back to tool_list format
+        for func_key, func_data in tool_functions.items():
+            if isinstance(func_data, dict) and "function" in func_data:
+                func = func_data["function"]
+                tool_list.append({
+                    "name": func.get("name", func_key),
+                    "description": func.get("description", ""),
+                    "inputSchema": func.get("parameters", {})
+                })
+
+        return {
+            "server_name": server.serverName,
+            "description": config.get("description", ""),
+            "path": server.path,
+            "tags": server.tags or [],
+            "entity_type": "mcp_server",
+            "tool_list": tool_list,
+            "is_enabled": config.get("enabled", True),
         }
 
     def __str__(self):
