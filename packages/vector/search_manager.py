@@ -32,6 +32,11 @@ class SearchIndexManager(Generic[T]):
             model_class: The model class to use for this manager
         """
         self.client = db_client or initialize_database()
+
+        if model_class is None:
+            raise ValueError(
+                "SearchIndexManager requires a non-None model_class to initialize the repository."
+            )
         self.model_class = model_class
         self.repository = Repository(self.client, self.model_class)
         self._background_tasks = set()  # Track background tasks
