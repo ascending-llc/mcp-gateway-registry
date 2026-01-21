@@ -5,7 +5,7 @@ const formatTimeSince = (timestamp: string | null | undefined): string | null =>
 
   try {
     const now = new Date();
-    const lastChecked = new Date(timestamp);
+    const lastChecked = new Date(timestamp.endsWith('Z') ? timestamp : `${timestamp}Z`);
 
     // Check if the date is valid
     if (Number.isNaN(lastChecked.getTime())) {
