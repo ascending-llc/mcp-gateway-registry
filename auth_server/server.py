@@ -1268,6 +1268,7 @@ async def generate_user_token(
         username = user_context.get('username')
         user_scopes = user_context.get('scopes', [])
         user_groups = user_context.get('groups', [])
+        user_id = user_context.get('user_id')
         logger.info(f"User context: {user_context}")
         if not username:
             raise HTTPException(
@@ -1313,7 +1314,7 @@ async def generate_user_token(
             "iss": JWT_ISSUER,
             "aud": JWT_AUDIENCE,
             "sub": username,
-            "user_id": username, # TODO: get ObjectsID from mongo
+            "user_id": user_id,
             "scope": " ".join(requested_scopes),
             "groups": user_groups,  # Include user groups from context
             "exp": expires_at,
