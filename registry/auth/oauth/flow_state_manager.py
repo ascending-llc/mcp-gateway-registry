@@ -4,7 +4,7 @@ import secrets
 import os
 from typing import Dict, Optional, Any, List
 
-from registry.config.redis_config import init_redis_connection
+from registry.core.config import init_redis_connection
 from registry.auth.oauth.redis_flow_storage import RedisFlowStorage
 from registry.auth.oauth.oauth_utils import parse_scope, scope_to_string
 from registry.models.oauth_models import (

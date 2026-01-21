@@ -19,8 +19,7 @@ from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 # Import domain routers
 from registry.auth.routes import router as auth_router
-from registry.api.server_routes import router as servers_router
-from registry.api.v1.server_routes import router as servers_router_v1
+from registry.api.v1.server.server_routes import router as servers_router_v1
 from registry.api.internal_routes import router as internal_router
 from registry.api.search_routes import router as search_router
 from registry.api.wellknown_routes import router as wellknown_router
@@ -205,7 +204,6 @@ else:
 
 # Register API routers with /api prefix
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
-app.include_router(servers_router, prefix="/api", tags=["Server Management"])
 app.include_router(servers_router_v1, prefix="/api", tags=["Server Management V1"])
 app.include_router(internal_router, prefix="/api", tags=["Server Management[internal]"])
 app.include_router(agent_router, prefix="/api", tags=["Agent Management"])
