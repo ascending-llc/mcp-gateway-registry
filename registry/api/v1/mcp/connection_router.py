@@ -180,14 +180,15 @@ async def get_server_connection_status(
 
         server_status = await get_single_server_connection_status(
             user_id=user_id,
-            server_id=server.id,
+            server_id=server_id,
             mcp_service=mcp_service
         )
         return {
             "success": True,
             "serverName": server.serverName,
             "connectionState": server_status["connection_state"],
-            "requiresOAuth": server_status["requires_oauth"]
+            "requiresOAuth": server_status["requires_oauth"],
+            "requiresId": server_id
         }
     except HTTPException:
         raise

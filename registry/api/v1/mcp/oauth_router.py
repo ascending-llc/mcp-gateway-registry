@@ -121,16 +121,17 @@ async def oauth_callback(
 
         # 5. Create user connection and setup server
         try:
-            # Get user_id from flow
+            # Get user_id and server_id from flow
             flow = mcp_service.oauth_service.flow_manager.get_flow(flow_id)
             if flow and flow.user_id:
                 user_id = flow.user_id
-                logger.debug(f"[MCP OAuth] Attempting to reconnect {server_name} with new OAuth tokens")
+                server_id = flow.server_id  # Extract server_id from flow
+                logger.debug(f"[MCP OAuth] Attempting to reconnect {server_name} (server_id: {server_id}) with new OAuth tokens")
 
                 # Create user connection with CONNECTED state
                 await mcp_service.connection_service.create_user_connection(
                     user_id=user_id,
-                    server_name=server_name,
+                    server_id=server_id,  # Use server_id instead of server_name
                     initial_state=ConnectionState.CONNECTED,
                     details={
                         "oauth_completed": True,
@@ -138,7 +139,7 @@ async def oauth_callback(
                         "created_at": time.time()
                     }
                 )
-                logger.info(f"[MCP OAuth] Successfully reconnected {server_name} for user {user_id}")
+                logger.info(f"[MCP OAuth] Successfully reconnected {server_name} (server_id: {server_id}) for user {user_id}")
 
                 # Clear any reconnection attempts
                 try:
@@ -146,8 +147,8 @@ async def oauth_callback(
                         mcp_service=mcp_service,
                         oauth_service=mcp_service.oauth_service
                     )
-                    reconnection_manager.clear_reconnection(user_id, server_name)
-                    logger.debug(f"[MCP OAuth] Cleared reconnection attempts for {server_name}")
+                    reconnection_manager.clear_reconnection(user_id, server_id)  # Use server_id instead of server_name
+                    logger.debug(f"[MCP OAuth] Cleared reconnection attempts for {server_name} (server_id: {server_id})")
                 except Exception as e:
                     logger.error(f"[MCP OAuth] Could not clear reconnection (manager not initialized): {e}")
 
