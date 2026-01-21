@@ -1877,9 +1877,10 @@ async def oauth2_callback(
 
                     if resp.status_code == 200:
                         user_id = resp.json().get("user_id")
+                        role = resp.json().get("role")
                         logger.info(f"Fetched user_id {user_id} from registry for {email}")
                     else:
-                        logger.info(f"Failed to fetch user_id from registry: {resp.status_code} {resp.text}")
+                        logger.info(f"Failed to fetch user info from registry: {resp.status_code} {resp.text}")
             except Exception as e:
                 logger.info(f"Error fetching user_id from registry: {e}")
 
@@ -1890,7 +1891,8 @@ async def oauth2_callback(
             "groups": mapped_user.get("groups", []),
             "provider": provider,
             "auth_method": "oauth2",
-            "user_id": user_id
+            "user_id": user_id,
+            "role": role
         }
 
         # Create session cookie compatible with registry

@@ -305,11 +305,13 @@ async def create_server(
 ):
     """Create a new server"""
     try:
-        user_id = user_context.get("username")
+        user_id = user_context.get("user_id")
+        username = user_context.get("username")
         
         server = await server_service_v1.create_server(
             data=data,
             user_id=user_id,
+            username=username
         )
 
         if not server:  
@@ -326,7 +328,7 @@ async def create_server(
         if not acl_entry: 
             # Transaction rollback will be implemented here
             await server.delete()
-            raise ValueError("Failed to create ACL entry for server: {server.id}")
+            raise ValueError("Failed to create ACL entry for server: {server.id}. Rolling back server creation")
         
         logger.info(f"Granted user {user_id} owner permissions for server Id {server.id}")
         return convert_to_create_response(server)

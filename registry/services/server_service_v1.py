@@ -296,7 +296,7 @@ class ServerServiceV1:
         page: int = 1,
         per_page: int = 20,
         user_id: Optional[str] = None,
-        acl_permissions_map: Dict[str, Any] = [],
+        acl_permissions_map: Dict[str, Any] = {},
     ) -> Tuple[List[MCPServerDocument], int]:
         """
         List servers with filtering and pagination.
@@ -395,6 +395,7 @@ class ServerServiceV1:
         self,
         data: ServerCreateRequest,
         user_id: str,
+        username: str
     ) -> MCPServerDocument:
         """
         Create a new server.
@@ -438,12 +439,13 @@ class ServerServiceV1:
         num_tools = len(tool_functions) if tool_functions else 0
         
         # Get or create author user reference
-        author = await IUser.find_one({"id": user_id})
+        author = await IUser.find_one({"_id": PydanticObjectId(user_id)})
+
         if not author:
             # Create a minimal user record if not exists
             now = _get_current_utc_time()
             # Generate unique email to avoid conflicts
-            email = f"{user_id}@local.mcp-gateway.internal"
+            email = f"{username}@local.mcp-gateway.internal"
             
             # Check if email already exists
             existing_user = await IUser.find_one({"email": email})
@@ -453,7 +455,7 @@ class ServerServiceV1:
                 # Create user without OAuth ID fields to avoid unique index conflicts
                 # Use model_dump with exclude_none to prevent OAuth fields from being included
                 user_data = {
-                    "username": user_id,
+                    "username": username,
                     "email": email,
                     "emailVerified": False,
                     "role": "USER",

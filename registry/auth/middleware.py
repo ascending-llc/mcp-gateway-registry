@@ -138,11 +138,11 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             raise AuthenticationError("Basic authentication required")
 
         if self._match_path(path, self.authenticated_paths_compiled):
-            # Try JWT first, then fall back to session auth
-            user_context = self._try_jwt_auth(request)
+            # Try session first, then fall back to jwt auth
+            user_context = self._try_session_auth(request)
             if user_context:
                 return user_context
-            user_context = self._try_session_auth(request)
+            user_context = self._try_jwt_auth(request)
             if user_context:
                 return user_context
             raise AuthenticationError("JWT or session authentication required")

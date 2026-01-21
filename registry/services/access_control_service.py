@@ -117,7 +117,7 @@ class ACLService:
 	async def get_permissions_map_for_user_id(
 		self,
 		principal_type: str,
-		principal_id: PydanticObjectId,
+		principal_id: str,
 	) -> dict:
 		"""
 		Returns a dict mapping resource types to resourceIds, each with a dict of role names (VIEWER, EDITOR, MANAGER, OWNER) set to True/False based on permBits.
@@ -140,18 +140,15 @@ class ACLService:
 				"principalType": {"$in": [principal_type, PrincipalType.PUBLIC.value]},
 				"resourceType": {"$in": resource_types},
 				"$or": [
-					{"principalId": {"userId": principal_id}},
+					{"principalId": {"userId": PydanticObjectId(principal_id)}},
 					{"principalId": None}
 				]
 			}
 			acl_entries = await IAclEntry.find(query).to_list()
-
-			result = {}
+			result = {rt.value: {} for rt in ResourceType}
 			for entry in acl_entries:
 				rtype = entry.resourceType
 				rid = str(entry.resourceId)
-				if rtype not in result:
-					result[rtype] = {}
 				result[rtype][rid] = {
 					"VIEW": entry.permBits >= PermissionBits.VIEW,
 					"EDIT": entry.permBits >= PermissionBits.EDIT,

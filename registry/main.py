@@ -276,6 +276,7 @@ async def get_current_user(user_context: CurrentUser):
         user_obj = await IUser.find_one({"email": user_context["username"]})
         if user_obj:
             user_id = user_obj.id
+            role = user_obj.role
     except Exception as e:
         logger.info(f"Error fetching user for email {user_context["username"]}: {e}")
 
@@ -287,7 +288,8 @@ async def get_current_user(user_context: CurrentUser):
         "groups": user_context.get("groups", []),
         "can_modify_servers": user_context.get("can_modify_servers", False),
         "is_admin": user_context.get("is_admin", False),
-        "user_id": str(user_id)
+        "user_id": str(user_id),
+        "role": role
     }
 
 

@@ -55,18 +55,12 @@ async def get_user_acl_permissions(request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Is not authenticated")
     
-    username = request.state.user.get('username')
-    if not username:
-        logger.warning('No username found in request state')
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="no username found")
 
     try:
-        user_obj = await IUser.find_one({"email": username})
-        if not user_obj:
-            logger.warning(f'User {username} not found in database')
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="user not found")
-
-        user_id = getattr(user_obj, "id")
+        # print(f"request.state.user: ${request.state.user}")
+        user_id = request.state.user.get('user_id')
+        role = request.state.user.get('role')
+        username = request.state.user.get('username')
         acl_permission_map = await acl_service.get_permissions_map_for_user_id(
             principal_type=PrincipalType.USER.value, 
             principal_id=user_id,
@@ -75,7 +69,7 @@ async def get_user_acl_permissions(request: Request) -> Dict[str, Any]:
             **request.state.user,
             "user_id": user_id,
             "acl_permission_map": acl_permission_map,
-            "role": getattr(user_obj, "role")
+            "role": role
             #  other acl fields can be added here
         }
     except Exception as e:

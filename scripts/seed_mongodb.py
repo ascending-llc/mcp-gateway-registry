@@ -628,7 +628,6 @@ async def seed_acl_entries(users, servers):
                 "principalId": {"userId": str(user.id)},
                 "resourceType": ResourceType.MCPSERVER,
                 "resourceId": server.id,
-                "updatedAt": datetime.now(timezone.utc)
             })
             if existing_acl:
                 print(f"  ACL entry for user {user} and server {server.serverName} already exists, skipping...")
