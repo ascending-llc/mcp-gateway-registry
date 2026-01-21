@@ -12,8 +12,8 @@ const getServerStatusById: (id: string) => Promise<TYPE.GET_SERVER_STATUS_BY_ID_
 const getOauthInitiate: (id: string) => Promise<TYPE.GET_OAUTH_INITIATE_RESPONSE> = async id =>
   await Request.get(API.getOauthInitiate(id));
 
-const getSOauthReinit: (id: string) => Promise<TYPE.GET_SERVER_AUTH_URL_RESPONSE> = async id =>
-  await Request.post(API.getSOauthReinit(id));
+const getOauthReinit: (id: string) => Promise<TYPE.GET_SERVER_AUTH_URL_RESPONSE> = async id =>
+  await Request.post(API.getOauthReinit(id));
 
 const cancelAuth: (id: string) => Promise<TYPE.CANCEL_AUTH_RESPONSE> = async id =>
   await Request.post(API.cancelAuth(id));
@@ -22,6 +22,6 @@ export default {
   getServerStatus,
   getServerStatusById,
   getOauthInitiate,
-  getSOauthReinit,
+  getOauthReinit,
   cancelAuth,
 };

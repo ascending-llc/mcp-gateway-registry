@@ -62,7 +62,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
     try {
       setLoading(true);
       if (isAuthenticated) {
-        const result = await SERVICES.MCP.getSOauthReinit(serverId);
+        const result = await SERVICES.MCP.getOauthReinit(serverId);
         if (result.success) {
           onShowToast?.(result?.message || 'Server reinitialized successfully', 'success');
           setShowApiKeyDialog(false);
