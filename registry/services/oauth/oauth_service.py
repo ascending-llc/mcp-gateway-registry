@@ -244,42 +244,53 @@ class MCPOAuthService:
     async def refresh_tokens(
             self,
             user_id: str,
-            server_name: str
+            server_id: str
     ) -> Tuple[bool, Optional[str]]:
         """
         Refresh OAuth tokens
-        
-        Notes: MCPOAuthHandler.refreshOAuthTokens()
         """
         try:
-            # Get current tokens
-            tokens = await self.get_tokens(user_id, server_name)
-            if not tokens or not tokens.refresh_token:
+            logger.info(f"[OAuth] Refreshing tokens for user={user_id}, server={server_id}")
+
+            # 1. Get server OAuth config
+            mcp_server = await server_service.get_server_by_id(server_id)
+            if not mcp_server:
+                return False, f"Server '{server_id}' not found"
+
+            server_name = mcp_server.serverName
+            # 2. Get current tokens
+            current_tokens = await token_service.get_oauth_tokens(user_id, server_name)
+            if not current_tokens or not current_tokens.refresh_token:
                 return False, "No refresh token available"
 
-            # Get server configuration from MongoDB
-            mcp_server = await server_service.get_server_by_id(server_name)
-            if not mcp_server:
-                return False, f"Server '{server_name}' not found"
-            
-            # Get OAuth config from oauth
-            authentication = mcp_server.config.get("oauth")
-            if not authentication:
-                return False, f"Server '{server_name}' OAuth configuration not found"
-            
-            # OAuth configuration is directly under oauth
-            oauth_config = authentication
+            oauth_config = mcp_server.config.get("oauth")
+            if not oauth_config:
+                return False, f"Server '{server_id}' OAuth configuration not found"
 
-            # Refresh tokens
+            # Decrypt OAuth config
+            oauth_config = decrypt_auth_fields(oauth_config)
+
+            # 3. Refresh tokens
             new_tokens = await self.http_client.refresh_tokens(
                 oauth_config=oauth_config,
-                refresh_token=tokens.refresh_token
+                refresh_token=current_tokens.refresh_token
             )
 
             if not new_tokens:
-                return False, "Failed to refresh tokens"
+                return False, "Token refresh failed"
 
-            # Persist refreshed tokens to database with metadata
+            # Log refresh_token rotation
+            has_new_refresh = new_tokens.refresh_token is not None
+            logger.info(f"[OAuth] Token refresh successful for {server_id}, "
+                f"refresh_token_rotated={has_new_refresh}")
+
+            if not has_new_refresh:
+                logger.debug(
+                    f"[OAuth] OAuth server did not rotate refresh_token for {server_id} "
+                    f"(normal for non-rotating providers)"
+                )
+
+            # 4. Store new tokens (handles rotation automatically)
             auth_url = oauth_config.get("authorization_url")
             scopes = parse_scope(oauth_config.get("scope"), default=[])
             

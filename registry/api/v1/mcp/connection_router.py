@@ -10,6 +10,7 @@ from registry.services.oauth.connection_status_service import (
     get_servers_connection_status,
     get_single_server_connection_status
 )
+from services.oauth.token_service import token_service
 
 router = APIRouter(prefix="/v1/mcp", tags=["connection"])
 
@@ -32,20 +33,39 @@ async def reinitialize_server(
     """
     try:
         user_id = current_user.get('user_id')
-        logger.info(f"User {user_id} reinitializing server: {server_id}")
+        logger.info(f"[Reinitialize] User {user_id} reinitializing server: {server_id}")
 
         # 1. Disconnect existing connection
-        disconnected = await mcp_service.connection_service.disconnect_user_connection(user_id, server_id)
+        disconnected = await mcp_service.connection_service.disconnect_user_connection(
+            user_id, server_id
+        )
         if disconnected:
-            logger.info(f"Disconnected {server_id} for user {user_id}")
+            logger.info(f"[Reinitialize] Disconnected {server_id} for user {user_id}")
 
         server_docs = await get_service_config(server_id)
 
-        # 2. Check if OAuth tokens exist for reconnection
+        # 2. Check if access_token is expired
+        is_expired = await token_service.is_access_token_expired(user_id, server_id)
+        has_refresh = await token_service.has_refresh_token(user_id, server_id)
+
+        # 3. If expired but has refresh_token, try auto-refresh
+        if is_expired and has_refresh:
+            logger.info(f"[Reinitialize] Access token expired for {server_id}, attempting refresh")
+            success, error = await mcp_service.oauth_service.refresh_tokens(user_id, server_id)
+
+            if success:
+                logger.info(f"[Reinitialize] Token refreshed successfully for {server_id}")
+                is_expired = False  # Token is now valid
+            else:
+                logger.warn(f"[Reinitialize] Token refresh failed for {server_id}: {error}")
+                # Continue, will check if we need OAuth below
+
+        # 4. Try to get valid tokens
         tokens = await mcp_service.oauth_service.get_tokens(user_id, server_id)
 
-        if tokens:
-            # Has tokens, create new connection
+        if tokens and not is_expired:
+            # Has valid tokens, create connection
+            logger.info(f"[Reinitialize] Valid tokens available for {server_id}, creating connection")
             await mcp_service.connection_service.create_user_connection(
                 user_id=user_id,
                 server_id=server_id,
@@ -63,7 +83,8 @@ async def reinitialize_server(
                 }
             )
         else:
-            # No tokens - need OAuth flow
+            # 5. No valid tokens - need OAuth flow
+            logger.info(f"[Reinitialize] No valid tokens for {server_id}, initiating OAuth")
             flow_id, auth_url, error = await mcp_service.oauth_service.initiate_oauth_flow(
                 user_id, server_id
             )
@@ -75,7 +96,7 @@ async def reinitialize_server(
                         "success": False,
                         "message": f"Failed to initiate OAuth: {error}",
                         "server_id": server_id,
-                        "requires_oauth": server_docs.config.get("requires_oauth", False)
+                        "requires_oauth": server_docs.config.get("requiresOAuth", False)
                     }
                 )
 
@@ -85,15 +106,16 @@ async def reinitialize_server(
                     "success": True,
                     "message": "OAuth authorization required",
                     "server_id": server_id,
-                    "requires_oauth": server_docs.config.get("requires_oauth", False),
+                    "requires_oauth": server_docs.config.get("requiresOAuth", False),
                     "oauth_url": auth_url
                 }
             )
 
     except Exception as e:
-        logger.error(f"Unexpected error for {server_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"Internal server error: {str(e)}")
+        logger.error(f"[Reinitialize] Unexpected error for {server_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error: {str(e)}")
 
 
 @DeprecationWarning
