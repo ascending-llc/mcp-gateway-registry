@@ -13,7 +13,7 @@ from registry.utils.log import logger
 class MCPConnection(Connection):
     """MCP connection"""
 
-    def is_stale(self, max_idle_time: Optional[float] = None) -> bool:
+    def is_stale(self, max_idle_time: Optional[float] = 900) -> bool:
         """
         Check if connection is stale based on idle time.
 
@@ -23,10 +23,6 @@ class MCPConnection(Connection):
 
         A connection is stale if it hasn't been active for longer than max_idle_time.
         """
-        # Use provided max_idle_time or default to 1 hour
-        if max_idle_time is None:
-            max_idle_time = 3600
-        
         current_time = time.time()
         idle_time = current_time - self.last_activity
         
@@ -41,7 +37,7 @@ class MCPConnectionService(ConnectionManager):
 
     def __init__(self):
         self.app_connections: Dict[str, MCPConnection] = {}
-        self.user_connections: Dict[str, Dict[str, MCPConnection]] = {}  # user_id -> {server_name -> connection}
+        self.user_connections: Dict[str, Dict[str, MCPConnection]] = {}  # user_id -> {server_id -> connection}
         self._lock = asyncio.Lock()
         self._max_error_count = 3  # Maximum error count
 
@@ -61,7 +57,7 @@ class MCPConnectionService(ConnectionManager):
                 for server in servers:
                     if not server.config.get("requiresOAuth"):
                         self.app_connections[server.serverName] = MCPConnection(
-                            server_name=server.serverName,
+                            server_id=server.server_id,
                             connection_state=ConnectionState.CONNECTED,
                             details={
                                 "type": "app_connection",
@@ -88,30 +84,30 @@ class MCPConnectionService(ConnectionManager):
     async def get_connection(
             self,
             user_id: str,
-            server_name: str
+            server_id: str
     ) -> Optional[MCPConnection]:
         """Get connection (application-level or user-level)"""
         # First check application-level connections
-        if server_name in self.app_connections:
-            return self.app_connections[server_name]
+        if server_id in self.app_connections:
+            return self.app_connections[server_id]
 
         # Then check user-level connections
         user_conns = self.get_user_connections(user_id)
-        if server_name in user_conns:
-            return user_conns[server_name]
+        if server_id in user_conns:
+            return user_conns[server_id]
 
         return None
 
     async def update_connection_state(
             self,
             user_id: str,
-            server_name: str,
+            server_id: str,
             state: ConnectionState,
             details: Optional[Dict[str, Any]] = None
     ) -> None:
         """Update connection state"""
         async with self._lock:
-            connection = await self.get_connection(user_id, server_name)
+            connection = await self.get_connection(user_id, server_id)
             if connection:
                 connection.connection_state = state
                 connection.last_activity = time.time()
@@ -125,7 +121,7 @@ class MCPConnectionService(ConnectionManager):
                     if connection.error_count >= self._max_error_count:
                         connection.connection_state = ConnectionState.DISCONNECTED
                         logger.warning(
-                            f"Connection {server_name} for user {user_id} "
+                            f"Connection {server_id} for user {user_id} "
                             f"disconnected due to {connection.error_count} errors"
                         )
                 elif state == ConnectionState.CONNECTED:
@@ -134,7 +130,7 @@ class MCPConnectionService(ConnectionManager):
     async def create_user_connection(
             self,
             user_id: str,
-            server_name: str,
+            server_id: str,
             initial_state: ConnectionState = ConnectionState.CONNECTING,
             details: Optional[Dict[str, Any]] = None
     ) -> MCPConnection:
@@ -144,20 +140,20 @@ class MCPConnectionService(ConnectionManager):
                 self.user_connections[user_id] = {}
 
             connection = MCPConnection(
-                server_name=server_name,
+                server_id=server_id,
                 connection_state=initial_state,
                 details=details or {}
             )
-            self.user_connections[user_id][server_name] = connection
-            logger.info(f"Created user connection: {user_id}/{server_name}")
+            self.user_connections[user_id][server_id] = connection
+            logger.info(f"Created user connection: {user_id}/{server_id}")
             return connection
 
-    async def disconnect_user_connection(self, user_id: str, server_name: str) -> bool:
+    async def disconnect_user_connection(self, user_id: str, server_id: str) -> bool:
         """Disconnect user connection"""
         async with self._lock:
-            if user_id in self.user_connections and server_name in self.user_connections[user_id]:
-                del self.user_connections[user_id][server_name]
-                logger.info(f"Disconnected user connection: {user_id}/{server_name}")
+            if user_id in self.user_connections and server_id in self.user_connections[user_id]:
+                del self.user_connections[user_id][server_id]
+                logger.info(f"Disconnected user connection: {user_id}/{server_id}")
 
                 # If user has no other connections, cleanup user entry
                 if not self.user_connections[user_id]:
@@ -184,14 +180,14 @@ class MCPConnectionService(ConnectionManager):
 
             # Cleanup user connections
             for user_id in list(self.user_connections.keys()):
-                for server_name in list(self.user_connections[user_id].keys()):
-                    connection = self.user_connections[user_id][server_name]
+                for server_id in list(self.user_connections[user_id].keys()):
+                    connection = self.user_connections[user_id][server_id]
 
                     # Check if connection is stale
                     if current_time - connection.last_activity > max_age_seconds:
-                        del self.user_connections[user_id][server_name]
+                        del self.user_connections[user_id][server_id]
                         cleaned_count += 1
-                        logger.debug(f"Cleaned stale connection: {user_id}/{server_name}")
+                        logger.debug(f"Cleaned stale connection: {user_id}/{server_id}")
 
                 # If user has no connections, cleanup user entry
                 if not self.user_connections[user_id]:

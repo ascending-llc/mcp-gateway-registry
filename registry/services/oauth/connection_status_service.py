@@ -43,25 +43,19 @@ async def get_servers_connection_status(
     connection_status = {}
     for server in servers:
         server_name = server.serverName
+        server_id = str(server.id)
 
-        # Determine if it is an OAuth server
         requires_oauth = server.config.get("requiresOAuth", False)
-
-        # Calculate idle_timeout
-        if requires_oauth:
-            idle_timeout_seconds = 3600  # Default OAuth connection timeout: 1 hour
-        else:
-            timeout_ms = server.config.get("timeout", 60000)  # Default: 60 seconds
-            idle_timeout_seconds = timeout_ms / 1000.0
-
+        idle_timeout_seconds = server.config.get("idleTimeout", 900)
         try:
             # Retrieve the connection
-            connection = app_connections.get(server_name) or user_connections.get(server_name)
+            connection = app_connections.get(server_id) or user_connections.get(server_id)
 
             # Build the context
             context = ConnectionStateContext(
                 user_id=user_id,
                 server_name=server_name,
+                server_id=server_id,
                 server_config=server.config,
                 connection=connection,
                 is_oauth_server=requires_oauth,
@@ -70,7 +64,7 @@ async def get_servers_connection_status(
 
             # Resolve the status
             server_status = await status_resolver.resolve_status(context)
-            connection_status[server_name] = server_status
+            connection_status[server_id] = server_status
 
         except Exception as e:
             logger.error(f"Failed to retrieve connection status for {server_name}: {e}", exc_info=True)
@@ -85,15 +79,15 @@ async def get_servers_connection_status(
 
 async def get_single_server_connection_status(
         user_id: str,
-        server_name: str,
+        server_id: str,
         mcp_service: Optional[MCPService] = None
 ) -> Dict[str, Any]:
     """
     Get connection status for a single server.
     """
-    server_docs = await server_service_v1.get_server_by_name(server_name)
+    server_docs = await server_service_v1.get_server_by_id(server_id)
     if not server_docs or not server_docs.config:
-        raise ValueError(f"Server '{server_name}' not found")
+        raise ValueError(f"Server '{server_id}' not found")
 
     if mcp_service is None:
         mcp_service = await get_mcp_service()
@@ -123,14 +117,15 @@ async def get_single_server_connection_status(
         timeout_ms = server_docs.config.get("timeout", 60000)  # Default: 60 seconds
         idle_timeout_seconds = timeout_ms / 1000.0
 
-    connection = app_connections.get(server_name) or user_connections.get(server_name)
+    connection = app_connections.get(server_id) or user_connections.get(server_id)
     context = ConnectionStateContext(
         user_id=user_id,
-        server_name=server_name,
+        server_name=server_docs.serverName,
+        server_id=server_id,
         server_config=server_docs.config,
         connection=connection,
         is_oauth_server=requires_oauth,
-        idle_timeout=idle_timeout_seconds
+        idle_timeout=idle_timeout_seconds,
     )
     server_status = await status_resolver.resolve_status(context)
     return server_status

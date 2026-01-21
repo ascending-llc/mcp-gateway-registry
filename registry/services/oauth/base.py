@@ -12,7 +12,7 @@ from registry.schemas.enums import ConnectionState
 @dataclass
 class Connection(ABC):
     """Basic connection interface"""
-    server_name: str
+    server_id: str
     connection_state: ConnectionState
     last_activity: float = field(default_factory=time.time)
     error_count: int = 0
@@ -43,7 +43,7 @@ class ConnectionManager(ABC):
     async def get_connection(
             self,
             user_id: str,
-            server_name: str
+            server_id: str
     ) -> Optional[Connection]:
         pass
 
@@ -51,7 +51,7 @@ class ConnectionManager(ABC):
     async def update_connection_state(
             self,
             user_id: str,
-            server_name: str,
+            server_id: str,
             state: ConnectionState,
             details: Optional[Dict[str, Any]] = None
     ) -> None:
@@ -62,7 +62,7 @@ class ConnectionManager(ABC):
     async def create_user_connection(
             self,
             user_id: str,
-            server_name: str,
+            server_id: str,
             initial_state: ConnectionState = ConnectionState.CONNECTING,
             details: Optional[Dict[str, Any]] = None
     ) -> Connection:
@@ -73,7 +73,7 @@ class ConnectionManager(ABC):
     async def disconnect_user_connection(
             self,
             user_id: str,
-            server_name: str
+            server_id: str
     ) -> bool:
         """Disconnect user connection"""
         pass
@@ -89,6 +89,7 @@ class ConnectionStateContext:
     """Connection status context - used for status parsing"""
     user_id: str
     server_name: str
+    server_id: str
     server_config: Dict[str, Any]
     connection: Optional[Connection] = None
     is_oauth_server: bool = False

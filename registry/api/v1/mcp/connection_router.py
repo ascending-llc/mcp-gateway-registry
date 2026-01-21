@@ -14,9 +14,9 @@ from registry.services.oauth.connection_status_service import (
 router = APIRouter(prefix="/v1/mcp", tags=["connection"])
 
 
-@router.post("/{server_name}/reinitialize")
+@router.post("/{server_id}/reinitialize")
 async def reinitialize_server(
-        server_name: str,
+        server_id: str,
         current_user: CurrentUser,
         mcp_service: MCPService = Depends(get_mcp_service)
 ) -> JSONResponse:
@@ -32,23 +32,23 @@ async def reinitialize_server(
     """
     try:
         user_id = current_user.get('user_id')
-        logger.info(f"User {user_id} reinitializing server: {server_name}")
+        logger.info(f"User {user_id} reinitializing server: {server_id}")
 
         # 1. Disconnect existing connection
-        disconnected = await mcp_service.connection_service.disconnect_user_connection(user_id, server_name)
+        disconnected = await mcp_service.connection_service.disconnect_user_connection(user_id, server_id)
         if disconnected:
-            logger.info(f"Disconnected {server_name} for user {user_id}")
+            logger.info(f"Disconnected {server_id} for user {user_id}")
 
-        server_docs = await get_service_config(server_name)
+        server_docs = await get_service_config(server_id)
 
         # 2. Check if OAuth tokens exist for reconnection
-        tokens = await mcp_service.oauth_service.get_tokens(user_id, server_name)
+        tokens = await mcp_service.oauth_service.get_tokens(user_id, server_id)
 
         if tokens:
             # Has tokens, create new connection
             await mcp_service.connection_service.create_user_connection(
                 user_id=user_id,
-                server_name=server_name,
+                server_id=server_id,
                 initial_state=ConnectionState.CONNECTED,
                 details={"reinitialized": True, "has_oauth": True}
             )
@@ -57,15 +57,15 @@ async def reinitialize_server(
                 status_code=status.HTTP_200_OK,
                 content={
                     "success": True,
-                    "message": f"Server '{server_name}' reinitialized successfully",
-                    "server_name": server_name,
-                    "requires_oauth": server_docs.config.get("requires_oauth", False)
+                    "message": f"Server '{server_id}' reinitialized successfully",
+                    "server_id": server_id,
+                    "requires_oauth": server_docs.config.get('requiresOAuth', False)
                 }
             )
         else:
             # No tokens - need OAuth flow
             flow_id, auth_url, error = await mcp_service.oauth_service.initiate_oauth_flow(
-                user_id, server_name
+                user_id, server_id
             )
 
             if error:
@@ -74,7 +74,7 @@ async def reinitialize_server(
                     content={
                         "success": False,
                         "message": f"Failed to initiate OAuth: {error}",
-                        "server_name": server_name,
+                        "server_id": server_id,
                         "requires_oauth": server_docs.config.get("requires_oauth", False)
                     }
                 )
@@ -84,14 +84,14 @@ async def reinitialize_server(
                 content={
                     "success": True,
                     "message": "OAuth authorization required",
-                    "server_name": server_name,
+                    "server_id": server_id,
                     "requires_oauth": server_docs.config.get("requires_oauth", False),
                     "oauth_url": auth_url
                 }
             )
 
     except Exception as e:
-        logger.error(f"Unexpected error for {server_name}: {e}", exc_info=True)
+        logger.error(f"Unexpected error for {server_id}: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Internal server error: {str(e)}")
 
@@ -159,7 +159,7 @@ async def get_server_connection_status(
 
         server_status = await get_single_server_connection_status(
             user_id=user_id,
-            server_name=server.serverName,
+            server_id=server.id,
             mcp_service=mcp_service
         )
         return {
@@ -175,6 +175,7 @@ async def get_server_connection_status(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Failed to get connection status for {server_id}")
 
+@DeprecationWarning
 @router.get("/{server_name}/auth-values")
 async def check_auth_values(
         server_name: str,
@@ -216,15 +217,15 @@ async def check_auth_values(
                             detail=f"Failed to check auth values for {server_name}")
 
 
-async def get_service_config(server_name):
+async def get_service_config(server_id):
     """
     Get service config for a specific MCP server
     """
-    server_docs = await server_service_v1.get_server_by_name(server_name)
+    server_docs = await server_service_v1.get_server_by_id(server_id)
     if not server_docs:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail=f"Server'{server_name}'config  not found")
+                            detail=f"Server'{server_id}'config  not found")
     if not server_docs.config:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail=f"Server'{server_name}' not found")
+                            detail=f"Server'{server_id}' not found")
     return server_docs

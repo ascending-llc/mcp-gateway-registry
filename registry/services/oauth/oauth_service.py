@@ -4,9 +4,10 @@ from registry.models.oauth_models import OAuthTokens
 from registry.schemas.enums import OAuthFlowStatus
 from registry.utils.utils import generate_code_verifier, generate_code_challenge
 from registry.services.server_service_v1 import server_service_v1 as server_service
-from registry.services.v1.token_service import token_service
+from services.oauth.token_service import token_service
 
 from registry.utils.log import logger
+from utils.crypto_utils import decrypt_auth_fields
 
 
 class MCPOAuthService:
@@ -24,7 +25,7 @@ class MCPOAuthService:
     async def initiate_oauth_flow(
             self,
             user_id: str,
-            server_name: str
+            server_id: str
     ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """
         Initialize OAuth flow
@@ -32,24 +33,24 @@ class MCPOAuthService:
         Notes: MCPOAuthHandler.initiateOAuthFlow()
         """
         try:
-            logger.info(f"Starting OAuth flow for user={user_id}, server={server_name}")
+            logger.info(f"Starting OAuth flow for user={user_id}, server={server_id}")
 
-            mcp_server = await server_service.get_server_by_name(server_name)
+            mcp_server = await server_service.get_server_by_id(server_id)
             if not mcp_server:
                 return None, None, "Server not found"
 
             # Check if server requires OAuth
             if not mcp_server.config.get("requiresOAuth"):
-                return None, None, f"Server '{server_name}' does not require OAuth"
+                return None, None, f"Server '{server_id}' does not require OAuth"
 
             # Get OAuth config from authentication
-            authentication = mcp_server.config.get("oauth")
-            if not authentication:
-                return None, None, f"Server '{server_name}' authentication configuration not found"
+            oauth_config = mcp_server.config.get("oauth")
+            if not oauth_config:
+                return None, None, f"Server '{server_id}' authentication configuration not found"
             
             # OAuth configuration is directly under authentication
-            oauth_config = authentication
-            
+            oauth_config = decrypt_auth_fields(oauth_config)
+
             # Debug logs: verify OAuth configuration
             logger.debug(f"OAuth config keys: {list(oauth_config.keys())}")
             logger.debug(f"authorization_url: {oauth_config.get('authorization_url')}")
@@ -60,12 +61,13 @@ class MCPOAuthService:
             # Generate PKCE parameters
             code_verifier = generate_code_verifier()
             code_challenge = generate_code_challenge(code_verifier)
-            flow_id = self.flow_manager.generate_flow_id(user_id, server_name)
+            flow_id = self.flow_manager.generate_flow_id(user_id, server_id)
 
             # Create OAuth flow metadata (using flow_id as state)
             authorization_url = oauth_config.get("authorization_url")
             flow_metadata = self.flow_manager.create_flow_metadata(
-                server_name=server_name,
+                server_id=server_id,
+                server_name=mcp_server.serverName,
                 user_id=user_id,
                 authorization_url=authorization_url,
                 code_verifier=code_verifier,
@@ -76,7 +78,7 @@ class MCPOAuthService:
             # Create OAuth flow
             flow = self.flow_manager.create_flow(
                 flow_id=flow_id,
-                server_name=server_name,
+                server_id=server_id,
                 user_id=user_id,
                 code_verifier=code_verifier,
                 metadata=flow_metadata
@@ -89,7 +91,7 @@ class MCPOAuthService:
                 flow_id=flow_id
             )
 
-            logger.info(f"Initiated OAuth flow: {flow_id} for {user_id}/{server_name}")
+            logger.info(f"Initiated OAuth flow: {flow_id} for {user_id}/{server_id}")
             return flow_id, auth_url, None
 
         except Exception as e:
@@ -167,11 +169,11 @@ class MCPOAuthService:
 
             await token_service.store_oauth_tokens(
                 user_id=flow.user_id,
-                service_name=flow.server_name,
+                service_name=flow.server_id,
                 tokens=tokens,
                 metadata=metadata
             )
-            logger.info(f"Persisted OAuth tokens to database for {flow.user_id}/{flow.server_name}")
+            logger.info(f"Persisted OAuth tokens to database for {flow.user_id}/{flow.server_id}")
 
             logger.info(f"Completed OAuth flow: {flow_id}")
             return True, None
@@ -219,20 +221,20 @@ class MCPOAuthService:
             "completed": flow.status == OAuthFlowStatus.COMPLETED,
             "failed": flow.status == OAuthFlowStatus.FAILED,
             "error": flow.error,
-            "server_name": flow.server_name,
+            "server_id": flow.server_id,
             "user_id": flow.user_id,
             "created_at": flow.created_at,
             "completed_at": flow.completed_at
         }
 
-    async def cancel_oauth_flow(self, user_id: str, server_name: str) -> Tuple[bool, Optional[str]]:
+    async def cancel_oauth_flow(self, user_id: str, server_id: str) -> Tuple[bool, Optional[str]]:
         """Cancel OAuth flow"""
         try:
-            success = self.flow_manager.cancel_user_flow(user_id, server_name)
+            success = self.flow_manager.cancel_user_flow(user_id, server_id)
             if not success:
                 return True, "No active OAuth flow to cancel"
 
-            logger.info(f"Cancelled OAuth flow for {user_id}/{server_name}")
+            logger.info(f"Cancelled OAuth flow for {user_id}/{server_id}")
             return True, None
 
         except Exception as e:
@@ -256,7 +258,7 @@ class MCPOAuthService:
                 return False, "No refresh token available"
 
             # Get server configuration from MongoDB
-            mcp_server = await server_service.get_server_by_name(server_name)
+            mcp_server = await server_service.get_server_by_id(server_name)
             if not mcp_server:
                 return False, f"Server '{server_name}' not found"
             

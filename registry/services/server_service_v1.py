@@ -13,7 +13,6 @@ ODM Schema:
 
 import logging
 import httpx
-import asyncio
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
 from beanie import PydanticObjectId
@@ -1036,7 +1035,7 @@ class ServerServiceV1:
 
             # Add OAuth token to headers if server requires OAuth
             if has_oauth and user_id:
-                from registry.services.v1.token_service import token_service
+                from services.oauth.token_service import token_service
 
                 oauth_tokens = await token_service.get_oauth_tokens(user_id, server.serverName)
 
@@ -1122,8 +1121,7 @@ class ServerServiceV1:
             If successful, returns (tool_list, None)
             If failed, returns (None, error_message)
         """
-        from registry.services.v1.token_service import token_service
-        from registry.services.oauth.oauth_service import MCPOAuthService
+        from services.oauth.token_service import token_service
         from registry.auth.oauth import OAuthHttpClient
 
         config = server.config or {}
@@ -1331,12 +1329,6 @@ class ServerServiceV1:
             "response_time_ms": None,  # We don't track response time for MCP connections
         }
 
-    async def get_server_by_name(self, server_name: str, status: str = "active") -> Optional[MCPServerDocument]:
-        """
-        Get server by name.
-        """
-        return await MCPServerDocument.find_one({"serverName": server_name})
-
     async def get_stats(self) -> Dict[str, Any]:
         """
         Get system-wide statistics (Admin only).
@@ -1351,7 +1343,6 @@ class ServerServiceV1:
             Dictionary containing all statistics
         """
         from packages.models._generated.token import Token
-        from packages.models._generated.user import IUser
 
         stats = {}
 

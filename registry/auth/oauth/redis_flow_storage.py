@@ -36,7 +36,7 @@ class RedisFlowStorage:
             # Serialize flow to dictionary
             data = {
                 "flow_id": flow.flow_id,
-                "server_name": flow.server_name,
+                "server_id": flow.server_id,
                 "user_id": flow.user_id,
                 "code_verifier": flow.code_verifier,
                 "state": flow.state,
@@ -95,7 +95,7 @@ class RedisFlowStorage:
             # Reconstruct OAuthFlow
             return OAuthFlow(
                 flow_id=data["flow_id"],
-                server_name=data["server_name"],
+                server_id=data["server_id"],
                 user_id=data["user_id"],
                 code_verifier=data["code_verifier"],
                 state=data["state"],
@@ -123,9 +123,9 @@ class RedisFlowStorage:
             logger.error(f"Failed to delete flow from Redis: {e}")
             return False
 
-    def find_flows(self, user_id: str, server_name: str) -> List[OAuthFlow]:
+    def find_flows(self, user_id: str, server_id: str) -> List[OAuthFlow]:
         """
-        Find flows by user_id and server_name
+        Find flows by user_id and server_id
         """
         try:
             pattern = f"{self.KEY_PREFIX}*"
@@ -134,7 +134,7 @@ class RedisFlowStorage:
             # Scan all flow keys
             for key in self.redis.scan_iter(match=pattern, count=100):
                 flow = self.get_flow(key.decode() if isinstance(key, bytes) else key.replace(self.KEY_PREFIX, ""))
-                if flow and flow.user_id == user_id and flow.server_name == server_name:
+                if flow and flow.user_id == user_id and flow.server_id == server_id:
                     flows.append(flow)
 
             return flows

@@ -51,7 +51,7 @@ class ConnectionStatusResolver:
         if context.is_oauth_server and base_state == ConnectionState.DISCONNECTED.value:
             final_state = await self._apply_oauth_overrides(
                 context.user_id,
-                context.server_name,
+                context.server_id,
                 base_state
             )
 
@@ -109,7 +109,7 @@ class ConnectionStatusResolver:
     async def _apply_oauth_overrides(
             self,
             user_id: str,
-            server_name: str,
+            server_id: str,
             base_state: str
     ) -> str:
         """
@@ -119,7 +119,7 @@ class ConnectionStatusResolver:
 
         Args:
             user_id: User ID
-            server_name: Server name
+            server_id: Server id
             base_state: Base connection state
 
         Returns:
@@ -130,29 +130,29 @@ class ConnectionStatusResolver:
             if self.reconnection_manager:
                 is_reconnecting = self.reconnection_manager.is_reconnecting(
                     user_id,
-                    server_name
+                    server_id
                 )
                 if is_reconnecting:
-                    logger.debug(f"Server is reconnecting: {server_name}")
+                    logger.debug(f"Server is reconnecting: {server_id}")
                     return ConnectionState.CONNECTING.value
 
             # 2. Check flow state
             if self.reconnection_manager:
                 oauth_state = await self.reconnection_manager.get_oauth_state_override(
                     user_id,
-                    server_name
+                    server_id
                 )
 
                 if oauth_state == "failed":
-                    logger.debug(f"OAuth flow failed for: {server_name}")
+                    logger.debug(f"OAuth flow failed for: {server_id}")
                     return ConnectionState.ERROR.value
                 elif oauth_state == "active":
-                    logger.debug(f"OAuth flow active for: {server_name}")
+                    logger.debug(f"OAuth flow active for: {server_id}")
                     return ConnectionState.CONNECTING.value
 
         except Exception as e:
             logger.error(
-                f"Error applying OAuth overrides for {server_name}: {e}",
+                f"Error applying OAuth overrides for {server_id}: {e}",
                 exc_info=True
             )
 
