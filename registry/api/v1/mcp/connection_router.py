@@ -10,7 +10,7 @@ from registry.services.oauth.connection_status_service import (
     get_servers_connection_status,
     get_single_server_connection_status
 )
-from services.oauth.token_service import token_service
+from registry.services.oauth.token_service import token_service
 
 router = APIRouter(prefix="/v1/mcp", tags=["connection"])
 
@@ -45,7 +45,7 @@ async def reinitialize_server(
         server = await get_service_config(server_id)
 
         # 2. Check if access_token is expired
-        is_expired = await token_service.is_access_token_expired(user_id,server.serverName )
+        is_expired = await token_service.is_access_token_expired(user_id, server.serverName)
         has_refresh = await token_service.has_refresh_token(user_id, server.serverName)
 
         # 3. If expired but has refresh_token, try auto-refresh
@@ -61,7 +61,7 @@ async def reinitialize_server(
                 # Continue, will check if we need OAuth below
 
         # 4. Try to get valid tokens
-        tokens = await mcp_service.oauth_service.get_tokens(user_id, server_id)
+        tokens = await mcp_service.oauth_service.get_tokens(user_id, server.serverName)
 
         if tokens and not is_expired:
             # Has valid tokens, create connection
@@ -155,7 +155,6 @@ async def get_all_connection_status(
                             detail="Failed to get connection status")
 
 
-
 @router.get("/connection/status/{server_id}")
 async def get_server_connection_status(
         server_id: str,
@@ -196,6 +195,7 @@ async def get_server_connection_status(
         logger.error(f"Failed to get status for {server_id}: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Failed to get connection status for {server_id}")
+
 
 @DeprecationWarning
 @router.get("/{server_name}/auth-values")

@@ -8,6 +8,7 @@ from registry.schemas.enums import ConnectionState
 from registry.services.server_service_v1 import server_service_v1
 from registry.auth.oauth.flow_state_manager import get_flow_state_manager
 
+
 class OAuthReconnectionManager:
     """
     OAuth Reconnection Manager
@@ -83,8 +84,8 @@ class OAuthReconnectionManager:
             results[server_id] = success
 
         logger.info(f"Reconnection completed for user: {user_id}, "
-            f"successful: {sum(1 for r in results.values() if r)}, "
-            f"failed: {sum(1 for r in results.values() if not r)}")
+                    f"successful: {sum(1 for r in results.values() if r)}, "
+                    f"failed: {sum(1 for r in results.values() if not r)}")
         return results
 
     async def try_reconnect_server(
@@ -223,7 +224,6 @@ class OAuthReconnectionManager:
             status[server_id] = server_status
 
         return status
-
 
     async def get_oauth_state_override(
             self,
@@ -433,8 +433,11 @@ class OAuthReconnectionManager:
             server_id: str
     ) -> Optional[OAuthTokens]:
         """Get user tokens"""
+        server = await server_service_v1.get_server_by_id(server_id)
+        if not server:
+            raise Exception(f"Failed to get server info: {server_id}")
         try:
-            tokens = await self.oauth_service.get_tokens(user_id, server_id)
+            tokens = await self.oauth_service.get_tokens(user_id, server.serverName)
             return tokens
         except Exception as e:
             logger.error(f"Failed to get user tokens: "

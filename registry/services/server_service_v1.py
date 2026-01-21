@@ -1035,7 +1035,7 @@ class ServerServiceV1:
 
             # Add OAuth token to headers if server requires OAuth
             if has_oauth and user_id:
-                from services.oauth.token_service import token_service
+                from registry.services.oauth.token_service import token_service
 
                 oauth_tokens = await token_service.get_oauth_tokens(user_id, server.serverName)
 
@@ -1121,7 +1121,7 @@ class ServerServiceV1:
             If successful, returns (tool_list, None)
             If failed, returns (None, error_message)
         """
-        from services.oauth.token_service import token_service
+        from registry.services.oauth.token_service import token_service
         from registry.auth.oauth import OAuthHttpClient
 
         config = server.config or {}
