@@ -59,4 +59,4 @@ def setup_logging():
 logger = setup_logging()
 
 from packages.telemetry.metrics_client import OTelMetricsClient
-metrics = OTelMetricsClient(os.getenv("OTEL_SERVICE_NAME", "unknown-service"))
+metrics = OTelMetricsClient()

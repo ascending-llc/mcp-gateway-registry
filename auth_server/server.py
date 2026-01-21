@@ -1453,12 +1453,12 @@ def parse_arguments():
 
     return parser.parse_args()
 
+# TODO: This function is completely skipped in the dockerfile.
 def main():
+    
     """Run the server"""
     args = parse_arguments()
     
-    logger.info("🔭 Initializing Telemetry...")
-    setup_metrics("auth-server")
 
     # Update global validator with default region
     global validator
@@ -1471,6 +1471,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
+logger.info("🔭 Initializing Telemetry...")    
+setup_metrics("auth-server")
 
 # Global OAuth2 configuration using the new config loader
 # This will use the singleton OAuth2ConfigLoader instance
