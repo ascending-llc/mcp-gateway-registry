@@ -1,9 +1,9 @@
 import logging
 import json
 from typing import List, Dict, Any, Optional
-from packages.vector import initialize_database
 from packages.vector.enum.enums import SearchType, RerankerProvider
 from packages.models.mcp_tool import McpTool
+from packages.vector.search_manager import mcp_tool_search_index_manager
 from .base import VectorSearchService
 
 logger = logging.getLogger(__name__)
@@ -33,15 +33,15 @@ class ExternalVectorSearchService(VectorSearchService):
         self.reranker_model = reranker_model
 
         try:
-            self._client = initialize_database()
-            self._mcp_tools = self._client.for_model(McpTool)
+            self.client = mcp_tool_search_index_manager.client
+            self.mcp_tools = mcp_tool_search_index_manager.tools
             self._initialized = True
-            logger.info(f"Vector search service initialized: "
+            logger.info(f"MCPGW vector search service initialized (shared connection): "
                         f"rerank={enable_rerank}, search_type={search_type.value}")
         except Exception as e:
             logger.error(f"Failed to initialize vector search: {e}")
-            self._client = None
-            self._mcp_tools = None
+            self.client = None
+            self.mcp_tools = None
             self._initialized = False
 
     async def initialize(self) -> None:
@@ -51,43 +51,29 @@ class ExternalVectorSearchService(VectorSearchService):
         Checks adapter status and collection availability.
         """
         if not self._initialized:
-            logger.error("Client not initialized")
-            self._initialized = False
-            raise Exception("DatabaseClient not initialized")
+            logger.error("Vector search not initialized (shared connection unavailable)")
+            raise Exception("Vector search not initialized")
 
         try:
-            if not self._client.is_initialized():
-                raise Exception("DatabaseClient not initialized")
+            if not self.client or not self.client.is_initialized():
+                raise Exception("Shared DatabaseClient not initialized")
 
-            # Get adapter info
-            adapter = self._client.adapter
             collection_name = McpTool.COLLECTION_NAME
-
-            # Check if collection exists
+            adapter = self.client.adapter
+            
             if hasattr(adapter, 'collection_exists'):
                 exists = adapter.collection_exists(collection_name)
                 if exists:
-                    logger.info(f"Collection '{collection_name}' exists")
+                    logger.info(f"MCPGW: Collection '{collection_name}' verified")
                 else:
-                    logger.warning(f"Collection '{collection_name}' may not exist yet")
+                    logger.warning(f"MCPGW: Collection '{collection_name}' may not exist yet")
 
-            # Try a simple filter query to verify
-            try:
-                test_results = self._mcp_tools.filter(
-                    filters={"is_enabled": True},  # Dict auto-converted
-                    limit=1
-                )
-                logger.info(f"Collection check: found {len(test_results)} tools")
-            except Exception as e:
-                logger.debug(f"Collection verification query failed: {e}")
-
-            self._initialized = True
-            logger.info("Vector search initialized successfully")
+            logger.info("MCPGW vector search verified successfully")
 
         except Exception as e:
-            logger.error(f"Initialization failed: {e}", exc_info=True)
+            logger.error(f"MCPGW initialization verification failed: {e}", exc_info=True)
             self._initialized = False
-            raise Exception(f"Cannot initialize vector search: {e}")
+            raise Exception(f"Cannot verify vector search: {e}")
 
     def get_retriever(
             self,
@@ -119,7 +105,7 @@ class ExternalVectorSearchService(VectorSearchService):
 
         if use_rerank:
             # Return compression retriever with rerank
-            return self._mcp_tools.get_compression_retriever(
+            return self.mcp_tools.get_compression_retriever(
                 reranker_type=RerankerProvider.FLASHRANK,
                 search_type=use_search_type,
                 search_kwargs={"k": top_k * 3},  # 3x candidates
@@ -130,7 +116,7 @@ class ExternalVectorSearchService(VectorSearchService):
             )
         else:
             # Return base retriever without rerank
-            return self._mcp_tools.get_retriever(
+            return self.mcp_tools.get_retriever(
                 search_type=use_search_type,
                 k=top_k
             )
@@ -185,7 +171,7 @@ class ExternalVectorSearchService(VectorSearchService):
         try:
             if not query:
                 # Metadata-only filter
-                tools = self._mcp_tools.filter(
+                tools = self.mcp_tools.filter(
                     filters=filter_conditions,
                     limit=top_n_tools
                 )
@@ -195,7 +181,7 @@ class ExternalVectorSearchService(VectorSearchService):
 
                 logger.info(f"Using rerank: type={use_search_type.value}, "
                             f"candidate_k={candidate_k}, k={top_n_tools}")
-                tools = self._mcp_tools.search_with_rerank(
+                tools = self.mcp_tools.search_with_rerank(
                     query=query,
                     search_type=use_search_type,
                     k=top_n_tools,
@@ -206,7 +192,7 @@ class ExternalVectorSearchService(VectorSearchService):
                 )
             else:
                 # Regular search without rerank
-                tools = self._mcp_tools.search(
+                tools = self.mcp_tools.search(
                     query=query,
                     search_type=use_search_type,
                     k=top_n_tools,
@@ -283,20 +269,26 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             True if initialized and ready
         """
-        return self._initialized and self._client is not None and self._client.is_initialized()
+        if not self._initialized:
+            return False
+        
+        if not self.client:
+            return False
+            
+        try:
+            return self.client.is_initialized()
+        except Exception as e:
+            logger.warning(f"Availability check failed: {e}")
+            return False
 
     async def cleanup(self):
-        """Cleanup resources and close database connection."""
-        logger.info("Cleaning up vector search service")
-
-        if self._initialized and self._client:
-            try:
-                self._client.close()
-                logger.info("Database connection closed")
-            except Exception as e:
-                logger.warning(f"Cleanup error: {e}")
-
-        self._client = None
-        self._mcp_tools = None
+        """
+        Cleanup resources.
+        
+        Note: Does not close database connection as it's shared with SearchIndexManager.
+        """
+        logger.info("Cleaning up MCPGW vector search service")
+        self.client = None
+        self.mcp_tools = None
         self._initialized = False
-        logger.info("Vector search cleanup complete")
+        logger.info("MCPGW vector search cleanup complete (shared connection preserved)")

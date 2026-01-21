@@ -268,10 +268,9 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
         refreshData(true);
       }
     } catch (error: any) {
-      showToast(error?.detail?.[0]?.msg || error, 'error');
+      showToast(error?.detail || error, 'error');
     } finally {
       setLoading(false);
-      onClose();
     }
   };
 

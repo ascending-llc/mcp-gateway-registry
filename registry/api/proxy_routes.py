@@ -306,12 +306,11 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
                 "service": server.path
             }
         )
-    # Validate authentication
-    try:
-        auth_context = await validate_auth(request)
-    except HTTPException as e:
-        logger.warning(f"Auth failed for {path}: {e.detail}")
-        raise
+    # Get auth context from middleware (already validated by AuthMiddleware)
+    auth_context = getattr(request.state, "user", None)
+    if not auth_context:
+        logger.warning(f"Auth failed for {path}: No authentication context")
+        raise HTTPException(status_code=401, detail="Authentication required")
     
     # Get target URL from server config
     proxy_pass_url = config.get("url")
