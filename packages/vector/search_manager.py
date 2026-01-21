@@ -21,8 +21,8 @@ class SearchIndexManager:
         Args:
             db_client: Optional database client for dependency injection
         """
-        self._client = db_client or initialize_database()
-        self.tools = Repository(self._client, McpTool)
+        self.client = db_client or initialize_database()
+        self.tools = Repository(self.client, McpTool)
         self._background_tasks = set()  # Track background tasks
         logger.info("SearchIndexManager initialized")
 
