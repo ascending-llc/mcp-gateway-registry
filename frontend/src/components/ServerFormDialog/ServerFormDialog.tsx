@@ -271,7 +271,6 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
       showToast(error?.detail || error, 'error');
     } finally {
       setLoading(false);
-      onClose();
     }
   };
 
