@@ -82,7 +82,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
   const handleAuth = async () => {
     if (connection_state === SERVER_CONNECTION.CONNECTING) {
       try {
-        const result = await SERVICES.MCP.cancelAuth(server.name);
+        const result = await SERVICES.MCP.cancelAuth(server.id);
         if (result.success) {
           onShowToast?.(result?.message || 'OAuth flow cancelled', 'success');
           refreshServerData();
