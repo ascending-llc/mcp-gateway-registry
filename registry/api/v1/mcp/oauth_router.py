@@ -9,7 +9,6 @@ from registry.schemas.enums import ConnectionState, OAuthFlowStatus
 from registry.utils.log import logger
 from registry.auth.oauth.reconnection import get_reconnection_manager
 from registry.constants import REGISTRY_CONSTANTS
-from registry.services.server_service_v1 import server_service_v1
 
 router = APIRouter(prefix="/v1/mcp", tags=["oauth"])
 

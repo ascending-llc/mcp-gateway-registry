@@ -7,7 +7,7 @@ from registry.services.server_service_v1 import server_service_v1 as server_serv
 from services.oauth.token_service import token_service
 
 from registry.utils.log import logger
-from utils.crypto_utils import decrypt_auth_fields
+from registry.utils.crypto_utils import decrypt_auth_fields
 
 
 class MCPOAuthService:

@@ -68,7 +68,7 @@ async def get_servers_connection_status(
 
         except Exception as e:
             logger.error(f"Failed to retrieve connection status for {server_name}: {e}", exc_info=True)
-            connection_status[server_name] = {
+            connection_status[server_id] = {
                 "connection_state": ConnectionState.ERROR.value,
                 "requires_oauth": requires_oauth,
                 "error": f"Failed to retrieve connection status: {str(e)}"

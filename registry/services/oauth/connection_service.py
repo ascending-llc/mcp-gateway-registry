@@ -57,7 +57,7 @@ class MCPConnectionService(ConnectionManager):
                 for server in servers:
                     if not server.config.get("requiresOAuth"):
                         self.app_connections[server.serverName] = MCPConnection(
-                            server_id=server.server_id,
+                            server_id=str(server.id),
                             connection_state=ConnectionState.CONNECTED,
                             details={
                                 "type": "app_connection",

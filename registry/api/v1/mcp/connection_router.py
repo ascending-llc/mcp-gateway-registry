@@ -42,11 +42,11 @@ async def reinitialize_server(
         if disconnected:
             logger.info(f"[Reinitialize] Disconnected {server_id} for user {user_id}")
 
-        server_docs = await get_service_config(server_id)
+        server = await get_service_config(server_id)
 
         # 2. Check if access_token is expired
-        is_expired = await token_service.is_access_token_expired(user_id, server_id)
-        has_refresh = await token_service.has_refresh_token(user_id, server_id)
+        is_expired = await token_service.is_access_token_expired(user_id,server.serverName )
+        has_refresh = await token_service.has_refresh_token(user_id, server.serverName)
 
         # 3. If expired but has refresh_token, try auto-refresh
         if is_expired and has_refresh:
@@ -79,7 +79,7 @@ async def reinitialize_server(
                     "success": True,
                     "message": f"Server '{server_id}' reinitialized successfully",
                     "server_id": server_id,
-                    "requires_oauth": server_docs.config.get('requiresOAuth', False)
+                    "requires_oauth": server.config.get('requiresOAuth', False)
                 }
             )
         else:
@@ -96,7 +96,7 @@ async def reinitialize_server(
                         "success": False,
                         "message": f"Failed to initiate OAuth: {error}",
                         "server_id": server_id,
-                        "requires_oauth": server_docs.config.get("requiresOAuth", False)
+                        "requires_oauth": server.config.get("requiresOAuth", False)
                     }
                 )
 
@@ -106,7 +106,7 @@ async def reinitialize_server(
                     "success": True,
                     "message": "OAuth authorization required",
                     "server_id": server_id,
-                    "requires_oauth": server_docs.config.get("requiresOAuth", False),
+                    "requires_oauth": server.config.get("requiresOAuth", False),
                     "oauth_url": auth_url
                 }
             )

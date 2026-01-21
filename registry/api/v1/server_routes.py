@@ -164,7 +164,7 @@ async def list_servers(
             )
             # Enrich each server item with connection status
             for server_item in server_items:
-                status = connection_status.get(server_item.id)
+                status = connection_status.get(str(server_item.id))
                 apply_connection_status_to_server(server_item, status, fallback_requires_oauth=False)
         
         except Exception as e:
