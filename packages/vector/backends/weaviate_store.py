@@ -396,7 +396,7 @@ class WeaviateStore(VectorStoreAdapter):
             return self.near_text(query, k, filters, collection_name, **kwargs)
         else:
             logger.error(f"Unknown search type: {search_type}")
-            return []
+            raise ValueError(f"Unknown search type: {search_type}")
 
     def batch_update_properties(
             self,
