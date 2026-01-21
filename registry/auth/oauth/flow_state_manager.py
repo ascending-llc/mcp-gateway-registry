@@ -133,6 +133,7 @@ class FlowStateManager:
         flow = OAuthFlow(
             flow_id=flow_id,
             server_id=server_id,
+            server_name=metadata.server_name,
             user_id=user_id,
             code_verifier=code_verifier,
             state=metadata.state,

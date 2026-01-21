@@ -57,7 +57,7 @@ async def reinitialize_server(
                 logger.info(f"[Reinitialize] Token refreshed successfully for {server_id}")
                 is_expired = False  # Token is now valid
             else:
-                logger.warn(f"[Reinitialize] Token refresh failed for {server_id}: {error}")
+                logger.warning(f"[Reinitialize] Token refresh failed for {server_id}: {error}")
                 # Continue, will check if we need OAuth below
 
         # 4. Try to get valid tokens

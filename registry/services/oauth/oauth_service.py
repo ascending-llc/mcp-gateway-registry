@@ -169,7 +169,7 @@ class MCPOAuthService:
 
             await token_service.store_oauth_tokens(
                 user_id=flow.user_id,
-                service_name=flow.server_id,
+                service_name=flow.server_name,
                 tokens=tokens,
                 metadata=metadata
             )

@@ -96,6 +96,7 @@ class RedisFlowStorage:
             return OAuthFlow(
                 flow_id=data["flow_id"],
                 server_id=data["server_id"],
+                server_name=metadata.server_name,
                 user_id=data["user_id"],
                 code_verifier=data["code_verifier"],
                 state=data["state"],

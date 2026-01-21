@@ -112,6 +112,7 @@ class OAuthFlow:
     """OAuth flow"""
     flow_id: str
     server_id: str
+    server_name: str
     user_id: str
     code_verifier: str
     state: str
