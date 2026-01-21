@@ -5,7 +5,7 @@ from .enum.enums import VectorStoreType, EmbeddingProvider
 from .enum.exceptions import DependencyMissingError, UnsupportedBackendError, ConfigurationError
 from .adapters.create import vector_store, embedding
 from .repository import Repository
-from .search_manager import SearchIndexManager, get_search_index_manager
+from .search_manager import SearchIndexManager
 
 __all__ = [
     'DatabaseClient',
@@ -20,6 +20,5 @@ __all__ = [
     'UnsupportedBackendError',
     'ConfigurationError',
     'Repository',
-    'SearchIndexManager',
-    'get_search_index_manager',
+    'SearchIndexManager'
 ]

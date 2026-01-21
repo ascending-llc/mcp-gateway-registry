@@ -25,7 +25,7 @@ from registry.schemas.server_api_schemas import (
 )
 from registry.utils.crypto_utils import encrypt_auth_fields
 from registry.core.mcp_client import get_tools_from_server_with_server_info
-from packages.vector.search_manager import get_search_index_manager
+from packages.vector.search_manager import mcpToolSearchIndexManager
 
 logger = logging.getLogger(__name__)
 
@@ -288,7 +288,6 @@ class ServerServiceV1:
 
     def __init__(self):
         """Initialize server service with search index manager."""
-        self.search_mgr = get_search_index_manager()
         logger.info("ServerServiceV1 initialized with search index manager")
 
     async def list_servers(
@@ -607,7 +606,7 @@ class ServerServiceV1:
         else:
             # No URL - sync search index immediately (for stdio or other transports)
             server_info = McpTool.from_server_document(server)
-            self.search_mgr.sync_full_background(
+            mcpToolSearchIndexManager.sync_full_background(
                 entity_path=server.path,
                 entity_info=server_info,
                 is_enabled=config.get("enabled", True)
@@ -692,7 +691,7 @@ class ServerServiceV1:
                 # Tools changed - use incremental update
                 logger.info(f"Tools changed for '{server.path}', using incremental update")
                 server_info = McpTool.from_server_document(server)
-                await self.search_mgr.sync_incremental_background(
+                await mcpToolSearchIndexManager.sync_incremental_background(
                     entity_path=server.path,
                     entity_info=server_info,
                     is_enabled=updated_config.get("enabled", True)
@@ -708,7 +707,7 @@ class ServerServiceV1:
 
                 if metadata_updates:
                     # Update safe metadata fields in background
-                    self.search_mgr.update_metadata_background(
+                    mcpToolSearchIndexManager.update_metadata_background(
                         entity_path=server.path,
                         metadata=metadata_updates
                     )
@@ -750,7 +749,7 @@ class ServerServiceV1:
 
         # Remove from search index before deleting
         try:
-            deleted_count = await self.search_mgr.tools.adelete_by_filter(
+            deleted_count = await mcpToolSearchIndexManager.tools.adelete_by_filter(
                 filters={"server_path": server.path}
             )
             logger.info(f"Removed {deleted_count} tools from search index for '{server.path}'")
@@ -860,14 +859,14 @@ class ServerServiceV1:
             else:
                 # Sync search index after successful registration and tool retrieval
                 server_info = McpTool.from_server_document(server)
-                self.search_mgr.sync_full_background(
+                mcpToolSearchIndexManager.sync_full_background(
                     entity_path=server.path,
                     entity_info=server_info,
                     is_enabled=enabled
                 )
         else:
             # Update search index enabled status in background
-            self.search_mgr.update_enabled_background(
+            mcpToolSearchIndexManager.update_enabled_background(
                 entity_path=server.path,
                 is_enabled=enabled
             )

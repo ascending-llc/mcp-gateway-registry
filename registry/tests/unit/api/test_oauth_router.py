@@ -107,7 +107,7 @@ class TestOAuthRouter:
         response_data = response.json()
         assert response_data["flow_id"] == "test_user-1234567890"
         assert response_data["authorization_url"] == "https://example.com/auth"
-        assert response_data["server_name"] == "test_server"
+        assert response_data["server_id"] == "test_server"
         assert response_data["user_id"] == "test_user"
         
     def test_initiate_oauth_flow_failure(self, client):
@@ -194,7 +194,7 @@ class TestOAuthRouter:
         
         assert response.status_code == 200
         assert response.json()["success"] == True
-        assert response.json()["server_name"] == "test_server"
+        assert response.json()["server_id"] == "test_server"
         assert "cancelled successfully" in response.json()["message"]
         
     def test_cancel_oauth_flow_failure(self, client):
@@ -229,7 +229,7 @@ class TestOAuthRouter:
         
         assert response.status_code == 200
         assert response.json()["success"] == True
-        assert response.json()["server_name"] == "test_server"
+        assert response.json()["server_id"] == "test_server"
         assert "refreshed successfully" in response.json()["message"]
         
     def test_refresh_oauth_tokens_failure(self, client):
