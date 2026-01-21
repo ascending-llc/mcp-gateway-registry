@@ -3,7 +3,7 @@ import json
 from typing import List, Dict, Any, Optional
 from packages.vector.enum.enums import SearchType, RerankerProvider
 from packages.models.mcp_tool import McpTool
-from packages.services import get_search_index_manager
+from packages.vector import get_search_index_manager
 from .base import VectorSearchService
 
 logger = logging.getLogger(__name__)
@@ -34,15 +34,15 @@ class ExternalVectorSearchService(VectorSearchService):
 
         try:
             search_mgr = get_search_index_manager()
-            self._client = search_mgr._client
-            self._mcp_tools = search_mgr._mcp_tools
-            self._initialized = search_mgr.is_available()
+            self.client = search_mgr.client
+            self.mcp_tools = search_mgr.tools
+            self._initialized = True
             logger.info(f"MCPGW vector search service initialized (shared connection): "
                         f"rerank={enable_rerank}, search_type={search_type.value}")
         except Exception as e:
             logger.error(f"Failed to initialize vector search: {e}")
-            self._client = None
-            self._mcp_tools = None
+            self.client = None
+            self.mcp_tools = None
             self._initialized = False
 
     async def initialize(self) -> None:
@@ -56,11 +56,11 @@ class ExternalVectorSearchService(VectorSearchService):
             raise Exception("Vector search not initialized")
 
         try:
-            if not self._client or not self._client.is_initialized():
+            if not self.client or not self.client.is_initialized():
                 raise Exception("Shared DatabaseClient not initialized")
 
             collection_name = McpTool.COLLECTION_NAME
-            adapter = self._client.adapter
+            adapter = self.client.adapter
             
             if hasattr(adapter, 'collection_exists'):
                 exists = adapter.collection_exists(collection_name)
@@ -106,7 +106,7 @@ class ExternalVectorSearchService(VectorSearchService):
 
         if use_rerank:
             # Return compression retriever with rerank
-            return self._mcp_tools.get_compression_retriever(
+            return self.mcp_tools.get_compression_retriever(
                 reranker_type=RerankerProvider.FLASHRANK,
                 search_type=use_search_type,
                 search_kwargs={"k": top_k * 3},  # 3x candidates
@@ -117,7 +117,7 @@ class ExternalVectorSearchService(VectorSearchService):
             )
         else:
             # Return base retriever without rerank
-            return self._mcp_tools.get_retriever(
+            return self.mcp_tools.get_retriever(
                 search_type=use_search_type,
                 k=top_k
             )
@@ -172,7 +172,7 @@ class ExternalVectorSearchService(VectorSearchService):
         try:
             if not query:
                 # Metadata-only filter
-                tools = self._mcp_tools.filter(
+                tools = self.mcp_tools.filter(
                     filters=filter_conditions,
                     limit=top_n_tools
                 )
@@ -182,7 +182,7 @@ class ExternalVectorSearchService(VectorSearchService):
 
                 logger.info(f"Using rerank: type={use_search_type.value}, "
                             f"candidate_k={candidate_k}, k={top_n_tools}")
-                tools = self._mcp_tools.search_with_rerank(
+                tools = self.mcp_tools.search_with_rerank(
                     query=query,
                     search_type=use_search_type,
                     k=top_n_tools,
@@ -193,7 +193,7 @@ class ExternalVectorSearchService(VectorSearchService):
                 )
             else:
                 # Regular search without rerank
-                tools = self._mcp_tools.search(
+                tools = self.mcp_tools.search(
                     query=query,
                     search_type=use_search_type,
                     k=top_n_tools,
@@ -273,11 +273,11 @@ class ExternalVectorSearchService(VectorSearchService):
         if not self._initialized:
             return False
         
-        if not self._client:
+        if not self.client:
             return False
             
         try:
-            return self._client.is_initialized()
+            return self.client.is_initialized()
         except Exception as e:
             logger.warning(f"Availability check failed: {e}")
             return False
@@ -289,7 +289,7 @@ class ExternalVectorSearchService(VectorSearchService):
         Note: Does not close database connection as it's shared with SearchIndexManager.
         """
         logger.info("Cleaning up MCPGW vector search service")
-        self._client = None
-        self._mcp_tools = None
+        self.client = None
+        self.mcp_tools = None
         self._initialized = False
         logger.info("MCPGW vector search cleanup complete (shared connection preserved)")

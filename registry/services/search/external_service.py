@@ -1,12 +1,9 @@
 from typing import Dict, Any, Optional, List
-from packages.vector import initialize_database
 from packages.vector.enum.enums import SearchType, RerankerProvider
 from packages.models.mcp_tool import McpTool
 from packages.vector import get_search_index_manager
 from .base import VectorSearchService
 from registry.utils.log import logger
-
-search_mgr = get_search_index_manager()
 
 
 class ExternalVectorSearchService(VectorSearchService):
@@ -33,26 +30,49 @@ class ExternalVectorSearchService(VectorSearchService):
         self.reranker_model = reranker_model
 
         try:
-            self._client = initialize_database()
-            self._mcp_tools = self._client.for_model(McpTool)
+            search_mgr = get_search_index_manager()
+            self.client = search_mgr.client
+            self.mcp_tools = search_mgr.tools
             self._initialized = True
 
-            logger.info(f"Vector search service initialized: "
+            logger.info(f"Registry vector search service initialized (shared connection): "
                         f"rerank={enable_rerank}, search_type={search_type.value}")
         except Exception as e:
-            self._client = None
-            self._mcp_tools = None
+            self.client = None
+            self.mcp_tools = None
             self._initialized = False
             logger.error(f"Failed to initialize vector search service: {e}")
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """
-        Initialize vector database and ensure MCPTool collection exists.
+        Initialize and verify database connection.
+        
+        Checks adapter status and collection availability.
         """
         if not self._initialized:
-            logger.error("Model operations not initialized, skipping vector search setup")
-            return
-        logger.info("Vector search service initialized successfully")
+            logger.error("Vector search not initialized (shared connection unavailable)")
+            raise Exception("Vector search not initialized")
+
+        try:
+            if not self.client or not self.client.is_initialized():
+                raise Exception("Shared DatabaseClient not initialized")
+
+            collection_name = McpTool.COLLECTION_NAME
+            adapter = self.client.adapter
+            
+            if hasattr(adapter, 'collection_exists'):
+                exists = adapter.collection_exists(collection_name)
+                if exists:
+                    logger.info(f"Registry: Collection '{collection_name}' verified")
+                else:
+                    logger.warning(f"Registry: Collection '{collection_name}' may not exist yet")
+
+            logger.info("Registry vector search verified successfully")
+
+        except Exception as e:
+            logger.error(f"Registry initialization verification failed: {e}", exc_info=True)
+            self._initialized = False
+            raise Exception(f"Cannot verify vector search: {e}")
 
     def get_retriever(
             self,
@@ -84,7 +104,7 @@ class ExternalVectorSearchService(VectorSearchService):
 
         if use_rerank:
             # Return compression retriever with rerank
-            return self._mcp_tools.get_compression_retriever(
+            return self.mcp_tools.get_compression_retriever(
                 reranker_type=RerankerProvider.FLASHRANK,
                 search_type=use_search_type,
                 search_kwargs={"k": top_k * 3},  # 3x candidates
@@ -95,7 +115,7 @@ class ExternalVectorSearchService(VectorSearchService):
             )
         else:
             # Return base retriever without rerank
-            return self._mcp_tools.get_retriever(
+            return self.mcp_tools.get_retriever(
                 search_type=use_search_type,
                 k=top_k
             )
@@ -117,6 +137,7 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             {"indexed_tools": count, "failed_tools": count} or None if unavailable
         """
+        search_mgr = get_search_index_manager()
         return await search_mgr.sync_full_background(
             entity_path=service_path,
             entity_info=server_info,
@@ -133,6 +154,7 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             {"deleted_tools": count}
         """
+        search_mgr = get_search_index_manager()
         deleted_count = await search_mgr.tools.adelete_by_filter(
             filters={"server_path": service_path}
         )
@@ -173,7 +195,7 @@ class ExternalVectorSearchService(VectorSearchService):
                 if not filters:
                     logger.warning("No query and no filters provided")
                     return []
-                tools = self._mcp_tools.filter(
+                tools = self.mcp_tools.filter(
                     filters=filters,
                     limit=top_k * 2 if tags else top_k
                 )
@@ -185,7 +207,7 @@ class ExternalVectorSearchService(VectorSearchService):
 
                 logger.info(f"Using rerank: type={use_search_type.value}, "
                             f"candidate_k={candidate_k}, k={top_k * 2 if tags else top_k}")
-                tools = self._mcp_tools.search_with_rerank(
+                tools = self.mcp_tools.search_with_rerank(
                     query=query,
                     search_type=use_search_type,
                     k=top_k * 2 if tags else top_k,
@@ -196,7 +218,7 @@ class ExternalVectorSearchService(VectorSearchService):
                 )
             else:
                 # Regular search without rerank
-                tools = self._mcp_tools.search(
+                tools = self.mcp_tools.search(
                     query=query,
                     search_type=use_search_type,
                     k=top_k * 2 if tags else top_k,
@@ -312,6 +334,7 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             Result dictionary or None if unavailable
         """
+        search_mgr = get_search_index_manager()
         if entity_type == "a2a_agent":
             # Convert AgentCard to server_info format
             server_info = self._agent_to_server_info(entity_info, entity_path)
@@ -349,6 +372,7 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             Result dictionary
         """
+        search_mgr = get_search_index_manager()
         deleted_count = await search_mgr.tools.adelete_by_filter(
             filters={"server_path": entity_path}
         )
@@ -356,22 +380,15 @@ class ExternalVectorSearchService(VectorSearchService):
 
     async def cleanup(self):
         """
-        Cleanup resources and close database client connection.
+        Cleanup resources.
+        
+        Note: Does not close database connection as it's shared with SearchIndexManager.
         """
-        logger.info("Cleaning up vector search service")
-
-        if self._initialized:
-            try:
-                # Close the database client
-                self._client.close()
-                logger.info("Database connection closed")
-            except Exception as e:
-                logger.warning(f"Cleanup error: {e}")
-
-        self._client = None
-        self._mcp_tools = None
+        logger.info("Cleaning up Registry vector search service")
+        self.client = None
+        self.mcp_tools = None
         self._initialized = False
-        logger.info("Vector search cleanup complete")
+        logger.info("Registry vector search cleanup complete (shared connection preserved)")
 
     async def search_mixed(
             self,
@@ -396,7 +413,7 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             Dictionary with entity type keys and result lists
         """
-        if not self._mcp_tools:
+        if not self.mcp_tools:
             logger.warning("Vector search not initialized")
             return {"servers": [], "tools": [], "agents": []}
 
@@ -433,7 +450,7 @@ class ExternalVectorSearchService(VectorSearchService):
                     f"Mixed search with rerank: type={use_search_type.value}, "
                     f"candidate_k={candidate_k}, k={search_k}"
                 )
-                tools = self._mcp_tools.search_with_rerank(
+                tools = self.mcp_tools.search_with_rerank(
                     query=query,
                     search_type=use_search_type,
                     k=search_k,
@@ -443,7 +460,7 @@ class ExternalVectorSearchService(VectorSearchService):
                 )
             else:
                 # Regular search without rerank
-                tools = self._mcp_tools.search(
+                tools = self.mcp_tools.search(
                     query=query,
                     search_type=use_search_type,
                     k=search_k
