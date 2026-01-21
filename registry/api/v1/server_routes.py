@@ -319,7 +319,7 @@ async def create_server(
         
         acl_entry = await acl_service.grant_permission(
             principal_type=PrincipalType.USER,
-            principal_id={"userId: ": user_context.get("user_id")},
+            principal_id={"userId": PydanticObjectId(user_id)},
             resource_type=ResourceType.MCPSERVER,
             resource_id=server.id,
             perm_bits=15  # Apply full permissions for owners
