@@ -3,7 +3,7 @@ import json
 from typing import List, Dict, Any, Optional
 from packages.vector.enum.enums import SearchType, RerankerProvider
 from packages.models.mcp_tool import McpTool
-from packages.vector.search_manager import mcpToolSearchIndexManager
+from packages.vector.search_manager import mcp_tool_search_index_manager
 from .base import VectorSearchService
 
 logger = logging.getLogger(__name__)
@@ -33,8 +33,8 @@ class ExternalVectorSearchService(VectorSearchService):
         self.reranker_model = reranker_model
 
         try:
-            self.client = mcpToolSearchIndexManager.client
-            self.mcp_tools = mcpToolSearchIndexManager.tools
+            self.client = mcp_tool_search_index_manager.client
+            self.mcp_tools = mcp_tool_search_index_manager.tools
             self._initialized = True
             logger.info(f"MCPGW vector search service initialized (shared connection): "
                         f"rerank={enable_rerank}, search_type={search_type.value}")

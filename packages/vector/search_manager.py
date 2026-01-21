@@ -345,4 +345,4 @@ class SearchIndexManager(Generic[T]):
         )
 
 
-mcpToolSearchIndexManager = SearchIndexManager(model_class=McpTool)
+mcp_tool_search_index_manager = SearchIndexManager(model_class=McpTool)
