@@ -887,6 +887,7 @@ async def generate_user_token(
                 "username": user_context["username"],
                 "scopes": user_context["scopes"],
                 "groups": user_context["groups"],
+                "user_id": user_context["user_id"]
             },
             "requested_scopes": requested_scopes,
             "expires_in_hours": expires_in_hours,
