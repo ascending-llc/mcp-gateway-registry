@@ -17,9 +17,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 
-from ..core.config import settings, SCOPES_CONFIG
+from ..core.config import settings
 from ..providers.factory import get_auth_provider
-from ..utils.config_loader import get_oauth2_config
 from ..utils.security_mask import (
     map_groups_to_scopes,
     mask_headers,
@@ -34,8 +33,6 @@ from ..models.device_flow import (
     DeviceTokenResponse,
     DeviceApprovalRequest
 )
-from ..utils.config_loader import get_oauth2_config
-
 from ..services.cognito_validator_service import SimplifiedCognitoValidator
 
 # Create global validator instance
@@ -45,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-OAUTH2_CONFIG = get_oauth2_config()
+
 
 # JWT / signer configuration (use settings)
 SECRET_KEY = settings.secret_key
@@ -333,7 +330,7 @@ async def device_token(grant_type: str = Form(...), device_code: str = Form(None
         user_info = auth_code_data["user_info"]
         audience = auth_code_data.get("resource") or JWT_AUDIENCE
         user_groups = user_info.get("groups", [])
-        user_scopes = map_groups_to_scopes(user_groups, settings.scopes_file_path and OAUTH2_CONFIG.get("scopes", {})) if user_groups else user_info.get("scopes", [])
+        user_scopes = map_groups_to_scopes(user_groups, settings.scopes_config) if user_groups else user_info.get("scopes", [])
 
         token_payload = {
             "iss": JWT_ISSUER,
@@ -406,7 +403,7 @@ async def get_oauth2_providers():
     try:
         auth_provider_env = os.getenv("AUTH_PROVIDER")
         enabled = []
-        for provider_name, config in OAUTH2_CONFIG.get("providers", {}).items():
+        for provider_name, config in settings.oauth2_config.get("providers", {}).items():
             if config.get("enabled", False):
                 if auth_provider_env and provider_name != auth_provider_env:
                     continue
@@ -420,9 +417,9 @@ async def get_oauth2_providers():
 @router.get(f"/oauth2/login/{'{provider}'}")
 async def oauth2_login(provider: str, request: Request, redirect_uri: str = None, client_id: str = None, code_challenge: str = None, code_challenge_method: str = None, response_type: str = None, resource: str = None, state: str = None):
     try:
-        if provider not in OAUTH2_CONFIG.get("providers", {}):
+        if provider not in settings.oauth2_config.get("providers", {}):
             raise HTTPException(status_code=404, detail=f"Provider {provider} not found")
-        provider_config = OAUTH2_CONFIG["providers"][provider]
+        provider_config = settings.oauth2_config["providers"][provider]
         if not provider_config.get("enabled", False):
             raise HTTPException(status_code=400, detail=f"Provider {provider} is disabled")
         
@@ -430,7 +427,7 @@ async def oauth2_login(provider: str, request: Request, redirect_uri: str = None
         internal_state_data = {"nonce": secrets.token_urlsafe(24), "resource": resource, "client_state": client_state}
         internal_state = base64.urlsafe_b64encode(json:=jwt.utils.force_bytes(json:=__import__('json').dumps(internal_state_data))).decode().rstrip('=')
 
-        session_data = {"state": internal_state, "client_state": client_state, "provider": provider, "redirect_uri": redirect_uri or OAUTH2_CONFIG.get("registry", {}).get("success_redirect", "/")}
+        session_data = {"state": internal_state, "client_state": client_state, "provider": provider, "redirect_uri": redirect_uri or settings.oauth2_config.get("registry", {}).get("success_redirect", "/")}
         if client_id and response_type == "code":
             session_data["client_id"] = client_id
             session_data["client_redirect_uri"] = redirect_uri
@@ -455,7 +452,7 @@ async def oauth2_login(provider: str, request: Request, redirect_uri: str = None
         raise
     except Exception as e:
         logger.error(f"Error initiating OAuth2 login for {provider}: {e}")
-        error_url = OAUTH2_CONFIG.get("registry", {}).get("error_redirect", "/login")
+        error_url = settings.oauth2_config.get("registry", {}).get("error_redirect", "/login")
         return RedirectResponse(url=f"{error_url}?error=oauth2_init_failed", status_code=302)
 
 
@@ -464,7 +461,7 @@ async def oauth2_callback(provider: str, request: Request, code: str = None, sta
     try:
         if error:
             logger.warning(f"OAuth2 error from {provider}: {error}")
-            error_url = OAUTH2_CONFIG.get("registry", {}).get("error_redirect", "/login")
+            error_url = settings.oauth2_config.get("registry", {}).get("error_redirect", "/login")
             return RedirectResponse(url=f"{error_url}?error=oauth2_error&details={error}", status_code=302)
         if not code or not state or not oauth2_temp_session:
             raise HTTPException(status_code=400, detail="Missing required OAuth2 parameters")
@@ -506,7 +503,7 @@ async def oauth2_callback(provider: str, request: Request, code: str = None, sta
         if provider != temp_session_data.get("provider"):
             raise HTTPException(status_code=400, detail="Provider mismatch")
 
-        provider_config = OAUTH2_CONFIG["providers"][provider]
+        provider_config = settings.oauth2_config["providers"][provider]
 
         auth_server_url = settings.auth_server_external_url or settings.auth_server_url
         auth_server_url = auth_server_url.rstrip('/')
@@ -560,19 +557,19 @@ async def oauth2_callback(provider: str, request: Request, code: str = None, sta
         # Otherwise, create session cookie for web flow
         session_data = {"username": mapped_user["username"], "email": mapped_user.get("email"), "name": mapped_user.get("name"), "groups": mapped_user.get("groups", []), "provider": provider, "auth_method": "oauth2"}
         registry_session = signer.dumps(session_data)
-        redirect_url = temp_session_data.get("redirect_uri", OAUTH2_CONFIG.get("registry", {}).get("success_redirect", "/"))
+        redirect_url = temp_session_data.get("redirect_uri", settings.oauth2_config.get("registry", {}).get("success_redirect", "/"))
         response = RedirectResponse(url=redirect_url, status_code=302)
 
-        cookie_secure_config = OAUTH2_CONFIG.get("session", {}).get("secure", False)
+        cookie_secure_config = settings.oauth2_config.get("session", {}).get("secure", False)
         x_forwarded_proto = request.headers.get("x-forwarded-proto", "")
         is_https = x_forwarded_proto == "https" or request.url.scheme == "https"
         cookie_secure = cookie_secure_config and is_https
-        cookie_samesite = OAUTH2_CONFIG.get("session", {}).get("samesite", "lax")
-        cookie_domain = OAUTH2_CONFIG.get("session", {}).get("domain", "")
+        cookie_samesite = settings.oauth2_config.get("session", {}).get("samesite", "lax")
+        cookie_domain = settings.oauth2_config.get("session", {}).get("domain", "")
         if not cookie_domain or cookie_domain == "${SESSION_COOKIE_DOMAIN}":
             cookie_domain = None
 
-        cookie_params = {"key": "mcp_gateway_session", "value": registry_session, "max_age": OAUTH2_CONFIG.get("session", {}).get("max_age_seconds", 28800), "httponly": OAUTH2_CONFIG.get("session", {}).get("httponly", True), "samesite": cookie_samesite, "secure": cookie_secure, "path": "/"}
+        cookie_params = {"key": "mcp_gateway_session", "value": registry_session, "max_age": settings.oauth2_config.get("session", {}).get("max_age_seconds", 28800), "httponly": settings.oauth2_config.get("session", {}).get("httponly", True), "samesite": cookie_samesite, "secure": cookie_secure, "path": "/"}
         if cookie_domain:
             cookie_params["domain"] = cookie_domain
         response.set_cookie(**cookie_params)
@@ -583,7 +580,7 @@ async def oauth2_callback(provider: str, request: Request, code: str = None, sta
         raise
     except Exception as e:
         logger.error(f"Error in OAuth2 callback for {provider}: {e}")
-        error_url = OAUTH2_CONFIG.get("registry", {}).get("error_redirect", "/login")
+        error_url = settings.oauth2_config.get("registry", {}).get("error_redirect", "/login")
         return RedirectResponse(url=f"{error_url}?error=oauth2_callback_failed", status_code=302)
 
 
@@ -631,12 +628,12 @@ def map_user_info(user_info: dict, provider_config: dict) -> dict:
 @router.get(f"/oauth2/logout/{{provider}}")
 async def oauth2_logout(provider: str, request: Request, redirect_uri: str = None):
     try:
-        if provider not in OAUTH2_CONFIG.get("providers", {}):
+        if provider not in settings.oauth2_config.get("providers", {}):
             raise HTTPException(status_code=404, detail=f"Provider {provider} not found")
-        provider_config = OAUTH2_CONFIG["providers"][provider]
+        provider_config = settings.oauth2_config["providers"][provider]
         logout_url = provider_config.get("logout_url")
         if not logout_url:
-            redirect_url = redirect_uri or OAUTH2_CONFIG.get("registry", {}).get("success_redirect", "/login")
+            redirect_url = redirect_uri or settings.oauth2_config.get("registry", {}).get("success_redirect", "/login")
             return RedirectResponse(url=redirect_url, status_code=302)
         full_redirect_uri = redirect_uri or "/logout"
         if not full_redirect_uri.startswith("http"):
@@ -649,7 +646,7 @@ async def oauth2_logout(provider: str, request: Request, redirect_uri: str = Non
         raise
     except Exception as e:
         logger.error(f"Error initiating logout for {provider}: {e}")
-        redirect_url = redirect_uri or OAUTH2_CONFIG.get("registry", {}).get("success_redirect", "/login")
+        redirect_url = redirect_uri or settings.oauth2_config.get("registry", {}).get("success_redirect", "/login")
         return RedirectResponse(url=redirect_url, status_code=302)
 
 
@@ -886,7 +883,7 @@ async def validate_request(request: Request):
         auth_method = validation_result.get('method', '')
         if user_groups and auth_method in ['keycloak', 'entra', 'cognito']:
             # Map IdP groups to scopes using the group mappings
-            user_scopes = map_groups_to_scopes(user_groups, SCOPES_CONFIG)
+            user_scopes = map_groups_to_scopes(user_groups, settings.scopes_config)
             logger.info(f"Mapped {auth_method} groups {user_groups} to scopes: {user_scopes}")
         else:
             user_scopes = validation_result.get('scopes', [])
@@ -1001,9 +998,9 @@ def validate_server_tool_access(server_name: str, method: str, tool_name: str, u
         logger.info(f"Requested method: '{method}'")
         logger.info(f"Requested tool: '{tool_name}'")
         logger.info(f"User scopes: {user_scopes}")
-        logger.info(f"Available scopes config keys: {list(SCOPES_CONFIG.keys()) if SCOPES_CONFIG else 'None'}")
+        logger.info(f"Available scopes config keys: {list(settings.scopes_config.keys()) if settings.scopes_config else 'None'}")
         
-        if not SCOPES_CONFIG:
+        if not settings.scopes_config:
             logger.warning("No scopes configuration loaded, allowing access")
             logger.info(f"=== VALIDATE_SERVER_TOOL_ACCESS END: ALLOWED (no config) ===")
             return True
@@ -1011,7 +1008,7 @@ def validate_server_tool_access(server_name: str, method: str, tool_name: str, u
         # Check each user scope to see if it grants access
         for scope in user_scopes:
             logger.info(f"--- Checking scope: '{scope}' ---")
-            scope_config = SCOPES_CONFIG.get(scope, [])
+            scope_config = settings.scopes_config.get(scope, [])
             
             if not scope_config:
                 logger.info(f"Scope '{scope}' not found in configuration")
@@ -1147,8 +1144,8 @@ def validate_session_cookie(cookie_value: str) -> Dict[str, any]:
         username = data.get('username')
         groups = data.get('groups', [])
 
-        # Map groups to scopes using global SCOPES_CONFIG
-        scopes = map_groups_to_scopes(groups, SCOPES_CONFIG)
+        # Map groups to scopes using global settings.scopes_config
+        scopes = map_groups_to_scopes(groups, settings.scopes_config)
 
         logger.info(f"Session cookie validated for user: {hash_username(username)}")
 

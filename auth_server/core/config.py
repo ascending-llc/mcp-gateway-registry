@@ -12,8 +12,25 @@ from typing import Optional
 
 from pydantic import ConfigDict, field_validator
 from pydantic_settings import BaseSettings
+from ..utils.config_loader import get_oauth2_config
 
+def load_scopes_config() -> dict:
+    """Load the scopes configuration from the configured scopes.yml file.
 
+    Returns:
+        Parsed YAML as dict, or empty dict on error.
+    """
+    try:
+        scopes_file = settings.scopes_file_path
+        with open(scopes_file, 'r') as f:
+            config = yaml.safe_load(f)
+            # Ensure at least an empty mapping structure
+            if not isinstance(config, dict):
+                return {}
+            return config
+    except Exception as e:
+        # Logging is not directly available here; re-raise or return empty
+        return {}
 class AuthSettings(BaseSettings):
     """Auth server settings with environment variable support."""
 
@@ -94,6 +111,17 @@ class AuthSettings(BaseSettings):
     # by the provider, but no manual restart of the flow is required).
     
     # ==================== Paths ====================
+    
+    @property
+    def scopes_config(self) -> dict:
+        """Get the scopes configuration from scopes.yml file."""
+        return load_scopes_config()
+    
+    @property
+    def oauth2_config(self) -> dict:
+        """Get the OAuth2 configuration from oauth2_providers.yml file."""
+        return get_oauth2_config()
+    
     @property
     def scopes_file_path(self) -> Path:
         """Get path to scopes.yml file."""
@@ -134,26 +162,3 @@ class AuthSettings(BaseSettings):
 
 # Global settings instance
 settings = AuthSettings()
-
-
-def load_scopes_config() -> dict:
-    """Load the scopes configuration from the configured scopes.yml file.
-
-    Returns:
-        Parsed YAML as dict, or empty dict on error.
-    """
-    try:
-        scopes_file = settings.scopes_file_path
-        with open(scopes_file, 'r') as f:
-            config = yaml.safe_load(f)
-            # Ensure at least an empty mapping structure
-            if not isinstance(config, dict):
-                return {}
-            return config
-    except Exception as e:
-        # Logging is not directly available here; re-raise or return empty
-        return {}
-
-
-# Global scopes configuration (loaded at import time)
-SCOPES_CONFIG = load_scopes_config()

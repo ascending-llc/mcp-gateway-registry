@@ -8,10 +8,11 @@ import base64
 import json
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, PropertyMock
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 
 from auth_server.server import app
+from auth_server.core.config import AuthSettings
 
 
 @pytest.fixture
@@ -54,7 +55,7 @@ class TestStateEncoding:
 
     def test_state_contains_resource_parameter(self, client, mock_oauth_config):
         """Test that OAuth login encodes resource in state parameter"""
-        with patch('auth_server.routes.oauth_flow.OAUTH2_CONFIG', mock_oauth_config):
+        with patch.object(type(AuthSettings()), 'oauth2_config', new_callable=PropertyMock, return_value=mock_oauth_config):
             resource_url = "https://jarvis-demo.ascendingdc.com/gateway/proxy/mcpgw"
             
             response = client.get(
@@ -111,7 +112,7 @@ class TestStateEncoding:
 
     def test_state_without_resource_parameter(self, client, mock_oauth_config):
         """Test that OAuth login works without resource parameter"""
-        with patch('auth_server.routes.oauth_flow.OAUTH2_CONFIG', mock_oauth_config):
+        with patch.object(type(AuthSettings()), 'oauth2_config', new_callable=PropertyMock, return_value=mock_oauth_config):
             response = client.get(
                 "/auth/oauth2/login/entra",
                 params={
@@ -145,7 +146,7 @@ class TestSessionExpiration:
 
     def test_signature_expired_returns_401_with_www_authenticate(self, client, mock_oauth_config):
         """Test that SignatureExpired returns 401 with WWW-Authenticate header"""
-        with patch('auth_server.routes.oauth_flow.OAUTH2_CONFIG', mock_oauth_config):
+        with patch.object(type(AuthSettings()), 'oauth2_config', new_callable=PropertyMock, return_value=mock_oauth_config):
             # Create a state with resource
             resource_url = "https://jarvis-demo.ascendingdc.com/gateway/proxy/mcpgw"
             state_data = {
@@ -182,7 +183,7 @@ class TestSessionExpiration:
 
     def test_bad_signature_returns_401_with_www_authenticate(self, client, mock_oauth_config):
         """Test that BadSignature returns 401 (not 400) with WWW-Authenticate header"""
-        with patch('auth_server.routes.oauth_flow.OAUTH2_CONFIG', mock_oauth_config):
+        with patch.object(type(AuthSettings()), 'oauth2_config', new_callable=PropertyMock, return_value=mock_oauth_config):
             # Create a state with resource
             resource_url = "https://jarvis-demo.ascendingdc.com/gateway/proxy/mcpgw"
             state_data = {
@@ -219,7 +220,7 @@ class TestSessionExpiration:
 
     def test_session_expiration_without_resource(self, client, mock_oauth_config):
         """Test that session expiration without resource returns 401 without resource_metadata"""
-        with patch('auth_server.routes.oauth_flow.OAUTH2_CONFIG', mock_oauth_config):
+        with patch.object(type(AuthSettings()), 'oauth2_config', new_callable=PropertyMock, return_value=mock_oauth_config):
             # Create a state without resource
             state_data = {
                 "nonce": "test-nonce",
@@ -252,7 +253,7 @@ class TestSessionExpiration:
 
     def test_resource_metadata_url_construction(self, client, mock_oauth_config):
         """Test correct construction of resource_metadata URL from resource parameter"""
-        with patch('auth_server.routes.oauth_flow.OAUTH2_CONFIG', mock_oauth_config):
+        with patch.object(type(AuthSettings()), 'oauth2_config', new_callable=PropertyMock, return_value=mock_oauth_config):
             test_cases = [
                 {
                     "resource": "https://jarvis-demo.ascendingdc.com/gateway/proxy/mcpgw",
@@ -297,7 +298,7 @@ class TestMissingParameters:
 
     def test_missing_code_parameter(self, client, mock_oauth_config):
         """Test that missing code parameter returns 400"""
-        with patch('auth_server.routes.oauth_flow.OAUTH2_CONFIG', mock_oauth_config):
+        with patch.object(type(AuthSettings()), 'oauth2_config', new_callable=PropertyMock, return_value=mock_oauth_config):
             response = client.get(
                 "/auth/oauth2/callback/entra",
                 params={
@@ -311,7 +312,7 @@ class TestMissingParameters:
 
     def test_missing_state_parameter(self, client, mock_oauth_config):
         """Test that missing state parameter returns 400"""
-        with patch('auth_server.routes.oauth_flow.OAUTH2_CONFIG', mock_oauth_config):
+        with patch.object(type(AuthSettings()), 'oauth2_config', new_callable=PropertyMock, return_value=mock_oauth_config):
             response = client.get(
                 "/auth/oauth2/callback/entra",
                 params={
@@ -325,7 +326,7 @@ class TestMissingParameters:
 
     def test_missing_session_cookie(self, client, mock_oauth_config):
         """Test that missing session cookie returns 400"""
-        with patch('auth_server.routes.oauth_flow.OAUTH2_CONFIG', mock_oauth_config):
+        with patch.object(type(AuthSettings()), 'oauth2_config', new_callable=PropertyMock, return_value=mock_oauth_config):
             response = client.get(
                 "/auth/oauth2/callback/entra",
                 params={

@@ -141,10 +141,12 @@ async def reload_scopes(request: Request, authorization: Optional[str] = Header(
         raise HTTPException(status_code=401, detail="Invalid admin credentials", headers={"WWW-Authenticate": "Basic"})
 
     try:
+        # Test loading the scopes configuration to validate it's correct
         new_config = load_scopes_config()
-        from ..core import config as core_config
-        core_config.SCOPES_CONFIG = new_config
-        logger.info(f"Successfully reloaded scopes configuration by admin '{username}'")
+        # Since scopes_config is now a property that loads from file each time,
+        # we don't need to update any module-level variable.
+        # The next access to settings.scopes_config will automatically load the updated file.
+        logger.info(f"Successfully validated and reloaded scopes configuration by admin '{username}'")
         return JSONResponse(status_code=200, content={"message": "Scopes configuration reloaded successfully", "timestamp": datetime.utcnow().isoformat(), "group_mappings_count": len(new_config.get('group_mappings', {}))})
     except Exception as e:
         logger.error(f"Failed to reload scopes configuration: {e}")
