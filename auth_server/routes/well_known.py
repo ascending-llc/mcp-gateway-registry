@@ -78,6 +78,7 @@ async def oauth_authorization_server_metadata():
         "response_types_supported": ["code"],
         "grant_types_supported": [
             "authorization_code",
+            "refresh_token",
             "urn:ietf:params:oauth:grant-type:device_code"
         ],
         "token_endpoint_auth_methods_supported": ["client_secret_post", "client_secret_basic", "none"],
@@ -124,6 +125,7 @@ async def openid_configuration():
         "claims_supported": ["sub", "email", "name", "groups"],
         "grant_types_supported": [
             "authorization_code",
+            "refresh_token",
             "urn:ietf:params:oauth:grant-type:device_code"
         ]
     }

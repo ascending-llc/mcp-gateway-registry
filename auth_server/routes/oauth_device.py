@@ -57,6 +57,8 @@ registered_clients: Dict[str, Dict[str, Any]] = {}
 # Authorization code storage for OAuth 2.0 Authorization Code Flow
 authorization_codes_storage: Dict[str, Dict[str, Any]] = {}  # code -> {token_data, user_info, client_id, expires_at, used, code_challenge}
 
+# Refresh token storage (in-memory prototype). In production, persist in Redis/DB.
+refresh_tokens_storage: Dict[str, Dict[str, Any]] = {}
 
 # ============================================================================
 # OAuth 2.0 Dynamic Client Registration (RFC 7591)
@@ -559,6 +561,7 @@ async def device_token(
     client_id: str = Form(...),
     code: str = Form(None),
     code_verifier: str = Form(None),
+    refresh_token: str = Form(None),
     redirect_uri: str = Form(None)
 ):
     """
@@ -587,6 +590,7 @@ async def device_token(
     logger.info(f"code: {code[:20] if code else None}...")
     logger.info(f"redirect_uri: {redirect_uri}")
     logger.info(f"code_verifier: {code_verifier[:20] if code_verifier else None}...")
+    logger.info(f"refresh_token: {refresh_token[:20] if refresh_token else None}...")
     logger.info("="*80)
     # Handle Authorization Code Flow (RFC 6749)
     if grant_type == "authorization_code":
@@ -718,17 +722,29 @@ async def device_token(
         }
         
         access_token = jwt.encode(token_payload, SECRET_KEY, algorithm="HS256", headers=headers)
-        
+
+        # Generate and store refresh token (in-memory prototype)
+        rt = secrets.token_urlsafe(32)
+        current_time = int(time.time())
+        refresh_expires_at = current_time + 1209600  # 14 days
+        refresh_tokens_storage[rt] = {
+            "client_id": client_id,
+            "user_info": user_info,
+            "scope": token_payload["scope"],
+            "expires_at": refresh_expires_at
+        }
+
         # Clean up used authorization code after successful token generation
         del authorization_codes_storage[code]
-        
+
         logger.info(f"Issued access token via authorization code flow for client {client_id}, user {user_info['username']}")
-        
+
         return DeviceTokenResponse(
             access_token=access_token,
             token_type="Bearer",
             expires_in=3600,
-            scope=" ".join(user_info.get("groups", []))
+            scope=" ".join(user_info.get("groups", [])),
+            refresh_token=rt
         )
     
     # Handle Device Flow (RFC 8628)
@@ -792,6 +808,74 @@ async def device_token(
     
     # Unsupported grant type
     else:
+        # Support refresh token grant
+        if grant_type == "refresh_token":
+            # Validate provided refresh_token parameter
+            if not refresh_token:
+                return oauth_error_response(
+                    "invalid_request",
+                    "refresh_token is required"
+                )
+
+            rt_data = refresh_tokens_storage.get(refresh_token)
+            if not rt_data:
+                return oauth_error_response(
+                    "invalid_grant",
+                    "refresh token invalid or expired"
+                )
+
+            # Validate client_id
+            if rt_data.get("client_id") != client_id:
+                return oauth_error_response(
+                    "invalid_client",
+                    "client_id mismatch"
+                )
+
+            # Check expiration
+            now = int(time.time())
+            if now > rt_data.get("expires_at", 0):
+                # remove expired refresh token
+                del refresh_tokens_storage[refresh_token]
+                return oauth_error_response(
+                    "invalid_grant",
+                    "refresh token expired"
+                )
+
+            # Issue new access token
+            user_info = rt_data["user_info"]
+            from ..server import SECRET_KEY, JWT_ISSUER, JWT_AUDIENCE, JWT_SELF_SIGNED_KID
+
+            audience = rt_data.get("audience") or JWT_AUDIENCE
+            token_payload = {
+                "iss": JWT_ISSUER,
+                "aud": audience,
+                "sub": user_info["username"],
+                "client_id": client_id,
+                "scope": rt_data.get("scope", ""),
+                "groups": user_info.get("groups", []),
+                "exp": now + 3600,
+                "iat": now,
+                "token_use": "access"
+            }
+
+            headers = {
+                "kid": JWT_SELF_SIGNED_KID,
+                "typ": "JWT",
+                "alg": "HS256"
+            }
+
+            access_token = jwt.encode(token_payload, SECRET_KEY, algorithm="HS256", headers=headers)
+
+            logger.info(f"Issued access token via refresh_token grant for client {client_id}, user {user_info['username']}")
+
+            return DeviceTokenResponse(
+                access_token=access_token,
+                token_type="Bearer",
+                expires_in=3600,
+                scope=rt_data.get("scope", ""),
+                refresh_token=refresh_token
+            )
+
         return oauth_error_response(
             "unsupported_grant_type",
             f"grant_type '{grant_type}' is not supported"
