@@ -6,6 +6,9 @@ build-backend = "setuptools.build_meta"
 # Auto-discover packages, excluding tests
 packages = {find = {exclude = ["tests*", "*.tests*"]}}
 
+[tool.uv.sources]
+packages = { workspace = true }
+
 [tool.setuptools.package-data]
 "*" = ["*.yml", "*.yaml", "*.json"]
 
@@ -36,6 +39,10 @@ dependencies = [
     # OAuth providers
     "boto3>=1.28.0",  # For Cognito
     "requests>=2.28.0",
+
+    # Local packages
+    "packages",
+
 ]
 
 [tool.uv]

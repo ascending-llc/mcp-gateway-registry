@@ -172,6 +172,9 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.auth
+      args:
+        SCHEMA_VERSION: ${SCHEMA_VERSION}
+        GITHUB_TOKEN: ${GITHUB_TOKEN}
     environment:
       - AWS_REGION=${AWS_REGION:-us-east-1}
       # Metrics configuration
@@ -197,6 +200,8 @@ services:
       - ENTRA_EMAIL_CLAIM=${ENTRA_EMAIL_CLAIM:-upn}
       - ENTRA_NAME_CLAIM=${ENTRA_NAME_CLAIM:-name}
       - ENTRA_ROLE_TOKEN_KIND=${ENTRA_ROLE_TOKEN_KIND:-id}
+      - MONGO_URI=mongodb://registry-mongodb:27017/jarvis
+
     ports:
       - "8888:8888"
     volumes:

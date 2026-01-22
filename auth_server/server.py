@@ -7,7 +7,9 @@ import argparse
 import logging
 import os
 import base64
+import traceback
 import boto3
+from fastapi.concurrency import asynccontextmanager
 import jwt
 import requests
 import json
@@ -30,6 +32,9 @@ from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 import secrets
 import urllib.parse
 import httpx
+
+from packages.database.mongodb import close_mongodb, init_mongodb
+
 
 # Import settings
 from .core.config import settings
@@ -57,6 +62,8 @@ from .models import (
     GenerateTokenRequest,
     GenerateTokenResponse
 )
+
+from packages.models._generated import IUser
 
 # Configure logging
 logging.basicConfig(
@@ -488,14 +495,29 @@ def _create_self_signed_jwt(access_payload: dict) -> str:
 api_prefix = settings.auth_server_api_prefix.rstrip('/') if settings.auth_server_api_prefix else ""
 logger.info(f"Auth server API prefix: '{api_prefix}'")
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("🗄️  Initializing MongoDB connection...")
+    await init_mongodb()
+    logger.info("✅ MongoDB connection established")
+
+    yield
+    
+    logger.info("🗄️  Closing MongoDB connection...")
+    await close_mongodb()
+    logger.info("✅ MongoDB connection closed")
+
+    
 app = FastAPI(
     title="Jarvis Auth Server",
     description="Authentication server to integrate with Identity Providers like Cognito, Keycloak, Entra ID",
     version="0.1.0",
+    lifespan=lifespan,
     docs_url=f"{api_prefix}/docs" if api_prefix else "/docs",
     redoc_url=f"{api_prefix}/redoc" if api_prefix else "/redoc",
     openapi_url=f"{api_prefix}/openapi.json" if api_prefix else "/openapi.json"
 )
+
 
 # Add CORS middleware to support browser-based OAuth clients (like Claude Desktop)
 # Parse CORS origins from settings (comma-separated list or "*")
@@ -1888,46 +1910,18 @@ async def oauth2_callback(
             logger.info(f"Redirecting OAuth client to: {client_redirect_uri}")
             return response
         
-        # Web browser session flow - create session cookie with user id
-        user_id = None
-        email = user_info.get("username")
-        if email:
-            try:
-                async with httpx.AsyncClient(timeout=5.0) as client:
-                    # Generate short-lived token to retrieve user_id from registry
-                    current_time = int(time.time())
-                    expires_at = current_time + 5 * 60  # 5 minutes = 300 seconds
-                    registry_url = settings.registry_url
-                    access_payload = {
-                        "iss": JWT_ISSUER,
-                        "aud": JWT_AUDIENCE,
-                        "sub": mapped_user['username'],
-                        "username": mapped_user['username'],
-                        "scope": " ".join(['auth-server/read:user_id']),
-                        "groups": [],  
-                        "exp": expires_at,
-                        "iat": current_time,
-                        "jti": str(uuid.uuid4()),
-                        "token_use": "access",
-                        "client_id": "user-generated",
-                        "token_type": "user_generated"
-                    }
-
-                    access_token = _create_self_signed_jwt(access_payload)
-                    headers = {"Authorization": f"Bearer {access_token}"}
-                    resp = await client.get(
-                        f"{registry_url}/api/auth/me",
-                        headers=headers,
-                    )
-
-                    if resp.status_code == 200:
-                        user_id = resp.json().get("user_id")
-                        logger.info(f"Fetched user_id {user_id} from registry for {email}")
-                    else:
-                        logger.info(f"Failed to fetch user_id from registry: {resp.status_code} {resp.text}")
-            except Exception as e:
-                logger.info(f"Error fetching user_id from registry: {e}")
-
+        try:
+            # Everything in MongoDB should have an ID. If not, then it's assumed the user does not exist.
+            user_obj = await IUser.find_one({"email": mapped_user["username"]})
+            user_id = str(user_obj.id) if user_obj else None
+        except Exception as e:
+            logger.warning(
+                f"Could not retrieve user ID from registry for {mapped_user['username']}: "
+                # Error is hidden. Must use traceback to debug.
+                f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+            )
+            user_id = None
+        
         session_data = {
             "username": mapped_user["username"],
             "email": mapped_user.get("email"),

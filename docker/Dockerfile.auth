@@ -1,9 +1,10 @@
-# Auth Dockerfile - separate and scalable auth service
 FROM python:3.12-slim
+
+ARG SCHEMA_VERSION=
+ARG GITHUB_TOKEN=
 
 ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
@@ -13,20 +14,44 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy only auth server files
-COPY auth_server/ /app/auth_server/
+RUN pip install --no-cache-dir uv
 
-# Install uv and setup Python environment
-RUN pip install uv && \
-    uv venv .venv --python 3.12 && \
+# Copy workspace root config (needed for uv workspace resolution)
+COPY pyproject.toml ./pyproject.toml
+
+# Copy only pyproject.toml files for dependency caching
+COPY packages/pyproject.toml ./packages/pyproject.toml
+COPY auth_server/pyproject.toml ./auth_server/pyproject.toml
+
+RUN uv venv .venv --python 3.12 && \
     . .venv/bin/activate && \
-    uv pip install --requirement /app/auth_server/pyproject.toml
+    uv pip install -e ./auth_server
 
-# Create logs directory
+COPY packages/ ./packages/
+
+RUN echo "Checking for schema import..." && \
+    if [ -z "$SCHEMA_VERSION" ] || [ -z "$GITHUB_TOKEN" ]; then \
+        echo "ERROR: Schema import is required for auth_server build"; \
+        echo "Please provide the following build arguments:"; \
+        echo "  --build-arg SCHEMA_VERSION=<version> (e.g., asc0.4.0)"; \
+        echo "  --build-arg GITHUB_TOKEN=<token>"; \
+        exit 1; \
+    fi && \
+    echo "Importing all schemas from GitHub release $SCHEMA_VERSION..." && \
+    cd /app/packages && \
+    uv run import-schemas \
+        --mode remote \
+        --tag "$SCHEMA_VERSION" \
+        # TODO: Currently init_mongo requires more than just user.json, so we import all schemas
+        # --files user.json \
+        --output-dir ./models \
+        --repo ascending-llc/jarvis-api \
+        --token "$GITHUB_TOKEN" && \
+    echo "Schema import completed successfully"
+
+COPY auth_server/ ./auth_server/
+
 RUN mkdir -p /app/logs
-
-# Expose port
 EXPOSE 8888
 
-# Start the auth server
-CMD ["/bin/bash", "-c", "source .venv/bin/activate && cd /app && uvicorn auth_server.server:app --host 0.0.0.0 --port 8888"] 
+CMD ["/bin/bash", "-c", "source .venv/bin/activate && uvicorn auth_server.server:app --host 0.0.0.0 --port 8888"]
