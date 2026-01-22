@@ -19,7 +19,6 @@ from packages.database.mongodb import close_mongodb, init_mongodb
 # Import settings
 from .core.config import settings
 # Import settings and scopes config loader
-from .core.config import settings
 
 # Import metrics middleware
 from .metrics_middleware import add_auth_metrics_middleware

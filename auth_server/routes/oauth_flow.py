@@ -561,7 +561,8 @@ async def oauth2_callback(provider: str, request: Request, code: str = None, sta
         
         try:
             # Everything in MongoDB should have an ID. If not, then it's assumed the user does not exist.
-            user_obj = await IUser.find_one({"email": mapped_user["username"]})
+            user_email = mapped_user.get("email")
+            user_obj = await IUser.find_one({"email": user_email}) if user_email else None
             user_id = str(user_obj.id) if user_obj else None
         except Exception as e:
             logger.warning(

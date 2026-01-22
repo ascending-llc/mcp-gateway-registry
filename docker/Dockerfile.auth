@@ -42,8 +42,8 @@ RUN echo "Checking for schema import..." && \
     uv run import-schemas \
         --mode remote \
         --tag "$SCHEMA_VERSION" \
-        # TODO: Currently init_mongo requires more than just user.json, so we import all schemas
-        # --files user.json \
+        # TODO: init_mongo currently depends on multiple schemas, so we import all of them here.
+        #       If you later restrict imports with --files, document the full required schema list.
         --output-dir ./models \
         --repo ascending-llc/jarvis-api \
         --token "$GITHUB_TOKEN" && \
