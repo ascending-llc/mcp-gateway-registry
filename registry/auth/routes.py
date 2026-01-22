@@ -61,7 +61,7 @@ async def login_form(request: Request, error: str | None = None):
     )
 
 # OAuth2 login redirect avoid /auth/ route collision with auth server
-@router.get("/redirect/login/{provider}")
+@router.get("/redirect/{provider}")
 async def oauth2_login_redirect(provider: str, request: Request):
     """Redirect to auth server for OAuth2 login"""
     try:
@@ -85,7 +85,7 @@ async def oauth2_login_redirect(provider: str, request: Request):
         return RedirectResponse(url="/login?error=oauth2_redirect_failed", status_code=302)
 
 
-@router.get("/redirect/callback")
+@router.get("/redirect")
 async def oauth2_callback(request: Request, userInfo: str, error: str = None, details: str = None):
     """Handle OAuth2 callback from auth server"""
     userinfo_json = base64.urlsafe_b64decode(userInfo + '=' * (-len(userInfo) % 4)).decode()
@@ -125,7 +125,7 @@ async def oauth2_callback(request: Request, userInfo: str, error: str = None, de
         registry_session = signer.dumps(session_data)
         response = RedirectResponse(url=settings.registry_client_url.rstrip('/'), status_code=302)
         x_forwarded_proto = request.headers.get("x-forwarded-proto", "")
-        cookie_secure_config = settings.oauth2_config.get("session", {}).get("secure", False)
+        cookie_secure_config = settings.session_cookie_secure
         is_https = x_forwarded_proto == "https" or request.url.scheme == "https"
 
         cookie_params = {
@@ -133,7 +133,7 @@ async def oauth2_callback(request: Request, userInfo: str, error: str = None, de
          "value": registry_session, 
          "max_age": settings.session_max_age_seconds, 
          "httponly": is_https,
-         "samesite": settings.oauth2_config.get("session", {}).get("samesite", "lax"), 
+         "samesite": "lax",
          "secure": cookie_secure_config and is_https, 
          "path": "/"
         }
