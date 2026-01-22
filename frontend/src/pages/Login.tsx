@@ -21,7 +21,7 @@ const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-  const [authServerUrl, setAuthServerUrl] = useState<string>('');
+  const [setAuthServerUrl] = useState<string>('');
   const { login } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -161,12 +161,7 @@ const Login: React.FC = () => {
   };
 
   const handleOAuthLogin = (provider: string) => {
-    const basePath = getBasePath();
-    const currentOrigin = window.location.origin;
-    const redirectUri = encodeURIComponent(currentOrigin + (basePath || '/'));
-
-    const authUrl = authServerUrl || 'http://localhost:8888';
-    window.location.href = `${authUrl}/oauth2/login/${provider}?redirect_uri=${redirectUri}`;
+    window.location.href = `${getBasePath()}/redirect/${provider}`;
   };
 
   return (

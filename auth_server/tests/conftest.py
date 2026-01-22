@@ -52,7 +52,7 @@ def mock_auth_provider():
 @pytest.fixture
 def clear_device_storage():
     """Clear device flow, client registration, and authorization code storage before and after each test."""
-    from auth_server.routes.oauth_device import (
+    from auth_server.core.state import (
         device_codes_storage,
         user_codes_storage,
         registered_clients,
