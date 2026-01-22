@@ -1564,6 +1564,18 @@ async def oauth2_login(
     - response_type: OAuth response type (code for authorization code flow)
     - resource: Protected resource URL (for RFC 8707 Resource Indicators)
     """
+    logger.info("="*80)
+    logger.info("OAUTH LOGIN REQUEST FROM CLAUDE")
+    logger.info("="*80)
+    logger.info(f"Provider: {provider}")
+    logger.info(f"client_id: {client_id}")
+    logger.info(f"redirect_uri: {redirect_uri}")
+    logger.info(f"code_challenge: {code_challenge}")  # ← CHECK IF THIS IS PRESENT!
+    logger.info(f"code_challenge_method: {code_challenge_method}")
+    logger.info(f"response_type: {response_type}")
+    logger.info(f"resource: {resource}")
+    logger.info(f"User-Agent: {request.headers.get('user-agent')}")
+    logger.info("="*80)
     try:
         if provider not in OAUTH2_CONFIG.get("providers", {}):
             raise HTTPException(status_code=404, detail=f"Provider {provider} not found")
@@ -1846,6 +1858,15 @@ async def oauth2_callback(
         client_redirect_uri = temp_session_data.get("client_redirect_uri")
         
         if client_id and client_redirect_uri:
+            logger.info("="*80)
+            logger.info("OAUTH CALLBACK - GENERATING AUTH CODE")
+            logger.info("="*80)
+            logger.info(f"client_id: {client_id}")
+            logger.info(f"client_redirect_uri: {client_redirect_uri}")
+            logger.info(f"code_challenge from session: {code_challenge}")  # ← KEY LINE!
+            logger.info(f"code_challenge_method: {code_challenge_method}")
+            logger.info(f"resource: {temp_session_data.get('resource')}")
+            logger.info("="*80)
             # OAuth Authorization Code Flow - return authorization code to client
             logger.info(f"OAuth client detected (client_id={client_id}), generating authorization code")
             from .routes.oauth_device import authorization_codes_storage, cleanup_expired_authorization_codes

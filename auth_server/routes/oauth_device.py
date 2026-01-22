@@ -578,7 +578,16 @@ async def device_token(
         - redirect_uri: Required (must match the one used in /oauth2/login)
         - code_verifier: Required for PKCE validation
     """
-    
+        # ADD AT THE TOP:
+    logger.info("="*80)
+    logger.info("TOKEN ENDPOINT CALLED")
+    logger.info("="*80)
+    logger.info(f"grant_type: {grant_type}")
+    logger.info(f"client_id: {client_id}")
+    logger.info(f"code: {code[:20] if code else None}...")
+    logger.info(f"redirect_uri: {redirect_uri}")
+    logger.info(f"code_verifier: {code_verifier[:20] if code_verifier else None}...")
+    logger.info("="*80)
     # Handle Authorization Code Flow (RFC 6749)
     if grant_type == "authorization_code":
         cleanup_expired_authorization_codes()
@@ -639,6 +648,17 @@ async def device_token(
         # Validate PKCE code_verifier if code_challenge was provided
         code_challenge = auth_code_data.get("code_challenge")
         if code_challenge:
+            logger.info("="*80)
+            logger.info("PKCE VALIDATION")
+            logger.info("="*80)
+            logger.info(f"Stored code_challenge: {code_challenge}")
+            logger.info(f"Received code_verifier: {code_verifier[:20] if code_verifier else None}...")
+            
+            # ... compute challenge ...
+            
+            logger.info(f"Computed challenge: {computed_challenge}")
+            logger.info(f"Match: {computed_challenge == code_challenge}")
+            logger.info("="*80)
             if not code_verifier:
                 return oauth_error_response(
                     "invalid_request",
