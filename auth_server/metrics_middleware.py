@@ -233,9 +233,25 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
         finally:
             # Calculate duration
             duration_ms = (time.perf_counter() - start_time) * 1000
-            
-            metrics.record_auth_request(auth_method, success=success)
-            
+            duration_seconds = duration_ms / 1000.0
+
+            metrics.record_auth_request(
+                auth_method,
+                success=success,
+                duration_seconds=duration_seconds
+            )
+
+            method_name = tool_info.get("method", "unknown")
+            if method_name in ("tools/call", "tools/list"):
+                actual_tool_name = tool_info.get("tool_name") or method_name
+                metrics.record_tool_execution(
+                    tool_name=actual_tool_name,
+                    server_name=server_name,
+                    success=success,
+                    duration_seconds=duration_seconds,
+                    method=method_name
+                )
+
             # Emit comprehensive metrics asynchronously (fire and forget)
             # 1. Main auth metric
             asyncio.create_task(
