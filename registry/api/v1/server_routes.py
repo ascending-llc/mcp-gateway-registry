@@ -441,7 +441,7 @@ async def delete_server(
         )
 
         if did_server_delete: 
-            num_acl_entries_deleted = await acl_service.remove_permissions_for_resource(
+            num_acl_entries_deleted = await acl_service.delete_acl_entries_for_resource(
                 resource_type=ResourceType.MCPSERVER,
                 resource_id=PydanticObjectId(server_id),
             )

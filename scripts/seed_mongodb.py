@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from dotenv import load_dotenv
 # TODO: Delete once import tool is fixed to incorporate enums
-from registry.services.constants import PrincipalType, ResourceType, RoleBits
+from registry.services.constants import PrincipalType, ResourceType, RoleBits, PermissionBits
 
 # Load environment variables from .env file
 load_dotenv()
@@ -402,7 +402,7 @@ async def seed_mcp_servers(users):
         },
         {
             "serverName": "public-api-service",
-            "author": users[3].id,  # Test User
+            "author": users[1].id,  # John Developer
             "path": "/public-api",
             "scope": "shared_app",
             "status": "active",
@@ -443,7 +443,7 @@ async def seed_mcp_servers(users):
         },
         {
             "serverName": "google-workspace",
-            "author": users[3].id,  # Test User
+            "author": users[1].id,  # John Developer
             "path": "/google-workspace",
             "scope": "private_user",
             "status": "active",
@@ -611,41 +611,61 @@ async def seed_acl_entries(users, servers):
     acl_entries = []
     admin_user = next((u for u in users if getattr(u, "role", "").upper() == "ADMIN"), None)
     for server in servers:
-        for user in users:
-            print(f"Seeding ACL Entry for user: {user} on server: {server.serverName}")
-            # Admin gets OWNER on all servers
-            if admin_user and user.id == admin_user.id:
-                perm_bits = RoleBits.OWNER
-            # Author gets OWNER
-            elif user.id == server.author:
-                perm_bits = RoleBits.OWNER
-            # Others get VIEWER
-            else:
-                perm_bits = RoleBits.VIEWER
+        # Create a public entry 
+        print(f"Seeding public ACL Entry for server: {server.id}")
+        existing_public_acl = await IAclEntry.find_one({
+            "principalType": PrincipalType.PUBLIC,
+            "principalId": None,
+            "resourceType": ResourceType.MCPSERVER,
+            "resourceId": server.id,
+        })
+        if existing_public_acl:
+            print(f"  Public ACL entry for server {server.serverName} already exists, skipping...")
+            acl_entries.append(existing_public_acl)
+        else: 
+            public_acl_entry = IAclEntry(
+                principalType=PrincipalType.PUBLIC,
+                principalId=None,
+                resourceType=ResourceType.MCPSERVER.value,
+                resourceId=server.id,
+                permBits=PermissionBits.VIEW,
+                grantedAt=datetime.now(timezone.utc),
+                createdAt=datetime.now(timezone.utc),
+                updatedAt=datetime.now(timezone.utc)
+            )
+            created_public_entry = await public_acl_entry.insert()
+            acl_entries.append(created_public_entry)
+            print(f"  Created public ACL entry server {server.serverName}")
 
-            existing_acl = await IAclEntry.find_one({
-                "principalType": PrincipalType.USER,
-                "principalId": {"userId": str(user.id)},
-                "resourceType": ResourceType.MCPSERVER,
-                "resourceId": server.id,
-            })
-            if existing_acl:
-                print(f"  ACL entry for user {user} and server {server.serverName} already exists, skipping...")
-                acl_entries.append(existing_acl)
-            else:
-                acl_entry = IAclEntry(
-                    principalType=PrincipalType.USER,
-                    principalId={"userId": user.id},
-                    resourceType=ResourceType.MCPSERVER.value,
-                    resourceId=server.id,
-                    permBits=perm_bits,
-                    grantedAt=datetime.now(timezone.utc),
-                    createdAt=datetime.now(timezone.utc),
-                    updatedAt=datetime.now(timezone.utc)
-                )
-                await acl_entry.insert()
-                acl_entries.append(acl_entry)
-                print(f"  Created ACL entry for user {user.username} and server {server.serverName} (permBits={perm_bits})")
+        for user in users:
+            print(f"Seeding ACL Entry for user: {user.id} on server: {server.serverName}")
+            # Admin and Authors get OWNER on all servers
+            if user.id == admin_user.id or user.id == server.author:
+                perm_bits = RoleBits.OWNER
+
+                existing_acl = await IAclEntry.find_one({
+                    "principalType": PrincipalType.USER,
+                    "principalId": {"userId": user.id},
+                    "resourceType": ResourceType.MCPSERVER,
+                    "resourceId": server.id,
+                })
+                if existing_acl:
+                    print(f"  ACL entry for user {user} and server {server.serverName} already exists, skipping...")
+                    acl_entries.append(existing_acl)
+                else:
+                    acl_entry = IAclEntry(
+                        principalType=PrincipalType.USER,
+                        principalId={"userId": user.id},
+                        resourceType=ResourceType.MCPSERVER.value,
+                        resourceId=server.id,
+                        permBits=perm_bits,
+                        grantedAt=datetime.now(timezone.utc),
+                        createdAt=datetime.now(timezone.utc),
+                        updatedAt=datetime.now(timezone.utc)
+                    )
+                    await acl_entry.insert()
+                    acl_entries.append(acl_entry)
+                    print(f"  Created ACL entry for user {user.username} and server {server.serverName} (permBits={perm_bits})")
 
     print(f"  - {len(acl_entries)} ACL entries seeded")
     return acl_entries
