@@ -648,23 +648,16 @@ async def device_token(
         # Validate PKCE code_verifier if code_challenge was provided
         code_challenge = auth_code_data.get("code_challenge")
         if code_challenge:
-            logger.info("="*80)
-            logger.info("PKCE VALIDATION")
-            logger.info("="*80)
-            logger.info(f"Stored code_challenge: {code_challenge}")
-            logger.info(f"Received code_verifier: {code_verifier[:20] if code_verifier else None}...")
-            
-            # ... compute challenge ...
-            
-            logger.info(f"Computed challenge: {computed_challenge}")
-            logger.info(f"Match: {computed_challenge == code_challenge}")
-            logger.info("="*80)
             if not code_verifier:
                 return oauth_error_response(
                     "invalid_request",
                     "code_verifier required for PKCE"
                 )
-            
+            logger.info("="*80)
+            logger.info("PKCE VALIDATION")
+            logger.info("="*80)
+            logger.info(f"Stored code_challenge: {code_challenge}")
+            logger.info(f"Received code_verifier: {code_verifier[:20] if code_verifier else None}...")
             # Validate code_verifier against code_challenge
             import hashlib
             import base64
@@ -690,7 +683,11 @@ async def device_token(
                     "invalid_grant",
                     "code_verifier validation failed"
                 )
+                        # ... compute challenge ...
             
+            logger.info(f"Computed challenge: {computed_challenge}")
+            logger.info(f"Match: {computed_challenge == code_challenge}")
+            logger.info("="*80)
             logger.info(f"PKCE validation successful for client {client_id}")
         
         # Generate access token using stored user info
