@@ -498,16 +498,9 @@ async def oauth2_callback(provider: str, request: Request, code: str = None, sta
             raise HTTPException(status_code=401, detail="OAuth session expired - please re-authenticate", headers={"WWW-Authenticate": www_authenticate})
 
         # Decode internal state from temp session to compare client_state
-        try:
-            internal_state = temp_session_data.get("state")
-            pad = '=' * (-len(internal_state) % 4)
-            decoded = base64.urlsafe_b64decode(internal_state + pad).decode('utf-8')
-            internal_state_obj = __import__('json').loads(decoded)
-            expected_client_state = internal_state_obj.get("client_state")
-        except Exception:
-            expected_client_state = None
+        internal_state = temp_session_data.get("state")
 
-        if state != expected_client_state:
+        if state != internal_state:
             raise HTTPException(status_code=400, detail="Invalid state parameter")
 
         if provider != temp_session_data.get("provider"):
