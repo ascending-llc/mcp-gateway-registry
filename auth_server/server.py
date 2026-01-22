@@ -1415,7 +1415,8 @@ async def oauth2_login(
     code_challenge: str = None,
     code_challenge_method: str = None,
     response_type: str = None,
-    resource: str = None
+    resource: str = None,
+    state: str = None
 ):
     """
     Initiate OAuth2 login flow.
@@ -1450,17 +1451,22 @@ async def oauth2_login(
         if not provider_config.get("enabled", False):
             raise HTTPException(status_code=400, detail=f"Provider {provider} is disabled")
         
-        # Generate state parameter for security
+        client_state = state
+        # Generate internal state parameter for security
         # Encode resource parameter in state so we can recover it even if session expires
-        state_data = {
+        internal_state_data = {
             "nonce": secrets.token_urlsafe(24),
-            "resource": resource  # RFC 8707 - preserve for session expiration handling
+            "resource": resource,
+            "client_state": client_state
         }
-        state = base64.urlsafe_b64encode(json.dumps(state_data).encode()).decode().rstrip('=')
+        internal_state = base64.urlsafe_b64encode(
+            json.dumps(internal_state_data).encode()
+        ).decode().rstrip('=')
         
-        # Store state and redirect URI in session for callback validation
+        # Store BOTH states in session
         session_data = {
-            "state": state,
+            "state": internal_state,
+            "client_state": client_state,
             "provider": provider,
             "redirect_uri": redirect_uri or OAUTH2_CONFIG.get("registry", {}).get("success_redirect", "/")
         }
@@ -1602,8 +1608,22 @@ async def oauth2_callback(
             )
         
         # Validate state parameter
-        if state != temp_session_data.get("state"):
-            logger.error(f"State mismatch for provider {provider}: expected={temp_session_data.get('state')[:8]}..., got={state[:8]}...")
+        try:
+            internal_state = temp_session_data.get("state")
+            # internal_state is base64 URL-safe encoded JSON; add padding then decode
+            if internal_state:
+                pad = '=' * (-len(internal_state) % 4)
+                decoded = base64.urlsafe_b64decode(internal_state + pad).decode('utf-8')
+                internal_state_obj = json.loads(decoded)
+                expected_client_state = internal_state_obj.get("client_state")
+            else:
+                expected_client_state = None
+        except Exception as e:
+            logger.warning(f"Failed to decode internal state from temp session: {e}")
+            expected_client_state = None
+
+        if state != expected_client_state:
+            logger.error(f"State mismatch for provider {provider}: expected={str(expected_client_state)[:8]}..., got={state[:8]}...")
             raise HTTPException(status_code=400, detail="Invalid state parameter")
         
         # Validate provider
@@ -1744,7 +1764,8 @@ async def oauth2_callback(
             authorization_code = secrets.token_urlsafe(32)
             current_time = int(time.time())
             expires_at = current_time + 600  # 10 minutes expiration
-            
+            client_state = temp_session_data.get("client_state")
+
             # Store authorization code with token and user data
             authorization_codes_storage[authorization_code] = {
                 "token_data": token_data,
@@ -1764,7 +1785,7 @@ async def oauth2_callback(
             # Redirect to client's redirect_uri with authorization code and state
             redirect_params = {
                 "code": authorization_code,
-                "state": state
+                "state": client_state
             }
             redirect_url = f"{client_redirect_uri}?{urllib.parse.urlencode(redirect_params)}"
             
