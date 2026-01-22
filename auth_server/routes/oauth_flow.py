@@ -554,26 +554,20 @@ async def oauth2_callback(provider: str, request: Request, code: str = None, sta
             response.delete_cookie("oauth2_temp_session")
             return response
 
-        # Otherwise, create session cookie for web flow
-        session_data = {"username": mapped_user["username"], "email": mapped_user.get("email"), "name": mapped_user.get("name"), "groups": mapped_user.get("groups", []), "provider": provider, "auth_method": "oauth2"}
-        registry_session = signer.dumps(session_data)
-        redirect_url = temp_session_data.get("redirect_uri", settings.oauth2_config.get("registry", {}).get("success_redirect", "/"))
+        # Prepare redirect to registry with user info
+        logger.info(f"OAuth2 login successful for user: {mapped_user['username']} via {provider}. Redirecting to registry...")
+        user_idp_data = {
+            "username": mapped_user["username"],
+            "email": mapped_user.get("email"),
+            "name": mapped_user.get("name"),
+            "groups": mapped_user.get("groups", []),
+            "provider": provider,
+            "auth_method": "oauth2"
+        }
+        userinfo_b64 = base64.urlsafe_b64encode(json.dumps(user_idp_data).encode()).decode()
+        redirect_url = f"{settings.registry_url}/api/auth/redirect/callback?userInfo={userinfo_b64}"
+    
         response = RedirectResponse(url=redirect_url, status_code=302)
-
-        cookie_secure_config = settings.oauth2_config.get("session", {}).get("secure", False)
-        x_forwarded_proto = request.headers.get("x-forwarded-proto", "")
-        is_https = x_forwarded_proto == "https" or request.url.scheme == "https"
-        cookie_secure = cookie_secure_config and is_https
-        cookie_samesite = settings.oauth2_config.get("session", {}).get("samesite", "lax")
-        cookie_domain = settings.oauth2_config.get("session", {}).get("domain", "")
-        if not cookie_domain or cookie_domain == "${SESSION_COOKIE_DOMAIN}":
-            cookie_domain = None
-
-        cookie_params = {"key": "mcp_gateway_session", "value": registry_session, "max_age": settings.oauth2_config.get("session", {}).get("max_age_seconds", 28800), "httponly": settings.oauth2_config.get("session", {}).get("httponly", True), "samesite": cookie_samesite, "secure": cookie_secure, "path": "/"}
-        if cookie_domain:
-            cookie_params["domain"] = cookie_domain
-        response.set_cookie(**cookie_params)
-        response.delete_cookie("oauth2_temp_session")
         return response
 
     except HTTPException:

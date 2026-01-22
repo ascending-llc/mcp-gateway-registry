@@ -161,7 +161,7 @@ const Login: React.FC = () => {
   };
 
   const handleOAuthLogin = (provider: string) => {
-    window.location.href = `${getBasePath()}/redirect/${provider}`;
+    window.location.href = `${getBasePath()}/redirect/login/${provider}`;
   };
 
   return (
