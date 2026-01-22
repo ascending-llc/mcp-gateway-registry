@@ -6,6 +6,7 @@ import time
 import secrets
 import random
 import logging
+import traceback
 import jwt
 import os
 import base64
@@ -16,6 +17,8 @@ from fastapi import APIRouter, HTTPException, Form, Request, Cookie
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
+
+from packages.models._generated.user import IUser
 
 from ..core.config import settings
 from ..providers.factory import get_auth_provider
@@ -554,8 +557,21 @@ async def oauth2_callback(provider: str, request: Request, code: str = None, sta
             response.delete_cookie("oauth2_temp_session")
             return response
 
-        # Otherwise, create session cookie for web flow
         session_data = {"username": mapped_user["username"], "email": mapped_user.get("email"), "name": mapped_user.get("name"), "groups": mapped_user.get("groups", []), "provider": provider, "auth_method": "oauth2"}
+        
+        try:
+            # Everything in MongoDB should have an ID. If not, then it's assumed the user does not exist.
+            user_obj = await IUser.find_one({"email": mapped_user["username"]})
+            user_id = str(user_obj.id) if user_obj else None
+        except Exception as e:
+            logger.warning(
+                f"Could not retrieve user ID from registry for {mapped_user['username']}: "
+                # Error is hidden. Must use traceback to debug.
+                f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+            )
+            user_id = None
+        session_data["user_id"] = user_id
+        
         registry_session = signer.dumps(session_data)
         redirect_url = temp_session_data.get("redirect_uri", settings.oauth2_config.get("registry", {}).get("success_redirect", "/"))
         response = RedirectResponse(url=redirect_url, status_code=302)
