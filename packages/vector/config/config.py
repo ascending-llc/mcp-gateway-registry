@@ -82,8 +82,8 @@ class WeaviateConfig(VectorStoreConfig):
     @classmethod
     def from_env(cls) -> "WeaviateConfig":
         """Create Weaviate config from environment variables with validation."""
-        host = os.getenv("WEAVIATE_HOST")
-        port = os.getenv("WEAVIATE_PORT")
+        host = os.getenv("WEAVIATE_HOST","127.0.0.1")
+        port = os.getenv("WEAVIATE_PORT","8080")
         collection_prefix = os.getenv("WEAVIATE_COLLECTION_PREFIX")
         
         # Required validation
@@ -157,7 +157,7 @@ class BedrockEmbeddingConfig(EmbeddingModelConfig):
     @classmethod
     def from_env(cls) -> "BedrockEmbeddingConfig":
         """Create AWS Bedrock config from environment variables with validation."""
-        region = os.getenv("AWS_REGION")
+        region = os.getenv("AWS_REGION","us-east-1")
         model = os.getenv("EMBEDDING_MODEL", "amazon.titan-embed-text-v2:0")
         
         # Required validation
@@ -203,8 +203,8 @@ class BackendConfig(BaseModel):
         Raises:
             ValueError: If required env vars missing or invalid
         """
-        vector_store_type = os.getenv("VECTOR_STORE_TYPE")
-        embedding_provider = os.getenv("EMBEDDING_PROVIDER")
+        vector_store_type = os.getenv("VECTOR_STORE_TYPE", "weaviate")
+        embedding_provider = os.getenv("EMBEDDING_PROVIDER","aws_bedrock")
         
         # Required validation
         if not vector_store_type or vector_store_type.strip() == "":

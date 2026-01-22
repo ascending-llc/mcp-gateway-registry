@@ -369,6 +369,41 @@ class TokenService:
 
         return count
 
+    async def is_access_token_expired(
+            self,
+            user_id: str,
+            service_name: str
+    ) -> bool:
+        """
+        Check if access token is expired or missing
+
+        Returns:
+            True if expired/missing, False if valid
+        """
+        client_token = await self.get_oauth_client_token(user_id, service_name)
+
+        if not client_token:
+            return True
+
+        return self._is_token_expired(client_token)
+
+    async def has_refresh_token(
+            self,
+            user_id: str,
+            service_name: str
+    ) -> bool:
+        """
+        Check if user has a valid refresh token
+
+        Returns:
+            True if refresh token exists and not expired
+        """
+        refresh_token = await self.get_oauth_refresh_token(user_id, service_name)
+
+        if not refresh_token:
+            return False
+
+        return not self._is_token_expired(refresh_token)
 
     async def _get_user_object_id(self, user_id: str) -> PydanticObjectId:
         """

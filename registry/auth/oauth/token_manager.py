@@ -11,13 +11,13 @@ class OAuthTokenManager:
     """OAuth token manager"""
 
     def __init__(self):
-        self.tokens: Dict[str, Dict[str, OAuthTokens]] = {}  # user_id -> {server_name -> tokens}
+        self.tokens: Dict[str, Dict[str, OAuthTokens]] = {}  # user_id -> {server_id -> tokens}
         self._lock = asyncio.Lock()
 
     async def store_tokens(
             self,
             user_id: str,
-            server_name: str,
+            server_id: str,
             tokens: OAuthTokens
     ) -> None:
         """Store tokens"""
@@ -25,30 +25,30 @@ class OAuthTokenManager:
             if user_id not in self.tokens:
                 self.tokens[user_id] = {}
 
-            self.tokens[user_id][server_name] = tokens
-            logger.debug(f"Stored tokens for {user_id}/{server_name}")
+            self.tokens[user_id][server_id] = tokens
+            logger.debug(f"Stored tokens for {user_id}/{server_id}")
 
-    async def get_tokens(self, user_id: str, server_name: str) -> Optional[OAuthTokens]:
+    async def get_tokens(self, user_id: str, server_id: str) -> Optional[OAuthTokens]:
         """Get user's OAuth tokens"""
         async with self._lock:
-            if user_id in self.tokens and server_name in self.tokens[user_id]:
-                tokens = self.tokens[user_id][server_name]
+            if user_id in self.tokens and server_id in self.tokens[user_id]:
+                tokens = self.tokens[user_id][server_id]
 
                 # Check if tokens are expired
                 if self._are_tokens_expired(tokens):
-                    logger.info(f"Tokens expired for {user_id}/{server_name}")
-                    del self.tokens[user_id][server_name]
+                    logger.info(f"Tokens expired for {user_id}/{server_id}")
+                    del self.tokens[user_id][server_id]
                     return None
 
                 return tokens
             return None
 
-    async def delete_tokens(self, user_id: str, server_name: str) -> bool:
+    async def delete_tokens(self, user_id: str, server_id: str) -> bool:
         """Delete user's OAuth tokens"""
         async with self._lock:
-            if user_id in self.tokens and server_name in self.tokens[user_id]:
-                del self.tokens[user_id][server_name]
-                logger.info(f"Deleted tokens for {user_id}/{server_name}")
+            if user_id in self.tokens and server_id in self.tokens[user_id]:
+                del self.tokens[user_id][server_id]
+                logger.info(f"Deleted tokens for {user_id}/{server_id}")
                 return True
             return False
 
@@ -58,11 +58,11 @@ class OAuthTokenManager:
             if user_id in self.tokens:
                 # Filter out expired tokens
                 valid_tokens = {}
-                for server_name, tokens in self.tokens[user_id].items():
+                for server_id, tokens in self.tokens[user_id].items():
                     if not self._are_tokens_expired(tokens):
-                        valid_tokens[server_name] = tokens
+                        valid_tokens[server_id] = tokens
                     else:
-                        logger.debug(f"Filtered expired tokens for {user_id}/{server_name}")
+                        logger.debug(f"Filtered expired tokens for {user_id}/{server_id}")
 
                 # Update storage, remove expired tokens
                 self.tokens[user_id] = valid_tokens
@@ -72,7 +72,7 @@ class OAuthTokenManager:
     async def refresh_tokens(
             self,
             user_id: str,
-            server_name: str,
+            server_id: str,
             new_tokens: OAuthTokens
     ) -> bool:
         """Refresh tokens"""
@@ -80,8 +80,8 @@ class OAuthTokenManager:
             if user_id not in self.tokens:
                 self.tokens[user_id] = {}
 
-            self.tokens[user_id][server_name] = new_tokens
-            logger.info(f"Refreshed tokens for {user_id}/{server_name}")
+            self.tokens[user_id][server_id] = new_tokens
+            logger.info(f"Refreshed tokens for {user_id}/{server_id}")
             return True
 
     def _are_tokens_expired(self, tokens: OAuthTokens) -> bool:
@@ -102,14 +102,14 @@ class OAuthTokenManager:
             for user_id, server_tokens in self.tokens.items():
                 servers_to_remove = []
 
-                for server_name, tokens in server_tokens.items():
+                for server_id, tokens in server_tokens.items():
                     if self._are_tokens_expired(tokens):
-                        servers_to_remove.append(server_name)
+                        servers_to_remove.append(server_id)
                         cleaned_count += 1
 
                 # Delete expired server tokens
-                for server_name in servers_to_remove:
-                    del server_tokens[server_name]
+                for server_id in servers_to_remove:
+                    del server_tokens[server_id]
 
                 # If user has no tokens, mark for removal
                 if not server_tokens:

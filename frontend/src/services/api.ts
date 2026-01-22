@@ -11,10 +11,10 @@ const API = {
 
   // mcp
   getServerStatus: `${MCP_BASE_URL}/connection/status`,
-  getServerStatusById: (serverId: string) => `${MCP_BASE_URL}/connection/status/${serverId}`,
-  getOauthInitiate: (name: string) => `${MCP_BASE_URL}/${name}/oauth/initiate`,
-  getSOauthReinit: (name: string) => `${MCP_BASE_URL}/${name}/reinitialize`,
-  cancelAuth: (name: string) => `${MCP_BASE_URL}/oauth/cancel/${name}`,
+  getServerStatusById: (id: string) => `${MCP_BASE_URL}/connection/status/${id}`,
+  getOauthInitiate: (id: string) => `${MCP_BASE_URL}/${id}/oauth/initiate`,
+  getOauthReinit: (id: string) => `${MCP_BASE_URL}/${id}/reinitialize`,
+  cancelAuth: (id: string) => `${MCP_BASE_URL}/oauth/cancel/${id}`,
 
   // server
   getServers: `${SERVER_BASE_URL}`,

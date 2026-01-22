@@ -92,6 +92,7 @@ class TokenTransformConfig(BaseModel):
 class MCPOAuthFlowMetadata(BaseModel):
     """MCP OAuth flow metadata"""
     server_name: str = Field(..., description="Server name")
+    server_id: str = Field(..., description="Server id")
     user_id: str = Field(..., description="User ID")
     authorization_url: str = Field(..., description="Authorization URL")
     state: str = Field(..., description="State parameter")
@@ -110,6 +111,7 @@ class MCPOAuthFlowMetadata(BaseModel):
 class OAuthFlow:
     """OAuth flow"""
     flow_id: str
+    server_id: str
     server_name: str
     user_id: str
     code_verifier: str

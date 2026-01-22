@@ -155,8 +155,7 @@ async def list_servers(
             )
             # Enrich each server item with connection status
             for server_item in server_items:
-                server_name = server_item.serverName
-                status = connection_status.get(server_name)
+                status = connection_status.get(str(server_item.id))
                 apply_connection_status_to_server(server_item, status, fallback_requires_oauth=False)
         
         except Exception as e:
@@ -269,7 +268,7 @@ async def get_server(
             mcp_service = await get_mcp_service()
             server_status = await get_single_server_connection_status(
                 user_id=user_id,
-                server_name=server.serverName,
+                server_id=server.id,
                 mcp_service=mcp_service
             )
             apply_connection_status_to_server(server_detail, server_status)

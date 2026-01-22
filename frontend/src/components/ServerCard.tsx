@@ -37,7 +37,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
   onServerUpdate,
   onRefreshSuccess,
 }) => {
-  const { cancelPolling, refreshServerData } = useServer();
+  const { cancelPolling, refreshServerData, getServerStatusByPolling } = useServer();
   const [loading, setLoading] = useState(false);
   const [tools, setTools] = useState<Tool[]>([]);
   const [loadingTools, setLoadingTools] = useState(false);
@@ -66,7 +66,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
     if (connection_state === SERVER_CONNECTION.CONNECTED) {
       return <CheckCircleIcon className='h-4 w-4 text-green-500' />;
     }
-    if (connection_state === SERVER_CONNECTION.DISCONNECTED) {
+    if (connection_state === SERVER_CONNECTION.DISCONNECTED || connection_state === SERVER_CONNECTION.ERROR) {
       return <KeyIcon className='h-4 w-4 text-amber-500' />;
     }
     if (connection_state === SERVER_CONNECTION.CONNECTING) {
@@ -82,7 +82,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
   const handleAuth = async () => {
     if (connection_state === SERVER_CONNECTION.CONNECTING) {
       try {
-        const result = await SERVICES.MCP.cancelAuth(server.name);
+        const result = await SERVICES.MCP.cancelAuth(server.id);
         if (result.success) {
           onShowToast?.(result?.message || 'OAuth flow cancelled', 'success');
           refreshServerData();
@@ -93,7 +93,16 @@ const ServerCard: React.FC<ServerCardProps> = ({
         cancelPolling?.(server.id);
       }
     } else {
-      setShowApiKeyDialog(true);
+      try {
+        const result = await SERVICES.MCP.getOauthReinit(server.id);
+        if (result.success) {
+          getServerStatusByPolling(server.id);
+        } else {
+          setShowApiKeyDialog(true);
+        }
+      } catch (_error) {
+        setShowApiKeyDialog(true);
+      }
     }
   };
 
@@ -138,7 +147,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
       }
     } catch (error: any) {
       if (onShowToast) {
-        onShowToast(error?.detail || 'Failed to refresh health status', 'error');
+        onShowToast(error?.detail?.message || 'Failed to refresh health status', 'error');
       }
     } finally {
       setLoadingRefresh(false);

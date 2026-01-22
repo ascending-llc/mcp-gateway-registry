@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Optional, List, Dict, Any, TypeVar, Generic, Type, TYPE_CHECKING
 from langchain_classic.retrievers.contextual_compression import ContextualCompressionRetriever
@@ -17,9 +18,7 @@ T = TypeVar('T')
 class Repository(Generic[T]):
     """
     Generic repository for model CRUD and search operations.
-    
-    Provides ORM-style API for type-safe model operations.
-    Directly uses the adapter for database operations.
+
     """
 
     def __init__(self, db_client: 'DatabaseClient', model_class: Type[T]):
@@ -37,7 +36,7 @@ class Repository(Generic[T]):
 
     def save(self, instance: T) -> Optional[str]:
         """
-        Save a model instance.
+        Save a model instance (synchronous).
         
         Args:
             instance: Model instance to save
@@ -56,9 +55,13 @@ class Repository(Generic[T]):
             logger.error(f"Failed to save {self.model_class.__name__}: {e}")
             return None
 
+    async def asave(self, instance: T) -> Optional[str]:
+        """Save a model instance (asynchronous)."""
+        return await asyncio.to_thread(self.save, instance)
+
     def get(self, doc_id: str) -> Optional[T]:
         """
-        Get model instance by ID.
+        Get model instance by ID (synchronous).
         
         Args:
             doc_id: Document ID
@@ -79,9 +82,13 @@ class Repository(Generic[T]):
             logger.error(f"Failed to get {self.model_class.__name__} {doc_id}: {e}")
             return None
 
+    async def aget(self, doc_id: str) -> Optional[T]:
+        """Get model instance by ID (asynchronous)."""
+        return await asyncio.to_thread(self.get, doc_id)
+
     def update(self, instance: T) -> bool:
         """
-        Update model instance.
+        Update model instance (synchronous).
         
         Args:
             instance: Model instance to update
@@ -101,9 +108,13 @@ class Repository(Generic[T]):
             logger.error(f"Failed to update {self.model_class.__name__}: {e}")
             return False
 
+    async def aupdate(self, instance: T) -> bool:
+        """Update model instance (asynchronous)."""
+        return await asyncio.to_thread(self.update, instance)
+
     def delete(self, doc_id: str) -> bool:
         """
-        Delete model instance by ID.
+        Delete model instance by ID (synchronous).
         
         Args:
             doc_id: Document ID to delete
@@ -121,6 +132,10 @@ class Repository(Generic[T]):
             logger.error(f"Failed to delete {self.model_class.__name__} {doc_id}: {e}")
             return False
 
+    async def adelete(self, doc_id: str) -> bool:
+        """Delete model instance by ID (asynchronous)."""
+        return await asyncio.to_thread(self.delete, doc_id)
+
     def similarity_search(
             self,
             query: str,
@@ -128,7 +143,7 @@ class Repository(Generic[T]):
             filters: Optional[Any] = None
     ) -> List[T]:
         """
-        Semantic search for model instances.
+        Semantic search for model instances (synchronous).
         
         Args:
             query: Search query text
@@ -148,6 +163,20 @@ class Repository(Generic[T]):
             logger.error(f"Search failed: {e}")
             return []
 
+    async def asimilarity_search(
+            self,
+            query: str,
+            k: int = 10,
+            filters: Optional[Any] = None
+    ) -> List[T]:
+        """Semantic search for model instances (asynchronous)."""
+        return await asyncio.to_thread(
+            self.similarity_search,
+            query,
+            k,
+            filters
+        )
+
     def search(
             self,
             query: str,
@@ -156,7 +185,7 @@ class Repository(Generic[T]):
             filters: Optional[Any] = None
     ) -> List[T]:
         """
-        Search for model instances using specified search type.
+        Search for model instances using specified search type (synchronous).
         
         Args:
             query: Search query text
@@ -180,13 +209,29 @@ class Repository(Generic[T]):
             logger.error(f"Search failed: {e}")
             return []
 
+    async def asearch(
+            self,
+            query: str,
+            search_type: SearchType = SearchType.NEAR_TEXT,
+            k: int = 10,
+            filters: Optional[Any] = None
+    ) -> List[T]:
+        """Search for model instances using specified search type (asynchronous)."""
+        return await asyncio.to_thread(
+            self.search,
+            query,
+            search_type,
+            k,
+            filters
+        )
+
     def filter(
             self,
             filters: Any,
             limit: int = 100
     ) -> List[T]:
         """
-        Filter model instances by metadata only (no vector search).
+        Filter model instances by metadata only (synchronous, no vector search).
         
         Uses database-specific metadata filtering.
         
@@ -207,9 +252,21 @@ class Repository(Generic[T]):
             logger.error(f"Filter failed: {e}")
             return []
 
+    async def afilter(
+            self,
+            filters: Any,
+            limit: int = 100
+    ) -> List[T]:
+        """Filter model instances by metadata only (asynchronous)."""
+        return await asyncio.to_thread(
+            self.filter,
+            filters,
+            limit
+        )
+
     def bulk_save(self, instances: List[T]) -> BatchResult:
         """
-        Bulk save model instances.
+        Bulk save model instances (synchronous).
         
         Args:
             instances: List of model instances to save
@@ -242,9 +299,13 @@ class Repository(Generic[T]):
                 errors=[{'message': str(e)}]
             )
 
+    async def abulk_save(self, instances: List[T]) -> BatchResult:
+        """Bulk save model instances (asynchronous)."""
+        return await asyncio.to_thread(self.bulk_save, instances)
+
     def delete_by_filter(self, filters: Any) -> int:
         """
-        Delete model instances by filter conditions.
+        Delete model instances by filter conditions (synchronous).
         
         Args:
             filters: Database-specific filter object
@@ -252,14 +313,94 @@ class Repository(Generic[T]):
         """
         try:
             instances = self.filter(filters=filters, limit=1000)
-            deleted_count = 0
-            for inst in instances:
-                if self.delete(inst.id):
-                    deleted_count += 1
-            return deleted_count
+            
+            # Use batch delete if adapter supports it
+            if hasattr(self.adapter, 'batch_delete_by_ids'):
+                doc_ids = [inst.id for inst in instances]
+                return self.adapter.batch_delete_by_ids(doc_ids, self.collection)
+            else:
+                # Fallback to individual deletes
+                deleted_count = 0
+                for inst in instances:
+                    if self.delete(inst.id):
+                        deleted_count += 1
+                return deleted_count
         except Exception as e:
             logger.error(f"Delete by filter failed: {e}")
             return 0
+
+    async def adelete_by_filter(self, filters: Any) -> int:
+        """Delete model instances by filter conditions (asynchronous)."""
+        return await asyncio.to_thread(self.delete_by_filter, filters)
+
+    def batch_update_by_filter(
+            self,
+            filters: Any,
+            update_data: Dict[str, Any],
+            limit: int = 1000
+    ) -> int:
+        """
+        Batch update fields without triggering re-vectorization (synchronous).
+        
+        Args:
+            filters: Database-specific filter object
+            update_data: Dictionary of fields to update (metadata only, not vector fields)
+            limit: Maximum number of documents to update
+            
+        Returns:
+            Number of successfully updated documents
+        """
+        try:
+            # 1. Query matching documents
+            instances = self.filter(filters=filters, limit=limit)
+            
+            if not instances:
+                logger.info("No documents found matching filters")
+                return 0
+            
+            # 2. Extract IDs
+            doc_ids = [inst.id for inst in instances]
+            
+            # 3. Use adapter's batch update if available
+            if hasattr(self.adapter, 'batch_update_properties'):
+                updated_count = self.adapter.batch_update_properties(
+                    doc_ids=doc_ids,
+                    update_data=update_data,
+                    collection_name=self.collection
+                )
+                logger.info(f"Batch updated {updated_count} documents")
+                return updated_count
+            else:
+                # Fallback: update individually (slower but works)
+                logger.warning("Adapter doesn't support batch updates, using fallback")
+                updated_count = 0
+                for inst in instances:
+                    # Update instance fields
+                    for key, value in update_data.items():
+                        if hasattr(inst, key):
+                            setattr(inst, key, value)
+                    # Save updated instance
+                    if self.update(inst):
+                        updated_count += 1
+                return updated_count
+                
+        except Exception as e:
+            logger.error(f"Batch update by filter failed: {e}")
+            return 0
+
+    async def abatch_update_by_filter(
+            self,
+            filters: Any,
+            update_data: Dict[str, Any],
+            limit: int = 1000
+    ) -> int:
+        """Batch update fields without triggering re-vectorization (asynchronous)."""
+        return await asyncio.to_thread(
+            self.batch_update_by_filter,
+            filters,
+            update_data,
+            limit
+        )
 
     def get_retriever(self,
                       search_type: SearchType = SearchType.NEAR_TEXT,
