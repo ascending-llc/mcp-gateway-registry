@@ -89,6 +89,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             request.state.is_authenticated = True
             request.state.auth_source = user_context.get('auth_source', 'unknown')
             
+            metrics.record_auth_request(user_context.get('auth_source'), success=True)
             logger.info(f"User {user_context.get('username')} authenticated via {user_context.get('auth_source')}")
             return await call_next(request)
         except AuthenticationError as e:
