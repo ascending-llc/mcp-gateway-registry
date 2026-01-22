@@ -12,15 +12,17 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch
 
-from auth_server.routes.oauth_device import (
-    registered_clients,
-    device_codes_storage,
-    user_codes_storage,
+from auth_server.routes.oauth_flow import (
     generate_user_code,
     get_client,
     validate_client_credentials,
     list_registered_clients,
     cleanup_expired_device_codes
+)
+from auth_server.core.state import (
+    registered_clients,
+    device_codes_storage,
+    user_codes_storage
 )
 
 # API prefix for OAuth endpoints (set in conftest.py via AUTH_SERVER_API_PREFIX env var)
@@ -309,7 +311,7 @@ class TestDeviceFlowRoutes:
         # Verify page contains expected content
         content = response.text
         assert user_code in content
-        assert "Device Authorization" in content or "Verify" in content
+        assert "Device Verification" in content or "Verify" in content
 
     def test_device_verification_page_without_user_code(self, test_client: TestClient):
         """Test verification page without user_code parameter."""
@@ -487,7 +489,7 @@ class TestDeviceFlowRoutes:
         device_code = device_response.json()["device_code"]
         
         # Manually expire the device code
-        from auth_server.routes.oauth_device import device_codes_storage
+        from auth_server.core.state import device_codes_storage
         device_codes_storage[device_code]["expires_at"] = int(time.time()) - 1
         
         # Trigger cleanup to remove expired code
@@ -645,7 +647,7 @@ class TestDeviceFlowRoutes:
 
     def test_cleanup_expired_codes(self, test_client: TestClient, clear_device_storage):
         """Test that expired device codes are cleaned up."""
-        from auth_server.routes.oauth_device import device_codes_storage, user_codes_storage
+        from auth_server.core.state import device_codes_storage, user_codes_storage
         
         # Generate device code
         response = test_client.post(
@@ -678,7 +680,7 @@ class TestDeviceFlowRoutes:
 class TestDeviceFlowWithMocking:
     """Integration tests for device flow with JWT mocking."""
     
-    @patch('auth_server.routes.oauth_device.jwt.encode')
+    @patch('auth_server.routes.oauth_flow.jwt.encode')
     def test_approve_device_success_with_token(self, mock_jwt_encode, test_client: TestClient, clear_device_storage):
         """Test device approval generates access token."""
         mock_jwt_encode.return_value = "mock-access-token"
@@ -705,7 +707,7 @@ class TestDeviceFlowWithMocking:
         # Verify JWT token generated
         mock_jwt_encode.assert_called_once()
     
-    @patch('auth_server.routes.oauth_device.jwt.encode')
+    @patch('auth_server.routes.oauth_flow.jwt.encode')
     def test_approve_device_already_approved(self, mock_jwt_encode, test_client: TestClient, clear_device_storage):
         """Test approving already-approved device returns success."""
         mock_jwt_encode.return_value = "mock-access-token"
@@ -729,7 +731,7 @@ class TestDeviceFlowWithMocking:
         assert response.status_code == 200
         assert "already" in response.json()["message"].lower()
     
-    @patch('auth_server.routes.oauth_device.jwt.encode')
+    @patch('auth_server.routes.oauth_flow.jwt.encode')
     def test_device_token_success_with_mocked_jwt(self, mock_jwt_encode, test_client: TestClient, clear_device_storage):
         """Test token endpoint returns mocked access token after approval."""
         mock_jwt_encode.return_value = "mock-access-token"
@@ -766,7 +768,7 @@ class TestDeviceFlowWithMocking:
         assert token_data["scope"] == "test-scope"
         assert token_data["access_token"] == "mock-access-token"
     
-    @patch('auth_server.routes.oauth_device.jwt.encode')
+    @patch('auth_server.routes.oauth_flow.jwt.encode')
     def test_device_token_expired_code(self, mock_jwt_encode, test_client: TestClient, clear_device_storage):
         """Test token endpoint rejects expired device codes."""
         # Create device code
@@ -799,7 +801,7 @@ class TestDeviceFlowWithMocking:
 class TestEndToEndIntegration:
     """End-to-end integration tests combining client registration and device flow."""
     
-    @patch('auth_server.routes.oauth_device.jwt.encode')
+    @patch('auth_server.routes.oauth_flow.jwt.encode')
     def test_full_device_flow_with_registered_client(self, mock_jwt_encode, test_client: TestClient, clear_device_storage):
         """Test complete device flow with dynamically registered client."""
         mock_jwt_encode.return_value = "integration-test-token"

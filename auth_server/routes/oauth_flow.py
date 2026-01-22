@@ -45,7 +45,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Load OAuth2 provider config locally to avoid circular imports
 OAUTH2_CONFIG = get_oauth2_config()
 
 # JWT / signer configuration (use settings)
@@ -446,7 +445,7 @@ async def oauth2_login(provider: str, request: Request, redirect_uri: str = None
         auth_server_url = auth_server_url.rstrip('/')
         callback_uri = f"{auth_server_url}/oauth2/callback/{provider}"
 
-        auth_params = {"client_id": provider_config["client_id"], "response_type": provider_config["response_type"], "scope": " ".join(provider_config["scopes"]), "state": state, "redirect_uri": callback_uri}
+        auth_params = {"client_id": provider_config["client_id"], "response_type": provider_config["response_type"], "scope": " ".join(provider_config["scopes"]), "state": internal_state, "redirect_uri": callback_uri}
         auth_url = f"{provider_config['auth_url']}?{urllib.parse.urlencode(auth_params)}"
 
         response = RedirectResponse(url=auth_url, status_code=302)

@@ -5,29 +5,12 @@ Configuration is passed via headers instead of environment variables.
 
 import argparse
 import logging
-import os
-import base64
-import boto3
+from fastapi import FastAPI
 import jwt
-import requests
-import json
 import time
-import uuid
-from jwt.api_jwk import PyJWK
-from datetime import datetime
-from typing import Dict, Optional, List, Any
-from functools import lru_cache
-from botocore.exceptions import ClientError
-from fastapi import FastAPI, Header, HTTPException, Request, Cookie
-from fastapi.responses import JSONResponse, Response, RedirectResponse
+from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from pydantic import BaseModel
-from pathlib import Path
-from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
-import secrets
-import urllib.parse
-import httpx
 
 # Import settings and scopes config loader
 from .core.config import settings, load_scopes_config
@@ -56,12 +39,6 @@ from .services.cognito_validator_service import SimplifiedCognitoValidator
 # Instantiate a default validator (main() may replace region)
 validator = SimplifiedCognitoValidator()
 
-# Import models
-from .models import (
-    GenerateTokenRequest,
-    GenerateTokenResponse
-)
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,  # Set the log level to INFO
@@ -69,6 +46,7 @@ logging.basicConfig(
     format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
 )
 logger = logging.getLogger(__name__)
+
 
 # Configuration for token generation (from settings)
 JWT_ISSUER = settings.jwt_issuer
@@ -294,63 +272,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# Global OAuth2 configuration using the new config loader
-# This will use the singleton OAuth2ConfigLoader instance
-# OAUTH2_CONFIG = get_oauth2_config()
-
-# Initialize SECRET_KEY and signer for session management (from settings)
-# SECRET_KEY = settings.secret_key
-# signer = URLSafeTimedSerializer(SECRET_KEY)
-
-# def get_enabled_providers():
-#     """Get list of enabled OAuth2 providers, filtered by AUTH_PROVIDER env var if set"""
-#     enabled = []
-
-#     # Check if AUTH_PROVIDER env var is set to filter to only one provider
-#     auth_provider_env = settings.auth_provider if settings.auth_provider else None
-
-#     # First, collect all enabled providers from YAML
-#     yaml_enabled_providers = []
-#     for provider_name, config in OAUTH2_CONFIG.get("providers", {}).items():
-#         if config.get("enabled", False):
-#             yaml_enabled_providers.append(provider_name)
-
-#     if auth_provider_env:
-#         logger.info(f"AUTH_PROVIDER is set to '{auth_provider_env}', filtering providers accordingly")
-
-#         # Check if the specified provider exists in the config
-#         if auth_provider_env not in OAUTH2_CONFIG.get("providers", {}):
-#             logger.error(f"AUTH_PROVIDER '{auth_provider_env}' not found in oauth2_providers.yml configuration")
-#             return []
-
-#         # Check if the specified provider is enabled in YAML
-#         provider_config = OAUTH2_CONFIG["providers"][auth_provider_env]
-#         if not provider_config.get("enabled", False):
-#             logger.warning(f"AUTH_PROVIDER '{auth_provider_env}' is set but this provider is disabled in oauth2_providers.yml")
-#             logger.warning(f"To fix this, either set AUTH_PROVIDER to one of the enabled providers: {yaml_enabled_providers} or enable '{auth_provider_env}' in oauth2_providers.yml")
-#             return []
-
-#         # Warn about providers being filtered out
-#         filtered_providers = [p for p in yaml_enabled_providers if p != auth_provider_env]
-#         if filtered_providers:
-#             logger.warning(f"AUTH_PROVIDER override: Filtering out enabled providers {filtered_providers} - only showing '{auth_provider_env}'")
-#             logger.warning(f"To show all enabled providers, remove the AUTH_PROVIDER environment variable")
-#     else:
-#         logger.info("AUTH_PROVIDER not set, returning all enabled providers from config")
-
-#     for provider_name, config in OAUTH2_CONFIG.get("providers", {}).items():
-#         if config.get("enabled", False):
-#             # If AUTH_PROVIDER is set, only include that specific provider
-#             if auth_provider_env and provider_name != auth_provider_env:
-#                 logger.debug(f"Skipping provider '{provider_name}' due to AUTH_PROVIDER filter")
-#                 continue
-
-#             enabled.append({
-#                 "name": provider_name,
-#                 "display_name": config.get("display_name", provider_name.title())
-#             })
-#             logger.debug(f"Enabled provider: {provider_name}")
-
-#     logger.info(f"Returning {len(enabled)} enabled providers: {[p['name'] for p in enabled]}")
-#     return enabled
