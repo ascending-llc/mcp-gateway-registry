@@ -122,7 +122,7 @@ async def check_tool_exists(tool: McpTool) -> bool:
         return False
 
 
-async def sync_server_tools(server, stats: SyncStats):
+async def sync_server_tools(server: Any, stats: SyncStats):
     server_name = server.serverName
     server_path = server.path
 
@@ -190,7 +190,8 @@ async def sync_server_tools(server, stats: SyncStats):
             print(f"  ○ All {skipped_count} tools already exist, skipping...")
 
         # Record stats for this server
-        failed_count = len(tool_list) - len(tools_to_import) - skipped_count if len(tool_list) >= len(tools_to_import) + skipped_count else 0
+        failed_count = len(tool_list) - len(tools_to_import) - skipped_count if len(tool_list) >= len(
+            tools_to_import) + skipped_count else 0
         stats.add_server(
             server_name,
             server_path,
@@ -256,7 +257,8 @@ async def sync_all_servers(batch_size: int = 100):
 
         for page in range(1, total_pages + 1):
             print(f"\n{'─' * 80}")
-            print(f"BATCH {page}/{total_pages} (Servers {processed_count + 1}-{min(processed_count + batch_size, total)})")
+            print(
+                f"BATCH {page}/{total_pages} (Servers {processed_count + 1}-{min(processed_count + batch_size, total)})")
             print(f"{'─' * 80}")
 
             # Fetch current batch
@@ -278,14 +280,14 @@ async def sync_all_servers(batch_size: int = 100):
                 await sync_server_tools(server, stats)
 
             print(f"\n{'─' * 80}")
-            print(f"Batch {page} completed. Progress: {processed_count}/{total} servers ({processed_count/total*100:.1f}%)")
+            print(
+                f"Batch {page} completed. Progress: {processed_count}/{total} servers ({processed_count / total * 100:.1f}%)")
             print(f"{'─' * 80}")
 
         return stats
 
     except Exception as e:
         print(f"\n✗ Fatal error during sync: {e}")
-        import traceback
         traceback.print_exc()
         stats.add_error(f"Fatal error: {e}")
         return stats
@@ -314,8 +316,9 @@ async def main():
 
     # Parse database name from URI
     db_name = None
-    if '/' in mongo_uri.split('://')[-1]:
-        uri_path = mongo_uri.split('://')[-1]
+    uri_without_scheme = mongo_uri.split("://")[-1]
+    if '/' in uri_without_scheme:
+        uri_path = uri_without_scheme
         if '/' in uri_path:
             db_name = uri_path.split('/')[-1].split('?')[0]
 
