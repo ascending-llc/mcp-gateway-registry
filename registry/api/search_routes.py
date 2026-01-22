@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
 from registry.services.search.service import faiss_service
-from ..services.server_service import server_service
+# from ..services.server_service import server_service
 from ..services.agent_service import agent_service
 
 logger = logging.getLogger(__name__)
@@ -130,11 +130,11 @@ def _user_can_access_agent(agent_path: str, user_context: dict) -> bool:
     return False
 
 
-@router.post(
-    "/semantic",
-    response_model=SemanticSearchResponse,
-    summary="Unified semantic search for MCP servers and tools",
-)
+# @router.post(
+#     "/semantic",
+#     response_model=SemanticSearchResponse,
+#     summary="Unified semantic search for MCP servers and tools",
+# )
 async def semantic_search(
         request: Request,
         search_request: SemanticSearchRequest,
