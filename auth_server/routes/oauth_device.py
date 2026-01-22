@@ -26,6 +26,10 @@ from ..models.device_flow import (
 
 logger = logging.getLogger(__name__)
 
+from ..utils.security_mask import (
+    map_groups_to_scopes,
+)
+
 router = APIRouter()
 
 
@@ -697,18 +701,22 @@ async def device_token(
         # Generate access token using stored user info
         user_info = auth_code_data["user_info"]
         from ..server import SECRET_KEY, JWT_ISSUER, JWT_AUDIENCE, JWT_SELF_SIGNED_KID
+        from ..core.config import SCOPES_CONFIG
         
         # Use resource parameter from auth request as audience, fallback to default
         # This is RFC 8707 (Resource Indicators for OAuth 2.0)
         audience = auth_code_data.get("resource") or JWT_AUDIENCE
         logger.info(f"Generating token with audience: {audience} (resource from request: {auth_code_data.get('resource')})")
         
+        user_groups = user_info.get("groups", [])
+        user_scopes = map_groups_to_scopes(user_groups, SCOPES_CONFIG)
+
         token_payload = {
             "iss": JWT_ISSUER,
             "aud": audience,
             "sub": user_info["username"],
             "client_id": client_id,
-            "scope": " ".join(user_info.get("groups", [])),  # Map groups to scopes
+            "scope": " ".join(user_scopes),
             "groups": user_info.get("groups", []),
             "exp": current_time + 3600,  # 1 hour
             "iat": current_time,
@@ -743,7 +751,7 @@ async def device_token(
             access_token=access_token,
             token_type="Bearer",
             expires_in=3600,
-            scope=" ".join(user_info.get("groups", [])),
+            scope=" ".join(user_scopes),
             refresh_token=rt
         )
     

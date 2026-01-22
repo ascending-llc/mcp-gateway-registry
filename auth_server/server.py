@@ -11,10 +11,8 @@ import boto3
 import jwt
 import requests
 import json
-import yaml
 import time
 import uuid
-import hashlib
 from jwt.api_jwk import PyJWK
 from datetime import datetime
 from typing import Dict, Optional, List, Any
@@ -31,8 +29,8 @@ import secrets
 import urllib.parse
 import httpx
 
-# Import settings
-from .core.config import settings
+# Import settings and scopes config loader
+from .core.config import settings, SCOPES_CONFIG, load_scopes_config
 
 # Import metrics middleware
 from .metrics_middleware import add_auth_metrics_middleware
@@ -77,131 +75,25 @@ DEFAULT_TOKEN_LIFETIME_HOURS = settings.default_token_lifetime_hours
 user_token_generation_counts = {}
 MAX_TOKENS_PER_USER_PER_HOUR = settings.max_tokens_per_user_per_hour
 
-# Load scopes configuration
-def load_scopes_config():
-    """Load the scopes configuration from scopes.yml"""
-    try:
-        # Get scopes file path from settings
-        scopes_file = settings.scopes_file_path
+from .utils.security_mask import (
+    mask_sensitive_id,
+    hash_username,
+    anonymize_ip,
+    mask_headers,
+    map_groups_to_scopes,
+    parse_server_and_tool_from_url,
+)
 
-        with open(scopes_file, 'r') as f:
-            config = yaml.safe_load(f)
-            logger.info(f"Loaded scopes configuration from {scopes_file} with {len(config.get('group_mappings', {}))} group mappings")
-            return config
-    except Exception as e:
-        logger.error(f"Failed to load scopes configuration: {e}")
-        return {}
-
-# Global scopes configuration (will be reloaded dynamically)
-SCOPES_CONFIG = load_scopes_config()
-
-# Utility functions for GDPR/SOX compliance
-def mask_sensitive_id(value: str) -> str:
-    """Mask sensitive IDs showing only first and last 4 characters."""
-    if not value or len(value) <= 8:
-        return "***MASKED***"
-    return f"{value[:4]}...{value[-4:]}"
-
-def hash_username(username: str) -> str:
-    """Hash username for privacy compliance."""
-    if not username:
-        return "anonymous"
-    return f"user_{hashlib.sha256(username.encode()).hexdigest()[:8]}"
-
-def anonymize_ip(ip_address: str) -> str:
-    """Anonymize IP address by masking last octet for IPv4."""
-    if not ip_address or ip_address == 'unknown':
-        return ip_address
-    if '.' in ip_address:  # IPv4
-        parts = ip_address.split('.')
-        if len(parts) == 4:
-            return f"{'.'.join(parts[:3])}.xxx"
-    elif ':' in ip_address:  # IPv6
-        # Mask last segment
-        parts = ip_address.split(':')
-        if len(parts) > 1:
-            parts[-1] = 'xxxx'
-            return ':'.join(parts)
-    return ip_address
-
-def mask_token(token: str) -> str:
-    """Mask JWT token showing only last 4 characters."""
-    if not token:
-        return "***EMPTY***"
-    if len(token) > 20:
-        return f"...{token[-4:]}"
-    return "***MASKED***"
-
-def mask_headers(headers: dict) -> dict:
-    """Mask sensitive headers for logging compliance."""
-    masked = {}
-    for key, value in headers.items():
-        key_lower = key.lower()
-        if key_lower in ['x-authorization', 'authorization', 'cookie']:
-            if 'bearer' in str(value).lower():
-                # Extract token part and mask it
-                parts = str(value).split(' ', 1)
-                if len(parts) == 2:
-                    masked[key] = f"Bearer {mask_token(parts[1])}"
-                else:
-                    masked[key] = mask_token(value)
-            else:
-                masked[key] = "***MASKED***"
-        elif key_lower in ['x-user-pool-id', 'x-client-id']:
-            masked[key] = mask_sensitive_id(value)
-        else:
-            masked[key] = value
-    return masked
-
-def map_groups_to_scopes(groups: List[str]) -> List[str]:
-    """
-    Map identity provider groups to MCP scopes using the group_mappings from scopes.yml configuration.
-    
-    Args:
-        groups: List of group names from identity provider (Cognito, Keycloak, etc.)
-        
-    Returns:
-        List of MCP scopes
-    """
-    scopes = []
-    group_mappings = SCOPES_CONFIG.get('group_mappings', {})
-    
-    for group in groups:
-        if group in group_mappings:
-            group_scopes = group_mappings[group]
-            scopes.extend(group_scopes)
-            logger.debug(f"Mapped group '{group}' to scopes: {group_scopes}")
-        else:
-            logger.debug(f"No scope mapping found for group: {group}")
-    
-    # Remove duplicates while preserving order
-    seen = set()
-    unique_scopes = []
-    for scope in scopes:
-        if scope not in seen:
-            seen.add(scope)
-            unique_scopes.append(scope)
-    
-    logger.info(f"Final mapped scopes: {unique_scopes}")
-    return unique_scopes
 
 def validate_session_cookie(cookie_value: str) -> Dict[str, any]:
     """
     Validate session cookie using itsdangerous serializer.
-    
+
     Args:
         cookie_value: The session cookie value
-        
+
     Returns:
-        Dict containing validation results matching JWT validation format:
-        {
-            'valid': True,
-            'username': str,
-            'scopes': List[str],
-            'method': 'session_cookie',
-            'groups': List[str]
-        }
-        
+        Dict containing validation results matching JWT validation format
     Raises:
         ValueError: If cookie is invalid or expired
     """
@@ -210,20 +102,20 @@ def validate_session_cookie(cookie_value: str) -> Dict[str, any]:
     if not signer:
         logger.warning("Global signer not configured for session cookie validation")
         raise ValueError("Session cookie validation not configured")
-    
+
     try:
         # Decrypt cookie (max_age=28800 for 8 hours)
         data = signer.loads(cookie_value, max_age=28800)
-        
+
         # Extract user info
         username = data.get('username')
         groups = data.get('groups', [])
-        
-        # Map groups to scopes
-        scopes = map_groups_to_scopes(groups)
-        
+
+        # Map groups to scopes using global SCOPES_CONFIG
+        scopes = map_groups_to_scopes(groups, SCOPES_CONFIG)
+
         logger.info(f"Session cookie validated for user: {hash_username(username)}")
-        
+
         return {
             'valid': True,
             'username': username,
@@ -242,34 +134,6 @@ def validate_session_cookie(cookie_value: str) -> Dict[str, any]:
     except Exception as e:
         logger.error(f"Session cookie validation error: {e}")
         raise ValueError(f"Session cookie validation failed: {e}")
-
-def parse_server_and_tool_from_url(original_url: str) -> tuple[Optional[str], Optional[str]]:
-    """
-    Parse server name and tool name from the original URL and request payload.
-    
-    Args:
-        original_url: The original URL from X-Original-URL header
-        
-    Returns:
-        Tuple of (server_name, tool_name) or (None, None) if parsing fails
-    """
-    try:
-        # Extract path from URL (remove query parameters and fragments)
-        from urllib.parse import urlparse
-        parsed_url = urlparse(original_url)
-        path = parsed_url.path.strip('/')
-        
-        # The path should be in format: /server_name/...
-        # Extract the first path component as server name
-        path_parts = path.split('/') if path else []
-        server_name = path_parts[0] if path_parts else None
-        
-        logger.debug(f"Parsed server name '{server_name}' from URL path: {path}")
-        return server_name, None  # Tool name would need to be extracted from request payload
-        
-    except Exception as e:
-        logger.error(f"Failed to parse server/tool from URL {original_url}: {e}")
-        return None, None
 
 
 def _normalize_server_name(name: str) -> str:
@@ -1108,7 +972,7 @@ async def validate_request(request: Request):
         auth_method = validation_result.get('method', '')
         if user_groups and auth_method in ['keycloak', 'entra', 'cognito']:
             # Map IdP groups to scopes using the group mappings
-            user_scopes = map_groups_to_scopes(user_groups)
+            user_scopes = map_groups_to_scopes(user_groups, SCOPES_CONFIG)
             logger.info(f"Mapped {auth_method} groups {user_groups} to scopes: {user_scopes}")
         else:
             user_scopes = validation_result.get('scopes', [])
@@ -1402,10 +1266,12 @@ async def reload_scopes(
             headers={"WWW-Authenticate": "Basic"}
         )
 
-    # Reload the scopes configuration
-    global SCOPES_CONFIG
+    # Reload the scopes configuration by delegating to core.config loader
     try:
-        SCOPES_CONFIG = load_scopes_config()
+        new_config = load_scopes_config()
+        # Update the module-level SCOPES_CONFIG in core.config
+        from .core import config as core_config
+        core_config.SCOPES_CONFIG = new_config
         logger.info(f"Successfully reloaded scopes configuration by admin '{username}'")
 
         return JSONResponse(
@@ -1413,7 +1279,7 @@ async def reload_scopes(
             content={
                 "message": "Scopes configuration reloaded successfully",
                 "timestamp": datetime.utcnow().isoformat(),
-                "group_mappings_count": len(SCOPES_CONFIG.get('group_mappings', {}))
+                "group_mappings_count": len(new_config.get('group_mappings', {}))
             }
         )
     except Exception as e:
