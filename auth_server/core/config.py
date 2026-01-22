@@ -6,6 +6,7 @@ All environment variables are loaded here and accessed through the global `setti
 """
 
 import secrets
+import yaml
 from pathlib import Path
 from typing import Optional
 
@@ -133,3 +134,26 @@ class AuthSettings(BaseSettings):
 
 # Global settings instance
 settings = AuthSettings()
+
+
+def load_scopes_config() -> dict:
+    """Load the scopes configuration from the configured scopes.yml file.
+
+    Returns:
+        Parsed YAML as dict, or empty dict on error.
+    """
+    try:
+        scopes_file = settings.scopes_file_path
+        with open(scopes_file, 'r') as f:
+            config = yaml.safe_load(f)
+            # Ensure at least an empty mapping structure
+            if not isinstance(config, dict):
+                return {}
+            return config
+    except Exception as e:
+        # Logging is not directly available here; re-raise or return empty
+        return {}
+
+
+# Global scopes configuration (loaded at import time)
+SCOPES_CONFIG = load_scopes_config()

@@ -40,3 +40,4 @@ class DeviceTokenResponse(BaseModel):
     token_type: str
     expires_in: int
     scope: str
+    refresh_token: Optional[str] = None
