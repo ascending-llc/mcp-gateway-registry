@@ -364,10 +364,5 @@ async def main():
         print("\nConnections closed.")
 
 
-def cli():
-    """Entry point for command-line script."""
-    asyncio.run(main())
-
-
 if __name__ == "__main__":
-    cli()
+    asyncio.run(main())
