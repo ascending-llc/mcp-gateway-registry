@@ -45,8 +45,6 @@ from .services.cognito_validator_service import SimplifiedCognitoValidator
 # Instantiate a default validator (main() may replace region)
 validator = SimplifiedCognitoValidator()
 
-from packages.models._generated import IUser
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,  # Set the log level to INFO
