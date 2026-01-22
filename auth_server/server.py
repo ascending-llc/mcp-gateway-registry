@@ -1474,7 +1474,10 @@ if __name__ == "__main__":
     main()
     
 logger.info("🔭 Initializing Telemetry...")    
-setup_metrics("auth-server")
+try:
+    setup_metrics("auth-server")
+except Exception as e:
+    logger.warning(f"Failed to initialize telemetry: {e}")
 
 # Global OAuth2 configuration using the new config loader
 # This will use the singleton OAuth2ConfigLoader instance
