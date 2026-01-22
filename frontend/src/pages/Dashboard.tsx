@@ -9,6 +9,7 @@ import {
 import axios from 'axios';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { ServerFormDialog } from '@/components/ServerFormDialog';
 import type { ServerInfo } from '@/contexts/ServerContext';
@@ -50,8 +51,12 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
     return () => clearTimeout(timer);
   }, [onClose]);
 
-  return (
-    <div className='fixed top-4 right-4 z-50 animate-slide-in-top'>
+  return createPortal(
+    <div
+      className='fixed top-4 right-4 z-[100] animate-slide-in-top'
+      onClick={e => e.stopPropagation()}
+      onMouseDown={e => e.stopPropagation()}
+    >
       <div
         className={`flex items-center p-4 rounded-lg shadow-lg border ${
           type === 'success'
@@ -65,11 +70,19 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
           <ExclamationCircleIcon className='h-5 w-5 mr-3 flex-shrink-0' />
         )}
         <p className='text-sm font-medium'>{message}</p>
-        <button onClick={onClose} className='ml-3 flex-shrink-0 text-current opacity-70 hover:opacity-100'>
+        <button
+          onClick={e => {
+            e.stopPropagation();
+            onClose();
+          }}
+          onMouseDown={e => e.stopPropagation()}
+          className='ml-3 flex-shrink-0 text-current opacity-70 hover:opacity-100'
+        >
           <XMarkIcon className='h-4 w-4' />
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 
