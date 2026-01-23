@@ -5,17 +5,15 @@ description = "MCP Gateway Registry - Monorepo Workspace Root"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 
-# Root workspace has no runtime dependencies
-# All dependencies are declared in sub-projects
+# Root workspace dependencies needed for scripts
 dependencies = []
 
 [project.scripts]
-# Scripts from sub-projects
-seed_data = "scripts.seed_mongodb:cli"
-sync_mongo_weaviate = "scripts.sync_mongo_to_weaviate:cli"
+# Data management scripts (use workspace dependencies)
+seed-data = "scripts.seed_mongodb:cli"
+sync-mongo-weaviate = "scripts.sync_mongo_to_weaviate:cli"
 
 # Optional dependencies are defined in sub-projects where they're used
-
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
