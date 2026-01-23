@@ -9,12 +9,12 @@ from pydantic_settings import BaseSettings
 from redis import Redis
 from registry.constants import REGISTRY_CONSTANTS
 
-
 def init_redis_connection() -> Redis:
     """
     Initialize Redis connection
     """
     redis_url = REGISTRY_CONSTANTS.REDIS_URI
+    from registry.utils.log import logger
     try:
         # Create Redis client with connection pooling
         redis_conn = Redis.from_url(

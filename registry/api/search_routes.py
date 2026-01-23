@@ -6,8 +6,9 @@ from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
 from registry.services.search.service import faiss_service
-# from ..services.server_service import server_service
+from ..services.server_service_v1 import server_service_v1
 from ..services.agent_service import agent_service
+from ..schemas.errors import ErrorCode, create_error_detail
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +78,7 @@ class SemanticSearchResponse(BaseModel):
     total_agents: int = 0
 
 
-def _user_can_access_server(path: str, server_name: str, user_context: dict) -> bool:
+async def _user_can_access_server(path: str, server_name: str, user_context: dict) -> bool:
     """Validate whether the current user can view the specified server."""
     if user_context.get("is_admin"):
         return True
@@ -90,7 +91,7 @@ def _user_can_access_server(path: str, server_name: str, user_context: dict) -> 
         return False
 
     try:
-        if server_service.user_can_access_server_path(path, accessible_servers):
+        if await server_service_v1.user_can_access_server_path(path, accessible_servers):
             return True
     except Exception:
         # Fall through to string comparisons if server lookup failed
@@ -130,11 +131,11 @@ def _user_can_access_agent(agent_path: str, user_context: dict) -> bool:
     return False
 
 
-# @router.post(
-#     "/semantic",
-#     response_model=SemanticSearchResponse,
-#     summary="Unified semantic search for MCP servers and tools",
-# )
+@router.post(
+    "/semantic",
+    response_model=SemanticSearchResponse,
+    summary="Unified semantic search for MCP servers and tools",
+)
 async def semantic_search(
         request: Request,
         search_request: SemanticSearchRequest,
@@ -143,7 +144,13 @@ async def semantic_search(
     Run a semantic search against MCP servers (and their tools) using FAISS embeddings.
     """
     if not request.state.is_authenticated:
-        raise HTTPException(detail="Not authenticated", status_code=401)
+        raise HTTPException(
+            status_code=401,
+            detail=create_error_detail(
+                ErrorCode.AUTHENTICATION_REQUIRED,
+                "Not authenticated"
+            )
+        )
     user_context = request.state.user
     logger.info(
         "Semantic search requested by %s (entities=%s, max=%s)",
@@ -160,24 +167,31 @@ async def semantic_search(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=create_error_detail(
+                ErrorCode.INVALID_REQUEST,
+                str(exc)
+            )
         ) from exc
     except RuntimeError as exc:
         logger.error("FAISS search service unavailable: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Semantic search is temporarily unavailable. Please try again later.",
+            detail=create_error_detail(
+                ErrorCode.SERVICE_UNAVAILABLE,
+                "Semantic search is temporarily unavailable. Please try again later."
+            )
         ) from exc
 
     filtered_servers: List[ServerSearchResult] = []
     for server in raw_results.get("servers", []):
-        if not _user_can_access_server(
+        if not await _user_can_access_server(
                 server.get("path", ""),
                 server.get("server_name", ""),
                 user_context,
         ):
             continue
-
+        
         matching_tools = [
             MatchingToolResult(
                 tool_name=tool.get("tool_name", ""),
@@ -187,7 +201,7 @@ async def semantic_search(
             )
             for tool in server.get("matching_tools", [])
         ]
-
+        
         filtered_servers.append(
             ServerSearchResult(
                 path=server.get("path", ""),
@@ -206,7 +220,7 @@ async def semantic_search(
     for tool in raw_results.get("tools", []):
         server_path = tool.get("server_path", "")
         server_name = tool.get("server_name", "")
-        if not _user_can_access_server(server_path, server_name, user_context):
+        if not await _user_can_access_server(server_path, server_name, user_context):
             continue
 
         filtered_tools.append(
