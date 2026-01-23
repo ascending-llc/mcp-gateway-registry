@@ -87,7 +87,15 @@ async def oauth2_login_redirect(provider: str, request: Request):
 
 @router.get("/redirect")
 async def oauth2_callback(request: Request, user_info: str, error: str = None, details: str = None):
-    """Handle OAuth2 callback from auth server"""
+    """Handle OAuth2 callback from auth server
+    
+    This endpoint receives signed user information from the auth server after successful OAuth2 login.
+    The user_info parameter contains a cryptographically signed payload that includes:
+    - username, email, name
+    - idp_id (OID from Entra, sub from Keycloak/Cognito)
+    - groups (from IdP)
+    - provider and auth_method
+    """
 
     try:
         if error:
@@ -104,12 +112,37 @@ async def oauth2_callback(request: Request, user_info: str, error: str = None, d
                 url=f"/login?error={urllib.parse.quote(error_message)}", 
                 status_code=302
             )
-        
-        # Base64 requires the string length to be a multiple of 4.
-        # Add padding to ensure correct decoding of URL-safe values 
-        userinfo_json = base64.urlsafe_b64decode(user_info + '=' * (-len(user_info) % 4)).decode()
-        userinfo = json.loads(userinfo_json)
-        logger.info(f"OAuth2 callback received user: {userinfo['username']}")
+    
+        try:
+            from itsdangerous import SignatureExpired, BadSignature
+            # Max age of 60 seconds for the signed data (should be instant redirect)
+            userinfo = signer.loads(user_info, max_age=60)
+            logger.info(f"OAuth2 callback received signed user info for: {userinfo['username']}")
+        except SignatureExpired:
+            logger.error("Signed user info has expired (>60 seconds old)")
+            return RedirectResponse(
+                url="/login?error=oauth2_data_expired", 
+                status_code=302
+            )
+        except BadSignature:
+            logger.error("Invalid signature on user info data - possible tampering")
+            return RedirectResponse(
+                url="/login?error=oauth2_data_invalid", 
+                status_code=302
+            )
+        except Exception as e:
+            logger.error(f"Failed to decrypt user info: {e}")
+            # Fallback to old base64 decoding for backward compatibility
+            try:
+                userinfo_json = base64.urlsafe_b64decode(user_info + '=' * (-len(user_info) % 4)).decode()
+                userinfo = json.loads(userinfo_json)
+                logger.warning("Used legacy base64 decoding for user info (not recommended)")
+            except Exception as legacy_error:
+                logger.error(f"Failed to decode user info with both methods: {legacy_error}")
+                return RedirectResponse(
+                    url="/login?error=oauth2_data_decode_failed", 
+                    status_code=302
+                )
 
         # IDP username is an email address
         user_obj = await IUser.find_one({"email": userinfo['username']})
