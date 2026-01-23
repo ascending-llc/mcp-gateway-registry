@@ -3,8 +3,7 @@ from typing import Dict, Any, Optional
 from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from fastapi.responses import RedirectResponse, JSONResponse
-
-from api.v1.mcp.connection_router import get_service_config
+from registry.api.v1.mcp.connection_router import get_service_config
 from registry.auth.dependencies import CurrentUser
 from registry.services.oauth.mcp_service import get_mcp_service, MCPService
 from registry.schemas.enums import ConnectionState, OAuthFlowStatus

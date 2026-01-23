@@ -18,37 +18,96 @@ from registry.core.config import settings
 
 class UnifiedAuthMiddleware(BaseHTTPMiddleware):
     """
-        A unified authentication middleware that encapsulates the functionality of `enhanced_auth` and `nginx_proxied_auth`.
+    A unified authentication middleware that encapsulates the functionality of `enhanced_auth` and `nginx_proxied_auth`.
 
-        It automatically attempts all authentication methods and stores the results in `request.state`.
+    It automatically attempts all authentication methods and stores the results in `request.state`.
+
+    Path Matching Logic:
+    --------------------
+    1. authenticated_paths_compiled: Paths that REQUIRE authentication (checked FIRST for security)
+       - These are checked with PRIORITY to ensure security-sensitive paths are protected
+       - Use broad patterns to catch all variations of protected endpoints
+       - Example: "/api/{versions}/mcp/{path:path}" catches all MCP API paths
+
+    2. public_paths_compiled: Paths that are PUBLICLY accessible (no authentication required)
+       - These act as EXCEPTIONS to authenticated paths via double-check logic
+       - Use specific patterns to carve out public endpoints from broader authenticated patterns
+       - Example: "/api/{versions}/mcp/{server_name}/oauth/callback" is public despite matching broader MCP pattern
+
+    3. Double-check mechanism in dispatch():
+       - If a path matches authenticated_paths_compiled, we STILL check public_paths_compiled
+       - This allows specific public paths to override broader authenticated patterns
+       - Critical for OAuth callbacks that fall under general "/api/{versions}/mcp/{path:path}" pattern
+
+    How to Define Paths:
+    --------------------
+    authenticated_paths_compiled:
+      - Define BROAD patterns for protected endpoints first
+      - Use Starlette path syntax: {param}, {param:path}, etc.
+      - Examples:
+        * "/proxy/{path:path}" - All proxy requests need auth
+        * "/api/{versions}/mcp/{path:path}" - All MCP API requests need auth (except public ones below)
+
+    public_paths_compiled:
+      - Define SPECIFIC patterns that should be accessible without auth
+      - These override authenticated patterns via double-check
+      - Use more specific paths to carve out exceptions
+      - Examples:
+        * "/api/{versions}/mcp/{server_name}/oauth/callback" - Specific OAuth callback (public)
+        * "/.well-known/{path:path}" - OAuth discovery endpoints (must be public per RFC)
+        * "/health" - Health check endpoint (public)
+
+    Path Matching Priority:
+    --------------------
+    1. Check authenticated_paths_compiled FIRST (security priority)
+    2. If matched, double-check public_paths_compiled (exceptions)
+    3. If public match found, allow without auth
+    4. Otherwise, require authentication
     """
 
     def __init__(self, app):
         super().__init__(app)
-        # Paths that require authentication (checked before public paths)
+        
+        # =====================================================================
+        # AUTHENTICATED PATHS (Require Authentication - Checked First)
+        # =====================================================================
+        # Define BROAD patterns for endpoints that need authentication.
+        # Use Starlette path syntax: {param} for single segment, {path:path} for multi-segment
+        # These are checked BEFORE public paths for security priority.
         self.authenticated_paths_compiled = self._compile_patterns([
-            "/api/auth/me",
-            "/api/{versions}/servers/{path:path}",
-            "/api/{versions}/servers",
-            "/proxy/{path:path}",
-            "/api/{versions}/mcp/{path:path}",
+            "/api/auth/me",                                # User profile endpoint
+            "/api/{versions}/servers/{path:path}",         # All server management endpoints
+            "/api/{versions}/servers",                     # Server listing endpoint
+            "/proxy/{path:path}",                          # All MCP proxy requests
+            "/api/{versions}/mcp/{path:path}",             # All MCP API requests (with public exceptions below)
         ])
+        
+        # =====================================================================
+        # PUBLIC PATHS (No Authentication Required - Act as Exceptions)
+        # =====================================================================
+        # Define SPECIFIC patterns that should be publicly accessible.
+        # These override authenticated patterns via double-check logic in dispatch().
+        # Use MORE SPECIFIC paths to carve out exceptions from broader authenticated patterns.
         self.public_paths_compiled = self._compile_patterns([
-            "/",
-            "/health",
-            "/docs",
-            "/openapi.json",
-            "/static/{path:path}",
-            "/redirect/{provider}",
-            "/api/auth/{path:path}",  # Most auth endpoints are public
-            "/api/{versions}/mcp/{server_name}/oauth/callback",  # OAuth callback is public
-            "/api/{versions}/mcp/oauth/success",  # OAuth success page
-            "/api/{versions}/mcp/oauth/error",  # OAuth error page
-            "/.well-known/{path:path}",  # OAuth discovery endpoints must be public
+            "/",                                                          # Root/home page
+            "/health",                                                    # Health check endpoint
+            "/docs",                                                      # API documentation
+            "/openapi.json",                                              # OpenAPI schema
+            "/static/{path:path}",                                        # Static assets (CSS, JS, images)
+            "/redirect/{provider}",                                       # OAuth provider redirect
+            #"/api/auth/{path:path}",                                     # COMMENTED OUT: Would conflict with /api/auth/me (requires auth). If this broad pattern is enabled, the double-check would incorrectly allow /api/auth/me without authentication. Instead, explicitly list specific public auth endpoints if needed (e.g., /api/auth/login, /api/auth/logout).
+            "/api/{versions}/mcp/{server_name}/oauth/callback",           # OAuth callback (MUST be public for OAuth flow)
+            "/api/{versions}/mcp/oauth/success",                          # OAuth success page
+            "/api/{versions}/mcp/oauth/error",                            # OAuth error page
+            "/.well-known/{path:path}",                                   # OAuth discovery endpoints (RFC requirement)
         ])
-        # note: admin
+        
+        # =====================================================================
+        # INTERNAL PATHS (Admin/Internal - Require Basic Auth)
+        # =====================================================================
+        # Define patterns for internal/admin endpoints that use Basic authentication.
         self.internal_paths_compiled = self._compile_patterns([
-            "/api/internal/{path:path}",
+            "/api/internal/{path:path}",                   # Internal admin endpoints
         ])
         logger.info(
             f"Auth middleware initialized with Starlette routing: "
