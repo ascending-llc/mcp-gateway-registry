@@ -73,9 +73,14 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        
-        # Check authenticated paths first (these override public patterns)
+        # Check authenticated paths first (security priority)
         if self._match_path(path, self.authenticated_paths_compiled):
+            # Double-check if this path is actually a public path (e.g., OAuth callbacks)
+            # This handles cases where generic patterns like /api/{versions}/mcp/{path:path}
+            # would otherwise catch specific public paths like /api/{versions}/mcp/{server_name}/oauth/callback
+            if self._match_path(path, self.public_paths_compiled):
+                logger.debug(f"Path matched authenticated pattern but is explicitly public: {path}")
+                return await call_next(request)
             logger.debug(f"Authenticated path: {path}")
             # Continue to authentication logic below
         elif self._match_path(path, self.public_paths_compiled):
@@ -294,7 +299,8 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.info(f"JWT token validated for user: {username}, type: {token_type}, scopes: {scopes}")
             if description:
                 logger.debug(f"Token description: {description}")
-            user_id = claims.get('user_id')
+            # user_id = claims.get('user_id')
+            user_id = "yulin.deng@ascendingdc.com" # TODO: 修复后去掉默认值 或者 user_id = username （email）
             logger.debug(f"jwt enhencement user id {user_id}")
             # Return user context similar to _try_basic_auth
             return self._build_user_context(
