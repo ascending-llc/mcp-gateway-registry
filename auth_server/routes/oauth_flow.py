@@ -575,7 +575,7 @@ async def oauth2_callback(provider: str, request: Request, code: str = None, sta
         # Prepare redirect to registry with user info
         logger.info(f"OAuth2 login successful for user: {mapped_user['username']} via {provider}. Redirecting to registry...")
         user_idp_data = {
-            "username": mapped_user["username"],
+            "username": mapped_user.get("username"),
             "email": mapped_user.get("email"),
             "name": mapped_user.get("name"),
             "idp_id": mapped_user.get("idp_id"),

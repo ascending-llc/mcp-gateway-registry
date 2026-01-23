@@ -12,7 +12,7 @@ import secrets
 
 from ..core.config import settings
 from auth_server.core.config import settings as auth_settings
-from .dependencies import create_session_cookie, validate_login_credentials
+from ..auth.dependencies import create_session_cookie, validate_login_credentials
 from packages.models._generated import IUser
 from itsdangerous import URLSafeTimedSerializer
 
@@ -144,8 +144,14 @@ async def oauth2_callback(request: Request, user_info: str, error: str = None, d
                     status_code=302
                 )
 
-        # IDP username is an email address
-        user_obj = await IUser.find_one({"email": userinfo['username']})
+        # Check idp_id
+        user_obj = await IUser.find_one({
+            "$or": [
+                {"idOnTheSource": userinfo.get("idp_id")},
+                {"email": userinfo.get("username")}
+            ]
+        })
+
         if not user_obj: 
             logger.warning(f"User {userinfo['username']} not found in registry database")
             return RedirectResponse(

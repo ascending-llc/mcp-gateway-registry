@@ -18,7 +18,7 @@ from registry.core.config import settings
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 # Import domain routers
-from registry.auth.routes import router as auth_router
+from registry.api.redirect_routes import router as auth_router
 from registry.api.server_routes import router as servers_router
 from registry.api.v1.server_routes import router as servers_router_v1
 from registry.api.internal_routes import router as internal_router
@@ -29,7 +29,7 @@ from registry.api.agent_routes import router as agent_router
 from registry.api.management_routes import router as management_router
 from registry.health.routes import router as health_router
 from registry.api.v1.mcp.oauth_router import router as oauth_router
-from registry.auth.routes import router as auth_provider_router
+from registry.api.redirect_routes import router as auth_provider_router
 from registry.api.v1.mcp.connection_router import router as connection_router
 from registry.version import __version__
 from registry.api.proxy_routes import router as proxy_router, shutdown_proxy_client
