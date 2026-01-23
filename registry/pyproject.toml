@@ -55,7 +55,6 @@ dependencies = [
 packages = { workspace = true }
 
 [tool.uv]
-# Local-only project - never resolve from PyPI
 package = false
 
 [build-system]

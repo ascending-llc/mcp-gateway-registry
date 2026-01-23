@@ -78,9 +78,10 @@ async def oauth_authorization_server_metadata():
         "response_types_supported": ["code"],
         "grant_types_supported": [
             "authorization_code",
+            "refresh_token",
             "urn:ietf:params:oauth:grant-type:device_code"
         ],
-        "token_endpoint_auth_methods_supported": ["client_secret_post"],
+        "token_endpoint_auth_methods_supported": ["client_secret_post", "client_secret_basic", "none"],
         "code_challenge_methods_supported": ["S256"],
         "scopes_supported": [
             "mcp-registry-admin",
@@ -120,10 +121,11 @@ async def openid_configuration():
         "subject_types_supported": ["public"],
         "id_token_signing_alg_values_supported": ["HS256", "RS256"],
         "scopes_supported": ["openid", "profile", "email"],
-        "token_endpoint_auth_methods_supported": ["client_secret_post"],
+        "token_endpoint_auth_methods_supported": ["client_secret_post", "client_secret_basic", "none"],
         "claims_supported": ["sub", "email", "name", "groups"],
         "grant_types_supported": [
             "authorization_code",
+            "refresh_token",
             "urn:ietf:params:oauth:grant-type:device_code"
         ]
     }

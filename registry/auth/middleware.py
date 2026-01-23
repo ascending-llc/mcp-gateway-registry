@@ -39,6 +39,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/docs",
             "/openapi.json",
             "/static/{path:path}",
+            "/redirect/{provider}",
             "/api/auth/{path:path}",  # Most auth endpoints are public
             "/api/{versions}/mcp/{server_name}/oauth/callback",  # OAuth callback is public
             "/api/{versions}/mcp/oauth/success",  # OAuth success page
@@ -294,6 +295,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             if description:
                 logger.debug(f"Token description: {description}")
             user_id = claims.get('user_id')
+            logger.debug(f"jwt enhencement user id {user_id}")
             # Return user context similar to _try_basic_auth
             return self._build_user_context(
                 user_id=user_id,
@@ -323,7 +325,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             auth_method = session_data.get('auth_method', 'traditional')
             user_id = session_data.get('user_id')
 
-            logger.info(f"Enhanced auth debug for {username}: groups={groups}, auth_method={auth_method}")
+            logger.debug(f"Enhanced auth debug for {username} and user id {user_id}: groups={groups}, auth_method={auth_method}")
 
             # Process permissions according to enhanced_auth logic
             if auth_method == 'oauth2':

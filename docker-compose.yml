@@ -124,7 +124,6 @@ services:
       retries: 3
     profiles:
       - full
-      - dev
 
   # MongoDB Database
   registry-mongodb:
@@ -197,6 +196,7 @@ services:
       - ENTRA_EMAIL_CLAIM=${ENTRA_EMAIL_CLAIM:-upn}
       - ENTRA_NAME_CLAIM=${ENTRA_NAME_CLAIM:-name}
       - ENTRA_ROLE_TOKEN_KIND=${ENTRA_ROLE_TOKEN_KIND:-id}
+      - REGISTRY_CLIENT_URL=${REGISTRY_CLIENT_URL:-http://registry-frontend}
     ports:
       - "8888:8888"
     volumes:
@@ -223,7 +223,6 @@ services:
     restart: unless-stopped
     profiles:
       - full
-      - dev
 
   # MCP Gateway Server
   mcpgw-server:
@@ -290,7 +289,6 @@ services:
       retries: 3
     profiles:
       - full
-      - dev
 
   # Prometheus for metrics collection
   prometheus:

@@ -6,6 +6,9 @@ from fastapi import APIRouter, Request, Form, HTTPException, status, Cookie
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 import httpx
+import base64
+import json
+import secrets
 
 from ..core.config import settings
 from .dependencies import create_session_cookie, validate_login_credentials
@@ -41,10 +44,17 @@ async def oauth2_login_redirect(provider: str, request: Request):
     """Redirect to auth server for OAuth2 login"""
     try:
         # Build redirect URL to auth server - use external URL for browser redirects
-        registry_url = str(request.base_url).rstrip('/')
+        registry_client_url = settings.registry_client_url
         auth_external_url = settings.auth_server_external_url
-        auth_url = f"{auth_external_url}/oauth2/login/{provider}?redirect_uri={registry_url}/"
-        logger.info(f"request.base_url: {request.base_url}, registry_url: {registry_url}, auth_external_url: {auth_external_url}, auth_url: {auth_url}")
+        state_data = {
+            "nonce": secrets.token_urlsafe(24),
+            "resource": registry_client_url
+        }
+        client_state = base64.urlsafe_b64encode(
+            json.dumps(state_data).encode()
+        ).decode().rstrip('=')
+        auth_url = f"{auth_external_url}/oauth2/login/{provider}?redirect_uri={registry_client_url}&state={client_state}"
+        logger.info(f"request.base_url: {request.base_url}, registry_url: {registry_client_url}, auth_external_url: {auth_external_url}, auth_url: {auth_url}")
         logger.info(f"Redirecting to OAuth2 login for provider {provider}: {auth_url}")
         return RedirectResponse(url=auth_url, status_code=302)
         

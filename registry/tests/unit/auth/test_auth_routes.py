@@ -36,10 +36,11 @@ class TestAuthRoutes:
         """Mock settings for testing."""
         with patch('registry.auth.routes.settings') as mock_settings:
             mock_settings.auth_server_url = "http://auth.example.com"
-            mock_settings.auth_server_external_url = "http://auth.example.com"  # Add external URL
+            mock_settings.auth_server_external_url = "http://auth.example.com"
             mock_settings.session_cookie_name = "session"
             mock_settings.session_max_age_seconds = 3600
             mock_settings.templates_dir = "/templates"
+            mock_settings.registry_client_url = "http://localhost:8000/"
             yield mock_settings
 
     @pytest.fixture
@@ -131,13 +132,15 @@ class TestAuthRoutes:
     async def test_oauth2_login_redirect_success(self, mock_request, mock_settings):
         """Test successful OAuth2 login redirect."""
         provider = "google"
-        
+
         response = await oauth2_login_redirect(provider, mock_request)
-        
+
         assert isinstance(response, RedirectResponse)
         assert response.status_code == 302
-        expected_url = f"{mock_settings.auth_server_url}/oauth2/login/{provider}?redirect_uri=http://localhost:8000/"
-        assert response.headers["location"] == expected_url
+        # The route uses auth_server_external_url for the redirect
+        expected_url = f"{mock_settings.auth_server_external_url}/oauth2/login/{provider}?redirect_uri=http://localhost:8000/&state="
+        # The state param is dynamic, so just check the prefix
+        assert response.headers["location"].startswith(expected_url)
 
     @pytest.mark.asyncio
     async def test_oauth2_login_redirect_exception(self, mock_request, mock_settings):
