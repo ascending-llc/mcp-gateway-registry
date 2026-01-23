@@ -486,8 +486,7 @@ class WeaviateStore(VectorStoreAdapter):
             deleted_count = result.successful
             if result.failed > 0:
                 logger.warning(f"Batch delete: {result.successful} successful, {result.failed} failed")
-            else:
-                logger.info(f"Batch deleted {deleted_count}/{len(doc_ids)} documents")
+            logger.info(f"Batch deleted {deleted_count}/{len(doc_ids)} documents")
             return deleted_count
 
         except Exception as e:

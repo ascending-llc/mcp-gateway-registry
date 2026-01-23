@@ -56,13 +56,6 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         * "/api/{versions}/mcp/{server_name}/oauth/callback" - Specific OAuth callback (public)
         * "/.well-known/{path:path}" - OAuth discovery endpoints (must be public per RFC)
         * "/health" - Health check endpoint (public)
-
-    Path Matching Priority:
-    --------------------
-    1. Check authenticated_paths_compiled FIRST (security priority)
-    2. If matched, double-check public_paths_compiled (exceptions)
-    3. If public match found, allow without auth
-    4. Otherwise, require authentication
     """
 
     def __init__(self, app):
@@ -95,7 +88,6 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/openapi.json",                                              # OpenAPI schema
             "/static/{path:path}",                                        # Static assets (CSS, JS, images)
             "/redirect/{provider}",                                       # OAuth provider redirect
-            #"/api/auth/{path:path}",                                     # COMMENTED OUT: Would conflict with /api/auth/me (requires auth). If this broad pattern is enabled, the double-check would incorrectly allow /api/auth/me without authentication. Instead, explicitly list specific public auth endpoints if needed (e.g., /api/auth/login, /api/auth/logout).
             "/api/{versions}/mcp/{server_name}/oauth/callback",           # OAuth callback (MUST be public for OAuth flow)
             "/api/{versions}/mcp/oauth/success",                          # OAuth success page
             "/api/{versions}/mcp/oauth/error",                            # OAuth error page
