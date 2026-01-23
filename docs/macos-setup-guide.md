@@ -260,6 +260,8 @@ After starting the services, you can populate MongoDB with sample data including
 
 # Seed the database with sample data
 uv run seed_data
+# sync data into vector database(optional)
+uv run sync-mongo-weaviate
 
 # Or use the full command:
 # uv run python scripts/seed_mongodb.py
