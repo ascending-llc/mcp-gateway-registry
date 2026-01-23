@@ -11,7 +11,10 @@ import json
 import secrets
 
 from ..core.config import settings
-from .dependencies import create_session_cookie, validate_login_credentials
+from auth_server.core.config import settings as auth_settings
+from ..auth.dependencies import create_session_cookie, validate_login_credentials
+from packages.models._generated import IUser
+from itsdangerous import URLSafeTimedSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +22,10 @@ router = APIRouter()
 
 # Templates (will be injected via dependency later, but for now keep it simple)
 templates = Jinja2Templates(directory=settings.templates_dir)
+
+# JWT / signer configuration
+SECRET_KEY = settings.secret_key
+signer = URLSafeTimedSerializer(SECRET_KEY)
 
 
 async def get_oauth2_providers():
@@ -63,9 +70,18 @@ async def oauth2_login_redirect(provider: str, request: Request):
         return RedirectResponse(url="/login?error=oauth2_redirect_failed", status_code=302)
 
 
-@router.get("/auth/callback")
-async def oauth2_callback(request: Request, error: str = None, details: str = None):
-    """Handle OAuth2 callback from auth server"""
+@router.get("/redirect")
+async def oauth2_callback(request: Request, user_info: str, error: str = None, details: str = None):
+    """Handle OAuth2 callback from auth server
+    
+    This endpoint receives signed user information from the auth server after successful OAuth2 login.
+    The user_info parameter contains a cryptographically signed payload that includes:
+    - username, email, name
+    - idp_id (OID from Entra, sub from Keycloak/Cognito)
+    - groups (from IdP)
+    - provider and auth_method
+    """
+
     try:
         if error:
             logger.warning(f"OAuth2 callback received error: {error}, details: {details}")
@@ -81,27 +97,79 @@ async def oauth2_callback(request: Request, error: str = None, details: str = No
                 url=f"/login?error={urllib.parse.quote(error_message)}", 
                 status_code=302
             )
-        
-        # If we reach here, the auth server should have set the session cookie
-        # Verify the session is valid by checking the cookie
-        session_cookie = request.cookies.get(settings.session_cookie_name)
-        if session_cookie:
+    
+        try:
+            from itsdangerous import SignatureExpired, BadSignature
+            # Max age of 60 seconds for the signed data (should be instant redirect)
+            userinfo = signer.loads(user_info, max_age=60)
+            logger.info(f"OAuth2 callback received signed user info for: {userinfo['username']}")
+        except SignatureExpired:
+            logger.error("Signed user info has expired (>60 seconds old)")
+            return RedirectResponse(
+                url="/login?error=oauth2_data_expired", 
+                status_code=302
+            )
+        except BadSignature:
+            logger.error("Invalid signature on user info data - possible tampering")
+            return RedirectResponse(
+                url="/login?error=oauth2_data_invalid", 
+                status_code=302
+            )
+        except Exception as e:
+            logger.error(f"Failed to decrypt user info: {e}")
+            # Fallback to old base64 decoding for backward compatibility
             try:
-                from .dependencies import signer
-                # Validate session cookie
-                session_data = signer.loads(session_cookie, max_age=settings.session_max_age_seconds)
-                username = session_data.get("username")
-                auth_method = session_data.get("auth_method", "unknown")
-                
-                logger.info(f"OAuth2 callback successful for user {username} via {auth_method}")
-                return RedirectResponse(url="/", status_code=302)
-                
-            except Exception as e:
-                logger.warning(f"Invalid session cookie in OAuth2 callback: {e}")
+                userinfo_json = base64.urlsafe_b64decode(user_info + '=' * (-len(user_info) % 4)).decode()
+                userinfo = json.loads(userinfo_json)
+                logger.warning("Used legacy base64 decoding for user info (not recommended)")
+            except Exception as legacy_error:
+                logger.error(f"Failed to decode user info with both methods: {legacy_error}")
+                return RedirectResponse(
+                    url="/login?error=oauth2_data_decode_failed", 
+                    status_code=302
+                )
+
+        # Check idp_id
+        user_obj = await IUser.find_one({
+            "$or": [
+                {"idOnTheSource": userinfo.get("idp_id")},
+                {"email": userinfo.get("username")}
+            ]
+        })
+
+        if not user_obj: 
+            logger.warning(f"User {userinfo['username']} not found in registry database")
+            return RedirectResponse(
+                url="/login?error=User+not+found+in+registry", 
+                status_code=302
+            )
         
-        # If no valid session, redirect to login with error
-        logger.warning("OAuth2 callback completed but no valid session found")
-        return RedirectResponse(url="/login?error=oauth2_session_invalid", status_code=302)
+        session_data = {
+            **userinfo,
+            "user_id": str(user_obj.id),
+            "role": user_obj.role
+        }
+        registry_session = signer.dumps(session_data)
+        response = RedirectResponse(url=settings.registry_client_url.rstrip('/'), status_code=302)
+        cookie_secure_config = auth_settings.oauth2_config.get("session", {}).get("secure", False)
+        x_forwarded_proto = request.headers.get("x-forwarded-proto", "")
+        is_https = x_forwarded_proto == "https" or request.url.scheme == "https"
+        cookie_secure = cookie_secure_config and is_https   
+
+        cookie_params = {
+         "key": "mcp_gateway_session",
+         "value": registry_session, 
+         "max_age": auth_settings.oauth2_config.get("session", {}).get("max_age_seconds", 28800), 
+         "httponly": auth_settings.oauth2_config.get("session", {}).get("httponly", True),
+         "samesite": auth_settings.oauth2_config.get("session", {}).get("samesite", "lax"),
+         "secure": cookie_secure, 
+         "path": "/"
+        }
+
+        # Set cookie and redirect back to UI
+        response.set_cookie(**cookie_params)
+        response.delete_cookie("oauth2_temp_session")
+        return response
         
     except Exception as e:
         logger.error(f"Error in OAuth2 callback: {e}")
