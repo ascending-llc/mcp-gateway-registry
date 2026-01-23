@@ -3,6 +3,8 @@ Unit tests for authentication routes.
 """
 import pytest
 import urllib.parse
+import base64 
+import json
 from unittest.mock import Mock, patch, AsyncMock
 from fastapi import Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -48,6 +50,19 @@ class TestAuthRoutes:
         """Mock Jinja2Templates."""
         with patch('registry.auth.routes.templates') as mock_templates:
             yield mock_templates
+
+    @pytest.fixture
+    def mock_user_info(self):
+        user_idp_data =  {
+            "username": "test.user@example.com",
+            "email": "test.user@example.com",
+            "name": "Test User",
+            "groups": [],
+            "provider": "entra",
+            "auth_method": "oauth2"
+        }
+        userinfo_b64 = base64.urlsafe_b64encode(json.dumps(user_idp_data).encode()).decode()
+        return userinfo_b64
 
     @pytest.mark.asyncio
     async def test_get_oauth2_providers_success(self):
@@ -159,25 +174,30 @@ class TestAuthRoutes:
             assert "/login?error=oauth2_redirect_failed" in response.headers["location"]
 
     @pytest.mark.asyncio
-    async def test_oauth2_callback_success(self, mock_request, mock_settings):
-        """Test successful OAuth2 callback."""
-        # Mock valid session cookie
-        session_data = {"username": "testuser", "auth_method": "google"}
-        mock_request.cookies = {mock_settings.session_cookie_name: "valid_session"}
-        
-        with patch('registry.auth.dependencies.signer') as mock_signer:
-            mock_signer.loads.return_value = session_data
-            
-            response = await oauth2_callback(mock_request)
-            
-            assert isinstance(response, RedirectResponse)
-            assert response.status_code == 302
-            assert response.headers["location"] == "/"
+    async def test_oauth2_callback_success(self, mock_request, mock_settings, mock_user_info):
+        """Test successful OAuth2 callback with valid user."""
+        mock_user = Mock()
+        mock_user.id = "12345"
+        mock_user.role = "user"
+        with patch("registry.auth.routes.IUser.find_one", new=AsyncMock(return_value=mock_user)):
+            response = await oauth2_callback(mock_request, mock_user_info)
+        assert isinstance(response, RedirectResponse)
+        assert response.status_code == 302
+        assert response.headers["location"] == "http://localhost:8000"
 
     @pytest.mark.asyncio
-    async def test_oauth2_callback_with_error(self, mock_request):
+    async def test_oauth2_callback_user_not_found(self, mock_request, mock_user_info):
+        """Test OAuth2 callback when user is not found in DB."""
+        with patch("registry.auth.routes.IUser.find_one", new=AsyncMock(return_value=None)):
+            response = await oauth2_callback(mock_request, mock_user_info)
+        assert isinstance(response, RedirectResponse)
+        assert response.status_code == 302
+        assert "/login?error=User+not+found+in+registry" in response.headers["location"]
+
+    @pytest.mark.asyncio
+    async def test_oauth2_callback_with_error(self, mock_request, mock_user_info):
         """Test OAuth2 callback with error parameter."""
-        response = await oauth2_callback(mock_request, error="oauth2_error", details="Provider error")
+        response = await oauth2_callback(mock_request, mock_user_info, error="oauth2_error", details="Provider error",)
         
         assert isinstance(response, RedirectResponse)
         assert response.status_code == 302
@@ -185,57 +205,32 @@ class TestAuthRoutes:
         assert "OAuth2%20provider%20error" in response.headers["location"]
 
     @pytest.mark.asyncio
-    async def test_oauth2_callback_oauth2_init_failed(self, mock_request):
+    async def test_oauth2_callback_oauth2_init_failed(self, mock_request, mock_user_info):
         """Test OAuth2 callback with init failed error."""
-        response = await oauth2_callback(mock_request, error="oauth2_init_failed")
+        response = await oauth2_callback(mock_request, mock_user_info, error="oauth2_init_failed")
         
         assert isinstance(response, RedirectResponse)
         assert response.status_code == 302
         assert "Failed%20to%20initiate%20OAuth2%20login" in response.headers["location"]
 
     @pytest.mark.asyncio
-    async def test_oauth2_callback_oauth2_callback_failed(self, mock_request):
+    async def test_oauth2_callback_oauth2_callback_failed(self, mock_request, mock_user_info):
         """Test OAuth2 callback with callback failed error."""
-        response = await oauth2_callback(mock_request, error="oauth2_callback_failed")
+        response = await oauth2_callback(mock_request, mock_user_info, error="oauth2_callback_failed")
         
         assert isinstance(response, RedirectResponse)
         assert response.status_code == 302
         assert "OAuth2%20authentication%20failed" in response.headers["location"]
 
     @pytest.mark.asyncio
-    async def test_oauth2_callback_no_session_cookie(self, mock_request, mock_settings):
-        """Test OAuth2 callback without session cookie."""
-        mock_request.cookies = {}
-        
-        response = await oauth2_callback(mock_request)
-        
-        assert isinstance(response, RedirectResponse)
-        assert response.status_code == 302
-        assert "oauth2_session_invalid" in response.headers["location"]
-
-    @pytest.mark.asyncio
-    async def test_oauth2_callback_invalid_session(self, mock_request, mock_settings):
-        """Test OAuth2 callback with invalid session cookie."""
-        mock_request.cookies = {mock_settings.session_cookie_name: "invalid_session"}
-        
-        with patch('registry.auth.dependencies.signer') as mock_signer:
-            mock_signer.loads.side_effect = Exception("Invalid signature")
-            
-            response = await oauth2_callback(mock_request)
-            
-            assert isinstance(response, RedirectResponse)
-            assert response.status_code == 302
-            assert "oauth2_session_invalid" in response.headers["location"]
-
-    @pytest.mark.asyncio
-    async def test_oauth2_callback_general_exception(self, mock_request):
+    async def test_oauth2_callback_general_exception(self, mock_request, mock_user_info):
         """Test OAuth2 callback with general exception."""
         with patch('registry.auth.routes.logger') as mock_logger:
             # Force exception by making cookies access fail
             mock_request.cookies = Mock()
             mock_request.cookies.get = Mock(side_effect=Exception("Cookie error"))
             
-            response = await oauth2_callback(mock_request)
+            response = await oauth2_callback(mock_request, mock_user_info)
             
             assert isinstance(response, RedirectResponse)
             assert response.status_code == 302
