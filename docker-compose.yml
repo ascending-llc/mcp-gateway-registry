@@ -124,7 +124,6 @@ services:
       retries: 3
     profiles:
       - full
-      - dev
 
   # MongoDB Database
   registry-mongodb:
@@ -223,7 +222,6 @@ services:
     restart: unless-stopped
     profiles:
       - full
-      - dev
 
   # MCP Gateway Server
   mcpgw-server:
@@ -290,7 +288,6 @@ services:
       retries: 3
     profiles:
       - full
-      - dev
 
   # Prometheus for metrics collection
   prometheus:
