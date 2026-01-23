@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from beanie import PydanticObjectId
 from packages.models._generated.token import Token
 from packages.models._generated.user import IUser
@@ -61,6 +61,7 @@ class TokenService:
             return existing_token
         else:
             # Create new token
+            # TODO:  user_id == email ? 是否需要保存email
             token_doc = Token(
                 userId=user_obj_id,
                 type=TokenType.MCP_OAUTH_CLIENT.value,
@@ -200,6 +201,7 @@ class TokenService:
             "type": TokenType.MCP_OAUTH_CLIENT.value,
             "identifier": identifier
         })
+        logger.debug(f"OAuth client token for user={user_id}, token={token}")
 
         # Check if token is expired
         if token and self._is_token_expired(token):
@@ -405,6 +407,62 @@ class TokenService:
 
         return not self._is_token_expired(refresh_token)
 
+    async def get_access_token_status(
+            self,
+            user_id: str,
+            service_name: str
+    ) -> Tuple[Optional[Token], bool]:
+        """
+        Get access token and its validity status
+        
+        Returns:
+            tuple: (token_doc, is_valid)
+                - token_doc: Token document or None if not exists
+                - is_valid: True if token exists and not expired, False otherwise
+        """
+        identifier = self._get_client_identifier(service_name)
+        user_obj_id = await self._get_user_object_id(user_id)
+        
+        token = await Token.find_one({
+            "userId": user_obj_id,
+            "type": TokenType.MCP_OAUTH_CLIENT.value,
+            "identifier": identifier
+        })
+        
+        if not token:
+            return None, False
+        
+        is_valid = not self._is_token_expired(token)
+        return token, is_valid
+
+    async def get_refresh_token_status(
+            self,
+            user_id: str,
+            service_name: str
+    ) -> Tuple[Optional[Token], bool]:
+        """
+        Get refresh token and its validity status
+        
+        Returns:
+            tuple: (token_doc, is_valid)
+                - token_doc: Token document or None if not exists
+                - is_valid: True if token exists and not expired, False otherwise
+        """
+        identifier = self._get_refresh_identifier(service_name)
+        user_obj_id = await self._get_user_object_id(user_id)
+        
+        token = await Token.find_one({
+            "userId": user_obj_id,
+            "type": TokenType.MCP_OAUTH_REFRESH.value,
+            "identifier": identifier
+        })
+        
+        if not token:
+            return None, False
+        
+        is_valid = not self._is_token_expired(token)
+        return token, is_valid
+
     async def _get_user_object_id(self, user_id: str) -> PydanticObjectId:
         """
         Get or create user's ObjectId  TODO: Will be replaced with real user system
@@ -442,6 +500,28 @@ class TokenService:
             return result.inserted_id
 
         return user.id
+
+    async def get_or_create_user(self, email: str) -> Optional[IUser]:
+        """
+        Get user by email
+        """
+        user = await IUser.find_one({"email": email})
+        if not user:
+            now = datetime.now(timezone.utc)
+            # Create user
+            user_data = {
+                "email": email,
+                "emailVerified": False,
+                "role": "USER",
+                "provider": "local",
+                "createdAt": now,
+                "updatedAt": now
+            }
+            collection = IUser.get_pymongo_collection()
+            await collection.insert_one(user_data)
+            logger.info(f"Created user record for token storage: {email}")
+            user = await IUser.find_one({"email": email})
+        return user
 
     def _calculate_expiration(self, expires_in: Optional[int]) -> datetime:
         """
