@@ -565,7 +565,7 @@ async def oauth2_callback(provider: str, request: Request, code: str = None, sta
             "auth_method": "oauth2"
         }
         userinfo_b64 = base64.urlsafe_b64encode(json.dumps(user_idp_data).encode()).decode()
-        redirect_url = f"{settings.registry_url}/redirect?userInfo={userinfo_b64}"
+        redirect_url = f"{settings.registry_url}/redirect?user_info={userinfo_b64}"
     
         response = RedirectResponse(url=redirect_url, status_code=302)
         return response

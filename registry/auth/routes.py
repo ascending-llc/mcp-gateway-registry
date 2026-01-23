@@ -1,4 +1,3 @@
-import os
 import urllib.parse
 import logging
 from typing import Annotated
@@ -12,6 +11,7 @@ import json
 import secrets
 
 from ..core.config import settings
+from auth_server.core.config import settings as auth_settings
 from .dependencies import create_session_cookie, validate_login_credentials
 from packages.models._generated import IUser
 from itsdangerous import URLSafeTimedSerializer
@@ -86,10 +86,8 @@ async def oauth2_login_redirect(provider: str, request: Request):
 
 
 @router.get("/redirect")
-async def oauth2_callback(request: Request, userInfo: str, error: str = None, details: str = None):
+async def oauth2_callback(request: Request, user_info: str, error: str = None, details: str = None):
     """Handle OAuth2 callback from auth server"""
-    userinfo_json = base64.urlsafe_b64decode(userInfo + '=' * (-len(userInfo) % 4)).decode()
-    userinfo = json.loads(userinfo_json)
 
     try:
         if error:
@@ -107,8 +105,13 @@ async def oauth2_callback(request: Request, userInfo: str, error: str = None, de
                 status_code=302
             )
         
-
+        # Base64 requires the string length to be a multiple of 4.
+        # Add padding to ensure correct decoding of URL-safe values 
+        userinfo_json = base64.urlsafe_b64decode(user_info + '=' * (-len(user_info) % 4)).decode()
+        userinfo = json.loads(userinfo_json)
         logger.info(f"OAuth2 callback received user: {userinfo['username']}")
+
+        # IDP username is an email address
         user_obj = await IUser.find_one({"email": userinfo['username']})
         if not user_obj: 
             logger.warning(f"User {userinfo['username']} not found in registry database")
@@ -124,17 +127,18 @@ async def oauth2_callback(request: Request, userInfo: str, error: str = None, de
         }
         registry_session = signer.dumps(session_data)
         response = RedirectResponse(url=settings.registry_client_url.rstrip('/'), status_code=302)
+        cookie_secure_config = auth_settings.oauth2_config.get("session", {}).get("secure", False)
         x_forwarded_proto = request.headers.get("x-forwarded-proto", "")
-        cookie_secure_config = settings.session_cookie_secure
         is_https = x_forwarded_proto == "https" or request.url.scheme == "https"
+        cookie_secure = cookie_secure_config and is_https   
 
         cookie_params = {
          "key": "mcp_gateway_session",
          "value": registry_session, 
-         "max_age": settings.session_max_age_seconds, 
-         "httponly": is_https,
-         "samesite": "lax",
-         "secure": cookie_secure_config and is_https, 
+         "max_age": auth_settings.oauth2_config.get("session", {}).get("max_age_seconds", 28800), 
+         "httponly": auth_settings.oauth2_config.get("session", {}).get("httponly", True),
+         "samesite": auth_settings.oauth2_config.get("session", {}).get("samesite", "lax"),
+         "secure": cookie_secure, 
          "path": "/"
         }
 
