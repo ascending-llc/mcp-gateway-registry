@@ -39,7 +39,7 @@ async def seed_users():
         {
             "name": "Admin User",
             "username": "admin",
-            "email": os.getenv("ADMIN_EMAIL", "admin@example.com"),
+            "email":"admin@example.com",
             "emailVerified": True,
             "password": "$2b$10$abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGH",  # hashed password
             "role": "ADMIN",

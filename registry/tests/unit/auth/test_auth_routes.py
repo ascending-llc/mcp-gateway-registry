@@ -55,7 +55,8 @@ class TestAuthRoutes:
             "name": "Test User",
             "groups": [],
             "provider": "entra",
-            "auth_method": "oauth2"
+            "auth_method": "oauth2",
+            "idp_id": "12345-6789"
         }
         return signer.dumps(user_idp_data)
 
@@ -174,6 +175,7 @@ class TestAuthRoutes:
         mock_user = Mock()
         mock_user.id = "12345"
         mock_user.role = "user"
+        mock_user.idp_id = "12345-6789"
         with patch("registry.api.redirect_routes.IUser.find_one", new=AsyncMock(return_value=mock_user)):
             response = await oauth2_callback(mock_request, mock_user_info)
         assert isinstance(response, RedirectResponse)

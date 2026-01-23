@@ -24,16 +24,4 @@ class UserService:
             logger.error(f"Error finding user by source_id '{source_id}': {e}")
             return None
 
-    async def find_by_email(self, email: str) -> Optional[IUser]:
-        """Find a user by email address."""
-        if not email:
-            logger.warning("No email provided to find_by_email.")
-            return None
-        try:
-            user = await IUser.find_one({"email": email})
-            return user
-        except Exception as e:
-            logger.error(f"Error finding user by email '{email}': {e}")
-            return None
-
 user_service = UserService()

@@ -144,16 +144,8 @@ async def oauth2_callback(request: Request, user_info: str, error: str = None, d
                     url="/login?error=oauth2_data_decode_failed", 
                     status_code=302
                 )
-
-
-        user_obj = None
-        if settings.is_local_dev:
-            # Local/dev: find by email
-            user_obj = await user_service.find_by_email(email=userinfo.get("username"))
-        else:
-            # Production: find by source_id (Entra ID)
-            user_obj = await user_service.find_by_source_id(source_id=userinfo.get("idp_id"))
-
+            
+        user_obj = await user_service.find_by_source_id(source_id=userinfo.get("idp_id"))
         if not user_obj: 
             logger.warning(f"User {userinfo['username']} not found in registry database")
             return RedirectResponse(
