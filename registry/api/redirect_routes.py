@@ -14,6 +14,7 @@ from ..core.config import settings
 from auth_server.core.config import settings as auth_settings
 from ..auth.dependencies import create_session_cookie, validate_login_credentials
 from packages.models._generated import IUser
+from registry.services.user_service import user_service
 from itsdangerous import URLSafeTimedSerializer
 
 logger = logging.getLogger(__name__)
@@ -144,13 +145,14 @@ async def oauth2_callback(request: Request, user_info: str, error: str = None, d
                     status_code=302
                 )
 
-        # Check idp_id
-        user_obj = await IUser.find_one({
-            "$or": [
-                {"idOnTheSource": userinfo.get("idp_id")},
-                {"email": userinfo.get("username")}
-            ]
-        })
+
+        user_obj = None
+        if settings.is_local_dev:
+            # Local/dev: find by email
+            user_obj = await user_service.find_by_email(email=userinfo.get("username"))
+        else:
+            # Production: find by source_id (Entra ID)
+            user_obj = await user_service.find_by_source_id(source_id=userinfo.get("idp_id"))
 
         if not user_obj: 
             logger.warning(f"User {userinfo['username']} not found in registry database")
