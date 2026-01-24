@@ -1,13 +1,24 @@
 from datetime import timezone, datetime
 from typing import Optional
-
 from beanie import PydanticObjectId
-
 from packages.models import IUser
 from registry.utils.log import logger
 
 
 class UserService:
+    
+    async def find_by_source_id(self, source_id: str) -> Optional[IUser]:
+        """Find a user by idOnTheSource (Entra ID or similar)."""
+        if not source_id:
+            logger.warning("No source_id provided to find_by_source_id.")
+            return None
+        try:
+            user = await IUser.find_one({"idOnTheSource": source_id})
+            return user
+        except Exception as e:
+            logger.error(f"Error finding user by source_id '{source_id}': {e}")
+            return None
+    
     async def get_or_create_user(self, email: str) -> Optional[IUser]:
         """
         Get or create an user
@@ -68,6 +79,6 @@ class UserService:
             return result.inserted_id
 
         return user.id
-
+     
 
 user_service = UserService()

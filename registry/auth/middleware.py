@@ -87,6 +87,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/docs",                                                      # API documentation
             "/openapi.json",                                              # OpenAPI schema
             "/static/{path:path}",                                        # Static assets (CSS, JS, images)
+             "/redirect",
             "/redirect/{provider}",                                       # OAuth provider redirect
             "/api/{versions}/mcp/{server_name}/oauth/callback",           # OAuth callback (MUST be public for OAuth flow)
             "/api/{versions}/mcp/oauth/success",                          # OAuth success page

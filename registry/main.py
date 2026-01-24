@@ -18,7 +18,7 @@ from registry.core.config import settings
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 # Import domain routers
-from registry.auth.routes import router as auth_router
+from registry.api.redirect_routes import router as auth_router
 from registry.api.server_routes import router as servers_router
 from registry.api.v1.server_routes import router as servers_router_v1
 from registry.api.internal_routes import router as internal_router
@@ -29,7 +29,7 @@ from registry.api.agent_routes import router as agent_router
 from registry.api.management_routes import router as management_router
 from registry.health.routes import router as health_router
 from registry.api.v1.mcp.oauth_router import router as oauth_router
-from registry.auth.routes import router as auth_provider_router
+from registry.api.redirect_routes import router as auth_provider_router
 from registry.api.v1.mcp.connection_router import router as connection_router
 from registry.version import __version__
 from registry.api.proxy_routes import router as proxy_router, shutdown_proxy_client
@@ -271,23 +271,15 @@ app.openapi = custom_openapi
 @app.get("/api/auth/me")
 async def get_current_user(user_context: CurrentUser):
     """Get current user information for React auth context"""
- 
-    try:
-        user_obj = await IUser.find_one({"email": user_context["username"]})
-        if user_obj:
-            user_id = user_obj.id
-    except Exception as e:
-        logger.info(f"Error fetching user for email {user_context["username"]}: {e}")
-
     return {
-        "username": user_context["username"],
+        "username": user_context.get("username"),
         "auth_method": user_context.get("auth_method", "basic"),
         "provider": user_context.get("provider"),
         "scopes": user_context.get("scopes", []),
         "groups": user_context.get("groups", []),
         "can_modify_servers": user_context.get("can_modify_servers", False),
         "is_admin": user_context.get("is_admin", False),
-        "user_id": str(user_id)
+        "user_id": user_context.get("user_id")
     }
 
 
