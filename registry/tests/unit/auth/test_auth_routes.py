@@ -2,17 +2,12 @@
 Unit tests for authentication routes.
 """
 import pytest
-import urllib.parse
-import base64 
-import json
 from unittest.mock import Mock, patch, AsyncMock
 from fastapi import Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from registry.api.redirect_routes import signer
 
 from registry.api.redirect_routes import (
-    router, 
     get_oauth2_providers,
     login_form,
     oauth2_login_redirect,
@@ -60,7 +55,8 @@ class TestAuthRoutes:
             "name": "Test User",
             "groups": [],
             "provider": "entra",
-            "auth_method": "oauth2"
+            "auth_method": "oauth2",
+            "idp_id": "12345-6789"
         }
         return signer.dumps(user_idp_data)
 
@@ -179,6 +175,7 @@ class TestAuthRoutes:
         mock_user = Mock()
         mock_user.id = "12345"
         mock_user.role = "user"
+        mock_user.idp_id = "12345-6789"
         with patch("registry.api.redirect_routes.IUser.find_one", new=AsyncMock(return_value=mock_user)):
             response = await oauth2_callback(mock_request, mock_user_info)
         assert isinstance(response, RedirectResponse)
@@ -234,7 +231,7 @@ class TestAuthRoutes:
             
             assert isinstance(response, RedirectResponse)
             assert response.status_code == 302
-            assert "oauth2_callback_error" in response.headers["location"]
+            assert "User+not+found+in+registry" in response.headers["location"]
 
     @pytest.mark.asyncio
     async def test_login_submit_success(self, mock_request, mock_settings):
