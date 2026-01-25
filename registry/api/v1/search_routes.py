@@ -1,5 +1,5 @@
 import logging
-from typing import Annotated, List, Literal, Optional
+from typing import List, Literal, Optional
 from registry.auth.dependencies import CurrentUser
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
