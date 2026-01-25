@@ -225,7 +225,7 @@ async def execute_tool(
     username = user_context.get("username", "unknown")
     server = await server_service_v1.get_server_by_id(body.server_id)
     logger.info(
-        f"🔧 Tool execution from user '{username}': {tool_name} on {server.path}"
+        f"🔧 Tool execution from user '{username}': {tool_name} on {body.server_id}"
     )
                
     if not server:

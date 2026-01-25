@@ -199,27 +199,12 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             if not auth_header:
                 logger.debug("Missing Authorization header for JWT auth")
                 return None
-            
-            # Log header format for debugging
-            token_preview = auth_header[:30] + "..." if len(auth_header) > 30 else auth_header
-            logger.info(f"Received Authorization header: {token_preview}")
-            logger.info(f"Header length: {len(auth_header)} chars, starts with 'Bearer ': {auth_header.startswith('Bearer ')}")
-            
-            if not auth_header.startswith("Bearer "):
-                logger.info(f"Authorization header doesn't start with 'Bearer ': {token_preview}")
-                return None
-            
+                        
             access_token = auth_header.split(" ")[1]
             if not access_token:
                 logger.debug("Empty JWT token after split")
                 return None
-            
-            # Log token structure
-            token_parts = access_token.split(".")
-            logger.debug(f"JWT token has {len(token_parts)} parts (expected 3)")
-            if len(token_parts) != 3:
-                logger.error(f"Invalid JWT token structure: expected 3 parts, got {len(token_parts)}")
-                return None
+        
             # JWT validation parameters from auth_server/server.py
             # Extract kid from header first
             kid = None
