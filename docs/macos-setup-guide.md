@@ -79,7 +79,7 @@ ls -la
 ### Setup Python Virtual Environment
 ```bash
 # Create and activate Python virtual environment
-uv sync
+uv sync --all-packages
 source .venv/bin/activate
 
 # Verify virtual environment is active
@@ -260,6 +260,8 @@ After starting the services, you can populate MongoDB with sample data including
 
 # Seed the database with sample data
 uv run seed_data
+# sync data into vector database(optional)
+uv run sync-mongo-weaviate
 
 # Or use the full command:
 # uv run python scripts/seed_mongodb.py

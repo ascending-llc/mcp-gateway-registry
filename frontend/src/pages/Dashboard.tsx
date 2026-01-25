@@ -740,9 +740,6 @@ const Dashboard: React.FC = () => {
             renderDashboardCollections()
           )}
         </div>
-
-        {/* Padding at bottom for scroll */}
-        <div className='pb-12'></div>
       </div>
 
       {/* Register and Edit Server Modal */}

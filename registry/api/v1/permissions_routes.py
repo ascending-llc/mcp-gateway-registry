@@ -51,10 +51,12 @@ async def update_server_permissions(
         status_code=http_status.HTTP_403_FORBIDDEN,
         detail={
             "error": "forbidden",
-            "message": "You do not have edit permissions for this server."
+            "message": "You do not have share permissions for this server."
         })
     
     try:
+        updated_count = 0
+        deleted_count = 0
         if data.public:
             # find the author of the server
             mcp_server = await MCPServerDocument.find_one({"_id": PydanticObjectId(server_id)})
@@ -75,17 +77,15 @@ async def update_server_permissions(
                 perm_bits=PermissionBits.VIEW
             )
         else:
-            # Grant VIEW permissions for principals in data.updated
+            # Grant permissions for principals in data.updated
             for principal in data.updated:
-                principal_type = principal.get("principal_type")
-                principal_id = principal.get("principal_id")
-                await asyncio.gather(
+                result =  await asyncio.gather(
                     acl_service.grant_permission(
-                        principal_type=principal_type,
-                        principal_id={"userId": principal_id},
+                        principal_type=principal.principal_type,
+                        principal_id={"userId": PydanticObjectId(principal.principal_id)},
                         resource_type=ResourceType.MCPSERVER,
                         resource_id=PydanticObjectId(server_id),
-                        perm_bits=PermissionBits.VIEW,
+                        perm_bits=principal.perm_bits,
                     )
                 )
 
@@ -96,13 +96,13 @@ async def update_server_permissions(
                         acl_service.delete_permission(
                             resource_type=ResourceType.MCPSERVER,
                             resource_id=PydanticObjectId(server_id),
-                            principal_type=principal.get("principal_type"),
-                            principal_id=principal.get("principal_id")
+                            principal_type=principal.principal_type,
+                            principal_id=PydanticObjectId(principal.principal_id)
                         )
                     )
 
         return UpdateServerPermissionsResponse(
-            message=f"Deleted {deleted_count} permissions. Permissions updated successfully.",
+            message=f"Updated {updated_count} and deleted {deleted_count} permissions",
             results={f"server_id": server_id}
         )
     

@@ -247,7 +247,7 @@ class ACLService:
 			logger.error(f"Error fetching ACL permissions map for user id: {principal_id}: {e}")
 			return {}
 	
-	# Not used
+
 	async def delete_permission(
 		self,
 		resource_type: str,
@@ -275,7 +275,7 @@ class ACLService:
 				"resourceType": resource_type,
 				"resourceId": resource_id,
 				"principalType": principal_type,
-				"principalId": {"userId": principal_id} if principal_type == "user" else principal_id
+				"principalId": {"userId": principal_id}
 			}
 			result = await IAclEntry.find(query).delete()
 			if hasattr(result, "deleted_count"):

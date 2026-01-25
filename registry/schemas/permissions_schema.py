@@ -11,9 +11,9 @@ from registry.services.constants import PrincipalType
 
 class PermissionPrincipalIn(BaseModel):
     principal_id: str
-    type: PrincipalType
-    permBits: Optional[int]
-    accessRoleId: Optional[str]
+    principal_type: PrincipalType
+    perm_bits: Optional[int]
+    accessRoleId: Optional[str] = None
 
 class UpdateServerPermissionsRequest(BaseModel):
     updated: List[PermissionPrincipalIn] = Field(default_factory=list)
@@ -22,8 +22,8 @@ class UpdateServerPermissionsRequest(BaseModel):
 
 
 class PermissionPrincipalOut(BaseModel):
-    type: PrincipalType
-    id: str
+    principal_type: PrincipalType
+    principal_id: str
     name: Optional[str] = None
     email: Optional[str] = None
     source: Optional[str] = None

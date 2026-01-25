@@ -516,18 +516,36 @@ async def oauth2_callback(provider: str, request: Request, code: str = None, sta
             if provider in ["cognito", "keycloak"]:
                 if "id_token" in token_data:
                     id_claims = jwt.decode(token_data["id_token"], options={"verify_signature": False})
-                    mapped_user = {"username": id_claims.get("preferred_username") or id_claims.get("sub"), "email": id_claims.get("email"), "name": id_claims.get("name") or id_claims.get("given_name"), "groups": id_claims.get("groups", [])}
+                    mapped_user = {
+                        "username": id_claims.get("preferred_username") or id_claims.get("sub"), 
+                        "email": id_claims.get("email"), 
+                        "name": id_claims.get("name") or id_claims.get("given_name"), 
+                        "idp_id": id_claims.get("sub"),
+                        "groups": id_claims.get("groups", [])
+                    }
                 else:
                     # Try to decode access_token without verification to extract claims
                     try:
                         access_claims = jwt.decode(token_data.get("access_token"), options={"verify_signature": False})
-                        mapped_user = {"username": access_claims.get("username") or access_claims.get("sub"), "email": access_claims.get("email"), "name": access_claims.get("name"), "groups": access_claims.get("groups", [])}
+                        mapped_user = {
+                            "username": access_claims.get("username") or access_claims.get("sub"), 
+                            "email": access_claims.get("email"), 
+                            "name": access_claims.get("name"), 
+                            "idp_id": access_claims.get("sub"),
+                            "groups": access_claims.get("groups", [])
+                        }
                     except Exception:
                         raise ValueError("No ID token and access token claims unavailable")
             elif provider == "entra":
                 auth_provider = get_auth_provider('entra')
                 user_info = auth_provider.get_user_info(access_token=token_data.get("access_token"), id_token=token_data.get("id_token"))
-                mapped_user = {"username": user_info.get("username"), "email": user_info.get("email"), "name": user_info.get("name"), "groups": user_info.get("groups", [])}
+                mapped_user = {
+                    "username": user_info.get("username"), 
+                    "email": user_info.get("email"), 
+                    "name": user_info.get("name"), 
+                    "idp_id": user_info.get("id"),
+                    "groups": user_info.get("groups", [])
+                }
             else:
                 user_info = await get_user_info(token_data.get("access_token"), provider_config)
                 mapped_user = map_user_info(user_info, provider_config)
@@ -554,25 +572,32 @@ async def oauth2_callback(provider: str, request: Request, code: str = None, sta
             response.delete_cookie("oauth2_temp_session")
             return response
 
-        # Otherwise, create session cookie for web flow
-        session_data = {"username": mapped_user["username"], "email": mapped_user.get("email"), "name": mapped_user.get("name"), "groups": mapped_user.get("groups", []), "provider": provider, "auth_method": "oauth2"}
-        registry_session = signer.dumps(session_data)
-        redirect_url = temp_session_data.get("redirect_uri", settings.oauth2_config.get("registry", {}).get("success_redirect", "/"))
+        # Prepare redirect to registry with user info
+        logger.info(f"OAuth2 login successful for user: {mapped_user['username']} via {provider}. Redirecting to registry...")
+        user_idp_data = {
+            "username": mapped_user.get("username"),
+            "email": mapped_user.get("email"),
+            "name": mapped_user.get("name"),
+            "idp_id": mapped_user.get("idp_id"),
+            "groups": mapped_user.get("groups", []),
+            "provider": provider,
+            "auth_method": "oauth2"
+        }
+        
+        try:
+            signed_userinfo = signer.dumps(user_idp_data)
+            redirect_url = f"{settings.registry_url}/redirect?user_info={signed_userinfo}"
+            
+            # Check URL length to prevent browser limitations (2048 char limit)
+            if len(redirect_url) > 2000:
+                logger.warning(f"Redirect URL length ({len(redirect_url)}) exceeds safe limit. User has {len(user_idp_data.get('groups', []))} groups.")
+                # Log warning but proceed - registry will handle validation
+                
+        except Exception as e:
+            logger.error(f"Failed to sign user info data: {e}")
+            raise HTTPException(status_code=500, detail="Failed to prepare redirect")
+    
         response = RedirectResponse(url=redirect_url, status_code=302)
-
-        cookie_secure_config = settings.oauth2_config.get("session", {}).get("secure", False)
-        x_forwarded_proto = request.headers.get("x-forwarded-proto", "")
-        is_https = x_forwarded_proto == "https" or request.url.scheme == "https"
-        cookie_secure = cookie_secure_config and is_https
-        cookie_samesite = settings.oauth2_config.get("session", {}).get("samesite", "lax")
-        cookie_domain = settings.oauth2_config.get("session", {}).get("domain", "")
-        if not cookie_domain or cookie_domain == "${SESSION_COOKIE_DOMAIN}":
-            cookie_domain = None
-
-        cookie_params = {"key": "mcp_gateway_session", "value": registry_session, "max_age": settings.oauth2_config.get("session", {}).get("max_age_seconds", 28800), "httponly": settings.oauth2_config.get("session", {}).get("httponly", True), "samesite": cookie_samesite, "secure": cookie_secure, "path": "/"}
-        if cookie_domain:
-            cookie_params["domain"] = cookie_domain
-        response.set_cookie(**cookie_params)
         response.delete_cookie("oauth2_temp_session")
         return response
 
@@ -605,7 +630,22 @@ async def get_user_info(access_token: str, provider_config: dict) -> dict:
 
 
 def map_user_info(user_info: dict, provider_config: dict) -> dict:
-    mapped = {"username": user_info.get(provider_config["username_claim"]), "email": user_info.get(provider_config["email_claim"]), "name": user_info.get(provider_config["name_claim"]), "groups": []}
+    """Map user info from OAuth provider to standard format.
+    
+    Args:
+        user_info: Raw user info from provider's userinfo endpoint
+        provider_config: Provider configuration with claim mappings
+        
+    Returns:
+        Standardized user info dict with username, email, name, user_id, and groups
+    """
+    mapped = {
+        "username": user_info.get(provider_config["username_claim"]), 
+        "email": user_info.get(provider_config["email_claim"]), 
+        "name": user_info.get(provider_config["name_claim"]), 
+        "idp_id": user_info.get("sub") or user_info.get("id"),
+        "groups": []
+    }
     groups_claim = provider_config.get("groups_claim")
     if groups_claim and groups_claim in user_info:
         groups = user_info[groups_claim]

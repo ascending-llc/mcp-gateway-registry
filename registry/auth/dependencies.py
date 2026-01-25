@@ -57,7 +57,6 @@ async def get_user_acl_permissions(request: Request) -> Dict[str, Any]:
     
 
     try:
-        # print(f"request.state.user: ${request.state.user}")
         user_id = request.state.user.get('user_id')
         role = request.state.user.get('role')
         username = request.state.user.get('username')
