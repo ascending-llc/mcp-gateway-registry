@@ -29,10 +29,10 @@ class Settings(BaseSettings):
     Application settings loaded from environment variables.
     
     All settings can be overridden via environment variables with the same name.
-    For nested configs, use double underscore (e.g., REGISTRY__BASE_URL).
+    For nested configs, use double underscore (e.g., REGISTRY__URL).
     """
     # Registry configuration
-    REGISTRY_BASE_URL: str = Field(
+    REGISTRY_URL: str = Field(
         default="http://localhost:7860",
         description="Base URL of the MCP Gateway Registry"
     )
@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     )
 
     # JWT authentication configuration
-    JWT_SECRET_KEY: Optional[str] = Field(
+    SECRET_KEY: Optional[str] = Field(
         default=None,
         description="Secret key for JWT token validation (HS256)"
     )
@@ -135,12 +135,12 @@ class Settings(BaseSettings):
         validate_default=True,
     )
 
-    @field_validator("REGISTRY_BASE_URL")
+    @field_validator("REGISTRY_URL")
     @classmethod
     def validate_registry_url(cls, v: str) -> str:
         """Validate and normalize registry base URL."""
         if not v:
-            raise ValueError("REGISTRY_BASE_URL must be set")
+            raise ValueError("REGISTRY_URL must be set")
         return v.rstrip("/")
 
     @property
@@ -167,7 +167,7 @@ class Settings(BaseSettings):
     def log_config(self):
         """Log current configuration (hiding sensitive values)."""
         logger.info("Configuration loaded:")
-        logger.info(f"  Registry URL: {self.REGISTRY_BASE_URL}")
+        logger.info(f"  Registry URL: {self.REGISTRY_URL}")
         logger.info(f"  Registry Username: {'***' if self.REGISTRY_USERNAME else 'not set'}")
         logger.info(f"  Registry Password: {'***' if self.REGISTRY_PASSWORD else 'not set'}")
         logger.info(f"  MCP Transport: {self.MCP_TRANSPORT}")

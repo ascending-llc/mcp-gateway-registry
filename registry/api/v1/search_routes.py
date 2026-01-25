@@ -1,13 +1,13 @@
 import logging
 from typing import Annotated, List, Literal, Optional
-
+from registry.auth.dependencies import CurrentUser
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
 from registry.services.search.service import faiss_service
-from ..services.server_service import server_service
-from ..services.agent_service import agent_service
+from ...services.server_service import server_service
+from ...services.agent_service import agent_service
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +131,7 @@ def _user_can_access_agent(agent_path: str, user_context: dict) -> bool:
 
 
 @router.post(
-    "/semantic",
+    "/search/semantic",
     response_model=SemanticSearchResponse,
     summary="Unified semantic search for MCP servers and tools",
 )
@@ -273,4 +273,165 @@ async def semantic_search(
         total_servers=len(filtered_servers),
         total_tools=len(filtered_tools),
         total_agents=len(filtered_agents),
+    )
+
+class ToolDiscoveryMatch(BaseModel):
+    """A discovered tool with metadata for execution"""
+    tool_name: str
+    server_id: str
+    server_path: str
+    description: Optional[str] = None
+    input_schema: Optional[dict] = None
+    discovery_score: float = Field(..., ge=0.0, le=1.0)
+    transport_type: str = "streamable-http"
+
+
+class ToolDiscoveryResponse(BaseModel):
+    """Response from tool discovery"""
+    query: str
+    total_matches: int
+    matches: List[ToolDiscoveryMatch]
+
+
+@router.post("/search/tools")
+async def discover_tools(
+    request: Request,
+    body: dict,
+    user_context: CurrentUser
+) -> ToolDiscoveryResponse:
+    """    
+    Request body:
+    {
+        "query": "search GitHub pull requests",
+        "top_n": 5
+    }
+    
+    Returns:
+    {
+        "query": "search GitHub pull requests",
+        "total_matches": 2,
+        "matches": [
+            {
+                "tool_name": "search_pull_requests",
+                "server_name": "github-copilot",
+                "server_path": "/github",
+                "description": "Search for pull requests...",
+                "input_schema": {...},
+                "discovery_score": 0.9902,
+                "transport_type": "streamable-http"
+            }
+        ]
+    }
+    """
+    query = body.get("query", "")
+    top_n = body.get("top_n", 5)
+    
+    if not query:
+        raise HTTPException(
+            status_code=400,
+            detail="query parameter is required"
+        )
+        
+    logger.info(f"🔍 Tool discovery from user '{user_context.get("username", "unknown")}': '{query}'")
+    
+    # PROTOTYPE: Hard-code Tavily Search server discovery
+    # In production, this would query your intelligent_tool_finder service
+    
+    tavily_server_path = "/tavilysearch"
+    tavily_tools = [
+        {
+            "tool_name": "tavily_search",
+            "description": "Search the web using Tavily's AI-powered search engine",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "The search query"},
+                    "max_results": {"type": "integer", "description": "Maximum number of results to return", "default": 5},
+                    "search_depth": {"type": "string", "enum": ["basic", "advanced"], "description": "Search depth", "default": "basic"},
+                    "include_domains": {"type": "array", "items": {"type": "string"}, "description": "Domains to include in search"},
+                    "exclude_domains": {"type": "array", "items": {"type": "string"}, "description": "Domains to exclude from search"}
+                },
+                "required": ["query"]
+            },
+            "discovery_score": 0.9952
+        },
+        {
+            "tool_name": "tavily_extract",
+            "description": "Extract content from specific URLs using Tavily",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "urls": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of URLs to extract content from"
+                    }
+                },
+                "required": ["urls"]
+            },
+            "discovery_score": 0.9958
+        },
+        {
+            "tool_name": "tavily_map",
+            "description": "Map and analyze a website's structure using Tavily",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "The URL to map"}
+                },
+                "required": ["url"]
+            },
+            "discovery_score": 0.9963
+        },
+        {
+            "tool_name": "tavily_crawl",
+            "description": "Crawl a website to gather comprehensive information",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "The URL to crawl"},
+                    "max_depth": {"type": "integer", "description": "Maximum crawl depth", "default": 2}
+                },
+                "required": ["url"]
+            },
+            "discovery_score": 0.9955
+        }
+    ]
+    
+    # Filter based on query keywords (simple prototype logic)
+    query_lower = query.lower()
+    matches = []
+    
+    for tool in tavily_tools[:top_n]:
+        # Simple keyword matching for prototype
+        tool_desc_lower = tool["description"].lower()
+        tool_name_lower = tool["tool_name"].lower()
+        
+        # Boost score if query matches tool name or description
+        score = tool["discovery_score"]
+        if any(word in tool_name_lower or word in tool_desc_lower 
+               for word in query_lower.split()):
+            score = min(1.0, score + 0.1)
+        
+        matches.append(
+            ToolDiscoveryMatch(
+                tool_name=tool["tool_name"],
+                server_id="6972e222755441652c23090f",
+                server_path=tavily_server_path,
+                description=tool["description"],
+                input_schema=tool["input_schema"],
+                discovery_score=score,
+                transport_type="streamable-http"
+            )
+        )
+    
+    # Sort by score
+    matches.sort(key=lambda x: x.discovery_score, reverse=True)
+    
+    logger.info(f"✅ Found {len(matches)} tools for query: '{query}'")
+    
+    return ToolDiscoveryResponse(
+        query=query,
+        total_matches=len(matches),
+        matches=matches
     )

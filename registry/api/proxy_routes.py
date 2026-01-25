@@ -1,6 +1,5 @@
 """
 Dynamic MCP server proxy routes.
-Replaces nginx {{LOCATION_BLOCKS}} with FastAPI dynamic routing.
 """
 
 import logging
@@ -8,16 +7,15 @@ import httpx
 from typing import Dict, Any, Optional
 from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
-from starlette.background import BackgroundTask
 
+from registry.auth.dependencies import CurrentUser
 from registry.services.server_service_v1 import server_service_v1
-from registry.health.service import health_service
-from registry.constants import HealthStatus
-from registry.core.config import settings
+from registry.utils.crypto_utils import decrypt_auth_fields
+from registry.core.mcp_client import _build_headers_for_server
+from registry.schemas.proxy_tool_schema import ToolExecutionRequest, ToolExecutionResponse
 
 logger = logging.getLogger(__name__)
 
-# Create router WITHOUT prefix (we'll handle dynamic paths)
 router = APIRouter(tags=["MCP Proxy"])
 
 # Shared httpx client for connection pooling
@@ -26,63 +24,6 @@ proxy_client = httpx.AsyncClient(
     follow_redirects=True,
     limits=httpx.Limits(max_connections=100, max_keepalive_connections=20)
 )
-
-
-async def validate_auth(request: Request) -> Dict[str, Any]:
-    """
-    Validate authentication by calling auth-server /validate endpoint.
-    Replaces nginx auth_request pattern.
-    """
-    # Build validation headers
-    validation_headers = {
-        "X-Original-URI": request.url.path,
-        "X-Original-Method": request.method,
-        "X-Original-URL": str(request.url),
-        "X-User-Pool-Id": request.headers.get("X-User-Pool-Id", ""),
-        "X-Client-Id": request.headers.get("X-Client-Id", ""),
-        "X-Region": request.headers.get("X-Region", ""),
-        "X-Authorization": request.headers.get("X-Authorization", ""),
-        "Authorization": request.headers.get("Authorization", ""),
-    }
-    
-    # Get request body for validation (replaces Lua body capture)
-    body = await request.body()
-    if body:
-        validation_headers["X-Body"] = body.decode("utf-8", errors="ignore")
-    
-    try:
-        response = await proxy_client.get(
-            f"{settings.auth_server_url}/validate",
-            headers=validation_headers,
-            cookies=request.cookies,
-            timeout=10.0
-        )
-        
-        if response.status_code == 401:
-            raise HTTPException(status_code=401, detail="Authentication required")
-        elif response.status_code == 403:
-            raise HTTPException(status_code=403, detail="Access forbidden")
-        elif response.status_code != 200:
-            logger.warning(f"Auth validation returned {response.status_code}")
-            raise HTTPException(status_code=502, detail="Auth validation failed")
-        
-        # Return auth context from response headers
-        return {
-            "username": response.headers.get("X-Username", ""),
-            "user": response.headers.get("X-User", ""),
-            "client_id": response.headers.get("X-Client-Id", ""),
-            "scopes": response.headers.get("X-Scopes", "").split(),
-            "auth_method": response.headers.get("X-Auth-Method", ""),
-            "server_name": response.headers.get("X-Server-Name", ""),
-            "tool_name": response.headers.get("X-Tool-Name", ""),
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Auth validation error: {e}")
-        raise HTTPException(status_code=500, detail="Auth validation error")
-
 
 async def proxy_to_mcp_server(
     request: Request,
@@ -102,8 +43,10 @@ async def proxy_to_mcp_server(
         transport_type: Transport protocol type
         server_config: Server configuration including apiKey authentication
     """
-    # Build proxy headers
+    # Build proxy headers - start with request headers
     headers = dict(request.headers)
+    
+    # Add context headers for tracing/logging
     headers.update({
         "X-User": auth_context.get("username", ""),
         "X-Username": auth_context.get("username", ""),
@@ -118,33 +61,14 @@ async def proxy_to_mcp_server(
     # Remove host header to avoid conflicts
     headers.pop("host", None)
     
-    # Process backend server apiKey authentication if configured
+    # Build authentication headers for external MCP server using existing mcp_client logic
+    # This handles apiKey, OAuth, and custom authentication from database config
     if server_config:
-        api_key_config = server_config.get("apiKey")
-        if api_key_config and isinstance(api_key_config, dict):
-            key_value = api_key_config.get("key")
-            authorization_type = api_key_config.get("authorization_type", "bearer").lower()
-            
-            if key_value:
-                if authorization_type == "bearer":
-                    # Bearer token: Authorization: Bearer <key>
-                    headers['Authorization'] = f'Bearer {key_value}'
-                    logger.debug("Added Bearer authentication header for backend server")
-                elif authorization_type == "basic":
-                    # Basic auth: Authorization: Basic <key>
-                    headers['Authorization'] = f'Basic {key_value}'
-                    logger.debug("Added Basic authentication header for backend server")
-                elif authorization_type == "custom":
-                    # Custom header: use custom_header field as header name
-                    custom_header = api_key_config.get("custom_header")
-                    if custom_header:
-                        headers[custom_header] = key_value
-                        logger.debug(f"Added custom authentication header for backend server: {custom_header}")
-                    else:
-                        logger.warning("apiKey with authorization_type='custom' but no custom_header specified")
-                else:
-                    logger.warning(f"Unknown authorization_type: {authorization_type}, defaulting to Bearer")
-                    headers['Authorization'] = f'Bearer {key_value}'
+        decrypt_config_fields = decrypt_auth_fields(server_config)
+        auth_headers = _build_headers_for_server(decrypt_config_fields)
+        # Merge authentication headers (this adds Authorization or custom headers)
+        headers.update(auth_headers)
+        logger.info(f"Built authentication headers for backend server using server config")
 
     body = await request.body()
     
@@ -275,14 +199,137 @@ async def extract_server_path_from_request(request_path: str) -> Optional[str]:
     
     return None
 
+@router.post("/tools/call")
+async def execute_tool(
+    body: ToolExecutionRequest,
+    user_context: CurrentUser
+) -> ToolExecutionResponse:
+    """    
+    Request body:
+    {
+        "server_id": "12345",
+        "server_path": "/tavilysearch",
+        "tool_name": "tavily_search_mcp_tavily_search",
+        "arguments": {
+            "query": "Donald Trump news"
+        }
+    }
+    
+    Returns SSE stream if backend returns SSE, otherwise JSON:
+    - SSE: event: message\ndata: {...}\n\n
+    - JSON: {"success": true, "result": {...}}
+    """
+    tool_name = body.tool_name
+    arguments = body.arguments
+        
+    username = user_context.get("username", "unknown")
+    server = await server_service_v1.get_server_by_id(body.server_id)
+    logger.info(
+        f"🔧 Tool execution from user '{username}': {tool_name} on {server.path}"
+    )
+               
+    if not server:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Server not found: {body.server_id}"
+        )
+    config = server.config or {}   
+    
+    # Get target URL from server config
+    proxy_pass_url = config.get("url")
+    if not proxy_pass_url:
+        raise HTTPException(
+            status_code=500,
+            detail="Server URL not configured"
+        )
+    
+    # Ensure proxy_pass_url has trailing slash
+    if not proxy_pass_url.endswith('/'):
+        proxy_pass_url += '/'
+        
+    mcp_request_body = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "tavily_search",
+            "arguments": arguments
+        }
+    }    
+    try:
+        # Build headers for tracking purpose
+        headers = {
+            "Content-Type": "application/json",
+            "X-User": username,
+            "X-Username": username,
+            "X-Tool-Name": tool_name,
+        }
+        
+        if config:
+            decrypted_config = decrypt_auth_fields(config)
+            auth_headers = _build_headers_for_server(decrypted_config)
+            headers.update(auth_headers)
+        
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                proxy_pass_url,
+                json=mcp_request_body,
+                headers=headers
+            )
+            response.raise_for_status()
+            
+            # Check content type or response format
+            content_type = response.headers.get("content-type", "")
+            response_text = response.text
+            
+            # If response is SSE format, return it directly as SSE
+            if "text/event-stream" in content_type or response_text.startswith(("event:", "data:")):
+                logger.info(f"✅ Returning SSE response for tool: {tool_name}")
+                return Response(
+                    content=response_text,
+                    media_type="text/event-stream",
+                    headers={
+                        "Cache-Control": "no-cache",
+                        "X-Accel-Buffering": "no"
+                    }
+                )
+            
+            # Otherwise parse as JSON and return structured response
+            result = response.json()
+        
+        logger.info(
+            f"✅ Tool execution successful: {tool_name}"
+        )
+        
+        return ToolExecutionResponse(
+            success=True,
+            server_id=body.server_id,
+            server_path=server.path,
+            tool_name=tool_name,
+            result=result,
+        )
+        
+    except httpx.HTTPError as e:
+        logger.error(f"❌ Tool execution failed: {e}")
+        
+        return ToolExecutionResponse(
+            success=False,
+            server_id=body.server_id,
+            server_path=server.path,
+            tool_name=tool_name,
+            error=f"HTTP error: {str(e)}",
+        )
 
+
+# ========== Catch-All Dynamic Proxy Route ==========
 @router.api_route("/{full_path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def dynamic_mcp_proxy(request: Request, full_path: str):
     """
     Dynamic catch-all route for MCP server proxying.
     This replaces nginx {{LOCATION_BLOCKS}}.
     
-    NOTE: This must be registered LAST in main.py so other routes take precedence.
+    CRITICAL: This catch-all route matches ANY path pattern, so it must be defined LAST.
+    FastAPI matches routes in order, so this will capture all unmatched routes.
     """
     path = f"/{full_path}"
        
@@ -350,3 +397,4 @@ async def shutdown_proxy_client():
     """Cleanup proxy client on shutdown."""
     await proxy_client.aclose()
     logger.info("Proxy client closed")
+

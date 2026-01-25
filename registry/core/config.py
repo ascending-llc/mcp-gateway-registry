@@ -79,6 +79,7 @@ class Settings(BaseSettings):
     JWT_ISSUER: str = "mcp-auth-server"
     JWT_AUDIENCE: str = "mcp-registry"
     JWT_SELF_SIGNED_KID: str = "self-signed-key-v1"
+    API_VERSION: str = "v1"
 
     # Local development mode detection
     @property
