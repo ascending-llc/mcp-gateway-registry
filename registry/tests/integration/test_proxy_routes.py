@@ -170,9 +170,7 @@ class TestProxyToolExecutionRoutes:
                 }
             )
 
-        # Note: Returns 500 because server.path is accessed before None check
-        # This is acceptable as it's an internal error condition
-        assert response.status_code == 500
+        assert response.status_code == 404
 
     def test_execute_tool_missing_server_url(self, test_client: TestClient):
         """Tool execution fails with 500 when server URL not configured."""
