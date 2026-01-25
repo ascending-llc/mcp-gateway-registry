@@ -139,6 +139,7 @@ class Settings(BaseSettings):
         default=300,
         description="Insert time in seconds"
     )
+    API_VERSION: str = "v1"
 
     model_config = SettingsConfigDict(
         env_file=".env",
