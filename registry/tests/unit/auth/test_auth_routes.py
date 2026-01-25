@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch, AsyncMock
 from fastapi import Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from itsdangerous import URLSafeTimedSerializer
 
 from registry.auth.routes import (
     router, 
@@ -53,7 +54,10 @@ class TestAuthRoutes:
 
     @pytest.fixture
     def mock_user_info(self):
-        user_idp_data =  {
+        """Create properly signed user info using URLSafeTimedSerializer."""
+        from registry.core.config import settings
+        
+        user_idp_data = {
             "username": "test.user@example.com",
             "email": "test.user@example.com",
             "name": "Test User",
@@ -61,8 +65,11 @@ class TestAuthRoutes:
             "provider": "entra",
             "auth_method": "oauth2"
         }
-        userinfo_b64 = base64.urlsafe_b64encode(json.dumps(user_idp_data).encode()).decode()
-        return userinfo_b64
+        
+        # Use the same signer as the auth routes
+        signer = URLSafeTimedSerializer(settings.secret_key)
+        signed_user_info = signer.dumps(user_idp_data)
+        return signed_user_info
 
     @pytest.mark.asyncio
     async def test_get_oauth2_providers_success(self):
