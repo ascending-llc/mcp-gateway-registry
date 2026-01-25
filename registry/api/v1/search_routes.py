@@ -435,3 +435,185 @@ async def discover_tools(
         total_matches=len(matches),
         matches=matches
     )
+
+
+@router.post("/search/servers")
+async def search_servers(
+    request: Request,
+    body: dict,
+    user_context: CurrentUser
+):
+    """
+    Search for MCP servers with their tools, resources, and prompts.
+    POC endpoint returning raw JSON with dual-format tool definitions.
+    
+    Request body:
+    {
+        "query": "search",
+        "top_n": 5
+    }
+    
+    Returns raw JSON that can be converted to ExtendedMCPServer format.
+    """
+    query = body.get("query", "")
+    top_n = body.get("top_n", 10)
+    
+    logger.info(
+        f"🔍 Server search from user '{user_context.get('username', 'unknown')}': "
+        f"query='{query}', top_n={top_n}"
+    )
+    
+    # PROTOTYPE: Hard-coded Tavily server raw JSON (matches DB structure)
+    tavily_server_raw = {
+        "_id": "6972e222755441652c23090f",
+        "serverName": "tavilysearchv1",
+        "path": "/tavilysearch",
+        "config": {
+            "title": "Tavily Search V1",
+            "description": "Tavily search engine integration with web search, extraction, crawling, and mapping capabilities",
+            "type": "streamable-http",
+            "url": "https://mcp.tavily.com/mcp/",
+            "requiresOAuth": False,
+            "enabled": True,
+            
+            # Tools in OpenAI format (with mcpToolName for translation)
+            "toolFunctions": {
+                "tavily_search_mcp_tavilysearchv1": {
+                    "type": "function",
+                    "function": {
+                        "name": "tavily_search_mcp_tavilysearchv1",
+                        "description": "Search the web using Tavily's AI-powered search engine",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "query": {"type": "string", "description": "The search query"},
+                                "max_results": {"type": "integer", "description": "Maximum number of results", "default": 5},
+                                "search_depth": {"type": "string", "enum": ["basic", "advanced"], "default": "basic"}
+                            },
+                            "required": ["query"]
+                        }
+                    },
+                    "mcpToolName": "tavily_search"
+                },
+                "tavily_extract_mcp_tavilysearchv1": {
+                    "type": "function",
+                    "function": {
+                        "name": "tavily_extract_mcp_tavilysearchv1",
+                        "description": "Extract content from specific URLs using Tavily",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "urls": {"type": "array", "items": {"type": "string"}}
+                            },
+                            "required": ["urls"]
+                        }
+                    },
+                    "mcpToolName": "tavily_extract"
+                },
+                "tavily_crawl_mcp_tavilysearchv1": {
+                    "type": "function",
+                    "function": {
+                        "name": "tavily_crawl_mcp_tavilysearchv1",
+                        "description": "Crawl a website to gather comprehensive information",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "url": {"type": "string"},
+                                "max_depth": {"type": "integer", "default": 2}
+                            },
+                            "required": ["url"]
+                        }
+                    },
+                    "mcpToolName": "tavily_crawl"
+                },
+                "tavily_map_mcp_tavilysearchv1": {
+                    "type": "function",
+                    "function": {
+                        "name": "tavily_map_mcp_tavilysearchv1",
+                        "description": "Map and analyze a website's structure",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "url": {"type": "string"}
+                            },
+                            "required": ["url"]
+                        }
+                    },
+                    "mcpToolName": "tavily_map"
+                }
+            },
+            
+            # Resources in MCP format
+            "resources": [
+                {
+                    "uri": "tavily://search-results/{query}",
+                    "name": "search_results_cache",
+                    "description": "Cached search results for recent queries",
+                    "mimeType": "application/json",
+                    "annotations": {
+                        "audience": ["developers"],
+                        "cacheable": True,
+                        "ttl": 3600
+                    }
+                },
+                {
+                    "uri": "tavily://trending-topics",
+                    "name": "trending_topics",
+                    "description": "Current trending search topics",
+                    "mimeType": "application/json"
+                }
+            ],
+            
+            # Prompts in MCP format
+            "prompts": [
+                {
+                    "name": "research_assistant",
+                    "description": "AI research assistant that performs comprehensive web research",
+                    "arguments": [
+                        {"name": "topic", "description": "Research topic", "required": True},
+                        {"name": "depth", "description": "Research depth", "required": False}
+                    ]
+                },
+                {
+                    "name": "fact_checker",
+                    "description": "Verify claims using multiple web sources",
+                    "arguments": [
+                        {"name": "claim", "description": "Claim to verify", "required": True},
+                        {"name": "sources_count", "description": "Number of sources", "required": False}
+                    ]
+                }
+            ],
+            
+            "capabilities": {
+                "tools": {"listChanged": True},
+                "resources": {"subscribe": False, "listChanged": True},
+                "prompts": {"listChanged": True}
+            }
+        },
+        "tags": ["search", "api-key", "tavily"],
+        "scope": "shared_user",
+        "status": "active",
+        "numTools": 4,
+        "numStars": 0
+    }
+    
+    # In production: would do vector search here
+    # For now: simple keyword filter
+    servers = [tavily_server_raw]
+    
+    if query:
+        query_lower = query.lower()
+        servers = [
+            s for s in servers
+            if query_lower in s["serverName"].lower()
+            or query_lower in s["config"].get("description", "").lower()
+            or any(query_lower in tag.lower() for tag in s.get("tags", []))
+        ]
+    
+    logger.info(f"✅ Found {len(servers[:top_n])} servers")
+    
+    return {
+        "query": query,
+        "total": len(servers),
+        "servers": servers[:top_n]
+    }

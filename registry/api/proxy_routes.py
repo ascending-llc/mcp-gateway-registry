@@ -4,7 +4,7 @@ Dynamic MCP server proxy routes.
 
 import logging
 import httpx
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
 from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
@@ -12,7 +12,14 @@ from registry.auth.dependencies import CurrentUser
 from registry.services.server_service_v1 import server_service_v1
 from registry.utils.crypto_utils import decrypt_auth_fields
 from registry.core.mcp_client import _build_headers_for_server
-from registry.schemas.proxy_tool_schema import ToolExecutionRequest, ToolExecutionResponse
+from registry.schemas.proxy_tool_schema import (
+    ToolExecutionRequest,
+    ToolExecutionResponse,
+    ResourceReadRequest,
+    ResourceReadResponse,
+    PromptExecutionRequest,
+    PromptExecutionResponse
+)
 
 logger = logging.getLogger(__name__)
 
@@ -199,12 +206,37 @@ async def extract_server_path_from_request(request_path: str) -> Optional[str]:
     
     return None
 
-@router.post("/tools/call")
+@router.post(
+    "/tools/call",
+    response_model=None,
+    responses={
+        200: {
+            "description": "Tool execution result",
+            "content": {
+                "application/json": {
+                    "model": ToolExecutionResponse,
+                    "example": {
+                        "success": True,
+                        "server_id": "12345",
+                        "server_path": "/tavilysearch",
+                        "tool_name": "tavily_search_mcp_tavily_search",
+                        "result": {"data": "..."}
+                    }
+                },
+                "text/event-stream": {
+                    "example": "event: message\ndata: {...}\n\n"
+                }
+            }
+        }
+    }
+)
 async def execute_tool(
     body: ToolExecutionRequest,
     user_context: CurrentUser
-) -> ToolExecutionResponse:
-    """    
+) -> Union[Response, ToolExecutionResponse]:
+    """
+    Execute a tool on an MCP server.
+    
     Request body:
     {
         "server_id": "12345",
@@ -215,9 +247,9 @@ async def execute_tool(
         }
     }
     
-    Returns SSE stream if backend returns SSE, otherwise JSON:
-    - SSE: event: message\ndata: {...}\n\n
-    - JSON: {"success": true, "result": {...}}
+    Returns:
+        - SSE stream (text/event-stream) if backend returns SSE format
+        - JSON (ToolExecutionResponse) otherwise
     """
     tool_name = body.tool_name
     arguments = body.arguments
@@ -319,6 +351,180 @@ async def execute_tool(
             tool_name=tool_name,
             error=f"HTTP error: {str(e)}",
         )
+
+
+@router.post(
+    "/resources/read",
+    response_model=None,
+    responses={
+        200: {
+            "description": "Resource read result",
+            "content": {
+                "application/json": {
+                    "model": ResourceReadResponse,
+                    "example": {
+                        "success": True,
+                        "server_id": "12345",
+                        "server_path": "/tavilysearch",
+                        "resource_uri": "tavily://search-results/AI",
+                        "contents": [{"uri": "...", "mimeType": "...", "text": "..."}]
+                    }
+                }
+            }
+        }
+    }
+)
+async def read_resource(
+    body: ResourceReadRequest,
+    user_context: CurrentUser
+) -> Union[Response, ResourceReadResponse]:
+    """
+    Read/access an MCP resource.
+    
+    Request body:
+    {
+        "server_id": "12345",
+        "resource_uri": "tavily://search-results/AI"
+    }
+    
+    Returns:
+        Resource contents (text, JSON, binary, etc.)
+    """
+    resource_uri = body.resource_uri
+    username = user_context.get("username", "unknown")
+    
+    server = await server_service_v1.get_server_by_id(body.server_id)
+    logger.info(
+        f"📄 Resource read from user '{username}': {resource_uri} on {body.server_id}"
+    )
+    
+    if not server:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Server not found: {body.server_id}"
+        )
+    
+    config = server.config or {}
+    proxy_pass_url = config.get("url")
+    
+    if not proxy_pass_url:
+        raise HTTPException(status_code=500, detail="Server URL not configured")
+    
+    if not proxy_pass_url.endswith('/'):
+        proxy_pass_url += '/'
+    
+    # MOCK: Return hardcoded response for POC
+    logger.info(f"✅ (MOCK) Returning cached search results for: {resource_uri}")
+    
+    return ResourceReadResponse(
+        success=True,
+        server_id=body.server_id,
+        server_path=server.path,
+        resource_uri=resource_uri,
+        contents=[
+            {
+                "uri": resource_uri,
+                "mimeType": "application/json",
+                "text": '{"results": [{"title": "AI News", "snippet": "Latest AI developments..."}]}'
+            }
+        ]
+    )
+
+
+@router.post(
+    "/prompts/execute",
+    response_model=None,
+    responses={
+        200: {
+            "description": "Prompt execution result",
+            "content": {
+                "application/json": {
+                    "model": PromptExecutionResponse,
+                    "example": {
+                        "success": True,
+                        "server_id": "12345",
+                        "server_path": "/tavilysearch",
+                        "prompt_name": "research_assistant",
+                        "messages": [{"role": "...", "content": {...}}]
+                    }
+                }
+            }
+        }
+    }
+)
+async def execute_prompt(
+    body: PromptExecutionRequest,
+    user_context: CurrentUser
+) -> Union[Response, PromptExecutionResponse]:
+    """
+    Execute an MCP prompt (get prompt template with arguments filled in).
+    
+    Request body:
+    {
+        "server_id": "12345",
+        "prompt_name": "research_assistant",
+        "arguments": {
+            "topic": "Artificial Intelligence",
+            "depth": "comprehensive"
+        }
+    }
+    
+    Returns:
+        Prompt messages ready for LLM consumption
+    """
+    prompt_name = body.prompt_name
+    arguments = body.arguments or {}
+    username = user_context.get("username", "unknown")
+    
+    server = await server_service_v1.get_server_by_id(body.server_id)
+    logger.info(
+        f"💬 Prompt execution from user '{username}': {prompt_name} on {body.server_id}"
+    )
+    
+    if not server:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Server not found: {body.server_id}"
+        )
+    
+    config = server.config or {}
+    proxy_pass_url = config.get("url")
+    
+    if not proxy_pass_url:
+        raise HTTPException(status_code=500, detail="Server URL not configured")
+    
+    if not proxy_pass_url.endswith('/'):
+        proxy_pass_url += '/'
+    
+    # MOCK: Return hardcoded prompt response for POC
+    topic = arguments.get("topic", "general topic")
+    depth = arguments.get("depth", "basic")
+    
+    logger.info(f"✅ (MOCK) Returning prompt messages for: {prompt_name} (topic={topic}, depth={depth})")
+    
+    return PromptExecutionResponse(
+        success=True,
+        server_id=body.server_id,
+        server_path=server.path,
+        prompt_name=prompt_name,
+        description=f"AI research assistant for {topic}",
+        messages=[
+            {
+                "role": "system",
+                "content": {
+                    "type": "text",
+                    "text": f"You are a research assistant specializing in {topic}. Provide {depth} analysis."
+                }
+            },
+            {
+                "role": "user",
+                "content": {
+                    "type": "text",
+                    "text": f"Research and analyze: {topic}"
+                }
+            }
+        ]
+    )
 
 
 # ========== Catch-All Dynamic Proxy Route ==========
