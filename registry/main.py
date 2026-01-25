@@ -22,7 +22,7 @@ from registry.api.redirect_routes import router as auth_router
 from registry.api.server_routes import router as servers_router
 from registry.api.v1.server_routes import router as servers_router_v1
 from registry.api.internal_routes import router as internal_router
-from registry.api.search_routes import router as search_router
+from registry.api.v1.search_routes import router as search_router
 from registry.api.wellknown_routes import router as wellknown_router
 from registry.api.registry_routes import router as registry_router
 from registry.api.agent_routes import router as agent_router
@@ -208,11 +208,11 @@ else:
 # Register API routers with /api prefix
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(servers_router, prefix="/api", tags=["Server Management"])
-app.include_router(servers_router_v1, prefix="/api", tags=["Server Management V1"])
+app.include_router(servers_router_v1, prefix=f"/api/{settings.API_VERSION}", tags=["Server Management V1"])
 app.include_router(internal_router, prefix="/api", tags=["Server Management[internal]"])
 app.include_router(agent_router, prefix="/api", tags=["Agent Management"])
 app.include_router(management_router, prefix="/api")
-app.include_router(search_router, prefix="/api/search", tags=["Semantic Search"])
+app.include_router(search_router, prefix=f"/api/{settings.API_VERSION}", tags=["Semantic Search"])
 app.include_router(health_router, prefix="/api/health", tags=["Health Monitoring"])
 app.include_router(oauth_router, prefix="/api", tags=["MCP  Oauth Management"])
 app.include_router(connection_router, prefix="/api", tags=["MCP  Connection Management"])

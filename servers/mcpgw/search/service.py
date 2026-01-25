@@ -48,7 +48,7 @@ def create_vector_search_service() -> VectorSearchService:
 
     if mode == ToolDiscoveryMode.EXTERNAL:
         logger.info("Initializing EXTERNAL vector search service (lightweight, no FAISS)")
-        logger.info(f"  Registry URL: {settings.REGISTRY_BASE_URL}")
+        logger.info(f"  Registry URL: {settings.REGISTRY_URL}")
 
         # Only import external service - no heavy dependencies
         from .external_service import ExternalVectorSearchService
