@@ -178,9 +178,43 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <main
           className={`flex-1 flex flex-col transition-all duration-300 ${sidebarOpen ? 'md:ml-64 lg:ml-72 xl:ml-80' : ''}`}
         >
-          <div className='flex-1 flex flex-col px-4 sm:px-6 lg:px-8 py-4 md:py-8 overflow-hidden'>
+          <div className='flex-1 flex flex-col px-4 sm:px-6 lg:px-8 pt-4 md:pt-8 pb-1 md:pb-2 overflow-hidden'>
             {React.cloneElement(children as React.ReactElement, { activeFilter })}
           </div>
+
+          {/* Footer */}
+          <footer className='h-8 flex items-center justify-center px-4 sm:px-6 lg:px-8'>
+            <div className='flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400'>
+              <a
+                href='https://ascendingdc.com'
+                target='_blank'
+                rel='noopener noreferrer'
+                className='hover:text-purple-600 dark:hover:text-purple-400 transition-colors underline'
+              >
+                ASCENDING
+              </a>
+              <span>|</span>
+              <span>Messy World, Clean Code!</span>
+              <span>|</span>
+              <a
+                href='https://app.termly.io/policy-viewer/policy.html?policyUUID=0c91586e-1d8d-489e-83af-70b343467a34'
+                target='_blank'
+                rel='noopener noreferrer'
+                className='hover:text-purple-600 dark:hover:text-purple-400 transition-colors underline'
+              >
+                Privacy policy
+              </a>
+              <span>|</span>
+              <a
+                href='https://app.termly.io/policy-viewer/policy.html?policyUUID=c5f9adb5-4979-4c41-81de-904f87321a4e'
+                target='_blank'
+                rel='noopener noreferrer'
+                className='hover:text-purple-600 dark:hover:text-purple-400 transition-colors underline'
+              >
+                Terms of service
+              </a>
+            </div>
+          </footer>
         </main>
       </div>
     </div>
