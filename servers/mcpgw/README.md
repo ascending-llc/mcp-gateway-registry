@@ -59,7 +59,7 @@ mcpgw/
 
 Required:
 - `REGISTRY_URL`: Registry API URL (default: `http://localhost:7860`)
-- `JWT_SIGNING_SECRET`: JWT secret key (from env or Keycloak)
+- `SECRET_KEY`: JWT secret key (from env or Keycloak)
 
 ## Installation Modes
 

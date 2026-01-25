@@ -332,7 +332,7 @@ async def discover_tools(
             detail="query parameter is required"
         )
         
-    logger.info(f"🔍 Tool discovery from user '{user_context.get("username", "unknown")}': '{query}'")
+    logger.info(f"🔍 Tool discovery from user '{user_context.get('username', 'unknown')}': '{query}'")
     
     # PROTOTYPE: Hard-code Tavily Search server discovery
     # In production, this would query your intelligent_tool_finder service
