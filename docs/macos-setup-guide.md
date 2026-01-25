@@ -79,7 +79,7 @@ ls -la
 ### Setup Python Virtual Environment
 ```bash
 # Create and activate Python virtual environment
-uv sync
+uv sync --all-packages
 source .venv/bin/activate
 
 # Verify virtual environment is active
