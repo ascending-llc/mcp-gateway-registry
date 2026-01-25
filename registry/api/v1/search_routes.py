@@ -598,17 +598,11 @@ async def search_servers(
     }
     
     # In production: would do vector search here
-    # For now: simple keyword filter
+    # For now: always return all servers regardless of query
     servers = [tavily_server_raw]
     
-    if query:
-        query_lower = query.lower()
-        servers = [
-            s for s in servers
-            if query_lower in s["serverName"].lower()
-            or query_lower in s["config"].get("description", "").lower()
-            or any(query_lower in tag.lower() for tag in s.get("tags", []))
-        ]
+    # Note: Query filtering disabled - always return all servers
+    # This allows clients to always discover available servers
     
     logger.info(f"✅ Found {len(servers[:top_n])} servers")
     
