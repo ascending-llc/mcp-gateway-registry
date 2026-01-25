@@ -177,6 +177,72 @@ class MCPOAuthService:
             logger.error(f"Failed to complete OAuth flow: {e}", exc_info=True)
             return False, str(e)
 
+    async def get_valid_access_token(
+            self,
+            user_id: str,
+            server_id: str,
+            server_name: str
+    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        """
+        Get valid access token with automatic refresh and re-authentication flow
+        
+        This method implements the complete token lifecycle:
+        1. Try to use existing access token (if not expired)
+        2. If expired, try to refresh using refresh token
+        3. If refresh fails, return OAuth required error to initiate new flow
+        
+        Args:
+            user_id: User ID
+            server_id: Server ID (for OAuth flow initiation)
+            server_name: Server name (for token lookup)
+            
+        Returns:
+            Tuple of (access_token, auth_url, error_message)
+            - (token, None, None) if token is valid or refreshed successfully
+            - (None, auth_url, None) if re-authentication is needed
+            - (None, None, error) if an error occurred
+        """
+        try:
+            # 1. Check if access token exists and is not expired
+            is_expired = await token_service.is_access_token_expired(user_id, server_name)
+            
+            if not is_expired:
+                tokens = await token_service.get_oauth_tokens(user_id, server_name)
+                if tokens and tokens.access_token:
+                    logger.debug(f"Using existing valid access token for {user_id}/{server_name}")
+                    return tokens.access_token, None, None
+            
+            logger.info(f"Access token expired or missing for {user_id}/{server_name}, attempting refresh")
+            
+            # 2. Try refresh token if access token is expired/missing
+            has_refresh = await token_service.has_refresh_token(user_id, server_name)
+            
+            if has_refresh:
+                success, error = await self.refresh_tokens(user_id, server_id)
+                
+                if success:
+                    tokens = await token_service.get_oauth_tokens(user_id, server_name)
+                    if tokens and tokens.access_token:
+                        logger.info(f"Successfully refreshed access token for {user_id}/{server_name}")
+                        return tokens.access_token, None, None
+                
+                logger.warning(f"Token refresh failed for {user_id}/{server_name}: {error}")
+            else:
+                logger.info(f"No refresh token available for {user_id}/{server_name}")
+            
+            # 3. Both access and refresh failed - initiate new OAuth flow
+            logger.info(f"Initiating new OAuth flow for {user_id}/{server_name}")
+            flow_id, auth_url, flow_error = await self.initiate_oauth_flow(user_id, server_id)
+            
+            if flow_error:
+                return None, None, f"Failed to initiate OAuth flow: {flow_error}"
+            
+            return None, auth_url, None
+            
+        except Exception as e:
+            logger.error(f"Error getting valid access token: {e}", exc_info=True)
+            return None, None, str(e)
+
     async def get_tokens(self, user_id: str, server_name: str) -> Optional[OAuthTokens]:
         """
         Get user's OAuth tokens from database
