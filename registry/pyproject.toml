@@ -21,6 +21,7 @@ dependencies = [
     
     # MCP and Agents  
     "mcp>=1.9.3",
+    "fastmcp>=2.13.1",
     "langchain-mcp-adapters>=0.0.11",
     "langgraph>=0.4.3",
     "langchain-anthropic>=0.3.17",
@@ -55,7 +56,6 @@ dependencies = [
 packages = { workspace = true }
 
 [tool.uv]
-# Local-only project - never resolve from PyPI
 package = false
 
 [build-system]

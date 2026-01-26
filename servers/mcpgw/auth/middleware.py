@@ -35,11 +35,9 @@ class AuthMiddleware(Middleware):
         method = context.method
         logger.debug(f"MCP request: {method}")
         if method not in self.allowed_methods_without_auth:
-            # Compatible with retrieving the range from auth or from the request header.
-            user_scopes = await self._extract_user_scopes_for_user()
-            # if len(user_scopes) == 0:
-            #    user_scopes = await self._extract_user_scopes_for_headers(context)
-            await self._store_auth_context(context, user_scopes)
+            # Extract full user context from request
+            user_context = await self._extract_user_context()
+            await self._store_auth_context(context, user_context)
         try:
             result = await call_next(context)
             return result
@@ -47,34 +45,57 @@ class AuthMiddleware(Middleware):
             logger.error(f"Error processing request {method}: {type(e).__name__}: {e}")
             raise
 
-    async def _extract_user_scopes_for_user(self):
+    async def _extract_user_context(self):
         """
-        Extract user's scopes from request.
+        Extract full user context from FastMCP session token claims.
+        
+        Returns:
+            Dictionary with user authentication context (JWT claims)
         """
-        user_scopes = []
-        request = get_http_request()
-        if request.user.is_authenticated:
-            user_scopes = request.user.scopes
-        logger.debug(f"extract_user_scopes_for_user: {user_scopes}")
-        return user_scopes
+        user_context = {}
+        
+        # Extract user claims from FastMCP request.user.access_token.claims
+        try:
+            request = get_http_request()
+            if request.user.is_authenticated:
+                # Extract claims from access_token
+                if hasattr(request.user, "access_token") and hasattr(request.user.access_token, "claims"):
+                    # Get all claims from the access token
+                    user_context = dict(request.user.access_token.claims)                    
+                    logger.debug(f"Extracted user context from access token claims: "
+                               f"sub={user_context.get('sub')}, "
+                               f"user_id={user_context.get('user_id')}, "
+                               f"scopes={len(user_context.get('scopes', []))}, "
+                               f"groups={len(user_context.get('groups', []))}")
+                else:
+                    logger.warning("request.user exists but has no access_token.claims attribute")
+        except Exception as e:
+            logger.warning(f"Could not extract user context from session: {e}")
+        
+        return user_context
 
     async def _store_auth_context(
             self,
             context: MiddlewareContext,
-            user_scopes: List[str]
+            user_context: dict
     ) -> None:
         """
         Store authentication context for downstream tools.
         
         Args:
             context: Middleware context
-            user_scopes: List of user scopes
+            user_context: Dictionary with user authentication context
         """
         try:
             ctx = context.fastmcp_context
             if not hasattr(ctx, 'user_auth'):
                 ctx.user_auth = {}
-            ctx.user_auth['scopes'] = user_scopes
-            logger.debug(f"Stored {len(user_scopes)} scopes in context")
+            
+            # Store full user context
+            ctx.user_auth.update(user_context)
+            
+            logger.debug(f"Stored user context: username={user_context.get('username')}, "
+                        f"scopes={len(user_context.get('scopes', []))}, "
+                        f"groups={len(user_context.get('groups', []))}")
         except Exception as e:
             logger.warning(f"Could not store auth context: {type(e).__name__}: {e}")

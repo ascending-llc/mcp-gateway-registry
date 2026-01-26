@@ -41,9 +41,6 @@ from registry.schemas.server_api_schemas import (
     convert_to_health_response,
 )
 
-# API Version constant
-API_VERSION = "v1"
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -100,7 +97,7 @@ def apply_connection_status_to_server(
 # ==================== Endpoints ====================
 
 @router.get(
-    f"/{API_VERSION}/servers",
+    f"/servers",
     response_model=ServerListResponse,
     summary="List Servers",
     description="List all servers with filtering, searching, and pagination. Includes connection status for each server.",
@@ -194,7 +191,7 @@ async def list_servers(
 
 
 @router.get(
-    f"/{API_VERSION}/servers/stats",
+    f"/servers/stats",
     response_model=ServerStatsResponse,
     summary="Get System Statistics",
     description="Get system-wide statistics (Admin only). Includes server, token, and user metrics using MongoDB aggregation pipelines.",
@@ -244,7 +241,7 @@ async def get_server_stats(
 
 
 @router.get(
-    f"/{API_VERSION}/servers/{{server_id}}",
+    f"/servers/{{server_id}}",
     response_model=ServerDetailResponse,
     summary="Get Server Details",
     description="Get detailed information about a specific server, including connection status",
@@ -298,7 +295,7 @@ async def get_server(
 
 
 @router.post(
-    f"/{API_VERSION}/servers",
+    f"/servers",
     response_model=ServerCreateResponse,
     status_code=http_status.HTTP_201_CREATED,
     summary="Register Server",
@@ -339,7 +336,7 @@ async def create_server(
 
 
 @router.patch(
-    f"/{API_VERSION}/servers/{{server_id}}",
+    f"/servers/{{server_id}}",
     response_model=ServerUpdateResponse,
     summary="Update Server",
     description="Update server configuration",
@@ -391,7 +388,7 @@ async def update_server(
 
 
 @router.delete(
-    f"/{API_VERSION}/servers/{{server_id}}",
+    f"/servers/{{server_id}}",
     status_code=http_status.HTTP_204_NO_CONTENT,
     summary="Delete Server",
     description="Delete a server",
@@ -438,7 +435,7 @@ async def delete_server(
 
 
 @router.post(
-    f"/{API_VERSION}/servers/{{server_id}}/toggle",
+    f"/servers/{{server_id}}/toggle",
     response_model=ServerToggleResponse,
     summary="Toggle Server Status",
     description="Enable or disable a server",
@@ -489,7 +486,7 @@ async def toggle_server(
 
 
 @router.get(
-    f"/{API_VERSION}/servers/{{server_id}}/tools",
+    f"/servers/{{server_id}}/tools",
     response_model=ServerToolsResponse,
     summary="Get Server Tools",
     description="Get the list of tools provided by a server",
@@ -544,7 +541,7 @@ async def get_server_tools(
 
 
 @router.post(
-    f"/{API_VERSION}/servers/{{server_id}}/refresh",
+    f"/servers/{{server_id}}/refresh",
     response_model=ServerHealthResponse,
     summary="Refresh Server Health",
     description="Refresh server health status and check connectivity",
