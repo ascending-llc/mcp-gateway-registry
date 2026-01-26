@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-import asyncio
 import logging
 from fastmcp import FastMCP
 from starlette.responses import JSONResponse
-
 from auth.custom_jwt import jwtVerifier
 from auth.middleware import AuthMiddleware
 from config import parse_arguments, settings
-from servers.mcpgw.tools import registry_api
-from servers.mcpgw.tools import search
+from tools import registry_api, search
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -43,21 +40,6 @@ EXAMPLES:
 ALWAYS proactively discover and use available tools when user requests could benefit from external data, APIs, or specialized functionality."""
 )
 mcp.add_middleware(AuthMiddleware())
-
-
-# ============================================================================
-# Vector Search Initialization
-# ============================================================================
-
-async def initialize_vector_search():
-    """Initialize the vector search service."""
-    try:
-        from search import vector_search_service
-        await vector_search_service.initialize()
-        logger.info("Vector search service initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize vector search service: {e}", exc_info=True)
-        logger.warning("Server will continue but intelligent_tool_finder may not work")
 
 
 # ============================================================================
@@ -204,18 +186,8 @@ def main():
     logger.info(f"  Port: {settings.MCP_SERVER_LISTEN_PORT}")
     logger.info(f"  Transport: {settings.MCP_TRANSPORT}")
     logger.info(f"  Registry URL: {settings.REGISTRY_URL}")
-    logger.info(f"  Tool Discovery Mode: {settings.TOOL_DISCOVERY_MODE}")
     logger.info(f"  Endpoint: http://0.0.0.0:{settings.MCP_SERVER_LISTEN_PORT}/mcp")
     logger.info("=" * 80)
-
-    # Initialize services
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(initialize_vector_search())
-    except Exception as e:
-        logger.warning(f"Startup initialization encountered issues: {e}")
-        logger.warning("Server will continue but some features may not work until initialized")
 
     # Run the server
     logger.info("Starting server...")

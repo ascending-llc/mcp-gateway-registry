@@ -3,7 +3,6 @@ from typing import Dict, Any, Optional, List, Callable, Tuple
 from fastmcp import Context
 from pydantic import Field
 from core.registry import call_registry_api
-from search import vector_search_service
 
 logger = logging.getLogger(__name__)
 
