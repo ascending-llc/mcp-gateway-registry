@@ -6,9 +6,8 @@ from pathlib import Path
 
 from fastapi import Depends, HTTPException, status, Cookie, Header, Request
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
-from packages.models._generated.user import IUser
 from registry.services.access_control_service import acl_service
-from registry.services.constants import PrincipalType, ResourceType
+from registry.core.acl_constants import PrincipalType
 from registry.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -69,7 +68,6 @@ async def get_user_acl_permissions(request: Request) -> Dict[str, Any]:
             "user_id": user_id,
             "acl_permission_map": acl_permission_map,
             "role": role
-            #  other acl fields can be added here
         }
     except Exception as e:
         logger.info(f'Error fetching user ACL permissions {username} from database: {e}')
@@ -749,5 +747,4 @@ def ui_permission_required(permission: str, service_name: str = None):
 
     return check_permission
 
-# With fine -grained permissions
 CurrentUser: type[dict[str, Any]] = Annotated[Dict[str, Any], Depends(get_user_acl_permissions)]

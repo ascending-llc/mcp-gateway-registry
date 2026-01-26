@@ -7,7 +7,7 @@ Permisison Management endpoints based on the API documentation.
 
 from typing import List, Optional
 from pydantic import BaseModel, Field
-from registry.services.constants import PrincipalType
+from registry.core.acl_constants import PrincipalType
 
 class PermissionPrincipalIn(BaseModel):
     principal_id: str

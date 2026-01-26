@@ -24,7 +24,7 @@ from registry.services.permissions_utils import (
     check_required_permission,
     make_user_principal_id_dict
 )
-from registry.services.constants import PrincipalType, ResourceType
+from registry.core.acl_constants import PrincipalType, ResourceType, RoleBits
 from registry.schemas.enums import ConnectionState
 from registry.schemas.server_api_schemas import (
     ServerListResponse,
@@ -318,7 +318,7 @@ async def create_server(
             principal_id=make_user_principal_id_dict(user_id),
             resource_type=ResourceType.MCPSERVER,
             resource_id=server.id,
-            perm_bits=15  # Apply full permissions for owners
+            perm_bits=RoleBits.OWNER
         )
         
         if not acl_entry: 

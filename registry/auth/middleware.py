@@ -14,6 +14,8 @@ from registry.auth.dependencies import (map_cognito_groups_to_scopes, signer, ge
                                         get_accessible_agents_for_user, user_can_modify_servers,
                                         user_has_wildcard_access)
 from registry.core.config import settings
+
+
 class UnifiedAuthMiddleware(BaseHTTPMiddleware):
     """
         A unified authentication middleware that encapsulates the functionality of `enhanced_auth` and `nginx_proxied_auth`.

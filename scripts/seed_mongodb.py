@@ -16,7 +16,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from dotenv import load_dotenv
-from registry.services.constants import PrincipalType, ResourceType, RoleBits, PermissionBits
+from registry.core.acl_constants import PrincipalType, ResourceType, RoleBits, PermissionBits
 
 # Load environment variables from .env file
 load_dotenv()

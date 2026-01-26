@@ -7,12 +7,16 @@ from beanie import PydanticObjectId
 
 def check_required_permission(acl_permission_map: dict, resource_type: str, resource_id: str, required_permission: str) -> None:
     """
-    Raises HTTP 403 if the user does not have SHARE permission or is not ADMIN for the given server.
+    Checks if a user has the required permission for a given resource using the provided ACL permission map.
+
     Args:
-        user_context (dict): The user context dictionary (should contain 'acl_permission_map' and 'role').
-        server_id (str): The server ID to check permissions for.
+    acl_permission_map (dict): The user's ACL permission map (resource_type → resource_id → permissions dict).
+    resource_type (str): The type of resource to check (e.g., 'mcpServer').
+    resource_id (str): The ID of the resource to check.
+    required_permission (str): The permission to check for (e.g., 'SHARE', 'EDIT', 'VIEW').
+
     Raises:
-        HTTPException: If the user lacks share permission and is not ADMIN.
+    HTTPException: If the user lacks the required permission for the specified resource.
     """
     perms_for_resource = acl_permission_map.get(resource_type, {}).get(str(resource_id), {})
     if not (perms_for_resource.get(required_permission, False)):
@@ -35,4 +39,6 @@ def make_user_principal_id_dict(principal_id: str) -> dict:
     """
     if principal_id:
         return {"userId": PydanticObjectId(principal_id)}
+    
+    return {}
     

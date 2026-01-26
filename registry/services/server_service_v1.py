@@ -25,7 +25,7 @@ from registry.schemas.server_api_schemas import (
 )
 from registry.utils.crypto_utils import encrypt_auth_fields
 from registry.core.mcp_client import get_tools_from_server_with_server_info
-from registry.services.constants import ResourceType
+from registry.core.acl_constants import ResourceType
 from packages.vector.search_manager import mcp_tool_search_index_manager
 
 logger = logging.getLogger(__name__)

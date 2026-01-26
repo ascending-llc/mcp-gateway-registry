@@ -159,7 +159,7 @@ class TestRateAgent:
         authenticated_client,
     ) -> None:
         """Test rating an agent without access returns 403."""
-        from registry.auth.dependencies import get_current_user_by_mid
+        from registry.auth.dependencies import get_user_acl_permissions
         from fastapi import Request
 
         # User with restricted access - accessible_agents doesn't include /test-agent
@@ -177,7 +177,7 @@ class TestRateAgent:
             request.state.is_authenticated = True
             return restricted_context
 
-        app.dependency_overrides[get_current_user_by_mid] = _mock_get_user
+        app.dependency_overrides[get_user_acl_permissions] = _mock_get_user
 
         with patch.object(
             agent_service,

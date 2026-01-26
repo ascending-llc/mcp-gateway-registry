@@ -1,11 +1,11 @@
 from datetime import datetime, timezone
-from typing import Optional, List, Any
+from typing import Optional, Any
 from packages.models._generated import (
 	IAclEntry,
 	IAccessRole,
 )
 from beanie import PydanticObjectId
-from registry.services.constants import ResourceType, PermissionBits, PrincipalType
+from registry.core.acl_constants import ResourceType, PermissionBits, PrincipalType
 from registry.services.permissions_utils import make_user_principal_id_dict
 import logging 
 
@@ -87,15 +87,15 @@ class ACLService:
 		self,
 		resource_type: str,
 		resource_id: PydanticObjectId,
-		perm_bits_to_delete: Optional[int]
+		perm_bits_to_delete: Optional[int] = None
 	) -> int:
 		"""
-		Delete all ACL entries for a given resource, with optional preservation of the author's permissions.
+		Bulk delete ACL entries for a given resource, optionally deleting all entries with permBits less than or equal to the specified value.
 
 		Args:
 			resource_type (str): Type of resource (see ResourceType enum).
 			resource_id (PydanticObjectId): Resource document ID.
-			author_id (Optional[PydanticObjectId]): If provided, preserves ACL entry for the author.
+			perm_bits_to_delete (Optional[int]): If specified, delete all entries with permBits less than or equal to this value.
 
 		Returns:
 			int: Number of ACL entries deleted.
@@ -110,7 +110,7 @@ class ACLService:
 			}
 
 			if perm_bits_to_delete: 
-				query["permBits"] = perm_bits_to_delete
+				query["permBits"] = {"$lte": perm_bits_to_delete}
 
 			result = await IAclEntry.find(query).delete()
 			return result.deleted_count
