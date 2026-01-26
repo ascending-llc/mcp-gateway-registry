@@ -166,7 +166,7 @@ class CustomJWTVerifier(TokenVerifier):
 
 
 jwtVerifier = CustomJWTVerifier(
-    secret_key=settings.JWT_SECRET_KEY,
+    secret_key=settings.SECRET_KEY,
     issuer=settings.JWT_ISSUER,
     audience=settings.JWT_AUDIENCE,
     expected_kid=settings.JWT_SELF_SIGNED_KID

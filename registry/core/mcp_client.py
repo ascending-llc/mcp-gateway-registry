@@ -7,6 +7,7 @@ Refactored with centralized configuration and strategy pattern.
 
 import asyncio
 import json
+import base64
 import logging
 from typing import List, Dict, Optional, Callable, Any
 import re
@@ -93,7 +94,6 @@ def _build_headers_for_server(server_info: dict = None) -> Dict[str, str]:
                 # Basic auth: Authorization: Basic <base64(key)>
                 # Ignore custom_header field for basic type
                 # Note: The key should already be base64 encoded or in username:password format
-                import base64
                 # Check if key is already base64 encoded by trying to decode it
                 try:
                     base64.b64decode(key_value, validate=True)

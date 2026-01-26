@@ -18,21 +18,40 @@ from registry.core.config import settings
 
 class UnifiedAuthMiddleware(BaseHTTPMiddleware):
     """
-        A unified authentication middleware that encapsulates the functionality of `enhanced_auth` and `nginx_proxied_auth`.
+    A unified authentication middleware that encapsulates the functionality of `enhanced_auth` and `nginx_proxied_auth`.
 
-        It automatically attempts all authentication methods and stores the results in `request.state`.
+    It automatically attempts all authentication methods and stores the results in `request.state`.
+
+    Path Matching Logic:
+    --------------------
+    1. public_paths_compiled: Paths that are PUBLICLY accessible (no authentication required)
+       - These act as EXCEPTIONS to authenticated paths via double-check logic
+       - Use specific patterns to carve out public endpoints from broader authenticated patterns
+       - Example: "/api/{versions}/mcp/{server_name}/oauth/callback" is public despite matching broader MCP pattern
+
+    How to Define Paths:
+    --------------------
+    public_paths_compiled:
+      - Define SPECIFIC patterns that should be accessible without auth
+      - These override authenticated patterns via double-check
+      - Use more specific paths to carve out exceptions
+      - Examples:
+        * "/api/{versions}/mcp/{server_name}/oauth/callback" - Specific OAuth callback (public)
+        * "/.well-known/{path:path}" - OAuth discovery endpoints (must be public per RFC)
+        * "/health" - Health check endpoint (public)
     """
 
     def __init__(self, app):
         super().__init__(app)
         # Paths that require authentication (checked before public paths)
-        self.authenticated_paths_compiled = self._compile_patterns([
-            "/api/auth/me",
-            "/api/{versions}/servers/{path:path}",
-            "/api/{versions}/servers",
-            "/proxy/{path:path}",
-            "/api/{versions}/mcp/{path:path}",
-        ])
+        # self.authenticated_paths_compiled = self._compile_patterns([
+        #     "/api/auth/me",
+        #     "/api/{versions}/servers/{path:path}",
+        #     "/api/{versions}/servers",
+        #     "/proxy/{path:path}",
+        #     "/api/{versions}/mcp/{path:path}",
+        #     "/api/search/{path:path}",
+        # ])
         self.public_paths_compiled = self._compile_patterns([
             "/",
             "/health",
@@ -41,19 +60,22 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/static/{path:path}",
             "/redirect",
             "/redirect/{provider}",
-            "/api/auth/{path:path}",  # Most auth endpoints are public
-            "/api/{versions}/mcp/{server_name}/oauth/callback",  # OAuth callback is public
-            "/api/{versions}/mcp/oauth/success",  # OAuth success page
-            "/api/{versions}/mcp/oauth/error",  # OAuth error page
+            "/api/auth/providers",
+            "/api/auth/config",
+            "/api/auth/login",
+            f"/api/{settings.API_VERSION}/mcp/{{server_name}}/oauth/callback",  # OAuth callback is public
             "/.well-known/{path:path}",  # OAuth discovery endpoints must be public
         ])
-        # note: admin
+        
+        # =====================================================================
+        # INTERNAL PATHS (Admin/Internal - Require Basic Auth)
+        # =====================================================================
+        # Define patterns for internal/admin endpoints that use Basic authentication.
         self.internal_paths_compiled = self._compile_patterns([
-            "/api/internal/{path:path}",
+            "/api/internal/{path:path}",                   # Internal admin endpoints
         ])
         logger.info(
             f"Auth middleware initialized with Starlette routing: "
-            f"{len(self.authenticated_paths_compiled)} authenticated, "
             f"{len(self.public_paths_compiled)} public, "
             f"{len(self.internal_paths_compiled)} internal, "
         )
@@ -76,12 +98,12 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         
         # Check authenticated paths first (these override public patterns)
-        if self._match_path(path, self.authenticated_paths_compiled):
-            logger.debug(f"Authenticated path: {path}")
-            # Continue to authentication logic below
-        elif self._match_path(path, self.public_paths_compiled):
+        if self._match_path(path, self.public_paths_compiled):
             logger.debug(f"Public path: {path}")
             return await call_next(request)
+        else:
+            logger.debug(f"Authenticated path: {path}")
+            # Continue to authentication logic below
 
         try:
             user_context = await self._authenticate(request)
@@ -139,22 +161,14 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             if user_context:
                 return user_context
             raise AuthenticationError("Basic authentication required")
-
-        if self._match_path(path, self.authenticated_paths_compiled):
-            # Try JWT first, then fall back to session auth
-            user_context = self._try_jwt_auth(request)
-            if user_context:
-                return user_context
-            user_context = self._try_session_auth(request)
-            if user_context:
-                return user_context
-            raise AuthenticationError("JWT or session authentication required")
-
-        # Default: session Auth
+        # Try JWT first, then fall back to session auth
+        user_context = self._try_jwt_auth(request)
+        if user_context:
+            return user_context
         user_context = self._try_session_auth(request)
         if user_context:
             return user_context
-        raise AuthenticationError("Session authentication required")
+        raise AuthenticationError("JWT or session authentication required")
 
     def _try_basic_auth(self, request: Request) -> Optional[Dict[str, Any]]:
         """Basic authentication for internal endpoints"""
@@ -203,13 +217,15 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         try:
             # Get Authorization header
             auth_header = request.headers.get("Authorization")
-            if not auth_header or not auth_header.startswith("Bearer "):
-                logger.debug("Missing or invalid Authorization header for JWT auth")
+            if not auth_header:
+                logger.debug("Missing Authorization header for JWT auth")
                 return None
+                        
             access_token = auth_header.split(" ")[1]
             if not access_token:
-                logger.debug("Empty JWT token")
+                logger.debug("Empty JWT token after split")
                 return None
+        
             # JWT validation parameters from auth_server/server.py
             # Extract kid from header first
             kid = None

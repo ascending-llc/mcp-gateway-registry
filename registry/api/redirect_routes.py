@@ -306,15 +306,3 @@ async def logout_post(
 ):
     """Handle logout via POST request (for forms)"""
     return await logout_handler(request, session)
-
-
-@router.get("/providers")
-async def get_providers_api():
-    """API endpoint to get available OAuth2 providers for React frontend"""
-    providers = await get_oauth2_providers()
-    return {"providers": providers}
-
-@router.get("/config")
-async def get_auth_config():
-    """API endpoint to get auth configuration for React frontend"""
-    return {"auth_server_url": settings.auth_server_external_url}
