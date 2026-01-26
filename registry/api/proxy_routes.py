@@ -9,7 +9,7 @@ from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
 from registry.auth.dependencies import CurrentUser
-from registry.services.server_service_v1 import server_service_v1
+from registry.services.server_service import server_service_v1
 from registry.utils.crypto_utils import decrypt_auth_fields
 from registry.core.mcp_client import _build_headers_for_server
 from registry.schemas.proxy_tool_schema import (

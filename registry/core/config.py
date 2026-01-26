@@ -147,32 +147,6 @@ class Settings(BaseSettings):
         return self.container_registry_dir / "models" / self.embeddings_model_name
 
     @property
-    def servers_dir(self) -> Path:
-        if self.is_local_dev:
-            return Path.cwd() / "registry" / "servers"
-        return self.container_registry_dir / "servers"
-
-    @property
-    def static_dir(self) -> Path:
-        if self.is_local_dev:
-            return Path.cwd() / "registry" / "static"
-        return self.container_registry_dir / "static"
-
-    @property
-    def templates_dir(self) -> Path:
-        if self.is_local_dev:
-            return Path.cwd() / "registry" / "templates"
-        return self.container_registry_dir / "templates"
-
-    @property
-    def nginx_config_path(self) -> Path:
-        return Path("/etc/nginx/conf.d/nginx_rev_proxy.conf")
-
-    @property
-    def state_file_path(self) -> Path:
-        return self.servers_dir / "server_state.json"
-
-    @property
     def log_dir(self) -> Path:
         """Get log directory based on environment."""
         if self.is_local_dev:

@@ -4,7 +4,7 @@ from typing import Dict, Optional, Any
 from dataclasses import dataclass, field
 
 from registry.schemas.enums import ConnectionState
-from registry.services.server_service_v1 import server_service_v1
+from registry.services.server_service import server_service_v1
 from registry.services.oauth.base import Connection, ConnectionManager
 from registry.utils.log import logger
 

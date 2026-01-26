@@ -3,8 +3,7 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Request, Form, HTTPException, status, Cookie
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import RedirectResponse, JSONResponse
 import httpx
 import base64
 import json
@@ -20,9 +19,6 @@ from itsdangerous import URLSafeTimedSerializer
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# Templates (will be injected via dependency later, but for now keep it simple)
-templates = Jinja2Templates(directory=settings.templates_dir)
 
 # JWT / signer configuration
 SECRET_KEY = settings.secret_key
@@ -46,20 +42,6 @@ async def get_oauth2_providers():
     except Exception as e:
         logger.warning(f"Failed to fetch OAuth2 providers from auth server: {e}", exc_info=True)
     return []
-
-
-@router.get("/login", response_class=HTMLResponse)
-async def login_form(request: Request, error: str | None = None):
-    """Show login form with OAuth2 providers"""
-    oauth_providers = await get_oauth2_providers()
-    return templates.TemplateResponse(
-        "login.html",
-        {
-            "request": request,
-            "error": error,
-            "oauth_providers": oauth_providers
-        }
-    )
 
 # OAuth2 login redirect avoid /auth/ route collision with auth server
 @router.get("/redirect/{provider}")
@@ -110,7 +92,7 @@ async def oauth2_callback(request: Request, user_info: str, error: str = None, d
                 error_message = "OAuth2 authentication failed"
             
             return RedirectResponse(
-                url=f"/login?error={urllib.parse.quote(error_message)}", 
+                url=f"{settings.registry_client_url}/login?error={urllib.parse.quote(error_message)}", 
                 status_code=302
             )
     
@@ -122,13 +104,13 @@ async def oauth2_callback(request: Request, user_info: str, error: str = None, d
         except SignatureExpired:
             logger.error("Signed user info has expired (>60 seconds old)")
             return RedirectResponse(
-                url="/login?error=oauth2_data_expired", 
+                url=f"{settings.registry_client_url}/login?error=oauth2_data_expired", 
                 status_code=302
             )
         except BadSignature:
             logger.error("Invalid signature on user info data - possible tampering")
             return RedirectResponse(
-                url="/login?error=oauth2_data_invalid", 
+                url=f"{settings.registry_client_url}/login?error=oauth2_data_invalid", 
                 status_code=302
             )
         except Exception as e:
@@ -141,7 +123,7 @@ async def oauth2_callback(request: Request, user_info: str, error: str = None, d
             except Exception as legacy_error:
                 logger.error(f"Failed to decode user info with both methods: {legacy_error}")
                 return RedirectResponse(
-                    url="/login?error=oauth2_data_decode_failed", 
+                    url=f"{settings.registry_client_url}/login?error=oauth2_data_decode_failed", 
                     status_code=302
                 )
             
@@ -149,7 +131,7 @@ async def oauth2_callback(request: Request, user_info: str, error: str = None, d
         if not user_obj: 
             logger.warning(f"User {userinfo['username']} not found in registry database")
             return RedirectResponse(
-                url="/login?error=User+not+found+in+registry", 
+                url=f"{settings.registry_client_url}/login?error=User+not+found+in+registry", 
                 status_code=302
             )
         
@@ -182,7 +164,7 @@ async def oauth2_callback(request: Request, user_info: str, error: str = None, d
         
     except Exception as e:
         logger.error(f"Error in OAuth2 callback: {e}")
-        return RedirectResponse(url="/login?error=oauth2_callback_error", status_code=302)
+        return RedirectResponse(url=f"{settings.registry_client_url}/login?error=oauth2_callback_error", status_code=302)
 
 
 @router.post("/login")
@@ -242,7 +224,7 @@ async def login_submit(
         else:
             # Traditional redirect with error
             return RedirectResponse(
-                url="/login?error=Invalid+username+or+password",
+                url=f"{settings.registry_client_url}/login?error=Invalid+username+or+password",
                 status_code=status.HTTP_303_SEE_OTHER,
             )
 
@@ -272,22 +254,13 @@ async def logout_handler(
                 logger.debug(f"Could not decode session for logout: {e}")
         
         # Clear local session cookie
-        response = RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+        response = RedirectResponse(url=f"{settings.registry_client_url}/login", status_code=status.HTTP_303_SEE_OTHER)
         response.delete_cookie(settings.session_cookie_name)
         
         # If user was logged in via OAuth2, redirect to provider logout
         if provider:
-            auth_external_url = settings.auth_server_external_url
-            
-            # Build redirect URI based on current host
-            host = request.headers.get("host", "localhost:7860")
-            scheme = "https" if request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https" else "http"
-            
-            # Handle localhost specially to ensure correct port
-            if "localhost" in host and ":" not in host:
-                redirect_uri = f"{scheme}://localhost:7860/logout"
-            else:
-                redirect_uri = f"{scheme}://{host}/logout"
+            auth_external_url = settings.auth_server_external_url            
+            redirect_uri = f"{settings.registry_client_url}/logout"
             
             logout_url = f"{auth_external_url}/oauth2/logout/{provider}?redirect_uri={redirect_uri}"
             logger.info(f"Redirecting to {provider} logout: {logout_url}")
@@ -300,7 +273,7 @@ async def logout_handler(
     except Exception as e:
         logger.error(f"Error during logout: {e}")
         # Fallback to simple logout
-        response = RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
+        response = RedirectResponse(url=f"{settings.registry_client_url}/login", status_code=status.HTTP_303_SEE_OTHER)
         response.delete_cookie(settings.session_cookie_name)
         return response
 

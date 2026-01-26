@@ -15,14 +15,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-
 class RatingRequest(BaseModel):
     rating: int
-
-# Templates
-templates = Jinja2Templates(directory=settings.templates_dir)
-
-
 
 @router.get("/tokens", response_class=HTMLResponse)
 async def token_generation_page(

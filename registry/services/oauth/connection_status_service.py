@@ -1,7 +1,7 @@
 from typing import Dict, Any, List, Optional
 from registry.utils.log import logger
 from registry.services.oauth.mcp_service import MCPService, get_mcp_service
-from registry.services.server_service_v1 import server_service_v1
+from registry.services.server_service import server_service_v1
 from registry.services.oauth.status_resolver import get_status_resolver, ConnectionStateContext
 from registry.schemas.enums import ConnectionState
 from registry.auth.oauth.flow_state_manager import get_flow_state_manager

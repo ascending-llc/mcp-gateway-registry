@@ -5,7 +5,7 @@ from registry.utils.log import logger
 from registry.models.oauth_models import OAuthTokens
 from .tracker import OAuthReconnectionTracker
 from registry.schemas.enums import ConnectionState
-from registry.services.server_service_v1 import server_service_v1
+from registry.services.server_service import server_service_v1
 from registry.auth.oauth.flow_state_manager import get_flow_state_manager
 
 
