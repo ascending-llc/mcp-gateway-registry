@@ -47,7 +47,22 @@ async def get_oauth2_providers():
         logger.warning(f"Failed to fetch OAuth2 providers from auth server: {e}", exc_info=True)
     return []
 
-@router.get("/auth/{provider}")
+
+@router.get("/login", response_class=HTMLResponse)
+async def login_form(request: Request, error: str | None = None):
+    """Show login form with OAuth2 providers"""
+    oauth_providers = await get_oauth2_providers()
+    return templates.TemplateResponse(
+        "login.html",
+        {
+            "request": request,
+            "error": error,
+            "oauth_providers": oauth_providers
+        }
+    )
+
+# OAuth2 login redirect avoid /auth/ route collision with auth server
+@router.get("/redirect/{provider}")
 async def oauth2_login_redirect(provider: str, request: Request):
     """Redirect to auth server for OAuth2 login"""
     try:

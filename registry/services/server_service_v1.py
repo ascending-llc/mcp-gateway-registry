@@ -395,25 +395,6 @@ class ServerServiceV1:
         """
         return await MCPServerDocument.find_one({"path": path})
 
-    async def user_can_access_server_path(self, path: str, accessible_servers: List[str]) -> bool:
-        """
-        Check if user can access a specific server by path (MongoDB-based implementation).
-        
-        Args:
-            path: Server path to check
-            accessible_servers: List of server names the user can access
-            
-        Returns:
-            True if user can access the server, False otherwise
-        """
-        server = await self.get_server_by_path(path)
-        if not server:
-            return False
-
-        # Extract technical name from path (remove leading and trailing slashes)
-        technical_name = path.strip('/')
-        return technical_name in accessible_servers
-
     async def create_server(
             self,
             data: ServerCreateRequest,
