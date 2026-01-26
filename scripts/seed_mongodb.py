@@ -16,7 +16,6 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from dotenv import load_dotenv
-# TODO: Delete once import tool is fixed to incorporate enums
 from registry.services.constants import PrincipalType, ResourceType, RoleBits, PermissionBits
 
 # Load environment variables from .env file

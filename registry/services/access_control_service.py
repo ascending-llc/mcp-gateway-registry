@@ -6,6 +6,7 @@ from packages.models._generated import (
 )
 from beanie import PydanticObjectId
 from registry.services.constants import ResourceType, PermissionBits, PrincipalType
+from registry.services.permissions_utils import make_user_principal_id_dict
 import logging 
 
 logger = logging.getLogger(__name__)
@@ -14,7 +15,7 @@ class ACLService:
 	async def grant_permission(
 		self,
 		principal_type: str,
-		principal_id: Optional[Any],
+		principal_id: Optional[dict],
 		resource_type: str,
 		resource_id: PydanticObjectId,
 		role_id: Optional[PydanticObjectId] = None,
@@ -81,79 +82,12 @@ class ACLService:
 		except Exception as e: 
 			logger.error(f"Error upserting ACL entry: {e}")
 			raise ValueError(f"Error upserting ACL permissions: {e}")
-	
-	# Not used
-	async def check_permission(
-		self,
-		principal_type: str,
-		principal_id: str,
-		resource_type: str,
-		resource_id: PydanticObjectId,
-		required_permission: float
-	) -> bool:
-		"""
-		Check if a principal has the required permission for a resource.
-
-		Args:
-			principal_type (str): Type of principal ('user', 'group', etc.).
-			principal_id (str): ID of the principal (user ID, group ID, etc.).
-			resource_type (str): Type of resource (see ResourceType enum).
-			resource_id (PydanticObjectId): Resource document ID.
-			required_permission (float): Permission bit(s) required.
-
-		Returns:
-			bool: True if the principal has the required permission, False otherwise.
-
-		Raises:
-			None (returns False if not found or insufficient permissions).
-		"""
-		acl_entry = await IAclEntry.find_one({
-			"principalType": principal_type,
-			"principalId": {"userId": principal_id},
-			"resourceType": resource_type,
-			"resourceId": resource_id
-		})
-		if acl_entry and acl_entry.permBits is not None:
-			return (acl_entry.permBits & required_permission) == required_permission
-		return False
-
-	# Not used
-	async def list_accessible_resources(
-		self,
-		principal_type: str,
-		principal_id: str,
-		resource_type: str,
-		required_permissions: Optional[int] = 1
-	) -> List[PydanticObjectId]:
-		"""
-		List all resource IDs of a given type that a principal can access with the required permissions.
-
-		Args:
-			principal_type (str): Type of principal ('user', 'group', etc.).
-			principal_id (str): ID of the principal (user ID, group ID, etc.).
-			resource_type (str): Type of resource (see ResourceType enum).
-			required_permissions (Optional[int]): Minimum permission bits required (default: 1).
-
-		Returns:
-			List[PydanticObjectId]: List of resource IDs accessible by the principal.
-
-		Raises:
-			None (returns empty list on error).
-		"""
-		acl_entries = await IAclEntry.find({
-			"principalType": {"$in": [principal_type, PrincipalType.PUBLIC.value]},
-			"principalId": {"userId": principal_id},
-			"resourceType": resource_type,
-			"permBits": {"$gte": required_permissions}
-		}).to_list()
-		logger.info(f"Found {len(acl_entries)} accessible resources")
-		return acl_entries
 
 	async def delete_acl_entries_for_resource(
 		self,
 		resource_type: str,
 		resource_id: PydanticObjectId,
-		author_id: PydanticObjectId = None
+		perm_bits_to_delete: Optional[int]
 	) -> int:
 		"""
 		Delete all ACL entries for a given resource, with optional preservation of the author's permissions.
@@ -170,23 +104,16 @@ class ACLService:
 			None (returns 0 on error).
 		"""
 		try: 
-			# Remove all entries except the resource author 
-			# used when making a resource public
-			if author_id: 
-				result = await IAclEntry.find({
-					"resourceType": resource_type,
-					"resourceId": resource_id,
-					"$nor": [{"principalId.userId": author_id}]
-				}).delete()
-				return result.deleted_count
-			else: 
-				# Remove all entries including the author
-				# used when deleting a resource
-				result = await IAclEntry.find({
-					"resourceType": resource_type,
-					"resourceId": resource_id
-				}).delete()
-				return result.deleted_count
+			query = {
+				"resourceType": resource_type,
+				"resourceId": resource_id
+			}
+
+			if perm_bits_to_delete: 
+				query["permBits"] = perm_bits_to_delete
+
+			result = await IAclEntry.find(query).delete()
+			return result.deleted_count
 		except Exception as e: 
 			logger.error(f"Error deleting ACL entries for resource {resource_type} with ID {resource_id}: {e}")
 			return 0
@@ -227,7 +154,7 @@ class ACLService:
 				"principalType": {"$in": [principal_type, PrincipalType.PUBLIC.value]},
 				"resourceType": {"$in": resource_types},
 				"$or": [
-					{"principalId": {"userId": PydanticObjectId(principal_id)}},
+					{"principalId": make_user_principal_id_dict(principal_id)},
 					{"principalId": None}
 				]
 			}
@@ -247,7 +174,6 @@ class ACLService:
 			logger.error(f"Error fetching ACL permissions map for user id: {principal_id}: {e}")
 			return {}
 	
-
 	async def delete_permission(
 		self,
 		resource_type: str,
@@ -275,12 +201,10 @@ class ACLService:
 				"resourceType": resource_type,
 				"resourceId": resource_id,
 				"principalType": principal_type,
-				"principalId": {"userId": principal_id}
+				"principalId": make_user_principal_id_dict(principal_id)
 			}
 			result = await IAclEntry.find(query).delete()
-			if hasattr(result, "deleted_count"):
-				return result.deleted_count
-			return 0
+			return result.deleted_count
 		except Exception as e:
 			logger.error(f"Error revoking ACL entry for resource {resource_type} with ID {resource_id}: {e}")
 			return 0

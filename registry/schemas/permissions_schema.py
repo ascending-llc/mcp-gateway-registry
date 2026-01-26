@@ -12,7 +12,7 @@ from registry.services.constants import PrincipalType
 class PermissionPrincipalIn(BaseModel):
     principal_id: str
     principal_type: PrincipalType
-    perm_bits: Optional[int]
+    perm_bits: Optional[int] = 0
     accessRoleId: Optional[str] = None
 
 class UpdateServerPermissionsRequest(BaseModel):

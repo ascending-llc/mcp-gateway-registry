@@ -7,10 +7,7 @@ This is a complete rewrite independent of the legacy server_routes.py.
 
 import asyncio
 import logging
-import math
-from typing import Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, status as http_status, Depends
-from pydantic import ValidationError
 from beanie import PydanticObjectId
 
 from registry.auth.dependencies import CurrentUser
@@ -19,9 +16,11 @@ from registry.services.constants import PrincipalType, ResourceType, PermissionB
 from registry.schemas.permissions_schema import (
     UpdateServerPermissionsRequest,
     UpdateServerPermissionsResponse,
-    PermissionPrincipalOut,
 )
-from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+from registry.services.permissions_utils import (
+    check_required_permission,
+    make_user_principal_id_dict
+)
 
 API_VERSION = "v1"
 logger = logging.getLogger(__name__)
@@ -43,63 +42,64 @@ async def update_server_permissions(
     data: UpdateServerPermissionsRequest,
     user_context: dict = Depends(get_user_context),
 ) -> dict:
-    # Check if user has SHARE permissions or if they're an ADMIN
-    acl_permission_map = user_context.get("acl_permission_map", {})
-    user_perms_for_server = acl_permission_map.get(ResourceType.MCPSERVER.value, {}).get(str(server_id), {})
-    if not (user_perms_for_server.get("SHARE", False) or user_context.get("role") == "ADMIN"):
-        raise HTTPException(
-        status_code=http_status.HTTP_403_FORBIDDEN,
-        detail={
-            "error": "forbidden",
-            "message": "You do not have share permissions for this server."
-        })
+    # Check if user is an Admin or has SHARE permissions
+    is_admin = user_context.get("is_admin")
+    if not is_admin: 
+        acl_permission_map = user_context.get("acl_permission_map", {})
+        check_required_permission(acl_permission_map,ResourceType.MCPSERVER.value, server_id, "SHARE")
     
     try:
-        updated_count = 0
         deleted_count = 0
+        updated_count = 0
         if data.public:
-            # find the author of the server
-            mcp_server = await MCPServerDocument.find_one({"_id": PydanticObjectId(server_id)})
-
-            # delete all permissions except the author
+            # Delete all the ACL entries granting VIEW access
             deleted_count = await acl_service.delete_acl_entries_for_resource(
                 resource_type=ResourceType.MCPSERVER.value,
                 resource_id=PydanticObjectId(server_id),
-                author_id=mcp_server.author
+                perm_bits_to_delete=PermissionBits.VIEW
             )
 
-            # create a public acl entry
-            public_acl = await acl_service.grant_permission(
+            # Create 1 public acl entry
+            acl_entry = await acl_service.grant_permission(
                 principal_type=PrincipalType.PUBLIC.value,
                 principal_id=None,
                 resource_type=ResourceType.MCPSERVER,
                 resource_id=PydanticObjectId(server_id),
                 perm_bits=PermissionBits.VIEW
             )
+            updated_count = 1 if acl_entry else 0
         else:
-            # Grant permissions for principals in data.updated
-            for principal in data.updated:
-                result =  await asyncio.gather(
-                    acl_service.grant_permission(
-                        principal_type=principal.principal_type,
-                        principal_id={"userId": PydanticObjectId(principal.principal_id)},
-                        resource_type=ResourceType.MCPSERVER,
-                        resource_id=PydanticObjectId(server_id),
-                        perm_bits=principal.perm_bits,
-                    )
-                )
+            # Delete the public ACL entry
+            deleted_public_entry = await acl_service.delete_permission(
+                resource_type=ResourceType.MCPSERVER,
+                resource_id=PydanticObjectId(server_id),
+                principal_type=PrincipalType.PUBLIC,
+                principal_id=None
+            )
+            deleted_count += deleted_public_entry
 
-            # Delete all ACL entries for pricnipals in data.removed
-            if data.removed:
-                for principal in data.removed: 
-                    await asyncio.gather(
-                        acl_service.delete_permission(
-                            resource_type=ResourceType.MCPSERVER,
-                            resource_id=PydanticObjectId(server_id),
-                            principal_type=principal.principal_type,
-                            principal_id=PydanticObjectId(principal.principal_id)
-                        )
-                    )
+        if data.removed:
+            delete_results = await asyncio.gather(*[
+                acl_service.delete_permission(
+                    resource_type=ResourceType.MCPSERVER,
+                    resource_id=PydanticObjectId(server_id),
+                    principal_type=principal.principal_type,
+                    principal_id=principal.principal_id
+                ) for principal in data.removed
+            ])
+            deleted_count += sum(delete_results)
+
+        if data.updated:
+            update_results = await asyncio.gather(*[
+                acl_service.grant_permission(
+                    principal_type=principal.principal_type,
+                    principal_id=make_user_principal_id_dict(principal.principal_id),
+                    resource_type=ResourceType.MCPSERVER,
+                    resource_id=PydanticObjectId(server_id),
+                    perm_bits=principal.perm_bits,
+                ) for principal in data.updated
+            ])
+            updated_count += len(update_results)
 
         return UpdateServerPermissionsResponse(
             message=f"Updated {updated_count} and deleted {deleted_count} permissions",

@@ -20,6 +20,10 @@ from registry.services.oauth.connection_status_service import (
     get_single_server_connection_status
 )
 from registry.services.access_control_service import acl_service
+from registry.services.permissions_utils import (
+    check_required_permission,
+    make_user_principal_id_dict
+)
 from registry.services.constants import PrincipalType, ResourceType
 from registry.schemas.enums import ConnectionState
 from registry.schemas.server_api_schemas import (
@@ -62,7 +66,7 @@ def check_admin_permission(user_context: dict) -> bool:
     Returns:
         True if user is admin, False otherwise
     """
-    return user_context.get("role") == "ADMIN"
+    return user_context.get("is_admin")
 
 
 def apply_connection_status_to_server(
@@ -133,7 +137,7 @@ async def list_servers(
             page=page,
             per_page=per_page,
             user_id=None,
-            acl_permissions_map=user_context.get('acl_permission_map', {})
+            acl_permissions_map=user_context.get("acl_permission_map", {})
         )
         
         # Convert to response models
@@ -241,16 +245,13 @@ async def get_server(
 ):
     """Get detailed information about a server by ID, including connection status"""
     try:
-        accessible_server_ids = list(user_context.get('acl_permission_map', {}).get(ResourceType.MCPSERVER.value, {}).keys())
-        if server_id not in accessible_server_ids:
-            logger.error(f"Access denied to server Id {server_id} by ACL")
-            raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Access denied by ACL")
-        
+        acl_permission_map = user_context.get("acl_permission_map", {})
+        check_required_permission(acl_permission_map, ResourceType.MCPSERVER.value, server_id, "VIEW")
+
         server = await server_service_v1.get_server_by_id(
             server_id=server_id,
             user_id=None,
         )
-        
         if not server:
             raise HTTPException(
                 status_code=http_status.HTTP_404_NOT_FOUND,
@@ -314,14 +315,13 @@ async def create_server(
         
         acl_entry = await acl_service.grant_permission(
             principal_type=PrincipalType.USER,
-            principal_id={"userId": PydanticObjectId(user_id)},
+            principal_id=make_user_principal_id_dict(user_id),
             resource_type=ResourceType.MCPSERVER,
             resource_id=server.id,
             perm_bits=15  # Apply full permissions for owners
         )
         
         if not acl_entry: 
-            # Transaction rollback will be implemented here
             await server.delete()
             raise ValueError("Failed to create ACL entry for server: {server.id}. Rolling back server creation")
         
@@ -362,14 +362,7 @@ async def update_server(
     try:
         user_id = user_context.get("username")
         acl_permission_map = user_context.get("acl_permission_map", {})
-        user_perms_for_server = acl_permission_map.get(ResourceType.MCPSERVER.value, {}).get(str(server_id), {})
-        if not user_perms_for_server.get("EDIT", False):
-            raise HTTPException(
-            status_code=http_status.HTTP_403_FORBIDDEN,
-            detail={
-                "error": "forbidden",
-                "message": "You do not have edit permissions for this server."
-            })
+        check_required_permission(acl_permission_map, ResourceType.MCPSERVER.value, server_id, "EDIT")
 
         server = await server_service_v1.update_server(
             server_id=server_id,
@@ -420,27 +413,19 @@ async def delete_server(
     """Delete a server"""
     try:
         acl_permission_map = user_context.get("acl_permission_map", {})
-        user_perms_for_server = acl_permission_map.get(ResourceType.MCPSERVER.value, {}).get(str(server_id), {})
+        check_required_permission(acl_permission_map, ResourceType.MCPSERVER.value, server_id, "DELETE")
 
-        if not user_perms_for_server.get("DELETE", False):
-            raise HTTPException(
-                status_code=http_status.HTTP_403_FORBIDDEN,
-                detail={
-                    "error": "forbidden",
-                    "message": "You do not have delete permissions for this server."
-                }
-            )
-        did_server_delete = await server_service_v1.delete_server(
+        successful_delete = await server_service_v1.delete_server(
             server_id=server_id,
             user_id=None,
         )
 
-        if did_server_delete: 
-            num_acl_entries_deleted = await acl_service.delete_acl_entries_for_resource(
+        if successful_delete: 
+            deleted_count = await acl_service.delete_acl_entries_for_resource(
                 resource_type=ResourceType.MCPSERVER,
                 resource_id=PydanticObjectId(server_id),
             )
-            logger.info(f"Removed {num_acl_entries_deleted} ACL permissions for server Id {server_id}")
+            logger.info(f"Removed {deleted_count} ACL permissions for server Id {server_id}")
             return None  # 204 No Content
         else: 
             raise ValueError("Failed to delete server {server.id}. Skipping ACL cleanup")
@@ -487,16 +472,7 @@ async def toggle_server(
     """Toggle server enabled/disabled status. When enabling, fetches tools from server."""
     try:
         acl_permission_map = user_context.get("acl_permission_map", {})
-        user_perms_for_server = acl_permission_map.get(ResourceType.MCPSERVER.value, {}).get(str(server_id), {})
-
-        if not user_perms_for_server.get("EDIT", False):
-            raise HTTPException(
-                status_code=http_status.HTTP_403_FORBIDDEN,
-                detail={
-                    "error": "forbidden",
-                    "message": "You do not have edit permissions for this server."
-                }
-            )
+        check_required_permission(acl_permission_map, ResourceType.MCPSERVER.value, server_id, "EDIT")
         
         # Get user_id from context for OAuth token retrieval
         user_id = user_context.get("username") or user_context.get("user_id")
@@ -548,11 +524,9 @@ async def get_server_tools(
 ):
     """Get server tools"""
     try:
-        accessible_server_ids = list(user_context.get('acl_permission_map', {}).get(ResourceType.MCPSERVER.value, {}).keys())
-        if server_id not in accessible_server_ids:
-            logger.error(f"Access denied to server Id {server_id} by ACL")
-            raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Access denied by ACL")
-        
+        acl_permission_map = user_context.get("acl_permission_map", {})
+        check_required_permission(acl_permission_map, ResourceType.MCPSERVER.value, server_id, "VIEW")
+
         server, tools = await server_service_v1.get_server_tools(
             server_id=server_id,
             user_id=None,
