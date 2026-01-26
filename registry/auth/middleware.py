@@ -18,9 +18,27 @@ from registry.core.config import settings
 
 class UnifiedAuthMiddleware(BaseHTTPMiddleware):
     """
-        A unified authentication middleware that encapsulates the functionality of `enhanced_auth` and `nginx_proxied_auth`.
+    A unified authentication middleware that encapsulates the functionality of `enhanced_auth` and `nginx_proxied_auth`.
 
-        It automatically attempts all authentication methods and stores the results in `request.state`.
+    It automatically attempts all authentication methods and stores the results in `request.state`.
+
+    Path Matching Logic:
+    --------------------
+    1. public_paths_compiled: Paths that are PUBLICLY accessible (no authentication required)
+       - These act as EXCEPTIONS to authenticated paths via double-check logic
+       - Use specific patterns to carve out public endpoints from broader authenticated patterns
+       - Example: "/api/{versions}/mcp/{server_name}/oauth/callback" is public despite matching broader MCP pattern
+
+    How to Define Paths:
+    --------------------
+    public_paths_compiled:
+      - Define SPECIFIC patterns that should be accessible without auth
+      - These override authenticated patterns via double-check
+      - Use more specific paths to carve out exceptions
+      - Examples:
+        * "/api/{versions}/mcp/{server_name}/oauth/callback" - Specific OAuth callback (public)
+        * "/.well-known/{path:path}" - OAuth discovery endpoints (must be public per RFC)
+        * "/health" - Health check endpoint (public)
     """
 
     def __init__(self, app):
@@ -44,14 +62,17 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/redirect/{provider}",
             "/api/auth/providers",
             "/api/auth/config",
+            "/api/auth/login",
             f"/api/{settings.API_VERSION}/mcp/{{server_name}}/oauth/callback",  # OAuth callback is public
-            f"/api/{settings.API_VERSION}/mcp/oauth/success",  # OAuth success page
-            f"/api/{settings.API_VERSION}/mcp/oauth/error",  # OAuth error page
             "/.well-known/{path:path}",  # OAuth discovery endpoints must be public
         ])
-        # note: admin
+        
+        # =====================================================================
+        # INTERNAL PATHS (Admin/Internal - Require Basic Auth)
+        # =====================================================================
+        # Define patterns for internal/admin endpoints that use Basic authentication.
         self.internal_paths_compiled = self._compile_patterns([
-            "/api/internal/{path:path}",
+            "/api/internal/{path:path}",                   # Internal admin endpoints
         ])
         logger.info(
             f"Auth middleware initialized with Starlette routing: "

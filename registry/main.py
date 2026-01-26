@@ -18,7 +18,7 @@ from registry.core.config import settings
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 # Import domain routers
-from registry.api.redirect_routes import router as auth_router
+from registry.api.v1.meta_routes import router as meta_router
 from registry.api.server_routes import router as servers_router
 from registry.api.v1.server_routes import router as servers_router_v1
 from registry.api.internal_routes import router as internal_router
@@ -206,7 +206,7 @@ else:
     logger.warning("Static files directory not found, skipping static files mount")
 
 # Register API routers with /api prefix
-app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(meta_router, prefix="/api/auth", tags=["Authentication metadata"])
 app.include_router(servers_router, prefix="/api", tags=["Server Management"])
 app.include_router(servers_router_v1, prefix=f"/api/{settings.API_VERSION}", tags=["Server Management V1"])
 app.include_router(internal_router, prefix="/api", tags=["Server Management[internal]"])
