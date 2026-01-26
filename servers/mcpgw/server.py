@@ -167,7 +167,7 @@ async def _health_check_route(request):
 # Search and Discovery Tools
 # ============================================================================
 
-# Register search tools (discover_tools, intelligent_tool_finder) using Pattern 3
+# Register search tools (discover_tools, discover_servers) using Pattern 3
 for tool_name, tool_func in search.get_tools():
     mcp.tool(name=tool_name)(tool_func)
 
