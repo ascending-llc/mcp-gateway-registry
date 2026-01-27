@@ -1,5 +1,5 @@
 import secrets
-from typing import Annotated, List, Dict, Any, Optional
+from typing import Annotated, List, Dict, Any
 import logging
 import yaml
 from pathlib import Path
@@ -9,6 +9,7 @@ from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 from registry.services.access_control_service import acl_service
 from registry.core.acl_constants import PrincipalType
 from registry.core.config import settings
+from beanie import PydanticObjectId
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ async def get_user_acl_permissions(request: Request) -> Dict[str, Any]:
         username = request.state.user.get('username')
         acl_permission_map = await acl_service.get_permissions_map_for_user_id(
             principal_type=PrincipalType.USER.value, 
-            principal_id=user_id,
+            principal_id=PydanticObjectId(user_id),
         )
         return {
             **request.state.user,
@@ -747,4 +748,5 @@ def ui_permission_required(permission: str, service_name: str = None):
 
     return check_permission
 
-CurrentUser: type[dict[str, Any]] = Annotated[Dict[str, Any], Depends(get_user_acl_permissions)]
+CurrentUser: type[dict[str, Any]] = Annotated[Dict[str, Any], Depends(get_current_user_by_mid)]
+CurrentUserWithACLMap: type[dict[str, Any]] = Annotated[Dict[str, Any], Depends(get_user_acl_permissions)]

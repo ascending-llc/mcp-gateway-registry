@@ -2,7 +2,7 @@
 Pydantic Schemas for Permission Management API v1
 
 These schemas define the request and response models for the
-Permisison Management endpoints based on the API documentation.
+Permission Management endpoints based on the API documentation.
 """
 
 from typing import List, Optional

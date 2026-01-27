@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, status as http_status, Depends
 from pydantic import ValidationError
 from beanie import PydanticObjectId
 
-from registry.auth.dependencies import CurrentUser
+from registry.auth.dependencies import CurrentUserWithACLMap
 from registry.services.server_service_v1 import server_service_v1
 from registry.services.oauth.mcp_service import get_mcp_service
 from registry.services.oauth.connection_status_service import (
@@ -22,7 +22,6 @@ from registry.services.oauth.connection_status_service import (
 from registry.services.access_control_service import acl_service
 from registry.services.permissions_utils import (
     check_required_permission,
-    make_user_principal_id_dict
 )
 from registry.core.acl_constants import PrincipalType, ResourceType, RoleBits
 from registry.schemas.enums import ConnectionState
@@ -53,7 +52,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def get_user_context(user_context: CurrentUser):
+def get_user_context(user_context: CurrentUserWithACLMap):
     """Extract user context from authentication dependency"""
     return user_context
 
@@ -310,12 +309,13 @@ async def create_server(
             username=username
         )
 
-        if not server:  
+        if not server:
+            logger.error("Server creation failed without exception")
             raise ValueError("Failed to create server")
         
         acl_entry = await acl_service.grant_permission(
             principal_type=PrincipalType.USER,
-            principal_id=make_user_principal_id_dict(user_id),
+            principal_id=PydanticObjectId(user_id),
             resource_type=ResourceType.MCPSERVER,
             resource_id=server.id,
             perm_bits=RoleBits.OWNER
@@ -323,9 +323,10 @@ async def create_server(
         
         if not acl_entry: 
             await server.delete()
-            raise ValueError("Failed to create ACL entry for server: {server.id}. Rolling back server creation")
+            logger.error(f"Failed to create ACL entry for server: {server.id}. Rolling back server creation")
+            raise ValueError(f"Failed to create ACL entry for server: {server.id}. Rolling back server creation")
         
-        logger.info(f"Granted user {user_id} owner permissions for server Id {server.id}")
+        logger.info(f"Granted user {user_id} {RoleBits.OWNER} permissions for server Id {server.id}")
         return convert_to_create_response(server)
         
     except ValueError as e:
@@ -428,7 +429,7 @@ async def delete_server(
             logger.info(f"Removed {deleted_count} ACL permissions for server Id {server_id}")
             return None  # 204 No Content
         else: 
-            raise ValueError("Failed to delete server {server.id}. Skipping ACL cleanup")
+            raise ValueError(f"Failed to delete server {server_id}. Skipping ACL cleanup")
     
         
     except ValueError as e:

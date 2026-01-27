@@ -29,7 +29,7 @@ from packages.models._generated.user import IUser
 from packages.models._generated.key import Key
 from packages.models._generated.token import Token
 from packages.models.extended_mcp_server import MCPServerDocument
-from packages.models._generated.aclEntry import IAclEntry
+from packages.models.extended_acl_entry import IAclEntry
 from registry.utils.crypto_utils import encrypt_auth_fields
 
 
@@ -648,7 +648,7 @@ async def seed_acl_entries(users, servers):
 
                 existing_acl = await IAclEntry.find_one({
                     "principalType": PrincipalType.USER,
-                    "principalId": {"userId": user.id},
+                    "principalId": user.id,
                     "resourceType": ResourceType.MCPSERVER,
                     "resourceId": server.id,
                 })
@@ -658,7 +658,7 @@ async def seed_acl_entries(users, servers):
                 else:
                     acl_entry = IAclEntry(
                         principalType=PrincipalType.USER,
-                        principalId={"userId": user.id},
+                        principalId=user.id,
                         resourceType=ResourceType.MCPSERVER.value,
                         resourceId=server.id,
                         permBits=perm_bits,

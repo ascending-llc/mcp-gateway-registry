@@ -91,37 +91,30 @@ class TestACLService:
         assert deleted == 0
 
     @pytest.mark.asyncio
-    @patch('registry.services.access_control_service.make_user_principal_id_dict')
     @patch('registry.services.access_control_service.IAclEntry')
-    async def test_get_permissions_map_for_user_id(self, mock_acl_entry, mock_make_user_principal_id_dict):
+    async def test_get_permissions_map_for_user_id(self, mock_acl_entry):
         service = ACLService()
-        print("DEBUG ResourceType:", ResourceType)
-        print("DEBUG ResourceType members:", list(ResourceType))
         entry = MagicMock()
         entry.resourceType = ResourceType.MCPSERVER.value
         entry.resourceId = PydanticObjectId()
         entry.permBits = PermissionBits.EDIT
         mock_acl_entry.find.return_value.to_list = AsyncMock(return_value=[entry])
-        mock_make_user_principal_id_dict.return_value = {'id': 'user1'}
-        result = await service.get_permissions_map_for_user_id('user', 'user1')
-        print("DEBUG result:", result)
+        result = await service.get_permissions_map_for_user_id('user', PydanticObjectId())
         assert ResourceType.MCPSERVER.value in result
         assert isinstance(result[ResourceType.MCPSERVER.value], dict)
 
     @pytest.mark.asyncio
-    @patch('registry.services.access_control_service.make_user_principal_id_dict')
     @patch('registry.services.access_control_service.IAclEntry')
-    async def test_delete_permission(self, mock_acl_entry, mock_make_user_principal_id_dict):
+    async def test_delete_permission(self, mock_acl_entry):
         service = ACLService()
         mock_result = MagicMock()
         mock_result.deleted_count = 1
         mock_acl_entry.find.return_value.delete = AsyncMock(return_value=mock_result)
-        mock_make_user_principal_id_dict.return_value = {'id': 'user1'}
         deleted_count = await service.delete_permission(
             resource_type=ResourceType.MCPSERVER.value,
             resource_id=PydanticObjectId(),
             principal_type='user',
-            principal_id='user1'
+            principal_id=PydanticObjectId()
         )
         assert deleted_count == 1
 

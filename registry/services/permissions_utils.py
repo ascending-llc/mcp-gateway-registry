@@ -3,7 +3,6 @@ Permission utility functions for ACL checks.
 """
 
 from fastapi import HTTPException, status as http_status
-from beanie import PydanticObjectId
 
 def check_required_permission(acl_permission_map: dict, resource_type: str, resource_id: str, required_permission: str) -> None:
     """
@@ -28,17 +27,4 @@ def check_required_permission(acl_permission_map: dict, resource_type: str, reso
             }
         )
 
-
-def make_user_principal_id_dict(principal_id: str) -> dict: 
-    """
-    Helper to construct the PrincipalId dict expected by IAclEntry.
-    Args:
-        principal_id (str): The user ID to wrap in a dict.
-    Returns:
-        dict: Dictionary in the format {"userId": principal_id} for user principals.
-    """
-    if principal_id:
-        return {"userId": PydanticObjectId(principal_id)}
-    
-    return {}
     

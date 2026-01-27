@@ -311,7 +311,7 @@ class ServerServiceV1:
             page: Page number (min: 1)
             per_page: Items per page (min: 1, max: 100)
             user_id: Current user's ID (kept for compatibility but not used for filtering)
-            accessible_server_ids: List of server IDs the user has access to based on ACL permissions
+            acl_permissions_map: Mapping from resource type (e.g. ResourceType.MCPSERVER.value)
         Returns:
             Tuple of (servers list, total count)
         """
@@ -344,10 +344,10 @@ class ServerServiceV1:
             filters.append(text_filter)
 
         # Access control filter
-        accessible_servers = acl_permissions_map.get(ResourceType.MCPSERVER.value).keys()
+        accessible_servers = acl_permissions_map.get(ResourceType.MCPSERVER.value, {}).keys()
         accessible_server_ids = [PydanticObjectId(sid) for sid in accessible_servers]
-        if accessible_server_ids:
-            filters.append({"_id": {"$in": accessible_server_ids}})
+        # if accessible_server_ids:
+        filters.append({"_id": {"$in": accessible_server_ids}})
 
         # Combine all filters
         if filters:
@@ -366,7 +366,7 @@ class ServerServiceV1:
 
     async def get_server_by_id(
         self,
-        server_id: PydanticObjectId,
+        server_id: str,
         user_id: Optional[str] = None,
     ) -> Optional[MCPServerDocument]:
         """
@@ -379,7 +379,15 @@ class ServerServiceV1:
         Returns:
             Server document or None if not found
         """
-        server = await MCPServerDocument.get(server_id)        
+        try:
+            # Convert string ID to ObjectId
+            obj_id = PydanticObjectId(server_id)
+        except Exception as e:
+            logger.warning(f"Invalid server ID format: {server_id}")
+            return None
+
+        server = await MCPServerDocument.get(obj_id)
+
         return server
 
     async def get_server_by_path(self, path: str) -> Optional[MCPServerDocument]:

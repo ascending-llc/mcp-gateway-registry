@@ -1,12 +1,11 @@
 from datetime import datetime, timezone
-from typing import Optional, Any
+from typing import Optional, Union
 from packages.models._generated import (
-	IAclEntry,
 	IAccessRole,
 )
+from packages.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
 from beanie import PydanticObjectId
 from registry.core.acl_constants import ResourceType, PermissionBits, PrincipalType
-from registry.services.permissions_utils import make_user_principal_id_dict
 import logging 
 
 logger = logging.getLogger(__name__)
@@ -15,7 +14,7 @@ class ACLService:
 	async def grant_permission(
 		self,
 		principal_type: str,
-		principal_id: Optional[dict],
+		principal_id: Optional[Union[PydanticObjectId, str]],
 		resource_type: str,
 		resource_id: PydanticObjectId,
 		role_id: Optional[PydanticObjectId] = None,
@@ -121,7 +120,7 @@ class ACLService:
 	async def get_permissions_map_for_user_id(
 		self,
 		principal_type: str,
-		principal_id: str,
+		principal_id: PydanticObjectId,
 	) -> dict:
 		"""
 		Return a permissions map for a user, showing access rights for each resource type and resource ID.
@@ -154,7 +153,7 @@ class ACLService:
 				"principalType": {"$in": [principal_type, PrincipalType.PUBLIC.value]},
 				"resourceType": {"$in": resource_types},
 				"$or": [
-					{"principalId": make_user_principal_id_dict(principal_id)},
+					{"principalId": principal_id},
 					{"principalId": None}
 				]
 			}
@@ -179,7 +178,7 @@ class ACLService:
 		resource_type: str,
 		resource_id: PydanticObjectId,
 		principal_type: str,
-		principal_id: Any
+		principal_id: Optional[Union[PydanticObjectId, str]]
 	) -> int:
 		"""
 		Remove a single ACL entry for a given resource, principal type, and principal ID.
@@ -201,7 +200,7 @@ class ACLService:
 				"resourceType": resource_type,
 				"resourceId": resource_id,
 				"principalType": principal_type,
-				"principalId": make_user_principal_id_dict(principal_id)
+				"principalId": principal_id
 			}
 			result = await IAclEntry.find(query).delete()
 			return result.deleted_count

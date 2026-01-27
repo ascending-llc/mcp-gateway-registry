@@ -39,7 +39,7 @@ class TestProxyToolExecutionRoutes:
             request.state.is_authenticated = True
             return user_context
 
-        app.dependency_overrides[auth_dependencies.get_user_acl_permissions] = _mock_get_user
+        app.dependency_overrides[auth_dependencies.get_current_user_by_mid] = _mock_get_user
 
     def teardown_method(self):
         """Clean up dependency overrides."""
@@ -329,7 +329,6 @@ class TestProxyToolExecutionRoutes:
         assert response.status_code == 200
         
         # Verify tracking headers were added
-        print(f"CAP_HEADERS: {captured_headers}")
         assert "X-User" in captured_headers
         assert "X-Username" in captured_headers
         assert "X-Tool-Name" in captured_headers

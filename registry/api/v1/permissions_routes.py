@@ -9,7 +9,7 @@ import logging
 from fastapi import APIRouter, HTTPException, status as http_status, Depends
 from beanie import PydanticObjectId
 
-from registry.auth.dependencies import CurrentUser
+from registry.auth.dependencies import CurrentUserWithACLMap
 from registry.services.access_control_service import acl_service
 from registry.core.acl_constants import PrincipalType, ResourceType, PermissionBits
 from registry.schemas.permissions_schema import (
@@ -18,7 +18,6 @@ from registry.schemas.permissions_schema import (
 )
 from registry.services.permissions_utils import (
     check_required_permission,
-    make_user_principal_id_dict
 )
 
 API_VERSION = "v1"
@@ -26,7 +25,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def get_user_context(user_context: CurrentUser):
+def get_user_context(user_context: CurrentUserWithACLMap):
     """Extract user context from authentication dependency"""
     return user_context
 
@@ -41,11 +40,9 @@ async def update_server_permissions(
     data: UpdateServerPermissionsRequest,
     user_context: dict = Depends(get_user_context),
 ) -> dict:
-    # Check if user is an Admin or has SHARE permissions
-    is_admin = user_context.get("is_admin")
-    if not is_admin: 
-        acl_permission_map = user_context.get("acl_permission_map", {})
-        check_required_permission(acl_permission_map,ResourceType.MCPSERVER.value, server_id, "SHARE")
+    # Check if user has SHARE permissions
+    acl_permission_map = user_context.get("acl_permission_map", {})
+    check_required_permission(acl_permission_map, ResourceType.MCPSERVER.value, server_id, "SHARE")
     
     try:
         deleted_count = 0
@@ -57,33 +54,36 @@ async def update_server_permissions(
                 resource_id=PydanticObjectId(server_id),
                 perm_bits_to_delete=PermissionBits.VIEW
             )
+            logger.info(f"Deleted {deleted_count} VIEW ACL entries for server {server_id}")
 
             # Create 1 public acl entry
             acl_entry = await acl_service.grant_permission(
                 principal_type=PrincipalType.PUBLIC.value,
                 principal_id=None,
-                resource_type=ResourceType.MCPSERVER,
+                resource_type=ResourceType.MCPSERVER.value,
                 resource_id=PydanticObjectId(server_id),
                 perm_bits=PermissionBits.VIEW
             )
+            logger.info(f"Created public ACL entry: {acl_entry.id} for server {server_id}")
             updated_count = 1 if acl_entry else 0
         else:
             # Delete the public ACL entry
             deleted_public_entry = await acl_service.delete_permission(
-                resource_type=ResourceType.MCPSERVER,
+                resource_type=ResourceType.MCPSERVER.value,
                 resource_id=PydanticObjectId(server_id),
-                principal_type=PrincipalType.PUBLIC,
+                principal_type=PrincipalType.PUBLIC.value,
                 principal_id=None
             )
             deleted_count += deleted_public_entry
+            logger.info(f"Deleted public ACL entry for server {server_id}")
 
         if data.removed:
             delete_results = await asyncio.gather(*[
                 acl_service.delete_permission(
-                    resource_type=ResourceType.MCPSERVER,
+                    resource_type=ResourceType.MCPSERVER.value,
                     resource_id=PydanticObjectId(server_id),
                     principal_type=principal.principal_type,
-                    principal_id=principal.principal_id
+                    principal_id=PydanticObjectId(principal.principal_id)
                 ) for principal in data.removed
             ])
             deleted_count += sum(delete_results)
@@ -92,17 +92,18 @@ async def update_server_permissions(
             update_results = await asyncio.gather(*[
                 acl_service.grant_permission(
                     principal_type=principal.principal_type,
-                    principal_id=make_user_principal_id_dict(principal.principal_id),
-                    resource_type=ResourceType.MCPSERVER,
+                    principal_id=PydanticObjectId(principal.principal_id),
+                    resource_type=ResourceType.MCPSERVER.value,
                     resource_id=PydanticObjectId(server_id),
                     perm_bits=principal.perm_bits,
                 ) for principal in data.updated
             ])
             updated_count += len(update_results)
 
+        logger.info(f"Updated permissions for server {server_id}: {updated_count} updated, {deleted_count} deleted")
         return UpdateServerPermissionsResponse(
             message=f"Updated {updated_count} and deleted {deleted_count} permissions",
-            results={f"server_id": server_id}
+            results={"server_id": server_id}
         )
     
     except Exception as e: 
