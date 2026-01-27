@@ -333,7 +333,7 @@ async def refresh_oauth_tokens(
         mcp_server = await get_service_config(server_id)
 
         # 1. Refresh OAuth tokens
-        success, error_msg = await mcp_service.oauth_service.validate_and_refresh_tokens(user_id, server_id)
+        success, error_msg = await mcp_service.oauth_service.validate_and_refresh_tokens(user_id, mcp_server)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

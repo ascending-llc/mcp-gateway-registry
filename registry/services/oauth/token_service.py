@@ -1,4 +1,7 @@
 from typing import Optional, List, Dict, Any, Tuple
+
+from beanie import PydanticObjectId
+
 from packages.models._generated.token import Token
 from registry.models.oauth_models import OAuthTokens
 from registry.models.emus import TokenType
@@ -8,6 +11,12 @@ from registry.services.user_service import user_service
 
 
 class TokenService:
+
+    async def get_user_by_user_id(self, user_id: str) -> str:
+        user = await user_service.get_user_by_user_id(user_id)
+        if not user:
+            raise Exception(f"User {user_id} not found")
+        return str(user.id)
 
     def _get_client_identifier(self, service_name: str) -> str:
         """Build client token identifier"""
@@ -37,14 +46,17 @@ class TokenService:
             Created or updated Token document
         """
         identifier = self._get_client_identifier(service_name)
-        user_obj_id = await user_service.get_user_object_id(user_id)
+        user = await user_service.get_user_by_user_id(user_id)
+        if not user:
+            raise Exception(f"User {user_id} not found")
+        user_obj_id = str(user.id)
 
         # Calculate expiration time
         expires_at = self._calculate_expiration(tokens.expires_in)
 
         # Check if token exists
         existing_token = await Token.find_one({
-            "userId": user_obj_id,
+            "userId": PydanticObjectId(user_obj_id),
             "type": TokenType.MCP_OAUTH_CLIENT.value,
             "identifier": identifier,
         })
@@ -62,12 +74,13 @@ class TokenService:
             # Create new token
             # TODO:  user_id == email ? 是否需要保存email
             token_doc = Token(
-                userId=user_obj_id,
+                userId=PydanticObjectId(user_obj_id),
                 type=TokenType.MCP_OAUTH_CLIENT.value,
                 identifier=identifier,
                 token=tokens.access_token,
                 expiresAt=expires_at,
-                metadata=metadata or {}
+                metadata=metadata or {},
+                email=user.email
             )
             await token_doc.insert()
             logger.info(f"Created OAuth client token for user={user_id}, service={service_name}")
@@ -94,7 +107,7 @@ class TokenService:
             return None
 
         identifier = self._get_refresh_identifier(service_name)
-        user_obj_id = await user_service.get_user_object_id(user_id)
+        user_obj_id = await self.get_user_by_user_id(user_id)
 
         # Refresh tokens typically have a longer expiration time, set to 1 year here
         # Or set according to OAuth provider configuration
@@ -102,7 +115,7 @@ class TokenService:
 
         # Check if token exists
         existing_token = await Token.find_one({
-            "userId": user_obj_id,
+            "userId": PydanticObjectId(user_obj_id),
             "type": TokenType.MCP_OAUTH_REFRESH.value,
             "identifier": identifier
         })
@@ -193,10 +206,10 @@ class TokenService:
             Token document or None
         """
         identifier = self._get_client_identifier(service_name)
-        user_obj_id = await user_service.get_user_object_id(user_id)
+        user_obj_id = await self.get_user_by_user_id(user_id)
 
         token = await Token.find_one({
-            "userId": user_obj_id,
+            "userId": PydanticObjectId(user_obj_id),
             "type": TokenType.MCP_OAUTH_CLIENT.value,
             "identifier": identifier
         })
@@ -225,10 +238,10 @@ class TokenService:
             Token document or None
         """
         identifier = self._get_refresh_identifier(service_name)
-        user_obj_id = await user_service.get_user_object_id(user_id)
+        user_obj_id = await self.get_user_by_user_id(user_id)
 
         token = await Token.find_one({
-            "userId": user_obj_id,
+            "userId": PydanticObjectId(user_obj_id),
             "type": TokenType.MCP_OAUTH_REFRESH.value,
             "identifier": identifier
         })
@@ -286,12 +299,12 @@ class TokenService:
         Returns:
             Whether deletion was successful
         """
-        user_obj_id = await user_service.get_user_object_id(user_id)
+        user_obj_id = await self.get_user_by_user_id(user_id)
 
         # Delete client token
         client_identifier = self._get_client_identifier(service_name)
         client_result = await Token.find_one({
-            "userId": user_obj_id,
+            "userId": PydanticObjectId(user_obj_id),
             "type": TokenType.MCP_OAUTH_CLIENT.value,
             "identifier": client_identifier
         })
@@ -299,7 +312,7 @@ class TokenService:
         # Delete refresh token
         refresh_identifier = self._get_refresh_identifier(service_name)
         refresh_result = await Token.find_one({
-            "userId": user_obj_id,
+            "userId": PydanticObjectId(user_obj_id),
             "type": TokenType.MCP_OAUTH_REFRESH.value,
             "identifier": refresh_identifier
         })
@@ -334,7 +347,7 @@ class TokenService:
         Returns:
             List of Token documents
         """
-        user_obj_id = await user_service.get_user_object_id(user_id)
+        user_obj_id = await self.get_user_by_user_id(user_id)
 
         query = {"userId": user_obj_id}
         if token_type:
@@ -420,10 +433,10 @@ class TokenService:
                 - is_valid: True if token exists and not expired, False otherwise
         """
         identifier = self._get_client_identifier(service_name)
-        user_obj_id = await user_service.get_user_object_id(user_id)
+        user_obj_id = await self.get_user_by_user_id(user_id)
 
         token = await Token.find_one({
-            "userId": user_obj_id,
+            "userId": PydanticObjectId(user_obj_id),
             "type": TokenType.MCP_OAUTH_CLIENT.value,
             "identifier": identifier
         })
@@ -448,10 +461,10 @@ class TokenService:
                 - is_valid: True if token exists and not expired, False otherwise
         """
         identifier = self._get_refresh_identifier(service_name)
-        user_obj_id = await user_service.get_user_object_id(user_id)
+        user_obj_id = await self.get_user_by_user_id(user_id)
 
         token = await Token.find_one({
-            "userId": user_obj_id,
+            "userId": PydanticObjectId(user_obj_id),
             "type": TokenType.MCP_OAUTH_REFRESH.value,
             "identifier": identifier
         })
