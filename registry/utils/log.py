@@ -1,5 +1,6 @@
 # Configure logging with file and console handlers
 import logging
+import os
 import sys
 
 from registry.core.config import settings
@@ -60,3 +61,6 @@ def setup_logging():
     return root_logger
 
 logger = setup_logging()
+
+from packages.telemetry.metrics_client import OTelMetricsClient
+metrics = OTelMetricsClient()

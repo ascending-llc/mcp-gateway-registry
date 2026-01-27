@@ -1,0 +1,892 @@
+{
+  "id": null,
+  "uid": "mcp-otel-metrics",
+  "title": "MCP Gateway - OTel Metrics Dashboard",
+  "description": "OpenTelemetry metrics for Auth, Tool Discovery, Tool Execution, and Registry Operations",
+  "tags": ["mcp", "otel", "auth", "tools", "registry", "latency"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 100,
+      "title": "Auth Request Rate & Success Rate",
+      "type": "row",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "collapsed": false
+    },
+    {
+      "id": 1,
+      "title": "Auth Request Rate (per second)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(auth_requests_total{status=\"success\"}[5m]))",
+          "legendFormat": "Success"
+        },
+        {
+          "expr": "sum(rate(auth_requests_total{status=\"failure\"}[5m]))",
+          "legendFormat": "Failure"
+        },
+        {
+          "expr": "sum(rate(auth_requests_total[5m]))",
+          "legendFormat": "Total"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 1},
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "last"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "Requests/sec",
+            "axisPlacement": "left",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "reqps"
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Success"},
+            "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Failure"},
+            "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Total"},
+            "properties": [{"id": "color", "value": {"fixedColor": "blue", "mode": "fixed"}}]
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "title": "Auth Success Rate (%)",
+      "type": "gauge",
+      "targets": [
+        {
+          "expr": "sum(rate(auth_requests_total{status=\"success\"}[5m])) / sum(rate(auth_requests_total[5m])) * 100",
+          "legendFormat": "Success Rate"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 1},
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "orange", "value": 90},
+              {"color": "yellow", "value": 95},
+              {"color": "green", "value": 99}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Auth Request Latency (P50/P95/P99)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(auth_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(auth_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(auth_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P99"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 1},
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "last"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "Latency",
+            "axisPlacement": "left",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "P50"},
+            "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "P95"},
+            "properties": [{"id": "color", "value": {"fixedColor": "yellow", "mode": "fixed"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "P99"},
+            "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]
+          }
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "title": "Auth by Mechanism",
+      "type": "piechart",
+      "targets": [
+        {
+          "expr": "sum(increase(auth_requests_total[1h])) by (mechanism)",
+          "legendFormat": "{{mechanism}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 9},
+      "options": {
+        "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]},
+        "pieType": "pie",
+        "tooltip": {"mode": "single"}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Auth Latency by Mechanism (P95)",
+      "type": "bargauge",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(auth_request_duration_seconds_bucket[5m])) by (le, mechanism))",
+          "legendFormat": "{{mechanism}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 9},
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "continuous-BlYlRd"},
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.1},
+              {"color": "red", "value": 0.5}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 101,
+      "title": "Tool Discovery Latency (P50/P95/P99)",
+      "type": "row",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 17},
+      "collapsed": false
+    },
+    {
+      "id": 6,
+      "title": "Tool Discovery Rate",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(mcp_tool_discovery_total{status=\"success\"}[5m]))",
+          "legendFormat": "Success"
+        },
+        {
+          "expr": "sum(rate(mcp_tool_discovery_total{status=\"failure\"}[5m]))",
+          "legendFormat": "Failure"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 18},
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "last"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "Discoveries/sec",
+            "axisPlacement": "left",
+            "fillOpacity": 10
+          },
+          "unit": "reqps"
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Success"},
+            "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Failure"},
+            "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]
+          }
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "title": "Tool Discovery Latency (P50/P95/P99)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(mcp_tool_discovery_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(mcp_tool_discovery_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(mcp_tool_discovery_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P99"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 18},
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "last"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "Latency",
+            "axisPlacement": "left",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "P50"},
+            "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "P95"},
+            "properties": [{"id": "color", "value": {"fixedColor": "yellow", "mode": "fixed"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "P99"},
+            "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]
+          }
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "title": "Tool Discovery Latency Stats",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(mcp_tool_discovery_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(mcp_tool_discovery_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(mcp_tool_discovery_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P99"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 18},
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.5},
+              {"color": "red", "value": 1}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Tool Discovery by Source",
+      "type": "piechart",
+      "targets": [
+        {
+          "expr": "sum(increase(mcp_tool_discovery_total[1h])) by (source)",
+          "legendFormat": "{{source}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 26},
+      "options": {
+        "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]},
+        "pieType": "donut"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 102,
+      "title": "Tool Execution Success Rate",
+      "type": "row",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 34},
+      "collapsed": false
+    },
+    {
+      "id": 10,
+      "title": "Tool Execution Rate",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(mcp_tool_execution_total{status=\"success\"}[5m]))",
+          "legendFormat": "Success"
+        },
+        {
+          "expr": "sum(rate(mcp_tool_execution_total{status=\"failure\"}[5m]))",
+          "legendFormat": "Failure"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 35},
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "last"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "Executions/sec",
+            "axisPlacement": "left",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "reqps"
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Success"},
+            "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Failure"},
+            "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]
+          }
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "title": "Tool Execution Success Rate (%)",
+      "type": "gauge",
+      "targets": [
+        {
+          "expr": "sum(rate(mcp_tool_execution_total{status=\"success\"}[5m])) / sum(rate(mcp_tool_execution_total[5m])) * 100",
+          "legendFormat": "Success Rate"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 35},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "orange", "value": 90},
+              {"color": "yellow", "value": 95},
+              {"color": "green", "value": 99}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "Tool Execution Latency (P50/P95/P99)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(mcp_tool_execution_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(mcp_tool_execution_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(mcp_tool_execution_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P99"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 35},
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "last"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "Latency",
+            "axisPlacement": "left",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "P50"},
+            "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "P95"},
+            "properties": [{"id": "color", "value": {"fixedColor": "yellow", "mode": "fixed"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "P99"},
+            "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]
+          }
+        ]
+      }
+    },
+    {
+      "id": 13,
+      "title": "Tool Execution by Server",
+      "type": "table",
+      "targets": [
+        {
+          "expr": "sum(increase(mcp_tool_execution_total{status=\"success\"}[1h])) by (server_name)",
+          "legendFormat": "{{server_name}}",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "sum(increase(mcp_tool_execution_total{status=\"failure\"}[1h])) by (server_name)",
+          "legendFormat": "{{server_name}}_failures",
+          "format": "table",
+          "instant": true
+        },
+        {
+          "expr": "sum(rate(mcp_tool_execution_total{status=\"success\"}[5m])) by (server_name) / sum(rate(mcp_tool_execution_total[5m])) by (server_name) * 100",
+          "legendFormat": "{{server_name}}_success_rate",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 43},
+      "transformations": [
+        {"id": "merge", "options": {}},
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {"Time": true},
+            "renameByName": {
+              "server_name": "Server",
+              "Value #A": "Successes (1h)",
+              "Value #B": "Failures (1h)",
+              "Value #C": "Success Rate %"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Success Rate %"},
+            "properties": [
+              {"id": "unit", "value": "percent"},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 90}, {"color": "green", "value": 99}]}},
+              {"id": "custom.cellOptions", "value": {"type": "color-background"}}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 14,
+      "title": "Tool Execution by Tool Name (Top 10)",
+      "type": "bargauge",
+      "targets": [
+        {
+          "expr": "topk(10, sum(increase(mcp_tool_execution_total[1h])) by (tool_name))",
+          "legendFormat": "{{tool_name}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 43},
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "continuous-BlPu"},
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 103,
+      "title": "Registry Operation Latency",
+      "type": "row",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 51},
+      "collapsed": false
+    },
+    {
+      "id": 15,
+      "title": "Registry Operation Rate",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(registry_operations_total{status=\"success\"}[5m])) by (operation)",
+          "legendFormat": "{{operation}} (success)"
+        },
+        {
+          "expr": "sum(rate(registry_operations_total{status=\"failure\"}[5m])) by (operation)",
+          "legendFormat": "{{operation}} (failure)"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 52},
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "last"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "Operations/sec",
+            "axisPlacement": "left",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "reqps"
+        }
+      }
+    },
+    {
+      "id": 16,
+      "title": "Registry Operation Latency (P50/P95/P99)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(registry_operation_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(registry_operation_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(registry_operation_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P99"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 52},
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "last"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "Latency",
+            "axisPlacement": "left",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "P50"},
+            "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "P95"},
+            "properties": [{"id": "color", "value": {"fixedColor": "yellow", "mode": "fixed"}}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "P99"},
+            "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]
+          }
+        ]
+      }
+    },
+    {
+      "id": 17,
+      "title": "Registry Latency by Operation (P95)",
+      "type": "bargauge",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(registry_operation_duration_seconds_bucket[5m])) by (le, operation))",
+          "legendFormat": "{{operation}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 60},
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "continuous-BlYlRd"},
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.1},
+              {"color": "red", "value": 0.5}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 18,
+      "title": "Registry Operations by Resource Type",
+      "type": "piechart",
+      "targets": [
+        {
+          "expr": "sum(increase(registry_operations_total[1h])) by (resource_type)",
+          "legendFormat": "{{resource_type}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 60},
+      "options": {
+        "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]},
+        "pieType": "donut"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 19,
+      "title": "Registry Operation Stats",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(increase(registry_operations_total[1h]))",
+          "legendFormat": "Total Ops (1h)"
+        },
+        {
+          "expr": "sum(rate(registry_operations_total{status=\"success\"}[5m])) / sum(rate(registry_operations_total[5m])) * 100",
+          "legendFormat": "Success Rate"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(registry_operation_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P95 Latency"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 60},
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "blue", "value": null}
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Success Rate"},
+            "properties": [
+              {"id": "unit", "value": "percent"},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 95}, {"color": "green", "value": 99}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "P95 Latency"},
+            "properties": [
+              {"id": "unit", "value": "s"},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.1}, {"color": "red", "value": 0.5}]}}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 104,
+      "title": "Summary Statistics",
+      "type": "row",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 68},
+      "collapsed": false
+    },
+    {
+      "id": 20,
+      "title": "Key Metrics Summary",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(rate(auth_requests_total{status=\"success\"}[5m])) / sum(rate(auth_requests_total[5m])) * 100",
+          "legendFormat": "Auth Success %"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(mcp_tool_discovery_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "Discovery P95 (ms)"
+        },
+        {
+          "expr": "sum(rate(mcp_tool_execution_total{status=\"success\"}[5m])) / sum(rate(mcp_tool_execution_total[5m])) * 100",
+          "legendFormat": "Execution Success %"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(registry_operation_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "Registry P95 (ms)"
+        }
+      ],
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 69},
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "textMode": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null}
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Auth Success %"},
+            "properties": [
+              {"id": "unit", "value": "percent"},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 95}, {"color": "green", "value": 99}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Execution Success %"},
+            "properties": [
+              {"id": "unit", "value": "percent"},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 95}, {"color": "green", "value": 99}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Discovery P95 (ms)"},
+            "properties": [
+              {"id": "unit", "value": "ms"},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 100}, {"color": "red", "value": 500}]}}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Registry P95 (ms)"},
+            "properties": [
+              {"id": "unit", "value": "ms"},
+              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 100}, {"color": "red", "value": 500}]}}
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "mechanism",
+        "label": "Auth Mechanism",
+        "type": "query",
+        "query": "label_values(auth_requests_total, mechanism)",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*"
+      },
+      {
+        "name": "server_name",
+        "label": "Server Name",
+        "type": "query",
+        "query": "label_values(mcp_tool_execution_total, server_name)",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*"
+      },
+      {
+        "name": "tool_name",
+        "label": "Tool Name",
+        "type": "query",
+        "query": "label_values(mcp_tool_execution_total, tool_name)",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*"
+      },
+      {
+        "name": "operation",
+        "label": "Operation",
+        "type": "query",
+        "query": "label_values(registry_operations_total, operation)",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*"
+      },
+      {
+        "name": "resource_type",
+        "label": "Resource Type",
+        "type": "query",
+        "query": "label_values(registry_operations_total, resource_type)",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*"
+      }
+    ]
+  },
+  "schemaVersion": 39,
+  "version": 1
+}

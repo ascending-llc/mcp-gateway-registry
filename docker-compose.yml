@@ -1,6 +1,20 @@
 version: '3.8'
 
 services:
+  # OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./config/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4318:4318"   # OTLP HTTP receiver
+      - "4317:4317"   # OTLP gRPC receiver
+      - "8889:8889"   # Prometheus exporter (optional)
+    restart: unless-stopped
+    profiles:
+      - full
+
   # Registry service (includes nginx, SSL, FAISS, models)
   registry:
     build:
@@ -40,6 +54,10 @@ services:
       - SECURITY_ADD_PENDING_TAG=${SECURITY_ADD_PENDING_TAG:-true}
       - MCP_SCANNER_LLM_API_KEY=${MCP_SCANNER_LLM_API_KEY}
       - MONGO_URI=mongodb://registry-mongodb:27017/jarvis
+      # Sends logs to OpenTelemetry Collector
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_SERVICE_NAME=mcp-gateway-registry
+
       # Embeddings Configuration
       # - EMBEDDINGS_PROVIDER=${EMBEDDINGS_PROVIDER:-sentence-transformers}
       # - EMBEDDINGS_MODEL_NAME=${EMBEDDINGS_MODEL_NAME:-all-MiniLM-L6-v2}
@@ -162,6 +180,8 @@ services:
       - ENTRA_EMAIL_CLAIM=${ENTRA_EMAIL_CLAIM:-upn}
       - ENTRA_NAME_CLAIM=${ENTRA_NAME_CLAIM:-name}
       - ENTRA_ROLE_TOKEN_KIND=${ENTRA_ROLE_TOKEN_KIND:-id}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_SERVICE_NAME=auth-server
       - REGISTRY_CLIENT_URL=${REGISTRY_CLIENT_URL:-http://registry-frontend}
     ports:
       - "8888:8888"
@@ -226,7 +246,7 @@ services:
     restart: on-failure:0
     ports:
       - 8099:8080
-      - 50051:50051
+      # - 50051:50051
     env_file:
       - .env
     volumes:

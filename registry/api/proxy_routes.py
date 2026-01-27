@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional, Union
 from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
+from registry.utils.log import metrics
 from registry.auth.dependencies import CurrentUser
 from registry.services.server_service import server_service_v1
 from registry.utils.crypto_utils import decrypt_auth_fields
@@ -632,6 +633,7 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
     
     # Proxy the request
     logger.info(f"Proxying {request.method} {path} → {target_url}")
+    metrics.record_server_request(server_name=server.serverName)
     return await proxy_to_mcp_server(
         request=request,
         target_url=target_url,

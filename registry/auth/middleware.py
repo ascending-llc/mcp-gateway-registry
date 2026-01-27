@@ -1,5 +1,6 @@
 import base64
 import os
+import time
 import jwt
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -15,6 +16,7 @@ from registry.auth.dependencies import (map_cognito_groups_to_scopes, signer, ge
                                         user_has_wildcard_access)
 from registry.core.config import settings
 
+from registry.utils.log import metrics
 
 class UnifiedAuthMiddleware(BaseHTTPMiddleware):
     """
@@ -105,14 +107,31 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.debug(f"Authenticated path: {path}")
             # Continue to authentication logic below
 
+        start_time = time.perf_counter()
+        auth_source = "unknown"
+
         try:
             user_context = await self._authenticate(request)
             request.state.user = user_context
             request.state.is_authenticated = True
-            request.state.auth_source = user_context.get('auth_source', 'unknown')
-            logger.info(f"User {user_context.get('username')} authenticated via {user_context.get('auth_source')}")
+            auth_source = user_context.get('auth_source', 'unknown')
+            request.state.auth_source = auth_source
+
+            duration_seconds = time.perf_counter() - start_time
+            metrics.record_auth_request(
+                auth_source,
+                success=True,
+                duration_seconds=duration_seconds
+            )
+            logger.info(f"User {user_context.get('username')} authenticated via {auth_source}")
             return await call_next(request)
         except AuthenticationError as e:
+            duration_seconds = time.perf_counter() - start_time
+            metrics.record_auth_request(
+                auth_source,
+                success=False,
+                duration_seconds=duration_seconds
+            )
             logger.warning(f"Auth failed for {path}: {e}")
             # Add WWW-Authenticate header for MCP OAuth discovery
             # Extract server name from path for MCP proxy requests
@@ -129,9 +148,16 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             else:
                 # For other authenticated paths, use general OAuth discovery
                 headers["WWW-Authenticate"] = 'Bearer realm="mcp-registry"'
-            
+
             return JSONResponse(status_code=401, content={"detail": str(e)}, headers=headers)
         except Exception as e:
+            # Calculate duration and record error metrics
+            duration_seconds = time.perf_counter() - start_time
+            metrics.record_auth_request(
+                auth_source,
+                success=False,
+                duration_seconds=duration_seconds
+            )
             logger.error(f"Auth error for {path}: {e}")
             return JSONResponse(status_code=500, content={"detail": "Authentication error"})
 
