@@ -13,7 +13,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from .client import create_metrics_client
 from .utils import extract_headers_for_analysis, hash_user_id
-from registry.utils.log import metrics as otel_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -157,16 +156,8 @@ class RegistryMetricsMiddleware(BaseHTTPMiddleware):
         finally:
             # Calculate duration
             duration_ms = (time.perf_counter() - start_time) * 1000
-            duration_seconds = duration_ms / 1000.0
-
-            otel_metrics.record_registry_operation(
-                operation=operation_info["operation"],
-                resource_type=operation_info["resource_type"],
-                success=success,
-                duration_seconds=duration_seconds
-            )
-
-
+            
+            # Emit registry operation metric asynchronously
             asyncio.create_task(
                 self._emit_registry_metric(
                     operation=operation_info["operation"],
@@ -178,7 +169,7 @@ class RegistryMetricsMiddleware(BaseHTTPMiddleware):
                     error_code=error_code
                 )
             )
-
+            
             # Emit headers analysis metric for nginx config insights
             if success and operation_info["resource_type"] != "health":
                 asyncio.create_task(
@@ -189,25 +180,16 @@ class RegistryMetricsMiddleware(BaseHTTPMiddleware):
                         status_code=response.status_code if response else 500
                     )
                 )
-
+            
             # If this is a search operation, emit discovery metric too
-            if operation_info["resource_type"] == "search":
-                # Record OTel metrics for tool discovery latency (p50/p95/p99)
-                otel_metrics.record_tool_discovery(
-                    tool_name="search",
-                    source="registry",
-                    success=success,
-                    duration_seconds=duration_seconds
-                )
-
-                if success:
-                    asyncio.create_task(
-                        self._emit_discovery_metric_from_request(
-                            request=request,
-                            duration_ms=duration_ms
-                        )
+            if operation_info["resource_type"] == "search" and success:
+                asyncio.create_task(
+                    self._emit_discovery_metric_from_request(
+                        request=request,
+                        duration_ms=duration_ms
                     )
-
+                )
+        
         return response
     
     async def _emit_registry_metric(
