@@ -6,7 +6,6 @@ from opentelemetry import metrics
 logger = logging.getLogger(__name__)
 
 
-
 def safe_telemetry(func):
     """
     Decorator to safely execute telemetry methods.
@@ -33,9 +32,16 @@ class OTelMetricsClient:
     - Registry operation latency (histogram)
     """
 
-    def __init__(self):
+    def __init__(self, service_name: str):
+        """
+        Initialize metrics client for a specific service.
+        
+        Args:
+            service_name: Name of the service (e.g., 'api', 'worker', 'registry')
+        """
         try:
-            self.meter = metrics.get_meter(__name__)
+            self.service_name = service_name
+            self.meter = metrics.get_meter(f"mcp.{service_name}")
 
             # HTTP metrics
             self.http_requests = self.meter.create_counter(
@@ -104,7 +110,7 @@ class OTelMetricsClient:
                 unit="1"
             )
         except Exception as e:
-            logger.error(f"Failed to initialize OTelMetricsClient: {e}")
+            logger.error(f"Failed to initialize OTelMetricsClient for service '{service_name}': {e}")
 
     @safe_telemetry
     def record_http_request(self, method: str, route: str, status_code: int):
@@ -271,3 +277,24 @@ class OTelMetricsClient:
             "server_name": server_name
         }
         self.server_requests.add(1, attributes)
+
+
+def create_metrics_client(service_name: str) -> OTelMetricsClient:
+    """
+    Create a metrics client for a specific service.
+    
+    This factory function creates a new OTelMetricsClient instance with
+    service-specific meter identity for better observability in dashboards.
+    
+    Args:
+        service_name: Identifier for the service (e.g., 'api', 'worker', 'registry')
+    
+    Returns:
+        Configured OTelMetricsClient instance
+        
+    Example:
+        >>> from packages.telemetry.metrics_client import create_metrics_client
+        >>> metrics = create_metrics_client("api")
+        >>> metrics.record_http_request("GET", "/health", 200)
+    """
+    return OTelMetricsClient(service_name)

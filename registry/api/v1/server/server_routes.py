@@ -14,7 +14,7 @@ from fastapi import APIRouter, HTTPException, status as http_status, Depends
 from pydantic import ValidationError
 
 from registry.auth.dependencies import CurrentUser
-from registry.utils.log import metrics
+from registry.utils.otel_metrics import metrics
 from registry.services.server_service import server_service_v1
 from registry.services.oauth.mcp_service import get_mcp_service
 from registry.services.oauth.connection_status_service import (

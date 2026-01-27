@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
-from registry.utils.log import metrics
+from registry.utils.otel_metrics import metrics
 from registry.services.search.service import faiss_service
 from ...services.agent_service import agent_service
 

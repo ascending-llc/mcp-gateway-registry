@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional, Union
 from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
-from registry.utils.log import metrics
+from registry.utils.otel_metrics import metrics
 from registry.auth.dependencies import CurrentUser
 from registry.services.server_service import server_service_v1
 from registry.utils.crypto_utils import decrypt_auth_fields

@@ -16,7 +16,7 @@ from registry.auth.dependencies import (map_cognito_groups_to_scopes, signer, ge
                                         user_has_wildcard_access)
 from registry.core.config import settings
 
-from registry.utils.log import metrics
+from registry.utils.otel_metrics import metrics
 
 class UnifiedAuthMiddleware(BaseHTTPMiddleware):
     """
