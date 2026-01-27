@@ -346,7 +346,6 @@ class ServerServiceV1:
         # Access control filter
         accessible_servers = acl_permissions_map.get(ResourceType.MCPSERVER.value, {}).keys()
         accessible_server_ids = [PydanticObjectId(sid) for sid in accessible_servers]
-        # if accessible_server_ids:
         filters.append({"_id": {"$in": accessible_server_ids}})
 
         # Combine all filters
