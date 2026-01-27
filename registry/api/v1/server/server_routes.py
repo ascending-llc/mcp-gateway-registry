@@ -477,8 +477,7 @@ async def toggle_server(
         acl_permission_map = user_context.get("acl_permission_map", {})
         check_required_permission(acl_permission_map, ResourceType.MCPSERVER.value, server_id, "EDIT")
         
-        # Get user_id from context for OAuth token retrieval
-        user_id = user_context.get("username") or user_context.get("user_id")
+        user_id = user_context.get("user_id")
     
         server = await server_service_v1.toggle_server_status(
             server_id=server_id,
