@@ -43,7 +43,6 @@ Key Principle:
 - numTools is a calculated field, not stored in the database
 """
 
-import uuid
 from datetime import datetime
 from typing import Any, ClassVar, Dict, List, Optional, Set
 from pydantic import Field
