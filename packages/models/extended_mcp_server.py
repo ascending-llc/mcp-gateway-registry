@@ -151,12 +151,9 @@ class ExtendedMCPServer(Document):
             'status': self.status,
             'collection': self.COLLECTION_NAME,
         }
-
-        doc_id = str(uuid.uuid4())
         return LangChainDocument(
             page_content=content,
             metadata=metadata,
-            id=doc_id
         )
 
     def generate_content(self) -> str:

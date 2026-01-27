@@ -673,7 +673,7 @@ class ServerServiceV1:
 
         #sync to vector database
         try:
-            asyncio.create_task(mcp_server_repo.sync_server(server))
+            asyncio.create_task(mcp_server_repo.sync_server_to_vector_db(server))
             logger.info(f"Successfully synced server '{server.serverName}' to vector database")
         except Exception as e:
             logger.warning(f"Failed to sync server '{server.serverName}' to vector database: {e}")
@@ -818,7 +818,7 @@ class ServerServiceV1:
                 raise ValueError("Failed to fetch tools from server. Server remains disabled.")
             else:
                 # Sync search index after successful registration and tool retrieval
-                asyncio.create_task(mcp_server_repo.sync_server(server))
+                asyncio.create_task(mcp_server_repo.sync_server_to_vector_db(server))
         # Update the updatedAt timestamp
         server.updatedAt = _get_current_utc_time()
         await server.save()

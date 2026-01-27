@@ -13,7 +13,7 @@ class TokenService:
     async def get_user(self, user_id: str) -> Optional[IUser]:
         user = await user_service.get_user_by_user_id(user_id)
         if not user:
-            raise Exception(f"User {user_id} not found")
+            raise Exception(f"OAuth operation failed: User {user_id} not found")
         return user
 
     async def get_user_by_user_id(self, user_id: str) -> str:

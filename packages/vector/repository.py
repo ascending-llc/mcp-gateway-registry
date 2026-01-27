@@ -526,7 +526,7 @@ class Repository(Generic[T]):
             logger.error(f"Rerank search failed: {e}")
             return []
 
-    async def sync_server(
+    async def sync_server_to_vector_db(
             self,
             server: ExtendedMCPServer,
             is_delete: bool = True,

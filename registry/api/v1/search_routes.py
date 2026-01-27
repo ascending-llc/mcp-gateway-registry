@@ -453,7 +453,11 @@ async def search_servers(
         candidate_k=min(top_n * 5, 100),  # Fetch 5x candidates for reranking (max 100)
         search_type=search_type,
     )
-    logger.info(f"search results: {search_data}")
+    logger.info(
+        "Search completed: %d results for query=%r",
+        len(search_data),
+        query,
+    )
     server_ids = [search.get("server_id") for search in search_data]
 
     servers = []
