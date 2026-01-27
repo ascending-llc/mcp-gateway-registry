@@ -553,8 +553,8 @@ async def refresh_server_health(
     """Refresh server health status. Updates tools if server becomes active."""
     try:
         # Get user_id from context for OAuth token retrieval
-        user_id = user_context.get("username") or user_context.get("user_id")
-        
+        user_id = user_context.get("user_id") or user_context.get("username")
+
         health_info = await server_service_v1.refresh_server_health(
             server_id=server_id,
             user_id=user_id,
