@@ -27,12 +27,12 @@ class UserService:
             try:
                 obj_id = PydanticObjectId(user_id)
             except Exception as e:
-                logger.warning(f"Invalid server ID format: {user_id}")
+                logger.warning(f"Invalid user ID format: {user_id}")
                 return None
             user = await IUser.get(obj_id)
             return user
         except Exception as e:
-            logger.error(f"Error finding user by source_id '{user_id}': {e}")
+            logger.error(f"Error finding user by user_id '{user_id}': {e}")
             return None
 
     async def get_or_create_user(self, email: str) -> Optional[IUser]:
