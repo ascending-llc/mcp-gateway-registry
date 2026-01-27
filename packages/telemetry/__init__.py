@@ -5,9 +5,20 @@ from opentelemetry import metrics
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.metrics.view import View
+from opentelemetry.sdk.metrics.view import ExplicitBucketHistogramAggregation
+
+
 
 logger = logging.getLogger(__name__)
 
+# Histogram bucket boundaries for latency metrics (in seconds)
+# These buckets are designed to capture p50, p95, p99 accurately
+LATENCY_BUCKETS = [
+    0.005, 0.01, 0.025, 0.05, 0.075,
+    0.1, 0.25, 0.5, 0.75,
+    1.0, 2.5, 5.0, 7.5, 10.0
+]
 
 class SafeOTLPMetricExporter:
     """Wrapper that catches all exceptions during export."""
@@ -117,7 +128,15 @@ def setup_metrics(
                         logger.info(f"OTLP metrics configured for {otlp_endpoint}")
                     except Exception as e:
                         logger.warning(f"OTLP metrics setup failed: {e}")
-                
+                        
+                views = [
+                    View(
+                        instrument_name="*duration*",
+                        aggregation=ExplicitBucketHistogramAggregation(
+                            boundaries=LATENCY_BUCKETS
+                        )
+                    )
+                ]
                 # Set meter provider if we have any readers
                 if readers:
                     provider = MeterProvider(resource=resource, metric_readers=readers)

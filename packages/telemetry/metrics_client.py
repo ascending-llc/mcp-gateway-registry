@@ -13,13 +13,6 @@ LATENCY_BUCKETS_SECONDS = (
     1.0, 2.5, 5.0, 7.5, 10.0
 )
 
-# Histogram bucket boundaries for latency metrics (in milliseconds)
-LATENCY_BUCKETS_MS = (
-    5, 10, 25, 50, 75,
-    100, 250, 500, 750,
-    1000, 2500, 5000, 7500, 10000
-)
-
 
 def safe_telemetry(func):
     """
