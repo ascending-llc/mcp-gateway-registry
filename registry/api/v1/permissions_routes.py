@@ -20,7 +20,6 @@ from registry.services.permissions_utils import (
     check_required_permission,
 )
 
-API_VERSION = "v1"
 logger = logging.getLogger(__name__)
 router = APIRouter()
 

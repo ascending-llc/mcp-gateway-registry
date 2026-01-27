@@ -1042,19 +1042,33 @@ class ServerServiceV1:
 
             # Add OAuth token to headers if server requires OAuth
             if has_oauth and user_id:
-                from registry.services.oauth.token_service import token_service
+                from registry.services.oauth.oauth_service import get_oauth_service
 
-                oauth_tokens = await token_service.get_oauth_tokens(user_id, server.serverName)
+                # Get valid access token (handles refresh and re-auth automatically)
+                oauth_service = await get_oauth_service()
+                access_token, auth_url, token_error = await oauth_service.get_valid_access_token(
+                    user_id=user_id,
+                    server =server
+                )
 
-                if not oauth_tokens or not oauth_tokens.access_token:
-                    return None, None, f"No OAuth tokens found for user {user_id}"
+                # If re-authentication is needed
+                if auth_url:
+                    return None, None, f"oauth_required:{auth_url}"
+
+                # If error occurred
+                if token_error:
+                    return None, None, f"OAuth token error: {token_error}"
+
+                # If no token (shouldn't happen, defensive check)
+                if not access_token:
+                    return None, None, f"No valid OAuth token available for user {user_id}"
 
                 # Add OAuth Authorization header to server_info
                 if "headers" not in server_info:
                     server_info["headers"] = []
 
                 server_info["headers"].append(
-                    {"Authorization": f"Bearer {oauth_tokens.access_token}"}
+                    {"Authorization": f"Bearer {access_token}"}
                 )
 
                 logger.info(f"Added OAuth token to request for {server.serverName}")
@@ -1090,6 +1104,7 @@ class ServerServiceV1:
             error_msg = f"Error: {type(e).__name__} - {str(e)}"
             logger.error(f"Retrieval error for server {server.serverName}: {e}")
             return None, None, error_msg
+
 
     async def retrieve_tools_from_server(
             self,

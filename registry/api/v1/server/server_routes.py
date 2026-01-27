@@ -59,13 +59,15 @@ def get_user_context(user_context: CurrentUserWithACLMap):
 def check_admin_permission(user_context: dict) -> bool:
     """
     Check if user has admin permissions.
+    
     Args:
         user_context: User context dictionary from authentication
         
     Returns:
-        True if user is admin, False otherwise
+        True if user has admin scope, False otherwise
     """
-    return user_context.get("is_admin")
+    scopes = user_context.get("scopes", [])
+    return "mcp-registry-admin" in scopes
 
 
 def apply_connection_status_to_server(
