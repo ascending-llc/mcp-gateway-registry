@@ -7,6 +7,9 @@ from fastapi import APIRouter, Request
 
 from registry.services.search.service import faiss_service
 from packages.vector.enum.enums import SearchType
+from packages.vector.repository import mcp_server_repo
+from registry.schemas.server_api_schemas import convert_to_detail
+from registry.services.server_service import server_service_v1
 from ...services.agent_service import agent_service
 
 logger = logging.getLogger(__name__)
@@ -75,6 +78,7 @@ class SemanticSearchResponse(BaseModel):
     total_servers: int = 0
     total_tools: int = 0
     total_agents: int = 0
+
 
 def _user_can_access_agent(agent_path: str, user_context: dict) -> bool:
     """Validate user access for a given agent."""
@@ -409,7 +413,6 @@ async def discover_tools(
 async def search_servers(
         request: Request,
         body: dict,
-        search_type: SearchType,
         user_context: CurrentUser
 ):
     """
@@ -419,166 +422,48 @@ async def search_servers(
     Request body:
     {
         "query": "search",
-        "top_n": 5
+        "top_n": 5,
+        "search_type": "hybrid",  # Optional: "near_text", "bm25", or "hybrid" (default: "hybrid")
+        "include_disabled": false  # Optional: include disabled servers (default: false)
     }
     
     Returns raw JSON that can be converted to ExtendedMCPServer format.
     """
     query = body.get("query", "")
     top_n = body.get("top_n", 10)
-
-    logger.info(
-        f"🔍 Server search from user '{user_context.get('username', 'unknown')}': "
-        f"query='{query}', top_n={top_n}"
-    )
-    # TODO: server, search type
-    #  只关系
-    # PROTOTYPE: Hard-coded Tavily server raw JSON (matches DB structure)
-    tavily_server_raw = {
-        "_id": "6972e222755441652c23090f",  # TODO： 保存，不需要矢量化
-        "serverName": "tavilysearchv1",  # TODO： 保存，不需要矢量化
-        "path": "/tavilysearch",  # TODO： 保存，不需要矢量化
-        "config": {
-            "title": "Tavily Search V1",
-            "description": "Tavily search engine integration with web search, extraction, crawling, and mapping capabilities",
-            "type": "streamable-http",
-            "url": "https://mcp.tavily.com/mcp/",
-            "requiresOAuth": False,
-            "enabled": True,
-
-            # Tools in OpenAI format (with mcpToolName for translation)
-            "toolFunctions": {
-                "tavily_search_mcp_tavilysearchv1": {
-                    "type": "function",
-                    "function": {
-                        "name": "tavily_search_mcp_tavilysearchv1",  # tODO：1
-                        "description": "Search the web using Tavily's AI-powered search engine",  # tODO：2
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "query": {"type": "string", "description": "The search query"},
-                                "max_results": {"type": "integer", "description": "Maximum number of results",
-                                                "default": 5},
-                                "search_depth": {"type": "string", "enum": ["basic", "advanced"], "default": "basic"}
-                            },
-                            "required": ["query"]
-                        }
-                    },
-                    "mcpToolName": "tavily_search"
-                },
-                "tavily_extract_mcp_tavilysearchv1": {
-                    "type": "function",
-                    "function": {
-                        "name": "tavily_extract_mcp_tavilysearchv1",
-                        "description": "Extract content from specific URLs using Tavily",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "urls": {"type": "array", "items": {"type": "string"}}
-                            },
-                            "required": ["urls"]
-                        }
-                    },
-                    "mcpToolName": "tavily_extract"
-                },
-                "tavily_crawl_mcp_tavilysearchv1": {
-                    "type": "function",
-                    "function": {
-                        "name": "tavily_crawl_mcp_tavilysearchv1",
-                        "description": "Crawl a website to gather comprehensive information",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "url": {"type": "string"},
-                                "max_depth": {"type": "integer", "default": 2}
-                            },
-                            "required": ["url"]
-                        }
-                    },
-                    "mcpToolName": "tavily_crawl"
-                },
-                "tavily_map_mcp_tavilysearchv1": {
-                    "type": "function",
-                    "function": {
-                        "name": "tavily_map_mcp_tavilysearchv1",
-                        "description": "Map and analyze a website's structure",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "url": {"type": "string"}
-                            },
-                            "required": ["url"]
-                        }
-                    },
-                    "mcpToolName": "tavily_map"
-                }
-            },
-
-            # Resources in MCP format
-            "resources": [
-                {
-                    "uri": "tavily://search-results/{query}",
-                    "name": "search_results_cache",
-                    "description": "Cached search results for recent queries",
-                    "mimeType": "application/json",
-                    "annotations": {
-                        "audience": ["developers"],
-                        "cacheable": True,
-                        "ttl": 3600
-                    }
-                },
-                {
-                    "uri": "tavily://trending-topics",
-                    "name": "trending_topics",
-                    "description": "Current trending search topics",
-                    "mimeType": "application/json"
-                }
-            ],
-
-            # Prompts in MCP format
-            "prompts": [
-                {
-                    "name": "research_assistant",
-                    "description": "AI research assistant that performs comprehensive web research",
-                    "arguments": [
-                        {"name": "topic", "description": "Research topic", "required": True},
-                        {"name": "depth", "description": "Research depth", "required": False}
-                    ]
-                },
-                {
-                    "name": "fact_checker",
-                    "description": "Verify claims using multiple web sources",
-                    "arguments": [
-                        {"name": "claim", "description": "Claim to verify", "required": True},
-                        {"name": "sources_count", "description": "Number of sources", "required": False}
-                    ]
-                }
-            ],
-
-            "capabilities": {
-                "tools": {"listChanged": True},
-                "resources": {"subscribe": False, "listChanged": True},
-                "prompts": {"listChanged": True}
-            }
-        },
-        "tags": ["search", "api-key", "tavily"],
-        "scope": "shared_user",
-        "status": "active",  # TODO： 保存，不需要矢量化，不启用删除；启用矢量化
-        "numTools": 4,
-        "numStars": 0
+    # Get search_type from body or use default (hybrid)
+    search_type_str = body.get("search_type", "hybrid").lower()
+    search_type_mapping = {
+        "near_text": SearchType.NEAR_TEXT,
+        "bm25": SearchType.BM25,
+        "hybrid": SearchType.HYBRID,
+        "similarity_store": SearchType.SIMILARITY_STORE
     }
+    search_type = search_type_mapping.get(search_type_str, SearchType.HYBRID)
+    if search_type_str not in search_type_mapping:
+        logger.warning(f"Invalid search_type '{search_type_str}', using HYBRID")
 
-    # In production: would do vector search here
-    # For now: always return all servers regardless of query
-    servers = [tavily_server_raw]
+    logger.info(f"🔍 Server search from user '{user_context.get('username', 'unknown')}': "
+                f"query='{query}', top_n={top_n}, search_type={search_type}")
 
-    # Note: Query filtering disabled - always return all servers
-    # This allows clients to always discover available servers
+    # Search with reranking for better quality results
+    search_data = mcp_server_repo.search_with_rerank(
+        query=query,
+        k=top_n,
+        candidate_k=min(top_n * 5, 100),  # Fetch 5x candidates for reranking (max 100)
+        search_type=search_type,
+    )
+    logger.info(f"search results: {search_data}")
+    server_ids = [search.get("server_id") for search in search_data]
 
-    logger.info(f"✅ Found {len(servers[:top_n])} servers")
+    servers = []
+    for server_id in server_ids:
+        server = await server_service_v1.get_server_by_id(server_id=server_id)
+        servers.append(convert_to_detail(server))
 
+    logger.info(f"✅ Found {len(servers)} servers")
     return {
         "query": query,
         "total": len(servers),
-        "servers": servers[:top_n]
+        "servers": servers
     }

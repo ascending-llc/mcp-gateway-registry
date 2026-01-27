@@ -100,7 +100,8 @@ class ExtendedMCPServer(Document):
 
     # ========== Base Fields (from MCPServerDocument) ==========
     serverName: str = Field(..., description="Unique server identifier")
-    config: Dict[str, Any] = Field(...,description="MCP server configuration (oauth, apiKey, capabilities, tools, etc.)")
+    config: Dict[str, Any] = Field(...,
+                                   description="MCP server configuration (oauth, apiKey, capabilities, tools, etc.)")
     author: PydanticObjectId = Field(..., description="User who created this server")
 
     # ========== Registry-Specific Root-Level Fields ==========
@@ -202,7 +203,7 @@ class ExtendedMCPServer(Document):
         return ' | '.join(filter(None, parts))
 
     @classmethod
-    def from_document(cls, document: LangChainDocument) -> 'ExtendedMCPServer':
+    def from_document(cls, document: LangChainDocument) -> dict:
         """
         Create ExtendedMCPServer instance from LangChain Document.
         
@@ -211,20 +212,14 @@ class ExtendedMCPServer(Document):
 
         """
         metadata = document.metadata
-
-        # Extract MongoDB _id from metadata (stored as server_id)
-        mongodb_id = metadata.get('server_id')
-
-        # Create minimal instance with search metadata
-        return cls(
-            id=PydanticObjectId(mongodb_id) if mongodb_id else None,
-            serverName=metadata.get('server_name', ''),
-            path=metadata.get('path', ''),
-            scope=metadata.get('scope', 'private_user'),
-            status=metadata.get('status', 'active'),
-            config={},  # Empty config, should fetch from MongoDB for full data
-            author=PydanticObjectId(),  # Placeholder
-        )
+        return {
+            "server_id": metadata.get('server_id'),
+            "path": metadata.get('path'),
+            "scope": metadata.get('scope'),
+            "server_name": metadata.get('server_name'),
+            "status": metadata.get('status'),
+            "content": metadata.get('content'),
+        }
 
     @classmethod
     def from_server_info(
