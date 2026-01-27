@@ -27,6 +27,7 @@ from registry.utils.crypto_utils import encrypt_auth_fields
 from registry.core.mcp_client import get_tools_from_server_with_server_info
 from registry.core.acl_constants import ResourceType
 from packages.vector.search_manager import mcp_tool_search_index_manager
+from registry.services.user_service import user_service
 
 logger = logging.getLogger(__name__)
 
@@ -405,7 +406,6 @@ class ServerServiceV1:
         self,
         data: ServerCreateRequest,
         user_id: str,
-        username: str
     ) -> MCPServerDocument:
         """
         Create a new server.
@@ -448,38 +448,11 @@ class ServerServiceV1:
         tool_functions = config.get("toolFunctions", {})
         num_tools = len(tool_functions) if tool_functions else 0
 
-        # Get or create author user reference
-        author = await IUser.find_one({"_id": PydanticObjectId(user_id)})
-
+        # Get author user reference - authentication required
+        author = await user_service.get_user_by_user_id(user_id)
+        
         if not author:
-            # Create a minimal user record if not exists
-            now = _get_current_utc_time()
-            # Generate unique email to avoid conflicts
-            email = f"{username}@local.mcp-gateway.internal"
-            
-            # Check if email already exists
-            existing_user = await IUser.find_one({"email": email})
-            if existing_user:
-                author = existing_user
-            else:
-                # Create user without OAuth ID fields to avoid unique index conflicts
-                # Use model_dump with exclude_none to prevent OAuth fields from being included
-                user_data = {
-                    "username": username,
-                    "email": email,
-                    "emailVerified": False,
-                    "role": "USER",
-                    "provider": "local",
-                    "createdAt": now,
-                    "updatedAt": now
-                }
-
-                # Insert directly to avoid Pydantic adding None values for OAuth fields
-                collection = IUser.get_pymongo_collection()
-                result = await collection.insert_one(user_data)
-
-                # Fetch the created user
-                author = await IUser.get(result.inserted_id)
+            raise ValueError(f"Authentication required: User {user_id} not found")
 
         # Create server document with registry fields at root level
         now = _get_current_utc_time()

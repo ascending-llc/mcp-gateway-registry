@@ -303,12 +303,10 @@ async def create_server(
     """Create a new server"""
     try:
         user_id = user_context.get("user_id")
-        username = user_context.get("username")
         
         server = await server_service_v1.create_server(
             data=data,
             user_id=user_id,
-            username=username
         )
 
         if not server:
@@ -332,6 +330,18 @@ async def create_server(
         return convert_to_create_response(server)
         
     except ValueError as e:
+        error_msg = str(e)
+        
+        # Check if authentication error
+        if "Authentication required" in error_msg or "not found" in error_msg:
+            raise HTTPException(
+                status_code=http_status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "error": "unauthorized",
+                    "message": error_msg,
+                }
+            )
+        
         # Business logic errors (e.g., duplicate path, duplicate tags)
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
@@ -363,7 +373,7 @@ async def update_server(
 ):
     """Update a server with partial data"""
     try:
-        user_id = user_context.get("username")
+        user_id = user_context.get("user_id")
         acl_permission_map = user_context.get("acl_permission_map", {})
         check_required_permission(acl_permission_map, ResourceType.MCPSERVER.value, server_id, "EDIT")
 
@@ -585,7 +595,7 @@ async def refresh_server_health(
     """Refresh server health status. Updates tools if server becomes active."""
     try:
         # Get user_id from context for OAuth token retrieval
-        user_id = user_context.get("user_id") or user_context.get("username")
+        user_id = user_context.get("user_id")
 
         health_info = await server_service_v1.refresh_server_health(
             server_id=server_id,
