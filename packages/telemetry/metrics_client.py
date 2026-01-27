@@ -215,7 +215,7 @@ class OTelMetricsClient:
         server_name: str,
         success: bool,
         duration_seconds: Optional[float] = None,
-        method: Optional[str] = None
+        method: str = "UNKNOWN"
     ):
         """
         Record tool execution with success rate and latency tracking.
@@ -225,23 +225,14 @@ class OTelMetricsClient:
             server_name: Name of the MCP server
             success: Whether the execution was successful
             duration_seconds: Execution duration in seconds for p50/p95/p99 calculation
-            method: MCP method (e.g., "tools/call", "tools/list")
-
-        Example:
-            client.record_tool_execution(
-                "my_tool",
-                "my_server",
-                success=True,
-                duration_seconds=0.25
-            )
+            method: HTTP method (e.g., "POST", "GET") - defaults to "UNKNOWN"
         """
         attributes = {
             "tool_name": tool_name,
             "server_name": server_name,
-            "status": "success" if success else "failure"
+            "status": "success" if success else "failure",
+            "method": method  # Always include this
         }
-        if method:
-            attributes["method"] = method
 
         self.tool_execution.add(1, attributes)
 

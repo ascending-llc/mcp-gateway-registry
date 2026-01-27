@@ -18,6 +18,7 @@ import httpx
 import json
 from datetime import datetime
 from .utils import extract_server_name_from_url
+from registry.utils.log import metrics as otel_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -312,7 +313,13 @@ class _ToolDiscoveryTracker:
         duration_ms = (time.perf_counter() - self.start_time) * 1000
         
         try:
-            # Emit discovery metric
+            otel_metrics.record_tool_discovery(
+                tool_name=self.server_name,
+                source=self.server_url,
+                success=True if self.success else False,
+                duration_seconds=duration_ms / 1000.0,
+            )
+            
             await self.metrics_client.emit_discovery_metric(
                 query=f"tools_from_{self.server_name}",
                 results_count=self.tools_count if self.success else 0,

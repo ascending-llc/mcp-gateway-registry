@@ -1,71 +1,145 @@
 import os
 import logging
-from opentelemetry import metrics, trace
+from typing import Optional
+from opentelemetry import metrics
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader, ConsoleMetricExporter
-from opentelemetry.exporter.prometheus import PrometheusMetricReader
-from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
-
-from opentelemetry._logs import set_logger_provider
-from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
-from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 
 logger = logging.getLogger(__name__)
 
+
+class SafeOTLPMetricExporter:
+    """Wrapper that catches all exceptions during export."""
+    
+    def __init__(self, endpoint: str, timeout: int = 5):
+        try:
+            from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+            self._exporter = OTLPMetricExporter(endpoint=endpoint, timeout=timeout)
+            self._endpoint = endpoint
+        except Exception as e:
+            logger.warning(f"Failed to create OTLP metric exporter: {e}")
+            self._exporter = None
+    
+    @property
+    def _preferred_temporality(self):
+        """Delegate to underlying exporter."""
+        if self._exporter:
+            return self._exporter._preferred_temporality
+        return {}
+    
+    @property
+    def _preferred_aggregation(self):
+        """Delegate to underlying exporter."""
+        if self._exporter:
+            return self._exporter._preferred_aggregation
+        return {}
+    
+    def export(self, *args, **kwargs):
+        """Export with error suppression."""
+        if not self._exporter:
+            return
+        try:
+            return self._exporter.export(*args, **kwargs)
+        except Exception as e:
+            logger.debug(f"Metric export failed (suppressed): {e}")
+            return None
+    
+    def shutdown(self, *args, **kwargs):
+        """Shutdown with error suppression."""
+        if not self._exporter:
+            return
+        try:
+            return self._exporter.shutdown(*args, **kwargs)
+        except Exception:
+            pass
+    
+    def force_flush(self, *args, **kwargs):
+        """Force flush with error suppression."""
+        if not self._exporter:
+            return
+        try:
+            return self._exporter.force_flush(*args, **kwargs)
+        except Exception:
+            pass
+
+
 def setup_metrics(
     service_name: str,
-    otlp_endpoint: str = None,  # e.g., "http://otel-collector:4318"
-    enable_metrics: bool = True,
-    enable_logs: bool = True
+    otlp_endpoint: Optional[str] = None,
+    enable_metrics: bool = True
 ) -> None:
     """
-    Configures OTel Metrics AND Logs to send to a collector.
-    Safely handles errors during setup to prevent application crash.
+    Configures OTel Metrics to send to a collector.
+    Will NOT crash even if collector is unavailable - errors are suppressed.
     """
     logger.info("Setting up telemetry...")
+    
     try:
-        otlp_endpoint = otlp_endpoint or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-collector:4318")
+        otlp_endpoint = otlp_endpoint or os.getenv(
+            "OTEL_EXPORTER_OTLP_ENDPOINT", 
+            "http://otel-collector:4318"
+        )
+        
         resource = Resource.create(attributes={SERVICE_NAME: service_name})
         
+        # Setup Metrics
         if enable_metrics:
             try:
                 readers = []
-
+                
+                # Prometheus setup
                 if os.getenv("OTEL_PROMETHEUS_ENABLED", "false").lower() == "true":
-                     from prometheus_client import start_http_server
-                     start_http_server(port=9464, addr="0.0.0.0")
-                     readers.append(PrometheusMetricReader())
-
-
+                    try:
+                        from opentelemetry.exporter.prometheus import PrometheusMetricReader
+                        from prometheus_client import start_http_server
+                        
+                        port = int(os.getenv("OTEL_PROMETHEUS_PORT", "9464"))
+                        start_http_server(port=port, addr="0.0.0.0")
+                        readers.append(PrometheusMetricReader())
+                        logger.info(f"Prometheus metrics enabled on port {port}")
+                    except Exception as e:
+                        logger.warning(f"Prometheus setup failed: {e}")
+                
+                # OTLP setup with safe wrapper
                 if otlp_endpoint:
-                    metric_exporter = OTLPMetricExporter(endpoint=f"{otlp_endpoint}/v1/metrics")
-                    readers.append(PeriodicExportingMetricReader(metric_exporter))
-
-                provider = MeterProvider(resource=resource, metric_readers=readers)
-                metrics.set_meter_provider(provider)
-                logger.info(f"OTel Metrics initialized. Forwarding to {otlp_endpoint}")
+                    try:
+                        safe_exporter = SafeOTLPMetricExporter(
+                            endpoint=f"{otlp_endpoint}/v1/metrics",
+                            timeout=5
+                        )
+                        reader = PeriodicExportingMetricReader(
+                            safe_exporter,
+                            export_interval_millis=60000,
+                            export_timeout_millis=5000
+                        )
+                        readers.append(reader)
+                        logger.info(f"OTLP metrics configured for {otlp_endpoint}")
+                    except Exception as e:
+                        logger.warning(f"OTLP metrics setup failed: {e}")
+                
+                # Set meter provider if we have any readers
+                if readers:
+                    provider = MeterProvider(resource=resource, metric_readers=readers)
+                    metrics.set_meter_provider(provider)
+                    logger.info(f"Metrics initialized with {len(readers)} reader(s)")
+                else:
+                    logger.warning("No metric readers configured")
+                    
             except Exception as e:
-                logger.error(f"Failed to initialize OTel Metrics, skipping: {e}")
-
-        if enable_logs and otlp_endpoint:
-            try:
-                logger_provider = LoggerProvider(resource=resource)
-                set_logger_provider(logger_provider)
-
-                log_exporter = OTLPLogExporter(endpoint=f"{otlp_endpoint}/v1/logs")
-                
-                logger_provider.add_log_record_processor(BatchLogRecordProcessor(log_exporter))
-                
-                handler = LoggingHandler(level=logging.NOTSET, logger_provider=logger_provider)
-                
-                logging.getLogger().addHandler(handler)
-                
-                logger.info(f"OTel Logging initialized. Forwarding to {otlp_endpoint}")
-                
-            except Exception as e:
-                logger.error(f"Failed to initialize OTel Logging, skipping: {e}")
-
+                logger.warning(f"Metrics setup failed: {e}")
+        
+        logger.info("Telemetry setup complete")
+        
     except Exception as e:
-        logger.error(f"Failed to setup telemetry, skipping: {e}")
+        logger.warning(f"Telemetry initialization failed: {e}")
+
+
+def shutdown_telemetry():
+    """Gracefully shutdown telemetry providers."""
+    try:
+        provider = metrics.get_meter_provider()
+        if hasattr(provider, 'shutdown'):
+            provider.shutdown(timeout_millis=1000)
+    except Exception:
+        pass

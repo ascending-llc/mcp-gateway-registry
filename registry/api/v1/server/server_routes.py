@@ -5,13 +5,16 @@ RESTful API endpoints for managing MCP servers using MongoDB.
 This is a complete rewrite independent of the legacy server_routes.py.
 """
 
+from functools import wraps
 import logging
 import math
+from time import time
 from typing import Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, status as http_status, Depends
 from pydantic import ValidationError
 
 from registry.auth.dependencies import CurrentUser
+from registry.utils.log import metrics
 from registry.services.server_service import server_service_v1
 from registry.services.oauth.mcp_service import get_mcp_service
 from registry.services.oauth.connection_status_service import (
@@ -44,6 +47,48 @@ from registry.schemas.server_api_schemas import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+def track_operation(operation: str, resource_type: str):
+    """
+    Decorator to automatically track metrics for API operations.
+    
+    Args:
+        operation: Type of operation (create, read, update, delete, list, etc.)
+        resource_type: Type of resource (server, tool, etc.)
+    
+    Usage:
+        @track_operation("read", "server")
+        async def get_server(...):
+            ...
+    """
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            start_time = time()
+            success = False
+            
+            try:
+                result = await func(*args, **kwargs)
+                success = True
+                return result
+            except HTTPException:
+                # HTTPException means client error (4xx) - still track as failed operation
+                raise
+            except Exception:
+                # Unexpected error - track and re-raise
+                raise
+            finally:
+                # Always record metrics, even if exception occurred
+                duration = time() - start_time
+                metrics.record_registry_operation(
+                    operation=operation,
+                    resource_type=resource_type,
+                    success=success,
+                    duration_seconds=duration
+                )
+        
+        return wrapper
+    return decorator
 
 
 def get_user_context(user_context: CurrentUser):
@@ -102,6 +147,7 @@ def apply_connection_status_to_server(
     summary="List Servers",
     description="List all servers with filtering, searching, and pagination. Includes connection status for each server.",
 )
+@track_operation("list", "server")
 async def list_servers(
     query: Optional[str] = None,
     scope: Optional[str] = None,
@@ -196,6 +242,7 @@ async def list_servers(
     summary="Get System Statistics",
     description="Get system-wide statistics (Admin only). Includes server, token, and user metrics using MongoDB aggregation pipelines.",
 )
+@track_operation("read", "stats")
 async def get_server_stats(
     user_context: dict = Depends(get_user_context),
 ):
@@ -246,6 +293,7 @@ async def get_server_stats(
     summary="Get Server Details",
     description="Get detailed information about a specific server, including connection status",
 )
+@track_operation("read", "server")
 async def get_server(
     server_id: str,
     user_context: dict = Depends(get_user_context),
@@ -301,6 +349,7 @@ async def get_server(
     summary="Register Server",
     description="Register a new MCP server",
 )
+@track_operation("create", "server")
 async def create_server(
     data: ServerCreateRequest,
     user_context: dict = Depends(get_user_context),
@@ -341,6 +390,7 @@ async def create_server(
     summary="Update Server",
     description="Update server configuration",
 )
+@track_operation("update", "server")
 async def update_server(
     server_id: str,
     data: ServerUpdateRequest,
@@ -393,6 +443,7 @@ async def update_server(
     summary="Delete Server",
     description="Delete a server",
 )
+@track_operation("delete", "server")
 async def delete_server(
     server_id: str,
     user_context: dict = Depends(get_user_context),
@@ -440,6 +491,7 @@ async def delete_server(
     summary="Toggle Server Status",
     description="Enable or disable a server",
 )
+@track_operation("update", "server")
 async def toggle_server(
     server_id: str,
     data: ServerToggleRequest,
@@ -491,6 +543,7 @@ async def toggle_server(
     summary="Get Server Tools",
     description="Get the list of tools provided by a server",
 )
+@track_operation("read", "tool")
 async def get_server_tools(
     server_id: str,
     user_context: dict = Depends(get_user_context),

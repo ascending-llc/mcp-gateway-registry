@@ -2,6 +2,7 @@
 Dynamic MCP server proxy routes.
 """
 
+from time import time
 import logging
 import httpx
 from typing import Dict, Any, Optional, Union
@@ -53,6 +54,29 @@ async def proxy_to_mcp_server(
         server_path: Server path to determine special handling (e.g., MCPGW)
         server_config: Server configuration including apiKey authentication
     """
+    start_time = time()
+    server_name = server_config.get("title", server_path.strip('/')) if server_config else server_path.strip('/')
+    tool_name = "unknown"
+    try:
+        body_bytes = await request.body()
+        if body_bytes:
+            import json
+            body_json = json.loads(body_bytes)
+            # MCP JSON-RPC format: {"method": "tools/call", "params": {"name": "tool_name", ...}}
+            if body_json.get("method") == "tools/call":
+                tool_name = body_json.get("params", {}).get("name", "unknown")
+            elif body_json.get("method") == "tools/list":
+                tool_name = "tools/list"
+            elif body_json.get("method") == "resources/read":
+                tool_name = body_json.get("params", {}).get("uri", "resources/read")
+            elif body_json.get("method") == "prompts/execute":
+                tool_name = body_json.get("params", {}).get("name", "prompts/execute")
+            else:
+                tool_name = body_json.get("method", "unknown")
+    except Exception as e:
+        logger.debug(f"Could not extract tool name from request body: {e}")
+        tool_name = "unknown"
+    
     # Check if this is MCPGW path (special handling)
     is_mcpgw = server_path == MCPGW_PATH
     
@@ -118,7 +142,16 @@ async def proxy_to_mcp_server(
                 headers=headers,
                 content=body
             )
-            
+            duration = time() - start_time
+            success = response.status_code < 400
+            metrics.record_tool_execution(
+                tool_name=tool_name,
+                server_name=server_name,
+                success=success,
+                duration_seconds=duration,
+                method=request.method
+            )
+
             # Log error responses for debugging
             if response.status_code >= 400:
                 try:
@@ -156,6 +189,16 @@ async def proxy_to_mcp_server(
             content_bytes = await backend_response.aread()
             await stream_context.__aexit__(None, None, None)
             
+            duration = time() - start_time
+            success = backend_response.status_code < 400
+            metrics.record_tool_execution(
+                tool_name=tool_name,
+                server_name=server_name,
+                success=success,
+                duration_seconds=duration,
+                method=request.method
+            )
+
             # Log error responses for debugging
             if backend_response.status_code >= 400:
                 try:
@@ -173,6 +216,15 @@ async def proxy_to_mcp_server(
         
         # Backend is returning true SSE - keep stream open and forward it
         logger.info(f"Streaming SSE from backend")
+        
+        duration = time() - start_time
+        metrics.record_tool_execution(
+            tool_name=tool_name,
+            server_name=server_name,
+            success=True,  # SSE connection established
+            duration_seconds=duration,
+            method=request.method
+        )
         
         response_headers = {
             "Cache-Control": "no-cache",
@@ -206,12 +258,32 @@ async def proxy_to_mcp_server(
             
     except httpx.TimeoutException:
         logger.error(f"Timeout proxying to {target_url}")
+        
+        duration = time() - start_time
+        metrics.record_tool_execution(
+            tool_name=tool_name,
+            server_name=server_name,
+            success=False,
+            duration_seconds=duration,
+            method=request.method
+        )
+
         return JSONResponse(
             status_code=504,
             content={"error": "Gateway timeout"}
         )
     except Exception as e:
         logger.error(f"Error proxying to {target_url}: {e}")
+        
+        duration = time() - start_time
+        metrics.record_tool_execution(
+            tool_name=tool_name,
+            server_name=server_name,
+            success=False,
+            duration_seconds=duration,
+            method=request.method
+        )
+        
         return JSONResponse(
             status_code=502,
             content={"error": "Bad gateway", "detail": str(e)}

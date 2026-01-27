@@ -3,7 +3,14 @@
   "uid": "mcp-otel-metrics",
   "title": "MCP Gateway - OTel Metrics Dashboard",
   "description": "OpenTelemetry metrics for Auth, Tool Discovery, Tool Execution, and Registry Operations",
-  "tags": ["mcp", "otel", "auth", "tools", "registry", "latency"],
+  "tags": [
+    "mcp",
+    "otel",
+    "auth",
+    "tools",
+    "registry",
+    "latency"
+  ],
   "timezone": "browser",
   "refresh": "30s",
   "time": {
@@ -18,7 +25,12 @@
       "id": 100,
       "title": "Auth Request Rate & Success Rate",
       "type": "row",
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "collapsed": false
     },
     {
@@ -39,9 +51,22 @@
           "legendFormat": "Total"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 1},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "last"]}
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "last"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -55,16 +80,49 @@
         },
         "overrides": [
           {
-            "matcher": {"id": "byName", "options": "Success"},
-            "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "Success"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
           },
           {
-            "matcher": {"id": "byName", "options": "Failure"},
-            "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "Failure"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
           },
           {
-            "matcher": {"id": "byName", "options": "Total"},
-            "properties": [{"id": "color", "value": {"fixedColor": "blue", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "Total"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       }
@@ -79,10 +137,17 @@
           "legendFormat": "Success Rate"
         }
       ],
-      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 1},
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
       "options": {
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -97,10 +162,22 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"color": "red", "value": null},
-              {"color": "orange", "value": 90},
-              {"color": "yellow", "value": 95},
-              {"color": "green", "value": 99}
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "yellow",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
             ]
           }
         }
@@ -124,9 +201,22 @@
           "legendFormat": "P99"
         }
       ],
-      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 1},
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "last"]}
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "last"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -140,16 +230,49 @@
         },
         "overrides": [
           {
-            "matcher": {"id": "byName", "options": "P50"},
-            "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "P50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
           },
           {
-            "matcher": {"id": "byName", "options": "P95"},
-            "properties": [{"id": "color", "value": {"fixedColor": "yellow", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "P95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
           },
           {
-            "matcher": {"id": "byName", "options": "P99"},
-            "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "P99"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       }
@@ -164,15 +287,31 @@
           "legendFormat": "{{mechanism}}"
         }
       ],
-      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 9},
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 9
+      },
       "options": {
-        "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]},
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
         "pieType": "pie",
-        "tooltip": {"mode": "single"}
+        "tooltip": {
+          "mode": "single"
+        }
       },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
+          "color": {
+            "mode": "palette-classic"
+          },
           "unit": "short"
         }
       }
@@ -187,22 +326,42 @@
           "legendFormat": "{{mechanism}}"
         }
       ],
-      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 9},
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 9
+      },
       "options": {
         "orientation": "horizontal",
         "displayMode": "gradient",
-        "reduceOptions": {"calcs": ["lastNotNull"]}
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "continuous-BlYlRd"},
+          "color": {
+            "mode": "continuous-BlYlRd"
+          },
           "unit": "s",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"color": "green", "value": null},
-              {"color": "yellow", "value": 0.1},
-              {"color": "red", "value": 0.5}
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.1
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
             ]
           }
         }
@@ -212,7 +371,12 @@
       "id": 101,
       "title": "Tool Discovery Latency (P50/P95/P99)",
       "type": "row",
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 17},
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
       "collapsed": false
     },
     {
@@ -229,9 +393,22 @@
           "legendFormat": "Failure"
         }
       ],
-      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 18},
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 18
+      },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "last"]}
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "last"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -244,12 +421,34 @@
         },
         "overrides": [
           {
-            "matcher": {"id": "byName", "options": "Success"},
-            "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "Success"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
           },
           {
-            "matcher": {"id": "byName", "options": "Failure"},
-            "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "Failure"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       }
@@ -272,9 +471,22 @@
           "legendFormat": "P99"
         }
       ],
-      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 18},
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 18
+      },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "last"]}
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "last"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -288,16 +500,49 @@
         },
         "overrides": [
           {
-            "matcher": {"id": "byName", "options": "P50"},
-            "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "P50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
           },
           {
-            "matcher": {"id": "byName", "options": "P95"},
-            "properties": [{"id": "color", "value": {"fixedColor": "yellow", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "P95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
           },
           {
-            "matcher": {"id": "byName", "options": "P99"},
-            "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "P99"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       }
@@ -320,13 +565,22 @@
           "legendFormat": "P99"
         }
       ],
-      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 18},
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 18
+      },
       "options": {
         "colorMode": "value",
         "graphMode": "area",
         "justifyMode": "auto",
         "textMode": "auto",
-        "reduceOptions": {"calcs": ["lastNotNull"]}
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -334,9 +588,18 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"color": "green", "value": null},
-              {"color": "yellow", "value": 0.5},
-              {"color": "red", "value": 1}
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
             ]
           }
         }
@@ -352,14 +615,28 @@
           "legendFormat": "{{source}}"
         }
       ],
-      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 26},
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 26
+      },
       "options": {
-        "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]},
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
         "pieType": "donut"
       },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
+          "color": {
+            "mode": "palette-classic"
+          },
           "unit": "short"
         }
       }
@@ -368,7 +645,12 @@
       "id": 102,
       "title": "Tool Execution Success Rate",
       "type": "row",
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 34},
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
       "collapsed": false
     },
     {
@@ -385,9 +667,22 @@
           "legendFormat": "Failure"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 35},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 35
+      },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "last"]}
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "last"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -401,12 +696,34 @@
         },
         "overrides": [
           {
-            "matcher": {"id": "byName", "options": "Success"},
-            "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "Success"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
           },
           {
-            "matcher": {"id": "byName", "options": "Failure"},
-            "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "Failure"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       }
@@ -421,9 +738,18 @@
           "legendFormat": "Success Rate"
         }
       ],
-      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 35},
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 35
+      },
       "options": {
-        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "showThresholdLabels": false,
         "showThresholdMarkers": true
       },
@@ -435,10 +761,22 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"color": "red", "value": null},
-              {"color": "orange", "value": 90},
-              {"color": "yellow", "value": 95},
-              {"color": "green", "value": 99}
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "yellow",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
             ]
           }
         }
@@ -462,9 +800,22 @@
           "legendFormat": "P99"
         }
       ],
-      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 35},
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 35
+      },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "last"]}
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "last"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -478,16 +829,49 @@
         },
         "overrides": [
           {
-            "matcher": {"id": "byName", "options": "P50"},
-            "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "P50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
           },
           {
-            "matcher": {"id": "byName", "options": "P95"},
-            "properties": [{"id": "color", "value": {"fixedColor": "yellow", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "P95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
           },
           {
-            "matcher": {"id": "byName", "options": "P99"},
-            "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "P99"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       }
@@ -501,28 +885,41 @@
           "expr": "sum(increase(mcp_tool_execution_total{status=\"success\"}[1h])) by (server_name)",
           "legendFormat": "{{server_name}}",
           "format": "table",
-          "instant": true
+          "instant": true,
+          "refId": "A"
         },
         {
           "expr": "sum(increase(mcp_tool_execution_total{status=\"failure\"}[1h])) by (server_name)",
           "legendFormat": "{{server_name}}_failures",
           "format": "table",
-          "instant": true
+          "instant": true,
+          "refId": "B"
         },
         {
-          "expr": "sum(rate(mcp_tool_execution_total{status=\"success\"}[5m])) by (server_name) / sum(rate(mcp_tool_execution_total[5m])) by (server_name) * 100",
+          "expr": "sum by (server_name) (increase(mcp_tool_execution_total{status=\"success\"}[1h])) / (sum by (server_name) (increase(mcp_tool_execution_total{status=\"success\"}[1h])) + sum by (server_name) (increase(mcp_tool_execution_total{status=\"failure\"}[1h])) + 0.0001) * 100",
           "legendFormat": "{{server_name}}_success_rate",
           "format": "table",
-          "instant": true
+          "instant": true,
+          "refId": "C"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 43},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 43
+      },
       "transformations": [
-        {"id": "merge", "options": {}},
+        {
+          "id": "merge",
+          "options": {}
+        },
         {
           "id": "organize",
           "options": {
-            "excludeByName": {"Time": true},
+            "excludeByName": {
+              "Time": true
+            },
             "renameByName": {
               "server_name": "Server",
               "Value #A": "Successes (1h)",
@@ -535,11 +932,45 @@
       "fieldConfig": {
         "overrides": [
           {
-            "matcher": {"id": "byName", "options": "Success Rate %"},
+            "matcher": {
+              "id": "byName",
+              "options": "Success Rate %"
+            },
             "properties": [
-              {"id": "unit", "value": "percent"},
-              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 90}, {"color": "green", "value": 99}]}},
-              {"id": "custom.cellOptions", "value": {"type": "color-background"}}
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 90
+                    },
+                    {
+                      "color": "green",
+                      "value": 99
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              }
             ]
           }
         ]
@@ -555,15 +986,26 @@
           "legendFormat": "{{tool_name}}"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 43},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 43
+      },
       "options": {
         "orientation": "horizontal",
         "displayMode": "gradient",
-        "reduceOptions": {"calcs": ["lastNotNull"]}
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "continuous-BlPu"},
+          "color": {
+            "mode": "continuous-BlPu"
+          },
           "unit": "short"
         }
       }
@@ -572,7 +1014,12 @@
       "id": 103,
       "title": "Registry Operation Latency",
       "type": "row",
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 51},
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 51
+      },
       "collapsed": false
     },
     {
@@ -589,9 +1036,22 @@
           "legendFormat": "{{operation}} (failure)"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 52},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 52
+      },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "last"]}
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "last"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -623,9 +1083,22 @@
           "legendFormat": "P99"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 52},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 52
+      },
       "options": {
-        "legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "last"]}
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "last"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -639,16 +1112,49 @@
         },
         "overrides": [
           {
-            "matcher": {"id": "byName", "options": "P50"},
-            "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "P50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
           },
           {
-            "matcher": {"id": "byName", "options": "P95"},
-            "properties": [{"id": "color", "value": {"fixedColor": "yellow", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "P95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
           },
           {
-            "matcher": {"id": "byName", "options": "P99"},
-            "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]
+            "matcher": {
+              "id": "byName",
+              "options": "P99"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       }
@@ -663,22 +1169,42 @@
           "legendFormat": "{{operation}}"
         }
       ],
-      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 60},
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 60
+      },
       "options": {
         "orientation": "horizontal",
         "displayMode": "gradient",
-        "reduceOptions": {"calcs": ["lastNotNull"]}
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "continuous-BlYlRd"},
+          "color": {
+            "mode": "continuous-BlYlRd"
+          },
           "unit": "s",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"color": "green", "value": null},
-              {"color": "yellow", "value": 0.1},
-              {"color": "red", "value": 0.5}
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.1
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
             ]
           }
         }
@@ -694,14 +1220,28 @@
           "legendFormat": "{{resource_type}}"
         }
       ],
-      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 60},
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 60
+      },
       "options": {
-        "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]},
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
         "pieType": "donut"
       },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
+          "color": {
+            "mode": "palette-classic"
+          },
           "unit": "short"
         }
       }
@@ -724,36 +1264,98 @@
           "legendFormat": "P95 Latency"
         }
       ],
-      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 60},
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 60
+      },
       "options": {
         "colorMode": "value",
         "graphMode": "area",
         "justifyMode": "auto",
         "textMode": "auto",
-        "reduceOptions": {"calcs": ["lastNotNull"]}
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"color": "blue", "value": null}
+              {
+                "color": "blue",
+                "value": null
+              }
             ]
           }
         },
         "overrides": [
           {
-            "matcher": {"id": "byName", "options": "Success Rate"},
+            "matcher": {
+              "id": "byName",
+              "options": "Success Rate"
+            },
             "properties": [
-              {"id": "unit", "value": "percent"},
-              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 95}, {"color": "green", "value": 99}]}}
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 95
+                    },
+                    {
+                      "color": "green",
+                      "value": 99
+                    }
+                  ]
+                }
+              }
             ]
           },
           {
-            "matcher": {"id": "byName", "options": "P95 Latency"},
+            "matcher": {
+              "id": "byName",
+              "options": "P95 Latency"
+            },
             "properties": [
-              {"id": "unit", "value": "s"},
-              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.1}, {"color": "red", "value": 0.5}]}}
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 0.1
+                    },
+                    {
+                      "color": "red",
+                      "value": 0.5
+                    }
+                  ]
+                }
+              }
             ]
           }
         ]
@@ -763,7 +1365,12 @@
       "id": 104,
       "title": "Summary Statistics",
       "type": "row",
-      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 68},
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 68
+      },
       "collapsed": false
     },
     {
@@ -788,50 +1395,162 @@
           "legendFormat": "Registry P95 (ms)"
         }
       ],
-      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 69},
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 69
+      },
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "center",
         "textMode": "auto",
-        "reduceOptions": {"calcs": ["lastNotNull"]}
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
       },
       "fieldConfig": {
         "defaults": {
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {"color": "green", "value": null}
+              {
+                "color": "green",
+                "value": null
+              }
             ]
           }
         },
         "overrides": [
           {
-            "matcher": {"id": "byName", "options": "Auth Success %"},
+            "matcher": {
+              "id": "byName",
+              "options": "Auth Success %"
+            },
             "properties": [
-              {"id": "unit", "value": "percent"},
-              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 95}, {"color": "green", "value": 99}]}}
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 95
+                    },
+                    {
+                      "color": "green",
+                      "value": 99
+                    }
+                  ]
+                }
+              }
             ]
           },
           {
-            "matcher": {"id": "byName", "options": "Execution Success %"},
+            "matcher": {
+              "id": "byName",
+              "options": "Execution Success %"
+            },
             "properties": [
-              {"id": "unit", "value": "percent"},
-              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 95}, {"color": "green", "value": 99}]}}
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 95
+                    },
+                    {
+                      "color": "green",
+                      "value": 99
+                    }
+                  ]
+                }
+              }
             ]
           },
           {
-            "matcher": {"id": "byName", "options": "Discovery P95 (ms)"},
+            "matcher": {
+              "id": "byName",
+              "options": "Discovery P95 (ms)"
+            },
             "properties": [
-              {"id": "unit", "value": "ms"},
-              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 100}, {"color": "red", "value": 500}]}}
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 100
+                    },
+                    {
+                      "color": "red",
+                      "value": 500
+                    }
+                  ]
+                }
+              }
             ]
           },
           {
-            "matcher": {"id": "byName", "options": "Registry P95 (ms)"},
+            "matcher": {
+              "id": "byName",
+              "options": "Registry P95 (ms)"
+            },
             "properties": [
-              {"id": "unit", "value": "ms"},
-              {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 100}, {"color": "red", "value": 500}]}}
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 100
+                    },
+                    {
+                      "color": "red",
+                      "value": 500
+                    }
+                  ]
+                }
+              }
             ]
           }
         ]
