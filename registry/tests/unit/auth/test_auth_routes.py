@@ -10,7 +10,6 @@ from itsdangerous import URLSafeTimedSerializer
 
 from registry.api.redirect_routes import (
     get_oauth2_providers,
-    login_form,
     oauth2_login_redirect,
     oauth2_callback,
     login_submit
@@ -110,42 +109,43 @@ class TestAuthRoutes:
             
             assert providers == []
 
-    @pytest.mark.asyncio
-    async def test_login_form_success(self, mock_request, mock_templates):
-        """Test login form rendering."""
-        mock_providers = [{"name": "google", "display_name": "Google"}]
-        
-        with patch('registry.api.redirect_routes.get_oauth2_providers') as mock_get_providers:
-            mock_get_providers.return_value = mock_providers
-            mock_templates.TemplateResponse.return_value = HTMLResponse("login form")
-            
-            response = await login_form(mock_request)
-            
-            mock_templates.TemplateResponse.assert_called_once_with(
-                "login.html",
-                {
-                    "request": mock_request,
-                    "error": None,
-                    "oauth_providers": mock_providers
-                }
-            )
+    # login_form endpoint was removed in refactoring
+    # @pytest.mark.asyncio
+    # async def test_login_form_success(self, mock_request, mock_templates):
+    #     """Test login form rendering."""
+    #     mock_providers = [{"name": "google", "display_name": "Google"}]
+    #     
+    #     with patch('registry.api.redirect_routes.get_oauth2_providers') as mock_get_providers:
+    #         mock_get_providers.return_value = mock_providers
+    #         mock_templates.TemplateResponse.return_value = HTMLResponse("login form")
+    #         
+    #         response = await login_form(mock_request)
+    #         
+    #         mock_templates.TemplateResponse.assert_called_once_with(
+    #             "login.html",
+    #             {
+    #                 "request": mock_request,
+    #                 "error": None,
+    #                 "oauth_providers": mock_providers
+    #             }
+    #         )
 
-    @pytest.mark.asyncio
-    async def test_login_form_with_error(self, mock_request, mock_templates):
-        """Test login form rendering with error message."""
-        with patch('registry.api.redirect_routes.get_oauth2_providers') as mock_get_providers:
-            mock_get_providers.return_value = []
-            
-            response = await login_form(mock_request, error="Invalid credentials")
-            
-            mock_templates.TemplateResponse.assert_called_once_with(
-                "login.html",
-                {
-                    "request": mock_request,
-                    "error": "Invalid credentials",
-                    "oauth_providers": []
-                }
-            )
+    # @pytest.mark.asyncio
+    # async def test_login_form_with_error(self, mock_request, mock_templates):
+    #     """Test login form rendering with error message."""
+    #     with patch('registry.api.redirect_routes.get_oauth2_providers') as mock_get_providers:
+    #         mock_get_providers.return_value = []
+    #         
+    #         response = await login_form(mock_request, error="Invalid credentials")
+    #         
+    #         mock_templates.TemplateResponse.assert_called_once_with(
+    #             "login.html",
+    #             {
+    #                 "request": mock_request,
+    #                 "error": "Invalid credentials",
+    #                 "oauth_providers": []
+    #             }
+    #         )
 
     @pytest.mark.asyncio
     async def test_oauth2_login_redirect_success(self, mock_request, mock_settings):

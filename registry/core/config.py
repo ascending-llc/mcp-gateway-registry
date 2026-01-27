@@ -6,6 +6,35 @@ from typing import Optional
 from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
+from redis import Redis
+from registry.constants import REGISTRY_CONSTANTS
+
+def init_redis_connection() -> Redis:
+    """
+    Initialize Redis connection
+    """
+    redis_url = REGISTRY_CONSTANTS.REDIS_URI
+    from registry.utils.log import logger
+    try:
+        # Create Redis client with connection pooling
+        redis_conn = Redis.from_url(
+            redis_url,
+            decode_responses=True,
+            socket_connect_timeout=5,
+            socket_timeout=5,
+            retry_on_timeout=True,
+            health_check_interval=30,
+            max_connections=50
+        )
+        # Test connection
+        redis_conn.ping()
+        logger.info(f"Successfully connected to Redis: {redis_url}")
+        return redis_conn
+
+    except Exception as e:
+        logger.error(f"Failed to connect to Redis at {redis_url}: {e}")
+        raise RuntimeError(f"Redis connection failed: {e}")
+
 
 class Settings(BaseSettings):
     """Application settings with environment variable support."""
@@ -116,32 +145,6 @@ class Settings(BaseSettings):
         if self.is_local_dev:
             return Path.cwd() / "registry" / "models" / self.embeddings_model_name
         return self.container_registry_dir / "models" / self.embeddings_model_name
-
-    @property
-    def servers_dir(self) -> Path:
-        if self.is_local_dev:
-            return Path.cwd() / "registry" / "servers"
-        return self.container_registry_dir / "servers"
-
-    @property
-    def static_dir(self) -> Path:
-        if self.is_local_dev:
-            return Path.cwd() / "registry" / "static"
-        return self.container_registry_dir / "static"
-
-    @property
-    def templates_dir(self) -> Path:
-        if self.is_local_dev:
-            return Path.cwd() / "registry" / "templates"
-        return self.container_registry_dir / "templates"
-
-    @property
-    def nginx_config_path(self) -> Path:
-        return Path("/etc/nginx/conf.d/nginx_rev_proxy.conf")
-
-    @property
-    def state_file_path(self) -> Path:
-        return self.servers_dir / "server_state.json"
 
     @property
     def log_dir(self) -> Path:
