@@ -91,40 +91,6 @@ services:
     profiles:
       - full
   
-  # Metrics Collection Service
-  metrics-service:
-    build:
-      context: metrics-service
-      dockerfile: Dockerfile
-    environment:
-      - METRICS_SERVICE_PORT=8890
-      - METRICS_SERVICE_HOST=0.0.0.0
-      - SQLITE_DB_PATH=/var/lib/sqlite/metrics.db
-      - METRICS_RETENTION_DAYS=90
-      - METRICS_API_KEY_AUTH=${METRICS_API_KEY_AUTH_SERVER}
-      - METRICS_API_KEY_REGISTRY=${METRICS_API_KEY_REGISTRY}
-      - METRICS_API_KEY_MCPGW=${METRICS_API_KEY_MCPGW_SERVER}
-      - OTEL_SERVICE_NAME=mcp-metrics-service
-      - OTEL_PROMETHEUS_ENABLED=true
-      - OTEL_PROMETHEUS_PORT=9465
-      - METRICS_RATE_LIMIT=1000
-    ports:
-      - "8890:8890"
-      - "9465:9465"  # Prometheus metrics endpoint
-    volumes:
-      - metrics-db-data:/var/lib/sqlite
-      - ${APP_HOME}/mcp-gateway/logs:/app/logs
-    depends_on:
-      - metrics-db
-    restart: unless-stopped
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8890/health" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    profiles:
-      - full
-
   # MongoDB Database
   registry-mongodb:
     container_name: registry-mongodb
