@@ -5,13 +5,13 @@ from registry.auth.dependencies import CurrentUser
 from registry.services.oauth.mcp_service import MCPService, get_mcp_service
 from registry.schemas.enums import ConnectionState
 from registry.utils.log import logger
-from registry.services.server_service_v1 import server_service_v1
+from registry.services.server_service import server_service_v1
 from registry.services.oauth.connection_status_service import (
     get_servers_connection_status,
     get_single_server_connection_status
 )
 
-router = APIRouter(prefix="/v1/mcp", tags=["connection"])
+router = APIRouter(prefix="/mcp", tags=["connection"])
 
 
 @router.post("/{server_id}/reinitialize")

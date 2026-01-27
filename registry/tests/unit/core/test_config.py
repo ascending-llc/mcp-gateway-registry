@@ -45,6 +45,7 @@ class TestSettings:
         
         assert settings.secret_key == custom_key
 
+    @pytest.mark.skip(reason="servers_dir removed in PR-113 (MongoDB migration)")
     @patch.dict(os.environ, {}, clear=True)
     @patch('pathlib.Path.exists')
     def test_path_properties(self, mock_exists):
@@ -64,6 +65,7 @@ class TestSettings:
         assert settings.templates_dir == settings.container_registry_dir / "templates"
         assert settings.embeddings_model_dir == settings.container_registry_dir / "models" / settings.embeddings_model_name
 
+    @pytest.mark.skip(reason="state_file_path, faiss paths removed in PR-113 (MongoDB migration)")
     @patch.dict(os.environ, {}, clear=True)
     @patch('pathlib.Path.exists')
     def test_file_path_properties(self, mock_exists):
@@ -78,6 +80,7 @@ class TestSettings:
         assert settings.faiss_metadata_path == settings.servers_dir / "service_index_metadata.json"
         assert settings.dotenv_path == settings.container_registry_dir / ".env"
 
+    @pytest.mark.skip(reason="nginx_config_path removed in PR-113")
     @patch.dict(os.environ, {}, clear=True)
     def test_nginx_config_path(self):
         """Test nginx configuration path."""
@@ -108,6 +111,7 @@ class TestSettings:
             settings = Settings()
             assert settings.admin_user == "lowercase_user"
 
+    @pytest.mark.skip(reason="servers_dir removed in PR-113 (MongoDB migration)")
     @patch.dict(os.environ, {}, clear=True)
     @patch('pathlib.Path.exists')
     def test_custom_container_paths(self, mock_exists):

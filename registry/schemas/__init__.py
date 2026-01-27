@@ -19,6 +19,12 @@ from .agent_models import (
     AgentInfo,
     AgentRegistrationRequest,
 )
+from .errors import (
+    APIErrorDetail,
+    APIErrorResponse,
+    ErrorCode,
+    create_error_detail,
+)
 
 __all__ = [
     "Repository",
@@ -36,4 +42,9 @@ __all__ = [
     "AgentCard",
     "AgentInfo",
     "AgentRegistrationRequest",
+    # Error handling
+    "APIErrorDetail",
+    "APIErrorResponse",
+    "ErrorCode",
+    "create_error_detail",
 ]

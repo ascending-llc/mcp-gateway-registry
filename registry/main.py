@@ -20,11 +20,9 @@ from fastapi.staticfiles import StaticFiles
 # Import domain routers
 from registry.api.v1.meta_routes import router as meta_router
 from registry.api.server_routes import router as servers_router
-from registry.api.v1.server_routes import router as servers_router_v1
-from registry.api.internal_routes import router as internal_router
+from registry.api.v1.server.server_routes import router as servers_router_v1
 from registry.api.v1.search_routes import router as search_router
 from registry.api.wellknown_routes import router as wellknown_router
-from registry.api.registry_routes import router as registry_router
 from registry.api.agent_routes import router as agent_router
 from registry.api.management_routes import router as management_router
 from registry.health.routes import router as health_router
@@ -37,7 +35,6 @@ from registry.auth.dependencies import CurrentUser
 from packages.models._generated import IUser
 
 # Import services for initialization
-from registry.services.server_service import server_service
 from registry.services.agent_service import agent_service
 from registry.health.service import health_service
 from registry.services.federation_service import get_federation_service
@@ -56,28 +53,12 @@ async def lifespan(app: FastAPI):
         logger.info("🗄️  Initializing MongoDB connection...")
         await init_mongodb()
         logger.info("✅ MongoDB connection established")
-
-        # Initialize services in order
-        logger.info("📚 Loading server definitions and state...")
-        server_service.load_servers_and_state()
-
         logger.info("🔍 Initializing vector search service...")
         await vector_service.initialize()
 
         # Only update index if service initialized successfully
         if hasattr(vector_service, '_initialized') and vector_service._initialized:
             logger.info("📊 Updating vector search index with all registered services...")
-            all_servers = server_service.get_all_servers()
-            for service_path, server_info in all_servers.items():
-                is_enabled = server_service.is_service_enabled(service_path)
-                try:
-                    await vector_service.add_or_update_service(service_path, server_info, is_enabled)
-                    logger.debug(f"Updated vector search index for service: {service_path}")
-                except Exception as e:
-                    logger.warning(f"Failed to update index for service {service_path}: {e}")
-
-            logger.info(f"✅ Vector index updated with {len(all_servers)} services")
-
             logger.info("📋 Loading agent cards and state...")
             agent_service.load_agents_and_state()
             logger.info("📊 Updating vector index with all registered agents...")
@@ -209,17 +190,15 @@ else:
 app.include_router(meta_router, prefix="/api/auth", tags=["Authentication metadata"])
 app.include_router(servers_router, prefix="/api", tags=["Server Management"])
 app.include_router(servers_router_v1, prefix=f"/api/{settings.API_VERSION}", tags=["Server Management V1"])
-app.include_router(internal_router, prefix="/api", tags=["Server Management[internal]"])
 app.include_router(agent_router, prefix="/api", tags=["Agent Management"])
 app.include_router(management_router, prefix="/api")
 app.include_router(search_router, prefix=f"/api/{settings.API_VERSION}", tags=["Semantic Search"])
 app.include_router(health_router, prefix="/api/health", tags=["Health Monitoring"])
-app.include_router(oauth_router, prefix="/api", tags=["MCP  Oauth Management"])
-app.include_router(connection_router, prefix="/api", tags=["MCP  Connection Management"])
+app.include_router(oauth_router, prefix=f"/api/{settings.API_VERSION}", tags=["MCP  Oauth Management"])
+app.include_router(connection_router, prefix=f"/api/{settings.API_VERSION}", tags=["MCP  Connection Management"])
 app.include_router(auth_provider_router, tags=["Authentication"])
 
 # Register Anthropic MCP Registry API (public API for MCP servers only)
-app.include_router(registry_router, tags=["Anthropic Registry API"])
 
 # Register well-known discovery router
 app.include_router(wellknown_router, prefix="/.well-known", tags=["Discovery"])

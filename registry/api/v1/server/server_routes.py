@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, status as http_status, Depends
 from pydantic import ValidationError
 
 from registry.auth.dependencies import CurrentUser
-from registry.services.server_service_v1 import server_service_v1
+from registry.services.server_service import server_service_v1
 from registry.services.oauth.mcp_service import get_mcp_service
 from registry.services.oauth.connection_status_service import (
     get_servers_connection_status,
@@ -553,8 +553,8 @@ async def refresh_server_health(
     """Refresh server health status. Updates tools if server becomes active."""
     try:
         # Get user_id from context for OAuth token retrieval
-        user_id = user_context.get("username") or user_context.get("user_id")
-        
+        user_id = user_context.get("user_id") or user_context.get("username")
+
         health_info = await server_service_v1.refresh_server_health(
             server_id=server_id,
             user_id=user_id,

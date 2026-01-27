@@ -7,7 +7,6 @@ from fastapi import APIRouter, Request
 
 from registry.services.search.service import faiss_service
 from packages.vector.enum.enums import SearchType
-from ...services.server_service import server_service
 from ...services.agent_service import agent_service
 
 logger = logging.getLogger(__name__)
@@ -77,33 +76,6 @@ class SemanticSearchResponse(BaseModel):
     total_tools: int = 0
     total_agents: int = 0
 
-
-def _user_can_access_server(path: str, server_name: str, user_context: dict) -> bool:
-    """Validate whether the current user can view the specified server."""
-    if user_context.get("is_admin"):
-        return True
-
-    accessible_servers = user_context.get("accessible_servers") or []
-    if "all" in accessible_servers:
-        return True
-
-    if not accessible_servers:
-        return False
-
-    try:
-        if server_service.user_can_access_server_path(path, accessible_servers):
-            return True
-    except Exception:
-        # Fall through to string comparisons if server lookup failed
-        logger.debug("Unable to validate server path via service for %s", path, exc_info=True)
-
-    technical_name = path.strip("/")
-    return (
-            technical_name in accessible_servers
-            or (server_name and server_name in accessible_servers)
-    )
-
-
 def _user_can_access_agent(agent_path: str, user_context: dict) -> bool:
     """Validate user access for a given agent."""
     if user_context.get("is_admin"):
@@ -172,13 +144,6 @@ async def semantic_search(
 
     filtered_servers: List[ServerSearchResult] = []
     for server in raw_results.get("servers", []):
-        if not _user_can_access_server(
-                server.get("path", ""),
-                server.get("server_name", ""),
-                user_context,
-        ):
-            continue
-
         matching_tools = [
             MatchingToolResult(
                 tool_name=tool.get("tool_name", ""),
@@ -207,9 +172,6 @@ async def semantic_search(
     for tool in raw_results.get("tools", []):
         server_path = tool.get("server_path", "")
         server_name = tool.get("server_name", "")
-        if not _user_can_access_server(server_path, server_name, user_context):
-            continue
-
         filtered_tools.append(
             ToolSearchResult(
                 server_path=server_path,

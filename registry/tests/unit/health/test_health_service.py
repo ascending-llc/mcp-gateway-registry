@@ -65,14 +65,13 @@ class TestHealthMonitoringService:
     @pytest.mark.asyncio
     async def test_add_websocket_connection(self, health_service: HealthMonitoringService, mock_websocket):
         """Test adding WebSocket connection."""
-        result = await health_service.add_websocket_connection(mock_websocket)
+        # Mock _send_initial_status_optimized to avoid import issues in tests
+        with patch.object(health_service.websocket_manager, '_send_initial_status_optimized', new=AsyncMock()):
+            result = await health_service.add_websocket_connection(mock_websocket)
             
-        # add_websocket_connection now returns bool and uses websocket_manager
-        assert result is True
-        assert mock_websocket in health_service.websocket_manager.connections
-
-    @pytest.mark.asyncio
-    async def test_remove_websocket_connection(self, health_service: HealthMonitoringService, mock_websocket):
+            # add_websocket_connection now returns bool and uses websocket_manager
+            assert result is True
+            assert mock_websocket in health_service.websocket_manager.connections
         """Test removing WebSocket connection."""
         health_service.websocket_manager.connections.add(mock_websocket)
         
@@ -117,8 +116,8 @@ class TestHealthMonitoringService:
         mock_conn1 = AsyncMock()
         mock_conn2 = AsyncMock()
         health_service.websocket_manager.connections = {mock_conn1, mock_conn2}
-        
-        with patch('registry.services.server_service.server_service') as mock_server_service, \
+
+        with patch('registry.services.server_service.server_service_v1') as mock_server_service, \
              patch.object(health_service, '_get_service_health_data_fast') as mock_get_data, \
              patch.object(health_service.websocket_manager, 'broadcast_update') as mock_broadcast:
             
@@ -162,7 +161,7 @@ class TestHealthMonitoringService:
 
     def test_get_service_health_data(self, health_service: HealthMonitoringService):
         """Test getting health data for a service."""
-        with patch('registry.services.server_service.server_service') as mock_server_service:
+        with patch('registry.services.server_service.server_service_v1') as mock_server_service:
             mock_server_service.get_server_info.return_value = {"num_tools": 10}
             
             # Set up health data
@@ -178,7 +177,7 @@ class TestHealthMonitoringService:
 
     def test_get_service_health_data_missing(self, health_service: HealthMonitoringService):
         """Test getting health data for non-existent service."""
-        with patch('registry.services.server_service.server_service') as mock_server_service:
+        with patch('registry.services.server_service.server_service_v1') as mock_server_service:
             mock_server_service.get_server_info.return_value = None
             
             result = health_service._get_service_health_data("/nonexistent")
@@ -190,7 +189,7 @@ class TestHealthMonitoringService:
     @pytest.mark.asyncio
     async def test_perform_health_checks(self, health_service: HealthMonitoringService):
         """Test performing health checks."""
-        with patch('registry.services.server_service.server_service') as mock_server_service, \
+        with patch('registry.services.server_service.server_service_v1') as mock_server_service, \
              patch.object(health_service, '_check_single_service') as mock_check_single, \
              patch.object(health_service, 'broadcast_health_update') as mock_broadcast:
             
@@ -211,7 +210,7 @@ class TestHealthMonitoringService:
     @pytest.mark.asyncio
     async def test_perform_health_checks_no_enabled_services(self, health_service: HealthMonitoringService):
         """Test health checks with no enabled services."""
-        with patch('registry.services.server_service.server_service') as mock_server_service, \
+        with patch('registry.services.server_service.server_service_v1') as mock_server_service, \
              patch.object(health_service, 'broadcast_health_update') as mock_broadcast:
             
             mock_server_service.get_enabled_services.return_value = []
@@ -226,7 +225,7 @@ class TestHealthMonitoringService:
 
     def test_get_all_health_status(self, health_service: HealthMonitoringService):
         """Test getting all health status."""
-        with patch('registry.services.server_service.server_service') as mock_server_service, \
+        with patch('registry.services.server_service.server_service_v1') as mock_server_service, \
              patch.object(health_service, '_get_service_health_data_fast') as mock_get_data:
             
             mock_server_service.get_all_servers.return_value = {

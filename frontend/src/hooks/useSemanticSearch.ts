@@ -110,7 +110,7 @@ export const useSemanticSearch = (query: string, options: UseSemanticSearchOptio
       setError(null);
       try {
         const response = await axios.post<SemanticSearchResponse>(
-          '/api/search/semantic',
+          '/api/v1/search/semantic',
           {
             query: debouncedQuery,
             entity_types: entityTypes,

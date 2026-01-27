@@ -73,7 +73,7 @@ class TestProxyToolExecutionRoutes:
         }
         mock_response.raise_for_status = Mock()
         
-        with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", 
+        with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
              patch("httpx.AsyncClient") as mock_client_cls:
             
@@ -126,7 +126,7 @@ class TestProxyToolExecutionRoutes:
         mock_response.text = sse_content
         mock_response.raise_for_status = Mock()
         
-        with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", 
+        with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
              patch("httpx.AsyncClient") as mock_client_cls:
             
@@ -155,7 +155,7 @@ class TestProxyToolExecutionRoutes:
 
     def test_execute_tool_server_not_found(self, test_client: TestClient):
         """Tool execution fails when server not found."""
-        with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", 
+        with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server:
             
             mock_get_server.return_value = None
@@ -178,7 +178,7 @@ class TestProxyToolExecutionRoutes:
         mock_server.path = "/tavilysearch"
         mock_server.config = {}  # Missing url
         
-        with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", 
+        with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server:
             
             mock_get_server.return_value = mock_server
@@ -202,7 +202,7 @@ class TestProxyToolExecutionRoutes:
         mock_server.path = "/tavilysearch"
         mock_server.config = {"url": "http://localhost:8080/mcp"}
         
-        with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", 
+        with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
              patch("httpx.AsyncClient") as mock_client_cls:
             
@@ -254,7 +254,7 @@ class TestProxyToolExecutionRoutes:
         mock_response.json.return_value = {"jsonrpc": "2.0", "id": 1, "result": {}}
         mock_response.raise_for_status = Mock()
         
-        with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", 
+        with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
              patch("httpx.AsyncClient") as mock_client_cls, \
              patch("registry.api.proxy_routes.decrypt_auth_fields") as mock_decrypt, \
@@ -304,7 +304,7 @@ class TestProxyToolExecutionRoutes:
             captured_headers.update(kwargs.get("headers", {}))
             return mock_response
         
-        with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", 
+        with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
              patch("httpx.AsyncClient") as mock_client_cls:
             
@@ -354,7 +354,7 @@ class TestProxyToolExecutionRoutes:
             captured_json.update(kwargs.get("json", {}))
             return mock_response
         
-        with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", 
+        with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
              patch("httpx.AsyncClient") as mock_client_cls:
             
@@ -396,7 +396,7 @@ class TestProxyToolExecutionRoutes:
         mock_server.path = "/tavilysearch"
         mock_server.config = {"url": "http://localhost:8080/mcp"}
         
-        with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", 
+        with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
              patch("httpx.AsyncClient") as mock_client_cls:
             

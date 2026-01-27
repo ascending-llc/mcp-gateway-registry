@@ -96,7 +96,12 @@ const ServerCard: React.FC<ServerCardProps> = ({
       try {
         const result = await SERVICES.MCP.getOauthReinit(server.id);
         if (result.success) {
-          getServerStatusByPolling(server.id);
+          getServerStatusByPolling(server.id, state => {
+            if (state === SERVER_CONNECTION.DISCONNECTED || state === SERVER_CONNECTION.ERROR) {
+              cancelPolling?.(server.id);
+              setShowApiKeyDialog(true);
+            }
+          });
         } else {
           setShowApiKeyDialog(true);
         }
