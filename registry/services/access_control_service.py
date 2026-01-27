@@ -164,13 +164,14 @@ class ACLService:
 			for entry in specific + public:
 				rtype = entry.resourceType
 				rid = str(entry.resourceId)
-				if rid not in result[rtype]:
-					result[rtype][rid] = {
-						"VIEW": entry.permBits >= PermissionBits.VIEW,
-						"EDIT": entry.permBits >= PermissionBits.EDIT,
-						"DELETE": entry.permBits >= PermissionBits.DELETE,
-						"SHARE": entry.permBits >= PermissionBits.SHARE,
-					}
+				if rid in result[rtype]:
+					continue
+				result[rtype][rid] = {
+					"VIEW": entry.permBits >= PermissionBits.VIEW,
+					"EDIT": entry.permBits >= PermissionBits.EDIT,
+					"DELETE": entry.permBits >= PermissionBits.DELETE,
+					"SHARE": entry.permBits >= PermissionBits.SHARE,
+				}
 			return result
 		except Exception as e: 
 			logger.error(f"Error fetching ACL permissions map for user id: {principal_id}: {e}")
