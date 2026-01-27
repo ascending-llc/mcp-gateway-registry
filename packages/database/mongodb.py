@@ -12,7 +12,6 @@ import os
 from urllib.parse import quote_plus
 from packages.models._generated import (
     IAccessRole,
-    IAclEntry,
     IAction,
     IGroup,
     IUser,
@@ -20,6 +19,7 @@ from packages.models._generated import (
     Key
 )
 from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+from packages.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
 
 
 class MongoDB:

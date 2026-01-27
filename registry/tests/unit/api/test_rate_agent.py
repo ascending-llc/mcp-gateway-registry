@@ -4,7 +4,7 @@ Unit tests for rate_agent endpoint in agent_routes.py
 
 import pytest
 from typing import Any, Dict
-from unittest.mock import patch, Mock
+from unittest.mock import patch
 from fastapi import status
 from fastapi.testclient import TestClient
 

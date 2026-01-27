@@ -25,6 +25,7 @@ from registry.schemas.server_api_schemas import (
 )
 from registry.utils.crypto_utils import encrypt_auth_fields
 from registry.core.mcp_client import get_tools_from_server_with_server_info
+from registry.core.acl_constants import ResourceType
 from packages.vector.search_manager import mcp_tool_search_index_manager
 
 logger = logging.getLogger(__name__)
@@ -291,13 +292,14 @@ class ServerServiceV1:
         logger.info("ServerServiceV1 initialized with search index manager")
 
     async def list_servers(
-            self,
-            query: Optional[str] = None,
-            scope: Optional[str] = None,
-            status: Optional[str] = None,
-            page: int = 1,
-            per_page: int = 20,
-            user_id: Optional[str] = None,
+        self,
+        query: Optional[str] = None,
+        scope: Optional[str] = None,
+        status: Optional[str] = None,
+        page: int = 1,
+        per_page: int = 20,
+        user_id: Optional[str] = None,
+        acl_permissions_map: Dict[str, Any] = {},
     ) -> Tuple[List[MCPServerDocument], int]:
         """
         List servers with filtering and pagination.
@@ -309,7 +311,7 @@ class ServerServiceV1:
             page: Page number (min: 1)
             per_page: Items per page (min: 1, max: 100)
             user_id: Current user's ID (kept for compatibility but not used for filtering)
-            
+            acl_permissions_map: Mapping from resource type (e.g. ResourceType.MCPSERVER.value)
         Returns:
             Tuple of (servers list, total count)
         """
@@ -341,6 +343,11 @@ class ServerServiceV1:
             }
             filters.append(text_filter)
 
+        # Access control filter
+        accessible_servers = acl_permissions_map.get(ResourceType.MCPSERVER.value, {}).keys()
+        accessible_server_ids = [PydanticObjectId(sid) for sid in accessible_servers]
+        filters.append({"_id": {"$in": accessible_server_ids}})
+
         # Combine all filters
         if filters:
             query_filter = {"$and": filters} if len(filters) > 1 else filters[0]
@@ -354,13 +361,12 @@ class ServerServiceV1:
             .skip(skip) \
             .limit(per_page) \
             .to_list()
-
         return servers, total
 
     async def get_server_by_id(
-            self,
-            server_id: str,
-            user_id: Optional[str] = None,
+        self,
+        server_id: str,
+        user_id: Optional[str] = None,
     ) -> Optional[MCPServerDocument]:
         """
         Get a server by its ID.
@@ -396,9 +402,10 @@ class ServerServiceV1:
         return await MCPServerDocument.find_one({"path": path})
 
     async def create_server(
-            self,
-            data: ServerCreateRequest,
-            user_id: str,
+        self,
+        data: ServerCreateRequest,
+        user_id: str,
+        username: str
     ) -> MCPServerDocument:
         """
         Create a new server.
@@ -442,13 +449,14 @@ class ServerServiceV1:
         num_tools = len(tool_functions) if tool_functions else 0
 
         # Get or create author user reference
-        author = await IUser.find_one({"username": user_id})
+        author = await IUser.find_one({"_id": PydanticObjectId(user_id)})
+
         if not author:
             # Create a minimal user record if not exists
             now = _get_current_utc_time()
             # Generate unique email to avoid conflicts
-            email = f"{user_id}@local.mcp-gateway.internal"
-
+            email = f"{username}@local.mcp-gateway.internal"
+            
             # Check if email already exists
             existing_user = await IUser.find_one({"email": email})
             if existing_user:
@@ -457,7 +465,7 @@ class ServerServiceV1:
                 # Create user without OAuth ID fields to avoid unique index conflicts
                 # Use model_dump with exclude_none to prevent OAuth fields from being included
                 user_data = {
-                    "username": user_id,
+                    "username": username,
                     "email": email,
                     "emailVerified": False,
                     "role": "USER",
@@ -1096,6 +1104,7 @@ class ServerServiceV1:
             error_msg = f"Error: {type(e).__name__} - {str(e)}"
             logger.error(f"Retrieval error for server {server.serverName}: {e}")
             return None, None, error_msg
+
 
     async def retrieve_tools_from_server(
             self,
