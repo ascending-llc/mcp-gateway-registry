@@ -14,6 +14,10 @@ def setup_logging():
     # Define log file path
     log_file = log_dir / "registry.log"
 
+    # Get log level from settings
+    log_level_str = settings.LOG_LEVEL.upper()
+    log_level = getattr(logging, log_level_str, logging.INFO)
+
     # Create formatters
     file_formatter = logging.Formatter(
         '%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
@@ -25,7 +29,7 @@ def setup_logging():
 
     # Get root logger
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
+    root_logger.setLevel(log_level)
 
     # Remove any existing handlers
     for handler in root_logger.handlers[:]:
@@ -33,7 +37,7 @@ def setup_logging():
 
     # File handler with UTF-8 encoding
     file_handler = logging.FileHandler(log_file, encoding='utf-8')
-    file_handler.setLevel(logging.INFO)
+    file_handler.setLevel(log_level)
     file_handler.setFormatter(file_formatter)
 
     # Console handler with UTF-8 encoding for Windows compatibility
@@ -47,7 +51,7 @@ def setup_logging():
             pass
     
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(log_level)
     console_handler.setFormatter(console_formatter)
 
     # Add handlers to root logger

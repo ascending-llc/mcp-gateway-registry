@@ -5,7 +5,7 @@ from registry.auth.oauth import OAuthHttpClient, get_flow_state_manager, FlowSta
 from registry.models.oauth_models import OAuthTokens
 from registry.schemas.enums import OAuthFlowStatus
 from registry.utils.utils import generate_code_verifier, generate_code_challenge
-from registry.services.server_service_v1 import server_service_v1 as server_service
+from registry.services.server_service import server_service_v1 as server_service
 from registry.services.oauth.token_service import token_service
 
 from registry.utils.log import logger
@@ -180,8 +180,7 @@ class MCPOAuthService:
     async def get_valid_access_token(
             self,
             user_id: str,
-            server_id: str,
-            server_name: str
+            server: MCPServerDocument,
     ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """
         Get valid access token with automatic refresh and re-authentication flow
@@ -193,9 +192,8 @@ class MCPOAuthService:
         
         Args:
             user_id: User ID
-            server_id: Server ID (for OAuth flow initiation)
-            server_name: Server name (for token lookup)
-            
+            server: MCPServer document
+
         Returns:
             Tuple of (access_token, auth_url, error_message)
             - (token, None, None) if token is valid or refreshed successfully
@@ -203,42 +201,44 @@ class MCPOAuthService:
             - (None, None, error) if an error occurred
         """
         try:
+            server_name = server.serverName
+
             # 1. Check if access token exists and is not expired
             is_expired = await token_service.is_access_token_expired(user_id, server_name)
-            
+
             if not is_expired:
                 tokens = await token_service.get_oauth_tokens(user_id, server_name)
                 if tokens and tokens.access_token:
                     logger.debug(f"Using existing valid access token for {user_id}/{server_name}")
                     return tokens.access_token, None, None
-            
+
             logger.info(f"Access token expired or missing for {user_id}/{server_name}, attempting refresh")
-            
+
             # 2. Try refresh token if access token is expired/missing
             has_refresh = await token_service.has_refresh_token(user_id, server_name)
-            
+
             if has_refresh:
-                success, error = await self.refresh_tokens(user_id, server_id)
-                
+                success, error = await self.validate_and_refresh_tokens(user_id, server)
+
                 if success:
                     tokens = await token_service.get_oauth_tokens(user_id, server_name)
                     if tokens and tokens.access_token:
                         logger.info(f"Successfully refreshed access token for {user_id}/{server_name}")
                         return tokens.access_token, None, None
-                
+
                 logger.warning(f"Token refresh failed for {user_id}/{server_name}: {error}")
             else:
                 logger.info(f"No refresh token available for {user_id}/{server_name}")
-            
+
             # 3. Both access and refresh failed - initiate new OAuth flow
             logger.info(f"Initiating new OAuth flow for {user_id}/{server_name}")
-            flow_id, auth_url, flow_error = await self.initiate_oauth_flow(user_id, server_id)
-            
+            flow_id, auth_url, flow_error = await self.initiate_oauth_flow(user_id, server)
+
             if flow_error:
                 return None, None, f"Failed to initiate OAuth flow: {flow_error}"
-            
+
             return None, auth_url, None
-            
+
         except Exception as e:
             logger.error(f"Error getting valid access token: {e}", exc_info=True)
             return None, None, str(e)
@@ -374,7 +374,7 @@ class MCPOAuthService:
     async def validate_and_refresh_tokens(
             self,
             user_id: str,
-            server_id: str
+            mcp_server: MCPServerDocument
     ) -> Tuple[bool, Optional[str]]:
         """
         Validate and refresh OAuth tokens (with token retrieval and validation)
@@ -383,14 +383,9 @@ class MCPOAuthService:
         For internal use with pre-validated tokens, use refresh_token() instead.
         """
         try:
-            logger.info(f"[OAuth] Validating and refreshing tokens for user={user_id}, server={server_id}")
-
-            # 1. Get server OAuth config
-            mcp_server = await server_service.get_server_by_id(server_id)
-            if not mcp_server:
-                return False, f"Server '{server_id}' not found"
-
+            logger.info(f"[OAuth] Validating and refreshing tokens for user={user_id}, server={mcp_server}")
             server_name = mcp_server.serverName
+            server_id = str(mcp_server.id)
 
             # 2. Get current tokens
             current_tokens = await token_service.get_oauth_tokens(user_id, server_name)
@@ -461,7 +456,7 @@ class MCPOAuthService:
         """
         server_id = str(server.id)
         server_name = server.serverName
-        
+
         # Check token status
         access_token_doc, access_valid = await token_service.get_access_token_status(
             user_id, server_name
@@ -523,7 +518,7 @@ class MCPOAuthService:
         """
         server_id = str(server.id)
         server_name = server.serverName
-        
+
         try:
             # Get refresh token value (already validated by caller)
             refresh_token_doc, _ = await token_service.get_refresh_token_status(user_id, server_name)
@@ -541,7 +536,7 @@ class MCPOAuthService:
                     "serverId": server_id,
                     "server_name": server_name
                 }
-            
+
             oauth_config = decrypt_auth_fields(oauth_config)
 
             # Call core refresh logic

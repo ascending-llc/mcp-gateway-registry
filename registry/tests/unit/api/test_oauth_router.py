@@ -126,7 +126,7 @@ class TestOAuthRouter:
             )
         )
 
-        response = client.get(f"/v1/mcp/{TEST_SERVER_ID}/oauth/initiate")
+        response = client.get(f"/mcp/{TEST_SERVER_ID}/oauth/initiate")
 
         assert response.status_code == 200
         response_data = response.json()
@@ -146,7 +146,7 @@ class TestOAuthRouter:
             )
         )
 
-        response = client.get(f"/v1/mcp/{TEST_SERVER_ID}/oauth/initiate")
+        response = client.get(f"/mcp/{TEST_SERVER_ID}/oauth/initiate")
 
         assert response.status_code == 400
         assert "Failed to initiate OAuth flow" in response.json()["detail"]
@@ -168,7 +168,7 @@ class TestOAuthRouter:
         # The flow_id should start with the user_id to pass the validation
         flow_id = "test_user-1234567890"
 
-        response = client.get(f"/v1/mcp/oauth/tokens/{flow_id}")
+        response = client.get(f"/mcp/oauth/tokens/{flow_id}")
 
         assert response.status_code == 200
         response_data = response.json()
@@ -180,7 +180,7 @@ class TestOAuthRouter:
         # Flow ID doesn't match the current user
         flow_id = "other_user-1234567890"
 
-        response = client.get(f"/v1/mcp/oauth/tokens/{flow_id}")
+        response = client.get(f"/mcp/oauth/tokens/{flow_id}")
 
         assert response.status_code == 403
 
@@ -198,7 +198,7 @@ class TestOAuthRouter:
 
         flow_id = "test_user-1234567890"
 
-        response = client.get(f"/v1/mcp/oauth/status/{flow_id}")
+        response = client.get(f"/mcp/oauth/status/{flow_id}")
 
         assert response.status_code == 200
         assert response.json() == mock_status
@@ -215,7 +215,7 @@ class TestOAuthRouter:
             lambda *args, **kwargs: None
         )
 
-        response = client.post(f"/v1/mcp/oauth/cancel/{TEST_SERVER_ID}")
+        response = client.post(f"/mcp/oauth/cancel/{TEST_SERVER_ID}")
 
         assert response.status_code == 200
         assert response.json()["success"] == True
@@ -229,7 +229,7 @@ class TestOAuthRouter:
             lambda *args, **kwargs: (False, "Failed to cancel flow")
         )
 
-        response = client.post(f"/v1/mcp/oauth/cancel/{TEST_SERVER_ID}")
+        response = client.post(f"/mcp/oauth/cancel/{TEST_SERVER_ID}")
 
         assert response.status_code == 400
         assert "Failed to cancel flow" in response.json()["detail"]
@@ -250,7 +250,7 @@ class TestOAuthRouter:
             lambda *args, **kwargs: None
         )
 
-        response = client.post(f"/v1/mcp/oauth/refresh/{TEST_SERVER_ID}")
+        response = client.post(f"/mcp/oauth/refresh/{TEST_SERVER_ID}")
 
         assert response.status_code == 200
         assert response.json()["success"] == True
@@ -264,7 +264,7 @@ class TestOAuthRouter:
             lambda *args, **kwargs: (False, "Failed to refresh tokens")
         )
 
-        response = client.post(f"/v1/mcp/oauth/refresh/{TEST_SERVER_ID}")
+        response = client.post(f"/mcp/oauth/refresh/{TEST_SERVER_ID}")
 
         assert response.status_code == 400
         assert "Failed to refresh tokens" in response.json()["detail"]

@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from packages.database.mongodb import MongoDB
 from packages.models.mcp_tool import McpTool
 from packages.vector.search_manager import mcp_tool_search_index_manager
-from registry.services.server_service_v1 import server_service_v1
+from registry.services.server_service import server_service_v1
 
 
 class SyncStats:

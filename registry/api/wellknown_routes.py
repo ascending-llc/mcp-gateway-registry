@@ -5,7 +5,7 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 
 from ..core.config import settings
-from ..services.server_service import server_service
+# from ..services.server_service import server_service
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ def _get_required_env_vars() -> tuple[str, str, str]:
     return base_url, auth_server_url, registry_url
 
 
-@router.get("/mcp-servers")
+# @router.get("/mcp-servers")
 async def get_wellknown_mcp_servers(
     request: Request,
     user_context: Optional[dict] = None

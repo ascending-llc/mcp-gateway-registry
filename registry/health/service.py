@@ -256,7 +256,7 @@ class HealthMonitoringService:
         if not self.websocket_manager.connections:
             return
             
-        from ..services.server_service import server_service
+        from ..services.server_service import server_service_v1 as server_service
         
         if service_path:
             # Single service update - get data efficiently
@@ -277,7 +277,7 @@ class HealthMonitoringService:
             return self._cached_health_data
             
         # Rebuild cache
-        from ..services.server_service import server_service
+        from ..services.server_service import server_service_v1 as server_service
         all_servers = server_service.get_all_servers()
         
         data = {}
@@ -309,7 +309,7 @@ class HealthMonitoringService:
                 
     async def _perform_health_checks(self):
         """Perform health checks on all enabled services."""
-        from ..services.server_service import server_service
+        from ..services.server_service import server_service_v1 as server_service
         import httpx
         
         enabled_services = server_service.get_enabled_services()
@@ -348,7 +348,7 @@ class HealthMonitoringService:
             
     async def _check_single_service(self, client: httpx.AsyncClient, service_path: str, server_info: Dict) -> bool:
         """Check a single service and return True if status changed."""
-        from ..services.server_service import server_service
+        from ..services.server_service import server_service_v1 as server_service
         
         proxy_pass_url = server_info.get("proxy_pass_url")
         previous_status = self.server_health_status.get(service_path, HealthStatus.UNKNOWN)
@@ -879,7 +879,7 @@ class HealthMonitoringService:
         try:
             logger.info(f"Starting background tool update for {service_path}")
             from ..core.mcp_client import mcp_client_service
-            from ..services.server_service import server_service
+            from ..services.server_service import server_service_v1 as server_service
 
             # Wait a moment to ensure health check session is fully closed
             # This prevents connection conflicts with servers like currenttime and realserverfaketools
@@ -924,7 +924,7 @@ class HealthMonitoringService:
         
     def get_all_health_status(self) -> Dict:
         """Get health status for all services."""
-        from ..services.server_service import server_service
+        from ..services.server_service import server_service_v1 as server_service
         
         all_servers = server_service.get_all_servers()
         
@@ -936,7 +936,7 @@ class HealthMonitoringService:
 
     async def perform_immediate_health_check(self, service_path: str) -> tuple[str, datetime | None]:
         """Perform an immediate health check for a single service."""
-        from ..services.server_service import server_service
+        from ..services.server_service import server_service_v1 as server_service
         import httpx
         
         server_info = server_service.get_server_info(service_path)
@@ -1001,13 +1001,13 @@ class HealthMonitoringService:
 
     def _get_service_health_data(self, service_path: str) -> Dict:
         """Get health data for a specific service - legacy method, use _get_service_health_data_fast for better performance."""
-        from ..services.server_service import server_service
+        from ..services.server_service import server_service_v1 as server_service
         server_info = server_service.get_server_info(service_path)
         return self._get_service_health_data_fast(service_path, server_info or {})
         
     def _get_service_health_data_fast(self, service_path: str, server_info: Dict) -> Dict:
         """Get health data for a specific service - optimized version."""
-        from ..services.server_service import server_service
+        from ..services.server_service import server_service_v1 as server_service
         
         # Quick enabled check using cached server_info if possible
         is_enabled = server_service.is_service_enabled(service_path)
