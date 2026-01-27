@@ -139,7 +139,7 @@ def setup_metrics(
                 ]
                 # Set meter provider if we have any readers
                 if readers:
-                    provider = MeterProvider(resource=resource, metric_readers=readers)
+                    provider = MeterProvider(resource=resource, metric_readers=readers, views=views)
                     metrics.set_meter_provider(provider)
                     logger.info(f"Metrics initialized with {len(readers)} reader(s)")
                 else:
