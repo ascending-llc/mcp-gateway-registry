@@ -8,11 +8,13 @@ from typing import Dict, Any, Optional, Union
 from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
+from packages.models.extended_mcp_server import MCPServerDocument
 from registry.auth.dependencies import CurrentUser
 from registry.services.server_service import server_service_v1
 from registry.utils.crypto_utils import decrypt_auth_fields
 from registry.core.mcp_client import _build_headers_for_server
 from registry.services.server_service import _build_server_info_for_mcp_client
+from registry.services.oauth.oauth_service import get_oauth_service
 from registry.schemas.proxy_tool_schema import (
     ToolExecutionRequest,
     ToolExecutionResponse,
@@ -38,22 +40,20 @@ async def proxy_to_mcp_server(
     request: Request,
     target_url: str,
     auth_context: Dict[str, Any],
-    server_path: str = None,
-    server_config: Dict[str, Any] = None
+    server: MCPServerDocument
 ) -> Response:
     """
     Proxy request to MCP server with auth headers.
-    Handles both regular HTTP and SSE streaming.
+    Handles both regular HTTP and SSE streaming, including OAuth token injection.
     
     Args:
         request: Incoming FastAPI request
         target_url: Backend MCP server URL
         auth_context: Gateway authentication context
-        server_path: Server path to determine special handling (e.g., MCPGW)
-        server_config: Server configuration including apiKey authentication
+        server: MCPServerDocument
     """
     # Check if this is MCPGW path (special handling)
-    is_mcpgw = server_path == MCPGW_PATH
+    is_mcpgw = server.path == MCPGW_PATH
     
     # Build proxy headers - start with request headers
     headers = dict(request.headers)
@@ -80,24 +80,76 @@ async def proxy_to_mcp_server(
         headers.pop("Authorization", None)
         
         # Build authentication headers for external MCP server
-        if server_config:
-            decrypted_config = decrypt_auth_fields(server_config)
-            # Build server_info structure (same as server_service.py line 1034)
-            server_info = _build_server_info_for_mcp_client(
-                decrypted_config,
-                server_config.get("tags", [])
-            )
+        if server.config:
+            decrypted_config = decrypt_auth_fields(server.config)
             
-            # Extract headers from server_info structure
-            if "headers" in server_info:
-                for header_dict in server_info["headers"]:
-                    headers.update(header_dict)
+            # Check if server requires OAuth
+            requires_oauth = decrypted_config.get("requiresOAuth", False) or "oauth" in decrypted_config
             
-            # Also build API key headers directly from config
-            auth_headers = _build_headers_for_server(decrypted_config)
-            headers.update(auth_headers)
+            if requires_oauth and server:
+                # OAuth-protected server - retrieve and inject access token
+                user_id = auth_context.get("user_id")
+                if not user_id:
+                    logger.error("No user_id in auth_context for OAuth server")
+                    raise HTTPException(
+                        status_code=401,
+                        detail="User authentication required for OAuth-protected server"
+                    )
+                
+                logger.info(f"OAuth server detected, retrieving access token for user {user_id}")
+                
+                # Get valid access token (handles refresh automatically)
+                oauth_service = await get_oauth_service()
+                access_token, auth_url, token_error = await oauth_service.get_valid_access_token(
+                    user_id=user_id,
+                    server=server
+                )
+                
+                # If re-authentication is needed
+                if auth_url:
+                    raise HTTPException(
+                        status_code=401,
+                        detail=f"OAuth re-authentication required",
+                        headers={"X-OAuth-URL": auth_url}
+                    )
+                
+                # If error occurred
+                if token_error:
+                    raise HTTPException(
+                        status_code=401,
+                        detail=f"OAuth token error: {token_error}"
+                    )
+                
+                # If no token (shouldn't happen, defensive check)
+                if not access_token:
+                    raise HTTPException(
+                        status_code=401,
+                        detail=f"No valid OAuth token available"
+                    )
+                
+                # Inject OAuth Bearer token
+                headers["Authorization"] = f"Bearer {access_token}"
+                logger.debug(f"Injected OAuth access token for {server.serverName}")
             
-            logger.debug(f"Built authentication headers for backend server: {list(headers.keys())}")
+            else:
+                # Non-OAuth server - handle apiKey and custom headers
+                # Build server_info structure (same as server_service.py line 1034)
+                server_info = _build_server_info_for_mcp_client(
+                    decrypted_config,
+                    server.config.get("tags", [])
+                )
+                
+                # Extract custom headers from server_info structure
+                if "headers" in server_info:
+                    for header_dict in server_info["headers"]:
+                        headers.update(header_dict)
+                
+                # Build API key headers directly from config
+                auth_headers = _build_headers_for_server(decrypted_config)
+                headers.update(auth_headers)
+                
+                logger.debug(f"Built authentication headers for backend server: {list(headers.keys())}")
+
 
     body = await request.body()
     
@@ -340,16 +392,70 @@ async def execute_tool(
         
         if config:
             decrypted_config = decrypt_auth_fields(config)
-            # Build server_info structure (same as server_service.py)
-            server_info = _build_server_info_for_mcp_client(
-                decrypted_config,
-                server.tags or []
-            )
             
-            # Extract headers from server_info structure
-            if "headers" in server_info:
-                for header_dict in server_info["headers"]:
-                    headers.update(header_dict)
+            # Check if server requires OAuth
+            requires_oauth = decrypted_config.get("requiresOAuth", False) or "oauth" in decrypted_config
+            
+            if requires_oauth:
+                # OAuth-protected server - retrieve and inject access token
+                user_id = user_context.get("user_id")
+                if not user_id:
+                    raise HTTPException(
+                        status_code=401,
+                        detail="User authentication required for OAuth-protected server"
+                    )
+                
+                logger.info(f"OAuth server detected for tool execution, retrieving access token for user {user_id}")
+                
+                # Get valid access token (handles refresh automatically)
+                oauth_service = await get_oauth_service()
+                access_token, auth_url, token_error = await oauth_service.get_valid_access_token(
+                    user_id=user_id,
+                    server=server
+                )
+                
+                # If re-authentication is needed
+                if auth_url:
+                    raise HTTPException(
+                        status_code=401,
+                        detail=f"OAuth re-authentication required",
+                        headers={"X-OAuth-URL": auth_url}
+                    )
+                
+                # If error occurred
+                if token_error:
+                    raise HTTPException(
+                        status_code=401,
+                        detail=f"OAuth token error: {token_error}"
+                    )
+                
+                # If no token
+                if not access_token:
+                    raise HTTPException(
+                        status_code=401,
+                        detail=f"No valid OAuth token available"
+                    )
+                
+                # Inject OAuth Bearer token
+                headers["Authorization"] = f"Bearer {access_token}"
+                logger.info(f"Injected OAuth access token for tool execution on {server.serverName}")
+            
+            else:
+                # Non-OAuth server - handle apiKey and custom headers
+                # Build server_info structure (same as server_service.py)
+                server_info = _build_server_info_for_mcp_client(
+                    decrypted_config,
+                    server.tags or []
+                )
+                
+                # Extract custom headers from server_info structure
+                if "headers" in server_info:
+                    for header_dict in server_info["headers"]:
+                        headers.update(header_dict)
+                
+                # Build API key headers
+                auth_headers = _build_headers_for_server(decrypted_config)
+                headers.update(auth_headers)
         
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
@@ -636,8 +742,7 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
         request=request,
         target_url=target_url,
         auth_context=auth_context,
-        server_path=server.path,
-        server_config=server.config
+        server= server
     )
 
 
