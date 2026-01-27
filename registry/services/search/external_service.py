@@ -4,7 +4,6 @@ from packages.models.extended_mcp_server import ExtendedMCPServer
 from packages.vector.repository import mcp_server_repo
 from .base import VectorSearchService
 from registry.utils.log import logger
-import asyncio
 
 class ExternalVectorSearchService(VectorSearchService):
     """
