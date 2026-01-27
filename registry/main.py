@@ -280,11 +280,14 @@ app.include_router(proxy_router, prefix="/proxy", tags=["MCP Proxy"])
 
 if __name__ == "__main__":
     import uvicorn
+    import os
+
+    log_level = os.getenv("LOG_LEVEL", "INFO").lower()
 
     uvicorn.run(
         "registry.main:app",
         host="0.0.0.0",
         port=7860,
         reload=True,
-        log_level="info"
+        log_level=log_level
     )
