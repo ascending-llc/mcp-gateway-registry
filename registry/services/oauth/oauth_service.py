@@ -180,8 +180,7 @@ class MCPOAuthService:
     async def get_valid_access_token(
             self,
             user_id: str,
-            server_id: str,
-            server_name: str
+            server: MCPServerDocument,
     ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """
         Get valid access token with automatic refresh and re-authentication flow
@@ -193,9 +192,8 @@ class MCPOAuthService:
         
         Args:
             user_id: User ID
-            server_id: Server ID (for OAuth flow initiation)
-            server_name: Server name (for token lookup)
-            
+            server: MCPServer document
+
         Returns:
             Tuple of (access_token, auth_url, error_message)
             - (token, None, None) if token is valid or refreshed successfully
@@ -203,6 +201,9 @@ class MCPOAuthService:
             - (None, None, error) if an error occurred
         """
         try:
+            server_name = server.serverName
+            server_id = str(server.id)
+
             # 1. Check if access token exists and is not expired
             is_expired = await token_service.is_access_token_expired(user_id, server_name)
             
@@ -215,10 +216,24 @@ class MCPOAuthService:
             logger.info(f"Access token expired or missing for {user_id}/{server_name}, attempting refresh")
             
             # 2. Try refresh token if access token is expired/missing
-            has_refresh = await token_service.has_refresh_token(user_id, server_name)
+            current_tokens = await token_service.get_oauth_tokens(user_id, server_name)
             
-            if has_refresh:
-                success, error = await self.refresh_tokens(user_id, server_id)
+            if current_tokens and current_tokens.refresh_token:
+                # Get and decrypt OAuth config
+                oauth_config = server.config.get("oauth")
+                if not oauth_config:
+                    return None, None, f"OAuth configuration not found for server '{server_name}'"
+                
+                oauth_config = decrypt_auth_fields(oauth_config)
+                
+                # Refresh the token
+                success, error = await self.refresh_token(
+                    user_id=user_id,
+                    server_id=server_id,
+                    server_name=server_name,
+                    refresh_token_value=current_tokens.refresh_token,
+                    oauth_config=oauth_config
+                )
                 
                 if success:
                     tokens = await token_service.get_oauth_tokens(user_id, server_name)
@@ -232,7 +247,7 @@ class MCPOAuthService:
             
             # 3. Both access and refresh failed - initiate new OAuth flow
             logger.info(f"Initiating new OAuth flow for {user_id}/{server_name}")
-            flow_id, auth_url, flow_error = await self.initiate_oauth_flow(user_id, server_id)
+            flow_id, auth_url, flow_error = await self.initiate_oauth_flow(user_id, server)
             
             if flow_error:
                 return None, None, f"Failed to initiate OAuth flow: {flow_error}"

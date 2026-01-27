@@ -460,33 +460,33 @@ class WeaviateStore(VectorStoreAdapter):
             logger.error(f"Batch update failed: {e}", exc_info=True)
             return 0
 
-    def batch_delete_by_ids(
+    def batch_delete_by_values(
             self,
-            doc_ids: List[str],
+            name: str,
+            values: List[str],
             collection_name: str
     ) -> int:
         """
         Batch delete documents by IDs for better performance.
         
         Args:
-            doc_ids: List of document UUIDs to delete
+            name: metadata
+            values: list
             collection_name: Collection name
             
         Returns:
             Number of successfully deleted documents
         """
-        if not doc_ids:
-            return 0
 
         collection = self.get_collection(collection_name)
 
         try:
-            where = Filter.by_id().contains_any(doc_ids)
+            where = Filter.by_property(name).contains_any(values)
             result = collection.data.delete_many(where=where)
             deleted_count = result.successful
             if result.failed > 0:
                 logger.warning(f"Batch delete: {result.successful} successful, {result.failed} failed")
-            logger.info(f"Batch deleted {deleted_count}/{len(doc_ids)} documents")
+            logger.info(f"Batch deleted {deleted_count}/{len(values)} documents")
             return deleted_count
 
         except Exception as e:

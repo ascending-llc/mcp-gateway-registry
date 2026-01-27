@@ -2,15 +2,15 @@
 """
 MongoDB to Weaviate Sync Script for MCP Gateway Registry
 
-This script synchronizes MCP servers and their tools from MongoDB to Weaviate.
-It reads all servers from MongoDB using server_service_v1, extracts their tools,
-and bulk imports them into Weaviate. Already existing tools are skipped.
+This script synchronizes MCP servers from MongoDB to Weaviate.
+It reads all servers from MongoDB using server_service_v1 and imports them
+into Weaviate for semantic search. Already existing servers are skipped.
 
 Usage:
-    uv run  python scripts/sync_mongo_to_weaviate.py [--clean] [--batch-size N]
+    uv run python scripts/sync_mongo_to_weaviate.py [--clean] [--batch-size N]
     
 Options:
-    --clean: Delete all existing tools from Weaviate before syncing
+    --clean: Delete all existing servers from Weaviate before syncing
     --batch-size N: Number of servers to process per batch (default: 100)
 """
 import traceback
@@ -29,9 +29,9 @@ load_dotenv()
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from packages.database.mongodb import MongoDB
-from packages.models.mcp_tool import McpTool
-from packages.vector.search_manager import mcp_tool_search_index_manager
+from packages.models.extended_mcp_server import ExtendedMCPServer
 from registry.services.server_service_v1 import server_service_v1
+from packages.vector.repository import mcp_server_repo
 
 
 class SyncStats:
@@ -69,22 +69,22 @@ class SyncStats:
         print("SYNC SUMMARY")
         print("=" * 80)
         print(f"Total Servers Scanned:      {self.total_servers}")
-        print(f"Servers With Tools:         {self.servers_with_tools}")
-        print(f"Servers Without Tools:      {self.servers_without_tools} (skipped)")
-        print(f"\nTotal Tools:                {self.total_tools}")
-        print(f"Tools Imported:             {self.tools_imported} ")
-        print(f"Tools Skipped (existing):   {self.tools_skipped}")
-        print(f"Tools Failed:               {self.tools_failed} ✗")
+        print(f"Servers Imported:           {self.servers_with_tools}")
+        print(f"Servers Skipped:            {self.servers_without_tools}")
+        print(f"\nTotal Servers:              {self.total_tools}")
+        print(f"Servers Imported:           {self.tools_imported} ✓")
+        print(f"Servers Skipped (existing): {self.tools_skipped}")
+        print(f"Servers Failed:             {self.tools_failed} ✗")
 
         if self.servers_processed:
             print(f"\n{'-' * 80}")
             print("PER-SERVER BREAKDOWN:")
             print(f"{'-' * 80}")
             for server in self.servers_processed:
-                status = "" if server['imported'] > 0 else "○"
+                status = "✓" if server['imported'] > 0 else "○"
                 print(f"{status} {server['name']:<30} ({server['path']:<20})")
-                print(f"  Total: {server['total_tools']:>3} | Imported: {server['imported']:>3} |"
-                      f"  Skipped: {server['skipped']:>3} | Failed: {server['failed']:>3}")
+                print(
+                    f"  Imported: {server['imported']:>3} | Skipped: {server['skipped']:>3} | Failed: {server['failed']:>3}")
 
         if self.errors:
             print(f"\n{'-' * 80}")
@@ -98,128 +98,107 @@ class SyncStats:
         # Success summary
         success_rate = (self.tools_imported / self.total_tools * 100) if self.total_tools > 0 else 0
         if self.tools_failed == 0 and self.total_tools > 0:
-            print(f" SUCCESS: All {self.total_tools} tools processed successfully!")
+            print(f"✓ SUCCESS: All {self.total_tools} servers processed successfully!")
         elif self.tools_imported > 0:
-            print(f"  PARTIAL SUCCESS: {self.tools_imported}/{self.total_tools} tools imported ({success_rate:.1f}%)")
+            print(f"⚠ PARTIAL SUCCESS: {self.tools_imported}/{self.total_tools} servers imported ({success_rate:.1f}%)")
         else:
-            print(" FAILED: No tools were imported")
+            print("✗ FAILED: No servers were imported")
         print("=" * 80 + "\n")
 
 
-async def check_tool_exists(tool: McpTool) -> bool:
+async def check_server_exists(server_id: str) -> bool:
+    """
+    Check if server already exists in Weaviate.
+    
+    Args:
+        server_id: Server document ID (MongoDB _id)
+        
+    Returns:
+        True if server exists in Weaviate
+    """
     try:
-        # Query by server_path and tool_name (unique combination)
-        existing_tools = await mcp_tool_search_index_manager.repository.afilter(
-            filters={
-                "server_path": tool.server_path,
-                "tool_name": tool.tool_name
-            },
+        # Query by metadata.server_id (MongoDB _id)
+        existing_servers = await mcp_server_repo.afilter(
+            filters={"server_id": server_id},
             limit=1
         )
-        return len(existing_tools) > 0
+        return len(existing_servers) > 0
     except Exception as e:
-        print(f"  Warning: Failed to check existence for {tool.tool_name}: {e}")
+        print(f"  Warning: Failed to check existence for server {server_id}: {e}")
         return False
 
 
-async def sync_server_tools(server: Any, stats: SyncStats):
+async def sync_server(server: Any, stats: SyncStats):
+    """
+    Sync a single server to Weaviate.
+    
+    Args:
+        server: ExtendedMCPServer instance from MongoDB
+        stats: SyncStats tracker
+    """
     server_name = server.serverName
     server_path = server.path
+    server_id = str(server.id)
 
-    print(f"Processing: {server_name} ({server_path})")
+    print(f"Processing: {server_name} ({server_path}) [ID: {server_id}]")
     try:
-        # Convert server document to server_info format
-        server_info = McpTool.from_server_document(server)
+        # Check if server already exists (by server_id)
+        exists = await check_server_exists(server_id)
 
-        # Get tool_list from server_info
-        tool_list = server_info.get("tool_list", [])
-
-        if not tool_list:
-            print(f"  No tools found, skipping...")
+        if exists:
+            print(f"  ○ Server already exists, skipping...")
             stats.servers_without_tools += 1
-            stats.add_server(server_name, server_path, 0, 0, 0, 0)
+            stats.tools_skipped += 1
+            stats.add_server(server_name, server_path, 1, 0, 1, 0)
             return
 
-        print(f"  Found {len(tool_list)} tools")
+        # Count tools for stats
+        num_tools = server.numTools if hasattr(server, 'numTools') else 0
+        print(f"  Server has {num_tools} tools")
         stats.servers_with_tools += 1
-        stats.total_tools += len(tool_list)
+        stats.total_tools += 1  # Count servers, not individual tools
 
-        # Create McpTool instances
+        # Save server to Weaviate
+        # The server is already an ExtendedMCPServer instance from MongoDB
         try:
-            tools = McpTool.create_tools_from_server_info(
-                service_path=server_path,
-                server_info=server_info,
-                is_enabled=server_info.get("is_enabled", True)
-            )
+            result = await mcp_server_repo.asave(server)
+
+            if result:
+                print(f"  ✓ Successfully imported server")
+                stats.tools_imported += 1
+                stats.add_server(server_name, server_path, 1, 1, 0, 0)
+            else:
+                error_msg = f"{server_name}: Failed to import server"
+                print(f"  ✗ {error_msg}")
+                stats.add_error(error_msg)
+                stats.tools_failed += 1
+                stats.add_server(server_name, server_path, 1, 0, 0, 1)
+
         except Exception as e:
-            error_msg = f"Failed to create tools for {server_name}: {e}"
+            error_msg = f"Failed to save server {server_name}: {e}"
             print(f"  ✗ {error_msg}")
             stats.add_error(error_msg)
-            stats.tools_failed += len(tool_list)
-            stats.add_server(server_name, server_path, len(tool_list), 0, 0, len(tool_list))
-            return
-
-        # Filter out existing tools
-        tools_to_import = []
-        skipped_count = 0
-
-        for tool in tools:
-            exists = await check_tool_exists(tool)
-            if exists:
-                skipped_count += 1
-                stats.tools_skipped += 1
-            else:
-                tools_to_import.append(tool)
-
-        if tools_to_import:
-            print(f"  Importing {len(tools_to_import)} new tools...")
-
-            # Bulk save to Weaviate
-            result = await mcp_tool_search_index_manager.repository.abulk_save(tools_to_import)
-
-            stats.tools_imported += result.successful
-            stats.tools_failed += result.failed
-
-            if result.failed > 0:
-                error_msg = f"{server_name}: {result.failed}/{len(tools_to_import)} tools failed to import"
-                print(f"   {error_msg}")
-                stats.add_error(error_msg)
-            else:
-                print(f"   Successfully imported {result.successful} tools")
-        else:
-            print(f"  ○ All {skipped_count} tools already exist, skipping...")
-
-        # Record stats for this server
-        failed_count = len(tool_list) - len(tools_to_import) - skipped_count if len(tool_list) >= len(
-            tools_to_import) + skipped_count else 0
-        stats.add_server(
-            server_name,
-            server_path,
-            len(tool_list),
-            len(tools_to_import) - failed_count if tools_to_import else 0,
-            skipped_count,
-            failed_count
-        )
+            stats.tools_failed += 1
+            stats.add_server(server_name, server_path, 1, 0, 0, 1)
 
     except Exception as e:
         error_msg = f"Unexpected error processing {server_name}: {e}"
         print(f"  ✗ {error_msg}")
         stats.add_error(error_msg)
-        # Try to estimate tool count from config if available
-        tool_count = server.numTools if hasattr(server, 'numTools') else 0
-        stats.total_tools += tool_count
-        stats.tools_failed += tool_count
-        stats.add_server(server_name, server_path, tool_count, 0, 0, tool_count)
+        stats.total_tools += 1
+        stats.tools_failed += 1
+        stats.add_server(server_name, server_path, 1, 0, 0, 1)
 
 
 async def clean_weaviate():
-    print("Deleting all existing tools...")
+    """Delete all existing servers from Weaviate."""
+    print("Deleting all existing servers...")
     try:
-        # Delete all tools (filter by collection name)
-        deleted = await mcp_tool_search_index_manager.repository.adelete_by_filter(
-            filters={"collection": McpTool.COLLECTION_NAME}
+        # Delete all servers (filter by collection name)
+        deleted = await mcp_server_repo.adelete_by_filter(
+            filters={"collection": ExtendedMCPServer.COLLECTION_NAME}
         )
-        print(f" Deleted {deleted} tools from Weaviate")
+        print(f"✓ Deleted {deleted} servers from Weaviate")
         print("=" * 80 + "\n")
         return deleted
     except Exception as e:
@@ -277,7 +256,7 @@ async def sync_all_servers(batch_size: int = 100):
                 stats.total_servers = processed_count
 
                 print(f"\n[{processed_count}/{total}] ", end="")
-                await sync_server_tools(server, stats)
+                await sync_server(server, stats)
 
             print(f"\n{'─' * 80}")
             print(

@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
 from registry.services.search.service import faiss_service
+from packages.vector.enum.enums import SearchType
 from ...services.server_service import server_service
 from ...services.agent_service import agent_service
 
@@ -275,6 +276,7 @@ async def semantic_search(
         total_agents=len(filtered_agents),
     )
 
+
 class ToolDiscoveryMatch(BaseModel):
     """A discovered tool with metadata for execution"""
     tool_name: str
@@ -295,9 +297,9 @@ class ToolDiscoveryResponse(BaseModel):
 
 @router.post("/search/tools")
 async def discover_tools(
-    request: Request,
-    body: dict,
-    user_context: CurrentUser
+        request: Request,
+        body: dict,
+        user_context: CurrentUser
 ) -> ToolDiscoveryResponse:
     """    
     Request body:
@@ -325,18 +327,18 @@ async def discover_tools(
     """
     query = body.get("query", "")
     top_n = body.get("top_n", 5)
-    
+
     if not query:
         raise HTTPException(
             status_code=400,
             detail="query parameter is required"
         )
-        
+
     logger.info(f"🔍 Tool discovery from user '{user_context.get('username', 'unknown')}': '{query}'")
-    
+
     # PROTOTYPE: Hard-code Tavily Search server discovery
     # In production, this would query your intelligent_tool_finder service
-    
+
     tavily_server_path = "/tavilysearch"
     tavily_tools = [
         {
@@ -346,10 +348,14 @@ async def discover_tools(
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "The search query"},
-                    "max_results": {"type": "integer", "description": "Maximum number of results to return", "default": 5},
-                    "search_depth": {"type": "string", "enum": ["basic", "advanced"], "description": "Search depth", "default": "basic"},
-                    "include_domains": {"type": "array", "items": {"type": "string"}, "description": "Domains to include in search"},
-                    "exclude_domains": {"type": "array", "items": {"type": "string"}, "description": "Domains to exclude from search"}
+                    "max_results": {"type": "integer", "description": "Maximum number of results to return",
+                                    "default": 5},
+                    "search_depth": {"type": "string", "enum": ["basic", "advanced"], "description": "Search depth",
+                                     "default": "basic"},
+                    "include_domains": {"type": "array", "items": {"type": "string"},
+                                        "description": "Domains to include in search"},
+                    "exclude_domains": {"type": "array", "items": {"type": "string"},
+                                        "description": "Domains to exclude from search"}
                 },
                 "required": ["query"]
             },
@@ -397,22 +403,22 @@ async def discover_tools(
             "discovery_score": 0.9955
         }
     ]
-    
+
     # Filter based on query keywords (simple prototype logic)
     query_lower = query.lower()
     matches = []
-    
+
     for tool in tavily_tools[:top_n]:
         # Simple keyword matching for prototype
         tool_desc_lower = tool["description"].lower()
         tool_name_lower = tool["tool_name"].lower()
-        
+
         # Boost score if query matches tool name or description
         score = tool["discovery_score"]
-        if any(word in tool_name_lower or word in tool_desc_lower 
+        if any(word in tool_name_lower or word in tool_desc_lower
                for word in query_lower.split()):
             score = min(1.0, score + 0.1)
-        
+
         matches.append(
             ToolDiscoveryMatch(
                 tool_name=tool["tool_name"],
@@ -424,12 +430,12 @@ async def discover_tools(
                 transport_type="streamable-http"
             )
         )
-    
+
     # Sort by score
     matches.sort(key=lambda x: x.discovery_score, reverse=True)
-    
+
     logger.info(f"✅ Found {len(matches)} tools for query: '{query}'")
-    
+
     return ToolDiscoveryResponse(
         query=query,
         total_matches=len(matches),
@@ -439,9 +445,10 @@ async def discover_tools(
 
 @router.post("/search/servers")
 async def search_servers(
-    request: Request,
-    body: dict,
-    user_context: CurrentUser
+        request: Request,
+        body: dict,
+        search_type: SearchType,
+        user_context: CurrentUser
 ):
     """
     Search for MCP servers with their tools, resources, and prompts.
@@ -457,17 +464,18 @@ async def search_servers(
     """
     query = body.get("query", "")
     top_n = body.get("top_n", 10)
-    
+
     logger.info(
         f"🔍 Server search from user '{user_context.get('username', 'unknown')}': "
         f"query='{query}', top_n={top_n}"
     )
-    
+    # TODO: server, search type
+    #  只关系
     # PROTOTYPE: Hard-coded Tavily server raw JSON (matches DB structure)
     tavily_server_raw = {
-        "_id": "6972e222755441652c23090f",
-        "serverName": "tavilysearchv1",
-        "path": "/tavilysearch",
+        "_id": "6972e222755441652c23090f",  # TODO： 保存，不需要矢量化
+        "serverName": "tavilysearchv1",  # TODO： 保存，不需要矢量化
+        "path": "/tavilysearch",  # TODO： 保存，不需要矢量化
         "config": {
             "title": "Tavily Search V1",
             "description": "Tavily search engine integration with web search, extraction, crawling, and mapping capabilities",
@@ -475,19 +483,20 @@ async def search_servers(
             "url": "https://mcp.tavily.com/mcp/",
             "requiresOAuth": False,
             "enabled": True,
-            
+
             # Tools in OpenAI format (with mcpToolName for translation)
             "toolFunctions": {
                 "tavily_search_mcp_tavilysearchv1": {
                     "type": "function",
                     "function": {
-                        "name": "tavily_search_mcp_tavilysearchv1",
-                        "description": "Search the web using Tavily's AI-powered search engine",
+                        "name": "tavily_search_mcp_tavilysearchv1",  # tODO：1
+                        "description": "Search the web using Tavily's AI-powered search engine",  # tODO：2
                         "parameters": {
                             "type": "object",
                             "properties": {
                                 "query": {"type": "string", "description": "The search query"},
-                                "max_results": {"type": "integer", "description": "Maximum number of results", "default": 5},
+                                "max_results": {"type": "integer", "description": "Maximum number of results",
+                                                "default": 5},
                                 "search_depth": {"type": "string", "enum": ["basic", "advanced"], "default": "basic"}
                             },
                             "required": ["query"]
@@ -542,7 +551,7 @@ async def search_servers(
                     "mcpToolName": "tavily_map"
                 }
             },
-            
+
             # Resources in MCP format
             "resources": [
                 {
@@ -563,7 +572,7 @@ async def search_servers(
                     "mimeType": "application/json"
                 }
             ],
-            
+
             # Prompts in MCP format
             "prompts": [
                 {
@@ -583,7 +592,7 @@ async def search_servers(
                     ]
                 }
             ],
-            
+
             "capabilities": {
                 "tools": {"listChanged": True},
                 "resources": {"subscribe": False, "listChanged": True},
@@ -592,20 +601,20 @@ async def search_servers(
         },
         "tags": ["search", "api-key", "tavily"],
         "scope": "shared_user",
-        "status": "active",
+        "status": "active",  # TODO： 保存，不需要矢量化，不启用删除；启用矢量化
         "numTools": 4,
         "numStars": 0
     }
-    
+
     # In production: would do vector search here
     # For now: always return all servers regardless of query
     servers = [tavily_server_raw]
-    
+
     # Note: Query filtering disabled - always return all servers
     # This allows clients to always discover available servers
-    
+
     logger.info(f"✅ Found {len(servers[:top_n])} servers")
-    
+
     return {
         "query": query,
         "total": len(servers),

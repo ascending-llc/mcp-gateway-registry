@@ -1,14 +1,12 @@
 import asyncio
 import logging
-from typing import Optional, List, Dict, Any, TypeVar, Generic, Type, TYPE_CHECKING
+from typing import Optional, List, Dict, Any, TypeVar, Generic, Type
 from langchain_classic.retrievers.contextual_compression import ContextualCompressionRetriever
-
+from packages.models import ExtendedMCPServer
 from .batch_result import BatchResult
 from .enum.enums import SearchType, RerankerProvider
 from .retrievers.adapter_retriever import AdapterRetriever
-
-if TYPE_CHECKING:
-    from .client import DatabaseClient
+from packages.vector.client import initialize_database, DatabaseClient
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +19,7 @@ class Repository(Generic[T]):
 
     """
 
-    def __init__(self, db_client: 'DatabaseClient', model_class: Type[T]):
+    def __init__(self, db_client: DatabaseClient, model_class: Type[T]):
         """
         Initialize repository with database client and model class.
         
@@ -312,19 +310,8 @@ class Repository(Generic[T]):
                 - Weaviate: weaviate.classes.query.Filter object
         """
         try:
-            instances = self.filter(filters=filters, limit=1000)
-            
-            # Use batch delete if adapter supports it
-            if hasattr(self.adapter, 'batch_delete_by_ids'):
-                doc_ids = [inst.id for inst in instances]
-                return self.adapter.batch_delete_by_ids(doc_ids, self.collection)
-            else:
-                # Fallback to individual deletes
-                deleted_count = 0
-                for inst in instances:
-                    if self.delete(inst.id):
-                        deleted_count += 1
-                return deleted_count
+            if hasattr(self.adapter, 'batch_delete_by_values'):
+                self.adapter.batch_delete_by_values(name="server_id", filters=filters)
         except Exception as e:
             logger.error(f"Delete by filter failed: {e}")
             return 0
@@ -353,14 +340,14 @@ class Repository(Generic[T]):
         try:
             # 1. Query matching documents
             instances = self.filter(filters=filters, limit=limit)
-            
+
             if not instances:
                 logger.info("No documents found matching filters")
                 return 0
-            
+
             # 2. Extract IDs
             doc_ids = [inst.id for inst in instances]
-            
+
             # 3. Use adapter's batch update if available
             if hasattr(self.adapter, 'batch_update_properties'):
                 updated_count = self.adapter.batch_update_properties(
@@ -383,7 +370,7 @@ class Repository(Generic[T]):
                     if self.update(inst):
                         updated_count += 1
                 return updated_count
-                
+
         except Exception as e:
             logger.error(f"Batch update by filter failed: {e}")
             return 0
@@ -418,10 +405,10 @@ class Repository(Generic[T]):
 
     def get_compression_retriever(
             self,
-                                  reranker_type: RerankerProvider,
-                                  search_type: SearchType = SearchType.HYBRID,
-                                  search_kwargs: Optional[dict] = None,
-                                  reranker_kwargs: Optional[dict] = None,
+            reranker_type: RerankerProvider,
+            search_type: SearchType = SearchType.HYBRID,
+            search_kwargs: Optional[dict] = None,
+            reranker_kwargs: Optional[dict] = None,
     ) -> ContextualCompressionRetriever:
         """
         Get a compression retriever with reranking support.
@@ -528,3 +515,68 @@ class Repository(Generic[T]):
         except Exception as e:
             logger.error(f"Rerank search failed: {e}")
             return []
+
+    async def sync_full(
+            self,
+            server_info: Dict[str, Any],
+            is_enabled: bool = True
+    ) -> Optional[Dict[str, int]]:
+        """
+        Full rebuild: delete old server and recreate from server_info.
+        
+        Uses server_id as primary identifier if available, falls back to path.
+        This method is mainly used for initial sync from MongoDB to Weaviate.
+
+        Args:
+            server_info: Server info dictionary (must contain 'path', may contain 'id'/'_id')
+            is_enabled: Whether server is enabled
+            
+        Returns:
+            {"indexed_tools": count, "failed_tools": count}
+        """
+        try:
+            # 1. Extract identifiers
+            mongodb_id = server_info.get('id') or server_info.get('_id')
+            path = server_info.get('path')
+
+            if not path:
+                raise ValueError("server_info must contain 'path' field")
+
+            # 2. Delete old server by MongoDB ID (stored in metadata.server_id)
+            deleted = 0
+            if mongodb_id:
+                # Query by metadata.server_id (MongoDB _id)
+                deleted = await self.adelete_by_filter({"server_id": str(mongodb_id)})
+                if deleted > 0:
+                    logger.info(f"Deleted {deleted} old server(s) by server_id: {mongodb_id}")
+            else:
+                # Fallback: use path for deletion (for new servers without ID)
+                deleted = await self.adelete_by_filter({"path": path})
+                if deleted > 0:
+                    logger.info(f"Deleted {deleted} old server(s) by path: '{path}'")
+
+            # 3. Create new server instance
+            server = await asyncio.to_thread(
+                self.model_class.from_server_info,
+                server_info=server_info,
+                is_enabled=is_enabled
+            )
+
+            # 4. Save server
+            doc_id = await self.asave(server)
+            success = doc_id is not None
+
+            logger.info(f"Indexed server '{path}' (server_id: {mongodb_id}): "
+                        f"{'success' if success else 'failed'}")
+
+            return {
+                "indexed_tools": 1 if success else 0,
+                "failed_tools": 0 if success else 1
+            }
+
+        except Exception as e:
+            logger.error(f"Full sync failed: {e}", exc_info=True)
+            return None
+
+
+mcp_server_repo = Repository(initialize_database(), ExtendedMCPServer)

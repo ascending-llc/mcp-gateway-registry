@@ -10,13 +10,12 @@ ODM Schema:
 - createdAt: datetime (auto-generated)
 - updatedAt: datetime (auto-generated)
 """
-
+import asyncio
 import logging
 import httpx
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
 from beanie import PydanticObjectId
-from packages.models import McpTool
 from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 from packages.models._generated.user import IUser
 from registry.schemas.server_api_schemas import (
@@ -25,7 +24,7 @@ from registry.schemas.server_api_schemas import (
 )
 from registry.utils.crypto_utils import encrypt_auth_fields
 from registry.core.mcp_client import get_tools_from_server_with_server_info
-from packages.vector.search_manager import mcp_tool_search_index_manager
+from packages.vector.repository import mcp_server_repo
 
 logger = logging.getLogger(__name__)
 
@@ -603,14 +602,6 @@ class ServerServiceV1:
                     exc_info=True,
                 )
                 await server.delete()
-        else:
-            # No URL - sync search index immediately (for stdio or other transports)
-            server_info = McpTool.from_server_document(server)
-            mcp_tool_search_index_manager.sync_full_background(
-                entity_path=server.path,
-                entity_info=server_info,
-                is_enabled=config.get("enabled", True)
-            )
         return server
 
     async def update_server(
@@ -679,44 +670,8 @@ class ServerServiceV1:
         await server.save()
         logger.info(f"Updated server: {server.serverName} (ID: {server.id})")
 
-        # Smart search index update
-        try:
-            # Determine update strategy based on what changed
-            metadata_only_fields = {'tags', 'scope', 'status', 'serverName'}
-            tools_changed = data.tool_list is not None
-            metadata_changed = any(getattr(data, field, None) is not None
-                                   for field in metadata_only_fields)
-
-            if tools_changed:
-                # Tools changed - use incremental update
-                logger.info(f"Tools changed for '{server.path}', using incremental update")
-                server_info = McpTool.from_server_document(server)
-                await mcp_tool_search_index_manager.sync_incremental_background(
-                    entity_path=server.path,
-                    entity_info=server_info,
-                    is_enabled=updated_config.get("enabled", True)
-                )
-            elif metadata_changed:
-                # Only metadata changed - use metadata update
-                logger.info(f"Metadata changed for '{server.path}', using metadata update")
-                metadata_updates = {}
-                if data.tags is not None:
-                    metadata_updates["tags"] = server.tags
-                if data.serverName is not None:
-                    metadata_updates["server_name"] = server.serverName
-
-                if metadata_updates:
-                    # Update safe metadata fields in background
-                    mcp_tool_search_index_manager.update_metadata_background(
-                        entity_path=server.path,
-                        metadata=metadata_updates
-                    )
-            else:
-                logger.debug(f"No index-relevant changes for '{server.path}'")
-
-        except Exception as e:
-            logger.warning(f"Failed to update search index for '{server.path}': {e}")
-
+        # Update search index in background (non-blocking)
+        self.update_search_index(server, data)
         return server
 
     async def delete_server(
@@ -747,14 +702,17 @@ class ServerServiceV1:
         if not server:
             raise ValueError("Server not found")
 
-        # Remove from search index before deleting
+        # Remove from search index before deleting (use metadata.server_id)
         try:
-            deleted_count = await mcp_tool_search_index_manager.tools.adelete_by_filter(
-                filters={"server_path": server.path}
+            deleted_count = await mcp_server_repo.adelete_by_filter(
+                {"server_id": server_id}
             )
-            logger.info(f"Removed {deleted_count} tools from search index for '{server.path}'")
+            if deleted_count > 0:
+                logger.info(f"Removed server from search index: {server_id}")
+            else:
+                logger.warning(f"Server not found in search index: {server_id}")
         except Exception as e:
-            logger.warning(f"Failed to remove search index for '{server.path}': {e}")
+            logger.warning(f"Failed to remove search index for server {server_id}: {e}")
 
         await server.delete()
         logger.info(f"Deleted server: {server.serverName} (ID: {server.id})")
@@ -856,25 +814,30 @@ class ServerServiceV1:
                 server.config['enabled'] = False
                 await server.save()
                 raise ValueError("Failed to fetch tools from server. Server remains disabled.")
-            else:
-                # Sync search index after successful registration and tool retrieval
-                server_info = McpTool.from_server_document(server)
-                mcp_tool_search_index_manager.sync_full_background(
-                    entity_path=server.path,
-                    entity_info=server_info,
-                    is_enabled=enabled
-                )
-        else:
-            # Update search index enabled status in background
-            mcp_tool_search_index_manager.update_enabled_background(
-                entity_path=server.path,
-                is_enabled=enabled
-            )
+            
         # Update the updatedAt timestamp
         server.updatedAt = _get_current_utc_time()
         await server.save()
         logger.info(f"Toggled server {server.serverName} (ID: {server.id}) enabled to {enabled}")
+        
+        # Update search index
+        asyncio.create_task(self._update_server_in_search_index(server))
         return server
+    
+    async def _update_server_in_search_index(self, server: MCPServerDocument):
+        """
+        Background task to update server in search index.
+        """
+        server_id = str(server.id)
+        try:
+            # Delete old version and save new version
+            await mcp_server_repo.adelete_by_filter(
+                {"server_id": server_id}
+            )
+            await mcp_server_repo.asave(server)
+            logger.info(f"Background: Updated search index for server {server_id}")
+        except Exception as e:
+            logger.warning(f"Background: Failed to update search index for server {server_id}: {e}")
 
     async def get_server_tools(
             self,
@@ -1040,8 +1003,7 @@ class ServerServiceV1:
                 oauth_service = await get_oauth_service()
                 access_token, auth_url, token_error = await oauth_service.get_valid_access_token(
                     user_id=user_id,
-                    server_id=str(server.id),
-                    server_name=server.serverName
+                    server=server
                 )
 
                 # If re-authentication is needed
@@ -1547,6 +1509,61 @@ class ServerServiceV1:
                     f" {stats['total_tokens']} tokens, {stats['active_users']} active users")
 
         return stats
+
+    def update_search_index(self, server: MCPServerDocument, data: ServerUpdateRequest):
+        """
+        Update search index for server
+        """
+        # Start background task
+        asyncio.create_task(self._update_search_index_task(server, data))
+        logger.debug(f"Started background search index update for server {server.id}")
+    
+    async def _update_search_index_task(self, server: MCPServerDocument, data: ServerUpdateRequest):
+        """
+        Background task for updating search index with smart change detection.
+        """
+        server_id = str(server.id)
+        
+        try:
+            # 1. Check if any fields that affect search changed
+            safe_metadata_fields = server.get_safe_metadata_fields()
+            metadata_changed = any(getattr(data, field, None) is not None
+                                   for field in safe_metadata_fields)
+
+            # 2. Generate new content and compare with existing
+            new_content = server.generate_content()
+
+            # Get existing server from Weaviate by metadata.server_id (MongoDB _id)
+            existing_servers = await mcp_server_repo.afilter(
+                filters={"server_id": server_id},
+                limit=1
+            )
+
+            content_changed = True  # Default to changed if not found
+            if existing_servers:
+                existing_server = existing_servers[0]
+                existing_doc = existing_server.to_document()
+                old_content = existing_doc.page_content
+                content_changed = (new_content != old_content)
+                logger.debug(f"Background: Content comparison for server {server_id}: "
+                             f"changed={content_changed}, "
+                             f"old_len={len(old_content)}, new_len={len(new_content)}")
+
+            # 3. Update if anything changed
+            if content_changed or metadata_changed:
+                # Delete old and save new (handles both content and metadata updates)
+                logger.info(f"Background: Server {server_id} changed (content={content_changed}, "
+                           f"metadata={metadata_changed}), updating search index")
+                await mcp_server_repo.adelete_by_filter(
+                    {"server_id": server_id}
+                )
+                await mcp_server_repo.asave(server)
+                logger.info(f"Background: Successfully updated search index for server {server_id}")
+            else:
+                logger.debug(f"Background: No search index changes needed for server {server_id}")
+
+        except Exception as e:
+            logger.warning(f"Background: Search index update failed for server {server_id}: {e}")
 
 
 # Singleton instance
