@@ -159,15 +159,31 @@ class ACLService:
 			}
 			acl_entries = await IAclEntry.find(query).to_list()
 			result = {rt.value: {} for rt in ResourceType}
+			processed_entry = set()
+			# First, process user/group-specific entries
 			for entry in acl_entries:
-				rtype = entry.resourceType
-				rid = str(entry.resourceId)
-				result[rtype][rid] = {
-					"VIEW": entry.permBits >= PermissionBits.VIEW,
-					"EDIT": entry.permBits >= PermissionBits.EDIT,
-					"DELETE": entry.permBits >= PermissionBits.DELETE,
-					"SHARE": entry.permBits >= PermissionBits.SHARE,
-				}
+				if entry.principalType != PrincipalType.PUBLIC.value and entry.principalId is not None:
+					rtype = entry.resourceType
+					rid = str(entry.resourceId)
+					result[rtype][rid] = {
+						"VIEW": entry.permBits >= PermissionBits.VIEW,
+						"EDIT": entry.permBits >= PermissionBits.EDIT,
+						"DELETE": entry.permBits >= PermissionBits.DELETE,
+						"SHARE": entry.permBits >= PermissionBits.SHARE,
+					}
+					processed_entry.add((rtype, rid))
+			# Then, process public entries only if not already set
+			for entry in acl_entries:
+				if entry.principalType == PrincipalType.PUBLIC.value:
+					rtype = entry.resourceType
+					rid = str(entry.resourceId)
+					if (rtype, rid) not in processed_entry:
+						result[rtype][rid] = {
+							"VIEW": entry.permBits >= PermissionBits.VIEW,
+							"EDIT": entry.permBits >= PermissionBits.EDIT,
+							"DELETE": entry.permBits >= PermissionBits.DELETE,
+							"SHARE": entry.permBits >= PermissionBits.SHARE,
+						}
 			return result
 		except Exception as e: 
 			logger.error(f"Error fetching ACL permissions map for user id: {principal_id}: {e}")
