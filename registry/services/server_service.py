@@ -1048,7 +1048,8 @@ class ServerServiceV1:
                 oauth_service = await get_oauth_service()
                 access_token, auth_url, token_error = await oauth_service.get_valid_access_token(
                     user_id=user_id,
-                    server =server
+                    server_id=str(server.id),
+                    server_name=server.serverName
                 )
 
                 # If re-authentication is needed
