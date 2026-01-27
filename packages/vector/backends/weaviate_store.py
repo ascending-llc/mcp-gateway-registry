@@ -482,7 +482,10 @@ class WeaviateStore(VectorStoreAdapter):
 
         try:
             where = Filter.by_id().contains_any(doc_ids)
-            deleted_count = collection.data.delete_many(where=where)
+            result = collection.data.delete_many(where=where)
+            deleted_count = result.successful
+            if result.failed > 0:
+                logger.warning(f"Batch delete: {result.successful} successful, {result.failed} failed")
             logger.info(f"Batch deleted {deleted_count}/{len(doc_ids)} documents")
             return deleted_count
 

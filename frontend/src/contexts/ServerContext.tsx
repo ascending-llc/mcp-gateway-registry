@@ -81,7 +81,7 @@ interface ServerContextType {
   refreshServerData: (notLoading?: boolean) => Promise<ServerInfo[]>;
   refreshAgentData: (notLoading?: boolean) => Promise<void>;
   handleServerUpdate: (id: string, updates: Partial<ServerInfo>) => void;
-  getServerStatusByPolling: (serverId: string) => void;
+  getServerStatusByPolling: (serverId: string, callback?: (state: SERVER_CONNECTION | undefined) => void) => void;
   cancelPolling: (serverId?: string) => void;
 }
 
@@ -238,7 +238,7 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
   }, []);
 
   const getServerStatusByPolling = useCallback(
-    async (serverId: string) => {
+    async (serverId: string, callback?: (state: SERVER_CONNECTION | undefined) => void) => {
       // Clear existing timeout for this specific server if it exists
       if (timeoutRef.current[serverId]) {
         clearTimeout(timeoutRef.current[serverId]);
@@ -270,6 +270,7 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
             });
           }
         }
+        callback?.(currentState);
       };
 
       await poll();

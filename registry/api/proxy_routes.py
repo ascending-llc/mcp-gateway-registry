@@ -9,9 +9,10 @@ from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
 from registry.auth.dependencies import CurrentUser
-from registry.services.server_service_v1 import server_service_v1
+from registry.services.server_service import server_service_v1
 from registry.utils.crypto_utils import decrypt_auth_fields
 from registry.core.mcp_client import _build_headers_for_server
+from registry.services.server_service import _build_server_info_for_mcp_client
 from registry.schemas.proxy_tool_schema import (
     ToolExecutionRequest,
     ToolExecutionResponse,
@@ -24,6 +25,7 @@ from registry.schemas.proxy_tool_schema import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["MCP Proxy"])
+MCPGW_PATH="/mcpgw"
 
 # Shared httpx client for connection pooling
 proxy_client = httpx.AsyncClient(
@@ -36,8 +38,8 @@ async def proxy_to_mcp_server(
     request: Request,
     target_url: str,
     auth_context: Dict[str, Any],
-    transport_type: str = "streamable-http",
-    server_config: Optional[Dict[str, Any]] = None
+    server_path: str = None,
+    server_config: Dict[str, Any] = None
 ) -> Response:
     """
     Proxy request to MCP server with auth headers.
@@ -47,9 +49,12 @@ async def proxy_to_mcp_server(
         request: Incoming FastAPI request
         target_url: Backend MCP server URL
         auth_context: Gateway authentication context
-        transport_type: Transport protocol type
+        server_path: Server path to determine special handling (e.g., MCPGW)
         server_config: Server configuration including apiKey authentication
     """
+    # Check if this is MCPGW path (special handling)
+    is_mcpgw = server_path == MCPGW_PATH
+    
     # Build proxy headers - start with request headers
     headers = dict(request.headers)
     
@@ -68,80 +73,44 @@ async def proxy_to_mcp_server(
     # Remove host header to avoid conflicts
     headers.pop("host", None)
     
-    # Build authentication headers for external MCP server using existing mcp_client logic
-    # This handles apiKey, OAuth, and custom authentication from database config
-    if server_config:
-        decrypt_config_fields = decrypt_auth_fields(server_config)
-        auth_headers = _build_headers_for_server(decrypt_config_fields)
-        # Merge authentication headers (this adds Authorization or custom headers)
-        headers.update(auth_headers)
-        logger.info(f"Built authentication headers for backend server using server config")
+    # Special handling for MCPGW - keep all headers as-is, don't build auth
+    if not is_mcpgw:
+        # Remove gateway's Authorization header to prevent conflicts with backend auth
+        headers.pop("authorization", None)
+        headers.pop("Authorization", None)
+        
+        # Build authentication headers for external MCP server
+        if server_config:
+            decrypted_config = decrypt_auth_fields(server_config)
+            # Build server_info structure (same as server_service.py line 1034)
+            server_info = _build_server_info_for_mcp_client(
+                decrypted_config,
+                server_config.get("tags", [])
+            )
+            
+            # Extract headers from server_info structure
+            if "headers" in server_info:
+                for header_dict in server_info["headers"]:
+                    headers.update(header_dict)
+            
+            # Also build API key headers directly from config
+            auth_headers = _build_headers_for_server(decrypted_config)
+            headers.update(auth_headers)
+            
+            logger.debug(f"Built authentication headers for backend server: {list(headers.keys())}")
 
     body = await request.body()
     
     try:
+        # we can't use server_info.get("type") because sometime httpstreamable is also sse header
         accept_header = request.headers.get("accept", "")
         client_accepts_sse = "text/event-stream" in accept_header
         
-        logger.info(f"Accept header: {accept_header}")
-        logger.info(f"Client accepts SSE: {client_accepts_sse}")
-        logger.info(f"Transport type: {transport_type}")
+        logger.debug(f"Accept: {accept_header}, Client SSE: {client_accepts_sse}")
         
-        # Always use streaming mode if client accepts SSE
-        if client_accepts_sse:
-            logger.info(f"Using SSE streaming mode")
-            
-            # We need to peek at response to get headers before starting the stream
-            # Open the stream context but keep it alive
-            stream_manager = {"response": None, "context": None}
-            
-            async def setup_stream():
-                """Initialize stream and capture headers"""
-                stream_manager["context"] = proxy_client.stream(
-                    request.method,
-                    target_url,
-                    headers=headers,
-                    content=body
-                )
-                stream_manager["response"] = await stream_manager["context"].__aenter__()
-                return stream_manager["response"]
-            
-            async def cleanup_stream():
-                """Clean up stream when done"""
-                if stream_manager["context"] and stream_manager["response"]:
-                    await stream_manager["context"].__aexit__(None, None, None)
-            
-            backend_response = await setup_stream()
-            
-            # Build response headers from backend
-            response_headers = {
-                "Cache-Control": "no-cache",
-                "X-Accel-Buffering": "no"
-            }
-            
-            # Forward important MCP headers, this is the standard MCP session header
-            if "mcp-session-id" in backend_response.headers:
-                session_id = backend_response.headers["mcp-session-id"]
-                response_headers["Mcp-Session-Id"] = session_id
-                logger.info(f"Forwarding Mcp-Session-Id: {session_id}")
-            
-            # Generator that streams from already-opened response
-            async def stream_content():
-                try:
-                    async for chunk in backend_response.aiter_bytes():
-                        yield chunk
-                finally:
-                    await cleanup_stream()
-            
-            return StreamingResponse(
-                stream_content(),
-                status_code=backend_response.status_code,
-                media_type="text/event-stream",
-                headers=response_headers
-            )
-        else:
-            # Regular HTTP request
-            logger.info(f"Using regular HTTP mode")
+        # Optimize: Only use streaming if client accepts SSE
+        if not client_accepts_sse:
+            # Regular HTTP request (most common case for MCP JSON-RPC)
             response = await proxy_client.request(
                 method=request.method,
                 url=target_url,
@@ -149,11 +118,13 @@ async def proxy_to_mcp_server(
                 content=body
             )
             
-            try:
-                content_str = response.content.decode('utf-8')
-                logger.info(f"Response body: {content_str[:1000]}")
-            except:
-                logger.info(f"Response body: [binary data]")
+            # Log error responses for debugging
+            if response.status_code >= 400:
+                try:
+                    error_body = response.content.decode('utf-8')
+                    logger.error(f"Backend error response ({response.status_code}): {error_body}")
+                except Exception:
+                    logger.error(f"Backend error response ({response.status_code}): [binary content, {len(response.content)} bytes]")
             
             return Response(
                 content=response.content,
@@ -161,6 +132,76 @@ async def proxy_to_mcp_server(
                 headers=dict(response.headers),
                 media_type=response.headers.get("content-type")
             )
+        
+        # Client accepts SSE - check if backend returns SSE
+        logger.debug("Client accepts SSE - checking backend response type")
+        
+        # Manually manage stream lifecycle (can't use async with - it closes too early)
+        stream_context = proxy_client.stream(
+            request.method,
+            target_url,
+            headers=headers,
+            content=body
+        )
+        backend_response = await stream_context.__aenter__()
+        
+        backend_content_type = backend_response.headers.get("content-type", "")
+        is_sse = "text/event-stream" in backend_content_type
+        
+        logger.debug(f"Backend: status={backend_response.status_code}, content-type={backend_content_type or 'none'}")
+        
+        # If backend doesn't return SSE, read full response and close stream
+        if not is_sse:
+            content_bytes = await backend_response.aread()
+            await stream_context.__aexit__(None, None, None)
+            
+            # Log error responses for debugging
+            if backend_response.status_code >= 400:
+                try:
+                    error_body = content_bytes.decode('utf-8')
+                    logger.error(f"Backend error response ({backend_response.status_code}): {error_body}")
+                except Exception:
+                    logger.error(f"Backend error response ({backend_response.status_code}): [binary content, {len(content_bytes)} bytes]")
+            
+            return Response(
+                content=content_bytes,
+                status_code=backend_response.status_code,
+                headers=dict(backend_response.headers),
+                media_type=backend_content_type or "application/octet-stream"
+            )
+        
+        # Backend is returning true SSE - keep stream open and forward it
+        logger.info(f"Streaming SSE from backend")
+        
+        response_headers = {
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+            "Content-Type": "text/event-stream"
+        }
+        
+        # Forward MCP session header if present
+        if "mcp-session-id" in backend_response.headers:
+            response_headers["Mcp-Session-Id"] = backend_response.headers["mcp-session-id"]
+        
+        # Stream content from backend to client - cleanup when done
+        async def stream_sse():
+            try:
+                async for chunk in backend_response.aiter_bytes():
+                    yield chunk
+            except Exception as e:
+                logger.error(f"SSE streaming error: {e}")
+                raise
+            finally:
+                # Close stream when done streaming
+                await stream_context.__aexit__(None, None, None)
+        
+        return StreamingResponse(
+            stream_sse(),
+            status_code=backend_response.status_code,
+            media_type="text/event-stream",
+            headers=response_headers
+        )
             
     except httpx.TimeoutException:
         logger.error(f"Timeout proxying to {target_url}")
@@ -299,8 +340,16 @@ async def execute_tool(
         
         if config:
             decrypted_config = decrypt_auth_fields(config)
-            auth_headers = _build_headers_for_server(decrypted_config)
-            headers.update(auth_headers)
+            # Build server_info structure (same as server_service.py)
+            server_info = _build_server_info_for_mcp_client(
+                decrypted_config,
+                server.tags or []
+            )
+            
+            # Extract headers from server_info structure
+            if "headers" in server_info:
+                for header_dict in server_info["headers"]:
+                    headers.update(header_dict)
         
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
@@ -571,31 +620,24 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
         logger.error(f"No URL configured for {server.path}")
         raise HTTPException(status_code=500, detail="Server misconfigured")
     
-    # Ensure proxy_pass_url has trailing slash
-    if not proxy_pass_url.endswith('/'):
-        proxy_pass_url += '/'
-    
     remaining_path = path[len(server.path):].lstrip('/')
     
-    # Build full target URL
-    target_url = proxy_pass_url + remaining_path
-    
-    # Determine transport type from server config
-    transport_type = config.get("type", "streamable-http")
-    
-    # Build server_config for authentication
-    server_config = {}
-    if "apiKey" in config:
-        server_config["apiKey"] = config["apiKey"]
+    # Build full target URL - only add slash if there's a remaining path
+    if remaining_path:
+        if not proxy_pass_url.endswith('/'):
+            proxy_pass_url += '/'
+        target_url = proxy_pass_url + remaining_path
+    else:
+        target_url = proxy_pass_url
     
     # Proxy the request
-    logger.info(f"Proxying {request.method} {path} → {target_url} (transport: {transport_type})")
+    logger.info(f"Proxying {request.method} {path} → {target_url}")
     return await proxy_to_mcp_server(
         request=request,
         target_url=target_url,
         auth_context=auth_context,
-        transport_type=transport_type,
-        server_config=server_config
+        server_path=server.path,
+        server_config=server.config
     )
 
 

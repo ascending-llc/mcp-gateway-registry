@@ -13,7 +13,7 @@ from httpx import AsyncClient
 # Import our application and services
 from registry.main import app
 from registry.core.config import Settings
-from registry.services.server_service import ServerService
+from registry.services.server_service import ServerServiceV1
 from registry.health.service import HealthMonitoringService
 from registry.services.search.base import VectorSearchService
 
@@ -78,9 +78,9 @@ def mock_settings(test_settings: Settings, monkeypatch):
 
 
 @pytest.fixture
-def server_service(mock_settings: Settings) -> ServerService:
+def server_service(mock_settings: Settings) -> ServerServiceV1:
     """Create a fresh server service for testing."""
-    service = ServerService()
+    service = ServerServiceV1()
     return service
 
 
@@ -221,11 +221,15 @@ def cleanup_services():
     """Automatically cleanup services after each test."""
     yield
     # Reset global service states
-    from registry.services.server_service import server_service
+    from registry.services.server_service import server_service_v1
     from registry.health.service import health_service
     
-    server_service.registered_servers.clear()
-    server_service.service_state.clear()
+    # Clear server service state if methods exist
+    if hasattr(server_service_v1, 'registered_servers'):
+        server_service_v1.registered_servers.clear()
+    if hasattr(server_service_v1, 'service_state'):
+        server_service_v1.service_state.clear()
+    
     health_service.server_health_status.clear()
     health_service.server_last_check_time.clear()
     # Clear active_connections only if it exists (websocket feature)

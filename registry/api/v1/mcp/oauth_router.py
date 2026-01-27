@@ -2,7 +2,8 @@ import time
 from typing import Dict, Any, Optional
 from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
-from fastapi.responses import RedirectResponse, JSONResponse, HTMLResponse
+from fastapi.responses import RedirectResponse, JSONResponse
+from registry.api.v1.mcp.connection_router import get_service_config
 from registry.auth.dependencies import CurrentUser
 from registry.services.oauth.mcp_service import get_mcp_service, MCPService
 from registry.schemas.enums import ConnectionState, OAuthFlowStatus
@@ -10,7 +11,7 @@ from registry.utils.log import logger
 from registry.auth.oauth.reconnection import get_reconnection_manager
 from registry.constants import REGISTRY_CONSTANTS
 
-router = APIRouter(prefix="/v1/mcp", tags=["oauth"])
+router = APIRouter(prefix="/mcp", tags=["oauth"])
 
 
 @router.get("/{server_id}/oauth/initiate")
@@ -28,9 +29,11 @@ async def initiate_oauth_flow(
     try:
         user_id = user_context.get('user_id')
         logger.info(f"Oauth initiate for user id : {user_id}")
+        server = await get_service_config(server_id)
+
         flow_id, auth_url, error = await mcp_service.oauth_service.initiate_oauth_flow(
             user_id=user_id,
-            server_id=server_id
+            server=server
         )
         if error:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
@@ -43,7 +46,8 @@ async def initiate_oauth_flow(
                             content={"flow_id": flow_id,
                                      "authorization_url": auth_url,
                                      "server_id": server_id,
-                                     "user_id": user_id})
+                                     "user_id": user_id,
+                                     "server_name": server.serverName})
     except HTTPException:
         # Re-raise HTTP exceptions with their original status code
         raise
@@ -126,7 +130,8 @@ async def oauth_callback(
             if flow and flow.user_id:
                 user_id = flow.user_id
                 server_id = flow.server_id  # Extract server_id from flow
-                logger.debug(f"[MCP OAuth] Attempting to reconnect {server_name} (server_id: {server_id}) with new OAuth tokens")
+                logger.debug(f"[MCP OAuth] Attempting to reconnect {server_name}"
+                             f" (server_id: {server_id}) with new OAuth tokens")
 
                 # Create user connection with CONNECTED state
                 await mcp_service.connection_service.create_user_connection(
@@ -139,7 +144,8 @@ async def oauth_callback(
                         "created_at": time.time()
                     }
                 )
-                logger.info(f"[MCP OAuth] Successfully reconnected {server_name} (server_id: {server_id}) for user {user_id}")
+                logger.info(f"[MCP OAuth] Successfully reconnected {server_name}"
+                            f" (server_id: {server_id}) for user {user_id}")
 
                 # Clear any reconnection attempts
                 try:
@@ -148,7 +154,8 @@ async def oauth_callback(
                         oauth_service=mcp_service.oauth_service
                     )
                     reconnection_manager.clear_reconnection(user_id, server_id)  # Use server_id instead of server_name
-                    logger.debug(f"[MCP OAuth] Cleared reconnection attempts for {server_name} (server_id: {server_id})")
+                    logger.debug(f"[MCP OAuth] Cleared reconnection attempts"
+                                 f" for {server_name} (server_id: {server_id})")
                 except Exception as e:
                     logger.error(f"[MCP OAuth] Could not clear reconnection (manager not initialized): {e}")
 
@@ -260,6 +267,8 @@ async def cancel_oauth_flow(
         user_id = current_user.get("user_id")
         logger.info(f"[OAuth Cancel] Cancelling OAuth flow for {server_id} by user {user_id}")
 
+        mcp_server = await get_service_config(server_id)
+
         # 1. Cancel the OAuth flow
         success, error_msg = await mcp_service.oauth_service.cancel_oauth_flow(user_id, server_id)
         if not success:
@@ -285,9 +294,10 @@ async def cancel_oauth_flow(
 
         return {
             "success": True,
-            "message": f"OAuth flow for {server_id} cancelled successfully",
+            "message": f"OAuth flow for {mcp_server.serverName} cancelled successfully",
             "server_id": server_id,
-            "user_id": user_id
+            "user_id": user_id,
+            "server_name": mcp_server.serverName
         }
     except HTTPException:
         # Re-raise HTTP exceptions with their original status code
@@ -320,9 +330,10 @@ async def refresh_oauth_tokens(
     try:
         user_id = current_user.get("user_id")
         logger.info(f"[OAuth Refresh] Refreshing OAuth tokens for {server_id} by user {user_id}")
+        mcp_server = await get_service_config(server_id)
 
         # 1. Refresh OAuth tokens
-        success, error_msg = await mcp_service.oauth_service.refresh_tokens(user_id, server_id)
+        success, error_msg = await mcp_service.oauth_service.validate_and_refresh_tokens(user_id, server_id)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -375,9 +386,10 @@ async def refresh_oauth_tokens(
 
         return {
             "success": True,
-            "message": f"Tokens refreshed successfully for {server_id}",
+            "message": f"Tokens refreshed successfully for {mcp_server.serverName}",
             "server_id": server_id,
-            "user_id": user_id
+            "user_id": user_id,
+            "server_name": mcp_server.serverName,
         }
     except HTTPException:
         # Re-raise HTTP exceptions with their original status code
