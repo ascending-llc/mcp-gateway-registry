@@ -140,10 +140,10 @@ class ExternalVectorSearchService(VectorSearchService):
         if 'path' not in server_info:
             server_info['path'] = service_path
         
-        asyncio.create_task(mcp_server_repo.sync_full(
-            server_info=server_info,
-            is_enabled=is_enabled
-        ))
+        # asyncio.create_task(mcp_server_repo.sync_full(
+        #     server_info=server_info,
+        #     is_enabled=is_enabled
+        # ))
         return {"indexed_tools": 1, "failed_tools": 0}
 
     async def remove_service(self, service_path: str) -> Optional[Dict[str, int]]:
@@ -360,10 +360,10 @@ class ExternalVectorSearchService(VectorSearchService):
                 server_info['path'] = entity_path
             
             # Start background sync
-            asyncio.create_task(mcp_server_repo.sync_full(
-                server_info=server_info,
-                is_enabled=is_enabled
-            ))
+            # asyncio.create_task(mcp_server_repo.sync_full(
+            #     server_info=server_info,
+            #     is_enabled=is_enabled
+            # ))
             return {"indexed_tools": 1, "failed_tools": 0}
             
         elif entity_type == "mcp_server":
@@ -374,10 +374,10 @@ class ExternalVectorSearchService(VectorSearchService):
                 entity_info['path'] = entity_path
             
             # Start background sync
-            asyncio.create_task(mcp_server_repo.sync_full(
-                server_info=entity_info,
-                is_enabled=is_enabled
-            ))
+            # asyncio.create_task(mcp_server_repo.sync_full(
+            #     server_info=entity_info,
+            #     is_enabled=is_enabled
+            # ))
             return {"indexed_tools": 1, "failed_tools": 0}
         else:
             logger.warning(f"Unknown entity_type '{entity_type}', skipping indexing")

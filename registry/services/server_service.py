@@ -13,10 +13,10 @@ ODM Schema:
 
 import logging
 import httpx
+import asyncio
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
 from beanie import PydanticObjectId
-from packages.models import McpTool
 from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 from packages.models._generated.user import IUser
 from registry.schemas.server_api_schemas import (
@@ -25,7 +25,7 @@ from registry.schemas.server_api_schemas import (
 )
 from registry.utils.crypto_utils import encrypt_auth_fields
 from registry.core.mcp_client import get_tools_from_server_with_server_info
-from packages.vector.search_manager import mcp_tool_search_index_manager
+from packages.vector.repository import mcp_server_repo
 
 logger = logging.getLogger(__name__)
 
@@ -603,14 +603,6 @@ class ServerServiceV1:
                     exc_info=True,
                 )
                 await server.delete()
-        else:
-            # No URL - sync search index immediately (for stdio or other transports)
-            server_info = McpTool.from_server_document(server)
-            mcp_tool_search_index_manager.sync_full_background(
-                entity_path=server.path,
-                entity_info=server_info,
-                is_enabled=config.get("enabled", True)
-            )
         return server
 
     async def update_server(
@@ -679,43 +671,12 @@ class ServerServiceV1:
         await server.save()
         logger.info(f"Updated server: {server.serverName} (ID: {server.id})")
 
-        # Smart search index update
+        #sync to vector database
         try:
-            # Determine update strategy based on what changed
-            metadata_only_fields = {'tags', 'scope', 'status', 'serverName'}
-            tools_changed = data.tool_list is not None
-            metadata_changed = any(getattr(data, field, None) is not None
-                                   for field in metadata_only_fields)
-
-            if tools_changed:
-                # Tools changed - use incremental update
-                logger.info(f"Tools changed for '{server.path}', using incremental update")
-                server_info = McpTool.from_server_document(server)
-                await mcp_tool_search_index_manager.sync_incremental_background(
-                    entity_path=server.path,
-                    entity_info=server_info,
-                    is_enabled=updated_config.get("enabled", True)
-                )
-            elif metadata_changed:
-                # Only metadata changed - use metadata update
-                logger.info(f"Metadata changed for '{server.path}', using metadata update")
-                metadata_updates = {}
-                if data.tags is not None:
-                    metadata_updates["tags"] = server.tags
-                if data.serverName is not None:
-                    metadata_updates["server_name"] = server.serverName
-
-                if metadata_updates:
-                    # Update safe metadata fields in background
-                    mcp_tool_search_index_manager.update_metadata_background(
-                        entity_path=server.path,
-                        metadata=metadata_updates
-                    )
-            else:
-                logger.debug(f"No index-relevant changes for '{server.path}'")
-
+            await mcp_server_repo.sync_server(server)
+            logger.info(f"Successfully synced server '{server.serverName}' to vector database")
         except Exception as e:
-            logger.warning(f"Failed to update search index for '{server.path}': {e}")
+            logger.warning(f"Failed to sync server '{server.serverName}' to vector database: {e}")
 
         return server
 
@@ -747,14 +708,13 @@ class ServerServiceV1:
         if not server:
             raise ValueError("Server not found")
 
-        # Remove from search index before deleting
+        # Remove from vector database before deleting from MongoDB
         try:
-            deleted_count = await mcp_tool_search_index_manager.tools.adelete_by_filter(
-                filters={"server_path": server.path}
-            )
-            logger.info(f"Removed {deleted_count} tools from search index for '{server.path}'")
+            server_id = str(server.id)
+            deleted_count = await mcp_server_repo.adelete_by_filter({"server_id": server_id})
+            logger.info(f"Removed {deleted_count} record(s) from vector database for server '{server.serverName}'")
         except Exception as e:
-            logger.warning(f"Failed to remove search index for '{server.path}': {e}")
+            logger.warning(f"Failed to remove server '{server.serverName}' from vector database: {e}")
 
         await server.delete()
         logger.info(f"Deleted server: {server.serverName} (ID: {server.id})")
@@ -858,18 +818,7 @@ class ServerServiceV1:
                 raise ValueError("Failed to fetch tools from server. Server remains disabled.")
             else:
                 # Sync search index after successful registration and tool retrieval
-                server_info = McpTool.from_server_document(server)
-                mcp_tool_search_index_manager.sync_full_background(
-                    entity_path=server.path,
-                    entity_info=server_info,
-                    is_enabled=enabled
-                )
-        else:
-            # Update search index enabled status in background
-            mcp_tool_search_index_manager.update_enabled_background(
-                entity_path=server.path,
-                is_enabled=enabled
-            )
+                await mcp_server_repo.sync_server(server)
         # Update the updatedAt timestamp
         server.updatedAt = _get_current_utc_time()
         await server.save()
@@ -1040,7 +989,7 @@ class ServerServiceV1:
                 oauth_service = await get_oauth_service()
                 access_token, auth_url, token_error = await oauth_service.get_valid_access_token(
                     user_id=user_id,
-                    server =server
+                    server=server
                 )
 
                 # If re-authentication is needed

@@ -448,8 +448,8 @@ async def toggle_server(
     """Toggle server enabled/disabled status. When enabling, fetches tools from server."""
     try:
         # Get user_id from context for OAuth token retrieval
-        user_id = user_context.get("username") or user_context.get("user_id")
-        
+        user_id = user_context.get("user_id")
+
         server = await server_service_v1.toggle_server_status(
             server_id=server_id,
             enabled=data.enabled,

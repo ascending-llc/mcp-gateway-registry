@@ -301,22 +301,32 @@ class Repository(Generic[T]):
         """Bulk save model instances (asynchronous)."""
         return await asyncio.to_thread(self.bulk_save, instances)
 
-    def delete_by_filter(self, filters: Any) -> int:
+    def delete_by_filter(self, filters: Any) -> Optional[int]:
         """
         Delete model instances by filter conditions (synchronous).
         
         Args:
-            filters: Database-specific filter object
+            filters: Database-specific filter object or dict
+                - Dict: {"field": "value"} or {"field": {"$in": ["val1", "val2"]}}
                 - Weaviate: weaviate.classes.query.Filter object
+                
+        Returns:
+            Number of deleted documents, or None if operation failed
         """
         try:
-            if hasattr(self.adapter, 'batch_delete_by_values'):
-                self.adapter.batch_delete_by_values(name="server_id", filters=filters)
+            if hasattr(self.adapter, 'delete_by_filter'):
+                return self.adapter.delete_by_filter(
+                    filters=filters,
+                    collection_name=self.collection
+                )
+            else:
+                logger.warning(f"Adapter {type(self.adapter).__name__} does not support delete_by_filter")
+                return 0
         except Exception as e:
             logger.error(f"Delete by filter failed: {e}")
             return 0
 
-    async def adelete_by_filter(self, filters: Any) -> int:
+    async def adelete_by_filter(self, filters: Any) -> Optional[int]:
         """Delete model instances by filter conditions (asynchronous)."""
         return await asyncio.to_thread(self.delete_by_filter, filters)
 
@@ -516,66 +526,50 @@ class Repository(Generic[T]):
             logger.error(f"Rerank search failed: {e}")
             return []
 
-    async def sync_full(
+    async def sync_server(
             self,
-            server_info: Dict[str, Any],
-            is_enabled: bool = True
+            server: ExtendedMCPServer,
+            is_delete: bool = True,
     ) -> Optional[Dict[str, int]]:
         """
-        Full rebuild: delete old server and recreate from server_info.
+        Full rebuild: delete old server and recreate from server object.
         
         Uses server_id as primary identifier if available, falls back to path.
         This method is mainly used for initial sync from MongoDB to Weaviate.
 
         Args:
-            server_info: Server info dictionary (must contain 'path', may contain 'id'/'_id')
-            is_enabled: Whether server is enabled
-            
+            server: ExtendedMCPServer object from MongoDB
+            is_delete: Whether to delete old server records before saving
+
         Returns:
             {"indexed_tools": count, "failed_tools": count}
         """
         try:
-            # 1. Extract identifiers
-            mongodb_id = server_info.get('id') or server_info.get('_id')
-            path = server_info.get('path')
+            # 1. Extract identifiers from server object
+            server_id = str(server.id) if server.id else None
+            server_name = server.serverName
 
-            if not path:
-                raise ValueError("server_info must contain 'path' field")
-
-            # 2. Delete old server by MongoDB ID (stored in metadata.server_id)
+            # 2. Delete old server records if requested
             deleted = 0
-            if mongodb_id:
-                # Query by metadata.server_id (MongoDB _id)
-                deleted = await self.adelete_by_filter({"server_id": str(mongodb_id)})
-                if deleted > 0:
-                    logger.info(f"Deleted {deleted} old server(s) by server_id: {mongodb_id}")
-            else:
-                # Fallback: use path for deletion (for new servers without ID)
-                deleted = await self.adelete_by_filter({"path": path})
-                if deleted > 0:
-                    logger.info(f"Deleted {deleted} old server(s) by path: '{path}'")
+            if is_delete:
+                if server_id:
+                    deleted = await self.adelete_by_filter({"server_id": server_id})
+                    if deleted > 0:
+                        logger.info(f"Deleted {deleted} old record(s) by server_id: {server_id}")
 
-            # 3. Create new server instance
-            server = await asyncio.to_thread(
-                self.model_class.from_server_info,
-                server_info=server_info,
-                is_enabled=is_enabled
-            )
-
-            # 4. Save server
+            # 3. Save server object to vector database
             doc_id = await self.asave(server)
             success = doc_id is not None
 
-            logger.info(f"Indexed server '{path}' (server_id: {mongodb_id}): "
+            logger.info(f"Indexed server '{server_name}' ( server_id: {server_id}): "
                         f"{'success' if success else 'failed'}")
-
             return {
                 "indexed_tools": 1 if success else 0,
                 "failed_tools": 0 if success else 1
             }
 
         except Exception as e:
-            logger.error(f"Full sync failed: {e}", exc_info=True)
+            logger.error(f"Full sync failed for server {server.serverName}: {e}", exc_info=True)
             return None
 
 

@@ -460,37 +460,44 @@ class WeaviateStore(VectorStoreAdapter):
             logger.error(f"Batch update failed: {e}", exc_info=True)
             return 0
 
-    def batch_delete_by_values(
+    def delete_by_filter(
             self,
-            name: str,
-            values: List[str],
+            filters: Any,
             collection_name: str
     ) -> int:
         """
-        Batch delete documents by IDs for better performance.
+        Delete documents by filter conditions.
+        
+        Supports both dict and native Weaviate Filter formats:
+        - Dict: {"server_id": "xxx"} or {"status": {"$in": ["active", "inactive"]}}
+        - Native: weaviate.classes.query.Filter object
         
         Args:
-            name: metadata
-            values: list
+            filters: Filter conditions (auto-converted if dict)
             collection_name: Collection name
             
         Returns:
             Number of successfully deleted documents
         """
-
         collection = self.get_collection(collection_name)
 
         try:
-            where = Filter.by_property(name).contains_any(values)
-            result = collection.data.delete_many(where=where)
+            normalized_filters = self._normalize_filters(filters)
+            if normalized_filters is None:
+                logger.warning("No valid filters provided for deletion")
+                return 0
+            # Execute batch delete
+            result = collection.data.delete_many(where=normalized_filters)
             deleted_count = result.successful
+            
             if result.failed > 0:
                 logger.warning(f"Batch delete: {result.successful} successful, {result.failed} failed")
-            logger.info(f"Batch deleted {deleted_count}/{len(values)} documents")
+            
+            logger.info(f"Deleted {deleted_count} documents by filter")
             return deleted_count
 
         except Exception as e:
-            logger.error(f"Batch delete failed: {e}")
+            logger.error(f"Delete by filter failed: {e}", exc_info=True)
             return 0
 
     @staticmethod

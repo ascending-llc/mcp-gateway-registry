@@ -360,6 +360,30 @@ class VectorStoreAdapter(ABC):
         """
         return collection_name in self.list_collections()
 
+    def delete_by_filter(
+            self,
+            filters: Any,
+            collection_name: Optional[str] = None
+    ) -> int:
+        """
+        Extended feature: Delete documents by filter conditions
+        
+        Automatically converts dict filters to native format before deletion.
+        
+        Args:
+            filters: Filter object (auto-converted if dict)
+                - Dict: {"field": "value"} or {"field": {"$in": ["val1", "val2"]}}
+                - Native format: Database-specific filter object
+            collection_name: Target collection
+            
+        Returns:
+            Number of deleted documents
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement delete_by_filter(). "
+            "Use database-specific API to delete documents by filter."
+        )
+
     # ========================================
     # Utility methods
     # ========================================
