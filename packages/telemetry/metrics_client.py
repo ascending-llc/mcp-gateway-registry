@@ -5,13 +5,6 @@ from opentelemetry import metrics
 
 logger = logging.getLogger(__name__)
 
-# Histogram bucket boundaries for latency metrics (in seconds)
-# These buckets are designed to capture p50, p95, p99 accurately
-LATENCY_BUCKETS_SECONDS = (
-    0.005, 0.01, 0.025, 0.05, 0.075,
-    0.1, 0.25, 0.5, 0.75,
-    1.0, 2.5, 5.0, 7.5, 10.0
-)
 
 
 def safe_telemetry(func):
