@@ -15,22 +15,6 @@ router = APIRouter()
 class RatingRequest(BaseModel):
     rating: int
 
-@router.get("/tokens", response_class=HTMLResponse)
-async def token_generation_page(
-        request: Request,
-        user_context: CurrentUser,
-):
-    """Show token generation page for authenticated users."""
-    return templates.TemplateResponse(
-        "token_generation.html",
-        {
-            "request": request,
-            "username": user_context['username'],
-            "user_context": user_context,
-            "user_scopes": user_context['scopes'],
-            "available_scopes": user_context['scopes']  # For the UI to show what's available
-        }
-    )
 @router.post("/tokens/generate")
 async def generate_user_token(
         request: Request,

@@ -113,8 +113,15 @@ async def _build_complete_headers_for_server(
     if custom_headers and isinstance(custom_headers, list):
         for header_dict in custom_headers:
             if isinstance(header_dict, dict):
-                headers.update(header_dict)
-                logger.debug(f"Added custom headers: {header_dict}")
+                # Ensure all header values are strings (not lists or other types)
+                for key, value in header_dict.items():
+                    if isinstance(value, list):
+                        # Join list values with comma (HTTP header standard)
+                        headers[key] = ", ".join(str(v) for v in value)
+                        logger.debug(f"Joined list header {key}: {value} -> {headers[key]}")
+                    elif value is not None:
+                        headers[key] = str(value)
+                        logger.debug(f"Added custom header {key}: {value}")
     
     # 2. Check OAuth and add OAuth headers LAST (highest priority, overrides custom headers)
     requires_oauth = decrypted_config.get("requiresOAuth", False) or "oauth" in decrypted_config
@@ -174,7 +181,7 @@ async def _build_complete_headers_for_server(
         # Override any existing Authorization header with OAuth Bearer token
         # This ensures OAuth always takes priority over custom headers
         headers["Authorization"] = f"Bearer {access_token}"
-        logger.info(f"[DEBUG] OAuth Bearer token added for {server.serverName} (overrides any custom Authorization header)")
+        logger.debug(f"OAuth Bearer token added for {server.serverName} (overrides any custom Authorization header)")
         return headers
     
     # 2. Handle apiKey authentication (if not OAuth)
@@ -210,21 +217,6 @@ async def _build_complete_headers_for_server(
                 logger.warning(f"Unknown authorization_type: {authorization_type}, defaulting to Bearer for {server.serverName}")
                 headers["Authorization"] = f"Bearer {key_value}"
     
-    # 3. Add custom headers (lowest priority, can override)
-    custom_headers = decrypted_config.get("headers", [])
-    if custom_headers and isinstance(custom_headers, list):
-        for header_dict in custom_headers:
-            if isinstance(header_dict, dict):
-                # Ensure all header values are strings (not lists or other types)
-                for key, value in header_dict.items():
-                    if isinstance(value, list):
-                        # Join list values with comma (HTTP header standard)
-                        headers[key] = ", ".join(str(v) for v in value)
-                        logger.debug(f"Joined list header {key}: {value} -> {headers[key]}")
-                    elif value is not None:
-                        headers[key] = str(value)
-                        logger.debug(f"Added custom header {key}: {value}")
-    
     return headers
 
 
@@ -243,8 +235,9 @@ def _detect_oauth_requirement(oauth_field: Optional[Any]) -> bool:
     """
     return oauth_field is not None
 
+
 def _validate_and_merge_oauth_metadata(
-    oauth_config: Optional[Dict[str, Any]], 
+    oauth_config: Optional[Dict[str, Any]],
     oauth_metadata: Optional[Dict[str, Any]]
 ) -> Dict[str, Any]:
     """
@@ -256,25 +249,32 @@ def _validate_and_merge_oauth_metadata(
     Args:
         oauth_config: OAuth configuration from registry database (config.oauth) - AUTHORITATIVE
         oauth_metadata: OAuth metadata from MCP server's /.well-known endpoint
-        
+    
     Returns:
         Merged OAuth metadata with database config.oauth overriding server metadata
-        
+    
     Example:
         Database config.oauth.authorization_servers: ["https://accounts.google.com"]
         Server metadata.authorization_servers: ["http://localhost:3080/"]  # WRONG
         Result: authorization_servers = ["https://accounts.google.com"] (from database config)
     """
-    # If no server metadata, nothing to merge
-    if not oauth_metadata:
+    # If neither metadata nor config is provided, return empty dict
+    if not oauth_metadata and not oauth_config:
         return {}
     
-    # If no database config, use server metadata as-is
-    if not oauth_config:
-        return oauth_metadata
+    # If no server metadata, return database config as-is
+    if not oauth_metadata and oauth_config:
+        return oauth_config.copy()
     
-    # Start with server metadata, then override with database config fields
-    merged_metadata = oauth_metadata.copy()
+    # If no database config, use server metadata as-is
+    if oauth_metadata and not oauth_config:
+        return oauth_metadata.copy()
+    
+    # Both server metadata and database config exist:
+    # start with server metadata, then override with database config fields
+    merged_metadata: Dict[str, Any] = oauth_metadata.copy()  # type: ignore[union-attr]
+    merged_metadata.update(oauth_config)  # type: ignore[arg-type]
+    
     return merged_metadata
 
 
