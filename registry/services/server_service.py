@@ -108,7 +108,15 @@ async def _build_complete_headers_for_server(
         'User-Agent': 'MCP-Gateway-Registry/1.0'
     }
     
-    # 1. Check OAuth first (highest priority)
+    # 1. Add custom headers FIRST (lowest priority)
+    custom_headers = decrypted_config.get("headers", [])
+    if custom_headers and isinstance(custom_headers, list):
+        for header_dict in custom_headers:
+            if isinstance(header_dict, dict):
+                headers.update(header_dict)
+                logger.debug(f"Added custom headers: {header_dict}")
+    
+    # 2. Check OAuth and add OAuth headers LAST (highest priority, overrides custom headers)
     requires_oauth = decrypted_config.get("requiresOAuth", False) or "oauth" in decrypted_config
     
     if requires_oauth:
@@ -119,6 +127,23 @@ async def _build_complete_headers_for_server(
             )
         
         logger.info(f"Building OAuth headers for {server.serverName}")
+        
+        # Validate and merge OAuth metadata with config.oauth as source of truth
+        # This ensures correct authorization_servers are used for token validation
+        oauth_config = decrypted_config.get("oauth")
+        raw_oauth_metadata = decrypted_config.get("oauthMetadata", {})
+        
+        oauth_metadata = _validate_and_merge_oauth_metadata(
+            oauth_config=oauth_config,
+            oauth_metadata=raw_oauth_metadata
+        )
+        
+        # Update server's oauthMetadata in-memory for this request
+        # This ensures OAuth service uses correct authorization_servers
+        if oauth_metadata:
+            config["oauthMetadata"] = oauth_metadata
+            server.config = config
+            logger.debug(f"Validated OAuth metadata for token retrieval: authorization_servers={oauth_metadata.get('authorization_servers')}") 
         
         # Get OAuth token (handles refresh automatically)
         oauth_service = await get_oauth_service()
@@ -146,19 +171,10 @@ async def _build_complete_headers_for_server(
                 server_name=server.serverName
             )
         
-        # Inject OAuth Bearer token
+        # Override any existing Authorization header with OAuth Bearer token
+        # This ensures OAuth always takes priority over custom headers
         headers["Authorization"] = f"Bearer {access_token}"
-        logger.debug(f"Added OAuth Bearer token for {server.serverName}")
-        
-        # OAuth takes priority - skip apiKey processing
-        # But still add custom headers at the end
-        custom_headers = decrypted_config.get("headers", [])
-        if custom_headers and isinstance(custom_headers, list):
-            for header_dict in custom_headers:
-                if isinstance(header_dict, dict):
-                    headers.update(header_dict)
-                    logger.debug(f"Added custom headers: {header_dict}")
-        
+        logger.info(f"[DEBUG] OAuth Bearer token added for {server.serverName} (overrides any custom Authorization header)")
         return headers
     
     # 2. Handle apiKey authentication (if not OAuth)
@@ -226,6 +242,40 @@ def _detect_oauth_requirement(oauth_field: Optional[Any]) -> bool:
         True if OAuth is required, False otherwise
     """
     return oauth_field is not None
+
+def _validate_and_merge_oauth_metadata(
+    oauth_config: Optional[Dict[str, Any]], 
+    oauth_metadata: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    Merge OAuth metadata using database config.oauth as authoritative source.
+    
+    Database config.oauth (configured by admin) always takes priority over
+    MCP server's .well-known metadata to prevent incorrect configurations.
+    
+    Args:
+        oauth_config: OAuth configuration from registry database (config.oauth) - AUTHORITATIVE
+        oauth_metadata: OAuth metadata from MCP server's /.well-known endpoint
+        
+    Returns:
+        Merged OAuth metadata with database config.oauth overriding server metadata
+        
+    Example:
+        Database config.oauth.authorization_servers: ["https://accounts.google.com"]
+        Server metadata.authorization_servers: ["http://localhost:3080/"]  # WRONG
+        Result: authorization_servers = ["https://accounts.google.com"] (from database config)
+    """
+    # If no server metadata, nothing to merge
+    if not oauth_metadata:
+        return {}
+    
+    # If no database config, use server metadata as-is
+    if not oauth_config:
+        return oauth_metadata
+    
+    # Start with server metadata, then override with database config fields
+    merged_metadata = oauth_metadata.copy()
+    return merged_metadata
 
 
 def _get_current_utc_time() -> datetime:
@@ -699,7 +749,7 @@ class ServerServiceV1:
                     if oauth_metadata:
                         import json
                         config["oauthMetadata"] = oauth_metadata
-                        logger.info(f"Saved OAuth metadata for {server.serverName}: {json.dumps(oauth_metadata)}")
+                        logger.info(f"Saved raw OAuth metadata for {server.serverName}: {json.dumps(oauth_metadata)}")
                     else:
                         # Save empty oauthMetadata if retrieval failed
                         config["oauthMetadata"] = {}
