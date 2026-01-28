@@ -49,9 +49,6 @@ def _build_server_info_for_mcp_client(config: Dict[str, Any], tags: List[str]) -
     """
     Build server_info dictionary for MCP client operations.
 
-    This helper eliminates duplicate code in create_server, retrieve_tools_from_server,
-    and retrieve_tools_and_capabilities_from_server.
-
     Args:
         config: Server config dictionary
         tags: Server tags list
@@ -202,8 +199,15 @@ async def _build_complete_headers_for_server(
     if custom_headers and isinstance(custom_headers, list):
         for header_dict in custom_headers:
             if isinstance(header_dict, dict):
-                headers.update(header_dict)
-                logger.debug(f"Added custom headers: {header_dict}")
+                # Ensure all header values are strings (not lists or other types)
+                for key, value in header_dict.items():
+                    if isinstance(value, list):
+                        # Join list values with comma (HTTP header standard)
+                        headers[key] = ", ".join(str(v) for v in value)
+                        logger.debug(f"Joined list header {key}: {value} -> {headers[key]}")
+                    elif value is not None:
+                        headers[key] = str(value)
+                        logger.debug(f"Added custom header {key}: {value}")
     
     return headers
 
@@ -897,26 +901,13 @@ class ServerServiceV1:
         Returns:
             True if tools were successfully fetched and updated, False otherwise
         """
-        config = server.config or {}
-
-        # Check authentication type
-        has_oauth = config.get("oauth") is not None
-
-        tool_list = None
-        error_msg = None
-
-        if has_oauth:
-            # OAuth authentication
-            if not user_id:
-                logger.warning(f"Cannot fetch tools for OAuth server {server.serverName}: user_id is required")
-                return False
-
-            logger.info(f"Fetching tools for OAuth server {server.serverName} with user {user_id}")
-            tool_list, error_msg = await self.retrieve_tools_with_oauth(server, user_id)
-        else:
-            # No auth or API Key authentication
-            logger.info(f"Fetching tools for server {server.serverName}")
-            tool_list, error_msg = await self.retrieve_tools_from_server(server)
+        # Use consolidated retrieve_from_server which handles both OAuth and apiKey
+        logger.info(f"Fetching tools for server {server.serverName}")
+        tool_list, _, error_msg = await self.retrieve_from_server(
+            server=server, 
+            include_capabilities=False,
+            user_id=user_id
+        )
 
         if tool_list:
             # Convert tool_list to toolFunctions format
@@ -1118,10 +1109,6 @@ class ServerServiceV1:
     ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[Dict[str, Any]], Optional[str]]:
         """
         Consolidated method to retrieve tools and optionally capabilities from a server.
-
-        This replaces both retrieve_tools_from_server() and retrieve_tools_and_capabilities_from_server().
-        Handles both apiKey and OAuth authentication automatically via _build_complete_headers_for_server.
-
         Args:
             server: Server document
             include_capabilities: Whether to retrieve capabilities (default: True)
@@ -1195,27 +1182,6 @@ class ServerServiceV1:
             error_msg = f"Error: {type(e).__name__} - {str(e)}"
             logger.error(f"Retrieval error for server {server.serverName}: {e}")
             return None, None, error_msg
-
-
-    async def retrieve_tools_from_server(
-            self,
-            server: MCPServerDocument,
-    ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
-        """
-        Retrieve tools from a server using MCP client (legacy method).
-
-        Wraps retrieve_from_server() for backward compatibility.
-        
-        Args:
-            server: Server document
-            
-        Returns:
-            Tuple of (tool_list, error_message)
-            If successful, returns (tool_list, None)
-            If failed, returns (None, error_message)
-        """
-        tool_list, _, error_msg = await self.retrieve_from_server(server, include_capabilities=False)
-        return tool_list, error_msg
 
     async def retrieve_tools_with_oauth(
             self,
