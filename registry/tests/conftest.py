@@ -217,19 +217,60 @@ def mock_websocket():
 
 
 @pytest.fixture(autouse=True)
+def mock_telemetry_metrics(monkeypatch):
+    """
+    Mock telemetry metrics to prevent background thread issues during tests.
+
+    This prevents the OTel background exporter from trying to serialize
+    mock objects (like AsyncMock) which causes encoding errors.
+    """
+    mock_metrics_client = Mock()
+    mock_metrics_client.record_server_request = Mock()
+    mock_metrics_client.record_tool_execution = Mock()
+    mock_metrics_client.record_tool_discovery = Mock()
+    mock_metrics_client.record_auth_request = Mock()
+    mock_metrics_client.record_registry_operation = Mock()
+
+    # Mock the metrics client at the source module
+    monkeypatch.setattr(
+        "registry.utils.otel_metrics.metrics",
+        mock_metrics_client
+    )
+    # Also mock in all places where it's imported
+    monkeypatch.setattr(
+        "registry.api.proxy_routes.metrics",
+        mock_metrics_client
+    )
+    monkeypatch.setattr(
+        "registry.api.v1.search_routes.metrics",
+        mock_metrics_client
+    )
+    monkeypatch.setattr(
+        "registry.api.v1.server.server_routes.metrics",
+        mock_metrics_client
+    )
+    monkeypatch.setattr(
+        "registry.auth.middleware.metrics",
+        mock_metrics_client
+    )
+
+    yield mock_metrics_client
+
+
+@pytest.fixture(autouse=True)
 def cleanup_services():
     """Automatically cleanup services after each test."""
     yield
     # Reset global service states
     from registry.services.server_service import server_service_v1
     from registry.health.service import health_service
-    
+
     # Clear server service state if methods exist
     if hasattr(server_service_v1, 'registered_servers'):
         server_service_v1.registered_servers.clear()
     if hasattr(server_service_v1, 'service_state'):
         server_service_v1.service_state.clear()
-    
+
     health_service.server_health_status.clear()
     health_service.server_last_check_time.clear()
     # Clear active_connections only if it exists (websocket feature)

@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from beanie import PydanticObjectId
 
 from registry.auth.dependencies import CurrentUserWithACLMap
+from registry.utils.otel_metrics import metrics
 from registry.services.server_service import server_service_v1
 from registry.services.oauth.mcp_service import get_mcp_service
 from registry.services.oauth.connection_status_service import (
