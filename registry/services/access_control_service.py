@@ -159,9 +159,13 @@ class ACLService:
 			}
 			acl_entries = await IAclEntry.find(query).to_list()
 			result = {rt.value: {} for rt in ResourceType}
-			for entry in acl_entries:
+			specific = [e for e in acl_entries if e.principalType != PrincipalType.PUBLIC.value and e.principalId is not None]
+			public = [e for e in acl_entries if e.principalType == PrincipalType.PUBLIC.value]
+			for entry in specific + public:
 				rtype = entry.resourceType
 				rid = str(entry.resourceId)
+				if rid in result[rtype]:
+					continue
 				result[rtype][rid] = {
 					"VIEW": entry.permBits >= PermissionBits.VIEW,
 					"EDIT": entry.permBits >= PermissionBits.EDIT,

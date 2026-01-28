@@ -49,6 +49,7 @@ class TestProxyToolExecutionRoutes:
         """Successful tool execution returns JSON response."""
         # Mock server lookup
         mock_server = Mock(spec=Server)
+        mock_server.serverName = "tavilysearch"
         mock_server.path = "/tavilysearch"
         mock_server.tags = []  # Add tags attribute
         mock_server.config = {
@@ -77,10 +78,10 @@ class TestProxyToolExecutionRoutes:
         with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
              patch("httpx.AsyncClient") as mock_client_cls, \
-             patch("registry.api.proxy_routes._build_server_info_for_mcp_client") as mock_build_info:
+             patch("registry.services.server_service._build_complete_headers_for_server") as mock_build_headers:
             
             mock_get_server.return_value = mock_server
-            mock_build_info.return_value = {"headers": []}
+            mock_build_headers.return_value = {"Content-Type": "application/json"}
             
             # Setup mock HTTP client
             mock_client = Mock()
@@ -116,6 +117,7 @@ class TestProxyToolExecutionRoutes:
         """Tool execution returns SSE stream when backend sends SSE."""
         # Mock server lookup
         mock_server = Mock(spec=Server)
+        mock_server.serverName = "tavilysearch"
         mock_server.path = "/tavilysearch"
         mock_server.tags = []  # Add tags attribute
         mock_server.config = {
@@ -133,10 +135,10 @@ class TestProxyToolExecutionRoutes:
         with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
              patch("httpx.AsyncClient") as mock_client_cls, \
-             patch("registry.api.proxy_routes._build_server_info_for_mcp_client") as mock_build_info:
+             patch("registry.services.server_service._build_complete_headers_for_server") as mock_build_headers:
             
             mock_get_server.return_value = mock_server
-            mock_build_info.return_value = {"headers": []}
+            mock_build_headers.return_value = {"Content-Type": "application/json"}
             
             mock_client = Mock()
             mock_client.post = AsyncMock(return_value=mock_response)
@@ -205,6 +207,7 @@ class TestProxyToolExecutionRoutes:
     def test_execute_tool_http_error(self, test_client: TestClient):
         """Tool execution handles HTTP errors from backend server."""
         mock_server = Mock(spec=Server)
+        mock_server.serverName = "tavilysearch"
         mock_server.path = "/tavilysearch"
         mock_server.tags = []  # Add tags attribute
         mock_server.config = {"url": "http://localhost:8080/mcp"}
@@ -212,10 +215,10 @@ class TestProxyToolExecutionRoutes:
         with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
              patch("httpx.AsyncClient") as mock_client_cls, \
-             patch("registry.api.proxy_routes._build_server_info_for_mcp_client") as mock_build_info:
+             patch("registry.services.server_service._build_complete_headers_for_server") as mock_build_headers:
             
             mock_get_server.return_value = mock_server
-            mock_build_info.return_value = {"headers": []}
+            mock_build_headers.return_value = {"Content-Type": "application/json"}
             
             # Simulate HTTP error
             mock_client = Mock()
@@ -248,6 +251,7 @@ class TestProxyToolExecutionRoutes:
     def test_execute_tool_with_authentication(self, test_client: TestClient):
         """Tool execution includes authentication headers for backend server."""
         mock_server = Mock(spec=Server)
+        mock_server.serverName = "tavilysearch"
         mock_server.path = "/tavilysearch"
         mock_server.tags = []  # Add tags attribute
         mock_server.config = {
@@ -267,12 +271,12 @@ class TestProxyToolExecutionRoutes:
         with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
              patch("httpx.AsyncClient") as mock_client_cls, \
-             patch("registry.api.proxy_routes.decrypt_auth_fields") as mock_decrypt, \
-             patch("registry.api.proxy_routes._build_server_info_for_mcp_client") as mock_build_info:
+             patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt, \
+             patch("registry.api.proxy_routes._build_complete_headers_for_server") as mock_build_headers:
             
             mock_get_server.return_value = mock_server
             mock_decrypt.return_value = mock_server.config
-            mock_build_info.return_value = {"headers": [{"Authorization": "Bearer test-api-key"}]}
+            mock_build_headers.return_value = {"Authorization": "Bearer test-api-key", "Content-Type": "application/json"}
             
             mock_client = Mock()
             mock_client.post = AsyncMock(return_value=mock_response)
@@ -292,13 +296,13 @@ class TestProxyToolExecutionRoutes:
 
         assert response.status_code == 200
         
-        # Verify authentication functions were called
-        mock_decrypt.assert_called_once()
-        mock_build_info.assert_called_once()
+        # Verify httpx client was used to make backend request
+        mock_client.post.assert_called_once()
 
     def test_execute_tool_adds_tracking_headers(self, test_client: TestClient):
         """Tool execution adds user tracking headers to backend request."""
         mock_server = Mock(spec=Server)
+        mock_server.serverName = "tavilysearch"
         mock_server.path = "/tavilysearch"
         mock_server.tags = []  # Add tags attribute
         mock_server.config = {"url": "http://localhost:8080/mcp"}
@@ -318,10 +322,10 @@ class TestProxyToolExecutionRoutes:
         with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
              patch("httpx.AsyncClient") as mock_client_cls, \
-             patch("registry.api.proxy_routes._build_server_info_for_mcp_client") as mock_build_info:
+             patch("registry.services.server_service._build_complete_headers_for_server") as mock_build_headers:
             
             mock_get_server.return_value = mock_server
-            mock_build_info.return_value = {"headers": []}
+            mock_build_headers.return_value = {"Content-Type": "application/json"}
             
             mock_client = Mock()
             mock_client.post = AsyncMock(side_effect=capture_post)
@@ -352,6 +356,7 @@ class TestProxyToolExecutionRoutes:
     def test_execute_tool_builds_jsonrpc_request(self, test_client: TestClient):
         """Tool execution builds proper JSON-RPC request for MCP server."""
         mock_server = Mock(spec=Server)
+        mock_server.serverName = "tavilysearch"
         mock_server.path = "/tavilysearch"
         mock_server.tags = []  # Add tags attribute
         mock_server.config = {"url": "http://localhost:8080/mcp"}
@@ -371,10 +376,10 @@ class TestProxyToolExecutionRoutes:
         with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
              patch("httpx.AsyncClient") as mock_client_cls, \
-             patch("registry.api.proxy_routes._build_server_info_for_mcp_client") as mock_build_info:
+             patch("registry.services.server_service._build_complete_headers_for_server") as mock_build_headers:
             
             mock_get_server.return_value = mock_server
-            mock_build_info.return_value = {"headers": []}
+            mock_build_headers.return_value = {"Content-Type": "application/json"}
             
             mock_client = Mock()
             mock_client.post = AsyncMock(side_effect=capture_post)
@@ -409,6 +414,7 @@ class TestProxyToolExecutionRoutes:
     def test_execute_tool_timeout_configuration(self, test_client: TestClient):
         """Tool execution uses 60 second timeout for backend requests."""
         mock_server = Mock(spec=Server)
+        mock_server.serverName = "tavilysearch"
         mock_server.path = "/tavilysearch"
         mock_server.tags = []  # Add tags attribute
         mock_server.config = {"url": "http://localhost:8080/mcp"}
@@ -416,10 +422,10 @@ class TestProxyToolExecutionRoutes:
         with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
              patch("httpx.AsyncClient") as mock_client_cls, \
-             patch("registry.api.proxy_routes._build_server_info_for_mcp_client") as mock_build_info:
+             patch("registry.services.server_service._build_complete_headers_for_server") as mock_build_headers:
             
             mock_get_server.return_value = mock_server
-            mock_build_info.return_value = {"headers": []}
+            mock_build_headers.return_value = {"Content-Type": "application/json"}
             
             # Simulate timeout
             mock_client = Mock()

@@ -38,7 +38,7 @@ async def test_create_server_route_creates_acl_entry():
 
         response = await create_server(data, user_context)
 
-        mock_create_server.assert_awaited_once_with(data=data, user_id=user_context.get("user_id", ""), username=user_context.get("username", ""))
+        mock_create_server.assert_awaited_once_with(data=data, user_id=user_context.get("user_id", ""))
         mock_grant_permission.assert_awaited_once()
         assert response == {"id": "server123"}
 
