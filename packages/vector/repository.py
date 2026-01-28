@@ -1,334 +1,327 @@
 import asyncio
 import logging
-from typing import Optional, List, Dict, Any, TypeVar, Generic, Type
+from typing import Optional, List, Dict, Any, TypeVar, Generic, Type, Set, Callable, Awaitable
+from functools import wraps
 from langchain_classic.retrievers.contextual_compression import ContextualCompressionRetriever
-from packages.models import ExtendedMCPServer
+
 from .batch_result import BatchResult
 from .enum.enums import SearchType, RerankerProvider
 from .retrievers.adapter_retriever import AdapterRetriever
-from packages.vector.client import initialize_database, DatabaseClient
+from .client import DatabaseClient
+from .protocols import VectorStorable, ContentGenerator
+from .exceptions import RepositoryError
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
+# Type variables
+T = TypeVar('T', bound=VectorStorable)
+P = TypeVar('P')
+R = TypeVar('R')
+
+
+def async_wrapper(func: Callable[..., R]) -> Callable[..., Awaitable[R]]:
+    """
+    Decorator to auto-generate async version of sync method.
+
+    Eliminates boilerplate async methods that just wrap sync calls with asyncio.to_thread.
+
+    """
+
+    @wraps(func)
+    async def wrapper(*args, **kwargs) -> R:
+        return await asyncio.to_thread(func, *args, **kwargs)
+
+    wrapper.__name__ = f"a{func.__name__}"  # asave, aget, etc.
+    wrapper.__doc__ = f"Async version of {func.__name__} (auto-generated)"
+    return wrapper
 
 
 class Repository(Generic[T]):
     """
-    Generic repository for model CRUD and search operations.
+    Generic repository for vector database operations with smart update detection.
 
+    Type-safe, ORM-style API for model operations with automatic vectorization
+    and intelligent change detection to avoid unnecessary re-vectorization.
+
+    Type Parameters:
+        T: Model class implementing VectorStorable protocol
     """
 
     def __init__(self, db_client: DatabaseClient, model_class: Type[T]):
         """
         Initialize repository with database client and model class.
-        
+
         Args:
-            db_client: DatabaseClient instance
-            model_class: Model class with to_document/from_document methods
+            model_class: Model class implementing VectorStorable protocol
+
+        Raises:
+            TypeError: If model_class doesn't implement VectorStorable
         """
+        # Validate that model_class implements VectorStorable protocol
+        if not isinstance(model_class, type):
+            raise TypeError(f"model_class must be a class, got {type(model_class)}")
+
+        # Runtime check for VectorStorable protocol
+        required_attrs = ['COLLECTION_NAME', 'to_document', 'from_document', 'get_safe_metadata_fields']
+        missing_attrs = [attr for attr in required_attrs if not hasattr(model_class, attr)]
+        if missing_attrs:
+            raise TypeError(
+                f"{model_class.__name__} must implement VectorStorable protocol. "
+                f"Missing: {', '.join(missing_attrs)}"
+            )
+
         self.db_client = db_client
         self.adapter = db_client.adapter
         self.model_class = model_class
-        self.collection = getattr(model_class, 'COLLECTION_NAME', 'default')
+        self.collection = model_class.COLLECTION_NAME
+
+        logger.debug(f"Repository initialized for {model_class.__name__} -> {self.collection}")
+
+    # ========================================
+    # CRUD Operations with Smart Update Detection
+    # ========================================
 
     def save(self, instance: T) -> Optional[str]:
         """
-        Save a model instance (synchronous).
-        
+        Save a model instance to vector database.
+
         Args:
             instance: Model instance to save
-            
+
         Returns:
-            Document ID if successful, None otherwise
+            Document ID if successful, None if failed
+
+        Raises:
+            RepositoryError: If save operation fails critically
         """
         try:
-            document = instance.to_document()
-            ids = self.adapter.add_documents(
-                documents=[document],
+            doc = instance.to_document()
+            doc_id = self.adapter.add_documents(
+                documents=[doc],
                 collection_name=self.collection
             )
-            return ids[0] if ids else None
-        except Exception as e:
-            logger.error(f"Failed to save {self.model_class.__name__}: {e}")
+
+            if doc_id and len(doc_id) > 0:
+                logger.debug(f"Saved {self.model_class.__name__} with ID: {doc_id[0]}")
+                return doc_id[0]
+
+            logger.warning(f"Save returned empty ID for {self.model_class.__name__}")
             return None
 
-    async def asave(self, instance: T) -> Optional[str]:
-        """Save a model instance (asynchronous)."""
-        return await asyncio.to_thread(self.save, instance)
+        except Exception as e:
+            logger.error(f"Save failed for {self.model_class.__name__}: {e}", exc_info=True)
+            raise RepositoryError(f"Failed to save {self.model_class.__name__}") from e
 
     def get(self, doc_id: str) -> Optional[T]:
         """
-        Get model instance by ID (synchronous).
-        
+        Get a model instance by ID.
+
         Args:
             doc_id: Document ID
-            
+
         Returns:
             Model instance if found, None otherwise
         """
         try:
-            doc = self.adapter.get_by_id(
-                doc_id=doc_id,
+            docs = self.adapter.get_by_ids(
+                ids=[doc_id],
                 collection_name=self.collection
             )
 
-            if doc:
-                return self.model_class.from_document(doc)
+            if docs and len(docs) > 0:
+                data = self.model_class.from_document(docs[0])
+                logger.debug(f"Retrieved {self.model_class.__name__} with ID: {doc_id}")
+                return data
+
+            logger.debug(f"{self.model_class.__name__} not found: {doc_id}")
             return None
+
         except Exception as e:
-            logger.error(f"Failed to get {self.model_class.__name__} {doc_id}: {e}")
+            logger.error(f"Get failed for ID {doc_id}: {e}")
             return None
 
-    async def aget(self, doc_id: str) -> Optional[T]:
-        """Get model instance by ID (asynchronous)."""
-        return await asyncio.to_thread(self.get, doc_id)
-
-    def update(self, instance: T) -> bool:
+    def update(
+            self,
+            instance: T,
+            fields_changed: Optional[Set[str]] = None
+    ) -> bool:
         """
-        Update model instance (synchronous).
-        
+        Update model instance with smart re-vectorization detection.
+
+        Optimizes updates by:
+        1. Checking if only metadata fields changed (no re-vectorization needed)
+        2. Comparing generated content to detect actual content changes
+
         Args:
             instance: Model instance to update
-            
+            fields_changed: Set of field names that changed (optional, for optimization)
+
         Returns:
-            True if successful, False otherwise
+            True if updated successfully, False otherwise
+
+        Example:
+            # Metadata-only update (fast, no re-vectorization)
+            server.tags = ["new-tag"]
+            repo.update(server, fields_changed={"tags"})
+
+            # Content update (re-vectorization)
+            server.config["description"] = "New description"
+            repo.update(server)  # Auto-detects content change
         """
         try:
-            if not self.adapter.delete(
-                    ids=[instance.id],
-                    collection_name=self.collection
-            ):
-                return False
-            # Save new version
-            return self.save(instance) is not None
-        except Exception as e:
-            logger.error(f"Failed to update {self.model_class.__name__}: {e}")
-            return False
+            # Check if only safe metadata fields changed
+            safe_fields = self.model_class.get_safe_metadata_fields()
 
-    async def aupdate(self, instance: T) -> bool:
-        """Update model instance (asynchronous)."""
-        return await asyncio.to_thread(self.update, instance)
+            if fields_changed and fields_changed.issubset(safe_fields):
+                # Metadata-only update (no re-vectorization needed)
+                logger.info(f"Metadata-only update for {self.model_class.__name__} {instance.id}")
+
+                if hasattr(self.adapter, 'update_metadata'):
+                    # Extract metadata from instance
+                    doc = instance.to_document()
+                    metadata = doc.metadata
+
+                    return self.adapter.update_metadata(
+                        doc_id=str(instance.id),
+                        metadata=metadata,
+                        collection_name=self.collection
+                    )
+                else:
+                    logger.warning("Adapter doesn't support metadata-only updates, falling back to full update")
+
+            # Check if content actually changed (smart detection)
+            if isinstance(instance, ContentGenerator) and hasattr(instance, 'id'):
+                existing = self.get(str(instance.id))
+                if existing:
+                    old_content = existing.generate_content() if isinstance(existing, ContentGenerator) else ""
+                    new_content = instance.generate_content()
+
+                    if old_content == new_content:
+                        logger.info(
+                            f"Content unchanged for {self.model_class.__name__} {instance.id}, skipping re-vectorization")
+                        # Still update metadata in case it changed
+                        if hasattr(self.adapter, 'update_metadata'):
+                            doc = instance.to_document()
+                            return self.adapter.update_metadata(
+                                doc_id=str(instance.id),
+                                metadata=doc.metadata,
+                                collection_name=self.collection
+                            )
+                        return True
+
+            # Full update with re-vectorization (atomic operation)
+            logger.info(f"Full update with re-vectorization for {self.model_class.__name__} {instance.id}")
+
+            # Step 1: Delete old version
+            if not self.delete(str(instance.id)):
+                logger.warning(f"Delete failed during update for {instance.id}")
+                return False
+
+            # Step 2: Save new version
+            new_id = self.save(instance)
+            if new_id:
+                logger.info(f"Updated {self.model_class.__name__} {instance.id} successfully")
+                return True
+            else:
+                logger.error(f"Save failed during update for {instance.id}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Update failed for {self.model_class.__name__}: {e}", exc_info=True)
+            return False
 
     def delete(self, doc_id: str) -> bool:
         """
-        Delete model instance by ID (synchronous).
-        
+        Delete a model instance by ID.
+
         Args:
             doc_id: Document ID to delete
-            
+
         Returns:
-            True if successful, False otherwise
+            True if deleted successfully, False otherwise
         """
         try:
             result = self.adapter.delete(
                 ids=[doc_id],
                 collection_name=self.collection
             )
-            return bool(result)
-        except Exception as e:
-            logger.error(f"Failed to delete {self.model_class.__name__} {doc_id}: {e}")
+
+            if result:
+                logger.debug(f"Deleted {self.model_class.__name__} with ID: {doc_id}")
+                return True
+
+            logger.warning(f"Delete returned False for {doc_id}")
             return False
 
-    async def adelete(self, doc_id: str) -> bool:
-        """Delete model instance by ID (asynchronous)."""
-        return await asyncio.to_thread(self.delete, doc_id)
-
-    def similarity_search(
-            self,
-            query: str,
-            k: int = 10,
-            filters: Optional[Any] = None
-    ) -> List[T]:
-        """
-        Semantic search for model instances (synchronous).
-        
-        Args:
-            query: Search query text
-            k: Number of results to return
-            filters: Optional database-specific filter object
-                - Weaviate: weaviate.classes.query.Filter object
-        """
-        try:
-            docs = self.adapter.similarity_search(
-                query=query,
-                k=k,
-                filters=filters,
-                collection_name=self.collection
-            )
-            return [self.model_class.from_document(doc) for doc in docs]
         except Exception as e:
-            logger.error(f"Search failed: {e}")
-            return []
+            logger.error(f"Delete failed for ID {doc_id}: {e}")
+            return False
 
-    async def asimilarity_search(
-            self,
-            query: str,
-            k: int = 10,
-            filters: Optional[Any] = None
-    ) -> List[T]:
-        """Semantic search for model instances (asynchronous)."""
-        return await asyncio.to_thread(
-            self.similarity_search,
-            query,
-            k,
-            filters
-        )
-
-    def search(
-            self,
-            query: str,
-            search_type: SearchType = SearchType.NEAR_TEXT,
-            k: int = 10,
-            filters: Optional[Any] = None
-    ) -> List[T]:
-        """
-        Search for model instances using specified search type (synchronous).
-        
-        Args:
-            query: Search query text
-            search_type: Type of search (NEAR_TEXT, BM25, HYBRID)
-            k: Number of results to return
-            filters: Optional database-specific filter object
-            
-        Returns:
-            List of model instances
-        """
-        try:
-            docs = self.adapter.search(
-                query=query,
-                search_type=search_type,
-                k=k,
-                filters=filters,
-                collection_name=self.collection,
-            )
-            return [self.model_class.from_document(doc) for doc in docs]
-        except Exception as e:
-            logger.error(f"Search failed: {e}")
-            return []
-
-    async def asearch(
-            self,
-            query: str,
-            search_type: SearchType = SearchType.NEAR_TEXT,
-            k: int = 10,
-            filters: Optional[Any] = None
-    ) -> List[T]:
-        """Search for model instances using specified search type (asynchronous)."""
-        return await asyncio.to_thread(
-            self.search,
-            query,
-            search_type,
-            k,
-            filters
-        )
-
-    def filter(
-            self,
-            filters: Any,
-            limit: int = 100
-    ) -> List[T]:
-        """
-        Filter model instances by metadata only (synchronous, no vector search).
-        
-        Uses database-specific metadata filtering.
-        
-        Args:
-            filters: Database-specific filter object
-                - Weaviate: weaviate.classes.query.Filter object
-            limit: Maximum number of results
-        """
-        try:
-            docs = self.adapter.filter_by_metadata(
-                filters=filters,
-                limit=limit,
-                collection_name=self.collection
-            )
-
-            return [self.model_class.from_document(doc) for doc in docs]
-        except Exception as e:
-            logger.error(f"Filter failed: {e}")
-            return []
-
-    async def afilter(
-            self,
-            filters: Any,
-            limit: int = 100
-    ) -> List[T]:
-        """Filter model instances by metadata only (asynchronous)."""
-        return await asyncio.to_thread(
-            self.filter,
-            filters,
-            limit
-        )
+    # ========================================
+    # Bulk Operations
+    # ========================================
 
     def bulk_save(self, instances: List[T]) -> BatchResult:
         """
-        Bulk save model instances (synchronous).
-        
+        Bulk save model instances for better performance.
+
         Args:
-            instances: List of model instances to save
-            
+            instances: List of model instances
+
         Returns:
-            BatchResult with operation statistics
+            BatchResult with success/failure counts
         """
+        if not instances:
+            return BatchResult(total=0, successful=0, failed=0)
+
         try:
-            documents = [inst.to_document() for inst in instances]
-            ids = self.adapter.add_documents(
-                documents=documents,
+            docs = [inst.to_document() for inst in instances]
+            doc_ids = self.adapter.add_documents(
+                documents=docs,
                 collection_name=self.collection
             )
 
-            successful = len(ids) if ids else 0
-            failed = len(instances) - successful
+            successful = len(doc_ids) if doc_ids else 0
+            total = len(instances)
+            failed = total - successful
 
-            return BatchResult(
-                total=len(instances),
-                successful=successful,
-                failed=failed,
-                errors=[]
+            logger.info(
+                f"Bulk saved {successful}/{total} {self.model_class.__name__} instances "
+                f"(success rate: {successful / total * 100:.1f}%)"
             )
+
+            return BatchResult(total=total, successful=successful, failed=failed)
+
         except Exception as e:
-            logger.error(f"Bulk save failed: {e}")
-            return BatchResult(
-                total=len(instances),
-                successful=0,
-                failed=len(instances),
-                errors=[{'message': str(e)}]
-            )
-
-    async def abulk_save(self, instances: List[T]) -> BatchResult:
-        """Bulk save model instances (asynchronous)."""
-        return await asyncio.to_thread(self.bulk_save, instances)
+            logger.error(f"Bulk save failed: {e}", exc_info=True)
+            return BatchResult(total=len(instances), successful=0, failed=len(instances))
 
     def delete_by_filter(self, filters: Any) -> Optional[int]:
         """
-        Delete model instances by filter conditions (synchronous).
-        
+        Delete model instances by filter conditions.
+
         Args:
             filters: Database-specific filter object or dict
                 - Dict: {"field": "value"} or {"field": {"$in": ["val1", "val2"]}}
                 - Weaviate: weaviate.classes.query.Filter object
-                
+
         Returns:
             Number of deleted documents, or None if operation failed
         """
         try:
             if hasattr(self.adapter, 'delete_by_filter'):
-                return self.adapter.delete_by_filter(
+                deleted = self.adapter.delete_by_filter(
                     filters=filters,
                     collection_name=self.collection
                 )
+                logger.info(f"Deleted {deleted} {self.model_class.__name__} instances by filter")
+                return deleted
             else:
                 logger.warning(f"Adapter {type(self.adapter).__name__} does not support delete_by_filter")
                 return 0
         except Exception as e:
-            logger.error(f"Delete by filter failed: {e}")
-            return 0
-
-    async def adelete_by_filter(self, filters: Any) -> Optional[int]:
-        """Delete model instances by filter conditions (asynchronous)."""
-        return await asyncio.to_thread(self.delete_by_filter, filters)
+            logger.error(f"Delete by filter failed: {e}", exc_info=True)
+            raise RepositoryError(f"Failed to delete by filter") from e
 
     def batch_update_by_filter(
             self,
@@ -337,80 +330,230 @@ class Repository(Generic[T]):
             limit: int = 1000
     ) -> int:
         """
-        Batch update fields without triggering re-vectorization (synchronous).
-        
+        Batch update instances matching filter conditions.
+
+        Intelligently detects if only metadata fields are being updated
+        to avoid unnecessary re-vectorization.
+
         Args:
-            filters: Database-specific filter object
-            update_data: Dictionary of fields to update (metadata only, not vector fields)
-            limit: Maximum number of documents to update
-            
+            filters: Filter conditions
+            update_data: Dictionary of fields to update
+            limit: Maximum number of instances to update
+
         Returns:
-            Number of successfully updated documents
+            Number of updated instances
         """
         try:
-            # 1. Query matching documents
+            # Check if only safe metadata fields are being updated
+            safe_fields = self.model_class.get_safe_metadata_fields()
+            update_fields = set(update_data.keys())
+
+            if update_fields.issubset(safe_fields):
+                # Metadata-only batch update (fast path)
+                logger.info(f"Batch metadata-only update for {self.model_class.__name__}")
+
+                if hasattr(self.adapter, 'batch_update_properties'):
+                    # Get matching instances to extract IDs
+                    instances = self.filter(filters=filters, limit=limit)
+                    if not instances:
+                        logger.info("No documents found matching filters")
+                        return 0
+
+                    doc_ids = [str(inst.id) for inst in instances]
+
+                    return self.adapter.batch_update_properties(
+                        doc_ids=doc_ids,
+                        properties=update_data,
+                        collection_name=self.collection
+                    )
+
+            # Full update with re-vectorization (slow path)
+            logger.info(f"Batch full update with re-vectorization for {self.model_class.__name__}")
             instances = self.filter(filters=filters, limit=limit)
 
             if not instances:
                 logger.info("No documents found matching filters")
                 return 0
 
-            # 2. Extract IDs
-            doc_ids = [inst.id for inst in instances]
+            # Apply updates to instances
+            for inst in instances:
+                for key, value in update_data.items():
+                    setattr(inst, key, value)
 
-            # 3. Use adapter's batch update if available
-            if hasattr(self.adapter, 'batch_update_properties'):
-                updated_count = self.adapter.batch_update_properties(
-                    doc_ids=doc_ids,
-                    update_data=update_data,
-                    collection_name=self.collection
-                )
-                logger.info(f"Batch updated {updated_count} documents")
-                return updated_count
-            else:
-                # Fallback: update individually (slower but works)
-                logger.warning("Adapter doesn't support batch updates, using fallback")
-                updated_count = 0
-                for inst in instances:
-                    # Update instance fields
-                    for key, value in update_data.items():
-                        if hasattr(inst, key):
-                            setattr(inst, key, value)
-                    # Save updated instance
-                    if self.update(inst):
-                        updated_count += 1
-                return updated_count
+            # Bulk save updated instances
+            result = self.bulk_save(instances)
+            return result.successful
 
         except Exception as e:
-            logger.error(f"Batch update by filter failed: {e}")
+            logger.error(f"Batch update by filter failed: {e}", exc_info=True)
             return 0
 
-    async def abatch_update_by_filter(
+    # ========================================
+    # Search Operations
+    # ========================================
+
+    def search(
+            self,
+            query: str,
+            search_type: SearchType = SearchType.HYBRID,
+            k: int = 10,
+            filters: Optional[Any] = None
+    ) -> List[T]:
+        """
+        Search for model instances using natural language query.
+
+        Args:
+            query: Search query text
+            search_type: Type of search (NEAR_TEXT, BM25, HYBRID)
+            k: Number of results to return
+            filters: Optional filter conditions
+
+        Returns:
+            List of model instances ranked by relevance
+        """
+        try:
+            results = self.adapter.search(
+                query=query,
+                search_type=search_type,
+                k=k,
+                filters=filters,
+                collection_name=self.collection
+            )
+
+            instances = []
+            for doc in results:
+                try:
+                    data = self.model_class.from_document(doc)
+                    # Reconstruct model instance (may be partial)
+                    instances.append(data)
+                except Exception as e:
+                    logger.warning(f"Failed to convert document to model: {e}")
+
+            logger.info(f"Search returned {len(instances)} {self.model_class.__name__} instances")
+            return instances
+
+        except Exception as e:
+            logger.error(f"Search failed: {e}", exc_info=True)
+            return []
+
+    def filter(
             self,
             filters: Any,
-            update_data: Dict[str, Any],
-            limit: int = 1000
-    ) -> int:
-        """Batch update fields without triggering re-vectorization (asynchronous)."""
-        return await asyncio.to_thread(
-            self.batch_update_by_filter,
-            filters,
-            update_data,
-            limit
-        )
-
-    def get_retriever(self,
-                      search_type: SearchType = SearchType.NEAR_TEXT,
-                      **search_kwargs
-                      ):
+            limit: int = 10
+    ) -> List[T]:
         """
-        Retrieve model instances by search type.
+        Filter model instances by metadata conditions (no semantic search).
+
+        Args:
+            filters: Filter conditions (dict or native format)
+            limit: Maximum results to return
+
+        Returns:
+            List of matching model instances
+        """
+        try:
+            results = self.adapter.filter(
+                filters=filters,
+                limit=limit,
+                collection_name=self.collection
+            )
+
+            instances = []
+            for doc in results:
+                try:
+                    data = self.model_class.from_document(doc)
+                    instances.append(data)
+                except Exception as e:
+                    logger.warning(f"Failed to convert document: {e}")
+
+            logger.debug(f"Filter returned {len(instances)} {self.model_class.__name__} instances")
+            return instances
+
+        except Exception as e:
+            logger.error(f"Filter failed: {e}")
+            return []
+
+    def search_with_rerank(
+            self,
+            query: str,
+            k: int = 10,
+            candidate_k: Optional[int] = None,
+            search_type: SearchType = SearchType.HYBRID,
+            filters: Optional[Any] = None,
+            reranker_type: RerankerProvider = RerankerProvider.FLASHRANK,
+            reranker_kwargs: Optional[Dict[str, Any]] = None
+    ) -> List[T]:
+        """
+        Search with reranking for improved relevance.
+
+        Fetches candidate_k results, reranks them, returns top k.
+
+        Args:
+            query: Search query
+            k: Final number of results
+            candidate_k: Number of candidates for reranking (default: k*3)
+            search_type: Type of search
+            filters: Filter conditions
+            reranker_type: Reranker to use
+            reranker_kwargs: Additional reranker parameters
+
+        Returns:
+            List of reranked model instances
+        """
+        try:
+            if candidate_k is None:
+                candidate_k = min(k * 3, 100)
+
+            results = self.adapter.search_with_rerank(
+                query=query,
+                k=k,
+                candidate_k=candidate_k,
+                search_type=search_type,
+                filters=filters,
+                reranker_type=reranker_type,
+                reranker_kwargs=reranker_kwargs or {},
+                collection_name=self.collection
+            )
+
+            instances = []
+            for doc in results:
+                try:
+                    data = self.model_class.from_document(doc)
+                    instances.append(data)
+                except Exception as e:
+                    logger.warning(f"Failed to convert document: {e}")
+
+            logger.info(f"Rerank search returned {len(instances)} {self.model_class.__name__} instances")
+            return instances
+
+        except Exception as e:
+            logger.error(f"Rerank search failed: {e}", exc_info=True)
+            return []
+
+    # ========================================
+    # Retriever Methods (for LangChain integration)
+    # ========================================
+
+    def get_retriever(
+            self,
+            search_type: SearchType = SearchType.HYBRID,
+            k: int = 10
+    ):
+        """
+        Get a LangChain retriever for RAG applications.
+
+        Args:
+            search_type: Type of search
+            k: Number of results
+
+        Returns:
+            AdapterRetriever instance
         """
         return AdapterRetriever(
             adapter=self.adapter,
             collection_name=self.collection,
             search_type=search_type,
-            search_kwargs=search_kwargs
+            search_kwargs={"k": k}
         )
 
     def get_compression_retriever(
@@ -422,156 +565,43 @@ class Repository(Generic[T]):
     ) -> ContextualCompressionRetriever:
         """
         Get a compression retriever with reranking support.
-        
+
         Args:
-            reranker_type: Type of reranker to use (FLASHRANK, etc.)
-            search_type: Base search type (NEAR_TEXT, HYBRID, BM25)
-            search_kwargs: Arguments for base retriever (k, filters, etc.)
-            reranker_kwargs: Arguments for reranker (model, top_k, etc.)
-            
+            reranker_type: Reranker provider
+            search_type: Type of search
+            search_kwargs: Search parameters
+            reranker_kwargs: Reranker parameters
+
         Returns:
-            ContextualCompressionRetriever for use in LangChain chains
+            ContextualCompressionRetriever with reranking
         """
+        from .retrievers.reranker import create_reranker
+
         base_retriever = self.get_retriever(
             search_type=search_type,
-            **(search_kwargs or {})
+            k=search_kwargs.get("k", 10) if search_kwargs else 10
         )
-        compressor = self._create_compressor(reranker_type, reranker_kwargs or {})
 
-        compression_retriever = ContextualCompressionRetriever(
-            base_compressor=compressor,
+        reranker = create_reranker(
+            reranker_type=reranker_type,
+            **(reranker_kwargs or {})
+        )
+
+        return ContextualCompressionRetriever(
+            base_compressor=reranker,
             base_retriever=base_retriever
         )
-        return compression_retriever
 
-    def _create_compressor(self, reranker_type: RerankerProvider, kwargs: dict):
-        """
-        Create compressor based on reranker type.
-
-        Note: https://github.com/PrithivirajDamodaran/FlashRank
-        """
-        try:
-            if reranker_type == RerankerProvider.FLASHRANK:
-                from langchain_community.document_compressors import FlashrankRerank
-                try:
-                    FlashrankRerank.model_rebuild()
-                except Exception as e:
-                    logger.error(f"Flashrank model rebuild failed: {e}")
-                return FlashrankRerank(
-                    model=kwargs.get("model", "ms-marco-TinyBERT-L-2-v2"),
-                    top_n=kwargs.get("top_k", 10),
-                    **{k: v for k, v in kwargs.items() if k not in ["model", "top_k"]}
-                )
-            else:
-                raise ValueError(f"Unsupported reranker type: {reranker_type}")
-        except ImportError as e:
-            logger.error(f"Failed to import reranker {reranker_type}: {e}")
-            raise ImportError(
-                f"Required package for {reranker_type} not installed. "
-                f"For FlashRank: pip install flashrank. "
-                f"For Cohere: pip install cohere"
-            ) from e
-
-    def search_with_rerank(
-            self,
-            query: str,
-            reranker_type: RerankerProvider = RerankerProvider.FLASHRANK,
-            search_type: SearchType = SearchType.HYBRID,
-            k: int = 10,
-            candidate_k: int = 50,
-            filters: Optional[Any] = None,
-            reranker_kwargs: Optional[dict] = None
-    ) -> List[T]:
-        """
-        Search with reranking for improved result quality.
-        
-        Uses a two-stage retrieval:
-        1. Initial search retrieves candidate_k documents
-        2. Reranker re-scores and returns top k documents
-        
-        Args:
-            query: Search query text
-            reranker_type: Type of reranker (default: FLASHRANK)
-            search_type: Base search type (NEAR_TEXT, HYBRID, BM25)
-            k: Number of final results to return
-            candidate_k: Number of candidates for reranking (should be > k)
-            filters: Optional database-specific filter object
-            reranker_kwargs: Additional reranker parameters
-                - model: Model name for FlashRank (default: ms-marco-TinyBERT-L-2-v2)
-                - top_k: Override final result count (default: uses k)
-                
-        Returns:
-            List of reranked model instances
-        """
-        try:
-            search_kwargs = {
-                "k": candidate_k,
-                "filters": filters
-            }
-            # Build reranker parameters - k parameter takes precedence
-            rerank_kwargs = reranker_kwargs or {}
-            if "top_k" not in rerank_kwargs:
-                rerank_kwargs["top_k"] = k
-
-            compression_retriever = self.get_compression_retriever(
-                reranker_type=reranker_type,
-                search_type=search_type,
-                search_kwargs=search_kwargs,
-                reranker_kwargs=rerank_kwargs
-            )
-            compressed_docs = compression_retriever.invoke(query)
-            return [self.model_class.from_document(doc) for doc in compressed_docs]
-
-        except Exception as e:
-            logger.error(f"Rerank search failed: {e}")
-            return []
-
-    async def sync_server_to_vector_db(
-            self,
-            server: ExtendedMCPServer,
-            is_delete: bool = True,
-    ) -> Optional[Dict[str, int]]:
-        """
-        Full rebuild: delete old server and recreate from server object.
-        
-        Uses server_id as primary identifier if available, falls back to path.
-        This method is mainly used for initial sync from MongoDB to Weaviate.
-
-        Args:
-            server: ExtendedMCPServer object from MongoDB
-            is_delete: Whether to delete old server records before saving
-
-        Returns:
-            {"indexed_tools": count, "failed_tools": count}
-        """
-        try:
-            # 1. Extract identifiers from server object
-            server_id = str(server.id) if server.id else None
-            server_name = server.serverName
-
-            # 2. Delete old server records if requested
-            deleted = 0
-            if is_delete:
-                if server_id:
-                    deleted = await self.adelete_by_filter({"server_id": server_id})
-                    if deleted > 0:
-                        logger.info(f"Deleted {deleted} old record(s) by server_id: {server_id}")
-
-            # 3. Save server object to vector database
-            doc_id = await self.asave(server)
-            success = doc_id is not None
-
-            logger.info(f"Indexed server '{server_name}' ( server_id: {server_id}): "
-                        f"{'success' if success else 'failed'}")
-            return {
-                "indexed_tools": 1 if success else 0,
-                "failed_tools": 0 if success else 1,
-                "deleted": deleted
-            }
-
-        except Exception as e:
-            logger.error(f"Full sync failed for server {server.serverName}: {e}", exc_info=True)
-            return None
-
-
-mcp_server_repo = Repository(initialize_database(), ExtendedMCPServer)
+    # ========================================
+    # Auto-generated Async Methods
+    # ========================================
+    asave = async_wrapper(save)
+    aget = async_wrapper(get)
+    aupdate = async_wrapper(update)
+    adelete = async_wrapper(delete)
+    abulk_save = async_wrapper(bulk_save)
+    adelete_by_filter = async_wrapper(delete_by_filter)
+    abatch_update_by_filter = async_wrapper(batch_update_by_filter)
+    asearch = async_wrapper(search)
+    afilter = async_wrapper(filter)
+    asearch_with_rerank = async_wrapper(search_with_rerank)

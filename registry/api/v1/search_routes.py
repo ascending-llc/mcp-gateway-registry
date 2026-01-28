@@ -7,14 +7,16 @@ from fastapi import APIRouter, Request
 
 from registry.services.search.service import faiss_service
 from packages.vector.enum.enums import SearchType
-from packages.vector.repository import mcp_server_repo
 from registry.schemas.server_api_schemas import convert_to_detail
 from registry.services.server_service import server_service_v1
+from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
 from ...services.agent_service import agent_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+mcp_server_repo = get_mcp_server_repo()
 
 EntityType = Literal["mcp_server", "tool", "a2a_agent"]
 
@@ -431,6 +433,7 @@ async def search_servers(
     """
     query = body.get("query", "")
     top_n = body.get("top_n", 10)
+
     # Get search_type from body or use default (hybrid)
     search_type_str = body.get("search_type", "hybrid").lower()
     search_type_mapping = {
@@ -440,32 +443,38 @@ async def search_servers(
         "similarity_store": SearchType.SIMILARITY_STORE
     }
     search_type = search_type_mapping.get(search_type_str, SearchType.HYBRID)
+
     if search_type_str not in search_type_mapping:
         logger.warning(f"Invalid search_type '{search_type_str}', using HYBRID")
 
     logger.info(f"🔍 Server search from user '{user_context.get('username', 'unknown')}': "
                 f"query='{query}', top_n={top_n}, search_type={search_type}")
 
-    # Search with reranking for better quality results
-    search_data = mcp_server_repo.search_with_rerank(
+    # Search with reranking using specialized repository
+    search_results = await mcp_server_repo.asearch_with_rerank(
         query=query,
         k=top_n,
         candidate_k=min(top_n * 5, 100),  # Fetch 5x candidates for reranking (max 100)
         search_type=search_type,
     )
+
     logger.info(
         "Search completed: %d results for query=%r",
-        len(search_data),
+        len(search_results),
         query,
     )
-    server_ids = [search.get("server_id") for search in search_data]
 
+    # Convert search results to server details
     servers = []
-    for server_id in server_ids:
-        server = await server_service_v1.get_server_by_id(server_id=server_id)
-        servers.append(convert_to_detail(server))
+    for search_result in search_results:
+        server_id = search_result.get("server_id")
+        if server_id:
+            server = await server_service_v1.get_server_by_id(server_id=server_id)
+            if server:
+                servers.append(convert_to_detail(server))
 
     logger.info(f"✅ Found {len(servers)} servers")
+
     return {
         "query": query,
         "total": len(servers),

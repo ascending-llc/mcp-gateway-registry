@@ -31,7 +31,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from packages.database.mongodb import MongoDB
 from packages.models.extended_mcp_server import ExtendedMCPServer
 from registry.services.server_service_v1 import server_service_v1
-from packages.vector.repository import mcp_server_repo
+from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
+
+mcp_server_repo = get_mcp_server_repo()
 
 
 class SyncStats:
@@ -117,12 +119,8 @@ async def check_server_exists(server_id: str) -> bool:
         True if server exists in Weaviate
     """
     try:
-        # Query by metadata.server_id (MongoDB _id)
-        existing_servers = await mcp_server_repo.afilter(
-            filters={"server_id": server_id},
-            limit=1
-        )
-        return len(existing_servers) > 0
+        existing = await mcp_server_repo.get_by_server_id(server_id)
+        return existing is not None
     except Exception as e:
         print(f"  Warning: Failed to check existence for server {server_id}: {e}")
         return False
@@ -131,16 +129,13 @@ async def check_server_exists(server_id: str) -> bool:
 async def sync_server(server: Any, stats: SyncStats):
     """
     Sync a single server to Weaviate.
-    
-    Args:
-        server: ExtendedMCPServer instance from MongoDB
-        stats: SyncStats tracker
     """
     server_name = server.serverName
     server_path = server.path
     server_id = str(server.id)
 
     print(f"Processing: {server_name} ({server_path}) [ID: {server_id}]")
+
     try:
         # Check if server already exists (by server_id)
         exists = await check_server_exists(server_id)
@@ -158,24 +153,17 @@ async def sync_server(server: Any, stats: SyncStats):
         stats.servers_with_tools += 1
         stats.total_tools += 1  # Count servers, not individual tools
 
-        # Save server to Weaviate
-        # The server is already an ExtendedMCPServer instance from MongoDB
-        try:
-            result = await mcp_server_repo.asave(server)
+        result = await mcp_server_repo.sync_server_to_vector_db(
+            server=server,
+            is_delete=False  # No need to delete, we already checked existence
+        )
 
-            if result:
-                print(f"  ✓ Successfully imported server")
-                stats.tools_imported += 1
-                stats.add_server(server_name, server_path, 1, 1, 0, 0)
-            else:
-                error_msg = f"{server_name}: Failed to import server"
-                print(f"  ✗ {error_msg}")
-                stats.add_error(error_msg)
-                stats.tools_failed += 1
-                stats.add_server(server_name, server_path, 1, 0, 0, 1)
-
-        except Exception as e:
-            error_msg = f"Failed to save server {server_name}: {e}"
+        if result and result.get("indexed_tools", 0) > 0:
+            print(f"  ✓ Successfully imported server")
+            stats.tools_imported += 1
+            stats.add_server(server_name, server_path, 1, 1, 0, 0)
+        else:
+            error_msg = f"{server_name}: Failed to import server"
             print(f"  ✗ {error_msg}")
             stats.add_error(error_msg)
             stats.tools_failed += 1
@@ -191,10 +179,10 @@ async def sync_server(server: Any, stats: SyncStats):
 
 
 async def clean_weaviate():
-    """Delete all existing servers from Weaviate."""
+    """Delete all existing servers from Weaviate using specialized repository."""
     print("Deleting all existing servers...")
     try:
-        # Delete all servers (filter by collection name)
+        # Use specialized repository
         deleted = await mcp_server_repo.adelete_by_filter(
             filters={"collection": ExtendedMCPServer.COLLECTION_NAME}
         )
@@ -203,8 +191,8 @@ async def clean_weaviate():
         return deleted
     except Exception as e:
         print(f"✗ Error cleaning Weaviate: {e}")
-        print("=" * 80 + "\n")
-        raise
+        traceback.print_exc()
+        return 0
 
 
 async def sync_all_servers(batch_size: int = 100):

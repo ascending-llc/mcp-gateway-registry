@@ -44,7 +44,7 @@ Key Principle:
 """
 
 from datetime import datetime
-from typing import Any, ClassVar, Dict, List, Optional, Set
+from typing import Any, ClassVar, Dict, List, Optional, Set, Literal
 from pydantic import Field
 from beanie import Document, PydanticObjectId
 from langchain_core.documents import Document as LangChainDocument
@@ -98,17 +98,22 @@ class ExtendedMCPServer(Document):
     """
 
     # ========== Base Fields (from MCPServerDocument) ==========
-    serverName: str = Field(..., description="Unique server identifier")
+    serverName: str = Field(..., description="Unique server identifier",
+                            json_schema_extra={"vector_role": "content"})  # Vectorized for search
     config: Dict[str, Any] = Field(...,
                                    description="MCP server configuration (oauth, apiKey, capabilities, tools, etc.)")
     author: PydanticObjectId = Field(..., description="User who created this server")
 
     # ========== Registry-Specific Root-Level Fields ==========
     # These fields are specific to the registry and should NOT be in config
-    path: str = Field(..., description="API path for this server (e.g., /mcp/github)")
-    tags: List[str] = Field(default_factory=list, description="Tags for categorization")
-    scope: str = Field(default="private_user", description="Access level: shared_app, shared_user, private_user")
-    status: str = Field(default="active", description="Operational state: active, inactive, error")
+    path: str = Field(..., description="API path for this server (e.g., /mcp/github)",
+                      json_schema_extra={"vector_role": "content"})  # Vectorized for search
+    tags: List[str] = Field(default_factory=list, description="Tags for categorization",
+                            json_schema_extra={"vector_role": "metadata"})
+    scope: str = Field(default="private_user", description="Access level: shared_app, shared_user, private_user",
+                       json_schema_extra={"vector_role": "metadata"})
+    status: str = Field(default="active", description="Operational state: active, inactive, error",
+                        json_schema_extra={"vector_role": "metadata"})
     numTools: int = Field(default=0, alias="numTools", description="Number of tools (calculated from toolFunctions)")
     numStars: int = Field(default=0, alias="numStars", description="Number of stars/favorites")
 
@@ -142,14 +147,18 @@ class ExtendedMCPServer(Document):
 
         """
         content = self.generate_content()
-        metadata = {
-            'server_id': str(self.id) if self.id else None,
-            'server_name': self.serverName,
-            'path': self.path,
-            'scope': self.scope,
-            'status': self.status,
-            'collection': self.COLLECTION_NAME,
-        }
+
+        # Auto-discover metadata fields using annotations
+        metadata = {'collection': self.COLLECTION_NAME}
+
+        for field_name in self._get_fields_by_role("metadata"):
+            value = getattr(self, field_name, None)
+            metadata_key = self._camel_to_snake(field_name)
+            metadata[metadata_key] = value
+
+        # Always include server_id for lookups (MongoDB _id)
+        metadata['server_id'] = str(self.id) if self.id else None
+
         return LangChainDocument(
             page_content=content,
             metadata=metadata,
@@ -276,13 +285,34 @@ class ExtendedMCPServer(Document):
     def get_safe_metadata_fields() -> Set[str]:
         """
         Get safe metadata fields that can be updated without re-vectorization.
-        
-        These fields are stored in metadata, not in the vectorized content.
-        
+
+        Auto-discovers fields marked with vector_role="metadata".
+
         Returns:
-            Set of safe field names (matching Weaviate metadata field names)
+            Set of safe field names (matching Weaviate metadata field names in snake_case)
         """
-        return {'tags', 'scope', 'status', 'server_name', 'path'}
+        metadata_fields = ExtendedMCPServer._get_fields_by_role("metadata")
+        return {ExtendedMCPServer._camel_to_snake(f) for f in metadata_fields}
+
+    @staticmethod
+    def _camel_to_snake(name: str) -> str:
+        """Convert camelCase to snake_case"""
+        return ''.join(['_' + c.lower() if c.isupper() else c for c in name]).lstrip('_')
+
+    @classmethod
+    def _get_fields_by_role(cls, role: Literal["content", "metadata"]) -> Set[str]:
+        """
+        Automatically discover fields marked with specific vector_role.
+
+        This eliminates manual maintenance of field lists and ensures
+        consistency between field definitions and vector storage logic.
+        """
+        fields = set()
+        for field_name, field_info in cls.model_fields.items():
+            extra = field_info.json_schema_extra
+            if extra and extra.get("vector_role") == role:
+                fields.add(field_name)
+        return fields
 
 
 MCPServerDocument = ExtendedMCPServer

@@ -1,9 +1,10 @@
 from typing import Dict, Any, Optional, List
 from packages.vector.enum.enums import SearchType, RerankerProvider
 from packages.models.extended_mcp_server import ExtendedMCPServer
-from packages.vector.repository import mcp_server_repo
 from .base import VectorSearchService
 from registry.utils.log import logger
+from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
+
 
 class ExternalVectorSearchService(VectorSearchService):
     """
@@ -29,46 +30,42 @@ class ExternalVectorSearchService(VectorSearchService):
         self.reranker_model = reranker_model
 
         try:
-            self.client = mcp_server_repo.db_client
-            self.mcp_servers = mcp_server_repo
+            self.mcp_server_repo = get_mcp_server_repo()
+            self.client = self.mcp_server_repo.db_client
             self._initialized = True
 
-            logger.info(f"Registry vector search service initialized (shared connection): "
+            logger.info(f"Registry vector search service initialized (specialized repository): "
                         f"rerank={enable_rerank}, search_type={search_type.value}")
         except Exception as e:
             self.client = None
-            self.mcp_servers = None
+            self.mcp_server_repo = None
             self._initialized = False
             logger.error(f"Failed to initialize vector search service: {e}")
 
     async def initialize(self) -> None:
-        """
-        Initialize and verify database connection.
-        
-        Checks adapter status and collection availability.
-        """
+        """Initialize and verify database connection."""
         if not self._initialized:
-            logger.error("Vector search not initialized (shared connection unavailable)")
+            logger.error("Vector search not initialized")
             raise Exception("Vector search not initialized")
 
         try:
             if not self.client or not self.client.is_initialized():
-                raise Exception("Shared DatabaseClient not initialized")
+                raise Exception("Database client not initialized")
 
             collection_name = ExtendedMCPServer.COLLECTION_NAME
             adapter = self.client.adapter
-            
+
             if hasattr(adapter, 'collection_exists'):
                 exists = adapter.collection_exists(collection_name)
                 if exists:
-                    logger.info(f"Registry: Collection '{collection_name}' verified")
+                    logger.info(f"Collection '{collection_name}' verified")
                 else:
-                    logger.warning(f"Registry: Collection '{collection_name}' may not exist yet")
+                    logger.warning(f"Collection '{collection_name}' may not exist yet")
 
             logger.info("Registry vector search verified successfully")
 
         except Exception as e:
-            logger.error(f"Registry initialization verification failed: {e}", exc_info=True)
+            logger.error(f"Initialization verification failed: {e}", exc_info=True)
             self._initialized = False
             raise Exception(f"Cannot verify vector search: {e}")
 
@@ -102,7 +99,7 @@ class ExternalVectorSearchService(VectorSearchService):
 
         if use_rerank:
             # Return compression retriever with rerank
-            return self.mcp_servers.get_compression_retriever(
+            return self.mcp_server_repo.get_compression_retriever(
                 reranker_type=RerankerProvider.FLASHRANK,
                 search_type=use_search_type,
                 search_kwargs={"k": top_k * 3},  # 3x candidates
@@ -113,7 +110,7 @@ class ExternalVectorSearchService(VectorSearchService):
             )
         else:
             # Return base retriever without rerank
-            return self.mcp_servers.get_retriever(
+            return self.mcp_server_repo.get_retriever(
                 search_type=use_search_type,
                 k=top_k
             )
@@ -127,42 +124,41 @@ class ExternalVectorSearchService(VectorSearchService):
         """
         Add or update server in vector database.
 
-        Args:
-            service_path: Service path (e.g., /weather) - for backward compatibility
-            server_info: Server info with config (must contain 'path')
-            is_enabled: Whether service is enabled
-
-        Returns:
-            {"indexed_tools": count, "failed_tools": count} or None if unavailable
+        Uses ExtendedMCPServer.from_server_info() to create server instance,
+        then uses specialized repository for sync.
         """
-        # Ensure path is in server_info
-        if 'path' not in server_info:
-            server_info['path'] = service_path
-        
-        # asyncio.create_task(mcp_server_repo.sync_full(
-        #     server_info=server_info,
-        #     is_enabled=is_enabled
-        # ))
-        return {"indexed_tools": 1, "failed_tools": 0}
+        try:
+            # Ensure path is in server_info
+            if 'path' not in server_info:
+                server_info['path'] = service_path
+
+            # Create server instance from server_info
+            server = ExtendedMCPServer.from_server_info(
+                server_info=server_info,
+                is_enabled=is_enabled
+            )
+
+            # Use specialized repository's sync method
+            result = await self.mcp_server_repo.sync_server_to_vector_db(
+                server=server,
+                is_delete=True
+            )
+
+            return result if result else {"indexed_tools": 0, "failed_tools": 1}
+
+        except Exception as e:
+            logger.error(f"Failed to add/update service: {e}", exc_info=True)
+            return {"indexed_tools": 0, "failed_tools": 1}
 
     async def remove_service(self, service_path: str) -> Optional[Dict[str, int]]:
         """
         Remove server from vector database.
-        
-        Note: This method uses path as identifier, which is less reliable.
-        Prefer using remove_entity() with server_id when possible.
 
-        Args:
-            service_path: Service path identifier
-
-        Returns:
-            {"deleted_tools": count}
+        Note: Uses path as identifier. Prefer using server_id when available.
         """
-        # Delete by path filter
-        deleted_count = await mcp_server_repo.adelete_by_filter(
+        deleted_count = await self.mcp_server_repo.adelete_by_filter(
             filters={"path": service_path}
         )
-        
         return {"deleted_tools": deleted_count}
 
     async def search(
@@ -200,7 +196,7 @@ class ExternalVectorSearchService(VectorSearchService):
                 if not filters:
                     logger.warning("No query and no filters provided")
                     return []
-                servers = self.mcp_servers.filter(
+                servers = self.mcp_server_repo.filter(
                     filters=filters,
                     limit=top_k * 2 if tags else top_k
                 )
@@ -212,7 +208,7 @@ class ExternalVectorSearchService(VectorSearchService):
 
                 logger.info(f"Using rerank: type={use_search_type.value}, "
                             f"candidate_k={candidate_k}, k={top_k * 2 if tags else top_k}")
-                servers = self.mcp_servers.search_with_rerank(
+                servers = self.mcp_server_repo.search_with_rerank(
                     query=query,
                     search_type=use_search_type,
                     k=top_k * 2 if tags else top_k,
@@ -223,7 +219,7 @@ class ExternalVectorSearchService(VectorSearchService):
                 )
             else:
                 # Regular search without rerank
-                servers = self.mcp_servers.search(
+                servers = self.mcp_server_repo.search(
                     query=query,
                     search_type=use_search_type,
                     k=top_k * 2 if tags else top_k,
@@ -397,7 +393,7 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             Result dictionary
         """
-        deleted_count = await mcp_server_repo.adelete_by_filter(
+        deleted_count = await self.mcp_server_repo.adelete_by_filter(
             filters={"path": entity_path}
         )
         return {"deleted_tools": deleted_count}
@@ -410,7 +406,7 @@ class ExternalVectorSearchService(VectorSearchService):
         """
         logger.info("Cleaning up Registry vector search service")
         self.client = None
-        self.mcp_servers = None
+        self.mcp_server_repo = None
         self._initialized = False
         logger.info("Registry vector search cleanup complete (shared connection preserved)")
 
@@ -437,7 +433,7 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             Dictionary with entity type keys and result lists
         """
-        if not self.mcp_servers:
+        if not self.mcp_server_repo:
             logger.warning("Vector search not initialized")
             return {"servers": [], "agents": []}
 
@@ -473,7 +469,7 @@ class ExternalVectorSearchService(VectorSearchService):
                     f"Mixed search with rerank: type={use_search_type.value}, "
                     f"candidate_k={candidate_k}, k={search_k}"
                 )
-                servers = self.mcp_servers.search_with_rerank(
+                servers = self.mcp_server_repo.search_with_rerank(
                     query=query,
                     search_type=use_search_type,
                     k=search_k,
@@ -483,7 +479,7 @@ class ExternalVectorSearchService(VectorSearchService):
                 )
             else:
                 # Regular search without rerank
-                servers = self.mcp_servers.search(
+                servers = self.mcp_server_repo.search(
                     query=query,
                     search_type=use_search_type,
                     k=search_k

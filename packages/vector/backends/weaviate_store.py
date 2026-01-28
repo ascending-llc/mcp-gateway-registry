@@ -1,12 +1,10 @@
 import logging
-
 from typing import Dict, Any, List, Optional
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
 import weaviate.classes.config as wvc
 from ..adapters.adapter import VectorStoreAdapter
 from ..enum.enums import SearchType, EmbeddingProvider
-from weaviate.classes.query import Filter
 
 logger = logging.getLogger(__name__)
 
@@ -463,7 +461,7 @@ class WeaviateStore(VectorStoreAdapter):
     def delete_by_filter(
             self,
             filters: Any,
-            collection_name: str
+            collection_name: Optional[str] = None
     ) -> int:
         """
         Delete documents by filter conditions.
@@ -489,10 +487,10 @@ class WeaviateStore(VectorStoreAdapter):
             # Execute batch delete
             result = collection.data.delete_many(where=normalized_filters)
             deleted_count = result.successful
-            
+
             if result.failed > 0:
                 logger.warning(f"Batch delete: {result.successful} successful, {result.failed} failed")
-            
+
             logger.info(f"Deleted {deleted_count} documents by filter")
             return deleted_count
 
@@ -511,3 +509,42 @@ class WeaviateStore(VectorStoreAdapter):
             )
             docs.append(doc)
         return docs
+
+    def update_metadata(
+            self,
+            doc_id: str,
+            metadata: Dict[str, Any],
+            collection_name: Optional[str] = None
+    ) -> bool:
+        """
+        Update metadata properties without re-vectorization (Weaviate-specific).
+
+        Only updates the metadata properties, leaves vector unchanged.
+        This is much faster than delete+re-insert.
+
+        Args:
+            doc_id: Document UUID
+            metadata: Metadata properties to update
+            collection_name: Collection name
+
+        Returns:
+            True if updated successfully
+        """
+        collection = self.get_collection(collection_name)
+
+        try:
+            # Filter out non-property fields
+            properties = {k: v for k, v in metadata.items() if k != 'collection'}
+
+            # Update properties using Weaviate's update API
+            collection.data.update(
+                uuid=doc_id,
+                properties=properties
+            )
+
+            logger.info(f"Updated metadata for document {doc_id}: {list(properties.keys())}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Metadata update failed: {e}", exc_info=True)
+            return False

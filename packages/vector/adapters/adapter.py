@@ -360,6 +360,31 @@ class VectorStoreAdapter(ABC):
         """
         return collection_name in self.list_collections()
 
+    def update_metadata(
+            self,
+            doc_id: str,
+            metadata: Dict[str, Any],
+            collection_name: Optional[str] = None
+    ) -> bool:
+        """
+        Update metadata fields only without re-vectorization.
+
+        This is an optimization for updating non-content fields
+        like tags, status, scope, etc.
+
+        Args:
+            doc_id: Document ID
+            metadata: Metadata fields to update
+            collection_name: Target collection
+
+        Returns:
+            True if updated successfully
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement update_metadata(). "
+            "Falling back to full update with re-vectorization."
+        )
+
     def delete_by_filter(
             self,
             filters: Any,
