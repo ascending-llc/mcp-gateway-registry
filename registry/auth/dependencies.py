@@ -1,13 +1,15 @@
 import secrets
-from typing import Annotated, List, Dict, Any, Optional
+from typing import Annotated, List, Dict, Any
 import logging
 import yaml
 from pathlib import Path
 
 from fastapi import Depends, HTTPException, status, Cookie, Header, Request
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
-
+from registry.services.access_control_service import acl_service
+from registry.core.acl_constants import PrincipalType
 from registry.core.config import settings
+from beanie import PydanticObjectId
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,43 @@ def get_current_user_by_mid(request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Is not authenticated")
     return request.state.user
+
+async def get_user_acl_permissions(request: Request) -> Dict[str, Any]:
+    """ 
+        Get current authenticated user from request state with ACL permissions
+        Replaces the need for get_user_by_mid
+
+    Args:
+        request: FastAPI request object
+
+    Returns:
+        User context dictionary with additional acl details
+
+    Raises:
+        HTTPException: If user is not authenticated
+    """
+    if not hasattr(request.state, 'user') or not request.state.is_authenticated:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Is not authenticated")
+    
+
+    try:
+        user_id = request.state.user.get('user_id')
+        role = request.state.user.get('role')
+        username = request.state.user.get('username')
+        acl_permission_map = await acl_service.get_permissions_map_for_user_id(
+            principal_type=PrincipalType.USER.value, 
+            principal_id=PydanticObjectId(user_id),
+        )
+        return {
+            **request.state.user,
+            "user_id": user_id,
+            "acl_permission_map": acl_permission_map,
+            "role": role
+        }
+    except Exception as e:
+        logger.info(f'Error fetching user ACL permissions {username} from database: {e}')
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not find user object from db")
 
 
 def get_current_user(
@@ -709,5 +748,5 @@ def ui_permission_required(permission: str, service_name: str = None):
 
     return check_permission
 
-
 CurrentUser: type[dict[str, Any]] = Annotated[Dict[str, Any], Depends(get_current_user_by_mid)]
+CurrentUserWithACLMap: type[dict[str, Any]] = Annotated[Dict[str, Any], Depends(get_user_acl_permissions)]
