@@ -31,8 +31,8 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
         """
         super().__init__(db_client, ExtendedMCPServer)
         logger.info("MCPServerRepository initialized")
-    
-    def ensure_collection(self) -> bool:
+
+    async def ensure_collection(self) -> bool:
         """
         Ensure the collection exists in vector database.
         """
@@ -41,10 +41,10 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
             if self.adapter.collection_exists(self.collection):
                 logger.info(f"Collection '{self.collection}' already exists")
                 return True
-            
+
             logger.info(f"Creating collection '{self.collection}'...")
             store = self.adapter.get_vector_store(self.collection)
-            
+
             if store:
                 logger.info(f"Collection '{self.collection}' created successfully")
                 return True
@@ -73,6 +73,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
         Returns:
             {"indexed_tools": count, "failed_tools": count, "deleted": count}
         """
+        await self.ensure_collection()
         try:
             # 1. Extract identifiers from server object
             server_id = str(server.id) if server.id else None
@@ -124,43 +125,6 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
             logger.error(f"Get by server_id failed: {e}")
             return None
 
-    async def get_by_path(self, path: str) -> Optional[ExtendedMCPServer]:
-        """
-        Get server by path.
-
-        Args:
-            path: Server path (e.g., /github)
-
-        Returns:
-            ExtendedMCPServer instance if found, None otherwise
-        """
-        try:
-            results = await self.afilter(
-                filters={"path": path},
-                limit=1
-            )
-            return results[0] if results else None
-        except Exception as e:
-            logger.error(f"Get by path failed: {e}")
-            return None
-
-    async def update_server_smart(
-            self,
-            server: ExtendedMCPServer,
-            fields_changed: Optional[set] = None
-    ) -> bool:
-        """
-        Smart update that auto-detects content vs metadata changes.
-
-        Args:
-            server: Updated server instance
-            fields_changed: Set of field names that changed (optional)
-
-        Returns:
-            True if updated successfully
-        """
-        return await self.aupdate(server, fields_changed=fields_changed)
-
     async def sync_by_enabled_status(
             self,
             server: ExtendedMCPServer,
@@ -183,9 +147,10 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
         Returns:
             True if sync successful, False otherwise
         """
+        await self.ensure_collection()
         server_id = str(server.id)
         server_name = server.serverName
-        
+
         try:
             if enabled:
                 # Server enabled: Upsert to vector DB
@@ -206,12 +171,13 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
                     filters={"server_id": server_id}
                 )
                 if deleted_count > 0:
-                    logger.info(f"Successfully removed server '{server_name}' (ID: {server_id}) from vector DB (deleted {deleted_count} records)")
+                    logger.info(
+                        f"Successfully removed server '{server_name}' (ID: {server_id}) from vector DB (deleted {deleted_count} records)")
                     return True
                 else:
                     logger.debug(f"Server '{server_name}' (ID: {server_id}) not found in vector DB, nothing to delete")
                     return True  # Not an error if already gone
-                    
+
         except Exception as e:
             logger.error(f"Vector DB sync failed for server '{server_name}' (ID: {server_id}): {e}", exc_info=True)
             return False
@@ -233,6 +199,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
         Returns:
             True if deletion successful, False otherwise
         """
+        await self.ensure_collection()
         log_name = f"'{server_name}' (ID: {server_id})" if server_name else f"ID: {server_id}"
         try:
             logger.info(f"Removing server {log_name} from vector DB")
@@ -245,7 +212,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
             else:
                 logger.debug(f"Server {log_name} not found in vector DB")
                 return True
-                
+
         except Exception as e:
             logger.error(f"Failed to remove server {log_name} from vector DB: {e}", exc_info=True)
             return False
@@ -256,7 +223,6 @@ def create_mcp_server_repository(db_client: DatabaseClient) -> MCPServerReposito
     Factory function to create MCP Server repository.
     """
     repo = MCPServerRepository(db_client)
-    repo.ensure_collection()
     return repo
 
 
