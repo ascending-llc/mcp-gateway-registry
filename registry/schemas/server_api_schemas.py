@@ -211,7 +211,9 @@ class ServerDetailResponse(BaseModel):
     capabilities: Optional[str] = Field(None, description="JSON string of server capabilities")
     oauthMetadata: Optional[Dict[str, Any]] = Field(None, alias="oauthMetadata", description="OAuth metadata from autodiscovery")
     tools: Optional[str] = Field(None, description="Comma-separated list of tool names")
-    toolFunctions: Optional[Dict[str, Any]] = Field(None, alias="toolFunctions", description="Complete OpenAI function schemas")
+    toolFunctions: Optional[Dict[str, Any]] = Field(None, alias="toolFunctions", description="Complete OpenAI function schemas with mcpToolName")
+    resources: Optional[List[Dict[str, Any]]] = Field(None, description="List of available resources")
+    prompts: Optional[List[Dict[str, Any]]] = Field(None, description="List of available prompts")
     initDuration: Optional[int] = Field(None, alias="initDuration", description="Initialization duration in ms")
     author: Optional[str] = Field(None, description="Author user ID")
     scope: str
@@ -267,7 +269,9 @@ class ServerCreateResponse(BaseModel):
     capabilities: Optional[str] = None
     oauthMetadata: Optional[Dict[str, Any]] = Field(None, alias="oauthMetadata", description="OAuth metadata from autodiscovery")
     tools: Optional[str] = None
-    toolFunctions: Optional[Dict[str, Any]] = Field(None, alias="toolFunctions")
+    toolFunctions: Optional[Dict[str, Any]] = Field(None, alias="toolFunctions", description="Complete OpenAI function schemas with mcpToolName")
+    resources: Optional[List[Dict[str, Any]]] = Field(None, description="List of available resources")
+    prompts: Optional[List[Dict[str, Any]]] = Field(None, description="List of available prompts")
     initDuration: Optional[int] = Field(None, alias="initDuration")
     author: Optional[str] = None
     scope: str
@@ -558,8 +562,12 @@ def convert_to_detail(server) -> ServerDetailResponse:
     # Get tools string from config (already comma-separated)
     tools_str = config.get("tools", "")
     
-    # Get toolFunctions directly from config (already in OpenAI format)
+    # Get toolFunctions directly from config (already in OpenAI format with mcpToolName)
     tool_functions = config.get("toolFunctions")
+    
+    # Get resources and prompts from config
+    resources = config.get("resources", [])
+    prompts = config.get("prompts", [])
     
     # Get capabilities from config (already JSON string)
     capabilities_str = config.get("capabilities", "{}")
@@ -586,6 +594,8 @@ def convert_to_detail(server) -> ServerDetailResponse:
         oauthMetadata=config.get("oauthMetadata"),
         tools=tools_str,
         toolFunctions=tool_functions,
+        resources=resources,
+        prompts=prompts,
         initDuration=config.get("initDuration"),
         author=author_id,
         # Registry fields from root level
@@ -641,6 +651,8 @@ def convert_to_create_response(server) -> ServerCreateResponse:
         oauthMetadata=config.get("oauthMetadata"),
         tools=config.get("tools", ""),
         toolFunctions=config.get("toolFunctions", {}),
+        resources=config.get("resources", []),
+        prompts=config.get("prompts", []),
         initDuration=config.get("initDuration"),
         author=author_id,
         scope=server.scope,

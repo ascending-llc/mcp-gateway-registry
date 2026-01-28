@@ -195,8 +195,8 @@ class McpTool:
         desc_returns = parsed_desc.get("returns") or ""
         desc_raises = parsed_desc.get("raises") or ""
 
-        # Get schema
-        schema = tool.get("schema", {})
+        # Get schema - support both "inputSchema" (new MCP format) and "schema" (legacy)
+        schema = tool.get("inputSchema") or tool.get("schema", {})
         schema_json = json.dumps(schema) if schema else "{}"
 
         # Create MCP Tool instance
