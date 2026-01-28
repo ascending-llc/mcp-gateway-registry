@@ -20,6 +20,8 @@ from registry.services.permissions_utils import (
     check_required_permission,
 )
 
+from typing import Dict, Any
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -27,6 +29,31 @@ router = APIRouter()
 def get_user_context(user_context: CurrentUserWithACLMap):
     """Extract user context from authentication dependency"""
     return user_context
+
+
+@router.get(
+    "/permissions/servers/{server_id}",
+    summary="Get ACL permissions for a specific server (for UI controls)",
+    description="Returns the current user's permissions for a specific server resource. Used by frontend to show/hide edit/delete buttons.",
+)
+async def get_server_permissions(
+    server_id: str,
+    user_context: dict = Depends(get_user_context),
+) -> Dict[str, Any]:
+    """
+    Returns the current user's permissions for the given server resource.
+    Example response:
+    {
+        "server_id": "...",
+        "permissions": ["VIEW", "EDIT", "DELETE", ...]
+    }
+    """
+    acl_permission_map = user_context.get("acl_permission_map", {})
+    perms = acl_permission_map.get(ResourceType.MCPSERVER, {}).get(server_id, [])
+    return {
+        "server_id": server_id,
+        "permissions": perms
+    }
 
 @router.put(
     f"/permissions/servers/{{server_id}}",
