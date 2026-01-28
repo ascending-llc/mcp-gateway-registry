@@ -675,9 +675,10 @@ class ServerServiceV1:
         await server.save()
         logger.info(f"Updated server: {server.serverName} (ID: {server.id})")
 
-        # Update search index in background (non-blocking)
+        # Sync to vector DB in background (non-blocking)
+        enabled = server.config.get('enabled', False) if server.config else False
         asyncio.create_task(
-            self._update_server_in_search_index(server, fields_changed)
+            self.mcp_server_repo.sync_by_enabled_status(server, enabled, fields_changed)
         )
         return server
 
@@ -709,18 +710,11 @@ class ServerServiceV1:
         if not server:
             raise ValueError("Server not found")
 
-        # Remove from search index before deleting (use metadata.server_id)
-        try:
-            deleted_count = await self.mcp_server_repo.adelete_by_filter(
-                {"server_id": server_id}
-            )
-            if deleted_count > 0:
-                logger.info(f"Removed server from search index: {server_id}")
-            else:
-                logger.warning(f"Server not found in search index: {server_id}")
-        except Exception as e:
-            logger.warning(f"Failed to remove search index for server {server_id}: {e}")
-
+        # Remove from vector DB before deleting from MongoDB (background task)
+        asyncio.create_task(
+            self.mcp_server_repo.delete_by_server_id(server_id, server.serverName)
+        )
+        
         await server.delete()
         logger.info(f"Deleted server: {server.serverName} (ID: {server.id})")
 
@@ -790,7 +784,6 @@ class ServerServiceV1:
     ) -> MCPServerDocument:
         """
         Toggle server enabled/disabled status.
-        When enabling, fetch tools and update toolFunctions.
 
         Args:
             server_id: Server document ID
@@ -832,36 +825,11 @@ class ServerServiceV1:
         await server.save()
         logger.info(f"Toggled server {server.serverName} (ID: {server.id}) enabled to {enabled}")
 
-        # Update search index
+        # Sync to vector DB based on enabled status (background task)
         asyncio.create_task(
-            self._update_server_in_search_index(server, fields_changed)
+            self.mcp_server_repo.sync_by_enabled_status(server, enabled, fields_changed)
         )
         return server
-
-    async def _update_server_in_search_index(
-            self,
-            server: MCPServerDocument,
-            fields_changed: Optional[Set[str]] = None
-    ):
-        """
-        Background task to update server in search index with smart detection.
-
-        Args:
-            server: Updated server instance
-            fields_changed: Set of changed field names (for optimization)
-        """
-        server_id = str(server.id)
-        try:
-            success = await self.mcp_server_repo.update_server_smart(
-                server=server,
-                fields_changed=fields_changed
-            )
-            if success:
-                logger.info(f"Background: Updated search index for server {server_id}")
-            else:
-                logger.warning(f"Background: Failed to update search index for server {server_id}")
-        except Exception as e:
-            logger.warning(f"Background: Search index update failed for server {server_id}: {e}")
 
     async def get_server_tools(
             self,
@@ -1533,61 +1501,6 @@ class ServerServiceV1:
                     f" {stats['total_tokens']} tokens, {stats['active_users']} active users")
 
         return stats
-
-    def update_search_index(self, server: MCPServerDocument, data: ServerUpdateRequest):
-        """
-        Update search index for server
-        """
-        # Start background task
-        asyncio.create_task(self._update_search_index_task(server, data))
-        logger.debug(f"Started background search index update for server {server.id}")
-
-    async def _update_search_index_task(self, server: MCPServerDocument, data: ServerUpdateRequest):
-        """
-        Background task for updating search index with smart change detection.
-        """
-        server_id = str(server.id)
-
-        try:
-            # 1. Check if any fields that affect search changed
-            safe_metadata_fields = server.get_safe_metadata_fields()
-            metadata_changed = any(getattr(data, field, None) is not None
-                                   for field in safe_metadata_fields)
-
-            # 2. Generate new content and compare with existing
-            new_content = server.generate_content()
-
-            # Get existing server from Weaviate by metadata.server_id (MongoDB _id)
-            existing_servers = await mcp_server_repo.afilter(
-                filters={"server_id": server_id},
-                limit=1
-            )
-
-            content_changed = True  # Default to changed if not found
-            if existing_servers:
-                existing_server = existing_servers[0]
-                existing_doc = existing_server.to_document()
-                old_content = existing_doc.page_content
-                content_changed = (new_content != old_content)
-                logger.debug(f"Background: Content comparison for server {server_id}: "
-                             f"changed={content_changed}, "
-                             f"old_len={len(old_content)}, new_len={len(new_content)}")
-
-            # 3. Update if anything changed
-            if content_changed or metadata_changed:
-                # Delete old and save new (handles both content and metadata updates)
-                logger.info(f"Background: Server {server_id} changed (content={content_changed}, "
-                            f"metadata={metadata_changed}), updating search index")
-                await mcp_server_repo.adelete_by_filter(
-                    {"server_id": server_id}
-                )
-                await mcp_server_repo.asave(server)
-                logger.info(f"Background: Successfully updated search index for server {server_id}")
-            else:
-                logger.debug(f"Background: No search index changes needed for server {server_id}")
-
-        except Exception as e:
-            logger.warning(f"Background: Search index update failed for server {server_id}: {e}")
 
 
 # Singleton instance

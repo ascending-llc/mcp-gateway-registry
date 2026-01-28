@@ -71,8 +71,8 @@ def _build_server_info_for_mcp_client(config: Dict[str, Any], tags: List[str]) -
 
 
 async def _build_complete_headers_for_server(
-    server: MCPServerDocument,
-    user_id: Optional[str] = None
+        server: MCPServerDocument,
+        user_id: Optional[str] = None
 ) -> Dict[str, str]:
     """
     Build complete HTTP headers with ALL authentication types.
@@ -437,14 +437,14 @@ class ServerServiceV1:
         logger.info("ServerServiceV1 initialized with search index manager")
 
     async def list_servers(
-        self,
-        query: Optional[str] = None,
-        scope: Optional[str] = None,
-        status: Optional[str] = None,
-        page: int = 1,
-        per_page: int = 20,
-        user_id: Optional[str] = None,
-        acl_permissions_map: Dict[str, Any] = {},
+            self,
+            query: Optional[str] = None,
+            scope: Optional[str] = None,
+            status: Optional[str] = None,
+            page: int = 1,
+            per_page: int = 20,
+            user_id: Optional[str] = None,
+            acl_permissions_map: Dict[str, Any] = {},
     ) -> Tuple[List[MCPServerDocument], int]:
         """
         List servers with filtering and pagination.
@@ -509,9 +509,9 @@ class ServerServiceV1:
         return servers, total
 
     async def get_server_by_id(
-        self,
-        server_id: str,
-        user_id: Optional[str] = None,
+            self,
+            server_id: str,
+            user_id: Optional[str] = None,
     ) -> Optional[MCPServerDocument]:
         """
         Get a server by its ID.
@@ -547,9 +547,9 @@ class ServerServiceV1:
         return await MCPServerDocument.find_one({"path": path})
 
     async def create_server(
-        self,
-        data: ServerCreateRequest,
-        user_id: str,
+            self,
+            data: ServerCreateRequest,
+            user_id: str,
     ) -> MCPServerDocument:
         """
         Create a new server.
@@ -804,37 +804,12 @@ class ServerServiceV1:
         await server.save()
         logger.info(f"Updated server: {server.serverName} (ID: {server.id})")
 
-        # Smart vector index update
+        # Sync to vector DB in background (non-blocking)
+        enabled = server.config.get('enabled', False) if server.config else False
         asyncio.create_task(
-            self._update_server_in_search_index(server, fields_changed)
+            self.mcp_server_repo.sync_by_enabled_status(server, enabled, fields_changed)
         )
         return server
-
-    async def _update_server_in_search_index(
-            self,
-            server: MCPServerDocument,
-            fields_changed: Optional[Set[str]] = None
-    ):
-        """
-        Background task to update server in search index with smart detection.
-
-        Args:
-            server: Updated server instance
-            fields_changed: Set of changed field names (for optimization)
-        """
-        server_id = str(server.id)
-
-        try:
-            success = await self.mcp_server_repo.update_server_smart(
-                server=server,
-                fields_changed=fields_changed
-            )
-            if success:
-                logger.info(f"Background: Updated search index for server {server_id}")
-            else:
-                logger.warning(f"Background: Failed to update search index for server {server_id}")
-        except Exception as e:
-            logger.warning(f"Background: Search index update failed for server {server_id}: {e}")
 
     async def delete_server(
             self,
@@ -864,22 +839,12 @@ class ServerServiceV1:
         if not server:
             raise ValueError("Server not found")
 
-        # Remove from vector database before deleting from MongoDB
-        try:
-            deleted_count = await self.mcp_server_repo.adelete_by_filter(
-                {"server_id": server_id}
-            )
-            if deleted_count > 0:
-                logger.info(f"Removed {deleted_count} record(s) from "
-                            f"vector database for server '{server.serverName}'")
-            else:
-                logger.warning(f"Server not found in vector database: {server_id}")
-        except Exception as e:
-            logger.warning(f"Failed to remove server '{server.serverName}' from vector database: {e}")
-
+        # Remove from vector DB before deleting from MongoDB (background task)
+        asyncio.create_task(
+            self.mcp_server_repo.delete_by_server_id(server_id, server.serverName)
+        )
         await server.delete()
         logger.info(f"Deleted server: {server.serverName} (ID: {server.id})")
-
         return True
 
     async def _fetch_and_update_tools(
@@ -933,7 +898,8 @@ class ServerServiceV1:
     ) -> MCPServerDocument:
         """
         Toggle server enabled/disabled status.
-        When enabling, fetch tools and update toolFunctions.
+        When enabling, fetch tools and sync to vector DB (upsert).
+        When disabling, remove from vector DB.
 
         Args:
             server_id: Server document ID
@@ -952,7 +918,7 @@ class ServerServiceV1:
             raise ValueError("Server not found")
 
         # Track field changes for smart update
-        fields_changed = {"status"}  # At minimum, status metadata might change
+        fields_changed = {"status"}
 
         # Update enabled field in config only (do not update status field)
         if server.config is None:
@@ -969,14 +935,15 @@ class ServerServiceV1:
                 raise ValueError("Failed to fetch tools from server. Server remains disabled.")
             # Tools changed, will need re-vectorization
             fields_changed = None  # Full update
+
         # Update the updatedAt timestamp
         server.updatedAt = _get_current_utc_time()
         await server.save()
         logger.info(f"Toggled server {server.serverName} (ID: {server.id}) enabled to {enabled}")
 
-        # Smart update search index
+        # Sync to vector DB based on enabled status (background task)
         asyncio.create_task(
-            self._update_server_in_search_index(server, fields_changed)
+            self.mcp_server_repo.sync_by_enabled_status(server, enabled, fields_changed)
         )
         return server
 

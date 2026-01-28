@@ -195,7 +195,7 @@ class WeaviateStore(VectorStoreAdapter):
 
         return parse_filters(filters)
 
-    def _normalize_filters(self, filters: Any):
+    def normalize_filters(self, filters: Any):
         """Convert dict filters to Weaviate Filter or return native object."""
         if filters is None:
             return None
@@ -344,7 +344,7 @@ class WeaviateStore(VectorStoreAdapter):
     ) -> List[Document]:
         """Implement Weaviate metadata filtering (filters already normalized)."""
         collection = self.get_collection(collection_name)
-        normalized_filters = self._normalize_filters(filters)
+        normalized_filters = self.normalize_filters(filters)
         try:
             response = collection.query.fetch_objects(
                 filters=normalized_filters,
@@ -364,7 +364,7 @@ class WeaviateStore(VectorStoreAdapter):
                     **kwargs
                     ) -> List[Document]:
         collection = self.get_collection(collection_name)
-        normalized_filters = self._normalize_filters(filters)
+        normalized_filters = self.normalize_filters(filters)
         try:
             response = collection.query.bm25(
                 query=query,
@@ -392,7 +392,7 @@ class WeaviateStore(VectorStoreAdapter):
         For external embeddings, we need to provide the query vector manually.
         """
         collection = self.get_collection(collection_name)
-        normalized_filters = self._normalize_filters(filters)
+        normalized_filters = self.normalize_filters(filters)
         try:
             # Generate query vector using external embedding
             query_vector = self.embedding.embed_query(query)
@@ -434,7 +434,7 @@ class WeaviateStore(VectorStoreAdapter):
            Note:  A vectorizer needs to be configured before this function can be used.
         """
         collection = self.get_collection(collection_name)
-        normalized_filters = self._normalize_filters(filters)
+        normalized_filters = self.normalize_filters(filters)
         try:
             response = collection.query.near_text(
                 query=query,
@@ -649,7 +649,7 @@ class WeaviateStore(VectorStoreAdapter):
         collection = self.get_collection(collection_name)
 
         try:
-            normalized_filters = self._normalize_filters(filters)
+            normalized_filters = self.normalize_filters(filters)
             if normalized_filters is None:
                 logger.warning("No valid filters provided for deletion")
                 return 0

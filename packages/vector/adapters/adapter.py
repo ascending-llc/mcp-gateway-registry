@@ -125,11 +125,11 @@ class VectorStoreAdapter(ABC):
         store = self.get_vector_store(collection_name)
 
         # Smart filter normalization
-        native_filters = self._normalize_filters(filters)
+        native_filters = self.normalize_filters(filters)
 
         return store.similarity_search(query, k=k, filters=native_filters, **kwargs)
 
-    def _normalize_filters(self, filters: Any) -> Any:
+    def normalize_filters(self, filters: Any) -> Any:
         """
         Normalize filters to native format.
         

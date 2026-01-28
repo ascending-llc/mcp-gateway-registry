@@ -6,7 +6,7 @@ that don't belong in the generic Repository class.
 """
 
 import logging
-from typing import Optional, Dict
+from typing import Optional, Dict, Set
 from packages.models import ExtendedMCPServer
 from packages.vector.repository import Repository
 from packages.vector.client import DatabaseClient, initialize_database
@@ -137,6 +137,95 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
             True if updated successfully
         """
         return await self.aupdate(server, fields_changed=fields_changed)
+
+    async def sync_by_enabled_status(
+            self,
+            server: ExtendedMCPServer,
+            enabled: bool,
+            fields_changed: Optional[Set[str]] = None
+    ) -> bool:
+        """
+        Sync server to vector DB based on enabled status.
+        
+        This is the centralized method for all vector DB sync operations.
+        
+        - If enabled=True: Upsert to vector DB (create if missing, update if exists)
+        - If enabled=False: Delete from vector DB
+
+        Args:
+            server: Server instance
+            enabled: Whether server is enabled
+            fields_changed: Set of changed field names (for optimization)
+
+        Returns:
+            True if sync successful, False otherwise
+        """
+        server_id = str(server.id)
+        server_name = server.serverName
+        
+        try:
+            if enabled:
+                # Server enabled: Upsert to vector DB
+                logger.info(f"Syncing enabled server '{server_name}' (ID: {server_id}) to vector DB")
+                success = await self.aupsert(
+                    instance=server,
+                    fields_changed=fields_changed
+                )
+                if success:
+                    logger.info(f"Successfully synced server '{server_name}' (ID: {server_id}) to vector DB")
+                else:
+                    logger.warning(f"Failed to sync server '{server_name}' (ID: {server_id}) to vector DB")
+                return success
+            else:
+                # Server disabled: Delete from vector DB
+                logger.info(f"Removing disabled server '{server_name}' (ID: {server_id}) from vector DB")
+                deleted_count = await self.adelete_by_filter(
+                    filters={"server_id": server_id}
+                )
+                if deleted_count > 0:
+                    logger.info(f"Successfully removed server '{server_name}' (ID: {server_id}) from vector DB (deleted {deleted_count} records)")
+                    return True
+                else:
+                    logger.debug(f"Server '{server_name}' (ID: {server_id}) not found in vector DB, nothing to delete")
+                    return True  # Not an error if already gone
+                    
+        except Exception as e:
+            logger.error(f"Vector DB sync failed for server '{server_name}' (ID: {server_id}): {e}", exc_info=True)
+            return False
+
+    async def delete_by_server_id(
+            self,
+            server_id: str,
+            server_name: Optional[str] = None
+    ) -> bool:
+        """
+        Delete server from vector DB by MongoDB server ID.
+        
+        This is a convenience method for delete operations.
+
+        Args:
+            server_id: MongoDB server ID
+            server_name: Server name (optional, for better logging)
+
+        Returns:
+            True if deletion successful, False otherwise
+        """
+        log_name = f"'{server_name}' (ID: {server_id})" if server_name else f"ID: {server_id}"
+        try:
+            logger.info(f"Removing server {log_name} from vector DB")
+            deleted_count = await self.adelete_by_filter(
+                filters={"server_id": server_id}
+            )
+            if deleted_count > 0:
+                logger.info(f"Successfully removed server {log_name} from vector DB (deleted {deleted_count} records)")
+                return True
+            else:
+                logger.debug(f"Server {log_name} not found in vector DB")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Failed to remove server {log_name} from vector DB: {e}", exc_info=True)
+            return False
 
 
 def create_mcp_server_repository(db_client: DatabaseClient) -> MCPServerRepository:

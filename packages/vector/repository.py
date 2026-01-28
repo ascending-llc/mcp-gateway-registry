@@ -3,7 +3,6 @@ import logging
 from typing import Optional, List, Dict, Any, TypeVar, Generic, Type, Set, Callable, Awaitable
 from functools import wraps
 from langchain_classic.retrievers.contextual_compression import ContextualCompressionRetriever
-
 from .batch_result import BatchResult
 from .enum.enums import SearchType, RerankerProvider
 from .retrievers.adapter_retriever import AdapterRetriever
@@ -127,7 +126,6 @@ class Repository(Generic[T]):
                 ids=[doc_id],
                 collection_name=self.collection
             )
-
             if docs and len(docs) > 0:
                 data = self.model_class.from_document(docs[0])
                 logger.debug(f"Retrieved {self.model_class.__name__} with ID: {doc_id}")
@@ -143,7 +141,8 @@ class Repository(Generic[T]):
     def update(
             self,
             instance: T,
-            fields_changed: Optional[Set[str]] = None
+            fields_changed: Optional[Set[str]] = None,
+            create_if_missing: bool = False
     ) -> bool:
         """
         Update model instance with smart re-vectorization detection.
@@ -151,84 +150,118 @@ class Repository(Generic[T]):
         Optimizes updates by:
         1. Checking if only metadata fields changed (no re-vectorization needed)
         2. Comparing generated content to detect actual content changes
+        3. Optionally creating document if it doesn't exist (upsert behavior)
 
         Args:
             instance: Model instance to update
             fields_changed: Set of field names that changed (optional, for optimization)
+            create_if_missing: If True, create the document if it doesn't exist (upsert behavior)
 
         Returns:
-            True if updated successfully, False otherwise
-
-        Example:
-            # Metadata-only update (fast, no re-vectorization)
-            server.tags = ["new-tag"]
-            repo.update(server, fields_changed={"tags"})
-
-            # Content update (re-vectorization)
-            server.config["description"] = "New description"
-            repo.update(server)  # Auto-detects content change
+            True if updated/created successfully, False otherwise
         """
         try:
+            mongo_id = str(instance.id)
+
+            vector_docs = self.adapter.filter_by_metadata(
+                filters={"server_id": mongo_id},
+                limit=1,
+                collection_name=self.collection
+            )
+
+            if not vector_docs:
+                logger.warning(f"{self.model_class.__name__} not found in vector DB: {mongo_id}")
+                if create_if_missing:
+                    logger.info(f"Creating new document for {self.model_class.__name__} {mongo_id}")
+                    self.save(instance)
+                return True
+
+            weaviate_uuid = vector_docs[0].id
+            logger.debug(f"Found {self.model_class.__name__} MongoDB ID: {mongo_id}, Weaviate UUID: {weaviate_uuid}")
+
             # Check if only safe metadata fields changed
-            safe_fields = self.model_class.get_safe_metadata_fields()
+            safe_fields = instance.get_safe_metadata_fields()
 
             if fields_changed and fields_changed.issubset(safe_fields):
                 # Metadata-only update (no re-vectorization needed)
-                logger.info(f"Metadata-only update for {self.model_class.__name__} {instance.id}")
+                logger.info(f"Metadata-only update for {self.model_class.__name__} {mongo_id}")
 
                 if hasattr(self.adapter, 'update_metadata'):
-                    # Extract metadata from instance
-                    doc = instance.to_document()
-                    metadata = doc.metadata
-
-                    return self.adapter.update_metadata(
-                        doc_id=str(instance.id),
+                    new_doc = instance.to_document()
+                    metadata = new_doc.metadata
+                    result = self.adapter.update_metadata(
+                        doc_id=weaviate_uuid,
                         metadata=metadata,
                         collection_name=self.collection
                     )
+                    logger.info(f"Metadata updated for {self.model_class.__name__} {mongo_id}")
+                    return result
                 else:
                     logger.warning("Adapter doesn't support metadata-only updates, falling back to full update")
 
             # Check if content actually changed (smart detection)
-            if isinstance(instance, ContentGenerator) and hasattr(instance, 'id'):
-                existing = self.get(str(instance.id))
-                if existing:
-                    old_content = existing.generate_content() if isinstance(existing, ContentGenerator) else ""
-                    new_content = instance.generate_content()
+            if isinstance(instance, ContentGenerator):
+                # Get old content from existing instance
+                old_content = vector_docs[0].metadata.get("content")
+                new_content = instance.generate_content()
 
-                    if old_content == new_content:
-                        logger.info(
-                            f"Content unchanged for {self.model_class.__name__} {instance.id}, skipping re-vectorization")
-                        # Still update metadata in case it changed
-                        if hasattr(self.adapter, 'update_metadata'):
-                            doc = instance.to_document()
-                            return self.adapter.update_metadata(
-                                doc_id=str(instance.id),
-                                metadata=doc.metadata,
-                                collection_name=self.collection
-                            )
-                        return True
+                if old_content and old_content == new_content:
+                    logger.info(
+                        f"Content unchanged for {self.model_class.__name__} {mongo_id}, "
+                        f"skipping re-vectorization"
+                    )
+                    # Still update metadata in case it changed
+                    if hasattr(self.adapter, 'update_metadata'):
+                        new_doc = instance.to_document()
+                        result = self.adapter.update_metadata(
+                            doc_id=weaviate_uuid,
+                            metadata=new_doc.metadata,
+                            collection_name=self.collection
+                        )
+                        if result:
+                            logger.info(f"Metadata updated (content unchanged) for"
+                                        f" {self.model_class.__name__} {mongo_id}")
+                        return result
+                    return True
 
             # Full update with re-vectorization (atomic operation)
-            logger.info(f"Full update with re-vectorization for {self.model_class.__name__} {instance.id}")
+            logger.info(f"Full update with re-vectorization for {self.model_class.__name__} {mongo_id}")
 
-            # Step 1: Delete old version
-            if not self.delete(str(instance.id)):
-                logger.warning(f"Delete failed during update for {instance.id}")
+            # 1: Delete old version (use Weaviate UUID)
+            if not self.delete(weaviate_uuid):
+                logger.warning(f"Delete failed during update for MongoDB ID {mongo_id}, Weaviate UUID {weaviate_uuid}")
                 return False
 
-            # Step 2: Save new version
-            new_id = self.save(instance)
-            if new_id:
-                logger.info(f"Updated {self.model_class.__name__} {instance.id} successfully")
+            # 2: Save new version
+            new_weaviate_id = self.save(instance)
+            if new_weaviate_id:
+                logger.info(f"Updated {self.model_class.__name__} MongoDB ID {mongo_id} successfully "
+                            f"(old Weaviate UUID: {weaviate_uuid}, new: {new_weaviate_id})")
                 return True
             else:
-                logger.error(f"Save failed during update for {instance.id}")
+                logger.error(f"Save failed during update for MongoDB ID {mongo_id}")
                 return False
 
         except Exception as e:
             logger.error(f"Update failed for {self.model_class.__name__}: {e}", exc_info=True)
             return False
+
+    def upsert(
+            self,
+            instance: T,
+            fields_changed: Optional[Set[str]] = None
+    ) -> bool:
+        """
+        Upsert (Update or Insert) model instance.
+        
+        This is a convenience method that always creates the document if it doesn't exist.
+        Equivalent to: update(instance, fields_changed=fields_changed, create_if_missing=True)
+        
+        Args:
+            instance: Model instance to upsert
+            fields_changed: Set of field names that changed (optional, for optimization)
+        """
+        return self.update(instance, fields_changed=fields_changed, create_if_missing=True)
 
     def delete(self, doc_id: str) -> bool:
         """
@@ -241,18 +274,12 @@ class Repository(Generic[T]):
             True if deleted successfully, False otherwise
         """
         try:
-            result = self.adapter.delete(
+            self.adapter.delete(
                 ids=[doc_id],
                 collection_name=self.collection
             )
-
-            if result:
-                logger.debug(f"Deleted {self.model_class.__name__} with ID: {doc_id}")
-                return True
-
-            logger.warning(f"Delete returned False for {doc_id}")
-            return False
-
+            logger.debug(f"Deleted {self.model_class.__name__} with ID: {doc_id}")
+            return True
         except Exception as e:
             logger.error(f"Delete failed for ID {doc_id}: {e}")
             return False
@@ -598,6 +625,7 @@ class Repository(Generic[T]):
     asave = async_wrapper(save)
     aget = async_wrapper(get)
     aupdate = async_wrapper(update)
+    aupsert = async_wrapper(upsert)
     adelete = async_wrapper(delete)
     abulk_save = async_wrapper(bulk_save)
     adelete_by_filter = async_wrapper(delete_by_filter)
