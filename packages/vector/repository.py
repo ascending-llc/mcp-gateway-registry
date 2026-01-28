@@ -7,7 +7,7 @@ from .batch_result import BatchResult
 from .enum.enums import SearchType, RerankerProvider
 from .retrievers.adapter_retriever import AdapterRetriever
 from .client import DatabaseClient
-from .protocols import VectorStorable, ContentGenerator
+from .protocols import VectorStorable
 from .exceptions import RepositoryError
 
 logger = logging.getLogger(__name__)
@@ -199,17 +199,14 @@ class Repository(Generic[T]):
                 else:
                     logger.warning("Adapter doesn't support metadata-only updates, falling back to full update")
 
-            # Check if content actually changed (smart detection)
-            if isinstance(instance, ContentGenerator):
-                # Get old content from existing instance
-                old_content = vector_docs[0].metadata.get("content")
+            # Get old content from existing instance
+            if hasattr(instance, "generate_content"):
+                old_content = vector_docs[0].page_content
                 new_content = instance.generate_content()
 
                 if old_content and old_content == new_content:
-                    logger.info(
-                        f"Content unchanged for {self.model_class.__name__} {mongo_id}, "
-                        f"skipping re-vectorization"
-                    )
+                    logger.info(f"Content unchanged for {self.model_class.__name__} {mongo_id}, "
+                                f"skipping re-vectorization")
                     # Still update metadata in case it changed
                     if hasattr(self.adapter, 'update_metadata'):
                         new_doc = instance.to_document()

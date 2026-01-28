@@ -31,6 +31,29 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
         """
         super().__init__(db_client, ExtendedMCPServer)
         logger.info("MCPServerRepository initialized")
+    
+    def ensure_collection(self) -> bool:
+        """
+        Ensure the collection exists in vector database.
+        """
+        try:
+            # Check if collection exists
+            if self.adapter.collection_exists(self.collection):
+                logger.info(f"Collection '{self.collection}' already exists")
+                return True
+            
+            logger.info(f"Creating collection '{self.collection}'...")
+            store = self.adapter.get_vector_store(self.collection)
+            
+            if store:
+                logger.info(f"Collection '{self.collection}' created successfully")
+                return True
+            else:
+                logger.error(f"Failed to create collection '{self.collection}'")
+                return False
+        except Exception as e:
+            logger.error(f"Error ensuring collection '{self.collection}': {e}", exc_info=True)
+            raise
 
     async def sync_server_to_vector_db(
             self,
@@ -231,14 +254,10 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
 def create_mcp_server_repository(db_client: DatabaseClient) -> MCPServerRepository:
     """
     Factory function to create MCP Server repository.
-
-    Args:
-        db_client: Database client instance
-
-    Returns:
-        MCPServerRepository instance
     """
-    return MCPServerRepository(db_client)
+    repo = MCPServerRepository(db_client)
+    repo.ensure_collection()
+    return repo
 
 
 _mcp_server_repo = None

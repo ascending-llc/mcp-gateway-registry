@@ -98,7 +98,7 @@ class ExtendedMCPServer(Document):
     """
 
     # ========== Base Fields (from MCPServerDocument) ==========
-    serverName: str = Field(..., description="Unique server identifier",
+    serverName: str = Field(..., description="Server name for display",
                             json_schema_extra={"vector_role": "content"})  # Vectorized for search
     config: Dict[str, Any] = Field(...,
                                    description="MCP server configuration (oauth, apiKey, capabilities, tools, etc.)")
@@ -135,7 +135,7 @@ class ExtendedMCPServer(Document):
         # Indexes should be managed separately via database migrations
 
     # ========== Vector Search Integration (Weaviate) ==========
-    COLLECTION_NAME: ClassVar[str] = "MCP_GATEWAY"
+    COLLECTION_NAME: ClassVar[str] = "Jarvis_Registry"
 
     def to_document(self) -> LangChainDocument:
         """
