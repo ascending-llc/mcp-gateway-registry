@@ -1,5 +1,4 @@
 import logging
-from typing import Any, Dict, Optional
 from langchain_classic.retrievers.document_compressors.base import BaseDocumentCompressor
 
 logger = logging.getLogger(__name__)
