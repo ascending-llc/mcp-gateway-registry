@@ -1,4 +1,4 @@
-from datetime import time
+import time
 from functools import wraps
 import logging
 from typing import List, Literal, Optional
@@ -89,7 +89,7 @@ def track_search_operation(resource_type: str):
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            start_time = time()
+            start_time = time.time()
             success = False
             
             try:
@@ -101,7 +101,7 @@ def track_search_operation(resource_type: str):
             except Exception:
                 raise
             finally:
-                duration = time() - start_time
+                duration = time.time() - start_time
                 metrics.record_registry_operation(
                     operation="search",
                     resource_type=resource_type,
@@ -119,7 +119,7 @@ def track_tool_discovery(func):
     """
     @wraps(func)
     async def wrapper(*args, **kwargs):
-        start_time = time()
+        start_time = time.time()
         success = False
         query = ""
         
@@ -148,7 +148,7 @@ def track_tool_discovery(func):
             raise
         finally:
             # Record overall discovery operation with timing
-            duration = time() - start_time
+            duration = time.time() - start_time
             metrics.record_tool_discovery(
                 tool_name=query,  # Use query as identifier
                 source="search",
