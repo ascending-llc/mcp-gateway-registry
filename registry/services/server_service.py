@@ -25,7 +25,7 @@ from registry.schemas.server_api_schemas import (
 from registry.utils.crypto_utils import encrypt_auth_fields
 from registry.core.mcp_client import get_tools_from_server_with_server_info
 from registry.core.acl_constants import ResourceType
-from vector.repositories.mcp_server_repository import get_mcp_server_repo
+from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
 from registry.services.user_service import user_service
 from registry.schemas.errors import (
     OAuthReAuthRequiredError,
