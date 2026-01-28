@@ -11,10 +11,13 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from packages.models.extended_mcp_server import MCPServerDocument
 from registry.auth.dependencies import CurrentUser
 from registry.services.server_service import server_service_v1
-from registry.utils.crypto_utils import decrypt_auth_fields
-from registry.core.mcp_client import _build_headers_for_server
-from registry.services.server_service import _build_server_info_for_mcp_client
-from registry.services.oauth.oauth_service import get_oauth_service
+from registry.services.server_service import _build_complete_headers_for_server
+from registry.schemas.errors import (
+    OAuthReAuthRequiredError,
+    OAuthTokenError,
+    MissingUserIdError,
+    AuthenticationError
+)
 from registry.schemas.proxy_tool_schema import (
     ToolExecutionRequest,
     ToolExecutionResponse,
@@ -79,76 +82,35 @@ async def proxy_to_mcp_server(
         headers.pop("authorization", None)
         headers.pop("Authorization", None)
         
-        # Build authentication headers for external MCP server
-        if server.config:
-            decrypted_config = decrypt_auth_fields(server.config)
+        # Build complete authentication headers (OAuth, apiKey, custom)
+        try:
+            user_id = auth_context.get("user_id")
+            auth_headers = await _build_complete_headers_for_server(server, user_id)
             
-            # Check if server requires OAuth
-            requires_oauth = decrypted_config.get("requiresOAuth", False) or "oauth" in decrypted_config
+            # Merge auth headers (Authorization, custom headers, etc.)
+            # Only update Authorization and non-context headers
+            for key, value in auth_headers.items():
+                if key.lower() not in ["content-type", "accept", "user-agent"]:
+                    headers[key] = value
             
-            if requires_oauth and server:
-                # OAuth-protected server - retrieve and inject access token
-                user_id = auth_context.get("user_id")
-                if not user_id:
-                    logger.error("No user_id in auth_context for OAuth server")
-                    raise HTTPException(
-                        status_code=401,
-                        detail="User authentication required for OAuth-protected server"
-                    )
-                
-                logger.info(f"OAuth server detected, retrieving access token for user {user_id}")
-                
-                # Get valid access token (handles refresh automatically)
-                oauth_service = await get_oauth_service()
-                access_token, auth_url, token_error = await oauth_service.get_valid_access_token(
-                    user_id=user_id,
-                    server=server
-                )
-                
-                # If re-authentication is needed
-                if auth_url:
-                    raise HTTPException(
-                        status_code=401,
-                        detail=f"OAuth re-authentication required",
-                        headers={"X-OAuth-URL": auth_url}
-                    )
-                
-                # If error occurred
-                if token_error:
-                    raise HTTPException(
-                        status_code=401,
-                        detail=f"OAuth token error: {token_error}"
-                    )
-                
-                # If no token (shouldn't happen, defensive check)
-                if not access_token:
-                    raise HTTPException(
-                        status_code=401,
-                        detail=f"No valid OAuth token available"
-                    )
-                
-                # Inject OAuth Bearer token
-                headers["Authorization"] = f"Bearer {access_token}"
-                logger.debug(f"Injected OAuth access token for {server.serverName}")
+            logger.debug(f"Built complete authentication headers for {server.serverName}")
             
-            else:
-                # Non-OAuth server - handle apiKey and custom headers
-                # Build server_info structure (same as server_service.py line 1034)
-                server_info = _build_server_info_for_mcp_client(
-                    decrypted_config,
-                    server.config.get("tags", [])
-                )
-                
-                # Extract custom headers from server_info structure
-                if "headers" in server_info:
-                    for header_dict in server_info["headers"]:
-                        headers.update(header_dict)
-                
-                # Build API key headers directly from config
-                auth_headers = _build_headers_for_server(decrypted_config)
-                headers.update(auth_headers)
-                
-                logger.debug(f"Built authentication headers for backend server: {list(headers.keys())}")
+        except OAuthReAuthRequiredError as e:
+            raise HTTPException(
+                status_code=401,
+                detail="OAuth re-authentication required",
+                headers={"X-OAuth-URL": e.auth_url or ""}
+            )
+        except MissingUserIdError as e:
+            raise HTTPException(
+                status_code=401,
+                detail=f"User authentication required: {str(e)}"
+            )
+        except (OAuthTokenError, AuthenticationError) as e:
+            raise HTTPException(
+                status_code=401,
+                detail=f"Authentication error: {str(e)}"
+            )
 
 
     body = await request.body()
@@ -382,80 +344,39 @@ async def execute_tool(
         }
     }    
     try:
-        # Build headers for tracking purpose
+        # Build complete authentication headers (OAuth, apiKey, custom)
+        try:
+            user_id = user_context.get("user_id")
+            auth_headers = await _build_complete_headers_for_server(server, user_id)
+            
+        except OAuthReAuthRequiredError as e:
+            raise HTTPException(
+                status_code=401,
+                detail="OAuth re-authentication required",
+                headers={"X-OAuth-URL": e.auth_url or ""}
+            )
+        except MissingUserIdError as e:
+            raise HTTPException(
+                status_code=401,
+                detail=f"User authentication required: {str(e)}"
+            )
+        except (OAuthTokenError, AuthenticationError) as e:
+            raise HTTPException(
+                status_code=401,
+                detail=f"Authentication error: {str(e)}"
+            )
+        
+        # Build headers with tracking info and authentication
         headers = {
-            "Content-Type": "application/json",
             "X-User": username,
             "X-Username": username,
             "X-Tool-Name": tool_name,
         }
         
-        if config:
-            decrypted_config = decrypt_auth_fields(config)
-            
-            # Check if server requires OAuth
-            requires_oauth = decrypted_config.get("requiresOAuth", False) or "oauth" in decrypted_config
-            
-            if requires_oauth:
-                # OAuth-protected server - retrieve and inject access token
-                user_id = user_context.get("user_id")
-                if not user_id:
-                    raise HTTPException(
-                        status_code=401,
-                        detail="User authentication required for OAuth-protected server"
-                    )
-                
-                logger.info(f"OAuth server detected for tool execution, retrieving access token for user {user_id}")
-                
-                # Get valid access token (handles refresh automatically)
-                oauth_service = await get_oauth_service()
-                access_token, auth_url, token_error = await oauth_service.get_valid_access_token(
-                    user_id=user_id,
-                    server=server
-                )
-                
-                # If re-authentication is needed
-                if auth_url:
-                    raise HTTPException(
-                        status_code=401,
-                        detail=f"OAuth re-authentication required",
-                        headers={"X-OAuth-URL": auth_url}
-                    )
-                
-                # If error occurred
-                if token_error:
-                    raise HTTPException(
-                        status_code=401,
-                        detail=f"OAuth token error: {token_error}"
-                    )
-                
-                # If no token
-                if not access_token:
-                    raise HTTPException(
-                        status_code=401,
-                        detail=f"No valid OAuth token available"
-                    )
-                
-                # Inject OAuth Bearer token
-                headers["Authorization"] = f"Bearer {access_token}"
-                logger.info(f"Injected OAuth access token for tool execution on {server.serverName}")
-            
-            else:
-                # Non-OAuth server - handle apiKey and custom headers
-                # Build server_info structure (same as server_service.py)
-                server_info = _build_server_info_for_mcp_client(
-                    decrypted_config,
-                    server.tags or []
-                )
-                
-                # Extract custom headers from server_info structure
-                if "headers" in server_info:
-                    for header_dict in server_info["headers"]:
-                        headers.update(header_dict)
-                
-                # Build API key headers
-                auth_headers = _build_headers_for_server(decrypted_config)
-                headers.update(auth_headers)
+        # Merge auth headers (includes Content-Type, Authorization, custom headers)
+        headers.update(auth_headers)
+        
+        logger.debug(f"Built complete headers for tool execution on {server.serverName}")
         
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(

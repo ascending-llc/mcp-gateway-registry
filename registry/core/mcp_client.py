@@ -6,10 +6,9 @@ Refactored with centralized configuration and strategy pattern.
 """
 
 import asyncio
-import json
 import base64
 import logging
-from typing import List, Dict, Optional, Callable, Any
+from typing import List, Dict, Optional, Any
 import re
 from urllib.parse import urlparse
 
@@ -56,82 +55,6 @@ def normalize_sse_endpoint_url(endpoint_url: str) -> str:
     
     # If no mount path pattern detected, return as-is
     return endpoint_url
-
-
-import httpx
-
-
-def _build_headers_for_server(server_info: dict = None) -> Dict[str, str]:
-    """
-    Build HTTP headers for server requests by merging server-specific headers
-    and processing apiKey authentication.
-
-    Args:
-        server_info: Server configuration dictionary
-
-    Returns:
-        Headers dictionary with server-specific headers and authentication
-    """
-    # Start with default MCP headers from configuration
-    headers = mcp_config.DEFAULT_HEADERS.copy()
-
-    if not server_info:
-        return headers
-
-    # Process apiKey authentication if present
-    api_key_config = server_info.get("apiKey")
-    if api_key_config and isinstance(api_key_config, dict):
-        key_value = api_key_config.get("key")
-        authorization_type = api_key_config.get("authorization_type", "bearer").lower()
-        
-        if key_value:
-            if authorization_type == "bearer":
-                # Bearer token: Authorization: Bearer <key>
-                # Ignore custom_header field for bearer type
-                headers['Authorization'] = f'Bearer {key_value}'
-                logger.debug("Added Bearer authentication header")
-            elif authorization_type == "basic":
-                # Basic auth: Authorization: Basic <base64(key)>
-                # Ignore custom_header field for basic type
-                # Note: The key should already be base64 encoded or in username:password format
-                # Check if key is already base64 encoded by trying to decode it
-                try:
-                    base64.b64decode(key_value, validate=True)
-                    # Already base64 encoded
-                    headers['Authorization'] = f'Basic {key_value}'
-                    logger.debug("Added Basic authentication header (pre-encoded)")
-                except Exception:
-                    # Not base64 encoded, encode it
-                    encoded_key = base64.b64encode(key_value.encode()).decode()
-                    headers['Authorization'] = f'Basic {encoded_key}'
-                    logger.debug("Added Basic authentication header (auto-encoded)")
-            elif authorization_type == "custom":
-                # Custom header: use custom_header field as header name
-                # Only use custom_header when authorization_type is "custom"
-                custom_header = api_key_config.get("custom_header")
-                if custom_header:
-                    headers[custom_header] = key_value
-                    logger.debug(f"Added custom authentication header: {custom_header}")
-                else:
-                    logger.warning("apiKey with authorization_type='custom' but no custom_header specified")
-            else:
-                logger.warning(f"Unknown authorization_type: {authorization_type}, defaulting to Bearer")
-                headers['Authorization'] = f'Bearer {key_value}'
-
-    # Merge server-specific headers if present (these can override auth headers if needed)
-    server_headers = server_info.get("headers", [])
-    if server_headers and isinstance(server_headers, list):
-        for header_dict in server_headers:
-            if isinstance(header_dict, dict):
-                headers.update(header_dict)
-                logger.debug(f"Added server headers to MCP client: {header_dict}")
-
-    # Apply server-specific strategy modifications
-    strategy = get_server_strategy(server_info)
-    headers = strategy.modify_headers(headers)
-
-    return headers
-
 
 def normalize_sse_endpoint_url_for_request(url_str: str) -> str:
     """
@@ -266,15 +189,20 @@ async def get_tools_from_server_with_transport(base_url: str, transport: str = "
 
 async def _get_from_streamable_http(
     base_url: str, 
-    server_info: dict = None,
+    headers: Dict[str, str] = None,
+    transport_type: str = "streamable-http",
     include_capabilities: bool = True
 ) -> tuple[List[dict] | None, dict | None]:
     """
     Consolidated method to get tools and optionally capabilities using streamable-http transport.
     
+    Pure transport layer - accepts pre-built headers from caller.
+    No authentication logic - that's handled by the caller (server_service, proxy_routes, etc.)
+    
     Args:
         base_url: The URL to connect to (should contain everything needed)
-        server_info: Server configuration dictionary
+        headers: Pre-built HTTP headers (including authentication)
+        transport_type: Transport type for strategy selection
         include_capabilities: Whether to retrieve and validate capabilities
         
     Returns:
@@ -282,14 +210,15 @@ async def _get_from_streamable_http(
         - If include_capabilities=True: Returns (None, None) if capabilities cannot be retrieved
         - If include_capabilities=False: Returns (tools, None)
     """
-    # Build headers for the server
-    headers = _build_headers_for_server(server_info)
+    # Use provided headers or default MCP headers
+    if headers is None:
+        headers = mcp_config.DEFAULT_HEADERS.copy()
     
     # Use the URL as provided - it should contain everything needed
     mcp_url = base_url
     
     # Apply server-specific URL modifications via strategy pattern
-    strategy = get_server_strategy(server_info)
+    strategy = get_server_strategy({"type": transport_type})
     mcp_url = strategy.modify_url(mcp_url)
     
     logger.info(f"Connecting to MCP server: {mcp_url}")
@@ -335,26 +264,31 @@ async def _get_from_streamable_http(
         return None, None
 
 
-async def _get_tools_streamable_http(base_url: str, server_info: dict = None) -> List[dict] | None:
+async def _get_tools_streamable_http(base_url: str, headers: Dict[str, str] = None, transport_type: str = "streamable-http") -> List[dict] | None:
     """
     Get tools using streamable-http transport (legacy method, without capabilities).
     Wraps the consolidated method for backward compatibility.
     """
-    tools, _ = await _get_from_streamable_http(base_url, server_info, include_capabilities=False)
+    tools, _ = await _get_from_streamable_http(base_url, headers, transport_type, include_capabilities=False)
     return tools
 
 
 async def _get_from_sse(
     base_url: str, 
-    server_info: dict = None,
+    headers: Dict[str, str] = None,
+    transport_type: str = "sse",
     include_capabilities: bool = True
 ) -> tuple[List[dict] | None, dict | None]:
     """
     Consolidated method to get tools and optionally capabilities using SSE transport.
     
+    Pure transport layer - accepts pre-built headers from caller.
+    No authentication logic - that's handled by the caller.
+    
     Args:
         base_url: The URL to connect to (should contain everything needed)
-        server_info: Server configuration dictionary
+        headers: Pre-built HTTP headers (including authentication)
+        transport_type: Transport type for strategy selection
         include_capabilities: Whether to retrieve and validate capabilities
         
     Returns:
@@ -362,6 +296,10 @@ async def _get_from_sse(
         - If include_capabilities=True: Returns (None, None) if capabilities cannot be retrieved
         - If include_capabilities=False: Returns (tools, None)
     """
+    # Use provided headers or default MCP headers
+    if headers is None:
+        headers = mcp_config.DEFAULT_HEADERS.copy()
+    
     # Use the URL as provided - it should contain everything needed
     sse_url = base_url
     
@@ -369,11 +307,8 @@ async def _get_from_sse(
     mcp_server_url = f"http{secure_prefix}://{sse_url[len(f'http{secure_prefix}://'):]}"
     
     # Apply server-specific URL modifications via strategy pattern
-    strategy = get_server_strategy(server_info)
+    strategy = get_server_strategy({"type": transport_type})
     mcp_server_url = strategy.modify_url(mcp_server_url)
-    
-    # Build headers for the server
-    headers = _build_headers_for_server(server_info)
     
     logger.info(f"Connecting to SSE server: {mcp_server_url}")
 
@@ -433,12 +368,12 @@ async def _get_from_sse(
         return None, None
 
 
-async def _get_tools_sse(base_url: str, server_info: dict = None) -> List[dict] | None:
+async def _get_tools_sse(base_url: str, headers: Dict[str, str] = None, transport_type: str = "sse") -> List[dict] | None:
     """
     Get tools using SSE transport (legacy method, without capabilities).
     Wraps the consolidated method for backward compatibility.
     """
-    tools, _ = await _get_from_sse(base_url, server_info, include_capabilities=False)
+    tools, _ = await _get_from_sse(base_url, headers, transport_type, include_capabilities=False)
     return tools
 
 
@@ -578,13 +513,20 @@ async def get_tools_from_server_with_server_info(base_url: str, server_info: dic
         return None
 
 
-async def get_tools_and_capabilities_from_server(base_url: str, server_info: dict = None) -> tuple[List[dict] | None, dict | None]:
+async def get_tools_and_capabilities_from_server(
+    base_url: str, 
+    headers: Dict[str, str] = None,
+    transport_type: str = None
+) -> tuple[List[dict] | None, dict | None]:
     """
-    Get tools and capabilities from server using server configuration.
+    Get tools and capabilities from server.
+    
+    Pure transport layer - accepts pre-built headers and transport type.
     
     Args:
-        base_url: The base URL of the MCP server (e.g., http://localhost:8000).
-        server_info: Optional server configuration dict containing supported_transports
+        base_url: The base URL of the MCP server (e.g., http://localhost:8000)
+        headers: Pre-built HTTP headers (including authentication)
+        transport_type: Transport type ("streamable-http" or "sse"), auto-detected if None
         
     Returns:
         Tuple of (tool_list, capabilities_dict):
@@ -596,22 +538,23 @@ async def get_tools_and_capabilities_from_server(base_url: str, server_info: dic
         logger.error("MCP Check Error: Base URL is empty.")
         return None, None
 
-    # Use transport-aware detection
-    transport = await detect_server_transport_aware(base_url, server_info)
+    # Auto-detect transport if not provided
+    if transport_type is None:
+        transport_type = await detect_server_transport(base_url)
     
-    logger.info(f"Attempting to connect to MCP server at {base_url} using {transport} transport (server-info aware)...")
+    logger.info(f"Attempting to connect to MCP server at {base_url} using {transport_type} transport...")
     
     try:
-        if transport == mcp_config.TRANSPORT_HTTP:
-            return await _get_from_streamable_http(base_url, server_info, include_capabilities=True)
-        elif transport == mcp_config.TRANSPORT_SSE:
-            return await _get_from_sse(base_url, server_info, include_capabilities=True)
+        if transport_type == mcp_config.TRANSPORT_HTTP or transport_type == "streamable-http":
+            return await _get_from_streamable_http(base_url, headers, transport_type, include_capabilities=True)
+        elif transport_type == mcp_config.TRANSPORT_SSE or transport_type == "sse":
+            return await _get_from_sse(base_url, headers, transport_type, include_capabilities=True)
         else:
-            logger.error(f"Unsupported transport type: {transport}")
+            logger.error(f"Unsupported transport type: {transport_type}")
             return None, None
             
     except Exception as e:
-        logger.error(f"MCP Check Error: Failed to get tools and capabilities from {base_url} with {transport}: {type(e).__name__} - {e}")
+        logger.error(f"MCP Check Error: Failed to get tools and capabilities from {base_url} with {transport_type}: {type(e).__name__} - {e}")
         return None, None
 
 
