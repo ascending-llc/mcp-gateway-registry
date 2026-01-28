@@ -113,25 +113,6 @@ class OTelMetricsClient:
             logger.error(f"Failed to initialize OTelMetricsClient for service '{service_name}': {e}")
 
     @safe_telemetry
-    def record_http_request(self, method: str, route: str, status_code: int):
-        """Record an incoming HTTP request."""
-        attributes = {
-            "method": method,
-            "route": route,
-            "status_code": str(status_code)
-        }
-        self.http_requests.add(1, attributes)
-
-    @safe_telemetry
-    def record_http_duration(self, duration_seconds: float, method: str, route: str):
-        """Record how long a request took."""
-        attributes = {
-            "method": method,
-            "route": route
-        }
-        self.http_duration.record(duration_seconds, attributes)
-
-    @safe_telemetry
     def record_auth_request(
         self,
         mechanism: str,
@@ -158,16 +139,6 @@ class OTelMetricsClient:
         # Record duration histogram for latency percentiles
         if duration_seconds is not None:
             self.auth_duration.record(duration_seconds, attributes)
-
-    @safe_telemetry
-    def record_tool_used(self, tool_name: str):
-        """
-        Record when a tool is used.
-        """
-        attributes = {
-            "tool_name": tool_name
-        }
-        self.tool_discovery.add(1, attributes)
 
     @safe_telemetry
     def record_tool_discovery(
