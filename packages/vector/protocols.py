@@ -42,7 +42,7 @@ class VectorStorable(Protocol):
         Returns:
             LangChain Document with page_content and metadata
         """
-        ...
+        raise NotImplementedError()
 
     @classmethod
     def from_document(cls, document: LangChainDocument) -> dict:
@@ -55,7 +55,7 @@ class VectorStorable(Protocol):
         Returns:
             Dictionary with model data (may not be complete model instance)
         """
-        ...
+        raise NotImplementedError()
 
     @staticmethod
     def get_safe_metadata_fields() -> Set[str]:
@@ -65,7 +65,7 @@ class VectorStorable(Protocol):
         Returns:
             Set of safe metadata field names
         """
-        ...
+        raise NotImplementedError()
 
 
 @runtime_checkable
@@ -83,4 +83,4 @@ class ContentGenerator(Protocol):
         Returns:
             Combined text string for semantic search
         """
-        ...
+        raise NotImplementedError()
