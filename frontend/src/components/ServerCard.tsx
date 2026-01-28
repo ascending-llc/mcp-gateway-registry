@@ -37,7 +37,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
   onServerUpdate,
   onRefreshSuccess,
 }) => {
-  const { cancelPolling, refreshServerData, getServerStatusByPolling } = useServer();
+  const { cancelPolling, refreshServerData } = useServer();
   const [loading, setLoading] = useState(false);
   const [tools, setTools] = useState<Tool[]>([]);
   const [loadingTools, setLoadingTools] = useState(false);
@@ -93,21 +93,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
         cancelPolling?.(server.id);
       }
     } else {
-      try {
-        const result = await SERVICES.MCP.getOauthReinit(server.id);
-        if (result.success) {
-          getServerStatusByPolling(server.id, state => {
-            if (state === SERVER_CONNECTION.DISCONNECTED || state === SERVER_CONNECTION.ERROR) {
-              cancelPolling?.(server.id);
-              setShowApiKeyDialog(true);
-            }
-          });
-        } else {
-          setShowApiKeyDialog(true);
-        }
-      } catch (_error) {
-        setShowApiKeyDialog(true);
-      }
+      setShowApiKeyDialog(true);
     }
   };
 

@@ -264,8 +264,12 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
       } else {
         const result = await SERVICES.SERVER.createServer(data);
         setServerData(result);
-        if (data?.oauth) setShowSuccessDialog(true);
         refreshData(true);
+        if (data?.oauth) {
+          setShowSuccessDialog(true);
+        } else {
+          onClose();
+        }
       }
     } catch (error: any) {
       showToast(error?.detail || error, 'error');
