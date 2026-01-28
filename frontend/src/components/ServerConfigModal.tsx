@@ -25,7 +25,7 @@ const ServerConfigModal: React.FC<ServerConfigModalProps> = ({ server, isOpen, o
     // Get base URL and strip port for nginx proxy compatibility
     const currentUrl = new URL(window.location.origin);
     const basePath = getBasePath();
-    const url = `${currentUrl.protocol}//${currentUrl.hostname}${basePath ? `${basePath}/` : ''}${server.path}`;
+    const url = `${currentUrl.protocol}//${currentUrl.hostname}${basePath}/proxy${server.path}`;
 
     switch (selectedIDE) {
       case 'vscode':
