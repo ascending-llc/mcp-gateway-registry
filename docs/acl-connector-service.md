@@ -227,6 +227,23 @@ class ACLService:
 
 The following REST API endpoints are exposed for ACL management:
 
+- **GET /permissions/search-principals**
+    - **Purpose:** Search for principals (users, groups, public) by query string for ACL sharing UI and permission assignment.
+    - **Query Parameters:**
+        - `query` (string, required): The search string for principal name, email, or username.
+        - `limit` (int, optional): Maximum number of results to return (default: 30).
+        - `principal_types` (list of string, optional): Filter by principal type (e.g., `user`, `group`). 
+    - **Response:**
+        ```json
+        [
+          {
+            "principal_type": "<user | group >",
+            "principal_id": "<id>",
+            "display_name": "...",
+          }
+        ]
+        ```
+
 - **GET /permissions/servers/{server_id}**
     - **Purpose:** Get the current user's permissions for a specific server resource.
     - **Response:**
