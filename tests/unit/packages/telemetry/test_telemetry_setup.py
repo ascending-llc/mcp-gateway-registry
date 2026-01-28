@@ -10,6 +10,20 @@ from packages.telemetry import setup_metrics
 class TestTelemetrySetup:
     """Test suite for OpenTelemetry setup configuration."""
 
+    @pytest.fixture(autouse=True)
+    def reset_otel_state(self):
+        """Reset OTel global state before and after each test."""
+        # Ensure clean state before test
+        yield
+        # Clean up after test to prevent background thread issues
+        try:
+            from opentelemetry import metrics
+            provider = metrics.get_meter_provider()
+            if hasattr(provider, 'shutdown'):
+                provider.shutdown(timeout_millis=100)
+        except Exception:
+            pass
+
     @pytest.fixture
     def mock_otel_deps(self):
         """
@@ -29,6 +43,14 @@ class TestTelemetrySetup:
 
             mock_safe_exporter_instance = MagicMock()
             mock_safe_exporter.return_value = mock_safe_exporter_instance
+
+            # Ensure periodic reader mock doesn't spawn real threads
+            mock_periodic_reader_instance = MagicMock()
+            mock_periodic_reader.return_value = mock_periodic_reader_instance
+
+            # Ensure meter provider mock doesn't do real work
+            mock_meter_provider_instance = MagicMock()
+            mock_meter_provider.return_value = mock_meter_provider_instance
 
             yield {
                 "metrics": mock_metrics,
@@ -66,8 +88,11 @@ class TestTelemetrySetup:
         with patch.dict(os.environ, {"OTEL_PROMETHEUS_ENABLED": "true"}), \
              patch(
                  "opentelemetry.exporter.prometheus.PrometheusMetricReader"
-             ) as mock_prom_reader, \
+             ) as _mock_prom_reader, \
              patch("prometheus_client.start_http_server") as mock_start_server:
+
+            # Suppress unused variable warning - we just need to mock it
+            _ = _mock_prom_reader
 
             setup_metrics("test-service")
 

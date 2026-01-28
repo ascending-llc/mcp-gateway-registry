@@ -49,11 +49,12 @@ class SafeOTLPMetricExporter:
     def export(self, *args, **kwargs):
         """Export with error suppression."""
         if not self._exporter:
-            return
+            return None
         try:
             return self._exporter.export(*args, **kwargs)
-        except Exception as e:
-            logger.debug(f"Metric export failed (suppressed): {e}")
+        except Exception:
+            # Silently suppress export errors to prevent crashes
+            # This can happen during test cleanup when streams are closed
             return None
     
     def shutdown(self, *args, **kwargs):
