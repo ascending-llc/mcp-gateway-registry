@@ -1,5 +1,5 @@
 from datetime import timezone, datetime
-from typing import Optional
+from typing import Optional, List
 from beanie import PydanticObjectId
 from packages.models import IUser
 from registry.utils.log import logger
@@ -58,5 +58,22 @@ class UserService:
             user = await IUser.find_one({"email": email})
         return user
 
+    async def search_users(self, query: str, limit: int = 30, skip: int = 0) -> List[IUser]:
+        """
+        Search users by name, email, or username. Returns IUser model objects.
+        """
+        try:
+            query =  {
+                "$or": [
+                    {"email": {"$regex": query, "$options": "i"}},
+                    {"name": {"$regex": query, "$options": "i"}},
+                    {"username": {"$regex": query, "$options": "i"}}
+                ]
+            }
+            results = await IUser.find(query).to_list()
+            return results
+        except Exception as e:
+            logger.error(f"Error searching users with query '{query}': {e}")
+            return []
 
 user_service = UserService()

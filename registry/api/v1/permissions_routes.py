@@ -6,7 +6,7 @@ RESTful API endpoints for managing ACL permissions using MongoDB.
 
 import asyncio
 import logging
-from fastapi import APIRouter, HTTPException, status as http_status, Depends
+from fastapi import APIRouter, HTTPException, status as http_status, Depends, Query
 from beanie import PydanticObjectId
 
 from registry.auth.dependencies import CurrentUserWithACLMap
@@ -20,7 +20,7 @@ from registry.services.permissions_utils import (
     check_required_permission,
 )
 
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -54,6 +54,42 @@ async def get_server_permissions(
         "server_id": server_id,
         "permissions": perms
     }
+
+@router.get(
+    "/permissions/search-principals",
+    summary="Search for principals",
+    description="Search for principals by query string. Used for ACL sharing UI.",
+)
+async def search_principals(
+    query: str,
+    page: int = 1,
+    per_page: int = 30,
+    principal_types: Optional[List[str]] = Query(None),
+    user_context: dict = Depends(get_user_context),
+) -> Dict[str, Any]:
+    """
+    Search for principals (users, groups, public) matching the query string.
+    Returns a paginated response with metadata.
+    """
+    try:
+        response = await acl_service.search_principals(
+            query=query,
+            page=page,
+            per_page=per_page,
+            principal_types=principal_types,
+            current_user=user_context
+        )
+        return response
+    except Exception as e:
+        logger.error(f"Error searching principals: {e}")
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": "internal_server_error",
+                "message": "An error occurred while searching principals."
+            }
+        )
+
 
 @router.put(
     f"/permissions/servers/{{server_id}}",

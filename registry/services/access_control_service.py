@@ -1,14 +1,14 @@
 from datetime import datetime, timezone
-from typing import Optional, Union
+from typing import Optional, Union, List, Dict, Any
 from packages.models._generated import (
 	IAccessRole,
 )
 from packages.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
 from beanie import PydanticObjectId
 from registry.core.acl_constants import ResourceType, PermissionBits, PrincipalType
-import logging 
-
-logger = logging.getLogger(__name__)
+from registry.utils.log import logger
+from registry.services.user_service import user_service
+from registry.services.group_service import group_service
 
 class ACLService:
 	async def grant_permission(
@@ -211,6 +211,77 @@ class ACLService:
 		except Exception as e:
 			logger.error(f"Error revoking ACL entry for resource {resource_type} with ID {resource_id}: {e}")
 			return 0
+
+	async def search_principals(
+		self,
+		query: str,
+		page: int = 1,
+		per_page: int = 30,
+		principal_types: Optional[List[str]] = None,
+		current_user: Optional[dict] = None
+	) -> Dict[str, Any]:
+		"""
+		Search for principals (users, groups, agents) matching the query string.
+		Returns paginated results and metadata.
+		"""
+		query = (query or "").strip()
+		if not query or len(query) < 2:
+			raise ValueError("Query string must be at least 2 characters long.")
+
+		page = max(1, page)
+		per_page = max(1, min(100, per_page))
+		skip = (page - 1) * per_page
+
+		valid_types = {PrincipalType.USER.value, PrincipalType.GROUP.value}
+		type_filters = None
+		if principal_types:
+			if isinstance(principal_types, str):
+				types = [t.strip() for t in principal_types.split(",") if t.strip()]
+			else:
+				types = [str(t).strip() for t in principal_types if str(t).strip()]
+			type_filters = [t for t in types if t in valid_types]
+			if not type_filters:
+				type_filters = None
+
+		total_count = 0
+		current_user_id = current_user.get("user_id")
+
+		# Collect user results
+		user_results = []
+		if not type_filters or PrincipalType.USER.value in type_filters:
+			user_results = await user_service.search_users(query)
+			user_results = [u for u in user_results if str(getattr(u, "id")) != current_user_id]
+
+		# Collect group results
+		group_results = []
+		if not type_filters or PrincipalType.GROUP.value in type_filters:
+			group_results = await group_service.search_groups(query)
+
+		all_results = []
+		for user in user_results:
+			all_results.append({
+				"principal_type": PrincipalType.USER.value,
+				"principal_id": str(getattr(user, "id")),
+				"display_name": getattr(user, "name", None) or getattr(user, "email", None),
+			})
+		for group in group_results:
+			all_results.append({
+				"principal_type": PrincipalType.GROUP.value,
+				"principal_id": str(getattr(group, "id")),
+				"display_name": getattr(group, "name", None) or getattr(group, "email", None),
+			})
+
+		total_count = len(all_results)
+		paginated_results = all_results[skip:skip+per_page]
+		has_next = skip + per_page < total_count
+
+		return {
+			"results": paginated_results,
+			"total_count": total_count,
+			"page": page,
+			"per_page": per_page,
+			"has_next": has_next
+		}
 
 
 # Singleton instance
