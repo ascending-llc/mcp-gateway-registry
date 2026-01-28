@@ -259,6 +259,26 @@ class VectorStoreAdapter(ABC):
             "Use database-specific API to retrieve document by ID."
         )
 
+    def get_by_ids(
+            self,
+            ids: List[str],
+            collection_name: Optional[str] = None
+    ) -> List[Document]:
+        """
+        Extended feature: Get multiple documents by IDs
+        
+        Args:
+            ids: List of document IDs
+            collection_name: Target collection
+            
+        Returns:
+            List of LangChain Documents (may be less than requested if some IDs not found)
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement get_by_ids(). "
+            "Use database-specific API to retrieve documents by IDs."
+        )
+
     @abstractmethod
     def filter_by_metadata(
             self,
@@ -334,6 +354,41 @@ class VectorStoreAdapter(ABC):
         Extended feature: Search by search type
         """
         raise NotImplementedError()
+
+    def search_with_rerank(
+            self,
+            query: str,
+            k: int = 10,
+            candidate_k: Optional[int] = None,
+            search_type: SearchType = SearchType.HYBRID,
+            filters: Any = None,
+            reranker_type: str = "flashrank",
+            reranker_kwargs: Optional[Dict[str, Any]] = None,
+            collection_name: Optional[str] = None,
+            **kwargs
+    ) -> List[Document]:
+        """
+        Extended feature: Search with reranking for improved relevance.
+        
+        Fetches candidate_k results, reranks them, returns top k.
+        
+        Args:
+            query: Search query
+            k: Final number of results
+            candidate_k: Number of candidates for reranking (default: k*3)
+            search_type: Type of search
+            filters: Filter conditions
+            reranker_type: Reranker to use
+            reranker_kwargs: Additional reranker parameters
+            collection_name: Target collection
+            
+        Returns:
+            List of reranked Documents
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement search_with_rerank(). "
+            "Use search() + reranker to implement this functionality."
+        )
 
     def list_collections(self) -> List[str]:
         """

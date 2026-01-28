@@ -5,6 +5,7 @@ from langchain_core.vectorstores import VectorStore
 import weaviate.classes.config as wvc
 from ..adapters.adapter import VectorStoreAdapter
 from ..enum.enums import SearchType, EmbeddingProvider
+from ..retrievers.reranker import create_reranker
 
 logger = logging.getLogger(__name__)
 
@@ -213,10 +214,28 @@ class WeaviateStore(VectorStoreAdapter):
     # Extended features implementation
     # ========================================
 
-    def get_collection(self, collection_name):
+    def get_collection(self, collection_name: Optional[str] = None):
         """
         Get Weaviate collection by name.
+        
+        Args:
+            collection_name: Collection name (required, will use adapter default if None)
+            
+        Returns:
+            Weaviate collection object
+            
+        Raises:
+            ValueError: If collection_name is None and no default is set
+            Exception: If collection does not exist
         """
+        if collection_name is None:
+            collection_name = self._default_collection
+            if not collection_name:
+                raise ValueError(
+                    "collection_name is required but was not provided. "
+                    "This usually means the adapter was not properly initialized with a collection name."
+                )
+        
         client = self._get_client()
         if self.collection_exists(collection_name):
             return client.collections.get(collection_name)
@@ -251,6 +270,32 @@ class WeaviateStore(VectorStoreAdapter):
 
         return None
 
+    def get_by_ids(
+            self,
+            ids: List[str],
+            collection_name: Optional[str] = None
+    ) -> List[Document]:
+        """
+        Get multiple documents by IDs using Weaviate client.
+        
+        Args:
+            ids: List of document IDs (UUIDs)
+            collection_name: Collection name
+            
+        Returns:
+            List of LangChain Documents (may be less than requested if some IDs not found)
+        """
+        if not ids:
+            return []
+        
+        documents = []
+        for doc_id in ids:
+            doc = self.get_by_id(doc_id, collection_name)
+            if doc:
+                documents.append(doc)
+        
+        return documents
+
     def list_collections(self) -> List[str]:
         """List all Weaviate collections."""
         try:
@@ -262,8 +307,27 @@ class WeaviateStore(VectorStoreAdapter):
             logger.error(f"Failed to list collections: {e}")
             return list(self._stores.keys())
 
-    def collection_exists(self, collection_name: str) -> bool:
-        """Check if collection exists in Weaviate."""
+    def collection_exists(self, collection_name: Optional[str] = None) -> bool:
+        """
+        Check if collection exists in Weaviate.
+        
+        Args:
+            collection_name: Collection name (required, will use adapter default if None)
+            
+        Returns:
+            True if collection exists
+            
+        Raises:
+            ValueError: If collection_name is None and no default is set
+        """
+        if collection_name is None:
+            collection_name = self._default_collection
+            if not collection_name:
+                raise ValueError(
+                    "collection_name is required but was not provided. "
+                    "This usually means the adapter was not properly initialized with a collection name."
+                )
+        
         try:
             client = self._get_client()
             return client.collections.exists(collection_name)
@@ -349,7 +413,12 @@ class WeaviateStore(VectorStoreAdapter):
             logger.info("Falling back to semantic search only...")
             # Fallback to near_vector search if hybrid fails
             try:
-                return self.near_text(query, k, filters=filters, collection_name=collection_name)
+                return self.near_text(
+                    query=query,
+                    k=k,
+                    filters=filters,
+                    collection_name=collection_name
+                )
             except Exception as fallback_error:
                 logger.error(f"Fallback search also failed: {fallback_error}")
                 return []
@@ -387,14 +456,114 @@ class WeaviateStore(VectorStoreAdapter):
                collection_name: Optional[str] = None,
                **kwargs) -> List[Document]:
         if search_type == SearchType.BM25:
-            return self.bm25_search(query, k, filters, collection_name, **kwargs)
+            return self.bm25_search(
+                query=query,
+                k=k,
+                filters=filters,
+                collection_name=collection_name,
+                **kwargs
+            )
         elif search_type == SearchType.HYBRID:
-            return self.hybrid_search(query, k, filters, collection_name, **kwargs)
+            return self.hybrid_search(
+                query=query,
+                k=k,
+                filters=filters,
+                collection_name=collection_name,
+                **kwargs
+            )
         elif search_type == SearchType.NEAR_TEXT:
-            return self.near_text(query, k, filters, collection_name, **kwargs)
+            return self.near_text(
+                query=query,
+                k=k,
+                filters=filters,
+                collection_name=collection_name,
+                **kwargs
+            )
         else:
             logger.error(f"Unknown search type: {search_type}")
             raise ValueError(f"Unknown search type: {search_type}")
+
+    def search_with_rerank(
+            self,
+            query: str,
+            k: int = 10,
+            candidate_k: Optional[int] = None,
+            search_type: SearchType = SearchType.HYBRID,
+            filters: Any = None,
+            reranker_type: str = "flashrank",
+            reranker_kwargs: Optional[Dict[str, Any]] = None,
+            collection_name: Optional[str] = None,
+            **kwargs
+    ) -> List[Document]:
+        """
+        Search with reranking for improved relevance.
+        
+        Fetches candidate_k results, reranks them, returns top k.
+        
+        Args:
+            query: Search query
+            k: Final number of results
+            candidate_k: Number of candidates for reranking (default: k*3)
+            search_type: Type of search
+            filters: Filter conditions
+            reranker_type: Reranker to use
+            reranker_kwargs: Additional reranker parameters
+            collection_name: Target collection
+            
+        Returns:
+            List of reranked Documents
+        """
+        try:
+            # Default candidate_k to 3x final k
+            if candidate_k is None:
+                candidate_k = min(k * 3, 100)
+            
+            # Step 1: Get candidate documents
+            logger.debug(f"Fetching {candidate_k} candidates for reranking")
+            candidates = self.search(
+                query=query,
+                search_type=search_type,
+                k=candidate_k,
+                filters=filters,
+                collection_name=collection_name,
+                **kwargs
+            )
+            
+            if not candidates:
+                logger.warning("No candidates found for reranking")
+                return []
+            
+            # Step 2: Rerank candidates
+            logger.debug(f"Reranking {len(candidates)} candidates to get top {k}")
+            reranker_kwargs = reranker_kwargs or {}
+            reranker_kwargs['top_n'] = k
+            
+            reranker = create_reranker(
+                reranker_type=reranker_type,
+                **reranker_kwargs
+            )
+            
+            # Rerank and return top k
+            reranked = reranker.compress_documents(
+                documents=candidates,
+                query=query
+            )
+            
+            logger.info(f"Reranking complete: {len(candidates)} -> {len(reranked)} results")
+            return reranked
+            
+        except Exception as e:
+            logger.error(f"Reranking failed: {e}", exc_info=True)
+            logger.warning("Falling back to regular search without reranking")
+            # Fallback to regular search
+            return self.search(
+                query=query,
+                search_type=search_type,
+                k=k,
+                filters=filters,
+                collection_name=collection_name,
+                **kwargs
+            )
 
     def batch_update_properties(
             self,

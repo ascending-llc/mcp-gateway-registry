@@ -452,7 +452,7 @@ class Repository(Generic[T]):
             List of matching model instances
         """
         try:
-            results = self.adapter.filter(
+            results = self.adapter.filter_by_metadata(
                 filters=filters,
                 limit=limit,
                 collection_name=self.collection

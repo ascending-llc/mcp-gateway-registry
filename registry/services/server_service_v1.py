@@ -24,6 +24,7 @@ from registry.schemas.server_api_schemas import (
 from registry.utils.log import logger
 from registry.utils.crypto_utils import encrypt_auth_fields
 from registry.core.mcp_client import get_tools_from_server_with_server_info
+from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
 
 
 def _extract_config_field(server: MCPServerDocument, field: str, default: Any = None) -> Any:
