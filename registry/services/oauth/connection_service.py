@@ -1,8 +1,7 @@
 import asyncio
 import time
 from typing import Dict, Optional, Any
-from dataclasses import dataclass, field
-
+from dataclasses import dataclass
 from registry.schemas.enums import ConnectionState
 from registry.services.server_service import server_service_v1
 from registry.services.oauth.base import Connection, ConnectionManager

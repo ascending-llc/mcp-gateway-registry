@@ -14,7 +14,7 @@ ODM Schema:
 import logging
 import httpx
 import asyncio
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Set
 from datetime import datetime, timezone
 from beanie import PydanticObjectId
 from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
@@ -25,7 +25,7 @@ from registry.schemas.server_api_schemas import (
 )
 from registry.utils.crypto_utils import encrypt_auth_fields
 from registry.core.mcp_client import get_tools_from_server_with_server_info
-from packages.vector.repository import mcp_server_repo
+from vector.repositories.mcp_server_repository import get_mcp_server_repo
 
 logger = logging.getLogger(__name__)
 
@@ -288,6 +288,7 @@ class ServerServiceV1:
 
     def __init__(self):
         """Initialize server service with search index manager."""
+        self.mcp_server_repo = get_mcp_server_repo()
         logger.info("ServerServiceV1 initialized with search index manager")
 
     async def list_servers(
@@ -630,6 +631,9 @@ class ServerServiceV1:
         if not server:
             raise ValueError("Server not found")
 
+        # Track which fields are being changed
+        fields_changed: Set[str] = set()
+
         # Get current config
         config = server.config or {}
 
@@ -642,14 +646,19 @@ class ServerServiceV1:
         # Update root-level registry fields
         if data.serverName is not None:
             server.serverName = data.serverName
+            fields_changed.add("server_name")  # Weaviate uses snake_case
         if data.path is not None:
             server.path = data.path
+            fields_changed.add("path")
         if data.tags is not None:
             server.tags = [tag.lower() for tag in data.tags]
+            fields_changed.add("tags")
         if data.scope is not None:
             server.scope = data.scope
+            fields_changed.add("scope")
         if data.status is not None:
             server.status = data.status
+            fields_changed.add("status")
 
         # Update config with MCP-specific values only
         updated_config = _update_config_from_request(config, data, server_name=server.serverName)
@@ -671,14 +680,37 @@ class ServerServiceV1:
         await server.save()
         logger.info(f"Updated server: {server.serverName} (ID: {server.id})")
 
-        #sync to vector database
-        try:
-            asyncio.create_task(mcp_server_repo.sync_server_to_vector_db(server))
-            logger.info(f"Successfully synced server '{server.serverName}' to vector database")
-        except Exception as e:
-            logger.warning(f"Failed to sync server '{server.serverName}' to vector database: {e}")
-
+        # Smart vector index update
+        asyncio.create_task(
+            self._update_server_in_search_index(server, fields_changed)
+        )
         return server
+
+    async def _update_server_in_search_index(
+            self,
+            server: MCPServerDocument,
+            fields_changed: Optional[Set[str]] = None
+    ):
+        """
+        Background task to update server in search index with smart detection.
+
+        Args:
+            server: Updated server instance
+            fields_changed: Set of changed field names (for optimization)
+        """
+        server_id = str(server.id)
+
+        try:
+            success = await self.mcp_server_repo.update_server_smart(
+                server=server,
+                fields_changed=fields_changed
+            )
+            if success:
+                logger.info(f"Background: Updated search index for server {server_id}")
+            else:
+                logger.warning(f"Background: Failed to update search index for server {server_id}")
+        except Exception as e:
+            logger.warning(f"Background: Search index update failed for server {server_id}: {e}")
 
     async def delete_server(
             self,
@@ -710,9 +742,14 @@ class ServerServiceV1:
 
         # Remove from vector database before deleting from MongoDB
         try:
-            server_id = str(server.id)
-            deleted_count = await mcp_server_repo.adelete_by_filter({"server_id": server_id})
-            logger.info(f"Removed {deleted_count} record(s) from vector database for server '{server.serverName}'")
+            deleted_count = await self.mcp_server_repo.adelete_by_filter(
+                {"server_id": server_id}
+            )
+            if deleted_count > 0:
+                logger.info(f"Removed {deleted_count} record(s) from "
+                            f"vector database for server '{server.serverName}'")
+            else:
+                logger.warning(f"Server not found in vector database: {server_id}")
         except Exception as e:
             logger.warning(f"Failed to remove server '{server.serverName}' from vector database: {e}")
 
@@ -803,6 +840,9 @@ class ServerServiceV1:
         if not server:
             raise ValueError("Server not found")
 
+        # Track field changes for smart update
+        fields_changed = {"status"}  # At minimum, status metadata might change
+
         # Update enabled field in config only (do not update status field)
         if server.config is None:
             server.config = {}
@@ -816,13 +856,17 @@ class ServerServiceV1:
                 server.config['enabled'] = False
                 await server.save()
                 raise ValueError("Failed to fetch tools from server. Server remains disabled.")
-            else:
-                # Sync search index after successful registration and tool retrieval
-                asyncio.create_task(mcp_server_repo.sync_server_to_vector_db(server))
+            # Tools changed, will need re-vectorization
+            fields_changed = None  # Full update
         # Update the updatedAt timestamp
         server.updatedAt = _get_current_utc_time()
         await server.save()
         logger.info(f"Toggled server {server.serverName} (ID: {server.id}) enabled to {enabled}")
+
+        # Smart update search index
+        asyncio.create_task(
+            self._update_server_in_search_index(server, fields_changed)
+        )
         return server
 
     async def get_server_tools(
