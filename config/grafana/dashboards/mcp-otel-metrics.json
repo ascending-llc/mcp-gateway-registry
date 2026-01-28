@@ -1011,6 +1011,132 @@
       }
     },
     {
+      "id": 21,
+      "title": "Tool Execution by Method",
+      "type": "piechart",
+      "targets": [
+        {
+          "expr": "sum(increase(mcp_tool_execution_total[1h])) by (method)",
+          "legendFormat": "{{method}}"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 51
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "pieType": "donut"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        }
+      }
+    },
+    {
+      "id": 22,
+      "title": "MCP Server Requests",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(mcp_server_requests_total[5m])) by (server_name)",
+          "legendFormat": "{{server_name}}"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 51
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "mean",
+            "max",
+            "last"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "Requests/sec",
+            "axisPlacement": "left",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          },
+          "unit": "reqps"
+        }
+      }
+    },
+    {
+      "id": 23,
+      "title": "Tool Execution Latency by Method (P95)",
+      "type": "bargauge",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(mcp_tool_execution_duration_seconds_bucket[5m])) by (le, method))",
+          "legendFormat": "{{method}}"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 51
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-BlYlRd"
+          },
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
       "id": 103,
       "title": "Registry Operation Latency",
       "type": "row",
@@ -1018,7 +1144,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 51
+        "y": 59
       },
       "collapsed": false
     },
@@ -1040,7 +1166,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 52
+        "y": 60
       },
       "options": {
         "legend": {
@@ -1087,7 +1213,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 52
+        "y": 60
       },
       "options": {
         "legend": {
@@ -1173,7 +1299,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 60
+        "y": 68
       },
       "options": {
         "orientation": "horizontal",
@@ -1224,7 +1350,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 60
+        "y": 68
       },
       "options": {
         "legend": {
@@ -1268,7 +1394,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 60
+        "y": 68
       },
       "options": {
         "colorMode": "value",
@@ -1369,7 +1495,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 68
+        "y": 76
       },
       "collapsed": false
     },
@@ -1399,7 +1525,7 @@
         "h": 6,
         "w": 24,
         "x": 0,
-        "y": 69
+        "y": 77
       },
       "options": {
         "colorMode": "background",
@@ -1582,6 +1708,15 @@
         "label": "Tool Name",
         "type": "query",
         "query": "label_values(mcp_tool_execution_total, tool_name)",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": ".*"
+      },
+      {
+        "name": "method",
+        "label": "HTTP Method",
+        "type": "query",
+        "query": "label_values(mcp_tool_execution_total, method)",
         "refresh": 1,
         "includeAll": true,
         "allValue": ".*"
