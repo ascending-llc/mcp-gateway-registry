@@ -58,7 +58,8 @@ async def proxy_to_mcp_server(
         server: MCPServerDocument
     """
     start_time = time()
-    server_name = server_config.get("title", server_path.strip('/')) if server_config else server_path.strip('/')
+    
+    server_name = server.get("title", server.path.strip('/')) if server else server.path.strip('/')
     tool_name = "unknown"
     try:
         body_bytes = await request.body()
