@@ -58,29 +58,43 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
     setShowApiKeyDialog(false);
   };
 
-  const handleAuth = async () => {
+  const oauthInit = async () => {
     try {
       setLoading(true);
-      if (isAuthenticated) {
-        const result = await SERVICES.MCP.getOauthReinit(serverId);
-        if (result.success) {
-          onShowToast?.(result?.message || 'Server reinitialized successfully', 'success');
-          setShowApiKeyDialog(false);
-        } else {
-          onShowToast?.(result?.message || 'Server reinitialized failed', 'error');
-        }
+      const result = await SERVICES.MCP.getOauthInitiate(serverId);
+      if (result?.authorization_url) {
+        window.open(result.authorization_url, '_blank');
+        getServerStatusByPolling?.(serverId);
+        setShowApiKeyDialog(false);
       } else {
-        const result = await SERVICES.MCP.getOauthInitiate(serverId);
-        if (result?.authorization_url) {
-          window.open(result.authorization_url, '_blank');
-          getServerStatusByPolling?.(serverId);
-          setShowApiKeyDialog(false);
-        } else {
-          onShowToast?.('Failed to get auth URL', 'error');
-        }
+        onShowToast?.('Failed to get auth URL', 'error');
       }
     } catch (error) {
       onShowToast?.(error instanceof Error ? error.message : 'Unknown error', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+  const handleAuth = async () => {
+    try {
+      setLoading(true);
+      const result = await SERVICES.MCP.getOauthReinit(serverId);
+      if (result.success) {
+        await getServerStatusByPolling?.(serverId, state => {
+          if (state === SERVER_CONNECTION.CONNECTED) {
+            cancelPolling?.(serverId);
+            onShowToast?.(result?.message || 'Server reinitialized successfully', 'success');
+            setShowApiKeyDialog(false);
+          } else if (state === SERVER_CONNECTION.DISCONNECTED || state === SERVER_CONNECTION.ERROR) {
+            cancelPolling?.(serverId);
+            oauthInit();
+          }
+        });
+      } else {
+        oauthInit();
+      }
+    } catch (_error) {
+      oauthInit();
     } finally {
       setLoading(false);
     }
@@ -152,9 +166,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
               disabled={loading}
               onClick={handleAuth}
             >
-              {loading && !isAuthenticated && (
-                <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-slate-200' />
-              )}
+              {loading && <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-slate-200' />}
               {!(loading || isAuthenticated) && <ArrowPathIcon className='h-4 w-4' />}
               {isAuthenticated ? 'Reconnect' : 'Authenticate'}
             </button>

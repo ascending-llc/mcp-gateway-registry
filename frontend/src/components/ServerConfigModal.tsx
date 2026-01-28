@@ -1,6 +1,7 @@
 import { ClipboardDocumentIcon } from '@heroicons/react/24/outline';
 import type React from 'react';
 import { useCallback, useState } from 'react';
+import { getBasePath } from '@/config';
 import type { ServerInfo } from '@/contexts/ServerContext';
 
 type IDE = 'vscode' | 'cursor' | 'cline' | 'claude-code';
@@ -23,11 +24,8 @@ const ServerConfigModal: React.FC<ServerConfigModalProps> = ({ server, isOpen, o
 
     // Get base URL and strip port for nginx proxy compatibility
     const currentUrl = new URL(window.location.origin);
-    const baseUrl = `${currentUrl.protocol}//${currentUrl.hostname}`;
-
-    // Clean up server path - remove trailing slashes and ensure single leading slash
-    const cleanPath = server.path.replace(/\/+$/, '').replace(/^\/+/, '/');
-    const url = `${baseUrl}${cleanPath}/mcp`;
+    const basePath = getBasePath();
+    const url = `${currentUrl.protocol}//${currentUrl.hostname}${basePath ? `${basePath}/` : ''}${server.path}`;
 
     switch (selectedIDE) {
       case 'vscode':
@@ -131,33 +129,6 @@ const ServerConfigModal: React.FC<ServerConfigModalProps> = ({ server, isOpen, o
         </div>
 
         <div className='space-y-4 overflow-auto max-h-[calc(80vh-100px)]'>
-          <div className='bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4'>
-            <h4 className='font-medium text-blue-900 dark:text-blue-100 mb-2'>How to use this configuration:</h4>
-            <ol className='text-sm text-blue-800 dark:text-blue-200 space-y-1 list-decimal list-inside'>
-              <li>Copy the configuration below</li>
-              <li>
-                Paste it into your <code className='bg-blue-100 dark:bg-blue-800 px-1 rounded'>mcp.json</code> file
-              </li>
-              <li>
-                Replace <code className='bg-blue-100 dark:bg-blue-800 px-1 rounded'>[YOUR_AUTH_TOKEN]</code> with your
-                gateway authentication token
-              </li>
-              <li>
-                Replace <code className='bg-blue-100 dark:bg-blue-800 px-1 rounded'>[YOUR_CLIENT_ID]</code> with your
-                client ID
-              </li>
-              <li>Restart your AI coding assistant to load the new configuration</li>
-            </ol>
-          </div>
-
-          <div className='bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4'>
-            <h4 className='font-medium text-amber-900 dark:text-amber-100 mb-2'>🔐 Authentication Required</h4>
-            <p className='text-sm text-amber-800 dark:text-amber-200'>
-              This configuration requires gateway authentication tokens. The tokens authenticate your AI assistant with
-              the MCP Gateway, not the individual server. Visit the authentication documentation for setup instructions.
-            </p>
-          </div>
-
           <div className='bg-gray-50 dark:bg-gray-900 border dark:border-gray-700 rounded-lg p-4'>
             <h4 className='font-medium text-gray-900 dark:text-white mb-3'>Select your IDE/Tool:</h4>
             <div className='flex flex-wrap gap-2'>
