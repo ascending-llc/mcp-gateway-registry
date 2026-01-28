@@ -1,15 +1,12 @@
 import logging
 import httpx
 import os
-from fastapi import (APIRouter, Request, Form, HTTPException, Cookie, status, Depends)
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
+from fastapi import (APIRouter, Request, HTTPException, status)
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from ..core.mcp_client import mcp_client_service
 from ..core.config import settings
 from ..auth.dependencies import CurrentUser
-from registry.services.search.service import faiss_service
 
 logger = logging.getLogger(__name__)
 
