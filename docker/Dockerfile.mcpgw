@@ -1,21 +1,13 @@
-# MCPGW Server Dockerfile - Supports both embedded and external vector search modes
+# MCPGW Server Dockerfile - MCP Gateway API Server
 FROM python:3.12-slim
 
-# Build argument to control whether to install vector search dependencies
-ARG TOOL_DISCOVERY_MODE=embedded
-ARG SCHEMA_VERSION=
-ARG GITHUB_TOKEN=
-
 ENV PYTHONUNBUFFERED=1 \
-    DEBIAN_FRONTEND=noninteractive \
-    TOOL_DISCOVERY_MODE=${TOOL_DISCOVERY_MODE}
+    DEBIAN_FRONTEND=noninteractive
 
 # Install system dependencies
-# For embedded mode, we need build-essential for compiling dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
-    $([ "$TOOL_DISCOVERY_MODE" = "embedded" ] && echo "build-essential" || echo "") \
     netcat-openbsd \
     ca-certificates \
     && apt-get clean \
@@ -26,51 +18,21 @@ WORKDIR /app
 # Copy workspace root pyproject.toml to enable workspace resolution
 COPY pyproject.toml /app/
 
-# Copy the application code (including packages module)
-COPY packages/ /app/packages/
+# Copy the application code
 COPY servers/mcpgw/ /app/servers/mcpgw/
 
-# Install Python dependencies based on TOOL_DISCOVERY_MODE
+# Install Python dependencies
 # Step 1: Install uv package manager
-# Step 2: Install workspace members (packages + mcpgw) from parent directory
-# Step 3: Import schemas from GitHub release (if SCHEMA_VERSION provided)
+# Step 2: Install mcpgw server dependencies
 RUN pip install --no-cache-dir uv && \
-    echo "Installing workspace dependencies to system Python..." && \
+    echo "Installing MCPGW server dependencies..." && \
     cd /app && \
-    if [ "$TOOL_DISCOVERY_MODE" = "external" ]; then \
-        echo "Building LIGHTWEIGHT image (external mode) - skipping ML dependencies"; \
-        uv pip install --system -e ./packages && \
-        uv pip install --system -e ./servers/mcpgw; \
-    else \
-        echo "Building FULL image (embedded mode) - installing with ML dependencies"; \
-        uv pip install --system -e ./packages && \
-        uv pip install --system -e "./servers/mcpgw[embedded-search]"; \
-    fi && \
-    echo "Checking for schema import..." && \
-    if [ -z "$SCHEMA_VERSION" ] || [ -z "$GITHUB_TOKEN" ]; then \
-        echo "ERROR: Schema import is required for mcpgw build"; \
-        echo "Please provide the following build arguments:"; \
-        echo "  --build-arg SCHEMA_VERSION=<version> (e.g., asc0.4.0)"; \
-        echo "  --build-arg GITHUB_TOKEN=<token>"; \
-        exit 1; \
-    fi && \
-    echo "Importing all schemas from GitHub release $SCHEMA_VERSION..." && \
-    cd /app/packages && \
-    uv run import-schemas \
-        --mode remote \
-        --tag "$SCHEMA_VERSION" \
-        --output-dir ./models \
-        --repo ascending-llc/jarvis-api \
-        --token "$GITHUB_TOKEN" && \
-    echo "Schema import completed successfully"
+    uv pip install --system -e ./servers/mcpgw && \
+    echo "Dependencies installed successfully"
 
 # Create logs directory
 RUN mkdir -p /app/logs
 COPY auth_server/scopes.yml /app/auth_server/scopes.yml
-
-# Set default environment variables
-ENV EMBEDDINGS_MODEL_NAME=all-MiniLM-L6-v2 \
-    EMBEDDINGS_MODEL_DIMENSION=384
 
 # Expose default port
 EXPOSE 8003
@@ -87,7 +49,6 @@ echo "================================="\n\
 echo "MCPGW Server Configuration"\n\
 echo "================================="\n\
 echo "Port: ${PORT:-8003}"\n\
-echo "Tool Discovery Mode: ${TOOL_DISCOVERY_MODE:-embedded}"\n\
 echo "Registry URL: ${REGISTRY_BASE_URL:-not set}"\n\
 echo "================================="\n\
 \n\
@@ -95,24 +56,6 @@ echo "================================="\n\
 if [ -z "${REGISTRY_BASE_URL:-}" ]; then\n\
     echo "WARNING: REGISTRY_BASE_URL environment variable is not set."\n\
     echo "The MCPGW server may not function properly without registry access."\n\
-fi\n\
-\n\
-# Display mode-specific information\n\
-if [ "${TOOL_DISCOVERY_MODE:-embedded}" = "embedded" ]; then\n\
-    echo "Running in EMBEDDED mode - using local FAISS"\n\
-    echo "Requires: FAISS index files mounted at /app/registry/servers/"\n\
-    echo "Requires: Embedding models at /app/data/models/"\n\
-    \n\
-    EMBEDDINGS_MODEL_NAME="${EMBEDDINGS_MODEL_NAME:-all-MiniLM-L6-v2}"\n\
-    EMBEDDINGS_MODEL_DIR="/app/data/models/$EMBEDDINGS_MODEL_NAME"\n\
-    \n\
-    if [ ! -d "$EMBEDDINGS_MODEL_DIR" ] || [ -z "$(ls -A "$EMBEDDINGS_MODEL_DIR" 2>/dev/null)" ]; then\n\
-        echo "WARNING: Embeddings model not found at $EMBEDDINGS_MODEL_DIR"\n\
-        echo "Please mount the model directory for embedded mode to work."\n\
-    fi\n\
-else\n\
-    echo "Running in EXTERNAL mode - using registry API"\n\
-    echo "Registry endpoint: ${REGISTRY_BASE_URL}/api/search/semantic"\n\
 fi\n\
 \n\
 echo "================================="\n\

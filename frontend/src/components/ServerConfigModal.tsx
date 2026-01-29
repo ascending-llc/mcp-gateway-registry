@@ -1,6 +1,6 @@
 import { ClipboardDocumentIcon } from '@heroicons/react/24/outline';
 import type React from 'react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getBasePath } from '@/config';
 import type { ServerInfo } from '@/contexts/ServerContext';
 
@@ -16,6 +16,20 @@ interface ServerConfigModalProps {
 const ServerConfigModal: React.FC<ServerConfigModalProps> = ({ server, isOpen, onClose, onShowToast }) => {
   const [selectedIDE, setSelectedIDE] = useState<IDE>('vscode');
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      console.log('aaaa');
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   const generateMCPConfig = useCallback(() => {
     const serverName = server.name
       .toLowerCase()
@@ -25,7 +39,7 @@ const ServerConfigModal: React.FC<ServerConfigModalProps> = ({ server, isOpen, o
     // Get base URL and strip port for nginx proxy compatibility
     const currentUrl = new URL(window.location.origin);
     const basePath = getBasePath();
-    const url = `${currentUrl.protocol}//${currentUrl.hostname}${basePath ? `${basePath}/` : ''}${server.path}`;
+    const url = `${currentUrl.protocol}//${currentUrl.hostname}${basePath}/proxy${server.path}`;
 
     switch (selectedIDE) {
       case 'vscode':

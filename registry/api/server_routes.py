@@ -1,15 +1,12 @@
 import logging
 import httpx
 import os
-from fastapi import (APIRouter, Request, Form, HTTPException, Cookie, status, Depends)
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
+from fastapi import (APIRouter, Request, HTTPException, status)
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from ..core.mcp_client import mcp_client_service
 from ..core.config import settings
 from ..auth.dependencies import CurrentUser
-from registry.services.search.service import faiss_service
 
 logger = logging.getLogger(__name__)
 
@@ -18,22 +15,6 @@ router = APIRouter()
 class RatingRequest(BaseModel):
     rating: int
 
-@router.get("/tokens", response_class=HTMLResponse)
-async def token_generation_page(
-        request: Request,
-        user_context: CurrentUser,
-):
-    """Show token generation page for authenticated users."""
-    return templates.TemplateResponse(
-        "token_generation.html",
-        {
-            "request": request,
-            "username": user_context['username'],
-            "user_context": user_context,
-            "user_scopes": user_context['scopes'],
-            "available_scopes": user_context['scopes']  # For the UI to show what's available
-        }
-    )
 @router.post("/tokens/generate")
 async def generate_user_token(
         request: Request,

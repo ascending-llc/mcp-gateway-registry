@@ -1,7 +1,6 @@
 from typing import Optional, List, Dict, Any, Tuple
-
 from beanie import PydanticObjectId
-
+from packages.models import IUser
 from packages.models._generated.token import Token
 from registry.models.oauth_models import OAuthTokens
 from registry.models.emus import TokenType
@@ -11,11 +10,14 @@ from registry.services.user_service import user_service
 
 
 class TokenService:
-
-    async def get_user_by_user_id(self, user_id: str) -> str:
+    async def get_user(self, user_id: str) -> Optional[IUser]:
         user = await user_service.get_user_by_user_id(user_id)
         if not user:
-            raise Exception(f"User {user_id} not found")
+            raise Exception(f"OAuth operation failed: User {user_id} not found")
+        return user
+
+    async def get_user_by_user_id(self, user_id: str) -> str:
+        user = await self.get_user(user_id)
         return str(user.id)
 
     def _get_client_identifier(self, service_name: str) -> str:
@@ -46,9 +48,7 @@ class TokenService:
             Created or updated Token document
         """
         identifier = self._get_client_identifier(service_name)
-        user = await user_service.get_user_by_user_id(user_id)
-        if not user:
-            raise Exception(f"User {user_id} not found")
+        user = await self.get_user(user_id)
         user_obj_id = str(user.id)
 
         # Calculate expiration time
@@ -67,12 +67,12 @@ class TokenService:
             existing_token.expiresAt = expires_at
             if metadata:
                 existing_token.metadata = metadata
+            existing_token.email = user.email
             await existing_token.save()
             logger.info(f"Updated OAuth client token for user={user_id}, service={service_name}")
             return existing_token
         else:
             # Create new token
-            # TODO:  user_id == email ? 是否需要保存email
             token_doc = Token(
                 userId=PydanticObjectId(user_obj_id),
                 type=TokenType.MCP_OAUTH_CLIENT.value,
@@ -107,7 +107,8 @@ class TokenService:
             return None
 
         identifier = self._get_refresh_identifier(service_name)
-        user_obj_id = await self.get_user_by_user_id(user_id)
+        user = await self.get_user(user_id)
+        user_obj_id = str(user.id)
 
         # Refresh tokens typically have a longer expiration time, set to 1 year here
         # Or set according to OAuth provider configuration
@@ -126,19 +127,21 @@ class TokenService:
             existing_token.expiresAt = expires_at
             if metadata:
                 existing_token.metadata = metadata
+            existing_token.email = user.email
             await existing_token.save()
             logger.info(f"Updated OAuth refresh token for user={user_id}, service={service_name}")
             return existing_token
         else:
             # Create new token
             token_doc = Token(
-                userId=user_obj_id,
+                userId=PydanticObjectId(user_obj_id),
                 type=TokenType.MCP_OAUTH_REFRESH.value,
                 identifier=identifier,
                 token=tokens.refresh_token,
                 expiresAt=expires_at,
                 metadata=metadata or {}
             )
+            token_doc.email = user.email
             await token_doc.insert()
             logger.info(f"Created OAuth refresh token for user={user_id}, service={service_name}")
             return token_doc
