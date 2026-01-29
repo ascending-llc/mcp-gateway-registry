@@ -220,7 +220,6 @@ class ACLService:
 	) -> List:
 		"""
 		Search for principals (users, groups, agents) matching the query string.
-		Returns paginated results and metadata.
 		"""
 		query = (query or "").strip()
 		if not query or len(query) < 2:
@@ -266,7 +265,6 @@ class ACLService:
 	) -> Dict[str, Any]:
 		"""
 		Get all ACL permissions for a specific resource.
-		Returns a list of principals with their permission bits.
 		"""
 		try:
 			acl_entries = await IAclEntry.find({
