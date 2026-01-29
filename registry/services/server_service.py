@@ -709,7 +709,7 @@ class ServerServiceV1:
                     from registry.core.mcp_client import get_tools_and_capabilities_from_server
 
                     # Get tools, resources, prompts, and capabilities (we'll only use capabilities for now)
-                    tool_list, resource_list, prompt_list, capabilities = await get_tools_and_capabilities_from_server(
+                    result = await get_tools_and_capabilities_from_server(
                         data.url,
                         server_info,
                         include_resources=True,
@@ -717,18 +717,18 @@ class ServerServiceV1:
                     )
 
                     # Save capabilities if retrieved successfully
-                    if capabilities:
+                    if result.capabilities:
                         import json
-                        config["capabilities"] = json.dumps(capabilities)
+                        config["capabilities"] = json.dumps(result.capabilities)
                         logger.info(f"Saved capabilities for {server.serverName}: {config['capabilities']}")
                     else:
                         config["capabilities"] = "{}"
                         logger.warning(f"No capabilities retrieved for {server.serverName}, using empty JSON")
 
                     # Store resources and prompts (empty lists if not retrieved)
-                    config["resources"] = resource_list or []
-                    config["prompts"] = prompt_list or []
-                    logger.info(f"Saved {len(resource_list or [])} resources and {len(prompt_list or [])} prompts for {server.serverName}")
+                    config["resources"] = result.resources or []
+                    config["prompts"] = result.prompts or []
+                    logger.info(f"Saved {len(result.resources or [])} resources and {len(result.prompts or [])} prompts for {server.serverName}")
 
                 except Exception as e:
                     # If capabilities retrieval fails, just use empty capabilities
@@ -1195,7 +1195,7 @@ class ServerServiceV1:
 
             # Use the mcp_client with pre-built headers (pure transport layer)
             from registry.core.mcp_client import get_tools_and_capabilities_from_server
-            tool_list, resource_list, prompt_list, capabilities = await get_tools_and_capabilities_from_server(
+            result = await get_tools_and_capabilities_from_server(
                 url, 
                 headers=headers,
                 transport_type=transport_type,
@@ -1204,21 +1204,21 @@ class ServerServiceV1:
             )
 
             if include_capabilities:
-                if tool_list is None or capabilities is None:
-                    error_msg = "Failed to retrieve tools and capabilities from MCP server"
+                if result.tools is None or result.capabilities is None:
+                    error_msg = result.error_message or "Failed to retrieve tools and capabilities from MCP server"
                     logger.warning(f"{error_msg} for {server.serverName}")
                     return None, None, None, None, error_msg
 
-                logger.info(f"Retrieved {len(tool_list)} tools, {len(resource_list or [])} resources, {len(prompt_list or [])} prompts, and capabilities from {server.serverName}")
-                return tool_list, resource_list, prompt_list, capabilities, None
+                logger.info(f"Retrieved {len(result.tools)} tools, {len(result.resources or [])} resources, {len(result.prompts or [])} prompts, and capabilities from {server.serverName}")
+                return result.tools, result.resources, result.prompts, result.capabilities, None
             else:
-                if tool_list is None:
-                    error_msg = "Failed to retrieve tools from MCP server"
+                if result.tools is None:
+                    error_msg = result.error_message or "Failed to retrieve tools from MCP server"
                     logger.warning(f"{error_msg} for {server.serverName}")
                     return None, None, None, None, error_msg
 
-                logger.info(f"Retrieved {len(tool_list)} tools, {len(resource_list or [])} resources, {len(prompt_list or [])} prompts from {server.serverName}")
-                return tool_list, resource_list, prompt_list, None, None
+                logger.info(f"Retrieved {len(result.tools)} tools, {len(result.resources or [])} resources, {len(result.prompts or [])} prompts from {server.serverName}")
+                return result.tools, result.resources, result.prompts, None, None
 
         except Exception as e:
             error_msg = f"Error: {type(e).__name__} - {str(e)}"

@@ -11,6 +11,7 @@ import logging
 from typing import List, Dict, Optional, Any
 import re
 from urllib.parse import urlparse
+from dataclasses import dataclass
 
 # MCP Client imports
 from mcp import ClientSession
@@ -22,6 +23,33 @@ from registry.core.mcp_config import mcp_config
 from registry.core.server_strategies import get_server_strategy
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class MCPServerData:
+    """MCP server data container for tools, resources, prompts, and capabilities."""
+    tools: Optional[List[Dict[str, Any]]]
+    resources: Optional[List[Dict[str, Any]]]
+    prompts: Optional[List[Dict[str, Any]]]
+    capabilities: Optional[Dict[str, Any]]
+    error_message: Optional[str] = None
+
+
+def _convert_pydantic_to_dict(obj: Any) -> dict:
+    """
+    Convert Pydantic model or object to dict.
+    
+    Args:
+        obj: The object to convert (Pydantic model, object with __dict__, or regular dict)
+        
+    Returns:
+        Dictionary representation of the object
+    """
+    if hasattr(obj, 'model_dump'):
+        return obj.model_dump()
+    elif hasattr(obj, '__dict__'):
+        return dict(obj.__dict__)
+    return obj
 
 
 def normalize_sse_endpoint_url(endpoint_url: str) -> str:
@@ -194,7 +222,7 @@ async def _get_from_streamable_http(
     include_capabilities: bool = True,
     include_resources: bool = True,
     include_prompts: bool = True
-) -> tuple[List[dict] | None, List[dict] | None, List[dict] | None, dict | None]:
+) -> MCPServerData:
     """
     Consolidated method to get tools, resources, prompts, and optionally capabilities using streamable-http transport.
     
@@ -210,9 +238,9 @@ async def _get_from_streamable_http(
         include_prompts: Whether to retrieve prompts
         
     Returns:
-        Tuple of (tool_list, resource_list, prompt_list, capabilities_dict)
-        - If include_capabilities=True: Returns (None, None, None, None) if capabilities cannot be retrieved
-        - If include_capabilities=False: Returns (tools, resources, prompts, None)
+        MCPServerData containing tools, resources, prompts, and capabilities
+        - If include_capabilities=True: Returns empty MCPServerData if capabilities cannot be retrieved
+        - If include_capabilities=False: Returns MCPServerData with tools, resources, prompts (capabilities=None)
     """
     # Use provided headers or default MCP headers
     if headers is None:
@@ -252,7 +280,7 @@ async def _get_from_streamable_http(
                         # If capabilities required but not retrieved, consider it a failed server
                         if not capabilities:
                             logger.error(f"Failed to retrieve capabilities from {mcp_url} - server considered failed")
-                            return None, None, None, None
+                            return MCPServerData(None, None, None, None, "Failed to retrieve capabilities")
                         
                         logger.info(f"Successfully retrieved capabilities from {mcp_url}: {capabilities}")
                     
@@ -285,14 +313,19 @@ async def _get_from_streamable_http(
                             logger.warning(f"Failed to retrieve prompts from {mcp_url}: {e}")
                             prompt_list = []
                     
-                    return tool_list, resource_list, prompt_list, capabilities
+                    return MCPServerData(
+                        tools=tool_list,
+                        resources=resource_list,
+                        prompts=prompt_list,
+                        capabilities=capabilities
+                    )
                 
     except asyncio.TimeoutError:
         logger.error(f"Timeout connecting to {mcp_url}")
-        return None, None, None, None
+        return MCPServerData(None, None, None, None, "Timeout connecting to server")
     except Exception as e:
         logger.error(f"Failed to connect to {mcp_url}: {type(e).__name__} - {e}")
-        return None, None, None, None
+        return MCPServerData(None, None, None, None, f"Connection failed: {type(e).__name__} - {e}")
 
 
 async def _get_tools_streamable_http(base_url: str, headers: Dict[str, str] = None, transport_type: str = "streamable-http") -> List[dict] | None:
@@ -300,8 +333,8 @@ async def _get_tools_streamable_http(base_url: str, headers: Dict[str, str] = No
     Get tools using streamable-http transport (legacy method, without capabilities, resources, or prompts).
     Wraps the consolidated method for backward compatibility.
     """
-    tools, _, _, _ = await _get_from_streamable_http(base_url, headers, transport_type, include_capabilities=False, include_resources=False, include_prompts=False)
-    return tools
+    result = await _get_from_streamable_http(base_url, headers, transport_type, include_capabilities=False, include_resources=False, include_prompts=False)
+    return result.tools
 
 
 async def _get_from_sse(
@@ -311,7 +344,7 @@ async def _get_from_sse(
     include_capabilities: bool = True,
     include_resources: bool = True,
     include_prompts: bool = True
-) -> tuple[List[dict] | None, List[dict] | None, List[dict] | None, dict | None]:
+) -> MCPServerData:
     """
     Consolidated method to get tools, resources, prompts, and optionally capabilities using SSE transport.
     
@@ -327,9 +360,9 @@ async def _get_from_sse(
         include_prompts: Whether to retrieve prompts
         
     Returns:
-        Tuple of (tool_list, resource_list, prompt_list, capabilities_dict)
-        - If include_capabilities=True: Returns (None, None, None, None) if capabilities cannot be retrieved
-        - If include_capabilities=False: Returns (tools, resources, prompts, None)
+        MCPServerData containing tools, resources, prompts, and capabilities
+        - If include_capabilities=True: Returns empty MCPServerData if capabilities cannot be retrieved
+        - If include_capabilities=False: Returns MCPServerData with tools, resources, prompts (capabilities=None)
     """
     # Use provided headers or default MCP headers
     if headers is None:
@@ -385,7 +418,7 @@ async def _get_from_sse(
                             # If capabilities required but not retrieved, consider it a failed server
                             if not capabilities:
                                 logger.error(f"Failed to retrieve capabilities from {mcp_server_url} - server considered failed")
-                                return None, None, None, None
+                                return MCPServerData(None, None, None, None, "Failed to retrieve capabilities")
                             
                             logger.info(f"Successfully retrieved capabilities from {mcp_server_url}: {capabilities}")
                         
@@ -418,16 +451,21 @@ async def _get_from_sse(
                                 logger.warning(f"Failed to retrieve prompts from {mcp_server_url}: {e}")
                                 prompt_list = []
                         
-                        return tool_list, resource_list, prompt_list, capabilities
+                        return MCPServerData(
+                            tools=tool_list,
+                            resources=resource_list,
+                            prompts=prompt_list,
+                            capabilities=capabilities
+                        )
         finally:
             httpx.AsyncClient.request = original_request
             
     except asyncio.TimeoutError:
         logger.error(f"Timeout connecting to {mcp_server_url}")
-        return None, None, None, None
+        return MCPServerData(None, None, None, None, "Timeout connecting to server")
     except Exception as e:
         logger.error(f"Failed to connect to {mcp_server_url}: {type(e).__name__} - {e}")
-        return None, None, None, None
+        return MCPServerData(None, None, None, None, f"Connection failed: {type(e).__name__} - {e}")
 
 
 async def _get_tools_sse(base_url: str, headers: Dict[str, str] = None, transport_type: str = "sse") -> List[dict] | None:
@@ -435,8 +473,8 @@ async def _get_tools_sse(base_url: str, headers: Dict[str, str] = None, transpor
     Get tools using SSE transport (legacy method, without capabilities, resources, or prompts).
     Wraps the consolidated method for backward compatibility.
     """
-    tools, _, _, _ = await _get_from_sse(base_url, headers, transport_type, include_capabilities=False, include_resources=False, include_prompts=False)
-    return tools
+    result = await _get_from_sse(base_url, headers, transport_type, include_capabilities=False, include_resources=False, include_prompts=False)
+    return result.tools
 
 
 def _extract_capabilities(init_result: Any) -> Optional[Dict]:
@@ -530,10 +568,7 @@ def _extract_tool_details(tools_response) -> List[dict]:
             tool_schema = getattr(tool, 'inputSchema', {})
             
             # Convert Pydantic model to dict if necessary
-            if hasattr(tool_schema, 'model_dump'):
-                tool_schema = tool_schema.model_dump()
-            elif hasattr(tool_schema, '__dict__'):
-                tool_schema = dict(tool_schema.__dict__)
+            tool_schema = _convert_pydantic_to_dict(tool_schema)
             
             # Use simple description (not parsed) for standard MCP format
             simple_desc = tool_desc if tool_desc else "No description available."
@@ -563,10 +598,8 @@ def _extract_resource_details(resources_response) -> List[dict]:
             
             # Get annotations if present
             annotations = getattr(resource, 'annotations', None)
-            if annotations and hasattr(annotations, 'model_dump'):
-                annotations = annotations.model_dump()
-            elif annotations and hasattr(annotations, '__dict__'):
-                annotations = dict(annotations.__dict__)
+            if annotations:
+                annotations = _convert_pydantic_to_dict(annotations)
             
             resource_details_list.append({
                 "uri": resource_uri,
@@ -594,15 +627,7 @@ def _extract_prompt_details(prompts_response) -> List[dict]:
             arguments = getattr(prompt, 'arguments', None)
             if arguments:
                 # Convert each argument to dict
-                args_list = []
-                for arg in arguments:
-                    if hasattr(arg, 'model_dump'):
-                        args_list.append(arg.model_dump())
-                    elif hasattr(arg, '__dict__'):
-                        args_list.append(dict(arg.__dict__))
-                    else:
-                        args_list.append(arg)
-                arguments = args_list
+                arguments = [_convert_pydantic_to_dict(arg) for arg in arguments]
             
             prompt_details_list.append({
                 "name": prompt_name,
@@ -657,7 +682,7 @@ async def get_tools_and_capabilities_from_server(
     transport_type: str = None,
     include_resources: bool = True,
     include_prompts: bool = True
-) -> tuple[List[dict] | None, List[dict] | None, List[dict] | None, dict | None]:
+) -> MCPServerData:
     """
     Get tools, resources, prompts, and capabilities from server.
     
@@ -671,16 +696,17 @@ async def get_tools_and_capabilities_from_server(
         include_prompts: Whether to retrieve prompts (default: True)
         
     Returns:
-        Tuple of (tool_list, resource_list, prompt_list, capabilities_dict):
-        - tool_list: List of tool dictionaries or None if failed
-        - resource_list: List of resource dictionaries or None if failed
-        - prompt_list: List of prompt dictionaries or None if failed
-        - capabilities_dict: Server capabilities dictionary or None if failed
+        MCPServerData containing:
+        - tools: List of tool dictionaries or None if failed
+        - resources: List of resource dictionaries or None if failed
+        - prompts: List of prompt dictionaries or None if failed
+        - capabilities: Server capabilities dictionary or None if failed
+        - error_message: Error message if operation failed
     """
     
     if not base_url:
         logger.error("MCP Check Error: Base URL is empty.")
-        return None, None, None, None
+        return MCPServerData(None, None, None, None, "Base URL is empty")
 
     # Auto-detect transport if not provided
     if transport_type is None:
@@ -695,11 +721,11 @@ async def get_tools_and_capabilities_from_server(
             return await _get_from_sse(base_url, headers, transport_type, include_capabilities=True, include_resources=include_resources, include_prompts=include_prompts)
         else:
             logger.error(f"Unsupported transport type: {transport_type}")
-            return None, None, None, None
+            return MCPServerData(None, None, None, None, f"Unsupported transport type: {transport_type}")
             
     except Exception as e:
         logger.error(f"MCP Check Error: Failed to get tools, resources, prompts, and capabilities from {base_url} with {transport_type}: {type(e).__name__} - {e}")
-        return None, None, None, None
+        return MCPServerData(None, None, None, None, f"Failed to get server data: {type(e).__name__} - {e}")
 
 
 async def get_oauth_metadata_from_server(base_url: str, server_info: dict = None) -> dict | None:
