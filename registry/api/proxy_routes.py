@@ -90,7 +90,10 @@ async def proxy_to_mcp_server(
         auth_context: Gateway authentication context
         server: MCPServerDocument
     """
-    server_name = server.get("title", server.path.strip("/")) if server else server.path.strip("/")
+    # Extract server name from config or fall back to path
+    server_name = server.path.strip("/")
+    if server and server.config:
+        server_name = server.config.get("title", server_name)
     body_bytes = await request.body()
     tool_name = _extract_tool_name_from_body(body_bytes)
     
