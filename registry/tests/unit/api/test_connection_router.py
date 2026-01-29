@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from unittest.mock import Mock, patch, AsyncMock
 from registry.api.v1.mcp.connection_router import router
 from registry.services.oauth.mcp_service import MCPService
-from fastapi import Request, HTTPException, status
+from fastapi import Request, HTTPException
 from bson import ObjectId
 from registry.schemas.enums import ConnectionState
 from registry.services.oauth.mcp_service import get_mcp_service
