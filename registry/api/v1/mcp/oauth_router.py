@@ -3,7 +3,6 @@ from typing import Dict, Any, Optional
 from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from fastapi.responses import RedirectResponse, JSONResponse
-from registry.api.v1.mcp.connection_router import get_server_config
 from registry.auth.dependencies import CurrentUser
 from registry.services.oauth.mcp_service import get_mcp_service, MCPService
 from registry.schemas.enums import ConnectionState, OAuthFlowStatus
@@ -11,6 +10,7 @@ from registry.utils.log import logger
 from registry.auth.oauth.reconnection import get_reconnection_manager
 from registry.constants import REGISTRY_CONSTANTS
 from registry.services.oauth.token_service import token_service
+from registry.services.server_service import server_service_v1
 
 router = APIRouter(prefix="/mcp", tags=["oauth"])
 
@@ -30,7 +30,9 @@ async def initiate_oauth_flow(
     try:
         user_id = user_context.get('user_id')
         logger.info(f"Oauth initiate for user id : {user_id}")
-        server = await get_server_config(server_id)
+        server = await server_service_v1.get_server_by_id(server_id)
+        if not server:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
 
         flow_id, auth_url, error = await mcp_service.oauth_service.initiate_oauth_flow(
             user_id=user_id,
@@ -266,7 +268,9 @@ async def cancel_oauth_flow(
         user_id = current_user.get("user_id")
         logger.info(f"[OAuth Cancel] Cancelling OAuth flow for {server_id} by user {user_id}")
 
-        mcp_server = await get_server_config(server_id)
+        mcp_server = await server_service_v1.get_server_by_id(server_id)
+        if not mcp_server:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
 
         # 1. Cancel the OAuth flow
         success, error_msg = await mcp_service.oauth_service.cancel_oauth_flow(user_id, server_id)
@@ -329,7 +333,9 @@ async def refresh_oauth_tokens(
     try:
         user_id = current_user.get("user_id")
         logger.info(f"[OAuth Refresh] Refreshing OAuth tokens for {server_id} by user {user_id}")
-        mcp_server = await get_server_config(server_id)
+        mcp_server = await server_service_v1.get_server_by_id(server_id)
+        if not mcp_server:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
 
         # 1. Refresh OAuth tokens
         success, error_msg = await mcp_service.oauth_service.validate_and_refresh_tokens(user_id, mcp_server)
@@ -408,7 +414,9 @@ async def delete_oauth_tokens(
     Delete the OAuth token for this user
 
     """
-    server = await get_server_config(server_id)
+    server = await server_service_v1.get_server_by_id(server_id)
+    if not server:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
     user_id = current_user.get("user_id")
     try:
         results = await token_service.delete_oauth_tokens(user_id, server.serverName)

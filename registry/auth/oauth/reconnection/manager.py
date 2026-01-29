@@ -116,7 +116,10 @@ class OAuthReconnectionManager:
 
         try:
             # Get server configuration
-            config = await self._get_server_config(user_id, server_id)
+            server = await server_service_v1.get_server_by_id(server_id)
+            if not server:
+                raise ValueError("Server not found")
+            config = server.config
             if not config:
                 logger.warn(f"{log_prefix} No configuration found")
                 self._cleanup_on_failed_reconnect(user_id, server_id)
@@ -387,23 +390,6 @@ class OAuthReconnectionManager:
         except Exception as e:
             logger.error(f"Failed to get OAuth servers: {e}")
             return []
-
-    async def _get_server_config(
-            self,
-            user_id: str,
-            server_id: str
-    ) -> Optional[Dict[str, Any]]:
-        """Get server configuration"""
-        try:
-            server = await server_service_v1.get_server_by_id(server_id)
-            if server:
-                return server.config
-            return None
-
-        except Exception as e:
-            logger.error(f"Failed to get server config: "
-                         f"user={user_id}, server={server_id}, error={e}")
-            return None
 
     async def _is_server_connected(self, user_id: str, server_id: str) -> bool:
         """Check if server is connected"""
