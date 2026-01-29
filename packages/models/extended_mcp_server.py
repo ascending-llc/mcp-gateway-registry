@@ -16,7 +16,9 @@ Configuration Fields (stored in config object):
 - oauth: object (optional) - OAuth configuration
 - capabilities: string - JSON string of server capabilities
 - tools: string - Comma-separated list of tool names (e.g., "tool1, tool2, tool3")
-- toolFunctions: object - Tool function definitions in OpenAI format
+- toolFunctions: object - Tool function definitions in OpenAI format with mcpToolName field
+- resources: array - List of available MCP resources with uri, name, description, mimeType, annotations
+- prompts: array - List of available MCP prompts with name, description, arguments
 - initDuration: number - Server initialization time in ms
 
 Identity & Metadata Fields (stored at root level):
@@ -69,16 +71,33 @@ class ExtendedMCPServer(Document):
         "apiKey": {...} or "oauth": {...} or "authentication": {...},
         "requiresOAuth": false,
         "capabilities": "{}",  # JSON string
-        "toolFunctions": {     # OpenAI function format
+        "toolFunctions": {     # OpenAI function format with mcpToolName
           "tool1_mcp_github": {
             "type": "function",
             "function": {
               "name": "tool1_mcp_github",
               "description": "...",
               "parameters": {...}
-            }
+            },
+            "mcpToolName": "tool1"  # Original MCP tool name
           }
         },
+        "resources": [         # MCP resources
+          {
+            "uri": "github://repo/{owner}/{repo}",
+            "name": "repository",
+            "description": "...",
+            "mimeType": "application/json",
+            "annotations": {...}
+          }
+        ],
+        "prompts": [           # MCP prompts
+          {
+            "name": "code_review",
+            "description": "...",
+            "arguments": [...]
+          }
+        ],
         "tools": "tool1, tool2",
         "initDuration": 170
       },
