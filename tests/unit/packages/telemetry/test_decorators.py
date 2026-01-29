@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, patch, AsyncMock
 
 from packages.telemetry.decorators import (
     track_duration,
-    track_operation,
     create_timed_context,
     _safe_extract_labels,
 )
@@ -217,111 +216,6 @@ class TestTrackDurationDecorator:
 
         assert my_function.__name__ == "my_function"
         assert my_function.__doc__ == "My docstring."
-
-
-@pytest.mark.unit
-@pytest.mark.metrics
-class TestTrackOperationDecorator:
-    """Test suite for track_operation decorator."""
-
-    @pytest.mark.asyncio
-    async def test_tracks_operation_success(self):
-        """Test decorator tracks successful operations."""
-        mock_metrics = MagicMock()
-
-        @track_operation(mock_metrics, "create", resource_type="server")
-        async def create_server():
-            return {"id": "123"}
-
-        result = await create_server()
-
-        assert result == {"id": "123"}
-        mock_metrics.record_registry_operation.assert_called_once()
-        call_kwargs = mock_metrics.record_registry_operation.call_args[1]
-        assert call_kwargs["operation"] == "create"
-        assert call_kwargs["resource_type"] == "server"
-        assert call_kwargs["success"] is True
-        assert call_kwargs["duration_seconds"] >= 0
-
-    @pytest.mark.asyncio
-    async def test_tracks_operation_failure(self):
-        """Test decorator tracks failed operations."""
-        mock_metrics = MagicMock()
-
-        @track_operation(mock_metrics, "delete", resource_type="server")
-        async def delete_server():
-            raise ValueError("Not found")
-
-        with pytest.raises(ValueError, match="Not found"):
-            await delete_server()
-
-        mock_metrics.record_registry_operation.assert_called_once()
-        call_kwargs = mock_metrics.record_registry_operation.call_args[1]
-        assert call_kwargs["operation"] == "delete"
-        assert call_kwargs["success"] is False
-
-    @pytest.mark.asyncio
-    async def test_extracts_resource_dynamically(self):
-        """Test decorator can extract resource type dynamically."""
-        mock_metrics = MagicMock()
-
-        def extract_resource(query, **kwargs):
-            return query.get("type", "unknown")
-
-        @track_operation(mock_metrics, "search", extract_resource=extract_resource)
-        async def search(query):
-            return []
-
-        await search({"type": "tool", "q": "test"})
-
-        call_kwargs = mock_metrics.record_registry_operation.call_args[1]
-        assert call_kwargs["resource_type"] == "tool"
-
-    @pytest.mark.asyncio
-    async def test_handles_extract_resource_error(self):
-        """Test decorator handles errors in extract_resource gracefully."""
-        mock_metrics = MagicMock()
-
-        def failing_extract(query, **kwargs):
-            raise RuntimeError("Extraction failed")
-
-        @track_operation(mock_metrics, "search", extract_resource=failing_extract)
-        async def search(query):
-            return []
-
-        await search({"q": "test"})
-
-        call_kwargs = mock_metrics.record_registry_operation.call_args[1]
-        assert call_kwargs["resource_type"] == "unknown"
-
-    @pytest.mark.asyncio
-    async def test_uses_function_name_when_no_resource_type(self):
-        """Test decorator uses function name when no resource_type provided."""
-        mock_metrics = MagicMock()
-
-        @track_operation(mock_metrics, "custom")
-        async def my_custom_function():
-            return "result"
-
-        await my_custom_function()
-
-        call_kwargs = mock_metrics.record_registry_operation.call_args[1]
-        assert call_kwargs["resource_type"] == "my_custom_function"
-
-    def test_works_with_sync_functions(self):
-        """Test decorator works with synchronous functions."""
-        mock_metrics = MagicMock()
-
-        @track_operation(mock_metrics, "read", resource_type="config")
-        def read_config():
-            return {"key": "value"}
-
-        result = read_config()
-
-        assert result == {"key": "value"}
-        mock_metrics.record_registry_operation.assert_called_once()
-        call_kwargs = mock_metrics.record_registry_operation.call_args[1]
-        assert call_kwargs["success"] is True
 
 
 @pytest.mark.unit

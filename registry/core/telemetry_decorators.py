@@ -1,8 +1,8 @@
 """
 Centralized telemetry decorators for the Registry service.
 
-This module provides specialized decorators that use the generic telemetry
-package to track registry-specific operations with minimal code changes.
+This module provides specialized decorators that use the registry-specific
+domain functions to track operations with minimal code changes.
 
 All decorators use time.perf_counter() for accurate timing and handle
 exceptions gracefully without affecting business logic.
@@ -18,7 +18,12 @@ from typing import (
 )
 import logging
 
-from registry.utils.otel_metrics import metrics
+from registry.utils.otel_metrics import (
+    record_auth_request as _record_auth_request,
+    record_registry_operation as _record_registry_operation,
+    record_tool_discovery as _record_tool_discovery,
+    record_tool_execution as _record_tool_execution,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +84,7 @@ def track_registry_operation(
             finally:
                 duration = time.perf_counter() - start_time
                 try:
-                    metrics.record_registry_operation(
+                    _record_registry_operation(
                         operation=operation,
                         resource_type=resource or func.__name__,
                         success=success,
@@ -145,7 +150,7 @@ def track_auth_request(
             finally:
                 duration = time.perf_counter() - start_time
                 try:
-                    metrics.record_auth_request(
+                    _record_auth_request(
                         mechanism=mechanism,
                         success=success,
                         duration_seconds=duration,
@@ -216,7 +221,7 @@ def track_tool_execution(
             finally:
                 duration = time.perf_counter() - start_time
                 try:
-                    metrics.record_tool_execution(
+                    _record_tool_execution(
                         tool_name=tool_name,
                         server_name=server_name,
                         success=success,
@@ -275,7 +280,7 @@ def track_tool_discovery(
                 if hasattr(result, "matches"):
                     for match in result.matches:
                         try:
-                            metrics.record_tool_discovery(
+                            _record_tool_discovery(
                                 tool_name=getattr(match, "tool_name", "unknown"),
                                 source=source,
                                 success=True,
@@ -291,7 +296,7 @@ def track_tool_discovery(
                 duration = time.perf_counter() - start_time
                 try:
                     # Record overall discovery operation with timing
-                    metrics.record_tool_discovery(
+                    _record_tool_discovery(
                         tool_name=query,  # Use query as identifier for overall operation
                         source=source,
                         success=success,
@@ -359,7 +364,7 @@ class AuthMetricsContext:
         duration = time.perf_counter() - self._start_time
 
         try:
-            metrics.record_auth_request(
+            _record_auth_request(
                 mechanism=self._mechanism,
                 success=self._success,
                 duration_seconds=duration,
@@ -430,7 +435,7 @@ class ToolExecutionMetricsContext:
         duration = time.perf_counter() - self._start_time
 
         try:
-            metrics.record_tool_execution(
+            _record_tool_execution(
                 tool_name=self._tool_name,
                 server_name=self._server_name,
                 success=self._success,

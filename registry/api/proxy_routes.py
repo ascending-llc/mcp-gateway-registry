@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional, Union
 from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
-from registry.utils.otel_metrics import metrics
+from registry.utils.otel_metrics import record_server_request
 from registry.core.telemetry_decorators import ToolExecutionMetricsContext
 from packages.models.extended_mcp_server import MCPServerDocument
 from registry.auth.dependencies import CurrentUser
@@ -725,7 +725,7 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
     
     # Proxy the request
     logger.info(f"Proxying {request.method} {path} → {target_url}")
-    metrics.record_server_request(server_name=server.serverName)
+    record_server_request(server_name=server.serverName)
     return await proxy_to_mcp_server(
         request=request,
         target_url=target_url,

@@ -30,17 +30,11 @@ class TestOTelMetricsClient:
         """Sample config with common metrics."""
         return {
             "counters": [
-                {"name": "auth_requests_total", "description": "Auth attempts", "unit": "1"},
-                {"name": "mcp_tool_discovery_total", "description": "Tool discovery", "unit": "1"},
-                {"name": "mcp_tool_execution_total", "description": "Tool execution", "unit": "1"},
-                {"name": "registry_operations_total", "description": "Registry ops", "unit": "1"},
-                {"name": "mcp_server_requests_total", "description": "Server requests", "unit": "1"},
+                {"name": "requests_total", "description": "Total requests", "unit": "1"},
+                {"name": "errors_total", "description": "Total errors", "unit": "1"},
             ],
             "histograms": [
-                {"name": "auth_request_duration_seconds", "description": "Auth duration", "unit": "s"},
-                {"name": "mcp_tool_discovery_duration_seconds", "description": "Discovery duration", "unit": "s"},
-                {"name": "mcp_tool_execution_duration_seconds", "description": "Execution duration", "unit": "s"},
-                {"name": "registry_operation_duration_seconds", "description": "Registry duration", "unit": "s"},
+                {"name": "request_duration_seconds", "description": "Request duration", "unit": "s"},
             ]
         }
 
@@ -59,15 +53,15 @@ class TestOTelMetricsClient:
 
         client = OTelMetricsClient("test-service", config=sample_config)
 
-        # Should create 5 counters from config
-        assert meter_instance.create_counter.call_count == 5
-        # Should create 4 histograms from config
-        assert meter_instance.create_histogram.call_count == 4
+        # Should create 2 counters from config
+        assert meter_instance.create_counter.call_count == 2
+        # Should create 1 histogram from config
+        assert meter_instance.create_histogram.call_count == 1
 
         # Verify metrics are registered
-        assert "auth_requests_total" in client._counters
-        assert "registry_operations_total" in client._counters
-        assert "auth_request_duration_seconds" in client._histograms
+        assert "requests_total" in client._counters
+        assert "errors_total" in client._counters
+        assert "request_duration_seconds" in client._histograms
 
     def test_init_without_config_creates_empty_registries(self, mock_meter):
         """Test initialization without config creates empty registries."""
@@ -89,269 +83,6 @@ class TestOTelMetricsClient:
         with patch('packages.telemetry.metrics_client.logger') as mock_logger:
             OTelMetricsClient("test-service")
             mock_logger.error.assert_called_once()
-
-    def test_record_auth_request_success(self, mock_meter, sample_config):
-        """Test recording a successful authentication attempt."""
-        _, meter_instance = mock_meter
-        client = OTelMetricsClient("test-service", config=sample_config)
-
-        # Mock the counter in the registry
-        mock_counter = MagicMock()
-        client._counters["auth_requests_total"] = mock_counter
-
-        client.record_auth_request("jwt", success=True)
-
-        expected_attributes = {
-            "mechanism": "jwt",
-            "status": "success"
-        }
-
-        mock_counter.add.assert_called_once_with(1, expected_attributes)
-
-    def test_record_auth_request_failure(self, mock_meter, sample_config):
-        """Test recording a failed authentication attempt."""
-        _, meter_instance = mock_meter
-        client = OTelMetricsClient("test-service", config=sample_config)
-
-        mock_counter = MagicMock()
-        client._counters["auth_requests_total"] = mock_counter
-
-        client.record_auth_request("api_key", success=False)
-
-        expected_attributes = {
-            "mechanism": "api_key",
-            "status": "failure"
-        }
-
-        mock_counter.add.assert_called_once_with(1, expected_attributes)
-
-    def test_record_auth_request_with_duration(self, mock_meter, sample_config):
-        """Test recording authentication attempt with duration for latency tracking."""
-        _, meter_instance = mock_meter
-        client = OTelMetricsClient("test-service", config=sample_config)
-
-        mock_counter = MagicMock()
-        mock_histogram = MagicMock()
-        client._counters["auth_requests_total"] = mock_counter
-        client._histograms["auth_request_duration_seconds"] = mock_histogram
-
-        client.record_auth_request("jwt", success=True, duration_seconds=0.05)
-
-        expected_attributes = {
-            "mechanism": "jwt",
-            "status": "success"
-        }
-
-        mock_counter.add.assert_called_once_with(1, expected_attributes)
-        mock_histogram.record.assert_called_once_with(0.05, expected_attributes)
-
-    def test_record_auth_request_no_op_without_config(self, mock_meter):
-        """Test record_auth_request is no-op when metrics not configured."""
-        _, meter_instance = mock_meter
-        client = OTelMetricsClient("test-service")  # No config
-
-        # Should not raise, just do nothing
-        client.record_auth_request("jwt", success=True, duration_seconds=0.05)
-
-    def test_record_tool_discovery_default(self, mock_meter, sample_config):
-        """Test recording tool discovery with default parameters."""
-        _, meter_instance = mock_meter
-        client = OTelMetricsClient("test-service", config=sample_config)
-
-        mock_counter = MagicMock()
-        client._counters["mcp_tool_discovery_total"] = mock_counter
-
-        client.record_tool_discovery("weather-tool")
-
-        expected_attributes = {
-            "tool_name": "weather-tool",
-            "source": "registry",
-            "status": "success"
-        }
-
-        mock_counter.add.assert_called_once_with(1, expected_attributes)
-
-    def test_record_tool_discovery_custom_source(self, mock_meter, sample_config):
-        """Test recording tool discovery with custom source."""
-        _, meter_instance = mock_meter
-        client = OTelMetricsClient("test-service", config=sample_config)
-
-        mock_counter = MagicMock()
-        client._counters["mcp_tool_discovery_total"] = mock_counter
-
-        client.record_tool_discovery("finance-tool", source="user-defined")
-
-        expected_attributes = {
-            "tool_name": "finance-tool",
-            "source": "user-defined",
-            "status": "success"
-        }
-
-        mock_counter.add.assert_called_once_with(1, expected_attributes)
-
-    def test_record_tool_discovery_failure_with_duration(self, mock_meter, sample_config):
-        """Test recording failed tool discovery with duration."""
-        _, meter_instance = mock_meter
-        client = OTelMetricsClient("test-service", config=sample_config)
-
-        mock_counter = MagicMock()
-        mock_histogram = MagicMock()
-        client._counters["mcp_tool_discovery_total"] = mock_counter
-        client._histograms["mcp_tool_discovery_duration_seconds"] = mock_histogram
-
-        client.record_tool_discovery(
-            "unknown-tool",
-            source="search",
-            success=False,
-            duration_seconds=0.15
-        )
-
-        expected_attributes = {
-            "tool_name": "unknown-tool",
-            "source": "search",
-            "status": "failure"
-        }
-
-        mock_counter.add.assert_called_once_with(1, expected_attributes)
-        mock_histogram.record.assert_called_once_with(0.15, expected_attributes)
-
-    def test_record_tool_execution_success(self, mock_meter, sample_config):
-        """Test recording a successful tool execution."""
-        _, meter_instance = mock_meter
-        client = OTelMetricsClient("test-service", config=sample_config)
-
-        mock_counter = MagicMock()
-        client._counters["mcp_tool_execution_total"] = mock_counter
-
-        client.record_tool_execution(
-            tool_name="calculator",
-            server_name="math-server",
-            success=True
-        )
-
-        expected_attributes = {
-            "tool_name": "calculator",
-            "server_name": "math-server",
-            "status": "success",
-            "method": "UNKNOWN"
-        }
-
-        mock_counter.add.assert_called_once_with(1, expected_attributes)
-
-    def test_record_tool_execution_failure_with_duration(self, mock_meter, sample_config):
-        """Test recording a failed tool execution with duration and method."""
-        _, meter_instance = mock_meter
-        client = OTelMetricsClient("test-service", config=sample_config)
-
-        mock_counter = MagicMock()
-        mock_histogram = MagicMock()
-        client._counters["mcp_tool_execution_total"] = mock_counter
-        client._histograms["mcp_tool_execution_duration_seconds"] = mock_histogram
-
-        client.record_tool_execution(
-            tool_name="weather",
-            server_name="weather-server",
-            success=False,
-            duration_seconds=1.5,
-            method="POST"
-        )
-
-        expected_attributes = {
-            "tool_name": "weather",
-            "server_name": "weather-server",
-            "status": "failure",
-            "method": "POST"
-        }
-
-        mock_counter.add.assert_called_once_with(1, expected_attributes)
-        mock_histogram.record.assert_called_once_with(1.5, expected_attributes)
-
-    def test_record_registry_operation_success(self, mock_meter, sample_config):
-        """Test recording a successful registry operation."""
-        _, meter_instance = mock_meter
-        client = OTelMetricsClient("test-service", config=sample_config)
-
-        mock_counter = MagicMock()
-        client._counters["registry_operations_total"] = mock_counter
-
-        client.record_registry_operation(
-            operation="read",
-            resource_type="server",
-            success=True
-        )
-
-        expected_attributes = {
-            "operation": "read",
-            "resource_type": "server",
-            "status": "success"
-        }
-
-        mock_counter.add.assert_called_once_with(1, expected_attributes)
-
-    def test_record_registry_operation_with_duration(self, mock_meter, sample_config):
-        """Test recording registry operation with duration for latency tracking."""
-        _, meter_instance = mock_meter
-        client = OTelMetricsClient("test-service", config=sample_config)
-
-        mock_counter = MagicMock()
-        mock_histogram = MagicMock()
-        client._counters["registry_operations_total"] = mock_counter
-        client._histograms["registry_operation_duration_seconds"] = mock_histogram
-
-        client.record_registry_operation(
-            operation="search",
-            resource_type="tool",
-            success=True,
-            duration_seconds=0.08
-        )
-
-        expected_attributes = {
-            "operation": "search",
-            "resource_type": "tool",
-            "status": "success"
-        }
-
-        mock_counter.add.assert_called_once_with(1, expected_attributes)
-        mock_histogram.record.assert_called_once_with(0.08, expected_attributes)
-
-    def test_record_registry_operation_failure(self, mock_meter, sample_config):
-        """Test recording a failed registry operation."""
-        _, meter_instance = mock_meter
-        client = OTelMetricsClient("test-service", config=sample_config)
-
-        mock_counter = MagicMock()
-        mock_histogram = MagicMock()
-        client._counters["registry_operations_total"] = mock_counter
-        client._histograms["registry_operation_duration_seconds"] = mock_histogram
-
-        client.record_registry_operation(
-            operation="delete",
-            resource_type="server",
-            success=False,
-            duration_seconds=0.02
-        )
-
-        expected_attributes = {
-            "operation": "delete",
-            "resource_type": "server",
-            "status": "failure"
-        }
-
-        mock_counter.add.assert_called_once_with(1, expected_attributes)
-        mock_histogram.record.assert_called_once_with(0.02, expected_attributes)
-
-    def test_record_server_request(self, mock_meter, sample_config):
-        """Test recording a server request."""
-        _, meter_instance = mock_meter
-        client = OTelMetricsClient("test-service", config=sample_config)
-
-        mock_counter = MagicMock()
-        client._counters["mcp_server_requests_total"] = mock_counter
-
-        client.record_server_request("weather-server")
-
-        expected_attributes = {"server_name": "weather-server"}
-        mock_counter.add.assert_called_once_with(1, expected_attributes)
 
 
 @pytest.mark.unit

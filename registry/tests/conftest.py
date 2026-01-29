@@ -224,34 +224,37 @@ def mock_telemetry_metrics(monkeypatch):
     This prevents the OTel background exporter from trying to serialize
     mock objects (like AsyncMock) which causes encoding errors.
     """
+    # Mock the generic metrics client
     mock_metrics_client = Mock()
-    mock_metrics_client.record_server_request = Mock()
-    mock_metrics_client.record_tool_execution = Mock()
-    mock_metrics_client.record_tool_discovery = Mock()
-    mock_metrics_client.record_auth_request = Mock()
-    mock_metrics_client.record_registry_operation = Mock()
+    mock_metrics_client.record_counter = Mock()
+    mock_metrics_client.record_histogram = Mock()
 
     # Mock the metrics client at the source module
     monkeypatch.setattr(
         "registry.utils.otel_metrics.metrics",
         mock_metrics_client
     )
-    # Also mock in all places where it's imported
+
+    # Mock the domain functions where they're imported
     monkeypatch.setattr(
-        "registry.api.proxy_routes.metrics",
-        mock_metrics_client
+        "registry.api.proxy_routes.record_server_request",
+        Mock()
     )
     monkeypatch.setattr(
-        "registry.api.v1.search_routes.metrics",
-        mock_metrics_client
+        "registry.core.telemetry_decorators._record_registry_operation",
+        Mock()
     )
     monkeypatch.setattr(
-        "registry.api.v1.server.server_routes.metrics",
-        mock_metrics_client
+        "registry.core.telemetry_decorators._record_auth_request",
+        Mock()
     )
     monkeypatch.setattr(
-        "registry.auth.middleware.metrics",
-        mock_metrics_client
+        "registry.core.telemetry_decorators._record_tool_execution",
+        Mock()
+    )
+    monkeypatch.setattr(
+        "registry.core.telemetry_decorators._record_tool_discovery",
+        Mock()
     )
 
     yield mock_metrics_client

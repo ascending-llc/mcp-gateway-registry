@@ -10,7 +10,6 @@ from opentelemetry.sdk.metrics.view import ExplicitBucketHistogramAggregation
 
 from packages.telemetry.decorators import (
     track_duration,
-    track_operation,
     create_timed_context,
 )
 
@@ -19,7 +18,6 @@ __all__ = [
     "shutdown_telemetry",
     "LATENCY_BUCKETS",
     "track_duration",
-    "track_operation",
     "create_timed_context",
 ]
 
