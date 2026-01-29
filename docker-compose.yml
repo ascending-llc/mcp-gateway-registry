@@ -229,11 +229,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.mcpgw
-      args:
-        TOOL_DISCOVERY_MODE: ${TOOL_DISCOVERY_MODE:-embedded}
-        BUILD_VERSION: ${BUILD_VERSION:-}
-        SCHEMA_VERSION: ${SCHEMA_VERSION:-}
-        GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     environment:
       - PORT=8003
       - REGISTRY_BASE_URL=http://registry:7860

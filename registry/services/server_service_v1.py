@@ -10,31 +10,21 @@ ODM Schema:
 - createdAt: datetime (auto-generated)
 - updatedAt: datetime (auto-generated)
 """
-
-import logging
-import httpx
 import asyncio
+import httpx
 from typing import Dict, List, Optional, Tuple, Any, Set
 from datetime import datetime, timezone
 from beanie import PydanticObjectId
 from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+from packages.models._generated.user import IUser
 from registry.schemas.server_api_schemas import (
     ServerCreateRequest,
     ServerUpdateRequest,
 )
+from registry.utils.log import logger
 from registry.utils.crypto_utils import encrypt_auth_fields
 from registry.core.mcp_client import get_tools_from_server_with_server_info
-from registry.core.acl_constants import ResourceType
 from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
-from registry.services.user_service import user_service
-from registry.schemas.errors import (
-    OAuthReAuthRequiredError,
-    OAuthTokenError,
-    MissingUserIdError,
-    AuthenticationError
-)
-
-logger = logging.getLogger(__name__)
 
 
 def _extract_config_field(server: MCPServerDocument, field: str, default: Any = None) -> Any:
@@ -47,6 +37,9 @@ def _extract_config_field(server: MCPServerDocument, field: str, default: Any = 
 def _build_server_info_for_mcp_client(config: Dict[str, Any], tags: List[str]) -> Dict[str, Any]:
     """
     Build server_info dictionary for MCP client operations.
+
+    This helper eliminates duplicate code in create_server, retrieve_tools_from_server,
+    and retrieve_tools_and_capabilities_from_server.
 
     Args:
         config: Server config dictionary
@@ -70,155 +63,6 @@ def _build_server_info_for_mcp_client(config: Dict[str, Any], tags: List[str]) -
     return server_info
 
 
-async def _build_complete_headers_for_server(
-        server: MCPServerDocument,
-        user_id: Optional[str] = None
-) -> Dict[str, str]:
-    """
-    Build complete HTTP headers with ALL authentication types.
-    Consolidates OAuth, apiKey, and custom header logic in one place.
-
-    This eliminates duplicate header building across server_service, proxy_routes, and health_service.
-
-    Args:
-        server: Server document containing config
-        user_id: User ID for OAuth token retrieval (required for OAuth servers)
-
-    Returns:
-        Complete headers dictionary ready for HTTP requests
-
-    Raises:
-        MissingUserIdError: If OAuth server requires user_id but none provided
-        OAuthReAuthRequiredError: If OAuth re-authentication is needed
-        OAuthTokenError: If OAuth token retrieval/refresh fails
-        AuthenticationError: For other authentication failures
-    """
-    import base64
-    from registry.services.oauth.oauth_service import get_oauth_service
-    from registry.utils.crypto_utils import decrypt_auth_fields
-
-    config = server.config or {}
-    decrypted_config = decrypt_auth_fields(config)
-
-    # Start with base MCP headers
-    headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'User-Agent': 'MCP-Gateway-Registry/1.0'
-    }
-    
-    # 1. Add custom headers FIRST (lowest priority)
-    custom_headers = decrypted_config.get("headers", [])
-    if custom_headers and isinstance(custom_headers, list):
-        for header_dict in custom_headers:
-            if isinstance(header_dict, dict):
-                # Ensure all header values are strings (not lists or other types)
-                for key, value in header_dict.items():
-                    if isinstance(value, list):
-                        # Join list values with comma (HTTP header standard)
-                        headers[key] = ", ".join(str(v) for v in value)
-                        logger.debug(f"Joined list header {key}: {value} -> {headers[key]}")
-                    elif value is not None:
-                        headers[key] = str(value)
-                        logger.debug(f"Added custom header {key}: {value}")
-    
-    # 2. Check OAuth and add OAuth headers LAST (highest priority, overrides custom headers)
-    requires_oauth = decrypted_config.get("requiresOAuth", False) or "oauth" in decrypted_config
-
-    if requires_oauth:
-        if not user_id:
-            raise MissingUserIdError(
-                f"User ID required for OAuth server {server.serverName}",
-                server_name=server.serverName
-            )
-
-        logger.info(f"Building OAuth headers for {server.serverName}")
-        
-        # Validate and merge OAuth metadata with config.oauth as source of truth
-        # This ensures correct authorization_servers are used for token validation
-        oauth_config = decrypted_config.get("oauth")
-        raw_oauth_metadata = decrypted_config.get("oauthMetadata", {})
-        
-        oauth_metadata = _validate_and_merge_oauth_metadata(
-            oauth_config=oauth_config,
-            oauth_metadata=raw_oauth_metadata
-        )
-        
-        # Update server's oauthMetadata in-memory for this request
-        # This ensures OAuth service uses correct authorization_servers
-        if oauth_metadata:
-            config["oauthMetadata"] = oauth_metadata
-            server.config = config
-            logger.debug(f"Validated OAuth metadata for token retrieval: authorization_servers={oauth_metadata.get('authorization_servers')}") 
-        
-        # Get OAuth token (handles refresh automatically)
-        oauth_service = await get_oauth_service()
-        access_token, auth_url, error = await oauth_service.get_valid_access_token(
-            user_id=user_id,
-            server=server
-        )
-
-        if auth_url:
-            raise OAuthReAuthRequiredError(
-                f"OAuth re-authentication required for {server.serverName}",
-                auth_url=auth_url,
-                server_name=server.serverName
-            )
-
-        if error:
-            raise OAuthTokenError(
-                f"OAuth token error for {server.serverName}: {error}",
-                server_name=server.serverName
-            )
-
-        if not access_token:
-            raise OAuthTokenError(
-                f"No valid OAuth token available for {server.serverName}",
-                server_name=server.serverName
-            )
-        
-        # Override any existing Authorization header with OAuth Bearer token
-        # This ensures OAuth always takes priority over custom headers
-        headers["Authorization"] = f"Bearer {access_token}"
-        logger.debug(f"OAuth Bearer token added for {server.serverName} (overrides any custom Authorization header)")
-        return headers
-
-    # 2. Handle apiKey authentication (if not OAuth)
-    api_key_config = decrypted_config.get("apiKey")
-    if api_key_config and isinstance(api_key_config, dict):
-        key_value = api_key_config.get("key")
-        authorization_type = api_key_config.get("authorization_type", "bearer").lower()
-
-        if key_value:
-            if authorization_type == "bearer":
-                headers["Authorization"] = f"Bearer {key_value}"
-                logger.debug(f"Added Bearer apiKey for {server.serverName}")
-            elif authorization_type == "basic":
-                # Handle base64 encoding
-                try:
-                    base64.b64decode(key_value, validate=True)
-                    # Already base64 encoded
-                    headers["Authorization"] = f"Basic {key_value}"
-                    logger.debug(f"Added Basic auth (pre-encoded) for {server.serverName}")
-                except Exception:
-                    # Not base64 encoded, encode it
-                    encoded_key = base64.b64encode(key_value.encode()).decode()
-                    headers["Authorization"] = f"Basic {encoded_key}"
-                    logger.debug(f"Added Basic auth (auto-encoded) for {server.serverName}")
-            elif authorization_type == "custom":
-                custom_header = api_key_config.get("custom_header")
-                if custom_header:
-                    headers[custom_header] = key_value
-                    logger.debug(f"Added custom auth header '{custom_header}' for {server.serverName}")
-                else:
-                    logger.warning(f"apiKey with authorization_type='custom' but no custom_header for {server.serverName}")
-            else:
-                logger.warning(f"Unknown authorization_type: {authorization_type}, defaulting to Bearer for {server.serverName}")
-                headers["Authorization"] = f"Bearer {key_value}"
-    
-    return headers
-
-
 def _detect_oauth_requirement(oauth_field: Optional[Any]) -> bool:
     """
     Detect if OAuth is required based on oauth field.
@@ -233,48 +77,6 @@ def _detect_oauth_requirement(oauth_field: Optional[Any]) -> bool:
         True if OAuth is required, False otherwise
     """
     return oauth_field is not None
-
-
-def _validate_and_merge_oauth_metadata(
-    oauth_config: Optional[Dict[str, Any]],
-    oauth_metadata: Optional[Dict[str, Any]]
-) -> Dict[str, Any]:
-    """
-    Merge OAuth metadata using database config.oauth as authoritative source.
-    
-    Database config.oauth (configured by admin) always takes priority over
-    MCP server's .well-known metadata to prevent incorrect configurations.
-    
-    Args:
-        oauth_config: OAuth configuration from registry database (config.oauth) - AUTHORITATIVE
-        oauth_metadata: OAuth metadata from MCP server's /.well-known endpoint
-    
-    Returns:
-        Merged OAuth metadata with database config.oauth overriding server metadata
-    
-    Example:
-        Database config.oauth.authorization_servers: ["https://accounts.google.com"]
-        Server metadata.authorization_servers: ["http://localhost:3080/"]  # WRONG
-        Result: authorization_servers = ["https://accounts.google.com"] (from database config)
-    """
-    # If neither metadata nor config is provided, return empty dict
-    if not oauth_metadata and not oauth_config:
-        return {}
-    
-    # If no server metadata, return database config as-is
-    if not oauth_metadata and oauth_config:
-        return oauth_config.copy()
-    
-    # If no database config, use server metadata as-is
-    if oauth_metadata and not oauth_config:
-        return oauth_metadata.copy()
-    
-    # Both server metadata and database config exist:
-    # start with server metadata, then override with database config fields
-    merged_metadata: Dict[str, Any] = oauth_metadata.copy()  # type: ignore[union-attr]
-    merged_metadata.update(oauth_config)  # type: ignore[arg-type]
-    
-    return merged_metadata
 
 
 def _get_current_utc_time() -> datetime:
@@ -494,7 +296,6 @@ class ServerServiceV1:
             page: int = 1,
             per_page: int = 20,
             user_id: Optional[str] = None,
-            acl_permissions_map: Dict[str, Any] = {},
     ) -> Tuple[List[MCPServerDocument], int]:
         """
         List servers with filtering and pagination.
@@ -506,7 +307,7 @@ class ServerServiceV1:
             page: Page number (min: 1)
             per_page: Items per page (min: 1, max: 100)
             user_id: Current user's ID (kept for compatibility but not used for filtering)
-            acl_permissions_map: Mapping from resource type (e.g. ResourceType.MCPSERVER.value)
+            
         Returns:
             Tuple of (servers list, total count)
         """
@@ -538,11 +339,6 @@ class ServerServiceV1:
             }
             filters.append(text_filter)
 
-        # Access control filter
-        accessible_servers = acl_permissions_map.get(ResourceType.MCPSERVER.value, {}).keys()
-        accessible_server_ids = [PydanticObjectId(sid) for sid in accessible_servers]
-        filters.append({"_id": {"$in": accessible_server_ids}})
-
         # Combine all filters
         if filters:
             query_filter = {"$and": filters} if len(filters) > 1 else filters[0]
@@ -556,6 +352,7 @@ class ServerServiceV1:
             .skip(skip) \
             .limit(per_page) \
             .to_list()
+
         return servers, total
 
     async def get_server_by_id(
@@ -607,7 +404,7 @@ class ServerServiceV1:
         Args:
             data: Server creation data
             user_id: ID of the user creating the server
-
+            
         Returns:
             Created server document
             
@@ -642,11 +439,37 @@ class ServerServiceV1:
         tool_functions = config.get("toolFunctions", {})
         num_tools = len(tool_functions) if tool_functions else 0
 
-        # Get author user reference - authentication required
-        author = await user_service.get_user_by_user_id(user_id)
-
+        # Get or create author user reference
+        author = await IUser.find_one({"username": user_id})
         if not author:
-            raise ValueError(f"Authentication required: User {user_id} not found")
+            # Create a minimal user record if not exists
+            now = _get_current_utc_time()
+            # Generate unique email to avoid conflicts
+            email = f"{user_id}@local.mcp-gateway.internal"
+
+            # Check if email already exists
+            existing_user = await IUser.find_one({"email": email})
+            if existing_user:
+                author = existing_user
+            else:
+                # Create user without OAuth ID fields to avoid unique index conflicts
+                # Use model_dump with exclude_none to prevent OAuth fields from being included
+                user_data = {
+                    "username": user_id,
+                    "email": email,
+                    "emailVerified": False,
+                    "role": "USER",
+                    "provider": "local",
+                    "createdAt": now,
+                    "updatedAt": now
+                }
+
+                # Insert directly to avoid Pydantic adding None values for OAuth fields
+                collection = IUser.get_pymongo_collection()
+                result = await collection.insert_one(user_data)
+
+                # Fetch the created user
+                author = await IUser.get(result.inserted_id)
 
         # Create server document with registry fields at root level
         now = _get_current_utc_time()
@@ -749,7 +572,7 @@ class ServerServiceV1:
                     if oauth_metadata:
                         import json
                         config["oauthMetadata"] = oauth_metadata
-                        logger.info(f"Saved raw OAuth metadata for {server.serverName}: {json.dumps(oauth_metadata)}")
+                        logger.info(f"Saved OAuth metadata for {server.serverName}: {json.dumps(oauth_metadata)}")
                     else:
                         # Save empty oauthMetadata if retrieval failed
                         config["oauthMetadata"] = {}
@@ -805,9 +628,7 @@ class ServerServiceV1:
         if not server:
             raise ValueError("Server not found")
 
-        # Track which fields are being changed
         fields_changed: Set[str] = set()
-
         # Get current config
         config = server.config or {}
 
@@ -820,7 +641,7 @@ class ServerServiceV1:
         # Update root-level registry fields
         if data.serverName is not None:
             server.serverName = data.serverName
-            fields_changed.add("server_name")  # Weaviate uses snake_case
+            fields_changed.add("server_name")
         if data.path is not None:
             server.path = data.path
             fields_changed.add("path")
@@ -893,8 +714,10 @@ class ServerServiceV1:
         asyncio.create_task(
             self.mcp_server_repo.delete_by_server_id(server_id, server.serverName)
         )
+        
         await server.delete()
         logger.info(f"Deleted server: {server.serverName} (ID: {server.id})")
+
         return True
 
     async def _fetch_and_update_tools(
@@ -912,13 +735,26 @@ class ServerServiceV1:
         Returns:
             True if tools were successfully fetched and updated, False otherwise
         """
-        # Use consolidated retrieve_from_server which handles both OAuth and apiKey
-        logger.info(f"Fetching tools for server {server.serverName}")
-        tool_list, _, error_msg = await self.retrieve_from_server(
-            server=server,
-            include_capabilities=False,
-            user_id=user_id
-        )
+        config = server.config or {}
+
+        # Check authentication type
+        has_oauth = config.get("oauth") is not None
+
+        tool_list = None
+        error_msg = None
+
+        if has_oauth:
+            # OAuth authentication
+            if not user_id:
+                logger.warning(f"Cannot fetch tools for OAuth server {server.serverName}: user_id is required")
+                return False
+
+            logger.info(f"Fetching tools for OAuth server {server.serverName} with user {user_id}")
+            tool_list, error_msg = await self.retrieve_tools_with_oauth(server, user_id)
+        else:
+            # No auth or API Key authentication
+            logger.info(f"Fetching tools for server {server.serverName}")
+            tool_list, error_msg = await self.retrieve_tools_from_server(server)
 
         if tool_list:
             # Convert tool_list to toolFunctions format
@@ -948,8 +784,6 @@ class ServerServiceV1:
     ) -> MCPServerDocument:
         """
         Toggle server enabled/disabled status.
-        When enabling, fetch tools and sync to vector DB (upsert).
-        When disabling, remove from vector DB.
 
         Args:
             server_id: Server document ID
@@ -1118,6 +952,10 @@ class ServerServiceV1:
     ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[Dict[str, Any]], Optional[str]]:
         """
         Consolidated method to retrieve tools and optionally capabilities from a server.
+
+        This replaces both retrieve_tools_from_server() and retrieve_tools_and_capabilities_from_server().
+        Handles both apiKey and OAuth authentication automatically.
+
         Args:
             server: Server document
             include_capabilities: Whether to retrieve capabilities (default: True)
@@ -1142,35 +980,54 @@ class ServerServiceV1:
             return None, None, "OAuth server requires user_id for token retrieval"
 
         try:
-            # Build complete headers with all authentication (OAuth, apiKey, custom)
-            # This consolidates all auth logic in one place
-            try:
-                headers = await _build_complete_headers_for_server(server, user_id)
-            except OAuthReAuthRequiredError as e:
-                # OAuth re-authentication needed - return special error format
-                return None, None, f"oauth_required:{e.auth_url or str(e)}"
-            except (OAuthTokenError, MissingUserIdError) as e:
-                # OAuth token errors or missing user ID
-                return None, None, f"Authentication error: {str(e)}"
-            except AuthenticationError as e:
-                # Other authentication errors
-                return None, None, f"Authentication error: {str(e)}"
+            # Decrypt apiKey if present (key field is encrypted in MongoDB)
+            from registry.utils.crypto_utils import decrypt_auth_fields
+            decrypted_config = decrypt_auth_fields(config)
 
-            # Get transport type
-            transport_type = config.get("type", "streamable-http")
+            # Build server_info using helper function with decrypted config
+            server_info = _build_server_info_for_mcp_client(decrypted_config, server.tags)
+
+            # Add OAuth token to headers if server requires OAuth
+            if has_oauth and user_id:
+                from registry.services.oauth.oauth_service import get_oauth_service
+
+                # Get valid access token (handles refresh and re-auth automatically)
+                oauth_service = await get_oauth_service()
+                access_token, auth_url, token_error = await oauth_service.get_valid_access_token(
+                    user_id=user_id,
+                    server=server
+                )
+
+                # If re-authentication is needed
+                if auth_url:
+                    return None, None, f"oauth_required:{auth_url}"
+
+                # If error occurred
+                if token_error:
+                    return None, None, f"OAuth token error: {token_error}"
+
+                # If no token (shouldn't happen, defensive check)
+                if not access_token:
+                    return None, None, f"No valid OAuth token available for user {user_id}"
+
+                # Add OAuth Authorization header to server_info
+                if "headers" not in server_info:
+                    server_info["headers"] = []
+
+                server_info["headers"].append(
+                    {"Authorization": f"Bearer {access_token}"}
+                )
+
+                logger.info(f"Added OAuth token to request for {server.serverName}")
 
             logger.info(
                 f"Retrieving {'tools and capabilities' if include_capabilities else 'tools only'} from {url} for server {server.serverName}")
 
-            # Use the mcp_client with pre-built headers (pure transport layer)
-            from registry.core.mcp_client import get_tools_and_capabilities_from_server
-            tool_list, capabilities = await get_tools_and_capabilities_from_server(
-                url,
-                headers=headers,
-                transport_type=transport_type
-            )
-
+            # Use the appropriate MCP client function
             if include_capabilities:
+                from registry.core.mcp_client import get_tools_and_capabilities_from_server
+                tool_list, capabilities = await get_tools_and_capabilities_from_server(url, server_info)
+
                 if tool_list is None or capabilities is None:
                     error_msg = "Failed to retrieve tools and capabilities from MCP server"
                     logger.warning(f"{error_msg} for {server.serverName}")
@@ -1179,6 +1036,9 @@ class ServerServiceV1:
                 logger.info(f"Retrieved {len(tool_list)} tools and capabilities from {server.serverName}")
                 return tool_list, capabilities, None
             else:
+                from registry.core.mcp_client import get_tools_from_server_with_server_info
+                tool_list = await get_tools_from_server_with_server_info(url, server_info)
+
                 if tool_list is None:
                     error_msg = "Failed to retrieve tools from MCP server"
                     logger.warning(f"{error_msg} for {server.serverName}")
@@ -1191,6 +1051,26 @@ class ServerServiceV1:
             error_msg = f"Error: {type(e).__name__} - {str(e)}"
             logger.error(f"Retrieval error for server {server.serverName}: {e}")
             return None, None, error_msg
+
+    async def retrieve_tools_from_server(
+            self,
+            server: MCPServerDocument,
+    ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
+        """
+        Retrieve tools from a server using MCP client (legacy method).
+
+        Wraps retrieve_from_server() for backward compatibility.
+        
+        Args:
+            server: Server document
+            
+        Returns:
+            Tuple of (tool_list, error_message)
+            If successful, returns (tool_list, None)
+            If failed, returns (None, error_message)
+        """
+        tool_list, _, error_msg = await self.retrieve_from_server(server, include_capabilities=False)
+        return tool_list, error_msg
 
     async def retrieve_tools_with_oauth(
             self,

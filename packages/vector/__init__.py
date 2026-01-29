@@ -1,24 +1,31 @@
-from .client import DatabaseClient, initialize_database, get_db_client
-from .adapters.factory import VectorStoreFactory, create_adapter
-from .config.config import BackendConfig
-from .enum.enums import VectorStoreType, EmbeddingProvider
-from .enum.exceptions import DependencyMissingError, UnsupportedBackendError, ConfigurationError
+from .client import DatabaseClient, initialize_database
+from .config import BackendConfig
+from .enum.enums import VectorStoreType, SearchType, RerankerProvider
+from .enum.exceptions import DependencyMissingError, UnsupportedBackendError
 from .adapters.create import vector_store, embedding
 from .repository import Repository
-from .search_manager import SearchIndexManager
+from .protocols import VectorStorable, ContentGenerator
+from .exceptions import RepositoryError, AdapterError, ConfigurationError, ValidationError
+from .repositories.mcp_server_repository import MCPServerRepository, create_mcp_server_repository
 
 __all__ = [
     'DatabaseClient',
-    'VectorStoreFactory',
+    'initialize_database',
     'BackendConfig',
     'VectorStoreType',
-    'EmbeddingProvider',
-    'create_adapter',
-    'initialize_database',
-    'get_db_client',
+    'SearchType',
+    'RerankerProvider',
     'DependencyMissingError',
     'UnsupportedBackendError',
     'ConfigurationError',
+    'ValidationError',
+    'RepositoryError',
+    'AdapterError',
+    'vector_store',
+    'embedding',
     'Repository',
-    'SearchIndexManager'
+    'VectorStorable',
+    'ContentGenerator',
+    'MCPServerRepository',
+    'create_mcp_server_repository',
 ]
