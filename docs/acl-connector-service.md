@@ -49,7 +49,7 @@ This ACL service will be foundational for enforcing secure access and will be co
 An ACLService is already implemented in the Jarvis project. Prior to defining the registry-specific approach, it is essential to review this existing design and assess its compatibility with the updated requirements for sharing connectors (MCP servers and agents) across user, group, and public scopes.
 
 ### Terminology
-- **Principals**: Entities that can be granted permissions (individual users, groups, public)
+- **Principals**: Entities that can be granted permissions (individual users, groups, public, and roles)
 - **Roles**: Predefined sets of permissions. Each role is associated with a resource type  and maps to permission bits (permBits) 
 - **Resources**: Items that require access control (mcp servers, agents), identified by resourceType and resourceId.
 - **Permissions**: Numeric bitmasks that define allowed actions (view, edit).
@@ -180,7 +180,7 @@ class ACLService:
     async def delete_acl_entries_for_resource(self, resource_type: str, resource_id: PydanticObjectId, perm_bits_to_delete: Optional[int] = None) -> int: ...
     async def delete_permission(self, resource_type: str, resource_id: PydanticObjectId, principal_type: str, principal_id: Optional[Union[PydanticObjectId, str]]) -> int: ...
     async def get_permissions_map_for_user_id(self, principal_type: str, principal_id: PydanticObjectId) -> dict: ...
-    async def search_principals(self, query: str, limit: int = 30, principal_types: Optional[List[str]] = None) -> List[dict]: ...
+    async def search_principals(self, query: str, limit: int = 30, principal_types: Optional[List[str]] = None) -> List[PermissionPrincipalOut]: ...
     async def get_resource_permissions(self, resource_type: str, resource_id: PydanticObjectId) -> Dict[str, Any]: ...
 ```
 
@@ -195,14 +195,16 @@ The following REST API endpoints are exposed for ACL management:
     - **Query Parameters:**
         - `query` (string, required): The search string for principal name, email, or username.
         - `limit` (int, optional): Maximum number of results to return (default: 30).
-        - `principal_types` (list of string, optional): Filter by principal type (e.g., `user`, `group`).
+        - `principal_types` (list of string, optional): Filter by principal type (e.g., `user`, `group`, etc).
     - **Response:**
         ```json
         [
             {
-                "principal_type": "user",
-                "principal_id": "<id>",
-                "display_name": "..."
+                "principal_type": "user | group | role",
+                "principal_id": str,
+                "name": Optional[str] = None,
+                "email": Optional[str] = None,
+                "accessRoleId": str,
             },
         ]
         ```

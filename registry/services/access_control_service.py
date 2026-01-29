@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from registry.schemas.permissions_schema import PermissionPrincipalOut
 from typing import Optional, Union, List, Dict, Any
 from packages.models._generated import (
 	IAccessRole,
@@ -11,6 +12,18 @@ from registry.services.user_service import user_service
 from registry.services.group_service import group_service
 
 class ACLService:
+	def _principal_result_obj(self, principal_type: str, obj: Any) -> PermissionPrincipalOut:
+		"""
+		Helper to construct the PermissionPrincipalOut for users and groups.
+		"""
+		return PermissionPrincipalOut(
+			principal_type=principal_type,
+			principal_id=str(getattr(obj, "id")),
+			name=getattr(obj, "name", None),
+			email=getattr(obj, "email", None),
+			accessRoleId=str(getattr(obj, "accessRoleId", "")) if hasattr(obj, "accessRoleId") and getattr(obj, "accessRoleId") is not None else ""
+		)
+	
 	async def grant_permission(
 		self,
 		principal_type: str,
@@ -217,7 +230,7 @@ class ACLService:
 		query: str,
 		limit: int = 30,
 		principal_types: Optional[List[str]] = None,
-	) -> List:
+	) -> List[PermissionPrincipalOut]:
 		"""
 		Search for principals (users, groups, agents) matching the query string.
 		"""
@@ -240,22 +253,11 @@ class ACLService:
 		results = []
 		if not type_filters or PrincipalType.USER.value in type_filters:
 			for user in await user_service.search_users(query):
-				user_id = str(getattr(user, "id"))
-				results.append({
-					"principal_type": PrincipalType.USER.value,
-					"principal_id": user_id,
-					"display_name": getattr(user, "name", None) or getattr(user, "email", None),
-				})
-
+				results.append(self._principal_result_obj(PrincipalType.USER.value, user))
 
 		if not type_filters or PrincipalType.GROUP.value in type_filters:
 			for group in await group_service.search_groups(query):
-				results.append({
-					"principal_type": PrincipalType.GROUP.value,
-					"principal_id": str(getattr(group, "id")),
-					"display_name": getattr(group, "name", None) or getattr(group, "email", None),
-				})
-				
+				results.append(self._principal_result_obj(PrincipalType.GROUP.value, group))
 		return results[:limit]
 
 	async def get_resource_permissions(

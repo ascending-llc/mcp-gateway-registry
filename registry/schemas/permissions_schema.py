@@ -26,8 +26,6 @@ class PermissionPrincipalOut(BaseModel):
     principal_id: str
     name: Optional[str] = None
     email: Optional[str] = None
-    source: Optional[str] = None
-    idOnTheSource: Optional[str] = None
     accessRoleId: str
 
 

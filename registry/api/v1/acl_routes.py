@@ -15,6 +15,7 @@ from registry.core.acl_constants import PrincipalType, PermissionBits
 from registry.schemas.permissions_schema import (
     UpdateResourcePermissionsResponse,
     UpdateResourcePermissionsRequest,
+    PermissionPrincipalOut
 )
 from registry.services.permissions_utils import (
     check_required_permission,
@@ -40,7 +41,7 @@ async def search_principals(
     query: str,
     limit: Optional[int] = None,
     principal_types: Optional[List[str]] = Query(None),
-) -> List[Dict[str, Any]]:
+) -> List[PermissionPrincipalOut]:
     """
     Search for principals (users, groups, public) matching the query string.
     Returns a paginated response with metadata.
