@@ -31,18 +31,6 @@ counters:
     unit: "1"
     capture: true
 
-  # Search requests
-  - name: search_requests_total
-    description: Total number of search requests
-    unit: "1"
-    capture: true
-
-  # Proxy requests
-  - name: proxy_requests_total
-    description: Total number of proxy requests
-    unit: "1"
-    capture: true
-
 histograms:
   # Registry operation latency
   - name: registry_operation_duration_seconds
@@ -65,23 +53,5 @@ histograms:
   # Auth request latency (for middleware)
   - name: auth_request_duration_seconds
     description: Authentication request duration in seconds
-    unit: "s"
-    capture: true
-
-  # Search request latency
-  - name: search_request_duration_seconds
-    description: Search request duration in seconds
-    unit: "s"
-    capture: true
-
-  # Proxy request latency
-  - name: proxy_request_duration_seconds
-    description: Proxy request duration in seconds
-    unit: "s"
-    capture: true
-
-  # Server health check latency
-  - name: server_health_check_duration_seconds
-    description: Server health check duration in seconds
     unit: "s"
     capture: true
