@@ -58,22 +58,22 @@ class UserService:
             user = await IUser.find_one({"email": email})
         return user
 
-    async def search_users(self, query: str, limit: int = 30, skip: int = 0) -> List[IUser]:
+    async def search_users(self, query: str) -> List[IUser]:
         """
         Search users by name, email, or username. Returns IUser model objects.
         """
         try:
-            query =  {
+            search_query =  {
                 "$or": [
                     {"email": {"$regex": query, "$options": "i"}},
                     {"name": {"$regex": query, "$options": "i"}},
                     {"username": {"$regex": query, "$options": "i"}}
                 ]
             }
-            results = await IUser.find(query).to_list()
+            results = await IUser.find(search_query).to_list()
             return results
         except Exception as e:
-            logger.error(f"Error searching users with query '{query}': {e}")
+            logger.error(f"Error searching users with query '{search_query}': {e}")
             return []
 
 user_service = UserService()
