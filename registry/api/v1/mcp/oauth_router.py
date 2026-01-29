@@ -10,7 +10,7 @@ from registry.schemas.enums import ConnectionState, OAuthFlowStatus
 from registry.utils.log import logger
 from registry.auth.oauth.reconnection import get_reconnection_manager
 from registry.constants import REGISTRY_CONSTANTS
-from services.oauth.token_service import token_service
+from registry.services.oauth.token_service import token_service
 
 router = APIRouter(prefix="/mcp", tags=["oauth"])
 

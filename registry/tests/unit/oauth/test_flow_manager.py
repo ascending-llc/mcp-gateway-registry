@@ -9,11 +9,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirna
 
 from registry.auth.oauth.flow_state_manager import FlowStateManager
 from registry.schemas.enums import OAuthFlowStatus
-from registry.models.oauth_models import MCPOAuthFlowMetadata, OAuthFlow
 
 
 @pytest.mark.unit
-@pytest.mark.oauth
 class TestFlowStateManager:
     """Test suite for FlowStateManager."""
 
@@ -426,7 +424,6 @@ class TestFlowStateManager:
 
 
 @pytest.mark.unit
-@pytest.mark.oauth
 class TestFlowStateManagerIntegration:
     """Integration tests for FlowStateManager."""
     

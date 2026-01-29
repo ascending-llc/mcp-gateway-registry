@@ -22,7 +22,7 @@ class AdapterRetriever(BaseRetriever):
     search_type: SearchType = SearchType.NEAR_TEXT
     search_kwargs: Dict[str, Any] = Field(default_factory=dict)
 
-    class Config:
+    class ConfigDict:
         arbitrary_types_allowed = True  # Allow VectorStoreAdapter type
 
     def _get_relevant_documents(self,
