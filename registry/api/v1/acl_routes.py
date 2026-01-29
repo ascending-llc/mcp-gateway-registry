@@ -1,5 +1,5 @@
 """
-Permission Management API Routes V1
+ACL Management API Routes V1
 
 RESTful API endpoints for managing ACL permissions using MongoDB.
 """
@@ -11,7 +11,7 @@ from beanie import PydanticObjectId
 
 from registry.auth.dependencies import CurrentUserWithACLMap
 from registry.services.access_control_service import acl_service
-from registry.core.acl_constants import PrincipalType, ResourceType, PermissionBits
+from registry.core.acl_constants import PrincipalType, PermissionBits
 from registry.schemas.permissions_schema import (
     UpdateResourcePermissionsResponse,
     UpdateResourcePermissionsRequest,
@@ -95,7 +95,7 @@ async def update_resource_permissions(
             acl_entry = await acl_service.grant_permission(
                 principal_type=PrincipalType.PUBLIC.value,
                 principal_id=None,
-                resource_type=ResourceType.MCPSERVER.value,
+                resource_type=resource_type,
                 resource_id=PydanticObjectId(resource_id),
                 perm_bits=PermissionBits.VIEW
             )
@@ -115,7 +115,7 @@ async def update_resource_permissions(
         if data.removed:
             delete_results = await asyncio.gather(*[
                 acl_service.delete_permission(
-                    resource_type=ResourceType.MCPSERVER.value,
+                    resource_type=resource_type,
                     resource_id=PydanticObjectId(resource_id),
                     principal_type=principal.principal_type,
                     principal_id=PydanticObjectId(principal.principal_id)
@@ -128,7 +128,7 @@ async def update_resource_permissions(
                 acl_service.grant_permission(
                     principal_type=principal.principal_type,
                     principal_id=PydanticObjectId(principal.principal_id),
-                    resource_type=ResourceType.MCPSERVER.value,
+                    resource_type=resource_type,
                     resource_id=PydanticObjectId(resource_id),
                     perm_bits=principal.perm_bits,
                 ) for principal in data.updated

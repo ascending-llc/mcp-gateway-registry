@@ -197,7 +197,7 @@ app.include_router(search_router, prefix=f"/api/{settings.API_VERSION}", tags=["
 app.include_router(health_router, prefix="/api/health", tags=["Health Monitoring"])
 app.include_router(oauth_router, prefix=f"/api/{settings.API_VERSION}", tags=["MCP  Oauth Management"])
 app.include_router(connection_router, prefix=f"/api/{settings.API_VERSION}", tags=["MCP  Connection Management"])
-app.include_router(acl_router, prefix=f"/api/{settings.API_VERSION}", tags=["Permission Management"])
+app.include_router(acl_router, prefix=f"/api/{settings.API_VERSION}", tags=["ACL Management"])
 app.include_router(auth_provider_router, tags=["Authentication"])
 
 # Register Anthropic MCP Registry API (public API for MCP servers only)

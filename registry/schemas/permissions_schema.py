@@ -1,8 +1,8 @@
 """
-Pydantic Schemas for Permission Management API v1
+Pydantic Schemas for ACL Management API v1
 
 These schemas define the request and response models for the
-Permission Management endpoints based on the API documentation.
+ACL Management endpoints based on the API documentation.
 """
 
 from typing import List, Optional
