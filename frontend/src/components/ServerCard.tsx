@@ -435,12 +435,14 @@ const ServerCard: React.FC<ServerCardProps> = ({
         </div>
       )}
 
-      <ServerConfigModal
-        server={server}
-        isOpen={showConfig}
-        onClose={() => setShowConfig(false)}
-        onShowToast={onShowToast}
-      />
+      {showConfig && (
+        <ServerConfigModal
+          server={server}
+          isOpen={showConfig}
+          onClose={() => setShowConfig(false)}
+          onShowToast={onShowToast}
+        />
+      )}
 
       {showApiKeyDialog && (
         <ServerAuthorizationModal
