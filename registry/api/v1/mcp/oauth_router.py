@@ -160,8 +160,6 @@ async def oauth_callback(
                 except Exception as e:
                     logger.error(f"[MCP OAuth] Could not clear reconnection (manager not initialized): {e}")
 
-                # TODO: Fetch tools, resources, and prompts in parallel
-                # This should be done asynchronously in the background
                 logger.debug(f"[MCP OAuth] User connection created for {server_name}")
 
         except Exception as error:
@@ -402,7 +400,7 @@ async def refresh_oauth_tokens(
 
 
 @router.delete("/oauth/token/{server_id}")
-async def refresh_oauth_tokens(
+async def delete_oauth_tokens(
         server_id: str,
         current_user: CurrentUser
 ) -> Dict[str, Any]:
