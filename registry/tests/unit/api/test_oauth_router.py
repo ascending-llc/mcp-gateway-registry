@@ -1,6 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, AsyncMock
 from registry.api.v1.mcp.oauth_router import router
 from registry.services.oauth.mcp_service import MCPService
 from fastapi import Request
@@ -91,24 +91,19 @@ def client():
     # Override the get_mcp_service dependency
     app.dependency_overrides[get_mcp_service] = lambda: mock_mcp_service
 
-    # Mock get_service_config to return a valid server document
-    from registry.api.v1.mcp.connection_router import get_server_config
-
-    async def mock_get_server_config(server_id: str):
-        """Mock server config for testing"""
-        mock_server = Mock()
-        mock_server.id = ObjectId(TEST_SERVER_ID)
-        mock_server.serverName = "test_server"
-        mock_server.config = {
-            "oauth": {
-                "provider": "github",
-                "client_id": "test_client_id"
-            }
+    # Mock server config
+    mock_server = Mock()
+    mock_server.id = ObjectId(TEST_SERVER_ID)
+    mock_server.serverName = "test_server"
+    mock_server.config = {
+        "oauth": {
+            "provider": "github",
+            "client_id": "test_client_id"
         }
-        return mock_server
+    }
 
-    # Patch get_server_config in the oauth_router module
-    with patch('registry.api.v1.mcp.oauth_router.get_server_config', side_effect=mock_get_server_config):
+    with patch('registry.api.v1.mcp.oauth_router.server_service_v1') as mock_server_service:
+        mock_server_service.get_server_by_id = AsyncMock(return_value=mock_server)
         yield TestClient(app)
 
 

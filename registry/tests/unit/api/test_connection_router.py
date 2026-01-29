@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from unittest.mock import Mock, patch, AsyncMock
 from registry.api.v1.mcp.connection_router import router
 from registry.services.oauth.mcp_service import MCPService
-from fastapi import Request, HTTPException
+from fastapi import Request
 from bson import ObjectId
 from registry.schemas.enums import ConnectionState
 from registry.services.oauth.mcp_service import get_mcp_service
@@ -105,34 +105,34 @@ class TestConnectionRouter:
         mock_server.serverName = TEST_SERVER_NAME
         mock_server.config = {"oauth": {"provider": "github"}}
 
-        # Mock get_server_config to return the mock server
-        with patch('registry.api.v1.mcp.connection_router.get_server_config', AsyncMock(return_value=mock_server)):
-            # Mock connection service to successfully disconnect
-            mock_mcp_service.connection_service.disconnect_user_connection.return_value = True
+        # Mock server_service_v1.get_server_by_id to return the mock server
+        mock_server_service_v1.get_server_by_id.return_value = mock_server
+        
+        # Mock connection service to successfully disconnect
+        mock_mcp_service.connection_service.disconnect_user_connection.return_value = True
 
-            # Mock OAuth service to return needs_connection=True and response data
-            mock_mcp_service.oauth_service.handle_reinitialize_auth.return_value = (True, {"status": "success"})
+        # Mock OAuth service to return needs_connection=True and response data
+        mock_mcp_service.oauth_service.handle_reinitialize_auth.return_value = (True, {"status": "success"})
 
-            # Mock connection service to successfully create connection
-            mock_mcp_service.connection_service.create_user_connection.return_value = None
+        # Mock connection service to successfully create connection
+        mock_mcp_service.connection_service.create_user_connection.return_value = None
 
-            response = client.post(f"/mcp/{TEST_SERVER_ID}/reinitialize")
+        response = client.post(f"/mcp/{TEST_SERVER_ID}/reinitialize")
 
-            assert response.status_code == 200
-            response_data = response.json()
-            assert response_data["status"] == "success"
+        assert response.status_code == 200
+        response_data = response.json()
+        assert response_data["status"] == "success"
 
     def test_reinitialize_server_not_found(self, client):
         """Test reinitialization with non-existent server"""
-        # Mock get_server_config to raise HTTPException 404
-        with patch('registry.api.v1.mcp.connection_router.get_server_config',
-                   AsyncMock(side_effect=HTTPException(status_code=404, detail="Server not found"))):
-            response = client.post(f"/mcp/{TEST_SERVER_ID}/reinitialize")
+        # Mock server_service_v1.get_server_by_id to return None
+        mock_server_service_v1.get_server_by_id.return_value = None
+        
+        response = client.post(f"/mcp/{TEST_SERVER_ID}/reinitialize")
 
-            # Note: The endpoint catches all exceptions and returns 500, even HTTPException
-            assert response.status_code == 500
-            assert "Internal server error" in response.json()["detail"]
-            assert "Server not found" in response.json()["detail"]
+        # Endpoint raises HTTPException 404
+        assert response.status_code == 404
+        assert "Server not found" in response.json()["detail"]
 
     def test_reinitialize_server_disconnect_failure(self, client):
         """Test reinitialization when disconnect fails but continues"""
@@ -142,22 +142,24 @@ class TestConnectionRouter:
         mock_server.serverName = TEST_SERVER_NAME
         mock_server.config = {"oauth": {"provider": "github"}}
 
-        with patch('registry.api.v1.mcp.connection_router.get_server_config', AsyncMock(return_value=mock_server)):
-            # Mock connection service to fail disconnect
-            mock_mcp_service.connection_service.disconnect_user_connection.return_value = False
+        # Mock server_service_v1.get_server_by_id to return the mock server
+        mock_server_service_v1.get_server_by_id.return_value = mock_server
+        
+        # Mock connection service to fail disconnect
+        mock_mcp_service.connection_service.disconnect_user_connection.return_value = False
 
-            # Mock OAuth service to return needs_connection=True and response data
-            mock_mcp_service.oauth_service.handle_reinitialize_auth.return_value = (True, {"status": "success"})
+        # Mock OAuth service to return needs_connection=True and response data
+        mock_mcp_service.oauth_service.handle_reinitialize_auth.return_value = (True, {"status": "success"})
 
-            # Mock connection service to successfully create connection
-            mock_mcp_service.connection_service.create_user_connection.return_value = None
+        # Mock connection service to successfully create connection
+        mock_mcp_service.connection_service.create_user_connection.return_value = None
 
-            response = client.post(f"/mcp/{TEST_SERVER_ID}/reinitialize")
+        response = client.post(f"/mcp/{TEST_SERVER_ID}/reinitialize")
 
-            # Should still succeed even if disconnect fails
-            assert response.status_code == 200
-            response_data = response.json()
-            assert response_data["status"] == "success"
+        # Should still succeed even if disconnect fails
+        assert response.status_code == 200
+        response_data = response.json()
+        assert response_data["status"] == "success"
 
     def test_reinitialize_server_oauth_failure(self, client):
         """Test reinitialization when OAuth handling fails"""
@@ -167,18 +169,20 @@ class TestConnectionRouter:
         mock_server.serverName = TEST_SERVER_NAME
         mock_server.config = {"oauth": {"provider": "github"}}
 
-        with patch('registry.api.v1.mcp.connection_router.get_server_config', AsyncMock(return_value=mock_server)):
-            # Mock connection service to successfully disconnect
-            mock_mcp_service.connection_service.disconnect_user_connection.return_value = True
+        # Mock server_service_v1.get_server_by_id to return the mock server
+        mock_server_service_v1.get_server_by_id.return_value = mock_server
+        
+        # Mock connection service to successfully disconnect
+        mock_mcp_service.connection_service.disconnect_user_connection.return_value = True
 
-            # Mock OAuth service to raise an exception
-            mock_mcp_service.oauth_service.handle_reinitialize_auth.side_effect = Exception("OAuth error")
+        # Mock OAuth service to raise an exception
+        mock_mcp_service.oauth_service.handle_reinitialize_auth.side_effect = Exception("OAuth error")
 
-            response = client.post(f"/mcp/{TEST_SERVER_ID}/reinitialize")
+        response = client.post(f"/mcp/{TEST_SERVER_ID}/reinitialize")
 
-            # Should return 500 internal server error
-            assert response.status_code == 500
-            assert "Internal server error" in response.json()["detail"]
+        # Should return 500 internal server error
+        assert response.status_code == 500
+        assert "Internal server error" in response.json()["detail"]
 
     def test_reinitialize_server_connection_failure(self, client):
         """Test reinitialization when connection creation fails"""
@@ -188,21 +192,23 @@ class TestConnectionRouter:
         mock_server.serverName = TEST_SERVER_NAME
         mock_server.config = {"oauth": {"provider": "github"}}
 
-        with patch('registry.api.v1.mcp.connection_router.get_server_config', AsyncMock(return_value=mock_server)):
-            # Mock connection service to successfully disconnect
-            mock_mcp_service.connection_service.disconnect_user_connection.return_value = True
+        # Mock server_service_v1.get_server_by_id to return the mock server
+        mock_server_service_v1.get_server_by_id.return_value = mock_server
+        
+        # Mock connection service to successfully disconnect
+        mock_mcp_service.connection_service.disconnect_user_connection.return_value = True
 
-            # Mock OAuth service to return needs_connection=True and response data
-            mock_mcp_service.oauth_service.handle_reinitialize_auth.return_value = (True, {"status": "success"})
+        # Mock OAuth service to return needs_connection=True and response data
+        mock_mcp_service.oauth_service.handle_reinitialize_auth.return_value = (True, {"status": "success"})
 
-            # Mock connection service to fail creating connection
-            mock_mcp_service.connection_service.create_user_connection.side_effect = Exception("Connection failed")
+        # Mock connection service to fail creating connection
+        mock_mcp_service.connection_service.create_user_connection.side_effect = Exception("Connection failed")
 
-            response = client.post(f"/mcp/{TEST_SERVER_ID}/reinitialize")
+        response = client.post(f"/mcp/{TEST_SERVER_ID}/reinitialize")
 
-            # Should return 500 internal server error
-            assert response.status_code == 500
-            assert "Internal server error" in response.json()["detail"]
+        # Should return 500 internal server error
+        assert response.status_code == 500
+        assert "Internal server error" in response.json()["detail"]
 
     def test_get_all_connection_status_success(self, client):
         """Test successful retrieval of all connection statuses"""
@@ -261,38 +267,40 @@ class TestConnectionRouter:
 
     def test_get_server_connection_status_success(self, client):
         """Test successful retrieval of single server connection status"""
-        # Mock get_server_config to return a server
+        # Mock server config
         mock_server = Mock()
         mock_server.id = ObjectId(TEST_SERVER_ID)
         mock_server.serverName = TEST_SERVER_NAME
         mock_server.config = {"oauth": {"provider": "github"}}
 
+        # Mock server_service_v1.get_server_by_id to return the mock server
+        mock_server_service_v1.get_server_by_id.return_value = mock_server
+        
         # Mock get_single_server_connection_status to return status
         mock_get_single_server_connection_status.return_value = {
             "connection_state": ConnectionState.CONNECTED,
             "requires_oauth": True
         }
 
-        with patch('registry.api.v1.mcp.connection_router.get_server_config', AsyncMock(return_value=mock_server)):
-            response = client.get(f"/mcp/connection/status/{TEST_SERVER_ID}")
+        response = client.get(f"/mcp/connection/status/{TEST_SERVER_ID}")
 
-            assert response.status_code == 200
-            response_data = response.json()
-            assert response_data["success"] == True
-            assert response_data["serverName"] == TEST_SERVER_NAME
-            assert response_data["connectionState"] == ConnectionState.CONNECTED
-            assert response_data["requiresOAuth"] == True
-            assert response_data["serverId"] == TEST_SERVER_ID
+        assert response.status_code == 200
+        response_data = response.json()
+        assert response_data["success"] == True
+        assert response_data["serverName"] == TEST_SERVER_NAME
+        assert response_data["connectionState"] == ConnectionState.CONNECTED
+        assert response_data["requiresOAuth"] == True
+        assert response_data["serverId"] == TEST_SERVER_ID
 
     def test_get_server_connection_status_not_found(self, client):
         """Test retrieval of single server connection status when server not found"""
-        # Mock get_server_config to raise HTTPException 404
-        with patch('registry.api.v1.mcp.connection_router.get_server_config',
-                   AsyncMock(side_effect=HTTPException(status_code=404, detail="Server not found"))):
-            response = client.get(f"/mcp/connection/status/{TEST_SERVER_ID}")
+        # Mock server_service_v1.get_server_by_id to return None
+        mock_server_service_v1.get_server_by_id.return_value = None
+        
+        response = client.get(f"/mcp/connection/status/{TEST_SERVER_ID}")
 
-            assert response.status_code == 404
-            assert "Server not found" in response.json()["detail"]
+        assert response.status_code == 404
+        assert "Server not found" in response.json()["detail"]
 
     def test_get_server_connection_status_failure(self, client):
         """Test failure when retrieving single server connection status"""
@@ -302,13 +310,15 @@ class TestConnectionRouter:
         mock_server.serverName = TEST_SERVER_NAME
         mock_server.config = {"oauth": {"provider": "github"}}
 
+        # Mock server_service_v1.get_server_by_id to return the mock server
+        mock_server_service_v1.get_server_by_id.return_value = mock_server
+        
         mock_get_single_server_connection_status.side_effect = Exception("Status error")
 
-        with patch('registry.api.v1.mcp.connection_router.get_server_config', AsyncMock(return_value=mock_server)):
-            response = client.get(f"/mcp/connection/status/{TEST_SERVER_ID}")
+        response = client.get(f"/mcp/connection/status/{TEST_SERVER_ID}")
 
-            assert response.status_code == 500
-            assert f"Failed to get connection status for {TEST_SERVER_ID}" in response.json()["detail"]
+        assert response.status_code == 500
+        assert f"Failed to get connection status for {TEST_SERVER_ID}" in response.json()["detail"]
 
     def test_check_auth_values_with_tokens(self, client):
         """Test checking auth values when OAuth tokens exist"""

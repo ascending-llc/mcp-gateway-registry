@@ -71,6 +71,8 @@ async def reinitialize_server(
             content=response_data
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[Reinitialize] Unexpected error for {server_id}: {e}", exc_info=True)
         raise HTTPException(

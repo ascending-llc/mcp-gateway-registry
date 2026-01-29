@@ -17,9 +17,6 @@ import asyncio
 from typing import Dict, List, Optional, Tuple, Any, Set
 from datetime import datetime, timezone
 from beanie import PydanticObjectId
-from fastapi import HTTPException
-from starlette import status
-
 from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 from registry.schemas.server_api_schemas import (
     ServerCreateRequest,
