@@ -163,99 +163,70 @@ These enums are not currently imported via `import-schema`. Updates to the `impo
 
 ### Service Design
 
-The ACL service needs to facilitate the following operations: 
-1. Admin/Owner can share resource with specific user 
-2. Admin/Owner can share resource with specific group
-3. Admin/Owner can share resource with everyone 
-4. Admin/Owner can remove all permissions from resource (in the case of resource deletion)
+The ACL service provides the following core operations:
+
+1. Grant or update permissions for a principal (user, group, or public) on a resource: `grant_permission`
+2. Delete all ACL entries for a resource, optionally filtered by permission bits: `delete_acl_entries_for_resource`
+3. Delete a single ACL entry for a resource and principal: `delete_permission`
+4. Get a permissions map for a user (across all resources): `get_permissions_map_for_user_id`
+5. Search for principals (users, groups) by query string: `search_principals`
+6. Get all ACL permissions for a specific resource: `get_resource_permissions`
+
+Example method signatures:
 
 ```python
-from datetime import datetime, timezone
-from typing import Optional, Union
-from packages.models._generated import IAccessRole
-from packages.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
-from beanie import PydanticObjectId
-from registry.core.acl_constants import ResourceType, PermissionBits, PrincipalType
-
 class ACLService:
-    async def grant_permission(
-        self,
-        principal_type: str,
-        principal_id: Optional[Union[PydanticObjectId, str]],
-        resource_type: str,
-        resource_id: PydanticObjectId,
-        role_id: Optional[PydanticObjectId] = None,
-        perm_bits: Optional[int] = None,
-    ) -> IAclEntry:
-        """
-        Grant ACL permission to a principal (user or group) for a specific resource.
-        """
-
-    async def delete_acl_entries_for_resource(
-        self,
-        resource_type: str,
-        resource_id: PydanticObjectId,
-        perm_bits_to_delete: Optional[int] = None
-    ) -> int:
-        """
-        Bulk delete ACL entries for a given resource, optionally deleting all entries with permBits less than or equal to the specified value.
-        """
-
-    async def get_permissions_map_for_user_id(
-        self,
-        principal_type: str,
-        principal_id: PydanticObjectId,
-    ) -> dict:
-        """
-        Return a permissions map for a user, showing access rights for each resource type and resource ID.
-        """
-
-    async def delete_permission(
-        self,
-        resource_type: str,
-        resource_id: PydanticObjectId,
-        principal_type: str,
-        principal_id: Optional[Union[PydanticObjectId, str]]
-    ) -> int:
-        """
-        Remove a single ACL entry for a given resource, principal type, and principal ID.
-        """
+    async def grant_permission(principal_type: str, principal_id: Optional[Union[PydanticObjectId, str]], resource_type: str, resource_id: PydanticObjectId, role_id: Optional[PydanticObjectId] = None, perm_bits: Optional[int] = None) -> IAclEntry: ...
+    async def delete_acl_entries_for_resource(self, resource_type: str, resource_id: PydanticObjectId, perm_bits_to_delete: Optional[int] = None) -> int: ...
+    async def delete_permission(self, resource_type: str, resource_id: PydanticObjectId, principal_type: str, principal_id: Optional[Union[PydanticObjectId, str]]) -> int: ...
+    async def get_permissions_map_for_user_id(self, principal_type: str, principal_id: PydanticObjectId) -> dict: ...
+    async def search_principals(self, query: str, limit: int = 30, principal_types: Optional[List[str]] = None) -> List[dict]: ...
+    async def get_resource_permissions(self, resource_type: str, resource_id: PydanticObjectId) -> Dict[str, Any]: ...
 ```
 
+These methods are implemented in `registry/services/access_control_service.py` and are used by the API routes in `registry/api/v1/acl_routes.py`.
 
-### Exposed API Endpoints
+### API Endpoints
 
 The following REST API endpoints are exposed for ACL management:
 
-- **GET /permissions/search-principals**
-    - **Purpose:** Search for principals (users, groups, public) by query string for ACL sharing UI and permission assignment.
+- **GET `/permissions/search-principals`**
+    - **Purpose:** Search for principals (users, groups) by query string for ACL sharing UI and permission assignment.
     - **Query Parameters:**
         - `query` (string, required): The search string for principal name, email, or username.
         - `limit` (int, optional): Maximum number of results to return (default: 30).
-        - `principal_types` (list of string, optional): Filter by principal type (e.g., `user`, `group`). 
+        - `principal_types` (list of string, optional): Filter by principal type (e.g., `user`, `group`).
     - **Response:**
         ```json
         [
-          {
-            "principal_type": "<user | group >",
-            "principal_id": "<id>",
-            "display_name": "...",
-          }
+            {
+                "principal_type": "user",
+                "principal_id": "<id>",
+                "display_name": "..."
+            },
         ]
         ```
 
-- **GET /permissions/servers/{server_id}**
-    - **Purpose:** Get the current user's permissions for a specific server resource.
+- **GET `/permissions/{resource_type}/{resource_id}`**
+    - **Purpose:** Get all ACL permissions for a specific resource.
     - **Response:**
         ```json
         {
-            "server_id": "<id>",
-            "permissions": {"VIEW": true, "EDIT": false, ...}
+            "permissions": [
+                {
+                    "principal_type": "user",
+                    "principal_id": "<id>",
+                    "perm_bits": 1,
+                    "role_id": "<role_id>",
+                    "granted_at": "2024-01-01T00:00:00Z",
+                    "updated_at": "2024-01-01T00:00:00Z"
+                },
+            ]
         }
         ```
 
-- **PUT /permissions/servers/{server_id}**
-    - **Purpose:** Update ACL permissions for a specific server.
+- **PUT `/permissions/{resource_type}/{resource_id}`**
+    - **Purpose:** Update ACL permissions for a specific resource.
     - **Request:**
         ```json
         {
@@ -268,21 +239,11 @@ The following REST API endpoints are exposed for ACL management:
         ```json
         {
             "message": "Updated <count> and deleted <count> permissions",
-            "results": {"server_id": "<id>"}
+            "results": {"resource_id": "<id>"}
         }
-        ```
- 
-This pattern can be extended to include APIs for agent, prompt groups, and other resource types.
+            ```
 
 ## Additional Considerations
 
 ### ACL Service Cache
 TBD after evaulating performance of initial service implementation
-
-## Roadmap 
-Listed below are work items that need to be completed for ACL Service Integration 
-- Write the ACLService in the registry project
-- Write authentication middleware to connect jarvis and registry
-- Refactor `import-schema` tool to include constants and enums from `librechat/data-provider`
-- Update the Resource-based services to incorporate ACL permissions
-- point jarvis to `server_service_v1`

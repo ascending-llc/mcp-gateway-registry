@@ -215,11 +215,9 @@ class ACLService:
 	async def search_principals(
 		self,
 		query: str,
-		page: int = 1,
-		per_page: int = 30,
+		limit: int = 30,
 		principal_types: Optional[List[str]] = None,
-		current_user: Optional[dict] = None
-	) -> Dict[str, Any]:
+	) -> List:
 		"""
 		Search for principals (users, groups, agents) matching the query string.
 		Returns paginated results and metadata.
@@ -228,9 +226,6 @@ class ACLService:
 		if not query or len(query) < 2:
 			raise ValueError("Query string must be at least 2 characters long.")
 
-		page = max(1, page)
-		per_page = max(1, min(100, per_page))
-		skip = (page - 1) * per_page
 
 		valid_types = {PrincipalType.USER.value, PrincipalType.GROUP.value}
 		type_filters = None
@@ -243,45 +238,50 @@ class ACLService:
 			if not type_filters:
 				type_filters = None
 
-		total_count = 0
-		current_user_id = current_user.get("user_id")
-
-		# Collect user results
-		user_results = []
+		results = []
 		if not type_filters or PrincipalType.USER.value in type_filters:
-			user_results = await user_service.search_users(query)
-			user_results = [u for u in user_results if str(getattr(u, "id")) != current_user_id]
+			for user in await user_service.search_users(query):
+				user_id = str(getattr(user, "id"))
+				results.append({
+					"principal_type": PrincipalType.USER.value,
+					"principal_id": user_id,
+					"display_name": getattr(user, "name", None) or getattr(user, "email", None),
+				})
 
-		# Collect group results
-		group_results = []
+
 		if not type_filters or PrincipalType.GROUP.value in type_filters:
-			group_results = await group_service.search_groups(query)
+			for group in await group_service.search_groups(query):
+				results.append({
+					"principal_type": PrincipalType.GROUP.value,
+					"principal_id": str(getattr(group, "id")),
+					"display_name": getattr(group, "name", None) or getattr(group, "email", None),
+				})
+				
+		return results[:limit]
 
-		all_results = []
-		for user in user_results:
-			all_results.append({
-				"principal_type": PrincipalType.USER.value,
-				"principal_id": str(getattr(user, "id")),
-				"display_name": getattr(user, "name", None) or getattr(user, "email", None),
-			})
-		for group in group_results:
-			all_results.append({
-				"principal_type": PrincipalType.GROUP.value,
-				"principal_id": str(getattr(group, "id")),
-				"display_name": getattr(group, "name", None) or getattr(group, "email", None),
-			})
+	async def get_resource_permissions(
+		self,
+		resource_type: str,
+		resource_id: PydanticObjectId,
+	) -> Dict[str, Any]:
+		"""
+		Get all ACL permissions for a specific resource.
+		Returns a list of principals with their permission bits.
+		"""
+		try:
+			acl_entries = await IAclEntry.find({
+				"resourceType": resource_type,
+				"resourceId": resource_id
+			}).to_list()
 
-		total_count = len(all_results)
-		paginated_results = all_results[skip:skip+per_page]
-		has_next = skip + per_page < total_count
+			return {
+				"permissions": acl_entries
+			}
+		except Exception as e:
+			logger.error(f"Error fetching resource permissions for {resource_type} {resource_id}: {e}")
+			raise
 
-		return {
-			"results": paginated_results,
-			"total_count": total_count,
-			"page": page,
-			"per_page": per_page,
-			"has_next": has_next
-		}
+
 
 
 # Singleton instance

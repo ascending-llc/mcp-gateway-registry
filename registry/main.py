@@ -29,10 +29,10 @@ from registry.health.routes import router as health_router
 from registry.api.v1.mcp.oauth_router import router as oauth_router
 from registry.api.redirect_routes import router as auth_provider_router
 from registry.api.v1.mcp.connection_router import router as connection_router
-from registry.api.v1.permissions_routes import router as permissions_router
+from registry.api.v1.acl_routes import router as acl_router
 from registry.version import __version__
 from registry.api.proxy_routes import router as proxy_router, shutdown_proxy_client
-from registry.auth.dependencies import CurrentUser
+from registry.auth.dependencies import CurrentUserWithACLMap
 from packages.models._generated import IUser
 
 # Import services for initialization
@@ -197,7 +197,7 @@ app.include_router(search_router, prefix=f"/api/{settings.API_VERSION}", tags=["
 app.include_router(health_router, prefix="/api/health", tags=["Health Monitoring"])
 app.include_router(oauth_router, prefix=f"/api/{settings.API_VERSION}", tags=["MCP  Oauth Management"])
 app.include_router(connection_router, prefix=f"/api/{settings.API_VERSION}", tags=["MCP  Connection Management"])
-app.include_router(permissions_router, prefix=f"/api/{settings.API_VERSION}", tags=["Permission Management"])
+app.include_router(acl_router, prefix=f"/api/{settings.API_VERSION}", tags=["Permission Management"])
 app.include_router(auth_provider_router, tags=["Authentication"])
 
 # Register Anthropic MCP Registry API (public API for MCP servers only)
@@ -250,7 +250,7 @@ app.openapi = custom_openapi
 
 # Add user info endpoint for React auth context
 @app.get("/api/auth/me")
-async def get_current_user(user_context: CurrentUser):
+async def get_current_user(user_context: CurrentUserWithACLMap):
     """Get current user information for React auth context"""
     return {
         "username": user_context.get("username"),
@@ -260,7 +260,8 @@ async def get_current_user(user_context: CurrentUser):
         "groups": user_context.get("groups", []),
         "can_modify_servers": user_context.get("can_modify_servers", False),
         "is_admin": user_context.get("is_admin", False),
-        "user_id": user_context.get("user_id")
+        "user_id": user_context.get("user_id"),
+        "acl_permission_map": user_context.get("acl_permission_map", {})
     }
 
 
