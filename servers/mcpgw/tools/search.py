@@ -128,86 +128,106 @@ def get_tools() -> List[Tuple[str, Callable]]:
 
     # Define tool wrapper functions with proper signatures and decorators
     async def discover_tools(
-        query: str = Field(..., description="What you want to accomplish (e.g., 'search for current news', 'get weather data', 'analyze GitHub repos')"),
+        query: str = Field(..., description="Natural language description of what you want to accomplish (e.g., 'find latest news', 'search GitHub repositories', 'get weather data', 'analyze code')"),
         top_n: int = Field(5, description="Maximum number of tools to return (default: 5)"),
         ctx: Optional[Context] = None
     ) -> List[Dict[str, Any]]:
         """
-        🔍 AUTO-USE: Find and discover tools to accomplish any task.
+        🔍 AUTO-USE: Discover tools to accomplish any task using semantic search.
 
         **When to use this tool:**
-        - User asks for current information, news, or web search
-        - User needs data from external services (GitHub, databases, APIs)
-        - User requests functionality you don't have built-in
-        - You're unsure if a tool exists for a task
+        - User asks for current information, news, or real-time data
+        - User needs web search, research, or fact-checking
+        - User requests GitHub operations (repos, PRs, issues, code)
+        - User needs email, calendar, or productivity features
+        - User wants database operations or cloud services
+        - Any request requiring external services or APIs
 
-        **Examples of queries:**
-        - "search web" or "search news" → Finds web search tools (Tavily)
-        - "github pull requests" → Finds GitHub-related tools
-        - "weather information" → Finds weather tools
-        - "analyze code" → Finds code analysis tools
+        **Query Tips for Best Results:**
+        - Use descriptive phrases: "find latest news about AI" (not just "news")
+        - Include action verbs: "search", "find", "get", "create", "update"
+        - Specify domain: "GitHub pull requests", "web search", "calendar events"
+        - Be specific about intent: "search for Donald Trump news" vs "news"
+
+        **Example Queries:**
+        - "search web for current events" → Finds Tavily search tools
+        - "find latest news articles" → Finds web search and research tools
+        - "manage GitHub pull requests" → Finds GitHub PR management tools
+        - "schedule calendar meeting" → Finds Google Calendar tools
+        - "send email message" → Finds Gmail/email tools
+        - "analyze code repository" → Finds GitHub code analysis tools
+
+        **Search Technology:**
+        Uses hybrid semantic + keyword search with AI reranking for high precision.
+        Matches your query against tool descriptions, names, and capabilities.
 
         **After discovering tools:**
         Use execute_tool with the discovered tool_name and server_path.
 
         **Returns:** List of tools with:
         - tool_name: Name to use with execute_tool
-        - server_path: Server location (e.g., '/tavilysearch')
+        - server_path: Server location (e.g., '/tavilysearch', '/github-copilot')
         - description: What the tool does
-        - input_schema: Required parameters
-        - discovery_score: Relevance score (0.0-1.0)
+        - input_schema: Required and optional parameters
+        - discovery_score: Relevance score (0.0-1.0, higher is better)
 
-        ⚠️ Use this proactively when users ask questions requiring external data!
+        ⚠️ ALWAYS use this proactively when users ask questions requiring external data or real-time information!
         """
         return await discover_tools_impl(query, top_n, ctx)
 
     async def discover_servers(
-        query: str = Field("", description="Keywords to filter servers (e.g., 'github', 'search', 'database') - leave empty to see all servers"),
-        top_n: int = Field(10, description="Maximum number of servers to return (default: 10)"),
+        query: str = Field("", description="Natural language query or keywords to find servers (e.g., 'web search', 'github integration', 'productivity tools', 'email and calendar') - leave empty to see all servers"),
+        top_n: int = Field(3, description="Maximum number of servers to return (default: 3)"),
         ctx: Optional[Context] = None
     ) -> List[Dict[str, Any]]:
         """
-        🔍 Discover available MCP servers with complete capabilities.
+        🔍 Discover available MCP servers using semantic search.
 
         **When to use:**
-        - User asks "what can you do?" or "what services do you have?"
-        - You want to see all available tools, resources, and prompts
-        - User mentions a service by name (e.g., "GitHub", "Tavily")
+        - User asks "what can you do?" or "what services are available?"
+        - Exploring capabilities before finding specific tools
+        - User mentions a service category (web search, code management, productivity)
+        - Need to understand server capabilities and available tools
 
-        **Query examples:**
-        - "" (empty) → Returns ALL available servers
-        - "search" → Finds search-related servers (Tavily, etc.)
-        - "github" → Finds GitHub integration servers
-        - "database" → Finds database servers
+        **Query Tips for Best Results:**
+        - Use descriptive phrases: "web search and news" (not just "search")
+        - Specify use case: "code repository management", "email automation"
+        - Include domain keywords: "productivity", "development", "communication"
+        - Leave empty ("") to browse all available servers
+
+        **Example Queries:**
+        - "" (empty) → Returns ALL available servers (browsing mode)
+        - "web search real-time news" → Finds Tavily, web search servers
+        - "github code repository" → Finds GitHub Copilot server
+        - "email calendar productivity" → Finds Google Workspace server
+        - "cloud infrastructure AWS" → Finds AWS-related servers
+        - "database operations" → Finds database integration servers
+
+        **Search Technology:**
+        Uses hybrid semantic + keyword search with AI reranking.
+        Searches server descriptions, tags, tool names, and capabilities.
+
+        **Key Differences from discover_tools:**
+        - discover_servers: Browse server catalogs and capabilities (broader)
+        - discover_tools: Find specific tools for immediate tasks (narrower)
+        
+        Use discover_tools when you know what task to accomplish.
+        Use discover_servers when exploring what's available.
 
         **Returns:** Comprehensive server information:
-        - serverName: Display name
-        - path: Server routing path (e.g., '/tavilysearch')
-        - config.toolFunctions: All available tools with full schemas
-        - config.resources: Available resources (URIs, caches, etc.)
+        - serverName: Display name (e.g., "github-copilot", "travily")
+        - path: Server routing path (e.g., '/github-copilot', '/tavilysearch')
+        - description: What the server does (rich semantic description)
+        - tags: Categorization tags (e.g., ["search", "web", "news"])
+        - numTools: Total number of tools available
+        - config.toolFunctions: All tools with full schemas
+        - config.tools: Comma-separated tool names
+        - config.resources: Available resources (URIs, caches)
         - config.prompts: Pre-configured prompts
-        - tags: Categorization tags
-        - numTools: Total tool count
+        - status: Server status (active/inactive)
 
-        Use this when you need a comprehensive view of available services.
-
-        Examples:
-        - 'github' - Find GitHub-related servers
-        - 'search engines' - Find search and web scraping servers
-        - 'database' - Find database integration servers
-
-        Returns:
-            List of discovered servers with complete metadata:
-            - serverName: Display name of the server
-            - path: Server path for routing (e.g., '/github')
-            - config: Full configuration including:
-              * toolFunctions: All available tools with schemas
-              * resources: Available resources (URIs, cache, etc.)
-              * prompts: Pre-configured prompts
-              * capabilities: Server capabilities (tools, resources, prompts)
-            - tags: Categorization tags
-            - numTools: Total number of tools
-            - status: Server status (active/inactive)
+        **Pro Tip:** After discovering servers, use discover_tools with specific
+        task descriptions to find the exact tool you need to execute.
         """
         return await discover_servers_impl(query, top_n, ctx)
 

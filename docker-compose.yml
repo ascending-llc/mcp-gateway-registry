@@ -231,7 +231,7 @@ services:
       dockerfile: docker/Dockerfile.mcpgw
     environment:
       - PORT=8003
-      - REGISTRY_BASE_URL=http://registry:7860
+      - REGISTRY_URL=http://registry:7860
       - REGISTRY_USERNAME=${ADMIN_USER:-admin}
       - REGISTRY_PASSWORD=${ADMIN_PASSWORD}
       - JWT_SECRET_KEY=${SECRET_KEY}
