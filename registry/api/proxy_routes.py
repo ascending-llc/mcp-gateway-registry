@@ -78,6 +78,12 @@ async def _build_authenticated_headers(
     # Build complete authentication headers (OAuth, apiKey, custom)
     try:
         user_id = auth_context.get("user_id")
+        
+        # Debug logging for OAuth troubleshooting
+        if not user_id:
+            logger.error(f"Missing user_id in auth_context for OAuth server {server.serverName}. "
+                          f"Available keys: {list(auth_context.keys())}")
+        
         auth_headers = await _build_complete_headers_for_server(server, user_id)
         
         # Merge auth headers with case-insensitive override logic
