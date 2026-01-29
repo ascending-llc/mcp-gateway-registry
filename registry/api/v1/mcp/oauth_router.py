@@ -412,7 +412,7 @@ async def delete_oauth_tokens(
     user_id = current_user.get("user_id")
     try:
         results = await token_service.delete_oauth_tokens(user_id, server.serverName)
-        logger.info(f"[OAuth Refresh] Deleted OAuth tokens for {server_id},results: {results}")
+        logger.info(f"[OAuth Refresh] Deleted OAuth tokens for {server_id}, results: {results}")
         message = "successfully" if results else "failed"
         return {
             "success": results,
