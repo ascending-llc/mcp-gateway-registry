@@ -6,7 +6,6 @@ from typing import Optional, Dict, Any, Type, TypeVar
 from .adapters.factory import VectorStoreFactory
 from .config import BackendConfig
 from .adapters.adapter import VectorStoreAdapter
-from .repository import Repository
 
 logger = logging.getLogger(__name__)
 
@@ -109,25 +108,6 @@ class DatabaseClient:
         """
         self._ensure_initialized()
         return self._adapter
-
-    def for_model(self, model_class: Type[T]) -> Repository[T]:
-        """
-        Get repository for specific model class.
-        
-        This is the recommended way to interact with the database.
-        Provides type-safe, ORM-style API for model operations.
-        
-        Args:
-            model_class: Model class (must have to_document/from_document methods)
-        """
-        self._ensure_initialized()
-
-        model_name = model_class.__name__
-
-        if model_name not in self._repositories:
-            self._repositories[model_name] = Repository(self, model_class)
-
-        return self._repositories[model_name]
 
     def get_info(self) -> Dict[str, Any]:
         """

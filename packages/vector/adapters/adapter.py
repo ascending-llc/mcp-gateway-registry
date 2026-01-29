@@ -125,11 +125,11 @@ class VectorStoreAdapter(ABC):
         store = self.get_vector_store(collection_name)
 
         # Smart filter normalization
-        native_filters = self._normalize_filters(filters)
+        native_filters = self.normalize_filters(filters)
 
         return store.similarity_search(query, k=k, filters=native_filters, **kwargs)
 
-    def _normalize_filters(self, filters: Any) -> Any:
+    def normalize_filters(self, filters: Any) -> Any:
         """
         Normalize filters to native format.
         
@@ -259,6 +259,26 @@ class VectorStoreAdapter(ABC):
             "Use database-specific API to retrieve document by ID."
         )
 
+    def get_by_ids(
+            self,
+            ids: List[str],
+            collection_name: Optional[str] = None
+    ) -> List[Document]:
+        """
+        Extended feature: Get multiple documents by IDs
+        
+        Args:
+            ids: List of document IDs
+            collection_name: Target collection
+            
+        Returns:
+            List of LangChain Documents (may be less than requested if some IDs not found)
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement get_by_ids(). "
+            "Use database-specific API to retrieve documents by IDs."
+        )
+
     @abstractmethod
     def filter_by_metadata(
             self,
@@ -335,6 +355,41 @@ class VectorStoreAdapter(ABC):
         """
         raise NotImplementedError()
 
+    def search_with_rerank(
+            self,
+            query: str,
+            k: int = 10,
+            candidate_k: Optional[int] = None,
+            search_type: SearchType = SearchType.HYBRID,
+            filters: Any = None,
+            reranker_type: str = "flashrank",
+            reranker_kwargs: Optional[Dict[str, Any]] = None,
+            collection_name: Optional[str] = None,
+            **kwargs
+    ) -> List[Document]:
+        """
+        Extended feature: Search with reranking for improved relevance.
+        
+        Fetches candidate_k results, reranks them, returns top k.
+        
+        Args:
+            query: Search query
+            k: Final number of results
+            candidate_k: Number of candidates for reranking (default: k*3)
+            search_type: Type of search
+            filters: Filter conditions
+            reranker_type: Reranker to use
+            reranker_kwargs: Additional reranker parameters
+            collection_name: Target collection
+            
+        Returns:
+            List of reranked Documents
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement search_with_rerank(). "
+            "Use search() + reranker to implement this functionality."
+        )
+
     def list_collections(self) -> List[str]:
         """
         Extended feature: List all collections
@@ -359,6 +414,55 @@ class VectorStoreAdapter(ABC):
             True if collection exists
         """
         return collection_name in self.list_collections()
+
+    def update_metadata(
+            self,
+            doc_id: str,
+            metadata: Dict[str, Any],
+            collection_name: Optional[str] = None
+    ) -> bool:
+        """
+        Update metadata fields only without re-vectorization.
+
+        This is an optimization for updating non-content fields
+        like tags, status, scope, etc.
+
+        Args:
+            doc_id: Document ID
+            metadata: Metadata fields to update
+            collection_name: Target collection
+
+        Returns:
+            True if updated successfully
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement update_metadata(). "
+            "Falling back to full update with re-vectorization."
+        )
+
+    def delete_by_filter(
+            self,
+            filters: Any,
+            collection_name: Optional[str] = None
+    ) -> int:
+        """
+        Extended feature: Delete documents by filter conditions
+        
+        Automatically converts dict filters to native format before deletion.
+        
+        Args:
+            filters: Filter object (auto-converted if dict)
+                - Dict: {"field": "value"} or {"field": {"$in": ["val1", "val2"]}}
+                - Native format: Database-specific filter object
+            collection_name: Target collection
+            
+        Returns:
+            Number of deleted documents
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement delete_by_filter(). "
+            "Use database-specific API to delete documents by filter."
+        )
 
     # ========================================
     # Utility methods

@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from packages.models.enums import ToolDiscoveryMode
 
 logging.basicConfig(
     level=os.environ.get("LOGLEVEL", "INFO"),
@@ -50,14 +49,6 @@ class Settings(BaseSettings):
     @REGISTRY_BASE_URL.setter
     def REGISTRY_BASE_URL(self, value: str) -> None:
         self.REGISTRY_URL = value
-    REGISTRY_USERNAME: str = Field(
-        default="",
-        description="Username for registry authentication"
-    )
-    REGISTRY_PASSWORD: str = Field(
-        default="",
-        description="Password for registry authentication"
-    )
 
     # Server configuration
     MCP_TRANSPORT: str = Field(
@@ -93,52 +84,6 @@ class Settings(BaseSettings):
         description="Key ID for self-signed JWT tokens"
     )
 
-    # Vector search configuration
-    TOOL_DISCOVERY_MODE: ToolDiscoveryMode = Field(
-        default=ToolDiscoveryMode.EMBEDDED,
-        description="Vector search mode: 'embedded' or 'external'"
-    )
-    EMBEDDINGS_MODEL_NAME: str = Field(
-        default="all-MiniLM-L6-v2",
-        description="Name of the sentence-transformers model"
-    )
-    EMBEDDINGS_MODEL_DIMENSION: int = Field(
-        default=384,
-        description="Dimension of embeddings"
-    )
-    FAISS_CHECK_INTERVAL: float = Field(
-        default=5.0,
-        description="Interval in seconds to check for FAISS index updates"
-    )
-
-    # Weaviate Configuration
-    WEAVIATE_HOST: str = Field(default="weaviate")
-    WEAVIATE_PORT: int = Field(default=8080)
-    WEAVIATE_API_KEY: Optional[str] = Field(
-        default="test-secret-key",
-        description="API key for WEAVIATE server"
-    )
-
-    WEAVIATE_SESSION_POOL_CONNECTIONS: int = Field(
-        default=20,
-        description=" Maximum connections"
-    )
-    WEAVIATE_SESSION_POOL_MAXSIZE: int = Field(
-        default=100,
-        description="Connection pool size"
-    )
-    WEAVIATE_INIT_TIME: int = Field(
-        default=20,
-        description="Initialization time"
-    )
-    WEAVIATE_QUERY_TIME: int = Field(
-        default=120,
-        description="Query time in seconds"
-    )
-    WEAVIATE_INSERT_TIME: int = Field(
-        default=300,
-        description="Insert time in seconds"
-    )
     API_VERSION: str = "v1"
 
     model_config = SettingsConfigDict(
@@ -183,12 +128,9 @@ class Settings(BaseSettings):
         """Log current configuration (hiding sensitive values)."""
         logger.info("Configuration loaded:")
         logger.info(f"  Registry URL: {self.REGISTRY_URL}")
-        logger.info(f"  Registry Username: {'***' if self.REGISTRY_USERNAME else 'not set'}")
-        logger.info(f"  Registry Password: {'***' if self.REGISTRY_PASSWORD else 'not set'}")
         logger.info(f"  MCP Transport: {self.MCP_TRANSPORT}")
         logger.info(f"  Listen Port: {self.MCP_SERVER_LISTEN_PORT}")
         logger.info(f"  Auth Server URL: {self.AUTH_SERVER_URL}")
-        logger.info(f"  Tool Discovery Mode: {self.TOOL_DISCOVERY_MODE}")
 
 
 def parse_arguments() -> argparse.Namespace:

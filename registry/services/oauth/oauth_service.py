@@ -180,7 +180,7 @@ class MCPOAuthService:
     async def get_valid_access_token(
             self,
             user_id: str,
-            server: MCPServerDocument,
+            server: MCPServerDocument
     ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """
         Get valid access token with automatic refresh and re-authentication flow
@@ -193,7 +193,7 @@ class MCPOAuthService:
         Args:
             user_id: User ID
             server: MCPServer document
-
+            
         Returns:
             Tuple of (access_token, auth_url, error_message)
             - (token, None, None) if token is valid or refreshed successfully

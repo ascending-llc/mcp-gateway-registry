@@ -78,20 +78,33 @@ async def proxy_to_mcp_server(
     
     # Special handling for MCPGW - keep all headers as-is, don't build auth
     if not is_mcpgw:
-        # Remove gateway's Authorization header to prevent conflicts with backend auth
-        headers.pop("authorization", None)
-        headers.pop("Authorization", None)
-        
+        headers.pop("Authorization", None)  # Remove existing Authorization header
+
         # Build complete authentication headers (OAuth, apiKey, custom)
         try:
             user_id = auth_context.get("user_id")
             auth_headers = await _build_complete_headers_for_server(server, user_id)
             
-            # Merge auth headers (Authorization, custom headers, etc.)
-            # Only update Authorization and non-context headers
-            for key, value in auth_headers.items():
-                if key.lower() not in ["content-type", "accept", "user-agent"]:
-                    headers[key] = value
+            # Merge auth headers with case-insensitive override logic
+            # Protected headers that won't be overridden by auth headers
+            protected_headers = {"content-type", "accept", "user-agent"}
+
+            # Build a case-insensitive map of existing header names to their original keys
+            lowercase_header_map = {k.lower(): k for k in headers.keys()}
+
+            for auth_key, auth_value in auth_headers.items():
+                auth_key_lower = auth_key.lower()
+                if auth_key_lower in protected_headers:
+                    continue
+
+                # Remove any existing header with same name (case-insensitive)
+                existing_key = lowercase_header_map.get(auth_key_lower)
+                if existing_key is not None:
+                    headers.pop(existing_key, None)
+
+                # Add/override with the auth header and update the lowercase map
+                headers[auth_key] = auth_value
+                lowercase_header_map[auth_key_lower] = auth_key
             
             logger.debug(f"Built complete authentication headers for {server.serverName}")
             

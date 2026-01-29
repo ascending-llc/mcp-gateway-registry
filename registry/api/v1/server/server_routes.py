@@ -59,7 +59,7 @@ def get_user_context(user_context: CurrentUserWithACLMap):
 def check_admin_permission(user_context: dict) -> bool:
     """
     Check if user has admin permissions.
-    
+
     Args:
         user_context: User context dictionary from authentication
         
@@ -130,7 +130,7 @@ async def list_servers(
                 status_code=http_status.HTTP_400_BAD_REQUEST,
                 detail="Invalid status. Must be one of: active, inactive, error"
             )
-        
+
         servers, total = await server_service_v1.list_servers(
             query=query,
             scope=scope,
@@ -312,7 +312,7 @@ async def create_server(
         if not server:
             logger.error("Server creation failed without exception")
             raise ValueError("Failed to create server")
-        
+
         acl_entry = await acl_service.grant_permission(
             principal_type=PrincipalType.USER,
             principal_id=PydanticObjectId(user_id),
@@ -321,17 +321,17 @@ async def create_server(
             perm_bits=RoleBits.OWNER
         )
         
-        if not acl_entry: 
+        if not acl_entry:
             await server.delete()
             logger.error(f"Failed to create ACL entry for server: {server.id}. Rolling back server creation")
             raise ValueError(f"Failed to create ACL entry for server: {server.id}. Rolling back server creation")
-        
+
         logger.info(f"Granted user {user_id} {RoleBits.OWNER} permissions for server Id {server.id}")
         return convert_to_create_response(server)
         
     except ValueError as e:
         error_msg = str(e)
-        
+
         # Check if authentication error
         if "Authentication required" in error_msg or "not found" in error_msg:
             raise HTTPException(
@@ -341,7 +341,7 @@ async def create_server(
                     "message": error_msg,
                 }
             )
-        
+
         # Business logic errors (e.g., duplicate path, duplicate tags)
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
@@ -413,6 +413,7 @@ async def update_server(
             detail="Internal server error while updating server"
         )
 
+
 @router.delete(
     f"/servers/{{server_id}}",
     status_code=http_status.HTTP_204_NO_CONTENT,
@@ -433,16 +434,16 @@ async def delete_server(
             user_id=None,
         )
 
-        if successful_delete: 
+        if successful_delete:
             deleted_count = await acl_service.delete_acl_entries_for_resource(
                 resource_type=ResourceType.MCPSERVER,
                 resource_id=PydanticObjectId(server_id),
             )
             logger.info(f"Removed {deleted_count} ACL permissions for server Id {server_id}")
             return None  # 204 No Content
-        else: 
+        else:
             raise ValueError(f"Failed to delete server {server_id}. Skipping ACL cleanup")
-    
+
         
     except ValueError as e:
         error_msg = str(e)

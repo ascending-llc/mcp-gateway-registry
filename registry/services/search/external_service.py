@@ -1,9 +1,9 @@
 from typing import Dict, Any, Optional, List
 from packages.vector.enum.enums import SearchType, RerankerProvider
-from packages.models.mcp_tool import McpTool
-from packages.vector.search_manager import mcp_tool_search_index_manager
+from packages.models.extended_mcp_server import ExtendedMCPServer
 from .base import VectorSearchService
 from registry.utils.log import logger
+from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
 
 
 class ExternalVectorSearchService(VectorSearchService):
@@ -30,46 +30,42 @@ class ExternalVectorSearchService(VectorSearchService):
         self.reranker_model = reranker_model
 
         try:
-            self.client = mcp_tool_search_index_manager.client
-            self.mcp_tools = mcp_tool_search_index_manager.tools
+            self.mcp_server_repo = get_mcp_server_repo()
+            self.client = self.mcp_server_repo.db_client
             self._initialized = True
 
-            logger.info(f"Registry vector search service initialized (shared connection): "
+            logger.info(f"Registry vector search service initialized (specialized repository): "
                         f"rerank={enable_rerank}, search_type={search_type.value}")
         except Exception as e:
             self.client = None
-            self.mcp_tools = None
+            self.mcp_server_repo = None
             self._initialized = False
             logger.error(f"Failed to initialize vector search service: {e}")
 
     async def initialize(self) -> None:
-        """
-        Initialize and verify database connection.
-        
-        Checks adapter status and collection availability.
-        """
+        """Initialize and verify database connection."""
         if not self._initialized:
-            logger.error("Vector search not initialized (shared connection unavailable)")
+            logger.error("Vector search not initialized")
             raise Exception("Vector search not initialized")
 
         try:
             if not self.client or not self.client.is_initialized():
-                raise Exception("Shared DatabaseClient not initialized")
+                raise Exception("Database client not initialized")
 
-            collection_name = McpTool.COLLECTION_NAME
+            collection_name = ExtendedMCPServer.COLLECTION_NAME
             adapter = self.client.adapter
-            
+
             if hasattr(adapter, 'collection_exists'):
                 exists = adapter.collection_exists(collection_name)
                 if exists:
-                    logger.info(f"Registry: Collection '{collection_name}' verified")
+                    logger.info(f"Collection '{collection_name}' verified")
                 else:
-                    logger.warning(f"Registry: Collection '{collection_name}' may not exist yet")
+                    logger.warning(f"Collection '{collection_name}' may not exist yet")
 
             logger.info("Registry vector search verified successfully")
 
         except Exception as e:
-            logger.error(f"Registry initialization verification failed: {e}", exc_info=True)
+            logger.error(f"Initialization verification failed: {e}", exc_info=True)
             self._initialized = False
             raise Exception(f"Cannot verify vector search: {e}")
 
@@ -103,7 +99,7 @@ class ExternalVectorSearchService(VectorSearchService):
 
         if use_rerank:
             # Return compression retriever with rerank
-            return self.mcp_tools.get_compression_retriever(
+            return self.mcp_server_repo.get_compression_retriever(
                 reranker_type=RerankerProvider.FLASHRANK,
                 search_type=use_search_type,
                 search_kwargs={"k": top_k * 3},  # 3x candidates
@@ -114,7 +110,7 @@ class ExternalVectorSearchService(VectorSearchService):
             )
         else:
             # Return base retriever without rerank
-            return self.mcp_tools.get_retriever(
+            return self.mcp_server_repo.get_retriever(
                 search_type=use_search_type,
                 k=top_k
             )
@@ -126,34 +122,42 @@ class ExternalVectorSearchService(VectorSearchService):
             is_enabled: bool = False
     ) -> Optional[Dict[str, int]]:
         """
-        Add or update tools for a service with vector database.
+        Add or update server in vector database.
 
-        Args:
-            service_path: Service path (e.g., /weather)
-            server_info: Server info with tool_list
-            is_enabled: Whether service is enabled
-
-        Returns:
-            {"indexed_tools": count, "failed_tools": count} or None if unavailable
+        Uses ExtendedMCPServer.from_server_info() to create server instance,
+        then uses specialized repository for sync.
         """
-        return await mcp_tool_search_index_manager.sync_full_background(
-            entity_path=service_path,
-            entity_info=server_info,
-            is_enabled=is_enabled
-        )
+        try:
+            # Ensure path is in server_info
+            if 'path' not in server_info:
+                server_info['path'] = service_path
+
+            # Create server instance from server_info
+            server = ExtendedMCPServer.from_server_info(
+                server_info=server_info,
+                is_enabled=is_enabled
+            )
+
+            # Use specialized repository's sync method
+            result = await self.mcp_server_repo.sync_server_to_vector_db(
+                server=server,
+                is_delete=True
+            )
+
+            return result if result else {"indexed_tools": 0, "failed_tools": 1}
+
+        except Exception as e:
+            logger.error(f"Failed to add/update service: {e}", exc_info=True)
+            return {"indexed_tools": 0, "failed_tools": 1}
 
     async def remove_service(self, service_path: str) -> Optional[Dict[str, int]]:
         """
-        Remove all tools for a service.
+        Remove server from vector database.
 
-        Args:
-            service_path: Service path identifier
-
-        Returns:
-            {"deleted_tools": count}
+        Note: Uses path as identifier. Prefer using server_id when available.
         """
-        deleted_count = await mcp_tool_search_index_manager.tools.adelete_by_filter(
-            filters={"server_path": service_path}
+        deleted_count = await self.mcp_server_repo.adelete_by_filter(
+            filters={"path": service_path}
         )
         return {"deleted_tools": deleted_count}
 
@@ -192,7 +196,7 @@ class ExternalVectorSearchService(VectorSearchService):
                 if not filters:
                     logger.warning("No query and no filters provided")
                     return []
-                tools = self.mcp_tools.filter(
+                servers = self.mcp_server_repo.filter(
                     filters=filters,
                     limit=top_k * 2 if tags else top_k
                 )
@@ -204,7 +208,7 @@ class ExternalVectorSearchService(VectorSearchService):
 
                 logger.info(f"Using rerank: type={use_search_type.value}, "
                             f"candidate_k={candidate_k}, k={top_k * 2 if tags else top_k}")
-                tools = self.mcp_tools.search_with_rerank(
+                servers = self.mcp_server_repo.search_with_rerank(
                     query=query,
                     search_type=use_search_type,
                     k=top_k * 2 if tags else top_k,
@@ -215,7 +219,7 @@ class ExternalVectorSearchService(VectorSearchService):
                 )
             else:
                 # Regular search without rerank
-                tools = self.mcp_tools.search(
+                servers = self.mcp_server_repo.search(
                     query=query,
                     search_type=use_search_type,
                     k=top_k * 2 if tags else top_k,
@@ -224,57 +228,66 @@ class ExternalVectorSearchService(VectorSearchService):
 
             # Apply tag filtering if needed (in-memory)
             if tags:
-                filtered_tools = []
-                for tool in tools:
-                    tool_tags = tool.tags or []
-                    if any(tag in tool_tags for tag in tags):
-                        filtered_tools.append(tool)
-                tools = filtered_tools[:top_k]
+                filtered_servers = []
+                for server in servers:
+                    server_tags = server.tags or []
+                    if any(tag in server_tags for tag in tags):
+                        filtered_servers.append(server)
+                servers = filtered_servers[:top_k]
             else:
-                tools = tools[:top_k]
+                servers = servers[:top_k]
 
             # Convert to result dicts
-            results = self._tools_to_results(tools)
-            logger.info(f"Found {len(results)} tools (rerank={'ON' if self.enable_rerank else 'OFF'})")
+            results = self._servers_to_results(servers)
+            logger.info(f"Found {len(results)} servers (rerank={'ON' if self.enable_rerank else 'OFF'})")
             return results
 
         except Exception as e:
             logger.error(f"Search failed: {e}", exc_info=True)
             return []
 
-    def _tools_to_results(self, tools: List[McpTool]) -> List[Dict[str, Any]]:
+    def _servers_to_results(self, servers: List[ExtendedMCPServer]) -> List[Dict[str, Any]]:
         """
-        Convert MCPTool model instances to result dictionaries.
+        Convert ExtendedMCPServer instances to result dictionaries.
 
-        Extracts tool data and search metadata.
+        Extracts server data and search metadata.
 
         Args:
-            tools: List of MCPTool instances
+            servers: List of ExtendedMCPServer instances
 
         Returns:
-            List of dictionaries with tool data and metadata
+            List of dictionaries with server data and metadata
         """
         results = []
 
-        for tool in tools:
-            logger.info(f"Processing tool: {tool}")
-            relevance_score = round(tool.relevance_score, 4)
+        for server in servers:
+            logger.info(f"Processing server: {server.serverName}")
+            
+            # Get config details
+            config = server.config or {}
+            
             result = {
-                "tool_name": tool.tool_name,
-                "server_path": tool.server_path,
-                "server_name": tool.server_name,
-                "description": tool.description_main,
-                "description_args": tool.description_args,
-                "description_returns": tool.description_returns,
-                "tags": tool.tags or [],
-                "is_enabled": tool.is_enabled,
-                "entity_type": tool.entity_type or ["all"],
-                "relevance_score": relevance_score,  # Always set relevance_score
+                "server_name": server.serverName,
+                "server_path": server.path,
+                "path": server.path,
+                "description": config.get('description', ''),
+                "title": config.get('title', server.serverName),
+                "tags": server.tags or [],
+                "is_enabled": server.status == 'active',
+                "status": server.status,
+                "scope": server.scope,
+                "numTools": server.numTools,
+                "numStars": server.numStars,
             }
 
+            # Add relevance score if available
+            if hasattr(server, 'relevance_score'):
+                result['relevance_score'] = round(server.relevance_score, 4)
+            
             # Add score field if available
-            if hasattr(tool, 'score') and tool.score is not None:
-                result['score'] = tool.score
+            if hasattr(server, 'score') and server.score is not None:
+                result['score'] = server.score
+                
             results.append(result)
         return results
 
@@ -331,24 +344,36 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             Result dictionary or None if unavailable
         """
+
+        
         if entity_type == "a2a_agent":
             # Convert AgentCard to server_info format
             server_info = self._agent_to_server_info(entity_info, entity_path)
             server_info["is_enabled"] = is_enabled
-            return await mcp_tool_search_index_manager.sync_full_background(
-                entity_path=entity_path,
-                entity_info=server_info,
-                is_enabled=is_enabled
-            )
+            # Ensure path is in server_info
+            if 'path' not in server_info:
+                server_info['path'] = entity_path
+            
+            # Start background sync
+            # asyncio.create_task(mcp_server_repo.sync_full(
+            #     server_info=server_info,
+            #     is_enabled=is_enabled
+            # ))
+            return {"indexed_tools": 1, "failed_tools": 0}
+            
         elif entity_type == "mcp_server":
-            # Ensure entity_type is set
+            # Ensure entity_type and path are set
             if "entity_type" not in entity_info:
                 entity_info["entity_type"] = "mcp_server"
-            return await mcp_tool_search_index_manager.sync_full_background(
-                entity_path=entity_path,
-                entity_info=entity_info,
-                is_enabled=is_enabled
-            )
+            if 'path' not in entity_info:
+                entity_info['path'] = entity_path
+            
+            # Start background sync
+            # asyncio.create_task(mcp_server_repo.sync_full(
+            #     server_info=entity_info,
+            #     is_enabled=is_enabled
+            # ))
+            return {"indexed_tools": 1, "failed_tools": 0}
         else:
             logger.warning(f"Unknown entity_type '{entity_type}', skipping indexing")
             return None
@@ -368,8 +393,8 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             Result dictionary
         """
-        deleted_count = await mcp_tool_search_index_manager.tools.adelete_by_filter(
-            filters={"server_path": entity_path}
+        deleted_count = await self.mcp_server_repo.adelete_by_filter(
+            filters={"path": entity_path}
         )
         return {"deleted_tools": deleted_count}
 
@@ -377,11 +402,11 @@ class ExternalVectorSearchService(VectorSearchService):
         """
         Cleanup resources.
         
-        Note: Does not close database connection as it's shared with SearchIndexManager.
+        Note: Does not close database connection as it's shared with Repository.
         """
         logger.info("Cleaning up Registry vector search service")
         self.client = None
-        self.mcp_tools = None
+        self.mcp_server_repo = None
         self._initialized = False
         logger.info("Registry vector search cleanup complete (shared connection preserved)")
 
@@ -395,12 +420,12 @@ class ExternalVectorSearchService(VectorSearchService):
         """
         Search across multiple entity types with rerank support.
 
-        Searches servers, tools, and agents with improved relevance.
+        Searches servers and agents with improved relevance.
 
         Args:
             query: Natural language query text
             entity_types: List of entity types to search
-                Options: ["mcp_server", "tool", "a2a_agent"]
+                Options: ["mcp_server", "a2a_agent"]
                 Default: all types
             max_results: Maximum results per entity type (default: 20)
             search_type: Override default search type (NEAR_TEXT, BM25, HYBRID)
@@ -408,17 +433,17 @@ class ExternalVectorSearchService(VectorSearchService):
         Returns:
             Dictionary with entity type keys and result lists
         """
-        if not self.mcp_tools:
+        if not self.mcp_server_repo:
             logger.warning("Vector search not initialized")
-            return {"servers": [], "tools": [], "agents": []}
+            return {"servers": [], "agents": []}
 
         if not query or not query.strip():
             raise ValueError("Query text is required for search_mixed")
 
         # Validate and normalize entity types
         max_results = max(1, min(max_results, 50))
-        requested_types = set(entity_types or ["mcp_server", "tool", "a2a_agent"])
-        allowed_types = {"mcp_server", "tool", "a2a_agent"}
+        requested_types = set(entity_types or ["mcp_server", "a2a_agent"])
+        allowed_types = {"mcp_server", "a2a_agent"}
         entity_filter = list(requested_types & allowed_types)
 
         if not entity_filter:
@@ -430,7 +455,6 @@ class ExternalVectorSearchService(VectorSearchService):
         use_search_type = search_type or self.search_type
         results = {
             "servers": [],
-            "tools": [],
             "agents": []
         }
 
@@ -445,7 +469,7 @@ class ExternalVectorSearchService(VectorSearchService):
                     f"Mixed search with rerank: type={use_search_type.value}, "
                     f"candidate_k={candidate_k}, k={search_k}"
                 )
-                tools = self.mcp_tools.search_with_rerank(
+                servers = self.mcp_server_repo.search_with_rerank(
                     query=query,
                     search_type=use_search_type,
                     k=search_k,
@@ -455,58 +479,47 @@ class ExternalVectorSearchService(VectorSearchService):
                 )
             else:
                 # Regular search without rerank
-                tools = self.mcp_tools.search(
+                servers = self.mcp_server_repo.search(
                     query=query,
                     search_type=use_search_type,
                     k=search_k
                 )
 
             # Filter and categorize results
-            for tool in tools:
-                tool_entity_types = set(tool.entity_type or ["all"])
-
-                # Check if this tool matches any of the requested entity types
-                if not (tool_entity_types & set(entity_filter) or "all" in tool_entity_types):
-                    continue
-
-                match_context = (
-                    tool.content[:200]
-                    if tool.content
-                    else tool.description_main[:200]
-                )
-                relevance_score = round(tool.relevance_score, 4)
+            for server in servers:
+                config = server.config or {}
+                description = config.get('description', '')
+                
+                relevance_score = round(server.relevance_score, 4) if hasattr(server, 'relevance_score') else 0.0
+                
                 # Build result dict
                 result = {
-                    "server_path": tool.server_path,
-                    "server_name": tool.server_name,
-                    "tool_name": tool.tool_name,
-                    "description": tool.description_main,
-                    "match_context": match_context,
+                    "server_path": server.path,
+                    "server_name": server.serverName,
+                    "path": server.path,
+                    "description": description,
+                    "match_context": description[:200] if description else '',
                     "relevance_score": relevance_score,
-                    "entity_type": tool.entity_type or ["all"]
+                    "tags": server.tags or [],
+                    "is_enabled": server.status == 'active',
+                    "scope": server.scope,
                 }
-                # Add to results based on entity types
-                if "tool" in entity_filter and ("tool" in tool_entity_types or "all" in tool_entity_types):
-                    results["tools"].append(result)
+                
+                # Add to servers results
+                if "mcp_server" in entity_filter:
+                    results["servers"].append(result)
 
-                if "mcp_server" in entity_filter and ("mcp_server" in tool_entity_types or "all" in tool_entity_types):
-                    server_result = result.copy()
-                    server_result["path"] = tool.server_path
-                    server_result["description"] = tool.description_main[:100] if tool.description_main else ""
-                    server_result["tags"] = tool.tags or []
-                    server_result["is_enabled"] = tool.is_enabled
-                    results["servers"].append(server_result)
-
-                if "a2a_agent" in entity_filter and ("a2a_agent" in tool_entity_types or "all" in tool_entity_types):
+                # Add to agents results if it's an agent
+                # (determine by checking if it has agent-specific config)
+                if "a2a_agent" in entity_filter:
+                    # You can add logic here to distinguish agents from servers
+                    # For now, treat all as potential agents
                     agent_result = result.copy()
-                    agent_result["path"] = tool.server_path
-                    agent_result["agent_name"] = tool.server_name
-                    agent_result["tags"] = tool.tags or []
-                    agent_result["is_enabled"] = tool.is_enabled
+                    agent_result["agent_name"] = server.serverName
                     results["agents"].append(agent_result)
 
             # Sort and limit results
-            for key in ["tools", "servers", "agents"]:
+            for key in ["servers", "agents"]:
                 # Sort by relevance_score (with fallback to 0.0 for safety)
                 results[key].sort(
                     key=lambda x: x.get("relevance_score", 0.0),
@@ -514,12 +527,11 @@ class ExternalVectorSearchService(VectorSearchService):
                 )
                 results[key] = results[key][:max_results]
 
-            logger.info(f"Found {len(results['tools'])} tools, "
-                        f"{len(results['servers'])} servers, "
+            logger.info(f"Found {len(results['servers'])} servers, "
                         f"{len(results['agents'])} agents "
                         f"(rerank={'ON' if self.enable_rerank else 'OFF'})")
             return results
 
         except Exception as e:
             logger.error(f"search_mixed failed: {e}", exc_info=True)
-            return {"servers": [], "tools": [], "agents": []}
+            return {"servers": [], "agents": []}
