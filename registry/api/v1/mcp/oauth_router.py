@@ -421,9 +421,9 @@ async def delete_oauth_tokens(
             "user_id": user_id,
         }
     except HTTPException as e:
-        logger.error(f"Failed to refresh OAuth tokens: {str(e)}", exc_info=True)
+        logger.error(f"Failed to delete OAuth tokens: {str(e)}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"Failed to refresh tokens: {str(e)}")
+                            detail=f"Failed to delete tokens: {str(e)}")
 
 
 # ==================== Helper Functions ====================
