@@ -1,16 +1,29 @@
 from datetime import datetime, timezone
-from typing import Optional, Union
+from registry.schemas.permissions_schema import PermissionPrincipalOut
+from typing import Optional, Union, List, Dict, Any
 from packages.models._generated import (
 	IAccessRole,
 )
 from packages.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
 from beanie import PydanticObjectId
 from registry.core.acl_constants import ResourceType, PermissionBits, PrincipalType
-import logging 
-
-logger = logging.getLogger(__name__)
+from registry.utils.log import logger
+from registry.services.user_service import user_service
+from registry.services.group_service import group_service
 
 class ACLService:
+	def _principal_result_obj(self, principal_type: str, obj: Any) -> PermissionPrincipalOut:
+		"""
+		Helper to construct the PermissionPrincipalOut for users and groups.
+		"""
+		return PermissionPrincipalOut(
+			principal_type=principal_type,
+			principal_id=str(getattr(obj, "id")),
+			name=getattr(obj, "name", None),
+			email=getattr(obj, "email", None),
+			accessRoleId=str(getattr(obj, "accessRoleId", "")) if hasattr(obj, "accessRoleId") and getattr(obj, "accessRoleId") is not None else ""
+		)
+	
 	async def grant_permission(
 		self,
 		principal_type: str,
@@ -211,6 +224,64 @@ class ACLService:
 		except Exception as e:
 			logger.error(f"Error revoking ACL entry for resource {resource_type} with ID {resource_id}: {e}")
 			return 0
+
+	async def search_principals(
+		self,
+		query: str,
+		limit: int = 30,
+		principal_types: Optional[List[str]] = None,
+	) -> List[PermissionPrincipalOut]:
+		"""
+		Search for principals (users, groups, agents) matching the query string.
+		"""
+		query = (query or "").strip()
+		if not query or len(query) < 2:
+			raise ValueError("Query string must be at least 2 characters long.")
+
+
+		valid_types = {PrincipalType.USER.value, PrincipalType.GROUP.value}
+		type_filters = None
+		if principal_types:
+			if isinstance(principal_types, str):
+				types = [t.strip() for t in principal_types.split(",") if t.strip()]
+			else:
+				types = [str(t).strip() for t in principal_types if str(t).strip()]
+			type_filters = [t for t in types if t in valid_types]
+			if not type_filters:
+				type_filters = None
+
+		results = []
+		if not type_filters or PrincipalType.USER.value in type_filters:
+			for user in await user_service.search_users(query):
+				results.append(self._principal_result_obj(PrincipalType.USER.value, user))
+
+		if not type_filters or PrincipalType.GROUP.value in type_filters:
+			for group in await group_service.search_groups(query):
+				results.append(self._principal_result_obj(PrincipalType.GROUP.value, group))
+		return results[:limit]
+
+	async def get_resource_permissions(
+		self,
+		resource_type: str,
+		resource_id: PydanticObjectId,
+	) -> Dict[str, Any]:
+		"""
+		Get all ACL permissions for a specific resource.
+		"""
+		try:
+			acl_entries = await IAclEntry.find({
+				"resourceType": resource_type,
+				"resourceId": resource_id
+			}).to_list()
+
+			return {
+				"permissions": acl_entries
+			}
+		except Exception as e:
+			logger.error(f"Error fetching resource permissions for {resource_type} {resource_id}: {e}")
+			raise
+
+
 
 
 # Singleton instance

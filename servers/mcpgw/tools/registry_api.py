@@ -22,31 +22,25 @@ async def execute_tool_impl(
     ctx: Context = None
 ) -> Dict[str, Any]:
     """
-    Execute a specific tool that was discovered.
+    Execute a specific tool (implementation layer).
     
     Args:
-        server_id: server ID from discovery (e.g., '6972e222755441652c23090f')
-        server_path: Server path from discovery (e.g., '/github')
-        tool_name: Exact tool name from discovery
+        server_path: Server path from discovery (e.g., '/tavilysearch')
+        tool_name: Resolved tool name to send to MCP server (e.g., 'tavily_search')
         arguments: Tool-specific arguments as key-value pairs
+        server_id: Server ID from discovery (e.g., '6972e222755441652c23090f')
         ctx: FastMCP context with user auth
     
     Returns:
         Tool execution result
     
-    Example:
-        result = await execute_tool_impl(
-            server_path="/github",
-            tool_name="search_pull_requests",
-            arguments={
-                "owner": "agentic-community",
-                "repo": "mcp-gateway-registry",
-                "state": "open"
-            },
-            server_id="6972e222755441652c23090f"
-        )
+    Note:
+        This is the implementation layer - tool_name should already be resolved
+        by the interface layer (execute_tool). This function just sends the
+        request to the registry API.
     """
-    logger.info(f"🔧 Executing tool: {tool_name} on {server_path}" + (f" (server_id: {server_id})" if server_id else ""))
+    logger.info(f"🔧 Executing tool: {tool_name} on {server_path}" + 
+                (f" (server_id: {server_id})" if server_id else ""))
     
     try:
         # Build request payload
@@ -189,39 +183,56 @@ def get_tools() -> List[Tuple[str, Callable]]:
     # Define tool wrapper function with proper signature and decorators
     async def execute_tool(
         server_path: str = Field(..., description="Server path from discovery (e.g., '/tavilysearch' for web search)"),
-        tool_name: str = Field(..., description="Exact tool name from discovery (e.g., 'tavily_search')"),
+        tool_name: str = Field(..., description="Tool name from discovery - can be scoped name (e.g., 'tavily_search_mcp_tavily_search')"),
         arguments: Dict[str, Any] = Field(..., description="Tool parameters from input_schema"),
         server_id: str = Field(..., description="Server ID from discovery"),
+        mcp_tool_name: Optional[str] = Field(None, description="Original MCP tool name (e.g., 'tavily_search') - extract from toolFunction.mcpToolName if available"),
         ctx: Optional[Context] = None
     ) -> Dict[str, Any]:
         """
         🚀 AUTO-USE: Execute any discovered tool to get real-time data.
 
-        **Common use cases:**
-        - Web search: execute_tool(server_path="/tavilysearch", tool_name="tavily_search", arguments={"query": "..."})
-        - Extract URLs: execute_tool(server_path="/tavilysearch", tool_name="tavily_extract", arguments={"urls": [...]})
-        - GitHub operations: execute_tool(server_path="/github", tool_name="search_pull_requests", arguments={...})
-
-        **Workflow:**
-        1. Use discover_tools to find the right tool
-        2. Use execute_tool with the discovered server_path and tool_name
-        3. Pass arguments according to the tool's input_schema
-
-        **Example for web search:**
+        **Common Examples:**
         ```
-        # User asks: "What's the latest news about AI?"
-        result = execute_tool(
+        # Web search
+        execute_tool(
             server_path="/tavilysearch",
             tool_name="tavily_search",
+            mcp_tool_name="tavily_search",  # Extract from toolFunction.mcpToolName
             arguments={"query": "latest AI news", "max_results": 5},
             server_id="6972e222755441652c23090f"
         )
+        
+        # GitHub operations
+        execute_tool(
+            server_path="/github",
+            tool_name="search_pull_requests",
+            arguments={"owner": "org", "repo": "project", "state": "open"},
+            server_id="abc123..."
+        )
         ```
 
-        ⚠️ Always use this AFTER discover_tools to execute the actual functionality.
+        **Parameters:**
+        - server_path: From discovery (e.g., "/tavilysearch")
+        - tool_name: Tool identifier (can be scoped name like "tavily_search_mcp_tavily_search")
+        - mcp_tool_name: Original MCP name from toolFunction.mcpToolName (e.g., "tavily_search")
+        - arguments: Tool-specific parameters from input_schema
+        - server_id: Server ID from discovery
+
+        **Note:** If mcp_tool_name is provided, it's used for execution (MCP standard).
+        Otherwise, tool_name is used directly.
+
+        ⚠️ Use after discover_servers to execute tools.
         Returns: Tool-specific results (format varies by tool)
         """
-        return await execute_tool_impl(server_path, tool_name, arguments, server_id, ctx)
+        # Resolve tool name at interface layer: use mcpToolName if provided, otherwise use tool_name
+        resolved_tool_name = mcp_tool_name or tool_name
+        
+        # Log the resolution for debugging
+        if mcp_tool_name and mcp_tool_name != tool_name:
+            logger.debug(f"Resolved tool name: '{resolved_tool_name}' (from mcpToolName, scoped was '{tool_name}')")
+        
+        return await execute_tool_impl(server_path, resolved_tool_name, arguments, server_id, ctx)
     
     async def read_resource(
         server_id: str = Field(..., description="Server ID from discover_servers (e.g., '6972e222755441652c23090f')"),
