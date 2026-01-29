@@ -1,8 +1,8 @@
 """
-Pydantic Schemas for Permission Management API v1
+Pydantic Schemas for ACL Management API v1
 
 These schemas define the request and response models for the
-Permission Management endpoints based on the API documentation.
+ACL Management endpoints based on the API documentation.
 """
 
 from typing import List, Optional
@@ -15,7 +15,7 @@ class PermissionPrincipalIn(BaseModel):
     perm_bits: Optional[int] = 0
     accessRoleId: Optional[str] = None
 
-class UpdateServerPermissionsRequest(BaseModel):
+class UpdateResourcePermissionsRequest(BaseModel):
     updated: List[PermissionPrincipalIn] = Field(default_factory=list)
     removed: List[PermissionPrincipalIn] = Field(default_factory=list)
     public: bool = False
@@ -26,11 +26,9 @@ class PermissionPrincipalOut(BaseModel):
     principal_id: str
     name: Optional[str] = None
     email: Optional[str] = None
-    source: Optional[str] = None
-    idOnTheSource: Optional[str] = None
     accessRoleId: str
 
 
-class UpdateServerPermissionsResponse(BaseModel):
+class UpdateResourcePermissionsResponse(BaseModel):
     message: str
     results: dict
