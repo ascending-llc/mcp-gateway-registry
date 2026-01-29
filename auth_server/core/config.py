@@ -93,11 +93,7 @@ class AuthSettings(BaseSettings):
     entra_client_id: Optional[str] = None
     entra_client_secret: Optional[str] = None
     entra_token_kind: str = "id"  # "id" or "access"
-    
-    # ==================== Metrics Settings ====================
-    metrics_service_url: str = "http://localhost:8890"
-    metrics_api_key: str = ""
-    
+        
     # ==================== OAuth Device Flow Settings ====================
     device_code_expiry_seconds: int = 600  # 10 minutes
     device_code_poll_interval: int = 5  # Poll every 5 seconds
