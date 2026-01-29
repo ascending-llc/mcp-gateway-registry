@@ -282,7 +282,7 @@ class TestConnectionRouter:
             assert response_data["serverName"] == TEST_SERVER_NAME
             assert response_data["connectionState"] == ConnectionState.CONNECTED
             assert response_data["requiresOAuth"] == True
-            assert response_data["requiresId"] == TEST_SERVER_ID
+            assert response_data["serverId"] == TEST_SERVER_ID
 
     def test_get_server_connection_status_not_found(self, client):
         """Test retrieval of single server connection status when server not found"""
