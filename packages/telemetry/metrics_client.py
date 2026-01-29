@@ -50,88 +50,25 @@ class OTelMetricsClient:
         """
         Initialize metrics client for a specific service.
 
+        All metrics are loaded from the config dict. The config should define
+        counters and histograms that the service needs.
+
         Args:
             service_name: Name of the service (e.g., 'api', 'worker', 'registry')
-            config: Optional configuration dict with 'counters' and 'histograms' lists
+            config: Configuration dict with 'counters' and 'histograms' lists
         """
         try:
             self.service_name = service_name
             self.meter = metrics.get_meter(f"mcp.{service_name}")
 
-            # Dynamic metric registries
+            # Dynamic metric registries - all metrics loaded from config
             self._counters: Dict[str, Counter] = {}
             self._histograms: Dict[str, Histogram] = {}
 
-            # Initialize from config if provided
+            # Initialize from config
             if config:
                 self._init_from_config(config)
 
-            # HTTP metrics
-            self.http_requests = self.meter.create_counter(
-                name="http_requests_total",
-                description="Total number of HTTP requests",
-                unit="1"
-            )
-            self.http_duration = self.meter.create_histogram(
-                name="http_request_duration_seconds",
-                description="HTTP request duration in seconds",
-                unit="s"
-            )
-
-            # Auth metrics - counter for rate, histogram for latency percentiles
-            self.auth_requests = self.meter.create_counter(
-                name="auth_requests_total",
-                description="Total number of authentication attempts",
-                unit="1"
-            )
-            self.auth_duration = self.meter.create_histogram(
-                name="auth_request_duration_seconds",
-                description="Authentication request duration in seconds for p50/p95/p99",
-                unit="s"
-            )
-
-            # Tool discovery metrics - counter for rate, histogram for latency percentiles
-            self.tool_discovery = self.meter.create_counter(
-                name="mcp_tool_discovery_total",
-                description="Total number of tool discovery operations",
-                unit="1"
-            )
-            self.tool_discovery_duration = self.meter.create_histogram(
-                name="mcp_tool_discovery_duration_seconds",
-                description="Tool discovery latency in seconds for p50/p95/p99",
-                unit="s"
-            )
-
-            # Tool execution metrics - counter for success rate, histogram for latency
-            self.tool_execution = self.meter.create_counter(
-                name="mcp_tool_execution_total",
-                description="Total number of tool executions",
-                unit="1"
-            )
-            self.tool_execution_duration = self.meter.create_histogram(
-                name="mcp_tool_execution_duration_seconds",
-                description="Tool execution duration in seconds for p50/p95/p99",
-                unit="s"
-            )
-
-            # Registry operation metrics - counter for rate, histogram for latency
-            self.registry_operations = self.meter.create_counter(
-                name="registry_operations_total",
-                description="Total number of registry operations",
-                unit="1"
-            )
-            self.registry_operation_duration = self.meter.create_histogram(
-                name="registry_operation_duration_seconds",
-                description="Registry operation latency in seconds for p50/p95/p99",
-                unit="s"
-            )
-
-            # Server requests counter (legacy)
-            self.server_requests = self.meter.create_counter(
-                name="mcp_server_requests_total",
-                description="Total number of requests to MCP servers",
-                unit="1"
-            )
         except Exception as e:
             logger.error(f"Failed to initialize OTelMetricsClient for service '{service_name}': {e}")
 
@@ -142,14 +79,23 @@ class OTelMetricsClient:
         Config format:
             {
                 "counters": [
-                    {"name": "my_counter", "description": "...", "unit": "1"}
+                    {"name": "my_counter", "description": "...", "unit": "1", "capture": true}
                 ],
                 "histograms": [
-                    {"name": "my_histogram", "description": "...", "unit": "s"}
+                    {"name": "my_histogram", "description": "...", "unit": "s", "capture": true}
                 ]
             }
+
+        The 'capture' flag controls whether the metric is registered:
+        - capture: true (default) - metric is registered and will record data
+        - capture: false - metric is skipped, calls to record will be no-ops
         """
         for counter_def in config.get("counters", []):
+            # Skip if capture is explicitly set to false
+            if not counter_def.get("capture", True):
+                logger.debug(f"Skipping counter '{counter_def['name']}' (capture=false)")
+                continue
+
             self.create_counter(
                 name=counter_def["name"],
                 description=counter_def.get("description", ""),
@@ -157,6 +103,11 @@ class OTelMetricsClient:
             )
 
         for histogram_def in config.get("histograms", []):
+            # Skip if capture is explicitly set to false
+            if not histogram_def.get("capture", True):
+                logger.debug(f"Skipping histogram '{histogram_def['name']}' (capture=false)")
+                continue
+
             self.create_histogram(
                 name=histogram_def["name"],
                 description=histogram_def.get("description", ""),
@@ -294,9 +245,9 @@ class OTelMetricsClient:
         """Get a registered histogram by name."""
         return self._histograms.get(name)
 
-    # ========== Domain-Specific Methods (Backwards Compatible) ==========
-    # These methods are kept for backwards compatibility with existing code.
-    # New code should prefer the generic create_*/record_* methods above.
+    # ========== Domain-Specific Methods (Convenience Wrappers) ==========
+    # These methods provide a convenient API for common metrics patterns.
+    # They use the dynamic registries, so metrics must be defined in config.
 
     @safe_telemetry
     def record_auth_request(
@@ -308,23 +259,28 @@ class OTelMetricsClient:
         """
         Record an authentication attempt with optional duration for latency percentiles.
 
+        Requires these metrics in config:
+        - counter: auth_requests_total
+        - histogram: auth_request_duration_seconds
+
         Args:
             mechanism: Authentication mechanism (e.g., "jwt", "api_key", "basic")
             success: Whether the auth attempt was successful
             duration_seconds: Request duration in seconds for p50/p95/p99 calculation
-
-        Example:
-            client.record_auth_request("jwt", success=True, duration_seconds=0.05)
         """
         attributes = {
             "mechanism": mechanism,
             "status": "success" if success else "failure"
         }
-        self.auth_requests.add(1, attributes)
 
-        # Record duration histogram for latency percentiles
+        counter = self._counters.get("auth_requests_total")
+        if counter:
+            counter.add(1, attributes)
+
         if duration_seconds is not None:
-            self.auth_duration.record(duration_seconds, attributes)
+            histogram = self._histograms.get("auth_request_duration_seconds")
+            if histogram:
+                histogram.record(duration_seconds, attributes)
 
     @safe_telemetry
     def record_tool_discovery(
@@ -337,25 +293,30 @@ class OTelMetricsClient:
         """
         Record tool discovery operation with optional duration for latency percentiles.
 
+        Requires these metrics in config:
+        - counter: mcp_tool_discovery_total
+        - histogram: mcp_tool_discovery_duration_seconds
+
         Args:
             tool_name: Name of the tool discovered
             source: Source of discovery (e.g., "registry", "server", "search")
             success: Whether the discovery was successful
             duration_seconds: Discovery duration in seconds for p50/p95/p99 calculation
-
-        Example:
-            client.record_tool_discovery("my_tool", source="search", success=True, duration_seconds=0.15)
         """
         attributes = {
             "tool_name": tool_name,
             "source": source,
             "status": "success" if success else "failure"
         }
-        self.tool_discovery.add(1, attributes)
 
-        # Record duration histogram for latency percentiles
+        counter = self._counters.get("mcp_tool_discovery_total")
+        if counter:
+            counter.add(1, attributes)
+
         if duration_seconds is not None:
-            self.tool_discovery_duration.record(duration_seconds, attributes)
+            histogram = self._histograms.get("mcp_tool_discovery_duration_seconds")
+            if histogram:
+                histogram.record(duration_seconds, attributes)
 
     @safe_telemetry
     def record_tool_execution(
@@ -369,6 +330,10 @@ class OTelMetricsClient:
         """
         Record tool execution with success rate and latency tracking.
 
+        Requires these metrics in config:
+        - counter: mcp_tool_execution_total
+        - histogram: mcp_tool_execution_duration_seconds
+
         Args:
             tool_name: Name of the tool executed
             server_name: Name of the MCP server
@@ -380,14 +345,17 @@ class OTelMetricsClient:
             "tool_name": tool_name,
             "server_name": server_name,
             "status": "success" if success else "failure",
-            "method": method  # Always include this
+            "method": method
         }
 
-        self.tool_execution.add(1, attributes)
+        counter = self._counters.get("mcp_tool_execution_total")
+        if counter:
+            counter.add(1, attributes)
 
-        # Record duration histogram for latency percentiles
         if duration_seconds is not None:
-            self.tool_execution_duration.record(duration_seconds, attributes)
+            histogram = self._histograms.get("mcp_tool_execution_duration_seconds")
+            if histogram:
+                histogram.record(duration_seconds, attributes)
 
     @safe_telemetry
     def record_registry_operation(
@@ -400,40 +368,46 @@ class OTelMetricsClient:
         """
         Record registry operation with latency tracking.
 
+        Requires these metrics in config:
+        - counter: registry_operations_total
+        - histogram: registry_operation_duration_seconds
+
         Args:
             operation: Type of operation (e.g., "read", "create", "update", "delete", "list", "search")
             resource_type: Type of resource (e.g., "server", "tool", "search")
             success: Whether the operation was successful
             duration_seconds: Operation duration in seconds for p50/p95/p99 calculation
-
-        Example:
-            client.record_registry_operation(
-                "search",
-                "server",
-                success=True,
-                duration_seconds=0.08
-            )
         """
         attributes = {
             "operation": operation,
             "resource_type": resource_type,
             "status": "success" if success else "failure"
         }
-        self.registry_operations.add(1, attributes)
 
-        # Record duration histogram for latency percentiles
+        counter = self._counters.get("registry_operations_total")
+        if counter:
+            counter.add(1, attributes)
+
         if duration_seconds is not None:
-            self.registry_operation_duration.record(duration_seconds, attributes)
+            histogram = self._histograms.get("registry_operation_duration_seconds")
+            if histogram:
+                histogram.record(duration_seconds, attributes)
 
     @safe_telemetry
     def record_server_request(self, server_name: str):
         """
         Record a request to a specific MCP server.
+
+        Requires this metric in config:
+        - counter: mcp_server_requests_total
         """
         attributes = {
             "server_name": server_name
         }
-        self.server_requests.add(1, attributes)
+
+        counter = self._counters.get("mcp_server_requests_total")
+        if counter:
+            counter.add(1, attributes)
 
 
 def create_metrics_client(
