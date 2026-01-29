@@ -15,7 +15,7 @@ class PermissionPrincipalIn(BaseModel):
     perm_bits: Optional[int] = 0
     accessRoleId: Optional[str] = None
 
-class UpdateServerPermissionsRequest(BaseModel):
+class UpdateResourcePermissionsRequest(BaseModel):
     updated: List[PermissionPrincipalIn] = Field(default_factory=list)
     removed: List[PermissionPrincipalIn] = Field(default_factory=list)
     public: bool = False
@@ -31,6 +31,6 @@ class PermissionPrincipalOut(BaseModel):
     accessRoleId: str
 
 
-class UpdateServerPermissionsResponse(BaseModel):
+class UpdateResourcePermissionsResponse(BaseModel):
     message: str
     results: dict
