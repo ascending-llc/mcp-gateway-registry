@@ -1,6 +1,5 @@
 import base64
 import os
-import time
 import jwt
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -15,8 +14,7 @@ from registry.auth.dependencies import (map_cognito_groups_to_scopes, signer, ge
                                         get_accessible_agents_for_user, user_can_modify_servers,
                                         user_has_wildcard_access)
 from registry.core.config import settings
-
-from registry.utils.otel_metrics import metrics
+from registry.core.telemetry_decorators import AuthMetricsContext
 
 class UnifiedAuthMiddleware(BaseHTTPMiddleware):
     """
@@ -98,7 +96,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        
+
         # Check authenticated paths first (these override public patterns)
         if self._match_path(path, self.public_paths_compiled):
             logger.debug(f"Public path: {path}")
@@ -107,59 +105,48 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.debug(f"Authenticated path: {path}")
             # Continue to authentication logic below
 
-        start_time = time.perf_counter()
-        auth_source = "unknown"
+        # Use context manager for clean metrics tracking
+        async with AuthMetricsContext() as auth_ctx:
+            try:
+                user_context = await self._authenticate(request)
+                request.state.user = user_context
+                request.state.is_authenticated = True
+                auth_source = user_context.get("auth_source", "unknown")
+                request.state.auth_source = auth_source
 
-        try:
-            user_context = await self._authenticate(request)
-            request.state.user = user_context
-            request.state.is_authenticated = True
-            auth_source = user_context.get('auth_source', 'unknown')
-            request.state.auth_source = auth_source
+                # Update metrics context with auth result
+                auth_ctx.set_mechanism(auth_source)
+                auth_ctx.set_success(True)
 
-            duration_seconds = time.perf_counter() - start_time
-            metrics.record_auth_request(
-                auth_source,
-                success=True,
-                duration_seconds=duration_seconds
-            )
-            logger.info(f"User {user_context.get('username')} authenticated via {auth_source}")
-            return await call_next(request)
-        except AuthenticationError as e:
-            duration_seconds = time.perf_counter() - start_time
-            metrics.record_auth_request(
-                auth_source,
-                success=False,
-                duration_seconds=duration_seconds
-            )
-            logger.warning(f"Auth failed for {path}: {e}")
-            # Add WWW-Authenticate header for MCP OAuth discovery
-            # Extract server name from path for MCP proxy requests
-            server_name = None
-            if path.startswith("/proxy/"):
-                server_name = path.split("/")[2] if len(path.split("/")) > 2 else None
-            
-            headers = {"Connection": "close"}
-            if server_name:
-                # For MCP proxy paths, RFC 9728 (OAuth 2.0 Protected Resource Metadata) - the official specification
-                registry_url = settings.registry_client_url.rstrip('/')
-                oauth_discovery = f"{registry_url}/.well-known/oauth-protected-resource/proxy/{server_name}"
-                headers["WWW-Authenticate"] = f'Bearer realm="mcp-registry", resource_metadata="{oauth_discovery}"'
-            else:
-                # For other authenticated paths, use general OAuth discovery
-                headers["WWW-Authenticate"] = 'Bearer realm="mcp-registry"'
+                logger.info(f"User {user_context.get('username')} authenticated via {auth_source}")
+                return await call_next(request)
 
-            return JSONResponse(status_code=401, content={"detail": str(e)}, headers=headers)
-        except Exception as e:
-            # Calculate duration and record error metrics
-            duration_seconds = time.perf_counter() - start_time
-            metrics.record_auth_request(
-                auth_source,
-                success=False,
-                duration_seconds=duration_seconds
-            )
-            logger.error(f"Auth error for {path}: {e}")
-            return JSONResponse(status_code=500, content={"detail": "Authentication error"})
+            except AuthenticationError as e:
+                auth_ctx.set_success(False)
+                logger.warning(f"Auth failed for {path}: {e}")
+
+                # Add WWW-Authenticate header for MCP OAuth discovery
+                # Extract server name from path for MCP proxy requests
+                server_name = None
+                if path.startswith("/proxy/"):
+                    server_name = path.split("/")[2] if len(path.split("/")) > 2 else None
+
+                headers = {"Connection": "close"}
+                if server_name:
+                    # For MCP proxy paths, RFC 9728 (OAuth 2.0 Protected Resource Metadata)
+                    registry_url = settings.registry_client_url.rstrip("/")
+                    oauth_discovery = f"{registry_url}/.well-known/oauth-protected-resource/proxy/{server_name}"
+                    headers["WWW-Authenticate"] = f'Bearer realm="mcp-registry", resource_metadata="{oauth_discovery}"'
+                else:
+                    # For other authenticated paths, use general OAuth discovery
+                    headers["WWW-Authenticate"] = 'Bearer realm="mcp-registry"'
+
+                return JSONResponse(status_code=401, content={"detail": str(e)}, headers=headers)
+
+            except Exception as e:
+                auth_ctx.set_success(False)
+                logger.error(f"Auth error for {path}: {e}")
+                return JSONResponse(status_code=500, content={"detail": "Authentication error"})
 
     def _match_path(self, path: str, compiled_patterns: List[Tuple]) -> bool:
         """

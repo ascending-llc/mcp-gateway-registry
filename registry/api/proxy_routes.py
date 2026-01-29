@@ -2,7 +2,7 @@
 Dynamic MCP server proxy routes.
 """
 
-from time import time
+import json
 import logging
 import httpx
 from typing import Dict, Any, Optional, Union
@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
 from registry.utils.otel_metrics import metrics
+from registry.core.telemetry_decorators import ToolExecutionMetricsContext
 from packages.models.extended_mcp_server import MCPServerDocument
 from registry.auth.dependencies import CurrentUser
 from registry.services.server_service import server_service_v1
@@ -41,6 +42,38 @@ proxy_client = httpx.AsyncClient(
     limits=httpx.Limits(max_connections=100, max_keepalive_connections=20)
 )
 
+def _extract_tool_name_from_body(body_bytes: bytes) -> str:
+    """
+    Extract tool name from MCP JSON-RPC request body.
+
+    Args:
+        body_bytes: Raw request body bytes
+
+    Returns:
+        Extracted tool name or "unknown"
+    """
+    if not body_bytes:
+        return "unknown"
+
+    try:
+        body_json = json.loads(body_bytes)
+        method = body_json.get("method", "unknown")
+
+        # MCP JSON-RPC format: {"method": "tools/call", "params": {"name": "tool_name", ...}}
+        if method == "tools/call":
+            return body_json.get("params", {}).get("name", "unknown")
+        elif method == "tools/list":
+            return "tools/list"
+        elif method == "resources/read":
+            return body_json.get("params", {}).get("uri", "resources/read")
+        elif method == "prompts/execute":
+            return body_json.get("params", {}).get("name", "prompts/execute")
+        else:
+            return method
+    except Exception:
+        return "unknown"
+
+
 async def proxy_to_mcp_server(
     request: Request,
     target_url: str,
@@ -50,43 +83,23 @@ async def proxy_to_mcp_server(
     """
     Proxy request to MCP server with auth headers.
     Handles both regular HTTP and SSE streaming, including OAuth token injection.
-    
+
     Args:
         request: Incoming FastAPI request
         target_url: Backend MCP server URL
         auth_context: Gateway authentication context
         server: MCPServerDocument
     """
-    start_time = time()
-    
-    server_name = server.get("title", server.path.strip('/')) if server else server.path.strip('/')
-    tool_name = "unknown"
-    try:
-        body_bytes = await request.body()
-        if body_bytes:
-            import json
-            body_json = json.loads(body_bytes)
-            # MCP JSON-RPC format: {"method": "tools/call", "params": {"name": "tool_name", ...}}
-            if body_json.get("method") == "tools/call":
-                tool_name = body_json.get("params", {}).get("name", "unknown")
-            elif body_json.get("method") == "tools/list":
-                tool_name = "tools/list"
-            elif body_json.get("method") == "resources/read":
-                tool_name = body_json.get("params", {}).get("uri", "resources/read")
-            elif body_json.get("method") == "prompts/execute":
-                tool_name = body_json.get("params", {}).get("name", "prompts/execute")
-            else:
-                tool_name = body_json.get("method", "unknown")
-    except Exception as e:
-        logger.debug(f"Could not extract tool name from request body: {e}")
-        tool_name = "unknown"
+    server_name = server.get("title", server.path.strip("/")) if server else server.path.strip("/")
+    body_bytes = await request.body()
+    tool_name = _extract_tool_name_from_body(body_bytes)
     
     # Check if this is MCPGW path (special handling)
     is_mcpgw = server.path == MCPGW_PATH
-    
+
     # Build proxy headers - start with request headers
     headers = dict(request.headers)
-    
+
     # Add context headers for tracing/logging
     headers.update({
         "X-User": auth_context.get("username", ""),
@@ -98,29 +111,29 @@ async def proxy_to_mcp_server(
         "X-Tool-Name": auth_context.get("tool_name", ""),
         "X-Original-URL": str(request.url),
     })
-    
+
     # Remove host header to avoid conflicts
     headers.pop("host", None)
-    
+
     # Special handling for MCPGW - keep all headers as-is, don't build auth
     if not is_mcpgw:
         # Remove gateway's Authorization header to prevent conflicts with backend auth
         headers.pop("authorization", None)
         headers.pop("Authorization", None)
-        
+
         # Build complete authentication headers (OAuth, apiKey, custom)
         try:
             user_id = auth_context.get("user_id")
             auth_headers = await _build_complete_headers_for_server(server, user_id)
-            
+
             # Merge auth headers (Authorization, custom headers, etc.)
             # Only update Authorization and non-context headers
             for key, value in auth_headers.items():
                 if key.lower() not in ["content-type", "accept", "user-agent"]:
                     headers[key] = value
-            
+
             logger.debug(f"Built complete authentication headers for {server.serverName}")
-            
+
         except OAuthReAuthRequiredError as e:
             raise HTTPException(
                 status_code=401,
@@ -138,171 +151,134 @@ async def proxy_to_mcp_server(
                 detail=f"Authentication error: {str(e)}"
             )
 
+    # Use context manager for clean metrics tracking
+    async with ToolExecutionMetricsContext(
+        tool_name=tool_name,
+        server_name=server_name,
+        method=request.method,
+    ) as metrics_ctx:
+        try:
+            # Check accept header for SSE
+            accept_header = request.headers.get("accept", "")
+            client_accepts_sse = "text/event-stream" in accept_header
 
-    body = await request.body()
-    
-    try:
-        # we can't use server_info.get("type") because sometime httpstreamable is also sse header
-        accept_header = request.headers.get("accept", "")
-        client_accepts_sse = "text/event-stream" in accept_header
-        
-        logger.debug(f"Accept: {accept_header}, Client SSE: {client_accepts_sse}")
-        
-        # Optimize: Only use streaming if client accepts SSE
-        if not client_accepts_sse:
-            # Regular HTTP request (most common case for MCP JSON-RPC)
-            response = await proxy_client.request(
-                method=request.method,
-                url=target_url,
+            logger.debug(f"Accept: {accept_header}, Client SSE: {client_accepts_sse}")
+
+            # Optimize: Only use streaming if client accepts SSE
+            if not client_accepts_sse:
+                # Regular HTTP request (most common case for MCP JSON-RPC)
+                response = await proxy_client.request(
+                    method=request.method,
+                    url=target_url,
+                    headers=headers,
+                    content=body_bytes
+                )
+                metrics_ctx.set_success(response.status_code < 400)
+
+                # Log error responses for debugging
+                if response.status_code >= 400:
+                    try:
+                        error_body = response.content.decode("utf-8")
+                        logger.error(f"Backend error response ({response.status_code}): {error_body}")
+                    except Exception:
+                        logger.error(f"Backend error response ({response.status_code}): [binary content, {len(response.content)} bytes]")
+
+                return Response(
+                    content=response.content,
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                    media_type=response.headers.get("content-type")
+                )
+
+            # Client accepts SSE - check if backend returns SSE
+            logger.debug("Client accepts SSE - checking backend response type")
+
+            # Manually manage stream lifecycle (can't use async with - it closes too early)
+            stream_context = proxy_client.stream(
+                request.method,
+                target_url,
                 headers=headers,
-                content=body
+                content=body_bytes
             )
-            duration = time() - start_time
-            success = response.status_code < 400
-            metrics.record_tool_execution(
-                tool_name=tool_name,
-                server_name=server_name,
-                success=success,
-                duration_seconds=duration,
-                method=request.method
-            )
+            backend_response = await stream_context.__aenter__()
 
-            # Log error responses for debugging
-            if response.status_code >= 400:
-                try:
-                    error_body = response.content.decode('utf-8')
-                    logger.error(f"Backend error response ({response.status_code}): {error_body}")
-                except Exception:
-                    logger.error(f"Backend error response ({response.status_code}): [binary content, {len(response.content)} bytes]")
-            
-            return Response(
-                content=response.content,
-                status_code=response.status_code,
-                headers=dict(response.headers),
-                media_type=response.headers.get("content-type")
-            )
-        
-        # Client accepts SSE - check if backend returns SSE
-        logger.debug("Client accepts SSE - checking backend response type")
-        
-        # Manually manage stream lifecycle (can't use async with - it closes too early)
-        stream_context = proxy_client.stream(
-            request.method,
-            target_url,
-            headers=headers,
-            content=body
-        )
-        backend_response = await stream_context.__aenter__()
-        
-        backend_content_type = backend_response.headers.get("content-type", "")
-        is_sse = "text/event-stream" in backend_content_type
-        
-        logger.debug(f"Backend: status={backend_response.status_code}, content-type={backend_content_type or 'none'}")
-        
-        # If backend doesn't return SSE, read full response and close stream
-        if not is_sse:
-            content_bytes = await backend_response.aread()
-            await stream_context.__aexit__(None, None, None)
-            
-            duration = time() - start_time
-            success = backend_response.status_code < 400
-            metrics.record_tool_execution(
-                tool_name=tool_name,
-                server_name=server_name,
-                success=success,
-                duration_seconds=duration,
-                method=request.method
-            )
+            backend_content_type = backend_response.headers.get("content-type", "")
+            is_sse = "text/event-stream" in backend_content_type
 
-            # Log error responses for debugging
-            if backend_response.status_code >= 400:
-                try:
-                    error_body = content_bytes.decode('utf-8')
-                    logger.error(f"Backend error response ({backend_response.status_code}): {error_body}")
-                except Exception:
-                    logger.error(f"Backend error response ({backend_response.status_code}): [binary content, {len(content_bytes)} bytes]")
-            
-            return Response(
-                content=content_bytes,
-                status_code=backend_response.status_code,
-                headers=dict(backend_response.headers),
-                media_type=backend_content_type or "application/octet-stream"
-            )
-        
-        # Backend is returning true SSE - keep stream open and forward it
-        logger.info(f"Streaming SSE from backend")
-        
-        duration = time() - start_time
-        metrics.record_tool_execution(
-            tool_name=tool_name,
-            server_name=server_name,
-            success=True,  # SSE connection established
-            duration_seconds=duration,
-            method=request.method
-        )
-        
-        response_headers = {
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection": "keep-alive",
-            "Content-Type": "text/event-stream"
-        }
-        
-        # Forward MCP session header if present
-        if "mcp-session-id" in backend_response.headers:
-            response_headers["Mcp-Session-Id"] = backend_response.headers["mcp-session-id"]
-        
-        # Stream content from backend to client - cleanup when done
-        async def stream_sse():
-            try:
-                async for chunk in backend_response.aiter_bytes():
-                    yield chunk
-            except Exception as e:
-                logger.error(f"SSE streaming error: {e}")
-                raise
-            finally:
-                # Close stream when done streaming
+            logger.debug(f"Backend: status={backend_response.status_code}, content-type={backend_content_type or 'none'}")
+
+            # If backend doesn't return SSE, read full response and close stream
+            if not is_sse:
+                content_bytes = await backend_response.aread()
                 await stream_context.__aexit__(None, None, None)
-        
-        return StreamingResponse(
-            stream_sse(),
-            status_code=backend_response.status_code,
-            media_type="text/event-stream",
-            headers=response_headers
-        )
-            
-    except httpx.TimeoutException:
-        logger.error(f"Timeout proxying to {target_url}")
-        
-        duration = time() - start_time
-        metrics.record_tool_execution(
-            tool_name=tool_name,
-            server_name=server_name,
-            success=False,
-            duration_seconds=duration,
-            method=request.method
-        )
 
-        return JSONResponse(
-            status_code=504,
-            content={"error": "Gateway timeout"}
-        )
-    except Exception as e:
-        logger.error(f"Error proxying to {target_url}: {e}")
-        
-        duration = time() - start_time
-        metrics.record_tool_execution(
-            tool_name=tool_name,
-            server_name=server_name,
-            success=False,
-            duration_seconds=duration,
-            method=request.method
-        )
-        
-        return JSONResponse(
-            status_code=502,
-            content={"error": "Bad gateway", "detail": str(e)}
-        )
+                metrics_ctx.set_success(backend_response.status_code < 400)
+
+                # Log error responses for debugging
+                if backend_response.status_code >= 400:
+                    try:
+                        error_body = content_bytes.decode("utf-8")
+                        logger.error(f"Backend error response ({backend_response.status_code}): {error_body}")
+                    except Exception:
+                        logger.error(f"Backend error response ({backend_response.status_code}): [binary content, {len(content_bytes)} bytes]")
+
+                return Response(
+                    content=content_bytes,
+                    status_code=backend_response.status_code,
+                    headers=dict(backend_response.headers),
+                    media_type=backend_content_type or "application/octet-stream"
+                )
+
+            # Backend is returning true SSE - keep stream open and forward it
+            # Record metrics now since SSE connection is established successfully
+            logger.info("Streaming SSE from backend")
+            metrics_ctx.set_success(True)
+
+            response_headers = {
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+                "Content-Type": "text/event-stream"
+            }
+
+            # Forward MCP session header if present
+            if "mcp-session-id" in backend_response.headers:
+                response_headers["Mcp-Session-Id"] = backend_response.headers["mcp-session-id"]
+
+            # Stream content from backend to client - cleanup when done
+            async def stream_sse():
+                try:
+                    async for chunk in backend_response.aiter_bytes():
+                        yield chunk
+                except Exception as e:
+                    logger.error(f"SSE streaming error: {e}")
+                    raise
+                finally:
+                    # Close stream when done streaming
+                    await stream_context.__aexit__(None, None, None)
+
+            return StreamingResponse(
+                stream_sse(),
+                status_code=backend_response.status_code,
+                media_type="text/event-stream",
+                headers=response_headers
+            )
+
+        except httpx.TimeoutException:
+            logger.error(f"Timeout proxying to {target_url}")
+            metrics_ctx.set_success(False)
+            return JSONResponse(
+                status_code=504,
+                content={"error": "Gateway timeout"}
+            )
+
+        except Exception as e:
+            logger.error(f"Error proxying to {target_url}: {e}")
+            metrics_ctx.set_success(False)
+            return JSONResponse(
+                status_code=502,
+                content={"error": "Bad gateway", "detail": str(e)}
+            )
 
 
 async def extract_server_path_from_request(request_path: str) -> Optional[str]:

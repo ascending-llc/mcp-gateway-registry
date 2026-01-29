@@ -1,5 +1,3 @@
-import time
-from functools import wraps
 import logging
 from typing import List, Literal, Optional
 from registry.auth.dependencies import CurrentUser
@@ -7,8 +5,11 @@ from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
 
-from registry.utils.otel_metrics import metrics
 from registry.services.search.service import faiss_service
+from registry.core.telemetry_decorators import (
+    track_registry_operation,
+    track_tool_discovery,
+)
 from ...services.agent_service import agent_service
 
 logger = logging.getLogger(__name__)
@@ -77,86 +78,6 @@ class SemanticSearchResponse(BaseModel):
     total_servers: int = 0
     total_tools: int = 0
     total_agents: int = 0
-    
-def track_search_operation(resource_type: str):
-    """
-    Decorator to track search/discovery operations.
-    Uses record_registry_operation for general searches.
-    
-    Args:
-        resource_type: Type of resource (server, semantic, etc.)
-    """
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            start_time = time.time()
-            success = False
-            
-            try:
-                result = await func(*args, **kwargs)
-                success = True
-                return result
-            except HTTPException:
-                raise
-            except Exception:
-                raise
-            finally:
-                duration = time.time() - start_time
-                metrics.record_registry_operation(
-                    operation="search",
-                    resource_type=resource_type,
-                    success=success,
-                    duration_seconds=duration
-                )
-        
-        return wrapper
-    return decorator
-
-def track_tool_discovery(func):
-    """
-    Decorator specifically for tool discovery operations.
-    Uses the dedicated record_tool_discovery metric.
-    """
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        start_time = time.time()
-        success = False
-        query = ""
-        
-        try:
-            # Extract query from body
-            body = kwargs.get('body', {})
-            query = body.get('query', 'unknown')
-            
-            result = await func(*args, **kwargs)
-            success = True
-            
-            # Record discovery for each found tool
-            if hasattr(result, 'matches'):
-                for match in result.matches:
-                    metrics.record_tool_discovery(
-                        tool_name=match.tool_name,
-                        source="search",
-                        success=True,
-                        duration_seconds=None  # Don't duplicate duration per tool
-                    )
-            
-            return result
-        except HTTPException:
-            raise
-        except Exception:
-            raise
-        finally:
-            # Record overall discovery operation with timing
-            duration = time.time() - start_time
-            metrics.record_tool_discovery(
-                tool_name=query,  # Use query as identifier
-                source="search",
-                success=success,
-                duration_seconds=duration
-            )
-    
-    return wrapper
 
 def _user_can_access_agent(agent_path: str, user_context: dict) -> bool:
     """Validate user access for a given agent."""
@@ -190,7 +111,7 @@ def _user_can_access_agent(agent_path: str, user_context: dict) -> bool:
     response_model=SemanticSearchResponse,
     summary="Unified semantic search for MCP servers and tools",
 )
-@track_search_operation("semantic")
+@track_registry_operation("search", resource_type="semantic")
 async def semantic_search(
         request: Request,
         search_request: SemanticSearchRequest,
@@ -340,7 +261,7 @@ class ToolDiscoveryResponse(BaseModel):
 
 
 @router.post("/search/tools")
-@track_tool_discovery
+@track_tool_discovery(extract_query=lambda body, **kw: body.get("query", "unknown"))
 async def discover_tools(
     request: Request,
     body: dict,
@@ -485,7 +406,7 @@ async def discover_tools(
 
 
 @router.post("/search/servers")
-@track_search_operation("server")
+@track_registry_operation("search", resource_type="server")
 async def search_servers(
     request: Request,
     body: dict,

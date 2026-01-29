@@ -1,0 +1,51 @@
+service_name: registry
+
+counters:
+  - name: registry_operations_total
+    description: Total number of registry operations
+    unit: "1"
+
+  - name: mcp_server_requests_total
+    description: Total requests to MCP servers
+    unit: "1"
+
+  - name: mcp_tool_discovery_total
+    description: Total number of tool discovery operations
+    unit: "1"
+
+  - name: mcp_tool_execution_total
+    description: Total number of tool executions
+    unit: "1"
+
+  - name: search_requests_total
+    description: Total number of search requests
+    unit: "1"
+
+  - name: proxy_requests_total
+    description: Total number of proxy requests
+    unit: "1"
+
+histograms:
+  - name: registry_operation_duration_seconds
+    description: Registry operation latency in seconds
+    unit: "s"
+
+  - name: mcp_tool_execution_duration_seconds
+    description: Tool execution duration in seconds
+    unit: "s"
+
+  - name: mcp_tool_discovery_duration_seconds
+    description: Tool discovery latency in seconds
+    unit: "s"
+
+  - name: search_request_duration_seconds
+    description: Search request duration in seconds
+    unit: "s"
+
+  - name: proxy_request_duration_seconds
+    description: Proxy request duration in seconds
+    unit: "s"
+
+  - name: server_health_check_duration_seconds
+    description: Server health check duration in seconds
+    unit: "s"
