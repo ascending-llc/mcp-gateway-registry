@@ -2,18 +2,24 @@
 Dynamic MCP server proxy routes.
 """
 
+from time import time
 import logging
 import httpx
 from typing import Dict, Any, Optional, Union
 from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
-from registry.utils.log import metrics
+from registry.utils.otel_metrics import metrics
+from packages.models.extended_mcp_server import MCPServerDocument
 from registry.auth.dependencies import CurrentUser
 from registry.services.server_service import server_service_v1
-from registry.utils.crypto_utils import decrypt_auth_fields
-from registry.core.mcp_client import _build_headers_for_server
-from registry.services.server_service import _build_server_info_for_mcp_client
+from registry.services.server_service import _build_complete_headers_for_server
+from registry.schemas.errors import (
+    OAuthReAuthRequiredError,
+    OAuthTokenError,
+    MissingUserIdError,
+    AuthenticationError
+)
 from registry.schemas.proxy_tool_schema import (
     ToolExecutionRequest,
     ToolExecutionResponse,
@@ -39,22 +45,44 @@ async def proxy_to_mcp_server(
     request: Request,
     target_url: str,
     auth_context: Dict[str, Any],
-    server_path: str = None,
-    server_config: Dict[str, Any] = None
+    server: MCPServerDocument
 ) -> Response:
     """
     Proxy request to MCP server with auth headers.
-    Handles both regular HTTP and SSE streaming.
+    Handles both regular HTTP and SSE streaming, including OAuth token injection.
     
     Args:
         request: Incoming FastAPI request
         target_url: Backend MCP server URL
         auth_context: Gateway authentication context
-        server_path: Server path to determine special handling (e.g., MCPGW)
-        server_config: Server configuration including apiKey authentication
+        server: MCPServerDocument
     """
+    start_time = time()
+    
+    server_name = server.get("title", server.path.strip('/')) if server else server.path.strip('/')
+    tool_name = "unknown"
+    try:
+        body_bytes = await request.body()
+        if body_bytes:
+            import json
+            body_json = json.loads(body_bytes)
+            # MCP JSON-RPC format: {"method": "tools/call", "params": {"name": "tool_name", ...}}
+            if body_json.get("method") == "tools/call":
+                tool_name = body_json.get("params", {}).get("name", "unknown")
+            elif body_json.get("method") == "tools/list":
+                tool_name = "tools/list"
+            elif body_json.get("method") == "resources/read":
+                tool_name = body_json.get("params", {}).get("uri", "resources/read")
+            elif body_json.get("method") == "prompts/execute":
+                tool_name = body_json.get("params", {}).get("name", "prompts/execute")
+            else:
+                tool_name = body_json.get("method", "unknown")
+    except Exception as e:
+        logger.debug(f"Could not extract tool name from request body: {e}")
+        tool_name = "unknown"
+    
     # Check if this is MCPGW path (special handling)
-    is_mcpgw = server_path == MCPGW_PATH
+    is_mcpgw = server.path == MCPGW_PATH
     
     # Build proxy headers - start with request headers
     headers = dict(request.headers)
@@ -80,25 +108,36 @@ async def proxy_to_mcp_server(
         headers.pop("authorization", None)
         headers.pop("Authorization", None)
         
-        # Build authentication headers for external MCP server
-        if server_config:
-            decrypted_config = decrypt_auth_fields(server_config)
-            # Build server_info structure (same as server_service.py line 1034)
-            server_info = _build_server_info_for_mcp_client(
-                decrypted_config,
-                server_config.get("tags", [])
+        # Build complete authentication headers (OAuth, apiKey, custom)
+        try:
+            user_id = auth_context.get("user_id")
+            auth_headers = await _build_complete_headers_for_server(server, user_id)
+            
+            # Merge auth headers (Authorization, custom headers, etc.)
+            # Only update Authorization and non-context headers
+            for key, value in auth_headers.items():
+                if key.lower() not in ["content-type", "accept", "user-agent"]:
+                    headers[key] = value
+            
+            logger.debug(f"Built complete authentication headers for {server.serverName}")
+            
+        except OAuthReAuthRequiredError as e:
+            raise HTTPException(
+                status_code=401,
+                detail="OAuth re-authentication required",
+                headers={"X-OAuth-URL": e.auth_url or ""}
             )
-            
-            # Extract headers from server_info structure
-            if "headers" in server_info:
-                for header_dict in server_info["headers"]:
-                    headers.update(header_dict)
-            
-            # Also build API key headers directly from config
-            auth_headers = _build_headers_for_server(decrypted_config)
-            headers.update(auth_headers)
-            
-            logger.debug(f"Built authentication headers for backend server: {list(headers.keys())}")
+        except MissingUserIdError as e:
+            raise HTTPException(
+                status_code=401,
+                detail=f"User authentication required: {str(e)}"
+            )
+        except (OAuthTokenError, AuthenticationError) as e:
+            raise HTTPException(
+                status_code=401,
+                detail=f"Authentication error: {str(e)}"
+            )
+
 
     body = await request.body()
     
@@ -118,7 +157,16 @@ async def proxy_to_mcp_server(
                 headers=headers,
                 content=body
             )
-            
+            duration = time() - start_time
+            success = response.status_code < 400
+            metrics.record_tool_execution(
+                tool_name=tool_name,
+                server_name=server_name,
+                success=success,
+                duration_seconds=duration,
+                method=request.method
+            )
+
             # Log error responses for debugging
             if response.status_code >= 400:
                 try:
@@ -156,6 +204,16 @@ async def proxy_to_mcp_server(
             content_bytes = await backend_response.aread()
             await stream_context.__aexit__(None, None, None)
             
+            duration = time() - start_time
+            success = backend_response.status_code < 400
+            metrics.record_tool_execution(
+                tool_name=tool_name,
+                server_name=server_name,
+                success=success,
+                duration_seconds=duration,
+                method=request.method
+            )
+
             # Log error responses for debugging
             if backend_response.status_code >= 400:
                 try:
@@ -173,6 +231,15 @@ async def proxy_to_mcp_server(
         
         # Backend is returning true SSE - keep stream open and forward it
         logger.info(f"Streaming SSE from backend")
+        
+        duration = time() - start_time
+        metrics.record_tool_execution(
+            tool_name=tool_name,
+            server_name=server_name,
+            success=True,  # SSE connection established
+            duration_seconds=duration,
+            method=request.method
+        )
         
         response_headers = {
             "Cache-Control": "no-cache",
@@ -206,12 +273,32 @@ async def proxy_to_mcp_server(
             
     except httpx.TimeoutException:
         logger.error(f"Timeout proxying to {target_url}")
+        
+        duration = time() - start_time
+        metrics.record_tool_execution(
+            tool_name=tool_name,
+            server_name=server_name,
+            success=False,
+            duration_seconds=duration,
+            method=request.method
+        )
+
         return JSONResponse(
             status_code=504,
             content={"error": "Gateway timeout"}
         )
     except Exception as e:
         logger.error(f"Error proxying to {target_url}: {e}")
+        
+        duration = time() - start_time
+        metrics.record_tool_execution(
+            tool_name=tool_name,
+            server_name=server_name,
+            success=False,
+            duration_seconds=duration,
+            method=request.method
+        )
+        
         return JSONResponse(
             status_code=502,
             content={"error": "Bad gateway", "detail": str(e)}
@@ -331,26 +418,39 @@ async def execute_tool(
         }
     }    
     try:
-        # Build headers for tracking purpose
+        # Build complete authentication headers (OAuth, apiKey, custom)
+        try:
+            user_id = user_context.get("user_id")
+            auth_headers = await _build_complete_headers_for_server(server, user_id)
+            
+        except OAuthReAuthRequiredError as e:
+            raise HTTPException(
+                status_code=401,
+                detail="OAuth re-authentication required",
+                headers={"X-OAuth-URL": e.auth_url or ""}
+            )
+        except MissingUserIdError as e:
+            raise HTTPException(
+                status_code=401,
+                detail=f"User authentication required: {str(e)}"
+            )
+        except (OAuthTokenError, AuthenticationError) as e:
+            raise HTTPException(
+                status_code=401,
+                detail=f"Authentication error: {str(e)}"
+            )
+        
+        # Build headers with tracking info and authentication
         headers = {
-            "Content-Type": "application/json",
             "X-User": username,
             "X-Username": username,
             "X-Tool-Name": tool_name,
         }
         
-        if config:
-            decrypted_config = decrypt_auth_fields(config)
-            # Build server_info structure (same as server_service.py)
-            server_info = _build_server_info_for_mcp_client(
-                decrypted_config,
-                server.tags or []
-            )
-            
-            # Extract headers from server_info structure
-            if "headers" in server_info:
-                for header_dict in server_info["headers"]:
-                    headers.update(header_dict)
+        # Merge auth headers (includes Content-Type, Authorization, custom headers)
+        headers.update(auth_headers)
+        
+        logger.debug(f"Built complete headers for tool execution on {server.serverName}")
         
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
@@ -638,8 +738,7 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
         request=request,
         target_url=target_url,
         auth_context=auth_context,
-        server_path=server.path,
-        server_config=server.config
+        server= server
     )
 
 

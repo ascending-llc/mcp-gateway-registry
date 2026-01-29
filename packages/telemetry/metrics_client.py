@@ -5,21 +5,6 @@ from opentelemetry import metrics
 
 logger = logging.getLogger(__name__)
 
-# Histogram bucket boundaries for latency metrics (in seconds)
-# These buckets are designed to capture p50, p95, p99 accurately
-LATENCY_BUCKETS_SECONDS = (
-    0.005, 0.01, 0.025, 0.05, 0.075,
-    0.1, 0.25, 0.5, 0.75,
-    1.0, 2.5, 5.0, 7.5, 10.0
-)
-
-# Histogram bucket boundaries for latency metrics (in milliseconds)
-LATENCY_BUCKETS_MS = (
-    5, 10, 25, 50, 75,
-    100, 250, 500, 750,
-    1000, 2500, 5000, 7500, 10000
-)
-
 
 def safe_telemetry(func):
     """
@@ -47,9 +32,16 @@ class OTelMetricsClient:
     - Registry operation latency (histogram)
     """
 
-    def __init__(self):
+    def __init__(self, service_name: str):
+        """
+        Initialize metrics client for a specific service.
+        
+        Args:
+            service_name: Name of the service (e.g., 'api', 'worker', 'registry')
+        """
         try:
-            self.meter = metrics.get_meter(__name__)
+            self.service_name = service_name
+            self.meter = metrics.get_meter(f"mcp.{service_name}")
 
             # HTTP metrics
             self.http_requests = self.meter.create_counter(
@@ -118,26 +110,7 @@ class OTelMetricsClient:
                 unit="1"
             )
         except Exception as e:
-            logger.error(f"Failed to initialize OTelMetricsClient: {e}")
-
-    @safe_telemetry
-    def record_http_request(self, method: str, route: str, status_code: int):
-        """Record an incoming HTTP request."""
-        attributes = {
-            "method": method,
-            "route": route,
-            "status_code": str(status_code)
-        }
-        self.http_requests.add(1, attributes)
-
-    @safe_telemetry
-    def record_http_duration(self, duration_seconds: float, method: str, route: str):
-        """Record how long a request took."""
-        attributes = {
-            "method": method,
-            "route": route
-        }
-        self.http_duration.record(duration_seconds, attributes)
+            logger.error(f"Failed to initialize OTelMetricsClient for service '{service_name}': {e}")
 
     @safe_telemetry
     def record_auth_request(
@@ -166,16 +139,6 @@ class OTelMetricsClient:
         # Record duration histogram for latency percentiles
         if duration_seconds is not None:
             self.auth_duration.record(duration_seconds, attributes)
-
-    @safe_telemetry
-    def record_tool_used(self, tool_name: str):
-        """
-        Record when a tool is used.
-        """
-        attributes = {
-            "tool_name": tool_name
-        }
-        self.tool_discovery.add(1, attributes)
 
     @safe_telemetry
     def record_tool_discovery(
@@ -215,7 +178,7 @@ class OTelMetricsClient:
         server_name: str,
         success: bool,
         duration_seconds: Optional[float] = None,
-        method: Optional[str] = None
+        method: str = "UNKNOWN"
     ):
         """
         Record tool execution with success rate and latency tracking.
@@ -225,23 +188,14 @@ class OTelMetricsClient:
             server_name: Name of the MCP server
             success: Whether the execution was successful
             duration_seconds: Execution duration in seconds for p50/p95/p99 calculation
-            method: MCP method (e.g., "tools/call", "tools/list")
-
-        Example:
-            client.record_tool_execution(
-                "my_tool",
-                "my_server",
-                success=True,
-                duration_seconds=0.25
-            )
+            method: HTTP method (e.g., "POST", "GET") - defaults to "UNKNOWN"
         """
         attributes = {
             "tool_name": tool_name,
             "server_name": server_name,
-            "status": "success" if success else "failure"
+            "status": "success" if success else "failure",
+            "method": method  # Always include this
         }
-        if method:
-            attributes["method"] = method
 
         self.tool_execution.add(1, attributes)
 
@@ -294,3 +248,24 @@ class OTelMetricsClient:
             "server_name": server_name
         }
         self.server_requests.add(1, attributes)
+
+
+def create_metrics_client(service_name: str) -> OTelMetricsClient:
+    """
+    Create a metrics client for a specific service.
+    
+    This factory function creates a new OTelMetricsClient instance with
+    service-specific meter identity for better observability in dashboards.
+    
+    Args:
+        service_name: Identifier for the service (e.g., 'api', 'worker', 'registry')
+    
+    Returns:
+        Configured OTelMetricsClient instance
+        
+    Example:
+        >>> from packages.telemetry.metrics_client import create_metrics_client
+        >>> metrics = create_metrics_client("api")
+        >>> metrics.record_http_request("GET", "/health", 200)
+    """
+    return OTelMetricsClient(service_name)
