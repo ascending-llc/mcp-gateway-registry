@@ -1,18 +1,37 @@
 #!/usr/bin/env python3
 import logging
+import asyncio
+from contextlib import asynccontextmanager
 from fastmcp import FastMCP
 from starlette.responses import JSONResponse
 from auth.custom_jwt import jwtVerifier
 from auth.middleware import AuthMiddleware
 from config import parse_arguments, settings
 from tools import registry_api, search
+from packages.database import init_mongodb, close_mongodb
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def app_lifespan(server):
+    """Initialize MongoDB connection pool at server startup."""
+    logger.info("🗄️  Initializing MongoDB connection pool...")
+    try:
+        await init_mongodb()
+        logger.info("✅ MongoDB connection pool established")
+        yield {}  # Lifespan context (empty dict since we don't need to pass data)
+    finally:
+        logger.info("🗄️  Closing MongoDB connection pool...")
+        await close_mongodb()
+        logger.info("✅ MongoDB connection pool closed")
+
+
 mcp = FastMCP(
     "MCPGateway",
     auth=jwtVerifier,
+    lifespan=app_lifespan,  # Add lifespan here
     instructions="""This MCP Gateway provides unified access to 100+ MCP servers, tools, resources, and prompts through a centralized discovery and execution interface.
 
 KEY CAPABILITIES:
@@ -189,7 +208,7 @@ def main():
     logger.info(f"  Endpoint: http://0.0.0.0:{settings.MCP_SERVER_LISTEN_PORT}/mcp")
     logger.info("=" * 80)
 
-    # Run the server
+    # Run the server (lifespan will initialize MongoDB automatically)
     logger.info("Starting server...")
     try:
         mcp.run(

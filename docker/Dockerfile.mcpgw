@@ -18,15 +18,19 @@ WORKDIR /app
 # Copy workspace root pyproject.toml to enable workspace resolution
 COPY pyproject.toml /app/
 
-# Copy the application code
+# Copy packages and mcpgw application code
+COPY packages/ /app/packages/
 COPY servers/mcpgw/ /app/servers/mcpgw/
 
 # Install Python dependencies
 # Step 1: Install uv package manager
-# Step 2: Install mcpgw server dependencies
+# Step 2: Install packages workspace dependency first
+# Step 3: Install mcpgw server dependencies
 RUN pip install --no-cache-dir uv && \
-    echo "Installing MCPGW server dependencies..." && \
+    echo "Installing workspace dependencies..." && \
     cd /app && \
+    uv pip install --system -e ./packages && \
+    echo "Installing MCPGW server dependencies..." && \
     uv pip install --system -e ./servers/mcpgw && \
     echo "Dependencies installed successfully"
 
