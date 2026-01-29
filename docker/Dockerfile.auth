@@ -14,12 +14,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy only auth server files
+COPY pyproject.toml /app/pyproject.toml
 COPY auth_server/ /app/auth_server/
+COPY packages/ /app/packages/
 
 # Install uv and setup Python environment
 RUN pip install uv && \
     uv venv .venv --python 3.12 && \
     . .venv/bin/activate && \
+    uv pip install --system -e /app/packages && \
     uv pip install --requirement /app/auth_server/pyproject.toml
 
 # Create logs directory
