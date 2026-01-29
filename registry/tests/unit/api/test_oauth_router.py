@@ -92,9 +92,9 @@ def client():
     app.dependency_overrides[get_mcp_service] = lambda: mock_mcp_service
 
     # Mock get_service_config to return a valid server document
-    from registry.api.v1.mcp.connection_router import get_service_config
+    from registry.api.v1.mcp.connection_router import get_server_config
 
-    async def mock_get_service_config(server_id: str):
+    async def mock_get_server_config(server_id: str):
         """Mock server config for testing"""
         mock_server = Mock()
         mock_server.id = ObjectId(TEST_SERVER_ID)
@@ -107,8 +107,8 @@ def client():
         }
         return mock_server
 
-    # Patch get_service_config in the oauth_router module
-    with patch('registry.api.v1.mcp.oauth_router.get_service_config', side_effect=mock_get_service_config):
+    # Patch get_server_config in the oauth_router module
+    with patch('registry.api.v1.mcp.oauth_router.get_server_config', side_effect=mock_get_server_config):
         yield TestClient(app)
 
 

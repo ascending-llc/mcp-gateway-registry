@@ -3,13 +3,14 @@ from typing import Dict, Any, Optional
 from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from fastapi.responses import RedirectResponse, JSONResponse
-from registry.api.v1.mcp.connection_router import get_service_config
+from registry.api.v1.mcp.connection_router import get_server_config
 from registry.auth.dependencies import CurrentUser
 from registry.services.oauth.mcp_service import get_mcp_service, MCPService
 from registry.schemas.enums import ConnectionState, OAuthFlowStatus
 from registry.utils.log import logger
 from registry.auth.oauth.reconnection import get_reconnection_manager
 from registry.constants import REGISTRY_CONSTANTS
+from services.oauth.token_service import token_service
 
 router = APIRouter(prefix="/mcp", tags=["oauth"])
 
@@ -29,7 +30,7 @@ async def initiate_oauth_flow(
     try:
         user_id = user_context.get('user_id')
         logger.info(f"Oauth initiate for user id : {user_id}")
-        server = await get_service_config(server_id)
+        server = await get_server_config(server_id)
 
         flow_id, auth_url, error = await mcp_service.oauth_service.initiate_oauth_flow(
             user_id=user_id,
@@ -267,7 +268,7 @@ async def cancel_oauth_flow(
         user_id = current_user.get("user_id")
         logger.info(f"[OAuth Cancel] Cancelling OAuth flow for {server_id} by user {user_id}")
 
-        mcp_server = await get_service_config(server_id)
+        mcp_server = await get_server_config(server_id)
 
         # 1. Cancel the OAuth flow
         success, error_msg = await mcp_service.oauth_service.cancel_oauth_flow(user_id, server_id)
@@ -330,7 +331,7 @@ async def refresh_oauth_tokens(
     try:
         user_id = current_user.get("user_id")
         logger.info(f"[OAuth Refresh] Refreshing OAuth tokens for {server_id} by user {user_id}")
-        mcp_server = await get_service_config(server_id)
+        mcp_server = await get_server_config(server_id)
 
         # 1. Refresh OAuth tokens
         success, error_msg = await mcp_service.oauth_service.validate_and_refresh_tokens(user_id, mcp_server)
@@ -395,6 +396,33 @@ async def refresh_oauth_tokens(
         # Re-raise HTTP exceptions with their original status code
         raise
     except Exception as e:
+        logger.error(f"Failed to refresh OAuth tokens: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"Failed to refresh tokens: {str(e)}")
+
+
+@router.delete("/oauth/token/{server_id}")
+async def refresh_oauth_tokens(
+        server_id: str,
+        current_user: CurrentUser
+) -> Dict[str, Any]:
+    """
+    Delete the OAuth token for this user
+
+    """
+    server = await get_server_config(server_id)
+    user_id = current_user.get("user_id")
+    try:
+        results = await token_service.delete_oauth_tokens(user_id, server.serverName)
+        logger.info(f"[OAuth Refresh] Deleted OAuth tokens for {server_id},results: {results}")
+        message = "successfully" if results else "failed"
+        return {
+            "success": results,
+            "message": f"oauth delete {message} for {server_id}",
+            "server_id": server_id,
+            "user_id": user_id,
+        }
+    except HTTPException as e:
         logger.error(f"Failed to refresh OAuth tokens: {str(e)}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Failed to refresh tokens: {str(e)}")
