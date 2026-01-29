@@ -16,9 +16,6 @@ import uvicorn
 # Import settings and scopes config loader
 from .core.config import settings, load_scopes_config
 
-# Import metrics middleware
-from .metrics_middleware import add_auth_metrics_middleware
-
 # Import provider factory
 from .providers.factory import get_auth_provider
 
@@ -178,9 +175,6 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["WWW-Authenticate", "X-User", "X-Username", "X-Client-Id"],
 )
-
-# Add metrics collection middleware
-add_auth_metrics_middleware(app)
 
 # Include .well-known routes at root level (for mcp-remote RFC 8414 compliance)
 # mcp-remote strips path when building /.well-known/oauth-authorization-server URL /authorize

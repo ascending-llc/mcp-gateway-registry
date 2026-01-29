@@ -36,11 +36,6 @@ services:
       - HEALTH_CHECK_INTERVAL_SECONDS=${HEALTH_CHECK_INTERVAL_SECONDS:-30}
       - SRE_GATEWAY_AUTH_TOKEN=${SRE_GATEWAY_AUTH_TOKEN}
       - ATLASSIAN_AUTH_TOKEN=${ATLASSIAN_AUTH_TOKEN}
-      # Metrics configuration
-      - METRICS_SERVICE_URL=http://metrics-service:8890
-      - METRICS_API_KEY=${METRICS_API_KEY_REGISTRY}
-      - METRICS_API_KEY_NGINX=${METRICS_API_KEY_REGISTRY}
-      - AUTH_SERVER_URL=http://auth-server:8888
       # External Registry Configuration
       - EXTERNAL_REGISTRY_TAGS=${EXTERNAL_REGISTRY_TAGS:-anthropic-registry,workday-asor}
       - ASOR_ACCESS_TOKEN=${ASOR_ACCESS_TOKEN}
@@ -76,8 +71,6 @@ services:
     depends_on:
       auth-server:
         condition: service_started
-      metrics-service:
-        condition: service_healthy
       weaviate:
         condition: service_healthy
       registry-mongodb:
@@ -109,40 +102,6 @@ services:
     profiles:
       - full
   
-  # Metrics Collection Service
-  metrics-service:
-    build:
-      context: metrics-service
-      dockerfile: Dockerfile
-    environment:
-      - METRICS_SERVICE_PORT=8890
-      - METRICS_SERVICE_HOST=0.0.0.0
-      - SQLITE_DB_PATH=/var/lib/sqlite/metrics.db
-      - METRICS_RETENTION_DAYS=90
-      - METRICS_API_KEY_AUTH=${METRICS_API_KEY_AUTH_SERVER}
-      - METRICS_API_KEY_REGISTRY=${METRICS_API_KEY_REGISTRY}
-      - METRICS_API_KEY_MCPGW=${METRICS_API_KEY_MCPGW_SERVER}
-      - OTEL_SERVICE_NAME=mcp-metrics-service
-      - OTEL_PROMETHEUS_ENABLED=true
-      - OTEL_PROMETHEUS_PORT=9465
-      - METRICS_RATE_LIMIT=1000
-    ports:
-      - "8890:8890"
-      - "9465:9465"  # Prometheus metrics endpoint
-    volumes:
-      - metrics-db-data:/var/lib/sqlite
-      - ${APP_HOME}/mcp-gateway/logs:/app/logs
-    depends_on:
-      - metrics-db
-    restart: unless-stopped
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8890/health" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    profiles:
-      - full
-
   # MongoDB Database
   registry-mongodb:
     container_name: registry-mongodb
@@ -191,9 +150,6 @@ services:
       dockerfile: docker/Dockerfile.auth
     environment:
       - AWS_REGION=${AWS_REGION:-us-east-1}
-      # Metrics configuration
-      - METRICS_SERVICE_URL=http://metrics-service:8890
-      - METRICS_API_KEY=${METRICS_API_KEY_AUTH_SERVER}
       # Keycloak configuration
       - AUTH_PROVIDER=${AUTH_PROVIDER:-cognito}  # 'cognito' or 'keycloak' or 'entra'
       - KEYCLOAK_ENABLED=${KEYCLOAK_ENABLED:-false}
@@ -294,21 +250,6 @@ services:
     profiles:
       - full
       - dev
-
-  # SQLite container for metrics database
-  metrics-db:
-    image: alpine:latest
-    volumes:
-      - metrics-db-data:/var/lib/sqlite
-    command: [ "sh", "-c", "apk add --no-cache sqlite && mkdir -p /var/lib/sqlite && sqlite3 /var/lib/sqlite/metrics.db 'CREATE TABLE IF NOT EXISTS _health (id INTEGER);' && tail -f /dev/null" ]
-    restart: unless-stopped
-    healthcheck:
-      test: [ "CMD", "sqlite3", "/var/lib/sqlite/metrics.db", ".tables" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    profiles:
-      - full
 
   # Prometheus for metrics collection
   prometheus:
@@ -418,7 +359,6 @@ volumes:
     driver: local
   mongodb-config:
     driver: local
-  metrics-db-data:
   prometheus-data:
   grafana-data:
   weaviate_data:
