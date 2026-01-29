@@ -191,7 +191,7 @@ These methods are implemented in `registry/services/access_control_service.py` a
 The following REST API endpoints are exposed for ACL management:
 
 - **GET `/permissions/search-principals`**
-    - **Purpose:** Search for principals (users, groups) by query string for ACL sharing UI and permission assignment.
+    - **Purpose:** Search for principals (users, groups) by query string. Enables the ACL management UI to look up principals for permission assignment
     - **Query Parameters:**
         - `query` (string, required): The search string for principal name, email, or username.
         - `limit` (int, optional): Maximum number of results to return (default: 30).
@@ -208,7 +208,7 @@ The following REST API endpoints are exposed for ACL management:
         ```
 
 - **GET `/permissions/{resource_type}/{resource_id}`**
-    - **Purpose:** Get all ACL permissions for a specific resource.
+    - **Purpose:** Get all ACL permissions for a specific resource. Allows the ACL management UI to display which principals have access and whether the resource is public
     - **Response:**
         ```json
         {
