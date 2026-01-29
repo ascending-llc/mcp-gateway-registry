@@ -530,12 +530,12 @@ class ServerServiceV1:
                     from registry.core.mcp_client import get_tools_and_capabilities_from_server
 
                     # Get tools and capabilities (we'll only use capabilities)
-                    tool_list, capabilities = await get_tools_and_capabilities_from_server(data.url, server_info)
+                    result = await get_tools_and_capabilities_from_server(data.url, server_info)
 
                     # Save capabilities if retrieved successfully
-                    if capabilities:
+                    if result.capabilities:
                         import json
-                        config["capabilities"] = json.dumps(capabilities)
+                        config["capabilities"] = json.dumps(result.capabilities)
                         logger.info(f"Saved capabilities for {server.serverName}: {config['capabilities']}")
                     else:
                         config["capabilities"] = "{}"
@@ -1026,15 +1026,15 @@ class ServerServiceV1:
             # Use the appropriate MCP client function
             if include_capabilities:
                 from registry.core.mcp_client import get_tools_and_capabilities_from_server
-                tool_list, capabilities = await get_tools_and_capabilities_from_server(url, server_info)
+                result = await get_tools_and_capabilities_from_server(url, server_info)
 
-                if tool_list is None or capabilities is None:
-                    error_msg = "Failed to retrieve tools and capabilities from MCP server"
+                if result.tools is None or result.capabilities is None:
+                    error_msg = result.error_message or "Failed to retrieve tools and capabilities from MCP server"
                     logger.warning(f"{error_msg} for {server.serverName}")
                     return None, None, error_msg
 
-                logger.info(f"Retrieved {len(tool_list)} tools and capabilities from {server.serverName}")
-                return tool_list, capabilities, None
+                logger.info(f"Retrieved {len(result.tools)} tools and capabilities from {server.serverName}")
+                return result.tools, result.capabilities, None
             else:
                 from registry.core.mcp_client import get_tools_from_server_with_server_info
                 tool_list = await get_tools_from_server_with_server_info(url, server_info)

@@ -42,6 +42,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
   const [loading, setLoading] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [formData, setFormData] = useState<ServerConfig>(INIT_DATA);
+  const [originalData, setOriginalData] = useState<ServerConfig | null>(null);
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [serverData, setServerData] = useState<{ serverName: string }>({ serverName: '' });
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
@@ -54,6 +55,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
     } else {
       setLoadingDetail(false);
       setFormData(INIT_DATA);
+      setOriginalData(null);
       setErrors({});
     }
   }, [id, isOpen]);
@@ -93,6 +95,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
           scope: result.oauth?.scope,
         };
       }
+      setOriginalData(formData);
       setFormData(formData);
     } catch (_error) {
       showToast('Failed to fetch server details', 'error');
@@ -208,8 +211,12 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
           ...baseData,
           apiKey: {
             source: data.authConfig.source,
-            ...(data.authConfig.source !== 'user' && data.authConfig.key ? { key: data.authConfig.key } : {}),
             authorization_type: data.authConfig.authorization_type,
+            ...(data.authConfig.source !== 'user' &&
+            data.authConfig.key &&
+            data.authConfig.key !== originalData?.authConfig?.key
+              ? { key: data.authConfig.key }
+              : {}),
             ...(data.authConfig.authorization_type === 'custom' && data.authConfig.custom_header
               ? { custom_header: data.authConfig.custom_header }
               : {}),
@@ -220,7 +227,9 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
           ...baseData,
           oauth: {
             client_id: data.authConfig.client_id,
-            client_secret: data.authConfig.client_secret,
+            ...(data.authConfig.client_secret !== originalData?.authConfig?.client_secret
+              ? { client_secret: data.authConfig.client_secret }
+              : {}),
             authorization_url: data.authConfig.authorization_url,
             token_url: data.authConfig.token_url,
             scope: data.authConfig.scope,
