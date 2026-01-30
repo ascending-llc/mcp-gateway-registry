@@ -53,12 +53,12 @@ echo "================================="\n\
 echo "MCPGW Server Configuration"\n\
 echo "================================="\n\
 echo "Port: ${PORT:-8003}"\n\
-echo "Registry URL: ${REGISTRY_BASE_URL:-not set}"\n\
+echo "Registry URL: ${REGISTRY_URL:-not set}"\n\
 echo "================================="\n\
 \n\
 # Validate required environment variables\n\
-if [ -z "${REGISTRY_BASE_URL:-}" ]; then\n\
-    echo "WARNING: REGISTRY_BASE_URL environment variable is not set."\n\
+if [ -z "${REGISTRY_URL:-}" ]; then\n\
+    echo "WARNING: REGISTRY_URL environment variable is not set."\n\
     echo "The MCPGW server may not function properly without registry access."\n\
 fi\n\
 \n\
