@@ -15,6 +15,7 @@ const API = {
   getOauthInitiate: (id: string) => `${MCP_BASE_URL}/${id}/oauth/initiate`,
   getOauthReinit: (id: string) => `${MCP_BASE_URL}/${id}/reinitialize`,
   cancelAuth: (id: string) => `${MCP_BASE_URL}/oauth/cancel/${id}`,
+  revokeAuth: (id: string) => `${MCP_BASE_URL}/oauth/token/${id}`,
 
   // server
   getServers: `${SERVER_BASE_URL}`,

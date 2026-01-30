@@ -18,10 +18,14 @@ const getOauthReinit: (id: string) => Promise<TYPE.GET_SERVER_AUTH_URL_RESPONSE>
 const cancelAuth: (id: string) => Promise<TYPE.CANCEL_AUTH_RESPONSE> = async id =>
   await Request.post(API.cancelAuth(id));
 
+const revokeAuth: (id: string) => Promise<TYPE.CANCEL_AUTH_RESPONSE> = async id =>
+  await Request.delete(API.revokeAuth(id));
+
 export default {
   getServerStatus,
   getServerStatusById,
   getOauthInitiate,
   getOauthReinit,
   cancelAuth,
+  revokeAuth,
 };
