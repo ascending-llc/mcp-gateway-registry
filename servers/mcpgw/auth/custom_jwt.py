@@ -103,7 +103,7 @@ class CustomJWTVerifier(TokenVerifier):
             if not is_self_signed:
                 decode_kwargs["audience"] = self.audience
             else:
-                logger.info("Skipping audience validation for self-signed token (RFC 8707 Resource Indicators)")
+                logger.debug("Skipping audience validation for self-signed token (RFC 8707 Resource Indicators)")
             
             claims = jwt.decode(
                 token,

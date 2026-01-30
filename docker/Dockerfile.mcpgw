@@ -1,6 +1,9 @@
 # MCPGW Server Dockerfile - MCP Gateway API Server
 FROM python:3.12-slim
 
+ARG SCHEMA_VERSION=
+ARG GITHUB_TOKEN=
+
 ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive
 
@@ -18,17 +21,39 @@ WORKDIR /app
 # Copy workspace root pyproject.toml to enable workspace resolution
 COPY pyproject.toml /app/
 
-# Copy the application code
+# Copy packages and mcpgw application code
+COPY packages/ /app/packages/
 COPY servers/mcpgw/ /app/servers/mcpgw/
 
 # Install Python dependencies
 # Step 1: Install uv package manager
-# Step 2: Install mcpgw server dependencies
+# Step 2: Install packages workspace dependency first
+# Step 3: Install mcpgw server dependencies
+# Step 4: Import schemas from GitHub release
 RUN pip install --no-cache-dir uv && \
-    echo "Installing MCPGW server dependencies..." && \
+    echo "Installing workspace dependencies..." && \
     cd /app && \
+    uv pip install --system -e ./packages && \
+    echo "Installing MCPGW server dependencies..." && \
     uv pip install --system -e ./servers/mcpgw && \
-    echo "Dependencies installed successfully"
+    echo "Dependencies installed successfully" && \
+    echo "Checking for schema import..." && \
+    if [ -z "$SCHEMA_VERSION" ] || [ -z "$GITHUB_TOKEN" ]; then \
+        echo "ERROR: Schema import is required for mcpgw build"; \
+        echo "Please provide the following build arguments:"; \
+        echo "  --build-arg SCHEMA_VERSION=<version> (e.g., asc0.4.0)"; \
+        echo "  --build-arg GITHUB_TOKEN=<token>"; \
+        exit 1; \
+    fi && \
+    echo "Importing all schemas from GitHub release $SCHEMA_VERSION..." && \
+    cd /app/packages && \
+    uv run import-schemas \
+        --mode remote \
+        --tag "$SCHEMA_VERSION" \
+        --output-dir ./models \
+        --repo ascending-llc/jarvis-api \
+        --token "$GITHUB_TOKEN" && \
+    echo "Schema import completed successfully"
 
 # Create logs directory
 RUN mkdir -p /app/logs
@@ -49,12 +74,12 @@ echo "================================="\n\
 echo "MCPGW Server Configuration"\n\
 echo "================================="\n\
 echo "Port: ${PORT:-8003}"\n\
-echo "Registry URL: ${REGISTRY_BASE_URL:-not set}"\n\
+echo "Registry URL: ${REGISTRY_URL:-not set}"\n\
 echo "================================="\n\
 \n\
 # Validate required environment variables\n\
-if [ -z "${REGISTRY_BASE_URL:-}" ]; then\n\
-    echo "WARNING: REGISTRY_BASE_URL environment variable is not set."\n\
+if [ -z "${REGISTRY_URL:-}" ]; then\n\
+    echo "WARNING: REGISTRY_URL environment variable is not set."\n\
     echo "The MCPGW server may not function properly without registry access."\n\
 fi\n\
 \n\
