@@ -16,7 +16,7 @@ const getOauthReinit: (id: string) => Promise<TYPE.GET_SERVER_AUTH_URL_RESPONSE>
   await Request.post(API.getOauthReinit(id));
 
 const cancelAuth: (id: string) => Promise<TYPE.CANCEL_AUTH_RESPONSE> = async id =>
-  await Request.post(API.cancelAuth(id));
+  await Request.delete(API.cancelAuth(id));
 
 export default {
   getServerStatus,
