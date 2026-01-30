@@ -50,6 +50,10 @@ def _generate_service_jwt(user_context: Dict[str, Any]) -> str:
     logger.debug(f"Generated JWT for user: {payload.get('sub')} (user_id: {payload.get('user_id')}) "
                 f"with scopes: {payload.get('scopes', payload.get('scope', []))}")
     
+    # Critical: Verify user_id is present before generating token
+    if not payload.get('user_id'):
+        logger.error(f"WARNING: Generating JWT without user_id! User context keys: {list(user_context.keys())}")
+    
     # Sign with the same secret key used by registry
     token = jwt.encode(
         payload,

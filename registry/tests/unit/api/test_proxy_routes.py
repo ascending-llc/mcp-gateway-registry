@@ -2,23 +2,33 @@
 Unit tests for proxy_to_mcp_server function.
 """
 import pytest
+import json
 from unittest.mock import AsyncMock, Mock, patch, MagicMock
 import httpx
 from fastapi import Request, HTTPException
 from fastapi.responses import Response, StreamingResponse
 
-from registry.api.proxy_routes import proxy_to_mcp_server, MCPGW_PATH
+from registry.api.proxy_routes import (
+    proxy_to_mcp_server, 
+    _proxy_json_rpc_request,
+    _build_authenticated_headers,
+    _build_target_url,
+    MCPGW_PATH
+)
 from registry.schemas.errors import (
     OAuthReAuthRequiredError,
     OAuthTokenError,
     MissingUserIdError,
     AuthenticationError
 )
+from registry.schemas.proxy_tool_schema import (
+    ToolExecutionRequest,
+    ToolExecutionResponse
+)
 from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 
 
 @pytest.mark.unit
-@pytest.mark.proxy
 class TestProxyToMCPServer:
     """Unit tests for proxy_to_mcp_server function."""
 
@@ -541,3 +551,228 @@ class TestProxyToMCPServer:
             
             assert exc_info.value.status_code == 401
             assert "Authentication error" in exc_info.value.detail
+
+
+@pytest.mark.unit
+@pytest.mark.proxy
+class TestProxyJsonRpcRequest:
+    """Unit tests for _proxy_json_rpc_request helper function."""
+
+    @pytest.fixture
+    def mock_server(self):
+        """Create mock MCPServerDocument."""
+        server = Mock(spec=MCPServerDocument)
+        server.serverName = "test-server"
+        server.path = "/test"
+        server.config = {
+            "url": "http://backend:8080/mcp",
+            "transport": "streamable-http"
+        }
+        return server
+
+    @pytest.mark.asyncio
+    async def test_backend_4xx_error_response_without_exception(self, mock_server):
+        """
+        Test that backend 4xx responses are handled correctly.
+        httpx doesn't raise exceptions for non-2xx by default, so we must handle the status code.
+        """
+        target_url = "http://backend:8080/mcp"
+        json_body = {"jsonrpc": "2.0", "method": "tools/call", "params": {}}
+        headers = {"Content-Type": "application/json"}
+        
+        # Mock backend 400 error response
+        mock_response = Mock()
+        mock_response.status_code = 400
+        mock_response.headers = {"content-type": "application/json"}
+        mock_response.content = b'{"error": {"code": -32602, "message": "Invalid params"}}'
+        
+        with patch("registry.api.proxy_routes.proxy_client") as mock_client:
+            mock_client.post = AsyncMock(return_value=mock_response)
+            
+            response = await _proxy_json_rpc_request(
+                target_url=target_url,
+                json_body=json_body,
+                headers=headers,
+                accept_sse=False
+            )
+        
+        # Verify response preserves error status and body
+        assert response.status_code == 400
+        assert response.body == b'{"error": {"code": -32602, "message": "Invalid params"}}'
+        assert json.loads(response.body.decode('utf-8'))["error"]["code"] == -32602
+
+    @pytest.mark.asyncio
+    async def test_backend_5xx_error_response_without_exception(self, mock_server):
+        """
+        Test that backend 5xx responses are handled correctly.
+        """
+        target_url = "http://backend:8080/mcp"
+        json_body = {"jsonrpc": "2.0", "method": "tools/call", "params": {}}
+        headers = {"Content-Type": "application/json"}
+        
+        # Mock backend 500 error response
+        mock_response = Mock()
+        mock_response.status_code = 500
+        mock_response.headers = {"content-type": "application/json"}
+        mock_response.content = b'{"error": "Internal server error"}'
+        
+        with patch("registry.api.proxy_routes.proxy_client") as mock_client:
+            mock_client.post = AsyncMock(return_value=mock_response)
+            
+            response = await _proxy_json_rpc_request(
+                target_url=target_url,
+                json_body=json_body,
+                headers=headers,
+                accept_sse=False
+            )
+        
+        # Verify response preserves error status and body
+        assert response.status_code == 500
+        assert response.body == b'{"error": "Internal server error"}'
+
+    @pytest.mark.asyncio
+    async def test_backend_4xx_error_with_sse_fallback(self, mock_server):
+        """
+        Test that backend 4xx responses are handled when client accepts SSE but backend returns JSON error.
+        """
+        target_url = "http://backend:8080/mcp"
+        json_body = {"jsonrpc": "2.0", "method": "tools/call", "params": {}}
+        headers = {"Accept": "application/json, text/event-stream"}
+        
+        # Mock backend 404 error response (non-SSE)
+        mock_backend_response = Mock()
+        mock_backend_response.status_code = 404
+        mock_backend_response.headers = {"content-type": "application/json"}
+        mock_backend_response.aread = AsyncMock(return_value=b'{"error": "Tool not found"}')
+        
+        mock_stream_context = Mock()
+        mock_stream_context.__aenter__ = AsyncMock(return_value=mock_backend_response)
+        mock_stream_context.__aexit__ = AsyncMock(return_value=None)
+        
+        with patch("registry.api.proxy_routes.proxy_client") as mock_client:
+            mock_client.stream = Mock(return_value=mock_stream_context)
+            
+            response = await _proxy_json_rpc_request(
+                target_url=target_url,
+                json_body=json_body,
+                headers=headers,
+                accept_sse=True
+            )
+        
+        # Verify error response is returned correctly
+        assert response.status_code == 404
+        assert response.body == b'{"error": "Tool not found"}'
+        
+        # Verify stream was closed
+        mock_stream_context.__aexit__.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_successful_json_response(self, mock_server):
+        """Test successful JSON response without SSE."""
+        target_url = "http://backend:8080/mcp"
+        json_body = {"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "test"}}
+        headers = {"Content-Type": "application/json"}
+        
+        # Mock successful response
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.headers = {"content-type": "application/json"}
+        mock_response.content = b'{"jsonrpc": "2.0", "result": {"data": "success"}}'
+        
+        with patch("registry.api.proxy_routes.proxy_client") as mock_client:
+            mock_client.post = AsyncMock(return_value=mock_response)
+            
+            response = await _proxy_json_rpc_request(
+                target_url=target_url,
+                json_body=json_body,
+                headers=headers,
+                accept_sse=False
+            )
+        
+        assert response.status_code == 200
+        assert response.body == b'{"jsonrpc": "2.0", "result": {"data": "success"}}'
+
+    @pytest.mark.asyncio
+    async def test_sse_streaming_response(self, mock_server):
+        """Test true SSE streaming without buffering."""
+        target_url = "http://backend:8080/mcp"
+        json_body = {"jsonrpc": "2.0", "method": "tools/call", "params": {}}
+        headers = {"Accept": "text/event-stream"}
+        
+        # Mock SSE streaming response
+        async def async_iter_bytes():
+            yield b'event: message\n'
+            yield b'data: {"progress": 50}\n\n'
+            yield b'event: complete\n'
+            yield b'data: {"result": "done"}\n\n'
+        
+        mock_backend_response = Mock()
+        mock_backend_response.status_code = 200
+        mock_backend_response.headers = {
+            "content-type": "text/event-stream",
+            "mcp-session-id": "session-123"
+        }
+        mock_backend_response.aiter_bytes = async_iter_bytes
+        
+        mock_stream_context = Mock()
+        mock_stream_context.__aenter__ = AsyncMock(return_value=mock_backend_response)
+        mock_stream_context.__aexit__ = AsyncMock(return_value=None)
+        
+        with patch("registry.api.proxy_routes.proxy_client") as mock_client:
+            mock_client.stream = Mock(return_value=mock_stream_context)
+            
+            response = await _proxy_json_rpc_request(
+                target_url=target_url,
+                json_body=json_body,
+                headers=headers,
+                accept_sse=True
+            )
+        
+        # Verify it returns StreamingResponse
+        assert isinstance(response, StreamingResponse)
+        assert response.status_code == 200
+        assert response.media_type == "text/event-stream"
+        assert response.headers["Mcp-Session-Id"] == "session-123"
+        assert response.headers["Cache-Control"] == "no-cache"
+
+    @pytest.mark.asyncio
+    async def test_timeout_exception_handling(self, mock_server):
+        """Test timeout exception is converted to 504."""
+        target_url = "http://backend:8080/mcp"
+        json_body = {"jsonrpc": "2.0", "method": "tools/call", "params": {}}
+        headers = {"Content-Type": "application/json"}
+        
+        with patch("registry.api.proxy_routes.proxy_client") as mock_client:
+            mock_client.post = AsyncMock(side_effect=httpx.TimeoutException("Timeout"))
+            
+            with pytest.raises(HTTPException) as exc_info:
+                await _proxy_json_rpc_request(
+                    target_url=target_url,
+                    json_body=json_body,
+                    headers=headers,
+                    accept_sse=False
+                )
+            
+            assert exc_info.value.status_code == 504
+            assert "Gateway timeout" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_http_error_exception_handling(self, mock_server):
+        """Test HTTP error exception is converted to 502."""
+        target_url = "http://backend:8080/mcp"
+        json_body = {"jsonrpc": "2.0", "method": "tools/call", "params": {}}
+        headers = {"Content-Type": "application/json"}
+        
+        with patch("registry.api.proxy_routes.proxy_client") as mock_client:
+            mock_client.post = AsyncMock(side_effect=httpx.HTTPError("Connection failed"))
+            
+            with pytest.raises(HTTPException) as exc_info:
+                await _proxy_json_rpc_request(
+                    target_url=target_url,
+                    json_body=json_body,
+                    headers=headers,
+                    accept_sse=False
+                )
+            
+            assert exc_info.value.status_code == 502
+            assert "Bad gateway" in exc_info.value.detail

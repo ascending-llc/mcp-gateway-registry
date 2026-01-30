@@ -218,7 +218,7 @@ class TestRateAgent:
                 json={"rating": "five"},  # String instead of int
             )
 
-            assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+            assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
         app.dependency_overrides.clear()
 
@@ -246,7 +246,7 @@ class TestRateAgent:
                 json={},  # Missing rating field
             )
 
-            assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+            assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
         app.dependency_overrides.clear()
 

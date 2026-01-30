@@ -1,6 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, AsyncMock
 from registry.api.v1.mcp.oauth_router import router
 from registry.services.oauth.mcp_service import MCPService
 from fastapi import Request
@@ -40,15 +40,10 @@ for attr in dir(mock_oauth_service):
     if callable(method) and not attr.startswith("_"):
         setattr(mock_oauth_service, attr, make_async(method))
 
-# Make all mock methods async for connection_service
-for attr in dir(mock_connection_service):
-    if attr.startswith("mock_") or attr in ["update_connection_state", "get_connection",
-                                            "create_user_connection", "disconnect_user_connection"]:
-        continue
-
-    method = getattr(mock_connection_service, attr, None)
-    if callable(method) and not attr.startswith("_"):
-        setattr(mock_connection_service, attr, make_async(method))
+mock_connection_service.update_connection_state = AsyncMock()
+mock_connection_service.get_connection = AsyncMock()
+mock_connection_service.create_user_connection = AsyncMock()
+mock_connection_service.disconnect_user_connection = AsyncMock(return_value=True)
 
 # Also mock the flow_manager methods
 mock_flow_manager = Mock()
@@ -91,24 +86,19 @@ def client():
     # Override the get_mcp_service dependency
     app.dependency_overrides[get_mcp_service] = lambda: mock_mcp_service
 
-    # Mock get_service_config to return a valid server document
-    from registry.api.v1.mcp.connection_router import get_service_config
-
-    async def mock_get_service_config(server_id: str):
-        """Mock server config for testing"""
-        mock_server = Mock()
-        mock_server.id = ObjectId(TEST_SERVER_ID)
-        mock_server.serverName = "test_server"
-        mock_server.config = {
-            "oauth": {
-                "provider": "github",
-                "client_id": "test_client_id"
-            }
+    # Mock server config
+    mock_server = Mock()
+    mock_server.id = ObjectId(TEST_SERVER_ID)
+    mock_server.serverName = "test_server"
+    mock_server.config = {
+        "oauth": {
+            "provider": "github",
+            "client_id": "test_client_id"
         }
-        return mock_server
+    }
 
-    # Patch get_service_config in the oauth_router module
-    with patch('registry.api.v1.mcp.oauth_router.get_service_config', side_effect=mock_get_service_config):
+    with patch('registry.api.v1.mcp.oauth_router.server_service_v1') as mock_server_service:
+        mock_server_service.get_server_by_id = AsyncMock(return_value=mock_server)
         yield TestClient(app)
 
 
@@ -210,11 +200,7 @@ class TestOAuthRouter:
             lambda *args, **kwargs: (True, None)
         )
 
-        # Mock connection service to verify it's called
-        mock_mcp_service.connection_service.update_connection_state = make_async(
-            lambda *args, **kwargs: None
-        )
-
+        mock_mcp_service.connection_service.update_connection_state = AsyncMock(return_value=None)
         response = client.post(f"/mcp/oauth/cancel/{TEST_SERVER_ID}")
 
         assert response.status_code == 200
@@ -241,14 +227,9 @@ class TestOAuthRouter:
             lambda *args, **kwargs: (True, None)
         )
 
-        # Mock connection service - simulate existing connection
         mock_connection = Mock()
-        mock_mcp_service.connection_service.get_connection = make_async(
-            lambda *args, **kwargs: mock_connection
-        )
-        mock_mcp_service.connection_service.update_connection_state = make_async(
-            lambda *args, **kwargs: None
-        )
+        mock_mcp_service.connection_service.get_connection = AsyncMock(return_value=mock_connection)
+        mock_mcp_service.connection_service.update_connection_state = AsyncMock(return_value=None)
 
         response = client.post(f"/mcp/oauth/refresh/{TEST_SERVER_ID}")
 
@@ -268,6 +249,131 @@ class TestOAuthRouter:
 
         assert response.status_code == 400
         assert "Failed to refresh tokens" in response.json()["detail"]
+
+    def test_oauth_callback_success(self, client):
+        """Test successful OAuth callback"""
+        from registry.services.oauth.token_service import token_service
+
+        # Mock the flow_manager methods - note: decode_state is NOT async in the actual code
+        mock_mcp_service.oauth_service.flow_manager.decode_state = lambda state: ("test_user-flow123", "security_token")
+
+        # Mock get_flow to return a flow with user_id and server_id - note: get_flow is NOT async in the actual code
+        mock_flow = Mock()
+        mock_flow.user_id = "test_user"
+        mock_flow.server_id = TEST_SERVER_ID
+        mock_flow.status = "pending"
+        mock_mcp_service.oauth_service.flow_manager.get_flow = lambda flow_id: mock_flow
+
+        # Mock successful completion
+        mock_mcp_service.oauth_service.complete_oauth_flow = make_async(
+            lambda *args, **kwargs: (True, None)
+        )
+
+        # Mock connection service
+        mock_mcp_service.connection_service.create_user_connection = AsyncMock(return_value=None)
+
+        # Make the request with code and state, disable redirect following
+        response = client.get(f"/mcp/test_server/oauth/callback?code=auth_code&state=test_user-flow123##security_token", follow_redirects=False)
+
+        # Should redirect to success page
+        assert response.status_code == 307
+        assert "oauth-callback?type=success" in response.headers["location"]
+        assert "serverName=test_server" in response.headers["location"]
+
+    def test_oauth_callback_missing_code(self, client):
+        """Test OAuth callback with missing code parameter"""
+        response = client.get(f"/mcp/test_server/oauth/callback?state=some_state", follow_redirects=False)
+
+        assert response.status_code == 307
+        assert "oauth-callback?type=error" in response.headers["location"]
+        assert "serverName=test_server" in response.headers["location"]
+        assert "error=missing_code" in response.headers["location"]
+
+    def test_oauth_callback_missing_state(self, client):
+        """Test OAuth callback with missing state parameter"""
+        response = client.get(f"/mcp/test_server/oauth/callback?code=auth_code", follow_redirects=False)
+
+        assert response.status_code == 307
+        assert "oauth-callback?type=error" in response.headers["location"]
+        assert "serverName=test_server" in response.headers["location"]
+        assert "error=missing_state" in response.headers["location"]
+
+    def test_oauth_callback_provider_error(self, client):
+        """Test OAuth callback with error from provider"""
+        response = client.get(f"/mcp/test_server/oauth/callback?error=access_denied", follow_redirects=False)
+
+        assert response.status_code == 307
+        assert "oauth-callback?type=error" in response.headers["location"]
+        assert "serverName=test_server" in response.headers["location"]
+        assert "error=access_denied" in response.headers["location"]
+
+    def test_oauth_callback_invalid_state_format(self, client):
+        """Test OAuth callback with invalid state format"""
+        # Mock decode_state to raise ValueError - note: decode_state is NOT async in the actual code
+        mock_mcp_service.oauth_service.flow_manager.decode_state = Mock(
+            side_effect=ValueError("Invalid state format")
+        )
+        response = client.get(f"/mcp/test_server/oauth/callback?code=auth_code&state=invalid_state", follow_redirects=False)
+
+        assert response.status_code == 307
+        assert "oauth-callback?type=error" in response.headers["location"]
+        assert "serverName=test_server" in response.headers["location"]
+        assert "error=invalid_state_format" in response.headers["location"]
+
+    def test_oauth_callback_already_completed(self, client):
+        """Test OAuth callback when flow is already completed"""
+        from registry.schemas.enums import OAuthFlowStatus
+
+        # Mock decode_state - note: decode_state is NOT async in the actual code
+        mock_mcp_service.oauth_service.flow_manager.decode_state = lambda state: ("test_user-flow123", "security_token")
+
+        # Mock get_flow to return completed flow - note: get_flow is NOT async in the actual code
+        mock_flow = Mock()
+        mock_flow.status = OAuthFlowStatus.COMPLETED
+        mock_mcp_service.oauth_service.flow_manager.get_flow = lambda flow_id: mock_flow
+
+        response = client.get(f"/mcp/test_server/oauth/callback?code=auth_code&state=test_user-flow123##security_token", follow_redirects=False)
+
+        # Should still redirect to success page but not exchange tokens again
+        assert response.status_code == 307
+        assert "oauth-callback?type=success" in response.headers["location"]
+        assert "serverName=test_server" in response.headers["location"]
+
+    def test_delete_oauth_tokens_success(self, client):
+        """Test successful deletion of OAuth tokens"""
+        from registry.services.oauth.token_service import token_service
+
+        mock_mcp_service.connection_service.disconnect_user_connection = AsyncMock(return_value=True)
+
+        with patch('registry.api.v1.mcp.oauth_router.token_service') as mock_token_service:
+            mock_token_service.delete_oauth_tokens = AsyncMock(return_value=True)
+
+            response = client.delete(f"/mcp/oauth/token/{TEST_SERVER_ID}")
+
+            assert response.status_code == 200
+            response_data = response.json()
+            assert response_data["success"] == True
+            assert response_data["server_id"] == TEST_SERVER_ID
+            assert response_data["user_id"] == "test_user"
+            assert "oauth delete successfully" in response_data["message"]
+
+    def test_delete_oauth_tokens_failure(self, client):
+        """Test failed deletion of OAuth tokens"""
+        from registry.services.oauth.token_service import token_service
+
+        mock_mcp_service.connection_service.disconnect_user_connection = AsyncMock(return_value=False)
+
+        with patch('registry.api.v1.mcp.oauth_router.token_service') as mock_token_service:
+            mock_token_service.delete_oauth_tokens = AsyncMock(return_value=False)
+
+            response = client.delete(f"/mcp/oauth/token/{TEST_SERVER_ID}")
+
+            assert response.status_code == 200  # Note: The endpoint returns 200 even when delete returns False
+            response_data = response.json()
+            assert response_data["success"] == False
+            assert response_data["server_id"] == TEST_SERVER_ID
+            assert response_data["user_id"] == "test_user"
+            assert "oauth delete failed" in response_data["message"]
 
 
 if __name__ == "__main__":

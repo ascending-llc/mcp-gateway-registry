@@ -106,7 +106,7 @@ async def _build_complete_headers_for_server(
         'Accept': 'application/json',
         'User-Agent': 'MCP-Gateway-Registry/1.0'
     }
-    
+
     # 1. Add custom headers FIRST (lowest priority)
     custom_headers = decrypted_config.get("headers", [])
     if custom_headers and isinstance(custom_headers, list):
@@ -133,7 +133,7 @@ async def _build_complete_headers_for_server(
             )
 
         logger.info(f"Building OAuth headers for {server.serverName}")
-        
+
         # Validate and merge OAuth metadata with config.oauth as source of truth
         # This ensures correct authorization_servers are used for token validation
         oauth_config = decrypted_config.get("oauth")
@@ -149,7 +149,8 @@ async def _build_complete_headers_for_server(
         if oauth_metadata:
             config["oauthMetadata"] = oauth_metadata
             server.config = config
-            logger.debug(f"Validated OAuth metadata for token retrieval: authorization_servers={oauth_metadata.get('authorization_servers')}")
+            logger.debug(
+                f"Validated OAuth metadata for token retrieval: authorization_servers={oauth_metadata.get('authorization_servers')}")
 
         # Get OAuth token (handles refresh automatically)
         oauth_service = await get_oauth_service()
@@ -176,7 +177,7 @@ async def _build_complete_headers_for_server(
                 f"No valid OAuth token available for {server.serverName}",
                 server_name=server.serverName
             )
-        
+
         # Override any existing Authorization header with OAuth Bearer token
         # This ensures OAuth always takes priority over custom headers
         headers["Authorization"] = f"Bearer {access_token}"
@@ -211,9 +212,11 @@ async def _build_complete_headers_for_server(
                     headers[custom_header] = key_value
                     logger.debug(f"Added custom auth header '{custom_header}' for {server.serverName}")
                 else:
-                    logger.warning(f"apiKey with authorization_type='custom' but no custom_header for {server.serverName}")
+                    logger.warning(
+                        f"apiKey with authorization_type='custom' but no custom_header for {server.serverName}")
             else:
-                logger.warning(f"Unknown authorization_type: {authorization_type}, defaulting to Bearer for {server.serverName}")
+                logger.warning(
+                    f"Unknown authorization_type: {authorization_type}, defaulting to Bearer for {server.serverName}")
                 headers["Authorization"] = f"Bearer {key_value}"
 
     return headers
@@ -236,8 +239,8 @@ def _detect_oauth_requirement(oauth_field: Optional[Any]) -> bool:
 
 
 def _validate_and_merge_oauth_metadata(
-    oauth_config: Optional[Dict[str, Any]],
-    oauth_metadata: Optional[Dict[str, Any]]
+        oauth_config: Optional[Dict[str, Any]],
+        oauth_metadata: Optional[Dict[str, Any]]
 ) -> Dict[str, Any]:
     """
     Merge OAuth metadata using database config.oauth as authoritative source.
@@ -1659,6 +1662,12 @@ class ServerServiceV1:
                     f" {stats['total_tokens']} tokens, {stats['active_users']} active users")
 
         return stats
+
+    async def get_server_config(self, server_id: str) -> Optional[MCPServerDocument]:
+        """
+        Get service config for a specific MCP server
+        """
+        pass
 
 
 # Singleton instance
