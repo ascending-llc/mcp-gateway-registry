@@ -79,21 +79,29 @@ const ServerCard: React.FC<ServerCardProps> = ({
     }
   }, [requires_oauth, connection_state]);
 
+  const onOpenAuthDialog = () => setShowApiKeyDialog(true);
+  const onCloseAuthDialog = () => setShowApiKeyDialog(false);
+
+  const handleCancelAuth = async () => {
+    try {
+      const result = await SERVICES.MCP.cancelAuth(server.id);
+      if (result.success) {
+        onShowToast?.(result?.message || 'OAuth flow cancelled', 'success');
+        refreshServerData();
+      } else {
+        onShowToast?.(result?.message || 'Unknown error', 'error');
+      }
+    } catch (_error) {
+      onShowToast?.('Unknown error', 'error');
+    }
+  };
+
   const handleAuth = async () => {
     if (connection_state === SERVER_CONNECTION.CONNECTING) {
-      try {
-        const result = await SERVICES.MCP.cancelAuth(server.id);
-        if (result.success) {
-          onShowToast?.(result?.message || 'OAuth flow cancelled', 'success');
-          refreshServerData();
-        } else {
-          onShowToast?.(result?.message || 'Unknown error', 'error');
-        }
-      } finally {
-        cancelPolling?.(server.id);
-      }
+      handleCancelAuth();
+      cancelPolling?.(server.id);
     } else {
-      setShowApiKeyDialog(true);
+      onOpenAuthDialog();
     }
   };
 
@@ -113,7 +121,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
     } finally {
       setLoadingTools(false);
     }
-  }, [server.path, loadingTools, onShowToast]);
+  }, [server.id, loadingTools, onShowToast]);
 
   const handleRefreshHealth = useCallback(async () => {
     if (loadingRefresh) return;
@@ -153,7 +161,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
       onServerUpdate(id, { enabled });
       onShowToast(`Server ${enabled ? 'enabled' : 'disabled'} successfully!`, 'success');
     } catch (error: any) {
-      const errorMessage = error.detail?.message || typeof error.detail === 'string' ? error.detail : '';
+      const errorMessage = error.detail?.message || (typeof error.detail === 'string' ? error.detail : '');
       onShowToast(errorMessage || 'Failed to toggle server', 'error');
     } finally {
       setLoading(false);
@@ -450,8 +458,9 @@ const ServerCard: React.FC<ServerCardProps> = ({
           serverId={server.id}
           status={connection_state}
           showApiKeyDialog={showApiKeyDialog}
-          setShowApiKeyDialog={setShowApiKeyDialog}
           onShowToast={onShowToast}
+          handleCancelAuth={handleCancelAuth}
+          onCloseAuthDialog={onCloseAuthDialog}
         />
       )}
     </>
