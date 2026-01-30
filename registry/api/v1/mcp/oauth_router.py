@@ -408,7 +408,8 @@ async def refresh_oauth_tokens(
 @router.delete("/oauth/token/{server_id}")
 async def delete_oauth_tokens(
         server_id: str,
-        current_user: CurrentUser
+        current_user: CurrentUser,
+        mcp_service: MCPService = Depends(get_mcp_service)
 ) -> Dict[str, Any]:
     """
     Delete the OAuth token for this user
@@ -419,6 +420,11 @@ async def delete_oauth_tokens(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
     user_id = current_user.get("user_id")
     try:
+        disconnected = await mcp_service.connection_service.disconnect_user_connection(
+            user_id, server_id
+        )
+        if disconnected:
+            logger.info(f"[Reinitialize] Disconnected {server_id} for user {user_id}")
         results = await token_service.delete_oauth_tokens(user_id, server.serverName)
         logger.info(f"[OAuth Refresh] Deleted OAuth tokens for {server_id}, results: {results}")
         message = "successfully" if results else "failed"
