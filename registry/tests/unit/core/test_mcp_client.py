@@ -82,16 +82,16 @@ class TestMCPClient:
             with patch("registry.core.mcp_client.ClientSession") as mock_session_cls:
                 mock_session_cls.return_value = mock_session
                 
-                tools, capabilities = await _get_from_streamable_http(
+                result = await _get_from_streamable_http(
                     base_url=base_url,
                     headers=mock_headers,
                     transport_type="streamable-http",
                     include_capabilities=True
                 )
             
-            # Verify headers were used (passed to httpx.AsyncClient)
-            assert tools is not None
-            assert capabilities == mock_capabilities
+            # Verify result is MCPServerData object
+            assert result.tools is not None
+            assert result.capabilities == mock_capabilities
 
     @pytest.mark.asyncio
     async def test_get_from_streamable_http_without_capabilities(self, mock_headers, mock_tools_response):
@@ -115,15 +115,15 @@ class TestMCPClient:
             with patch("registry.core.mcp_client.ClientSession") as mock_session_cls:
                 mock_session_cls.return_value = mock_session
                 
-                tools, capabilities = await _get_from_streamable_http(
+                result = await _get_from_streamable_http(
                     base_url=base_url,
                     headers=mock_headers,
                     transport_type="streamable-http",
                     include_capabilities=False
                 )
             
-            assert tools is not None
-            assert capabilities is None
+            assert result.tools is not None
+            assert result.capabilities is None
 
     @pytest.mark.asyncio
     async def test_get_from_sse_with_headers(self, mock_headers, mock_tools_response, mock_capabilities):
@@ -155,15 +155,15 @@ class TestMCPClient:
             with patch("registry.core.mcp_client.ClientSession") as mock_session_cls:
                 mock_session_cls.return_value = mock_session
                 
-                tools, capabilities = await _get_from_sse(
+                result = await _get_from_sse(
                     base_url=base_url,
                     headers=mock_headers,
                     transport_type="sse",
                     include_capabilities=True
                 )
             
-            assert tools is not None
-            assert capabilities == mock_capabilities
+            assert result.tools is not None
+            assert result.capabilities == mock_capabilities
 
     @pytest.mark.asyncio
     async def test_get_tools_and_capabilities_from_server_streamable_http(self, mock_headers):
@@ -171,21 +171,29 @@ class TestMCPClient:
         base_url = "http://localhost:8000"
         
         with patch("registry.core.mcp_client._get_from_streamable_http") as mock_get:
-            mock_get.return_value = (["tool1"], {"tools": {}})
+            from registry.core.mcp_client import MCPServerData
+            mock_get.return_value = MCPServerData(
+                tools=["tool1"],
+                resources=[],
+                prompts=[],
+                capabilities={"tools": {}}
+            )
             
-            tools, capabilities = await get_tools_and_capabilities_from_server(
+            result = await get_tools_and_capabilities_from_server(
                 base_url=base_url,
                 headers=mock_headers,
                 transport_type="streamable-http"
             )
             
-            assert tools == ["tool1"]
-            assert capabilities == {"tools": {}}
+            assert result.tools == ["tool1"]
+            assert result.capabilities == {"tools": {}}
             mock_get.assert_called_once_with(
                 base_url,
                 mock_headers,
                 "streamable-http",
-                include_capabilities=True
+                include_capabilities=True,
+                include_resources=True,
+                include_prompts=True
             )
 
     @pytest.mark.asyncio
@@ -194,21 +202,29 @@ class TestMCPClient:
         base_url = "http://localhost:8000"
         
         with patch("registry.core.mcp_client._get_from_sse") as mock_get:
-            mock_get.return_value = (["tool2"], {"resources": {}})
+            from registry.core.mcp_client import MCPServerData
+            mock_get.return_value = MCPServerData(
+                tools=["tool2"],
+                resources=[],
+                prompts=[],
+                capabilities={"resources": {}}
+            )
             
-            tools, capabilities = await get_tools_and_capabilities_from_server(
+            result = await get_tools_and_capabilities_from_server(
                 base_url=base_url,
                 headers=mock_headers,
                 transport_type="sse"
             )
             
-            assert tools == ["tool2"]
-            assert capabilities == {"resources": {}}
+            assert result.tools == ["tool2"]
+            assert result.capabilities == {"resources": {}}
             mock_get.assert_called_once_with(
                 base_url,
                 mock_headers,
                 "sse",
-                include_capabilities=True
+                include_capabilities=True,
+                include_resources=True,
+                include_prompts=True
             )
 
     @pytest.mark.asyncio
@@ -216,20 +232,27 @@ class TestMCPClient:
         """Test transport auto-detection."""
         base_url = "http://localhost:8000"
         
+        from registry.core.mcp_client import MCPServerData
+        
         with patch("registry.core.mcp_client.detect_server_transport") as mock_detect, \
              patch("registry.core.mcp_client._get_from_streamable_http") as mock_get:
             
             mock_detect.return_value = "streamable-http"
-            mock_get.return_value = (["tool"], {})
+            mock_get.return_value = MCPServerData(
+                tools=["tool"],
+                resources=[],
+                prompts=[],
+                capabilities={}
+            )
             
-            tools, capabilities = await get_tools_and_capabilities_from_server(
+            result = await get_tools_and_capabilities_from_server(
                 base_url=base_url,
                 headers=mock_headers,
                 transport_type=None  # Auto-detect
             )
             
             mock_detect.assert_called_once_with(base_url)
-            assert tools == ["tool"]
+            assert result.tools == ["tool"]
 
     @pytest.mark.asyncio
     async def test_headers_default_to_mcp_headers_if_none(self):
@@ -271,7 +294,7 @@ class TestMCPClient:
 
     @pytest.mark.asyncio
     async def test_connection_timeout_returns_none(self, mock_headers):
-        """Test timeout returns None tuple."""
+        """Test timeout returns MCPServerData with None fields."""
         base_url = "http://localhost:8000/mcp/"
         
         with patch("registry.core.mcp_client.streamable_http_client") as mock_client, \
@@ -282,19 +305,19 @@ class TestMCPClient:
             mock_context.__aenter__ = AsyncMock(side_effect=TimeoutError("Connection timeout"))
             mock_client.return_value = mock_context
             
-            tools, capabilities = await _get_from_streamable_http(
+            result = await _get_from_streamable_http(
                 base_url=base_url,
                 headers=mock_headers,
                 transport_type="streamable-http",
                 include_capabilities=True
             )
             
-            assert tools is None
-            assert capabilities is None
+            assert result.tools is None
+            assert result.capabilities is None
 
     @pytest.mark.asyncio
     async def test_connection_error_returns_none(self, mock_headers):
-        """Test connection error returns None tuple."""
+        """Test connection error returns MCPServerData with None fields."""
         base_url = "http://localhost:8000/mcp/"
         
         with patch("registry.core.mcp_client.streamable_http_client") as mock_client, \
@@ -305,12 +328,12 @@ class TestMCPClient:
             mock_context.__aenter__ = AsyncMock(side_effect=Exception("Connection refused"))
             mock_client.return_value = mock_context
             
-            tools, capabilities = await _get_from_streamable_http(
+            result = await _get_from_streamable_http(
                 base_url=base_url,
                 headers=mock_headers,
                 transport_type="streamable-http",
                 include_capabilities=True
             )
             
-            assert tools is None
-            assert capabilities is None
+            assert result.tools is None
+            assert result.capabilities is None

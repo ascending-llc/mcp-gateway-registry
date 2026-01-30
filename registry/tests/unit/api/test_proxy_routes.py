@@ -29,7 +29,6 @@ from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDo
 
 
 @pytest.mark.unit
-@pytest.mark.proxy
 class TestProxyToMCPServer:
     """Unit tests for proxy_to_mcp_server function."""
 

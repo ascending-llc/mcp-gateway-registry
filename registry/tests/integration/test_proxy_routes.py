@@ -13,7 +13,6 @@ from packages.models.extended_mcp_server import ExtendedMCPServer as Server
 
 
 @pytest.mark.integration
-@pytest.mark.proxy
 class TestProxyToolExecutionRoutes:
     """Integration coverage for /proxy/tools/call endpoint."""
 

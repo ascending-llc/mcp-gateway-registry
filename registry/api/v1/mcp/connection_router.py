@@ -42,7 +42,13 @@ async def reinitialize_server(
             logger.info(f"[Reinitialize] Disconnected {server_id} for user {user_id}")
 
         # Step 2: Get server config
-        server = await get_service_config(server_id)
+        server = await server_service_v1.get_server_by_id(server_id)
+        if not server:
+            logger.info(f"[Reinitialize] Server {server_id} not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
+        if not server.config:
+            logger.info(f"[Reinitialize] Server {server_id} config not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server config not found")
 
         # Step 3: Handle OAuth authentication
         needs_connection, response_data = await mcp_service.oauth_service.handle_reinitialize_auth(
@@ -65,6 +71,8 @@ async def reinitialize_server(
             content=response_data
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[Reinitialize] Unexpected error for {server_id}: {e}", exc_info=True)
         raise HTTPException(
@@ -125,7 +133,10 @@ async def get_server_connection_status(
         user_id = current_user.get('user_id')
         logger.debug(f"Fetching status for {server_id} (user: {user_id})")
 
-        server = await get_service_config(server_id)
+        server = await server_service_v1.get_server_by_id(server_id)
+        if not server:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
+
         server_status = await get_single_server_connection_status(
             user_id=user_id,
             server_id=server_id,
@@ -136,7 +147,7 @@ async def get_server_connection_status(
             "serverName": server.serverName,
             "connectionState": server_status["connection_state"],
             "requiresOAuth": server_status["requires_oauth"],
-            "requiresId": server_id
+            "serverId": server_id
         }
     except HTTPException:
         raise
@@ -186,17 +197,3 @@ async def check_auth_values(
         logger.error(f"Failed to check auth values for {server_name}: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Failed to check auth values for {server_name}")
-
-
-async def get_service_config(server_id):
-    """
-    Get service config for a specific MCP server
-    """
-    server_docs = await server_service_v1.get_server_by_id(server_id)
-    if not server_docs:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail=f"Server'{server_id}'config  not found")
-    if not server_docs.config:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail=f"Server'{server_id}' not found")
-    return server_docs
