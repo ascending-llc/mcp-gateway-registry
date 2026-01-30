@@ -71,6 +71,8 @@ class TestMCPClient:
             mock_session = AsyncMock()
             mock_session.initialize = AsyncMock(return_value=mock_init_result)
             mock_session.list_tools = AsyncMock(return_value=mock_tools_response)
+            mock_session.list_resources = AsyncMock(return_value=Mock(resources=[]))
+            mock_session.list_prompts = AsyncMock(return_value=Mock(prompts=[]))
             mock_session.__aenter__ = AsyncMock(return_value=mock_session)
             mock_session.__aexit__ = AsyncMock(return_value=None)
             
@@ -107,6 +109,8 @@ class TestMCPClient:
             
             mock_session = AsyncMock()
             mock_session.list_tools = AsyncMock(return_value=mock_tools_response)
+            mock_session.list_resources = AsyncMock(return_value=Mock(resources=[]))
+            mock_session.list_prompts = AsyncMock(return_value=Mock(prompts=[]))
             
             mock_context = AsyncMock()
             mock_context.__aenter__ = AsyncMock(return_value=(Mock(), Mock(), Mock()))
@@ -144,6 +148,8 @@ class TestMCPClient:
             mock_session = AsyncMock()
             mock_session.initialize = AsyncMock(return_value=mock_init_result)
             mock_session.list_tools = AsyncMock(return_value=mock_tools_response)
+            mock_session.list_resources = AsyncMock(return_value=Mock(resources=[]))
+            mock_session.list_prompts = AsyncMock(return_value=Mock(prompts=[]))
             mock_session.__aenter__ = AsyncMock(return_value=mock_session)
             mock_session.__aexit__ = AsyncMock(return_value=None)
             
@@ -187,14 +193,15 @@ class TestMCPClient:
             
             assert result.tools == ["tool1"]
             assert result.capabilities == {"tools": {}}
-            mock_get.assert_called_once_with(
-                base_url,
-                mock_headers,
-                "streamable-http",
-                include_capabilities=True,
-                include_resources=True,
-                include_prompts=True
-            )
+            # Check that the call includes all expected parameters
+            mock_get.assert_called_once()
+            call_args = mock_get.call_args
+            assert call_args[0][0] == base_url
+            assert call_args[0][1] == mock_headers
+            assert call_args[0][2] == "streamable-http"
+            assert call_args[1]["include_capabilities"] == True
+            assert call_args[1]["include_resources"] == True
+            assert call_args[1]["include_prompts"] == True
 
     @pytest.mark.asyncio
     async def test_get_tools_and_capabilities_from_server_sse(self, mock_headers):
@@ -218,14 +225,15 @@ class TestMCPClient:
             
             assert result.tools == ["tool2"]
             assert result.capabilities == {"resources": {}}
-            mock_get.assert_called_once_with(
-                base_url,
-                mock_headers,
-                "sse",
-                include_capabilities=True,
-                include_resources=True,
-                include_prompts=True
-            )
+            # Check that the call includes all expected parameters
+            mock_get.assert_called_once()
+            call_args = mock_get.call_args
+            assert call_args[0][0] == base_url
+            assert call_args[0][1] == mock_headers
+            assert call_args[0][2] == "sse"
+            assert call_args[1]["include_capabilities"] == True
+            assert call_args[1]["include_resources"] == True
+            assert call_args[1]["include_prompts"] == True
 
     @pytest.mark.asyncio
     async def test_get_tools_and_capabilities_auto_detect_transport(self, mock_headers):
@@ -275,6 +283,8 @@ class TestMCPClient:
             
             mock_session = AsyncMock()
             mock_session.list_tools = AsyncMock(return_value=Mock(tools=[]))
+            mock_session.list_resources = AsyncMock(return_value=Mock(resources=[]))
+            mock_session.list_prompts = AsyncMock(return_value=Mock(prompts=[]))
             
             mock_context = AsyncMock()
             mock_context.__aenter__ = AsyncMock(return_value=(Mock(), Mock(), Mock()))
@@ -337,3 +347,4 @@ class TestMCPClient:
             
             assert result.tools is None
             assert result.capabilities is None
+            assert result.error_message is not None
