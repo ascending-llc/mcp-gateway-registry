@@ -3,6 +3,7 @@ from typing import Dict, Any, Optional, List, Callable, Tuple
 from fastmcp import Context
 from pydantic import Field
 from core.registry import call_registry_api
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,8 @@ async def discover_tools_impl(
 
 async def discover_servers_impl(
     query: str,
-    top_n: int = 10,
+    top_n: int = 1,
+    search_type: str = "hybrid",
     ctx: Context = None
 ) -> List[Dict[str, Any]]:
     """
@@ -74,7 +76,12 @@ async def discover_servers_impl(
     Args:
         query: Natural language description or keywords to search for servers
                (e.g., "github", "search engines", "database tools")
-        top_n: Maximum number of servers to return (default: 10)
+        top_n: Maximum number of servers to return (default: 1, optimized for token efficiency)
+        search_type: Search strategy to use:
+                    - "hybrid" (default): Combines semantic + keyword for best accuracy
+                    - "near_text": Pure semantic/vector search (best for concept matching)
+                    - "bm25": Pure keyword search (best for exact term matching)
+                    - "similarity_store": Alternative similarity algorithm
         ctx: FastMCP context with user auth
     
     Returns:
@@ -85,9 +92,9 @@ async def discover_servers_impl(
         - tags: Server tags for categorization
         - numTools: Number of tools available
     """
-    from config import settings
+    
 
-    logger.info(f"🔍 Discovering servers for query: '{query}'")
+    logger.info(f"🔍 Discovering servers for query: '{query}' (search_type={search_type})")
 
     try:
         # Use centralized registry API call with automatic auth header extraction
@@ -97,7 +104,8 @@ async def discover_servers_impl(
             ctx=ctx,
             json={
                 "query": query,
-                "top_n": top_n
+                "top_n": top_n,
+                "search_type": search_type
             }
         )
 
@@ -177,11 +185,12 @@ def get_tools() -> List[Tuple[str, Callable]]:
 
     async def discover_servers(
         query: str = Field("", description="Natural language query or keywords to find servers (e.g., 'web search', 'github integration', 'productivity tools', 'email and calendar') - leave empty to see all servers"),
-        top_n: int = Field(3, description="Maximum number of servers to return (default: 3)"),
+        top_n: int = Field(1, description="Maximum number of servers to return (default: 1, optimized for token efficiency)"),
+        search_type: str = Field("hybrid", description="Search strategy: 'hybrid' (semantic+keyword, best overall), 'near_text' (pure semantic/vector), 'bm25' (pure keyword), or 'similarity_store' (alternative)"),
         ctx: Optional[Context] = None
     ) -> List[Dict[str, Any]]:
         """
-        🔍 Discover available MCP servers using semantic search.
+        🔍 Discover available MCP servers using semantic search with multiple search strategies.
 
         **When to use:**
         - User asks "what can you do?" or "what services are available?"
@@ -189,11 +198,34 @@ def get_tools() -> List[Tuple[str, Callable]]:
         - User mentions a service category (web search, code management, productivity)
         - Need to understand server capabilities and available tools
 
+        **Search Type Strategies:**
+        The tool supports 4 different search algorithms - try different ones if results aren't optimal:
+        
+        1. **"hybrid" (default, recommended)** - Combines semantic + keyword search
+           - Best for: General queries, balanced accuracy
+           - Example: "web search news" → finds Tavily, web search servers
+           - Uses AI reranking for highest precision
+        
+        2. **"near_text"** - Pure semantic/vector search
+           - Best for: Concept matching, related functionality
+           - Example: "find information online" → matches search engines semantically
+           - Understands intent even with different wording
+        
+        3. **"bm25"** - Pure keyword/lexical search
+           - Best for: Exact term matching, specific names
+           - Example: "github" → finds servers with "github" in name/description
+           - Fast and deterministic
+        
+        4. **"similarity_store"** - Alternative similarity algorithm
+           - Best for: Alternative ranking when other methods fail
+           - Experimental alternative approach
+
         **Query Tips for Best Results:**
         - Use descriptive phrases: "web search and news" (not just "search")
         - Specify use case: "code repository management", "email automation"
         - Include domain keywords: "productivity", "development", "communication"
         - Leave empty ("") to browse all available servers
+        - Try different search_type values if results aren't what you expect
 
         **Example Queries:**
         - "" (empty) → Returns ALL available servers (browsing mode)
@@ -203,9 +235,10 @@ def get_tools() -> List[Tuple[str, Callable]]:
         - "cloud infrastructure AWS" → Finds AWS-related servers
         - "database operations" → Finds database integration servers
 
-        **Search Technology:**
-        Uses hybrid semantic + keyword search with AI reranking.
-        Searches server descriptions, tags, tool names, and capabilities.
+        **Token Optimization:**
+        - Default top_n=1 to reduce response size (servers contain many tools)
+        - Increase top_n only if you need to compare multiple servers
+        - Each server includes full tool/resource/prompt definitions
 
         **Key Differences from discover_tools:**
         - discover_servers: Browse server catalogs and capabilities (broader)
@@ -229,10 +262,9 @@ def get_tools() -> List[Tuple[str, Callable]]:
         **Pro Tip:** After discovering servers, use discover_tools with specific
         task descriptions to find the exact tool you need to execute.
         """
-        return await discover_servers_impl(query, top_n, ctx)
+        return await discover_servers_impl(query, top_n, search_type, ctx)
 
     return [
         # ("discover_tools", discover_tools),
         ("discover_servers", discover_servers),
-        # ("intelligent_tool_finder", intelligent_tool_finder),
     ]
