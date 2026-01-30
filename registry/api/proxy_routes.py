@@ -4,6 +4,7 @@ Dynamic MCP server proxy routes.
 
 import logging
 import httpx
+import json
 from typing import Dict, Any, Optional, Union
 from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -128,7 +129,7 @@ async def _build_authenticated_headers(
         )
 
 
-async def _build_target_url(
+def _build_target_url(
     server: MCPServerDocument,
     remaining_path: str = ""
 ) -> str:
@@ -213,42 +214,67 @@ async def _proxy_json_rpc_request(
                 media_type=response.headers.get("content-type")
             )
         
-        # Client accepts SSE - make request and check response type
-        response = await proxy_client.post(
+        # Client accepts SSE - use streaming to check response type
+        stream_context = proxy_client.stream(
+            'POST',
             target_url,
             json=json_body,
             headers=headers
         )
+        backend_response = await stream_context.__aenter__()
         
-        backend_content_type = response.headers.get("content-type", "")
+        backend_content_type = backend_response.headers.get("content-type", "")
         is_sse = "text/event-stream" in backend_content_type
         
-        # If backend doesn't return SSE, return as regular response
+        # If backend doesn't return SSE, read full response and close stream
         if not is_sse:
-            if response.status_code >= 400:
+            content_bytes = await backend_response.aread()
+            await stream_context.__aexit__(None, None, None)
+            
+            if backend_response.status_code >= 400:
                 try:
-                    error_body = response.content.decode('utf-8')
-                    logger.error(f"Backend error response ({response.status_code}): {error_body}")
+                    error_body = content_bytes.decode('utf-8')
+                    logger.error(f"Backend error response ({backend_response.status_code}): {error_body}")
                 except Exception:
-                    logger.error(f"Backend error response ({response.status_code}): [binary content]")
+                    logger.error(f"Backend error response ({backend_response.status_code}): [binary content]")
             
             return Response(
-                content=response.content,
-                status_code=response.status_code,
-                headers=dict(response.headers),
+                content=content_bytes,
+                status_code=backend_response.status_code,
+                headers=dict(backend_response.headers),
                 media_type=backend_content_type or "application/json"
             )
         
-        # Backend returned SSE - return it directly
-        logger.info(f"Returning SSE response from backend")
-        return Response(
-            content=response.content,
-            status_code=response.status_code,
+        # Backend returned SSE - stream it without buffering
+        logger.info(f"Streaming SSE response from backend")
+        
+        response_headers = {
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive"
+        }
+        
+        # Forward MCP session header if present
+        if "mcp-session-id" in backend_response.headers:
+            response_headers["Mcp-Session-Id"] = backend_response.headers["mcp-session-id"]
+        
+        # Stream content from backend to client - cleanup when done
+        async def stream_sse():
+            try:
+                async for chunk in backend_response.aiter_bytes():
+                    yield chunk
+            except Exception as e:
+                logger.error(f"SSE streaming error: {e}")
+                raise
+            finally:
+                # Close stream when done streaming
+                await stream_context.__aexit__(None, None, None)
+        
+        return StreamingResponse(
+            stream_sse(),
+            status_code=backend_response.status_code,
             media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "X-Accel-Buffering": "no"
-            }
+            headers=response_headers
         )
         
     except httpx.TimeoutException:
@@ -556,7 +582,7 @@ async def execute_tool(
         )
     
     # Build target URL using shared helper
-    target_url = await _build_target_url(server)
+    target_url = _build_target_url(server)
         
     # Build MCP JSON-RPC request
     mcp_request_body = {
@@ -595,9 +621,6 @@ async def execute_tool(
         if response.media_type == "text/event-stream":
             logger.info(f"✅ Returning SSE response for tool: {tool_name}")
             return response
-        
-        # Parse JSON response and return structured response
-        import json
         try:
             result_text = response.body.decode('utf-8') if isinstance(response.body, bytes) else str(response.body)
             result = json.loads(result_text)
@@ -679,7 +702,7 @@ async def read_resource(
         )
     
     # Build target URL using shared helper (for future implementation)
-    target_url = await _build_target_url(server)
+    target_url = _build_target_url(server)
     
     # MOCK: Return hardcoded response for POC
     logger.info(f"✅ (MOCK) Returning cached search results for: {resource_uri}")
@@ -756,7 +779,7 @@ async def execute_prompt(
         )
     
     # Build target URL using shared helper (for future implementation)
-    target_url = await _build_target_url(server)
+    target_url = _build_target_url(server)
     
     # MOCK: Return hardcoded prompt response for POC
     topic = arguments.get("topic", "general topic")
@@ -831,7 +854,7 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
     remaining_path = path[len(server_path):].lstrip('/')
     
     # Build target URL using shared helper
-    target_url = await _build_target_url(server, remaining_path)
+    target_url = _build_target_url(server, remaining_path)
     
     # Proxy the request
     logger.info(f"Proxying {request.method} {path} → {target_url}")

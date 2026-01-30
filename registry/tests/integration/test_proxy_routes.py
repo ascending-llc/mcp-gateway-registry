@@ -57,20 +57,24 @@ class TestProxyToolExecutionRoutes:
             "transport": "streamable-http"
         }
         
-        # Mock HTTP response from backend MCP server
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.headers = {"content-type": "application/json"}
-        mock_response.content = b'{"jsonrpc": "2.0", "id": 1, "result": {"content": [{"type": "text", "text": "Search results for Donald Trump..."}]}}'
+        # Mock HTTP response from backend MCP server (non-SSE)
+        mock_backend_response = Mock()
+        mock_backend_response.status_code = 200
+        mock_backend_response.headers = {"content-type": "application/json"}
+        mock_backend_response.aread = AsyncMock(return_value=b'{"jsonrpc": "2.0", "id": 1, "result": {"content": [{"type": "text", "text": "Search results for Donald Trump..."}]}}')
+        
+        mock_stream_context = Mock()
+        mock_stream_context.__aenter__ = AsyncMock(return_value=mock_backend_response)
+        mock_stream_context.__aexit__ = AsyncMock(return_value=None)
         
         with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
-             patch("registry.api.proxy_routes.proxy_client.post", new_callable=AsyncMock) as mock_post, \
+             patch("registry.api.proxy_routes.proxy_client.stream") as mock_stream, \
              patch("registry.services.server_service._build_complete_headers_for_server", new_callable=AsyncMock) as mock_build_headers:
             
             mock_get_server.return_value = mock_server
             mock_build_headers.return_value = {"Content-Type": "application/json"}
-            mock_post.return_value = mock_response
+            mock_stream.return_value = mock_stream_context
             
             response = test_client.post(
                 "/proxy/tools/call",
@@ -108,20 +112,27 @@ class TestProxyToolExecutionRoutes:
         }
         
         # Mock SSE response from backend
-        sse_content = b"event: message\ndata: {\"type\": \"progress\", \"value\": 50}\n\n"
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.headers = {"content-type": "text/event-stream"}
-        mock_response.content = sse_content
+        async def async_iter_bytes():
+            yield b"event: message\n"
+            yield b"data: {\"type\": \"progress\", \"value\": 50}\n\n"
+        
+        mock_backend_response = Mock()
+        mock_backend_response.status_code = 200
+        mock_backend_response.headers = {"content-type": "text/event-stream"}
+        mock_backend_response.aiter_bytes = async_iter_bytes
+        
+        mock_stream_context = Mock()
+        mock_stream_context.__aenter__ = AsyncMock(return_value=mock_backend_response)
+        mock_stream_context.__aexit__ = AsyncMock(return_value=None)
         
         with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
-             patch("registry.api.proxy_routes.proxy_client.post", new_callable=AsyncMock) as mock_post, \
+             patch("registry.api.proxy_routes.proxy_client.stream") as mock_stream, \
              patch("registry.services.server_service._build_complete_headers_for_server", new_callable=AsyncMock) as mock_build_headers:
             
             mock_get_server.return_value = mock_server
             mock_build_headers.return_value = {"Content-Type": "application/json"}
-            mock_post.return_value = mock_response
+            mock_stream.return_value = mock_stream_context
             
             response = test_client.post(
                 "/proxy/tools/call",
@@ -191,17 +202,15 @@ class TestProxyToolExecutionRoutes:
         
         with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
-             patch("registry.api.proxy_routes.proxy_client.post", new_callable=AsyncMock) as mock_post, \
+             patch("registry.api.proxy_routes.proxy_client.stream") as mock_stream, \
              patch("registry.services.server_service._build_complete_headers_for_server", new_callable=AsyncMock) as mock_build_headers:
             
             mock_get_server.return_value = mock_server
             mock_build_headers.return_value = {"Content-Type": "application/json"}
             
             # Simulate HTTP error
-            mock_post.side_effect = httpx.HTTPStatusError(
-                "500 Server Error",
-                request=Mock(),
-                response=Mock(status_code=500)
+            mock_stream.side_effect = httpx.HTTPError(
+                "Connection failed"
             )
             
             response = test_client.post(
@@ -233,21 +242,25 @@ class TestProxyToolExecutionRoutes:
             }
         }
         
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.headers = {"content-type": "application/json"}
-        mock_response.content = b'{"jsonrpc": "2.0", "id": 1, "result": {}}'
+        mock_backend_response = Mock()
+        mock_backend_response.status_code = 200
+        mock_backend_response.headers = {"content-type": "application/json"}
+        mock_backend_response.aread = AsyncMock(return_value=b'{"jsonrpc": "2.0", "id": 1, "result": {}}')
+        
+        mock_stream_context = Mock()
+        mock_stream_context.__aenter__ = AsyncMock(return_value=mock_backend_response)
+        mock_stream_context.__aexit__ = AsyncMock(return_value=None)
         
         with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
-             patch("registry.api.proxy_routes.proxy_client.post", new_callable=AsyncMock) as mock_post, \
+             patch("registry.api.proxy_routes.proxy_client.stream") as mock_stream, \
              patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt, \
              patch("registry.services.server_service._build_complete_headers_for_server", new_callable=AsyncMock) as mock_build_headers:
             
             mock_get_server.return_value = mock_server
             mock_decrypt.return_value = mock_server.config
             mock_build_headers.return_value = {"Authorization": "Bearer test-api-key", "Content-Type": "application/json"}
-            mock_post.return_value = mock_response
+            mock_stream.return_value = mock_stream_context
             
             response = test_client.post(
                 "/proxy/tools/call",
@@ -261,8 +274,8 @@ class TestProxyToolExecutionRoutes:
 
         assert response.status_code == 200
         
-        # Verify proxy_client.post was used to make backend request
-        mock_post.assert_called_once()
+        # Verify proxy_client.stream was used to make backend request
+        mock_stream.assert_called_once()
 
     def test_execute_tool_adds_tracking_headers(self, test_client: TestClient):
         """Tool execution adds user tracking headers to backend request."""
@@ -272,25 +285,28 @@ class TestProxyToolExecutionRoutes:
         mock_server.tags = []  # Add tags attribute
         mock_server.config = {"url": "http://localhost:8080/mcp"}
         
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.headers = {"content-type": "application/json"}
-        mock_response.content = b'{"jsonrpc": "2.0", "id": 1, "result": {}}'
+        mock_backend_response = Mock()
+        mock_backend_response.status_code = 200
+        mock_backend_response.headers = {"content-type": "application/json"}
+        mock_backend_response.aread = AsyncMock(return_value=b'{"jsonrpc": "2.0", "id": 1, "result": {}}')
         
         captured_headers = {}
         
-        async def capture_post(url, json=None, headers=None):
+        def capture_stream(method, url, json=None, headers=None):
             captured_headers.update(headers or {})
-            return mock_response
+            mock_stream_context = Mock()
+            mock_stream_context.__aenter__ = AsyncMock(return_value=mock_backend_response)
+            mock_stream_context.__aexit__ = AsyncMock(return_value=None)
+            return mock_stream_context
         
         with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
-             patch("registry.api.proxy_routes.proxy_client.post", new_callable=AsyncMock) as mock_post, \
+             patch("registry.api.proxy_routes.proxy_client.stream") as mock_stream, \
              patch("registry.services.server_service._build_complete_headers_for_server", new_callable=AsyncMock) as mock_build_headers:
             
             mock_get_server.return_value = mock_server
             mock_build_headers.return_value = {"Content-Type": "application/json"}
-            mock_post.side_effect = capture_post
+            mock_stream.side_effect = capture_stream
             
             response = test_client.post(
                 "/proxy/tools/call",
@@ -320,25 +336,28 @@ class TestProxyToolExecutionRoutes:
         mock_server.tags = []  # Add tags attribute
         mock_server.config = {"url": "http://localhost:8080/mcp"}
         
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.headers = {"content-type": "application/json"}
-        mock_response.content = b'{"jsonrpc": "2.0", "id": 1, "result": {}}'
+        mock_backend_response = Mock()
+        mock_backend_response.status_code = 200
+        mock_backend_response.headers = {"content-type": "application/json"}
+        mock_backend_response.aread = AsyncMock(return_value=b'{"jsonrpc": "2.0", "id": 1, "result": {}}')
         
         captured_json = {}
         
-        async def capture_post(url, json=None, headers=None):
+        def capture_stream(method, url, json=None, headers=None):
             captured_json.update(json or {})
-            return mock_response
+            mock_stream_context = Mock()
+            mock_stream_context.__aenter__ = AsyncMock(return_value=mock_backend_response)
+            mock_stream_context.__aexit__ = AsyncMock(return_value=None)
+            return mock_stream_context
         
         with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
-             patch("registry.api.proxy_routes.proxy_client.post", new_callable=AsyncMock) as mock_post, \
+             patch("registry.api.proxy_routes.proxy_client.stream") as mock_stream, \
              patch("registry.services.server_service._build_complete_headers_for_server", new_callable=AsyncMock) as mock_build_headers:
             
             mock_get_server.return_value = mock_server
             mock_build_headers.return_value = {"Content-Type": "application/json"}
-            mock_post.side_effect = capture_post
+            mock_stream.side_effect = capture_stream
             
             response = test_client.post(
                 "/proxy/tools/call",
@@ -385,14 +404,14 @@ class TestProxyToolExecutionRoutes:
         
         with patch("registry.services.server_service.server_service_v1.get_server_by_id", 
                    new_callable=AsyncMock) as mock_get_server, \
-             patch("registry.api.proxy_routes.proxy_client.post", new_callable=AsyncMock) as mock_post, \
+             patch("registry.api.proxy_routes.proxy_client.stream") as mock_stream, \
              patch("registry.services.server_service._build_complete_headers_for_server", new_callable=AsyncMock) as mock_build_headers:
             
             mock_get_server.return_value = mock_server
             mock_build_headers.return_value = {"Content-Type": "application/json"}
             
             # Simulate timeout
-            mock_post.side_effect = httpx.TimeoutException("Request timed out")
+            mock_stream.side_effect = httpx.TimeoutException("Request timed out")
             
             response = test_client.post(
                 "/proxy/tools/call",

@@ -1755,6 +1755,7 @@ name = "mcpgw-mcp-server"
 version = "0.2.0"
 source = { editable = "servers/mcpgw" }
 dependencies = [
+    { name = "fastapi" },
     { name = "fastmcp" },
     { name = "httpx" },
     { name = "mcp" },
@@ -1769,6 +1770,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "fastapi", specifier = ">=0.115.12" },
     { name = "fastmcp", specifier = ">=2.13.1" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "mcp", specifier = ">=1.9.3" },

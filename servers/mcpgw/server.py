@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import logging
-import asyncio
 from contextlib import asynccontextmanager
 from fastmcp import FastMCP
 from starlette.responses import JSONResponse
