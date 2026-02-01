@@ -69,6 +69,37 @@ async def _build_authenticated_headers(
     Raises:
         HTTPException: For auth errors (401 with appropriate details)
     """
+    # Enrich user_id if missing (for OAuth tokens from vscode, claude or gpt)
+    if not auth_context.get("user_id"):
+        sub = auth_context.get("username")
+        if sub:
+            logger.debug(f"user_id missing in auth_context, looking up user for sub/email: {sub}")
+            try:
+                user = await user_service.get_or_create_user(email=sub)
+                if user:
+                    auth_context["user_id"] = str(user.id)
+                    logger.debug(f"✓ Enriched user_id: {auth_context['user_id']} for sub: {sub}")
+                else:
+                    logger.error(f"Failed to get or create user for email/sub: {sub}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Failed to resolve user identity for email: {sub}"
+                    )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Failed to enrich user_id: {e}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to resolve user identity: {str(e)}"
+                )
+        else:
+            logger.error("Cannot enrich user_id: both user_id and sub/email are missing from auth_context")
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid authentication context: missing user identifier"
+            )
+    
     # Build base headers (filter out empty values to avoid httpx errors)
     headers = {
         "X-User-Id": auth_context.get("user_id") or "",
@@ -834,37 +865,6 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
     if not auth_context:
         logger.warning(f"Auth failed for {path}: No authentication context")
         raise HTTPException(status_code=401, detail="Authentication required")
-    
-    # Enrich user_id if missing (for OAuth tokens from vscode,claude or gpt)
-    if not auth_context.get("user_id"):
-        sub = auth_context.get("username")
-        if sub:
-            logger.debug(f"user_id missing in auth_context, looking up user for sub/email: {sub}")
-            try:
-                user = await user_service.get_or_create_user(email=sub)
-                if user:
-                    auth_context["user_id"] = str(user.id)
-                    logger.debug(f"✓ Enriched user_id: {auth_context['user_id']} for sub: {sub}")
-                else:
-                    logger.error(f"Failed to get or create user for email/sub: {sub}")
-                    raise HTTPException(
-                        status_code=500,
-                        detail=f"Failed to resolve user identity for email: {sub}"
-                    )
-            except HTTPException:
-                raise
-            except Exception as e:
-                logger.error(f"Failed to enrich user_id: {e}")
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Failed to resolve user identity: {str(e)}"
-                )
-        else:
-            logger.error("Cannot enrich user_id: both user_id and sub/email are missing from auth_context")
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid authentication context: missing user identifier"
-            )
     
     # Extract remaining path after server path
     remaining_path = path[len(server_path):].lstrip('/')
