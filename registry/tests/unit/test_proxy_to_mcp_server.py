@@ -164,7 +164,7 @@ class TestProxyToMCPServer:
         assert response.status_code == 200
         
         # For MCPGW, Authorization header is removed (line 364 in proxy_routes.py)
-        # MCPGW should receive X-Jarvis-Authorization instead if include_internal_jwt=True
+        # MCPGW should receive X-Jarvis-Auth instead if include_internal_jwt=True
         call_args = mock_client.request.call_args
         headers = call_args.kwargs["headers"]
         # Authorization header is explicitly removed in proxy_to_mcp_server

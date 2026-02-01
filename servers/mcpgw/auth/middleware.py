@@ -12,11 +12,11 @@ class HeaderSwapMiddleware(Middleware):
     """
     Middleware to swap custom authentication header to Authorization header.
     
-    This allows FastMCP to process tokens from custom headers like X-Jarvis-Authorization.
+    This allows FastMCP to process tokens from custom headers like X-Jarvis-Auth.
     Must be added BEFORE AuthMiddleware in the middleware stack.
     
     Usage:
-        mcp.add_middleware(HeaderSwapMiddleware(custom_header="X-Jarvis-Authorization"))
+        mcp.add_middleware(HeaderSwapMiddleware(custom_header="X-Jarvis-Auth"))
         mcp.add_middleware(AuthMiddleware())
     """
 

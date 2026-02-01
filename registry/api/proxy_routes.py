@@ -384,7 +384,8 @@ async def proxy_to_mcp_server(
     headers = await _build_authenticated_headers(
         server=server,
         auth_context=auth_context,
-        additional_headers=headers  # Pass existing headers to be merged
+        additional_headers=headers,
+        include_internal_jwt=(server.path == MCPGW_PATH)
     )
 
     body = await request.body()
@@ -618,7 +619,7 @@ async def execute_tool(
             "X-Tool-Name": tool_name,
             "Accept": "application/json, text/event-stream"  # MCP servers require both
         },
-        include_internal_jwt=False
+        include_internal_jwt=(server.path == MCPGW_PATH)
     )
     
     # Client can accept both JSON and SSE (as indicated in Accept header)
