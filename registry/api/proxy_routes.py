@@ -13,6 +13,8 @@ from packages.models.extended_mcp_server import MCPServerDocument
 from registry.auth.dependencies import CurrentUser
 from registry.services.server_service import server_service_v1
 from registry.services.server_service import _build_complete_headers_for_server
+from registry.services.user_service import user_service
+from registry.core.config import settings
 from registry.schemas.errors import (
     OAuthReAuthRequiredError,
     OAuthTokenError,
@@ -44,16 +46,22 @@ proxy_client = httpx.AsyncClient(
 async def _build_authenticated_headers(
     server: MCPServerDocument,
     auth_context: Dict[str, Any],
-    additional_headers: Optional[Dict[str, str]] = None
+    additional_headers: Optional[Dict[str, str]] = None,
+    include_internal_jwt: bool = False
 ) -> Dict[str, str]:
     """
     Build complete headers with authentication for MCP server requests.
     Consolidates auth logic used by all proxy endpoints.
     
+    Supports dual authentication:
+    - setting.auth_egress_header: OAuth/external access token (RFC 6750) for MCP server resource access
+    - setting.internal_auth_header: Internal JWT for gateway-to-MCP authentication
+    
     Args:
         server: MCP server document
-        auth_context: Gateway authentication context (user, client_id, scopes)
+        auth_context: Gateway authentication context (user, client_id, scopes, jwt_token)
         additional_headers: Optional additional headers to merge
+        include_internal_jwt: Whether to include internal Jarvis JWT in custom header
     
     Returns:
         Complete headers dict with authentication
@@ -61,12 +69,21 @@ async def _build_authenticated_headers(
     Raises:
         HTTPException: For auth errors (401 with appropriate details)
     """
+    # Build base headers (filter out empty values to avoid httpx errors)
     headers = {
-        "X-User": auth_context.get("username", ""),
-        "X-Username": auth_context.get("username", ""),
-        "X-Client-Id": auth_context.get("client_id", ""),
+        "X-User-Id": auth_context.get("user_id") or "",
+        "X-Username": auth_context.get("username") or "",
+        "X-Client-Id": auth_context.get("client_id") or "",
         "X-Scopes": " ".join(auth_context.get("scopes", [])),
     }
+    # Remove empty header values (httpx requires non-empty strings)
+    headers = {k: v for k, v in headers.items() if v}
+    
+    # Add internal Jarvis JWT if requested (for internal authorization)
+    if include_internal_jwt and auth_context.get("jwt_token"):
+        internal_header = settings.internal_auth_header
+        headers[internal_header] = f"Bearer {auth_context['jwt_token']}"
+        logger.debug(f"Added internal JWT to {internal_header} header")
     
     # Merge additional headers if provided
     if additional_headers:
@@ -89,7 +106,7 @@ async def _build_authenticated_headers(
         
         # Merge auth headers with case-insensitive override logic
         # Protected headers that won't be overridden by auth headers
-        protected_headers = {"x-user", "x-username", "x-client-id", "x-scopes", "accept"}
+        protected_headers = {"x-user-id", "x-username", "x-client-id", "x-scopes", settings.internal_auth_header.lower(), "accept"}
         
         # Build a case-insensitive map of existing header names to their original keys
         lowercase_header_map = {k.lower(): k for k in headers.keys()}
@@ -313,64 +330,31 @@ async def proxy_to_mcp_server(
         auth_context: Gateway authentication context
         server: MCPServerDocument
     """
-    # Check if this is MCPGW path (special handling)
-    is_mcpgw = server.path == MCPGW_PATH
     
     # Build proxy headers - start with request headers
     headers = dict(request.headers)
     
-    # Add context headers for tracing/logging
-    headers.update({
-        "X-User": auth_context.get("username", ""),
-        "X-Username": auth_context.get("username", ""),
-        "X-Client-Id": auth_context.get("client_id", ""),
-        "X-Scopes": " ".join(auth_context.get("scopes", [])),
-        "X-Auth-Method": auth_context.get("auth_method", ""),
-        "X-Server-Name": auth_context.get("server_name", ""),
-        "X-Tool-Name": auth_context.get("tool_name", ""),
+    # Add context headers for tracing/logging (filter out None values)
+    context_headers = {
+        "X-Auth-Method": auth_context.get("auth_method") or "",
+        "X-Server-Name": auth_context.get("server_name") or "",
+        "X-Tool-Name": auth_context.get("tool_name") or "",
         "X-Original-URL": str(request.url),
-    })
+    }
+    # Only add headers with non-empty values
+    headers.update({k: v for k, v in context_headers.items() if v})
     
     # Remove host header to avoid conflicts
     headers.pop("host", None)
-    
-    # Special handling for MCPGW - keep all headers as-is, don't build auth
-    if not is_mcpgw:
-        headers.pop("Authorization", None)  # Remove existing Authorization header
+    headers.pop("Authorization", None)  # Remove existing Authorization header
 
-        # Build complete authentication headers using shared helper
-        try:
-            auth_headers = await _build_authenticated_headers(
-                server=server,
-                auth_context=auth_context,
-                additional_headers={}
-            )
-            
-            # Merge auth headers with case-insensitive override logic
-            # Protected headers that won't be overridden by auth headers
-            protected_headers = {"content-type", "accept", "user-agent"}
-
-            # Build a case-insensitive map of existing header names to their original keys
-            lowercase_header_map = {k.lower(): k for k in headers.keys()}
-
-            for auth_key, auth_value in auth_headers.items():
-                auth_key_lower = auth_key.lower()
-                if auth_key_lower in protected_headers:
-                    continue
-
-                # Remove any existing header with same name (case-insensitive)
-                existing_key = lowercase_header_map.get(auth_key_lower)
-                if existing_key is not None:
-                    headers.pop(existing_key, None)
-
-                # Add/override with the auth header and update the lowercase map
-                headers[auth_key] = auth_value
-                lowercase_header_map[auth_key_lower] = auth_key
-                
-        except HTTPException:
-            # Re-raise HTTPExceptions from auth helper
-            raise
-
+    # Build complete authentication headers using shared helper
+    # This already handles all header merging with case-insensitive logic
+    headers = await _build_authenticated_headers(
+        server=server,
+        auth_context=auth_context,
+        additional_headers=headers  # Pass existing headers to be merged
+    )
 
     body = await request.body()
     
@@ -602,7 +586,8 @@ async def execute_tool(
         additional_headers={
             "X-Tool-Name": tool_name,
             "Accept": "application/json, text/event-stream"  # MCP servers require both
-        }
+        },
+        include_internal_jwt=False
     )
     
     # Client can accept both JSON and SSE (as indicated in Accept header)
@@ -849,6 +834,37 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
     if not auth_context:
         logger.warning(f"Auth failed for {path}: No authentication context")
         raise HTTPException(status_code=401, detail="Authentication required")
+    
+    # Enrich user_id if missing (for OAuth tokens from vscode,claude or gpt)
+    if not auth_context.get("user_id"):
+        sub = auth_context.get("username")
+        if sub:
+            logger.debug(f"user_id missing in auth_context, looking up user for sub/email: {sub}")
+            try:
+                user = await user_service.get_or_create_user(email=sub)
+                if user:
+                    auth_context["user_id"] = str(user.id)
+                    logger.debug(f"✓ Enriched user_id: {auth_context['user_id']} for sub: {sub}")
+                else:
+                    logger.error(f"Failed to get or create user for email/sub: {sub}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Failed to resolve user identity for email: {sub}"
+                    )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Failed to enrich user_id: {e}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to resolve user identity: {str(e)}"
+                )
+        else:
+            logger.error("Cannot enrich user_id: both user_id and sub/email are missing from auth_context")
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid authentication context: missing user identifier"
+            )
     
     # Extract remaining path after server path
     remaining_path = path[len(server_path):].lstrip('/')

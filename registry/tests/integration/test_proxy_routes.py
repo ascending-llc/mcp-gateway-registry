@@ -320,10 +320,10 @@ class TestProxyToolExecutionRoutes:
         assert response.status_code == 200
         
         # Verify tracking headers were added
-        assert "X-User" in captured_headers
+        assert "X-User-Id" in captured_headers
         assert "X-Username" in captured_headers
         assert "X-Tool-Name" in captured_headers
-        assert captured_headers["X-User"] == "test-user"
+        assert captured_headers["X-User-Id"] == "test-user-id"  # From auth_context fixture
         assert captured_headers["X-Username"] == "test-user"
         assert captured_headers["X-Tool-Name"] == "tavily_search"
 

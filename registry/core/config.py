@@ -49,13 +49,15 @@ class Settings(BaseSettings):
     secret_key: str = ""
     admin_user: str = "admin"
     admin_password: str = "password"
-    session_cookie_name: str = "mcp_gateway_session"
+    session_cookie_name: str = "jarvis_registry_session"
     session_max_age_seconds: int = 60 * 60 * 8  # 8 hours
     session_cookie_secure: bool = False  # Set to True in production with HTTPS
     session_cookie_domain: Optional[str] = None  # e.g., ".example.com" for cross-subdomain sharing
     auth_server_url: str = "http://localhost:8888"
     auth_server_external_url: str = "http://localhost:8888"  # External URL for OAuth redirects
     auth_server_api_prefix: str = ""  # API prefix for auth server routes (e.g., "/auth")
+    auth_egress_header: str = "Authorization"  # RFC 6750: OAuth access token for MCP server resource access
+    internal_auth_header: str = "X-Jarvis-Auth"  # Internal JWT for gateway-to-MCP-server authentication
     registry_client_url: str = "http://localhost:5173"  # Registry URL for OAuth protected resource metadata
     registry_url: str = "http://localhost:7860"
     # Embeddings settings
@@ -105,8 +107,8 @@ class Settings(BaseSettings):
     container_log_dir: Path = Path("/app/logs")
 
     # Note:  It will be overwritten from the .env file.
-    JWT_ISSUER: str = "mcp-auth-server"
-    JWT_AUDIENCE: str = "mcp-registry"
+    JWT_ISSUER: str = "jarvis-auth-server"
+    JWT_AUDIENCE: str = "jarvis-registry"
     JWT_SELF_SIGNED_KID: str = "self-signed-key-v1"
     API_VERSION: str = "v1"
     LOG_LEVEL: str = "INFO"

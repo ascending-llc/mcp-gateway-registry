@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastmcp import FastMCP
 from starlette.responses import JSONResponse
 from auth.custom_jwt import jwtVerifier
-from auth.middleware import AuthMiddleware
+from auth.middleware import HeaderSwapMiddleware, AuthMiddleware
 from config import parse_arguments, settings
 from tools import registry_api, search
 from packages.database import init_mongodb, close_mongodb
@@ -28,9 +28,9 @@ async def app_lifespan(server):
 
 
 mcp = FastMCP(
-    "MCPGateway",
-    auth=jwtVerifier,
-    lifespan=app_lifespan,  # Add lifespan here
+    "RegistryGateway",
+    auth=jwtVerifier,  # JWT verifier (requires middleware to swap headers if using custom header)
+    lifespan=app_lifespan,
     instructions="""This MCP Gateway provides unified access to 100+ MCP servers, tools, resources, and prompts through a centralized discovery and execution interface.
 
 KEY CAPABILITIES:
@@ -57,6 +57,11 @@ EXAMPLES:
 
 ALWAYS proactively discover and use available tools when user requests could benefit from external data, APIs, or specialized functionality."""
 )
+
+# Add header swap middleware (must be BEFORE AuthMiddleware)
+mcp.add_middleware(HeaderSwapMiddleware(custom_header=settings.INTERNAL_AUTH_HEADER)) 
+
+# Add authentication middleware
 mcp.add_middleware(AuthMiddleware())
 
 

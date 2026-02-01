@@ -65,18 +65,22 @@ class Settings(BaseSettings):
         default="http://localhost:8888",
         description="URL of the authentication server"
     )
-
+    
+    INTERNAL_AUTH_HEADER: str = Field(
+        default="X-Jarvis-Auth",
+        description="Header name for internal JWT authentication (RFC 8707 compliant)"
+    )
     # JWT authentication configuration
     SECRET_KEY: Optional[str] = Field(
         default=None,
         description="Secret key for JWT token validation (HS256)"
     )
     JWT_ISSUER: str = Field(
-        default="mcp-auth-server",
+        default="jarvis-auth-server",
         description="Expected JWT token issuer"
     )
     JWT_AUDIENCE: str = Field(
-        default="mcp-registry",
+        default="jarvis-registry",
         description="Expected JWT token audience"
     )
     JWT_SELF_SIGNED_KID: str = Field(

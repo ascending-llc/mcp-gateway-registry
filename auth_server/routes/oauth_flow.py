@@ -479,7 +479,7 @@ async def oauth2_callback(provider: str, request: Request, code: str = None, sta
         try:
             temp_session_data = signer.loads(oauth2_temp_session, max_age=settings.oauth_session_ttl_seconds)
         except (SignatureExpired, BadSignature) as e:
-            www_authenticate_parts = ['Bearer realm="mcp-auth-server"']
+            www_authenticate_parts = [f'Bearer realm="{settings.jwt_issuer}"']
             if resource:
                 try:
                     from urllib.parse import urlparse
@@ -774,12 +774,12 @@ async def validate_request(request: Request):
         validation_result = None
         
         # FIRST: Check for session cookie if present
-        if "mcp_gateway_session=" in cookie_header:
+        if "jarvis_registry_session=" in cookie_header:
             logger.info("Session cookie detected, attempting session validation")
             # Extract cookie value
             cookie_value = None
             for cookie in cookie_header.split(';'):
-                if cookie.strip().startswith('mcp_gateway_session='):
+                if cookie.strip().startswith('jarvis_registry_session='):
                     cookie_value = cookie.strip().split('=', 1)[1]
                     break
             

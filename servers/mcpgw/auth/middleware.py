@@ -4,19 +4,73 @@ from fastmcp.server.middleware import Middleware, MiddlewareContext
 from fastmcp.server.dependencies import get_http_request, get_http_headers
 from fastapi import HTTPException
 from packages.models import IUser
+from config import settings
 
 logger = logging.getLogger(__name__)
+
+
+class HeaderSwapMiddleware(Middleware):
+    """
+    Middleware to swap custom authentication header to Authorization header.
+    
+    This allows FastMCP to process tokens from custom headers like X-Jarvis-Authorization.
+    Must be added BEFORE AuthMiddleware in the middleware stack.
+    
+    Usage:
+        mcp.add_middleware(HeaderSwapMiddleware(custom_header="X-Jarvis-Authorization"))
+        mcp.add_middleware(AuthMiddleware())
+    """
+
+    def __init__(self, custom_header: Optional[str] = None):
+        """
+        Initialize the header swap middleware.
+        
+        Args:
+            custom_header: Header name to swap to Authorization (default: settings.INTERNAL_AUTH_HEADER)
+        """
+        super().__init__()
+        self.custom_header = (custom_header or settings.INTERNAL_AUTH_HEADER).lower()
+        logger.debug(f"HeaderSwapMiddleware initialized: {self.custom_header} -> Authorization")
+
+    async def on_request(self, context: MiddlewareContext, call_next):
+        """
+        Swap custom header to Authorization before FastMCP processes the request.
+        """
+        try:
+            request = get_http_request()
+            headers = dict(request.headers)
+            
+            auth_header = "authorization"
+            
+            # Check if custom header exists
+            if self.custom_header in headers:
+                # Preserve original Authorization header if it exists
+                if auth_header in headers:
+                    headers["x-original-authorization"] = headers[auth_header]
+                    logger.debug("Preserved original Authorization -> X-Original-Authorization")
+                
+                # Move custom header to Authorization
+                headers[auth_header] = headers[self.custom_header]
+                logger.debug(f"Swapped {self.custom_header} -> Authorization")
+                
+                # Update request headers
+                request._headers = headers
+            
+        except Exception as e:
+            logger.warning(f"Failed to swap auth headers: {e}")
+        
+        return await call_next(context)
 
 
 class AuthMiddleware(Middleware):
     """
     Authentication and authorization middleware for MCP Gateway.
+    
+    Extracts user context from authenticated requests and stores it for downstream tools.
+    Use HeaderSwapMiddleware before this if using custom auth headers.
     """
 
-    def __init__(
-            self,
-            allowed_methods_without_auth: Optional[List[str]] = None
-    ):
+    def __init__(self, allowed_methods_without_auth: Optional[List[str]] = None):
         """
         Initialize the authentication middleware.
         
@@ -33,13 +87,18 @@ class AuthMiddleware(Middleware):
     async def on_request(self, context: MiddlewareContext, call_next):
         """
         Process MCP requests with authentication.
+        
+        Extracts user context from authenticated requests and makes it available
+        to downstream tools via context.fastmcp_context.user_auth.
         """
         method = context.method
         logger.debug(f"MCP request: {method}")
+        
         if method not in self.allowed_methods_without_auth:
             # Extract full user context from request
             user_context = await self._extract_user_context()
             await self._store_auth_context(context, user_context)
+        
         try:
             result = await call_next(context)
             return result
@@ -72,26 +131,13 @@ class AuthMiddleware(Middleware):
                                f"user_id={user_context.get('user_id')}, "
                                f"scopes={len(user_context.get('scopes', []))}, "
                                f"groups={len(user_context.get('groups', []))}")
-                    
-                    # TODO: It's computing expensive however third party OAuth tokens may not have user_id in our application
-                    # We should probably think about caching it by session id in future
+
                     if not user_context.get('user_id'):
-                        sub = user_context.get('sub')
-                        if not sub:
-                            raise HTTPException(
-                                status_code=401,
-                                detail="JWT claims missing both 'user_id' and 'sub' - cannot authenticate user"
-                            )
-                        
-                        logger.debug(f"user_id missing in JWT claims, attempting MongoDB lookup for sub: {sub}")
-                        user = await IUser.find_one({"email": sub})
-                        if not user:
-                            raise HTTPException(
-                                status_code=401,
-                                detail=f"User not found in database for email/sub: {sub}"
-                            )
-                        user_context['user_id'] = str(user.id)
-                        logger.debug(f"✓ Resolved user_id from MongoDB: {user_context['user_id']} for sub: {sub}")
+                        logger.error("user_id missing in JWT claims - Registry should have enriched this")
+                        raise HTTPException(
+                            status_code=401,
+                            detail="Invalid token: missing user_id (Registry enrichment failed)"
+                        )
                 else:
                     raise HTTPException(
                         status_code=401,
