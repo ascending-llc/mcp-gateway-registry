@@ -46,8 +46,8 @@ class AuthSettings(BaseSettings):
     admin_password: str = "admin123"
     
     # JWT Settings
-    jwt_issuer: str = "mcp-auth-server"
-    jwt_audience: str = "mcp-registry"
+    jwt_issuer: str = "jarvis-auth-server"
+    jwt_audience: str = "jarvis-registry"
     jwt_self_signed_kid: str = "self-signed-key-v1"
     max_token_lifetime_hours: int = 24
     default_token_lifetime_hours: int = 8

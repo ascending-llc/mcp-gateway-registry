@@ -169,7 +169,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["WWW-Authenticate", "X-User", "X-Username", "X-Client-Id"],
+    expose_headers=["WWW-Authenticate", "X-User-Id", "X-Username", "X-Client-Id","X-Scopes","X-Jarvis-Auth"],
 )
 
 # Add metrics collection middleware

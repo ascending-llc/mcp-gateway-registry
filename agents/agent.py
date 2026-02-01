@@ -563,7 +563,7 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
             logger.warning(f"No egress token file found for auth_provider: {auth_provider}")
     
     if auth_method == "session_cookie" and session_cookie:
-        headers['Cookie'] = f'mcp_gateway_session={session_cookie}'
+        headers['Cookie'] = f'jarvis_registry_session={session_cookie}'
     else:
         headers['X-Authorization'] = f'Bearer {auth_token}'
         # If no auth header from config and no egress token, use the general auth_token
@@ -576,7 +576,7 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
         if header_name in ['Authorization', 'X-Authorization', 'Cookie', 'X-User-Pool-Id', 'X-Client-Id', 'X-Atlassian-Cloud-Id']:
             # Redact sensitive headers
             if header_name == 'Cookie':
-                redacted_headers[header_name] = f'mcp_gateway_session={redact_sensitive_value(session_cookie if session_cookie else "")}'
+                redacted_headers[header_name] = f'jarvis_registry_session={redact_sensitive_value(session_cookie if session_cookie else "")}'
             elif header_name in ['Authorization', 'X-Authorization'] and header_value.startswith('Bearer '):
                 token_part = header_value[7:]  # Remove 'Bearer ' prefix
                 redacted_headers[header_name] = f'Bearer {redact_sensitive_value(token_part)}'
@@ -1192,7 +1192,7 @@ async def main():
         # Prepare headers for MCP client authentication based on method
         if args.use_session_cookie:
             auth_headers = {
-                'Cookie': f'mcp_gateway_session={session_cookie}',
+                'Cookie': f'jarvis_registry_session={session_cookie}',
                 'X-User-Pool-Id': agent_settings.user_pool_id or '',
                 'X-Client-Id': agent_settings.client_id or '',
                 'X-Region': agent_settings.region or 'us-east-1'

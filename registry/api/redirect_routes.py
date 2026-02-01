@@ -148,7 +148,7 @@ async def oauth2_callback(request: Request, user_info: str, error: str = None, d
         cookie_secure = cookie_secure_config and is_https   
 
         cookie_params = {
-         "key": "mcp_gateway_session",
+         "key": "jarvis_registry_session",
          "value": registry_session, 
          "max_age": auth_settings.oauth2_config.get("session", {}).get("max_age_seconds", 28800), 
          "httponly": auth_settings.oauth2_config.get("session", {}).get("httponly", True),
