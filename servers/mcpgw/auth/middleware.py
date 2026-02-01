@@ -133,11 +133,16 @@ class AuthMiddleware(Middleware):
                                f"groups={len(user_context.get('groups', []))}")
 
                     if not user_context.get('user_id'):
-                        logger.error("user_id missing in JWT claims - Registry should have enriched this")
-                        raise HTTPException(
-                            status_code=401,
-                            detail="Invalid token: missing user_id (Registry enrichment failed)"
-                        )
+                        x_user_id = request.headers.get('x-user-id')
+                        if x_user_id:
+                            user_context['user_id'] = x_user_id
+                            logger.debug(f"Extracted user_id from x-user-id header: {x_user_id}")
+                        else:
+                            logger.error("user_id missing in JWT claims and x-user-id header")
+                            raise HTTPException(
+                                status_code=401,
+                                detail="Invalid token: missing user_id (Registry enrichment failed)"
+                            )
                 else:
                     raise HTTPException(
                         status_code=401,
