@@ -3,7 +3,6 @@ from typing import Optional, List
 from fastmcp.server.middleware import Middleware, MiddlewareContext
 from fastmcp.server.dependencies import get_http_request, get_http_headers
 from fastapi import HTTPException
-from packages.models import IUser
 from config import settings
 
 logger = logging.getLogger(__name__)
