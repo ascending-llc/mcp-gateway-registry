@@ -180,7 +180,7 @@ class TestServerSearchRoutes:
             mock_search.return_value = mock_search_results
             
             response = test_client.post(
-                "/api/v1/search",
+                "/api/v1/search/servers",
                 json={
                     "query": "test query",
                     "top_n": 5,
@@ -213,7 +213,7 @@ class TestServerSearchRoutes:
             mock_search.return_value = mock_search_results
             
             response = test_client.post(
-                "/api/v1/search",
+                "/api/v1/search/servers",
                 json={
                     "query": "semantic query",
                     "top_n": 3,
@@ -237,7 +237,7 @@ class TestServerSearchRoutes:
             mock_search.return_value = mock_search_results
             
             response = test_client.post(
-                "/api/v1/search",
+                "/api/v1/search/servers",
                 json={
                     "query": "keyword query",
                     "top_n": 10,
@@ -261,7 +261,7 @@ class TestServerSearchRoutes:
             mock_search.return_value = mock_search_results
             
             response = test_client.post(
-                "/api/v1/search",
+                "/api/v1/search/servers",
                 json={
                     "query": "test",
                     "top_n": 5,
@@ -285,7 +285,7 @@ class TestServerSearchRoutes:
             mock_search.return_value = mock_search_results
             
             response = test_client.post(
-                "/api/v1/search",
+                "/api/v1/search/servers",
                 json={
                     "query": "test",
                     "top_n": 5
@@ -301,7 +301,7 @@ class TestServerSearchRoutes:
     def test_search_servers_handles_invalid_search_type(self, test_client: TestClient):
         """Server search rejects invalid search_type with validation error."""
         response = test_client.post(
-            "/api/v1/search",
+            "/api/v1/search/servers",
             json={
                 "query": "test",
                 "top_n": 5,
@@ -321,7 +321,7 @@ class TestServerSearchRoutes:
             mock_search.return_value = mock_search_results
             
             response = test_client.post(
-                "/api/v1/search",
+                "/api/v1/search/servers",
                 json={
                     "query": "test",
                     "top_n": 3
@@ -342,7 +342,7 @@ class TestServerSearchRoutes:
             mock_search.return_value = mock_search_results
             
             response = test_client.post(
-                "/api/v1/search",
+                "/api/v1/search/servers",
                 json={
                     "query": "test",
                     "top_n": 5
@@ -363,7 +363,7 @@ class TestServerSearchRoutes:
             mock_search.return_value = mock_search_results
             
             response = test_client.post(
-                "/api/v1/search",
+                "/api/v1/search/servers",
                 json={
                     "query": "test",
                     "top_n": 50  # Would be 250 without cap
@@ -379,7 +379,7 @@ class TestServerSearchRoutes:
     def test_search_servers_empty_query(self, test_client: TestClient):
         """Server search rejects empty query string."""
         response = test_client.post(
-            "/api/v1/search",
+            "/api/v1/search/servers",
             json={
                 "query": "",
                 "top_n": 10
@@ -400,7 +400,7 @@ class TestServerSearchRoutes:
             mock_search.return_value = mock_search_results
             
             response = test_client.post(
-                "/api/v1/search",
+                "/api/v1/search/servers",
                 json={
                     "query": "test",
                     "top_n": 5
