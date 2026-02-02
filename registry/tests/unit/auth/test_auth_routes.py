@@ -281,11 +281,25 @@ class TestAuthRoutes:
         # Mock request headers to indicate traditional form submission (not API)
         mock_request.headers = {"accept": "text/html"}
         
+        # Mock user object with all required attributes
+        mock_user = Mock()
+        mock_user.id = "test-user-id"
+        mock_user.username = username
+        mock_user.email = f"{username}@local"
+        mock_user.role = "admin"
+        
+        # Mock the token generation to avoid JWT serialization issues
+        mock_tokens = ("mock_access_token", "mock_refresh_token")
+        
         with patch('registry.api.redirect_routes.validate_login_credentials') as mock_validate, \
-             patch('registry.api.redirect_routes.create_session_cookie') as mock_create_session:
+             patch('registry.api.redirect_routes.create_session_cookie') as mock_create_session, \
+             patch('registry.api.redirect_routes.user_service.get_or_create_user', new_callable=AsyncMock) as mock_get_user, \
+             patch('registry.api.redirect_routes.generate_token_pair') as mock_generate_tokens:
             
             mock_validate.return_value = True
             mock_create_session.return_value = "session_data"
+            mock_get_user.return_value = mock_user
+            mock_generate_tokens.return_value = mock_tokens
             
             response = await login_submit(mock_request, username, password)
             

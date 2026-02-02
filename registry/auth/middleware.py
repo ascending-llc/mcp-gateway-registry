@@ -1,7 +1,5 @@
 import base64
 import os
-from http.client import HTTPException
-
 import jwt
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -97,62 +95,45 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         return compiled
 
     async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        
+        # Check authenticated paths first (these override public patterns)
+        if self._match_path(path, self.public_paths_compiled):
+            logger.debug(f"Public path: {path}")
+            return await call_next(request)
+        else:
+            logger.debug(f"Authenticated path: {path}")
+            # Continue to authentication logic below
 
-        # 开发模式：自动通过所有鉴权
-        # 创建或获取开发用的 admin 用户
-        from registry.services.user_service import user_service
-        dev_user = await user_service.get_or_create_user("dev-admin@dev.local")
-        
-        if not dev_user:
-            logger.error("Failed to create/get dev user")
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to initialize dev mode user"
-            )
-        
-        user_context = {
-            'user_id': str(dev_user.id),  # 添加必需的 user_id 字段
-            'username': 'admin',
-            'email': 'dev-admin@dev.local',
-            'groups': ['mcp-registry-admin'],
-            'scopes': ['mcp-registry-admin', 'mcp-servers-unrestricted/read', 'mcp-servers-unrestricted/execute'],
-            'auth_method': 'dev',
-            'provider': 'dev',
-            'accessible_servers': ['*'],
-            'accessible_services': ['all'],
-            'accessible_agents': ['all'],
-            'ui_permissions': {
-                'list_service': ['all'],
-                'toggle_service': ['all'],
-                'register_service': ['all'],
-                'list_agents': ['all']
-            },
-            'can_modify_servers': True,
-            'is_admin': True,
-            'auth_source': 'dev_bypass'
-        }
-        request.state.user = user_context
-        request.state.is_authenticated = True
-        request.state.auth_source = 'dev_bypass'
-        logger.info(f"Dev mode: Auto-authenticated as admin (user_id: {dev_user.id}) for {request.url.path}")
-        
-        # Process the request
-        response = await call_next(request)
-        
-        # If a new access token was generated during refresh, update the cookie
-        if hasattr(request.state, 'new_access_token'):
-            logger.info("Updating access token cookie after refresh")
-            response.set_cookie(
-                key=settings.session_cookie_name,
-                value=request.state.new_access_token,
-                max_age=86400,  # 1 day
-                httponly=True,
-                samesite="lax",
-                secure=settings.session_cookie_secure,
-                path="/"
-            )
-        
-        return response
+        try:
+            user_context = await self._authenticate(request)
+            request.state.user = user_context
+            request.state.is_authenticated = True
+            request.state.auth_source = user_context.get('auth_source', 'unknown')
+            logger.info(f"User {user_context.get('username')} authenticated via {user_context.get('auth_source')}")
+            return await call_next(request)
+        except AuthenticationError as e:
+            logger.warning(f"Auth failed for {path}: {e}")
+            # Add WWW-Authenticate header for MCP OAuth discovery
+            # Extract server name from path for MCP proxy requests
+            server_name = None
+            if path.startswith("/proxy/"):
+                server_name = path.split("/")[2] if len(path.split("/")) > 2 else None
+
+            headers = {"Connection": "close"}
+            if server_name:
+                # For MCP proxy paths, RFC 9728 (OAuth 2.0 Protected Resource Metadata) - the official specification
+                registry_url = settings.registry_client_url.rstrip('/')
+                oauth_discovery = f"{registry_url}/.well-known/oauth-protected-resource/proxy/{server_name}"
+                headers["WWW-Authenticate"] = f'Bearer realm="mcp-registry", resource_metadata="{oauth_discovery}"'
+            else:
+                # For other authenticated paths, use general OAuth discovery
+                headers["WWW-Authenticate"] = 'Bearer realm="mcp-registry"'
+
+            return JSONResponse(status_code=401, content={"detail": str(e)}, headers=headers)
+        except Exception as e:
+            logger.error(f"Auth error for {path}: {e}")
+            return JSONResponse(status_code=500, content={"detail": "Authentication error"})
 
     def _match_path(self, path: str, compiled_patterns: List[Tuple]) -> bool:
         """
