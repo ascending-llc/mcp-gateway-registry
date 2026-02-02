@@ -233,11 +233,8 @@ class Repository(Generic[T]):
         Returns:
             True if update successful
         """
-        try:
-            return False
-        except Exception as e:
-            logger.error(f"Incremental update failed: {e}", exc_info=True)
-            return False
+        # TODO: Implement incremental update logic. For now, this is a stub.
+        return False
 
     def _full_update(
             self,
