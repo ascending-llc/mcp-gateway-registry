@@ -42,14 +42,15 @@ class TestMongoDBConnection:
 
     @pytest.mark.asyncio
     async def test_connect_db_uses_env_variables(self):
-        """Test connect_db reads configuration from environment variables."""
-        with patch.dict('os.environ', {
-            'MONGO_URI': 'mongodb://testhost:27017/testdb',
-            'MONGODB_USERNAME': 'testuser',
-            'MONGODB_PASSWORD': 'testpass'
-        }), \
+        """Test connect_db reads configuration from settings."""
+        with patch('packages.database.mongodb.settings') as mock_settings, \
              patch('packages.database.mongodb.AsyncIOMotorClient') as MockClient, \
              patch('packages.database.mongodb.init_beanie', new_callable=AsyncMock):
+            
+            # Configure mock settings
+            mock_settings.MONGO_URI = 'mongodb://testhost:27017/testdb'
+            mock_settings.MONGODB_USERNAME = 'testuser'
+            mock_settings.MONGODB_PASSWORD = 'testpass'
             
             mock_instance = MagicMock()
             mock_instance.admin = MagicMock()
@@ -67,11 +68,14 @@ class TestMongoDBConnection:
     @pytest.mark.asyncio
     async def test_connect_db_extracts_dbname_from_uri(self):
         """Test connect_db extracts database name from MONGO_URI."""
-        with patch.dict('os.environ', {
-            'MONGO_URI': 'mongodb://localhost:27017/extracted_db'
-        }), \
+        with patch('packages.database.mongodb.settings') as mock_settings, \
              patch('packages.database.mongodb.AsyncIOMotorClient') as MockClient, \
              patch('packages.database.mongodb.init_beanie', new_callable=AsyncMock):
+            
+            # Configure mock settings
+            mock_settings.MONGO_URI = 'mongodb://localhost:27017/extracted_db'
+            mock_settings.MONGODB_USERNAME = None
+            mock_settings.MONGODB_PASSWORD = None
             
             mock_instance = MagicMock()
             mock_instance.admin = MagicMock()

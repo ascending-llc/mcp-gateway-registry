@@ -8,7 +8,6 @@ and Beanie ODM initialization for the MCP Gateway Registry.
 from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
-import os
 from urllib.parse import quote_plus
 from packages.models._generated import (
     IAccessRole,
@@ -40,7 +39,7 @@ class MongoDB:
         # Try to get MONGO_URI first (format: mongodb://host:port/dbname)
         mongo_uri = settings.MONGO_URI
         mongo_username = settings.MONGODB_USERNAME
-        mongo_password = settings.MONGODB_USERNAME
+        mongo_password = settings.MONGODB_PASSWORD
         # Parse MONGO_URI to extract db_name if present
         # Extract database name from URI
         uri_parts = mongo_uri.rsplit('/', 1)
