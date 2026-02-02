@@ -246,13 +246,12 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
       }
 
       const initialServer: ServerInfo | undefined = servers.find((server: ServerInfo) => server.id === serverId);
-      const initialState = initialServer?.connection_state;
       if (!initialServer) return;
 
       const poll = async () => {
         const currentState = await getServerStatusById(serverId);
 
-        if (currentState === initialState || currentState === SERVER_CONNECTION.CONNECTING) {
+        if (currentState === SERVER_CONNECTION.CONNECTING) {
           timeoutRef.current[serverId] = setTimeout(() => {
             poll();
           }, 5000);

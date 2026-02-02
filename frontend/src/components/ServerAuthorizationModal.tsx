@@ -89,11 +89,9 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
       if (result.success) {
         await getServerStatusByPolling?.(serverId, state => {
           if (state === SERVER_CONNECTION.CONNECTED) {
-            cancelPolling?.(serverId);
             onShowToast?.(result?.message || 'Server reinitialized successfully', 'success');
             onCloseAuthDialog();
           } else if (state === SERVER_CONNECTION.DISCONNECTED || state === SERVER_CONNECTION.ERROR) {
-            cancelPolling?.(serverId);
             oauthInit();
           }
         });
