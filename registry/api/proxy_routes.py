@@ -333,8 +333,8 @@ async def proxy_to_mcp_server(
         auth_context: Gateway authentication context
         server: MCPServerDocument
     """
-    # Extract server name from config or fall back to path
-    server_name = server.path.strip("/")
+    
+    server_name = server.serverName if hasattr(server, "serverName") and server.serverName else server.path.strip("/")
     if server and server.config:
         server_name = server.config.get("title", server_name)
     
@@ -599,9 +599,8 @@ async def execute_tool(
         metrics_ctx.set_server_name(server.serverName)
         
         try:
-            # Build target URL using shared helper
             target_url = _build_target_url(server)
-                
+            
             # Build MCP JSON-RPC request
             mcp_request_body = {
                 "jsonrpc": "2.0",
