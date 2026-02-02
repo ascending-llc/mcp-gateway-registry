@@ -6,7 +6,7 @@ and registry redirect endpoint that calls /oauth2/token to decode JWT.
 """
 import pytest
 import secrets
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch, AsyncMock
 from fastapi.testclient import TestClient
 from bson import ObjectId
 
