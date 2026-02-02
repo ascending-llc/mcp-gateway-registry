@@ -184,8 +184,22 @@ class TestAuthRoutes:
         mock_user.id = "12345"
         mock_user.role = "user"
         mock_user.idp_id = "12345-6789"
-        with patch("registry.api.redirect_routes.IUser.find_one", new=AsyncMock(return_value=mock_user)):
+        
+        # Mock httpx AsyncClient for OAuth token exchange
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTIzNDUiLCJzdWIiOiJ0ZXN0dXNlciIsImVtYWlsIjoidGVzdEB0ZXN0LmNvbSIsIm5hbWUiOiJUZXN0IFVzZXIiLCJncm91cHMiOltdLCJwcm92aWRlciI6ImtleWNsb2FrIn0.test"
+        }
+        
+        with patch("registry.api.redirect_routes.IUser.find_one", new=AsyncMock(return_value=mock_user)), \
+             patch("registry.api.redirect_routes.user_service.get_user_by_user_id", new=AsyncMock(return_value=mock_user)), \
+             patch("registry.api.redirect_routes.httpx.AsyncClient") as mock_client:
+            mock_client_instance = mock_client.return_value.__aenter__.return_value
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            
             response = await oauth2_callback(mock_request, mock_user_info)
+        
         assert isinstance(response, RedirectResponse)
         assert response.status_code == 302
         assert response.headers["location"] == "http://localhost:8000"
@@ -193,8 +207,20 @@ class TestAuthRoutes:
     @pytest.mark.asyncio
     async def test_oauth2_callback_user_not_found(self, mock_request, mock_user_info):
         """Test OAuth2 callback when user is not found in DB."""
-        with patch("registry.api.redirect_routes.IUser.find_one", new=AsyncMock(return_value=None)):
+        # Mock httpx AsyncClient to return a token without user_id
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0dXNlciIsImVtYWlsIjoidGVzdEB0ZXN0LmNvbSIsIm5hbWUiOiJUZXN0IFVzZXIiLCJncm91cHMiOltdLCJwcm92aWRlciI6ImtleWNsb2FrIn0.test"
+        }
+        
+        with patch("registry.api.redirect_routes.IUser.find_one", new=AsyncMock(return_value=None)), \
+             patch("registry.api.redirect_routes.httpx.AsyncClient") as mock_client:
+            mock_client_instance = mock_client.return_value.__aenter__.return_value
+            mock_client_instance.post = AsyncMock(return_value=mock_response)
+            
             response = await oauth2_callback(mock_request, mock_user_info)
+        
         assert isinstance(response, RedirectResponse)
         assert response.status_code == 302
         assert "/login?error=User+not+found+in+registry" in response.headers["location"]
@@ -231,15 +257,20 @@ class TestAuthRoutes:
     async def test_oauth2_callback_general_exception(self, mock_request, mock_user_info):
         """Test OAuth2 callback with general exception."""
         with patch('registry.api.redirect_routes.logger') as mock_logger:
-            # Force exception by making cookies access fail
-            mock_request.cookies = Mock()
-            mock_request.cookies.get = Mock(side_effect=Exception("Cookie error"))
+            # Mock httpx to return a failed response (non-200)
+            mock_response = Mock()
+            mock_response.status_code = 500
             
-            response = await oauth2_callback(mock_request, mock_user_info)
-            
-            assert isinstance(response, RedirectResponse)
-            assert response.status_code == 302
-            assert "User+not+found+in+registry" in response.headers["location"]
+            with patch("registry.api.redirect_routes.httpx.AsyncClient") as mock_client:
+                mock_client_instance = mock_client.return_value.__aenter__.return_value
+                mock_client_instance.post = AsyncMock(return_value=mock_response)
+                
+                response = await oauth2_callback(mock_request, mock_user_info)
+                
+                assert isinstance(response, RedirectResponse)
+                assert response.status_code == 302
+                # When status_code != 200, it returns oauth2_token_exchange_failed
+                assert "oauth2_token_exchange_failed" in response.headers["location"]
 
     @pytest.mark.asyncio
     async def test_login_submit_success(self, mock_request, mock_settings):

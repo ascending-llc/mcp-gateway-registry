@@ -70,15 +70,10 @@ async def oauth2_login_redirect(provider: str, request: Request):
 
 
 @router.get("/redirect")
-async def oauth2_callback(request: Request, user_info: str, error: str = None, details: str = None):
+async def oauth2_callback(request: Request, code: str = None, error: str = None, details: str = None):
     """Handle OAuth2 callback from auth server
-    
-    This endpoint receives signed user information from the auth server after successful OAuth2 login.
-    The user_info parameter contains a cryptographically signed payload that includes:
-    - username, email, name
-    - idp_id (OID from Entra, sub from Keycloak/Cognito)
-    - groups (from IdP)
-    - provider and auth_method
+    This endpoint receives an authorization code and exchanges it for a JWT access token.
+    The user_id has already been resolved by auth_server from MongoDB and included in the JWT.
     """
 
     try:
@@ -96,41 +91,90 @@ async def oauth2_callback(request: Request, user_info: str, error: str = None, d
                 url=f"{settings.registry_client_url}/login?error={urllib.parse.quote(error_message)}", 
                 status_code=302
             )
-    
-        try:
-            from itsdangerous import SignatureExpired, BadSignature
-            # Max age of 60 seconds for the signed data (should be instant redirect)
-            userinfo = signer.loads(user_info, max_age=60)
-            logger.info(f"OAuth2 callback received signed user info for: {userinfo['username']}")
-        except SignatureExpired:
-            logger.error("Signed user info has expired (>60 seconds old)")
+
+        if not code:
+            logger.error("Missing authorization code in OAuth2 callback")
             return RedirectResponse(
-                url=f"{settings.registry_client_url}/login?error=oauth2_data_expired", 
+                url=f"{settings.registry_client_url}/login?error=oauth2_missing_code",
                 status_code=302
             )
-        except BadSignature:
-            logger.error("Invalid signature on user info data - possible tampering")
+
+        # Exchange authorization code for JWT access token (standard OAuth2 flow)
+        try:
+            async with httpx.AsyncClient() as client:
+                auth_server_url = settings.auth_server_url.rstrip('/')
+                registry_redirect_uri = f"{settings.registry_url}/redirect"
+
+                response = await client.post(
+                    f"{auth_server_url}/oauth2/token",
+                    data={
+                        "grant_type": "authorization_code",
+                        "code": code,
+                        "client_id": settings.registry_app_name,
+                        "redirect_uri": registry_redirect_uri
+                    },
+                    timeout=10.0
+                )
+
+                if response.status_code != 200:
+                    logger.error(f"Failed to exchange code for token: {response.status_code} - {response.text}")
+                    return RedirectResponse(
+                        url=f"{settings.registry_client_url}/login?error=oauth2_token_exchange_failed",
+                        status_code=302
+                    )
+
+                token_response = response.json()
+                access_token = token_response.get("access_token")
+
+                if not access_token:
+                    logger.error("No access_token returned from auth server")
+                    return RedirectResponse(
+                        url=f"{settings.registry_client_url}/login?error=oauth2_invalid_response",
+                        status_code=302
+                    )
+
+                # Decode JWT to extract user information (no signature verification for internal use)
+                import jwt as pyjwt
+                user_claims = pyjwt.decode(access_token, options={"verify_signature": False})
+
+                # Extract user info from JWT claims
+                userinfo = {
+                    "user_id": user_claims.get("user_id"),
+                    "username": user_claims.get("sub"),
+                    "email": user_claims.get("email"),
+                    "name": user_claims.get("name"),
+                    "groups": user_claims.get("groups", []),
+                    "provider": user_claims.get("provider"),
+                    "auth_method": "oauth2"
+                }
+
+                logger.info(f"OAuth2 callback exchanged code for JWT token: {userinfo['username']}")
+
+        except httpx.TimeoutException:
+            logger.error("Timeout exchanging authorization code with auth server")
             return RedirectResponse(
-                url=f"{settings.registry_client_url}/login?error=oauth2_data_invalid", 
+                url=f"{settings.registry_client_url}/login?error=oauth2_timeout",
                 status_code=302
             )
         except Exception as e:
-            logger.error(f"Failed to decrypt user info: {e}")
-            # Fallback to old base64 decoding for backward compatibility
-            try:
-                userinfo_json = base64.urlsafe_b64decode(user_info + '=' * (-len(user_info) % 4)).decode()
-                userinfo = json.loads(userinfo_json)
-                logger.warning("Used legacy base64 decoding for user info (not recommended)")
-            except Exception as legacy_error:
-                logger.error(f"Failed to decode user info with both methods: {legacy_error}")
-                return RedirectResponse(
-                    url=f"{settings.registry_client_url}/login?error=oauth2_data_decode_failed", 
-                    status_code=302
-                )
-            
-        user_obj = await user_service.find_by_source_id(source_id=userinfo.get("idp_id"))
+            logger.error(f"Failed to exchange authorization code for token: {e}")
+            return RedirectResponse(
+                url=f"{settings.registry_client_url}/login?error=oauth2_exchange_error",
+                status_code=302
+            )
+
+        # Validate that user_id was resolved by auth_server
+        if not userinfo.get("user_id"):
+            logger.warning(f"User {userinfo.get('username')} has no user_id - not found in MongoDB")
+            return RedirectResponse(
+                url=f"{settings.registry_client_url}/login?error=User+not+found+in+registry",
+                status_code=302
+            )
+
+        # Look up user object to get role (user_id already provided in JWT)
+        user_obj = await user_service.get_user_by_user_id(userinfo.get("user_id"))
         if not user_obj: 
-            logger.warning(f"User {userinfo['username']} not found in registry database")
+            logger.warning(f"User ID {userinfo.get('user_id')} not found in registry database")
             return RedirectResponse(
                 url=f"{settings.registry_client_url}/login?error=User+not+found+in+registry", 
                 status_code=302
@@ -148,15 +192,15 @@ async def oauth2_callback(request: Request, user_info: str, error: str = None, d
             provider=userinfo.get("provider", "unknown"),
             idp_id=userinfo.get("idp_id")
         )
-        
+
         response = RedirectResponse(url=settings.registry_client_url.rstrip('/'), status_code=302)
-        
+
         # Determine cookie security settings
         cookie_secure_config = auth_settings.oauth2_config.get("session", {}).get("secure", False)
         x_forwarded_proto = request.headers.get("x-forwarded-proto", "")
         is_https = x_forwarded_proto == "https" or request.url.scheme == "https"
         cookie_secure = cookie_secure_config and is_https
-        
+
         # Set access token cookie (1 day)
         response.set_cookie(
             key=settings.session_cookie_name,  # jarvis_registry_session
@@ -167,7 +211,7 @@ async def oauth2_callback(request: Request, user_info: str, error: str = None, d
             secure=cookie_secure,
             path="/"
         )
-        
+
         # Set refresh token cookie (7 days)
         response.set_cookie(
             key="jarvis_registry_refresh",
@@ -178,10 +222,10 @@ async def oauth2_callback(request: Request, user_info: str, error: str = None, d
             secure=cookie_secure,
             path="/"
         )
-        
+
         # Clean up temporary cookies
         response.delete_cookie("oauth2_temp_session")
-        
+
         logger.info(f"OAuth2 login successful for user {userinfo.get('username')}, JWT tokens set in httpOnly cookies")
         return response
         
@@ -212,7 +256,7 @@ async def login_submit(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to create user session"
             )
-        
+
         # Generate JWT access and refresh tokens
         access_token, refresh_token = generate_token_pair(
             user_id=str(user_obj.id),
@@ -242,7 +286,7 @@ async def login_submit(
             "secure": settings.session_cookie_secure,  # Only transmit over HTTPS when True
             "path": "/",
         }
-        
+
         # Set refresh token cookie (7 days)
         cookie_params_refresh = {
             "key": "jarvis_registry_refresh",
@@ -261,7 +305,7 @@ async def login_submit(
 
         response.set_cookie(**cookie_params_access)
         response.set_cookie(**cookie_params_refresh)
-        
+
         logger.info(f"User '{username}' logged in successfully, JWT tokens set in httpOnly cookies")
         return response
     else:

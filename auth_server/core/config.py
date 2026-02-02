@@ -47,7 +47,7 @@ class AuthSettings(BaseSettings):
     
     # JWT Settings
     jwt_issuer: str = "jarvis-auth-server"
-    jwt_audience: str = "jarvis-registry"
+    jwt_audience: str = "jarvis-services"
     jwt_self_signed_kid: str = "self-signed-key-v1"
     max_token_lifetime_hours: int = 24
     default_token_lifetime_hours: int = 8
@@ -59,6 +59,7 @@ class AuthSettings(BaseSettings):
     auth_server_url: str = "http://localhost:8888"
     auth_server_external_url: str = "http://localhost:8888"
     registry_url: str = "http://localhost:7860"
+    registry_app_name: str = "jarvis-registry-client"
     
     # API Prefix (e.g., "/auth", "/gateway", or empty string for no prefix)
     auth_server_api_prefix: str = ""

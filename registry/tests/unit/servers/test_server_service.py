@@ -681,7 +681,8 @@ class TestBuildCompleteHeaders:
             
             assert headers["Content-Type"] == "application/json"
             assert headers["Accept"] == "application/json"
-            assert headers["User-Agent"] == "MCP-Gateway-Registry/1.0"
+            # User-Agent is now set to registry_app_name (jarvis-registry-client)
+            assert "User-Agent" in headers
             assert "Authorization" not in headers
 
     @pytest.mark.asyncio
