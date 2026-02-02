@@ -27,6 +27,8 @@ from ..utils.security_mask import (
     hash_username,
     parse_server_and_tool_from_url
 )
+from packages.models import IUser
+from ..services.user_service import user_service
 
 from ..models.device_flow import (
     DeviceCodeResponse,
@@ -332,7 +334,11 @@ async def device_token(grant_type: str = Form(...), device_code: str = Form(None
         user_groups = user_info.get("groups", [])
         user_scopes = map_groups_to_scopes(user_groups, settings.scopes_config) if user_groups else user_info.get("scopes", [])
 
+        # Resolve user_id from MongoDB
+        user_id = await user_service.resolve_user_id(user_info)
+
         token_payload = {
+            "user_id": user_id,
             "iss": JWT_ISSUER,
             "aud": audience,
             "sub": user_info["username"],
@@ -390,7 +396,12 @@ async def device_token(grant_type: str = Form(...), device_code: str = Form(None
 
             user_info = rt_data["user_info"]
             audience = rt_data.get("audience") or JWT_AUDIENCE
-            token_payload = {"iss": JWT_ISSUER, "aud": audience, "sub": user_info["username"], "client_id": client_id, "scope": rt_data.get("scope", ""), "groups": user_info.get("groups", []), "exp": now + 3600, "iat": now, "token_use": "access"}
+            
+            # Resolve user_id from MongoDB
+            user_id = await user_service.resolve_user_id(user_info)
+            
+            token_payload = {"user_id": user_id, "iss": JWT_ISSUER, "aud": audience, "sub": user_info["username"], "client_id": client_id, "scope": rt_data.get("scope", ""), "groups": user_info.get("groups", []), "exp": now + 3600, "iat": now, "token_use": "access"}
+
             headers = {"kid": JWT_SELF_SIGNED_KID, "typ": "JWT", "alg": "HS256"}
             access_token = jwt.encode(token_payload, SECRET_KEY, algorithm="HS256", headers=headers)
             return DeviceTokenResponse(access_token=access_token, token_type="Bearer", expires_in=3600, scope=rt_data.get("scope", ""), refresh_token=refresh_token)
@@ -554,49 +565,44 @@ async def oauth2_callback(provider: str, request: Request, code: str = None, sta
             user_info = await get_user_info(token_data.get("access_token"), provider_config)
             mapped_user = map_user_info(user_info, provider_config)
 
-        # If this was an OAuth client flow, generate authorization code
-        client_id = temp_session_data.get("client_id")
+        # Resolve user_id from MongoDB and add to mapped_user
+        user_id = await user_service.resolve_user_id(mapped_user)
+        if user_id:
+            mapped_user["user_id"] = user_id
+            logger.debug(f"Added user_id {user_id} to mapped_user")
+
+        # Always use OAuth client flow (both external clients and registry)
+        client_id = temp_session_data.get("client_id") or settings.registry_app_name
         code_challenge = temp_session_data.get("code_challenge")
         code_challenge_method = temp_session_data.get("code_challenge_method", "S256")
-        client_redirect_uri = temp_session_data.get("client_redirect_uri")
+        client_redirect_uri = temp_session_data.get("client_redirect_uri") or f"{settings.registry_url}/redirect"
 
-        if client_id and client_redirect_uri:
-            cleanup_expired_authorization_codes()
-            authorization_code = secrets.token_urlsafe(32)
-            current_time = int(time.time())
-            expires_at = current_time + 600
-            authorization_codes_storage[authorization_code] = {"token_data": token_data, "user_info": mapped_user, "client_id": client_id, "expires_at": expires_at, "used": False, "code_challenge": code_challenge, "code_challenge_method": code_challenge_method, "redirect_uri": client_redirect_uri, "resource": temp_session_data.get("resource"), "created_at": current_time}
-            redirect_params = {"code": authorization_code, "state": temp_session_data.get("client_state")}
-            redirect_url = f"{client_redirect_uri}?{urllib.parse.urlencode(redirect_params)}"
-            response = RedirectResponse(url=redirect_url, status_code=302)
-            response.delete_cookie("oauth2_temp_session")
-            return response
-
-        # Prepare redirect to registry with user info
-        logger.info(f"OAuth2 login successful for user: {mapped_user['username']} via {provider}. Redirecting to registry...")
-        user_idp_data = {
-            "username": mapped_user.get("username"),
-            "email": mapped_user.get("email"),
-            "name": mapped_user.get("name"),
-            "idp_id": mapped_user.get("idp_id"),
-            "groups": mapped_user.get("groups", []),
-            "provider": provider,
-            "auth_method": "oauth2"
+        # Generate authorization code for OAuth client flow
+        cleanup_expired_authorization_codes()
+        authorization_code = secrets.token_urlsafe(32)
+        current_time = int(time.time())
+        expires_at = current_time + 600
+        
+        authorization_codes_storage[authorization_code] = {
+            "token_data": token_data,
+            "user_info": mapped_user,
+            "client_id": client_id,
+            "expires_at": expires_at,
+            "used": False,
+            "code_challenge": code_challenge,
+            "code_challenge_method": code_challenge_method,
+            "redirect_uri": client_redirect_uri,
+            "resource": temp_session_data.get("resource"),
+            "created_at": current_time
         }
         
-        try:
-            signed_userinfo = signer.dumps(user_idp_data)
-            redirect_url = f"{settings.registry_url}/redirect?user_info={signed_userinfo}"
+        redirect_params = {"code": authorization_code}
+        if temp_session_data.get("client_state"):
+            redirect_params["state"] = temp_session_data.get("client_state")
             
-            # Check URL length to prevent browser limitations (2048 char limit)
-            if len(redirect_url) > 2000:
-                logger.warning(f"Redirect URL length ({len(redirect_url)}) exceeds safe limit. User has {len(user_idp_data.get('groups', []))} groups.")
-                # Log warning but proceed - registry will handle validation
-                
-        except Exception as e:
-            logger.error(f"Failed to sign user info data: {e}")
-            raise HTTPException(status_code=500, detail="Failed to prepare redirect")
-    
+        redirect_url = f"{client_redirect_uri}?{urllib.parse.urlencode(redirect_params)}"
+        logger.info(f"OAuth2 login successful for user: {mapped_user['username']} via {provider}. Redirecting to {client_id}...")
+        
         response = RedirectResponse(url=redirect_url, status_code=302)
         response.delete_cookie("oauth2_temp_session")
         return response
