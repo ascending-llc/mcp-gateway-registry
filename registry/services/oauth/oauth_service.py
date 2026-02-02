@@ -568,7 +568,7 @@ class MCPOAuthService:
         """
         Helper method: Build response indicating OAuth is required
         
-        Does NOT initiate OAuth flow - frontend should call /{server_id}/oauth/initiate
+        Does NOT initiate OAuth flow - frontend should call /api/v1/mcp/{server_id}/oauth/initiate
         This ensures connection status remains DISCONNECTED until frontend starts OAuth
         
         Args:
