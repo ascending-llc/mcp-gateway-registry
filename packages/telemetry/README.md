@@ -151,49 +151,64 @@ async with create_timed_context(record_func, labels={"operation": "fetch"}) as c
         ctx.set_success(False)
 ```
 
-### Creating Service-Specific Decorators
+### Creating Service-Specific Decorators and Context Managers
 
-Create decorators in your service that wrap the domain functions:
+Create helpers in your service that wrap the domain functions. Context managers are preferred when you need to resolve data (like a server name) asynchronously inside the operation.
+
+#### 1. Context Manager Pattern (Recommended)
 
 ```python
 # your_service/core/telemetry_decorators.py
 
 import time
-from functools import wraps
-from typing import Callable, TypeVar
-
+from typing import Any, Optional
 from your_service.utils.otel_metrics import record_request
 
-F = TypeVar("F", bound=Callable)
+class RequestMetricsContext:
+    def __init__(self, endpoint: str, method: str = "GET"):
+        self._start_time = 0
+        self._endpoint = endpoint
+        self._method = method
+        self._success = False
+        self._server_name = "unknown"
 
+    def set_server_name(self, name: str):
+        self._server_name = name
 
-def track_request(endpoint: str, method: str = "GET") -> Callable[[F], F]:
-    """Decorator to automatically track API requests."""
+    def set_success(self, success: bool):
+        self._success = success
 
-    def decorator(func: F) -> F:
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            start_time = time.perf_counter()
-            success = False
+    async def __aenter__(self):
+        self._start_time = time.perf_counter()
+        return self
 
-            try:
-                result = await func(*args, **kwargs)
-                success = True
-                return result
-            except Exception:
-                raise
-            finally:
-                duration = time.perf_counter() - start_time
-                record_request(endpoint, method, success, duration)
-
-        return wrapper
-    return decorator
-
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is not None:
+            self._success = False
+        duration = time.perf_counter() - self._start_time
+        record_request(
+            self._endpoint, 
+            self._method, 
+            self._success, 
+            duration
+        )
 
 # Usage
-@track_request("/api/users", "GET")
-async def get_users():
-    return await db.fetch_users()
+async def proxy_request(request, server_id):
+    async with RequestMetricsContext("/proxy", request.method) as ctx:
+        server = await db.fetch_server(server_id)
+        ctx.set_server_name(server.name)
+        ...
+        ctx.set_success(True)
+```
+
+#### 2. Decorator Pattern
+
+```python
+# your_service/core/telemetry_decorators.py
+
+def track_request(endpoint: str, method: str = "GET") -> Callable[[F], F]:
+...
 ```
 
 ## OpenTelemetry Setup
@@ -267,3 +282,41 @@ YAML Config                    Service Module                 Decorators/Code
 4. Import and use your domain functions throughout your service
 
 This keeps the telemetry package generic while allowing each service to define its own domain-specific metrics vocabulary.
+
+## Standard Metrics Reference
+
+Below are the standard metrics currently defined for the core services, including the attributes (labels) used for filtering and aggregation.
+
+### Registry Service
+
+| Metric Name | Type | Labels | Description |
+|-------------|------|--------|-------------|
+| `registry_operations_total` | Counter | `operation`, `resource_type`, `status` | Tracks CRUD operations (create, read, list, search) on registry resources (server, tool). |
+| `mcp_server_requests_total` | Counter | `server_name` | Counts total requests proxied to a specific MCP server. |
+| `mcp_tool_discovery_total` | Counter | `tool_name` (or query), `source`, `status` | Tracks tool discovery attempts via search or direct lookup. |
+| `mcp_tool_execution_total` | Counter | `tool_name`, `server_name`, `method`, `status` | Counts execution of specific tools on MCP servers. |
+| `mcp_resource_access_total` | Counter | `resource_uri`, `server_name`, `status` | Tracks access to specific resources (e.g., file reads, data fetch). |
+| `mcp_prompt_execution_total` | Counter | `prompt_name`, `server_name`, `status` | Counts executions of pre-defined prompts on MCP servers. |
+| `auth_requests_total` | Counter | `mechanism`, `status` | Tracks authentication attempts handled by the registry middleware. |
+| `registry_operation_duration_seconds` | Histogram | *Same as above* | Latency distribution of registry operations. |
+| `mcp_tool_execution_duration_seconds` | Histogram | *Same as above* | Latency distribution of tool executions. |
+| `mcp_tool_discovery_duration_seconds` | Histogram | *Same as above* | Latency distribution of tool discovery operations. |
+| `mcp_resource_access_duration_seconds` | Histogram | *Same as above* | Latency distribution of resource access operations. |
+| `mcp_prompt_execution_duration_seconds` | Histogram | *Same as above* | Latency distribution of prompt executions. |
+
+### Auth Server
+
+| Metric Name | Type | Labels | Description |
+|-------------|------|--------|-------------|
+| `auth_requests_total` | Counter | `mechanism`, `status` | Tracks authentication attempts (JWT, API Key, Basic). |
+| `token_refreshes_total` | Counter | `status` | Tracks successful/failed token refresh attempts. |
+| `token_generations_total` | Counter | `status` | Tracks successful/failed token generation events. |
+| `token_revocations_total` | Counter | `status` | Tracks token revocation requests. |
+| `oauth_callbacks_total` | Counter | `status` | Tracks OAuth callback hits (step 2 of OAuth flow). |
+| `oauth_authorizations_total` | Counter | `status` | Tracks OAuth authorization requests (step 1 of OAuth flow). |
+| `session_creations_total` | Counter | `status` | Tracks new user session creations. |
+| `session_validations_total` | Counter | `status` | Tracks session validation checks. |
+| `auth_request_duration_seconds` | Histogram | *Same as above* | Latency of authentication requests. |
+| `token_generation_duration_seconds` | Histogram | *Same as above* | Latency of token generation operations. |
+| `oauth_flow_duration_seconds` | Histogram | *Same as above* | Latency of the complete OAuth authentication flow. |
+| `session_validation_duration_seconds` | Histogram | *Same as above* | Latency of session validation checks. |

@@ -25,6 +25,18 @@ counters:
     unit: "1"
     capture: true
 
+  # Resource access
+  - name: mcp_resource_access_total
+    description: Total number of resource access operations
+    unit: "1"
+    capture: true
+
+  # Prompt execution
+  - name: mcp_prompt_execution_total
+    description: Total number of prompt executions
+    unit: "1"
+    capture: true
+
   # Auth requests (for middleware)
   - name: auth_requests_total
     description: Total number of authentication attempts
@@ -47,6 +59,18 @@ histograms:
   # Tool discovery latency
   - name: mcp_tool_discovery_duration_seconds
     description: Tool discovery latency in seconds
+    unit: "s"
+    capture: true
+
+  # Resource access latency
+  - name: mcp_resource_access_duration_seconds
+    description: Resource access duration in seconds
+    unit: "s"
+    capture: true
+
+  # Prompt execution latency
+  - name: mcp_prompt_execution_duration_seconds
+    description: Prompt execution duration in seconds
     unit: "s"
     capture: true
 

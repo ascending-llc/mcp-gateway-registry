@@ -5,12 +5,19 @@ Dynamic MCP server proxy routes.
 import json
 import logging
 import httpx
+import time
 from typing import Dict, Any, Optional, Union
 from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
-from registry.utils.otel_metrics import record_server_request
-from registry.core.telemetry_decorators import ToolExecutionMetricsContext
+from registry.utils.otel_metrics import (
+    record_server_request,
+)
+from registry.core.telemetry_decorators import (
+    ToolExecutionMetricsContext,
+    ResourceAccessMetricsContext,
+    PromptExecutionMetricsContext
+)
 from packages.models.extended_mcp_server import MCPServerDocument
 from registry.auth.dependencies import CurrentUser
 from registry.services.server_service import server_service_v1
@@ -589,84 +596,99 @@ async def execute_tool(
         
     username = user_context.get("username", "unknown")
     user_id = user_context.get("user_id", "unknown")
-    server = await server_service_v1.get_server_by_id(body.server_id)
-    logger.info(
-        f"🔧 Tool execution from user '{username}:{user_id}': {tool_name} on {body.server_id}"
-    )
-               
-    if not server:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Server not found: {body.server_id}"
-        )
     
-    # Build target URL using shared helper
-    target_url = _build_target_url(server)
+    # Use context manager for metrics - handles duration and success/failure automatically
+    # We set server_name dynamically after resolution
+    async with ToolExecutionMetricsContext(
+        tool_name=tool_name,
+        method="POST"
+    ) as metrics_ctx:
         
-    # Build MCP JSON-RPC request
-    mcp_request_body = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "tools/call",
-        "params": {
-            "name": tool_name,
-            "arguments": arguments
-        }
-    }
-    
-    # Build authenticated headers using shared helper
-    headers = await _build_authenticated_headers(
-        server=server,
-        auth_context=user_context,
-        additional_headers={
-            "X-Tool-Name": tool_name,
-            "Accept": "application/json, text/event-stream"  # MCP servers require both
-        }
-    )
-    
-    # Client can accept both JSON and SSE (as indicated in Accept header)
-    accept_sse = True
-    
-    try:
-        # Use shared proxy logic
-        response = await _proxy_json_rpc_request(
-            target_url=target_url,
-            json_body=mcp_request_body,
-            headers=headers,
-            accept_sse=accept_sse
+        server = await server_service_v1.get_server_by_id(body.server_id)
+        logger.info(
+            f"🔧 Tool execution from user '{username}:{user_id}': {tool_name} on {body.server_id}"
         )
+                
+        if not server:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Server not found: {body.server_id}"
+            )
         
-        # If response is SSE, return it directly
-        if response.media_type == "text/event-stream":
-            logger.info(f"✅ Returning SSE response for tool: {tool_name}")
-            return response
+        # Update metrics context with resolved server name
+        metrics_ctx.set_server_name(server.serverName)
+        
         try:
-            result_text = response.body.decode('utf-8') if isinstance(response.body, bytes) else str(response.body)
-            result = json.loads(result_text)
-        except Exception:
-            result = {"raw": response.body.decode('utf-8') if isinstance(response.body, bytes) else str(response.body)}
-        
-        logger.info(f"✅ Tool execution successful: {tool_name}")
-        
-        return ToolExecutionResponse(
-            success=True,
-            server_id=body.server_id,
-            server_path=server.path,
-            tool_name=tool_name,
-            result=result,
-        )
-        
-    except HTTPException as e:
-        # HTTP exceptions from proxy helper - convert to structured response
-        logger.error(f"❌ Tool execution failed: {e.detail}")
-        
-        return ToolExecutionResponse(
-            success=False,
-            server_id=body.server_id,
-            server_path=server.path,
-            tool_name=tool_name,
-            error=f"Error: {e.detail}",
-        )
+            # Build target URL using shared helper
+            target_url = _build_target_url(server)
+                
+            # Build MCP JSON-RPC request
+            mcp_request_body = {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": tool_name,
+                    "arguments": arguments
+                }
+            }
+            
+            # Build authenticated headers using shared helper
+            headers = await _build_authenticated_headers(
+                server=server,
+                auth_context=user_context,
+                additional_headers={
+                    "X-Tool-Name": tool_name,
+                    "Accept": "application/json, text/event-stream"  # MCP servers require both
+                }
+            )
+            
+            # Client can accept both JSON and SSE (as indicated in Accept header)
+            accept_sse = True
+            
+            # Use shared proxy logic
+            response = await _proxy_json_rpc_request(
+                target_url=target_url,
+                json_body=mcp_request_body,
+                headers=headers,
+                accept_sse=accept_sse
+            )
+            
+            # If response is SSE, return it directly
+            if response.media_type == "text/event-stream":
+                logger.info(f"✅ Returning SSE response for tool: {tool_name}")
+                metrics_ctx.set_success(True)
+                return response
+
+            try:
+                result_text = response.body.decode('utf-8') if isinstance(response.body, bytes) else str(response.body)
+                result = json.loads(result_text)
+            except Exception:
+                result = {"raw": response.body.decode('utf-8') if isinstance(response.body, bytes) else str(response.body)}
+            
+            logger.info(f"✅ Tool execution successful: {tool_name}")
+            
+            metrics_ctx.set_success(True)
+            return ToolExecutionResponse(
+                success=True,
+                server_id=body.server_id,
+                server_path=server.path,
+                tool_name=tool_name,
+                result=result,
+            )
+            
+        except HTTPException as e:
+            # HTTP exceptions from proxy helper - convert to structured response
+            logger.error(f"❌ Tool execution failed: {e.detail}")
+            # Context manager defaults to success=False, so no need to set explicitly
+            
+            return ToolExecutionResponse(
+                success=False,
+                server_id=body.server_id,
+                server_path=server.path,
+                tool_name=tool_name,
+                error=f"Error: {e.detail}",
+            )
 
 
 @router.post(
@@ -709,36 +731,47 @@ async def read_resource(
     resource_uri = body.resource_uri
     username = user_context.get("username", "unknown")
     
-    server = await server_service_v1.get_server_by_id(body.server_id)
-    logger.info(
-        f"📄 Resource read from user '{username}': {resource_uri} on {body.server_id}"
-    )
-    
-    if not server:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Server not found: {body.server_id}"
+    async with ResourceAccessMetricsContext(resource_uri=resource_uri) as metrics_ctx:
+        server = await server_service_v1.get_server_by_id(body.server_id)
+        logger.info(
+            f"📄 Resource read from user '{username}': {resource_uri} on {body.server_id}"
         )
-    
-    # Build target URL using shared helper (for future implementation)
-    target_url = _build_target_url(server)
-    
-    # MOCK: Return hardcoded response for POC
-    logger.info(f"✅ (MOCK) Returning cached search results for: {resource_uri}")
-    
-    return ResourceReadResponse(
-        success=True,
-        server_id=body.server_id,
-        server_path=server.path,
-        resource_uri=resource_uri,
-        contents=[
-            {
-                "uri": resource_uri,
-                "mimeType": "application/json",
-                "text": '{"results": [{"title": "AI News", "snippet": "Latest AI developments..."}]}'
-            }
-        ]
-    )
+        
+        if not server:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Server not found: {body.server_id}"
+            )
+        
+        metrics_ctx.set_server_name(server.serverName)
+        
+        try:
+            # Build target URL using shared helper (for future implementation)
+            target_url = _build_target_url(server)
+            
+            # MOCK: Return hardcoded response for POC
+            logger.info(f"✅ (MOCK) Returning cached search results for: {resource_uri}")
+            
+            response = ResourceReadResponse(
+                success=True,
+                server_id=body.server_id,
+                server_path=server.path,
+                resource_uri=resource_uri,
+                contents=[
+                    {
+                        "uri": resource_uri,
+                        "mimeType": "application/json",
+                        "text": '{"results": [{"title": "AI News", "snippet": "Latest AI developments..."}]}'
+                    }
+                ]
+            )
+            
+            metrics_ctx.set_success(True)
+            return response
+
+        except Exception as e:
+            # Context manager handles metrics, we just re-raise
+            raise e
 
 
 @router.post(
@@ -786,49 +819,59 @@ async def execute_prompt(
     arguments = body.arguments or {}
     username = user_context.get("username", "unknown")
     
-    server = await server_service_v1.get_server_by_id(body.server_id)
-    logger.info(
-        f"💬 Prompt execution from user '{username}': {prompt_name} on {body.server_id}"
-    )
-    
-    if not server:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Server not found: {body.server_id}"
+    async with PromptExecutionMetricsContext(prompt_name=prompt_name) as metrics_ctx:
+        server = await server_service_v1.get_server_by_id(body.server_id)
+        logger.info(
+            f"💬 Prompt execution from user '{username}': {prompt_name} on {body.server_id}"
         )
-    
-    # Build target URL using shared helper (for future implementation)
-    target_url = _build_target_url(server)
-    
-    # MOCK: Return hardcoded prompt response for POC
-    topic = arguments.get("topic", "general topic")
-    depth = arguments.get("depth", "basic")
-    
-    logger.info(f"✅ (MOCK) Returning prompt messages for: {prompt_name} (topic={topic}, depth={depth})")
-    
-    return PromptExecutionResponse(
-        success=True,
-        server_id=body.server_id,
-        server_path=server.path,
-        prompt_name=prompt_name,
-        description=f"AI research assistant for {topic}",
-        messages=[
-            {
-                "role": "system",
-                "content": {
-                    "type": "text",
-                    "text": f"You are a research assistant specializing in {topic}. Provide {depth} analysis."
-                }
-            },
-            {
-                "role": "user",
-                "content": {
-                    "type": "text",
-                    "text": f"Research and analyze: {topic}"
-                }
-            }
-        ]
-    )
+        
+        if not server:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Server not found: {body.server_id}"
+            )
+        
+        metrics_ctx.set_server_name(server.serverName)
+        
+        try:
+            # Build target URL using shared helper (for future implementation)
+            target_url = _build_target_url(server)
+            
+            # MOCK: Return hardcoded prompt response for POC
+            topic = arguments.get("topic", "general topic")
+            depth = arguments.get("depth", "basic")
+            
+            logger.info(f"✅ (MOCK) Returning prompt messages for: {prompt_name} (topic={topic}, depth={depth})")
+            
+            response = PromptExecutionResponse(
+                success=True,
+                server_id=body.server_id,
+                server_path=server.path,
+                prompt_name=prompt_name,
+                description=f"AI research assistant for {topic}",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": {
+                            "type": "text",
+                            "text": f"You are a research assistant specializing in {topic}. Provide {depth} analysis."
+                        }
+                    },
+                    {
+                        "role": "user",
+                        "content": {
+                            "type": "text",
+                            "text": f"Research and analyze: {topic}"
+                        }
+                    }
+                ]
+            )
+            
+            metrics_ctx.set_success(True)
+            return response
+
+        except Exception as e:
+            raise e
 
 
 # ========== Catch-All Dynamic Proxy Route ==========

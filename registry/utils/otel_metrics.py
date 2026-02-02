@@ -11,6 +11,8 @@ Usage:
         record_tool_execution,
         record_tool_discovery,
         record_server_request,
+        record_resource_access,
+        record_prompt_execution,
     )
 
     # Using domain functions (recommended)
@@ -132,6 +134,68 @@ def record_tool_discovery(
 
     if duration_seconds is not None:
         metrics.record_histogram("mcp_tool_discovery_duration_seconds", duration_seconds, attributes)
+
+
+def record_resource_access(
+    resource_uri: str,
+    server_name: str,
+    success: bool,
+    duration_seconds: Optional[float] = None,
+) -> None:
+    """
+    Record resource access operation.
+
+    Requires these metrics in config:
+    - counter: mcp_resource_access_total
+    - histogram: mcp_resource_access_duration_seconds
+
+    Args:
+        resource_uri: URI of the accessed resource
+        server_name: Name of the MCP server
+        success: Whether the access was successful
+        duration_seconds: Access duration in seconds
+    """
+    attributes = {
+        "resource_uri": resource_uri,
+        "server_name": server_name,
+        "status": "success" if success else "failure",
+    }
+
+    metrics.record_counter("mcp_resource_access_total", 1, attributes)
+
+    if duration_seconds is not None:
+        metrics.record_histogram("mcp_resource_access_duration_seconds", duration_seconds, attributes)
+
+
+def record_prompt_execution(
+    prompt_name: str,
+    server_name: str,
+    success: bool,
+    duration_seconds: Optional[float] = None,
+) -> None:
+    """
+    Record prompt execution operation.
+
+    Requires these metrics in config:
+    - counter: mcp_prompt_execution_total
+    - histogram: mcp_prompt_execution_duration_seconds
+
+    Args:
+        prompt_name: Name of the executed prompt
+        server_name: Name of the MCP server
+        success: Whether the execution was successful
+        duration_seconds: Execution duration in seconds
+    """
+    attributes = {
+        "prompt_name": prompt_name,
+        "server_name": server_name,
+        "status": "success" if success else "failure",
+    }
+
+    metrics.record_counter("mcp_prompt_execution_total", 1, attributes)
+
+    if duration_seconds is not None:
+        metrics.record_histogram("mcp_prompt_execution_duration_seconds", duration_seconds, attributes)
 
 
 def record_server_request(server_name: str) -> None:

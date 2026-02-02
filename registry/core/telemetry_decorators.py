@@ -23,6 +23,8 @@ from registry.utils.otel_metrics import (
     record_registry_operation as _record_registry_operation,
     record_tool_discovery as _record_tool_discovery,
     record_tool_execution as _record_tool_execution,
+    record_resource_access as _record_resource_access,
+    record_prompt_execution as _record_prompt_execution,
 )
 
 logger = logging.getLogger(__name__)
@@ -444,3 +446,115 @@ class ToolExecutionMetricsContext:
             )
         except Exception as e:
             logger.warning(f"Failed to record tool execution metric: {e}")
+
+
+class ResourceAccessMetricsContext:
+    """
+    Context manager for tracking resource access.
+
+    Example:
+        async with ResourceAccessMetricsContext(resource_uri=uri) as ctx:
+            server = await get_server(id)
+            ctx.set_server_name(server.name)
+            ...
+            ctx.set_success(True)
+    """
+
+    def __init__(
+        self,
+        resource_uri: str,
+        server_name: str = "unknown",
+    ):
+        self._start_time: float = 0
+        self._resource_uri: str = resource_uri
+        self._server_name: str = server_name
+        self._success: bool = False
+
+    def set_server_name(self, server_name: str) -> None:
+        """Set the server name."""
+        self._server_name = server_name
+
+    def set_success(self, success: bool) -> None:
+        """Set the success status."""
+        self._success = success
+
+    async def __aenter__(self) -> "ResourceAccessMetricsContext":
+        self._start_time = time.perf_counter()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: Any,
+        exc_val: Any,
+        exc_tb: Any,
+    ) -> None:
+        if exc_type is not None:
+            self._success = False
+
+        duration = time.perf_counter() - self._start_time
+
+        try:
+            _record_resource_access(
+                resource_uri=self._resource_uri,
+                server_name=self._server_name,
+                success=self._success,
+                duration_seconds=duration,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record resource access metric: {e}")
+
+
+class PromptExecutionMetricsContext:
+    """
+    Context manager for tracking prompt execution.
+
+    Example:
+        async with PromptExecutionMetricsContext(prompt_name=name) as ctx:
+            server = await get_server(id)
+            ctx.set_server_name(server.name)
+            ...
+            ctx.set_success(True)
+    """
+
+    def __init__(
+        self,
+        prompt_name: str,
+        server_name: str = "unknown",
+    ):
+        self._start_time: float = 0
+        self._prompt_name: str = prompt_name
+        self._server_name: str = server_name
+        self._success: bool = False
+
+    def set_server_name(self, server_name: str) -> None:
+        """Set the server name."""
+        self._server_name = server_name
+
+    def set_success(self, success: bool) -> None:
+        """Set the success status."""
+        self._success = success
+
+    async def __aenter__(self) -> "PromptExecutionMetricsContext":
+        self._start_time = time.perf_counter()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: Any,
+        exc_val: Any,
+        exc_tb: Any,
+    ) -> None:
+        if exc_type is not None:
+            self._success = False
+
+        duration = time.perf_counter() - self._start_time
+
+        try:
+            _record_prompt_execution(
+                prompt_name=self._prompt_name,
+                server_name=self._server_name,
+                success=self._success,
+                duration_seconds=duration,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record prompt execution metric: {e}")
