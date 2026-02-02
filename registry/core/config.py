@@ -109,7 +109,7 @@ class Settings(BaseSettings):
 
     # Note:  It will be overwritten from the .env file.
     JWT_ISSUER: str = "jarvis-auth-server"
-    JWT_AUDIENCE: str = "jarvis-registry"
+    JWT_AUDIENCE: str = "jarvis-services"
     JWT_SELF_SIGNED_KID: str = "self-signed-key-v1"
     API_VERSION: str = "v1"
     LOG_LEVEL: str = "INFO"

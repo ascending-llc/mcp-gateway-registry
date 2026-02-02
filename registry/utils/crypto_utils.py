@@ -79,12 +79,12 @@ def generate_service_jwt(user_id: str, username: Optional[str] = None, scopes: O
     payload = {
         "user_id": user_id,
         "sub": username or user_id,
-        "iss": "mcp-registry",
-        "aud": "mcp-server",
+        "iss": settings.JWT_ISSUER,
+        "aud": settings.JWT_AUDIENCE,
         "iat": now,
         "exp": now + timedelta(minutes=5),  # Short-lived for service-to-service
         "jti": f"registry-{now.timestamp()}",
-        "client_id": "mcp-registry",
+        "client_id": settings.registry_app_name,
         "token_type": "service",
     }
     
