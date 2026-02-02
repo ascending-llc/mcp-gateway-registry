@@ -20,7 +20,7 @@ from ..schemas.agent_models import AgentCard, AgentInfo
 
 # Configure logging with basicConfig
 logging.basicConfig(
-    level=os.environ.get("LOGLEVEL", logging.INFO).upper(),
+    level=settings.LOG_LEVEL,
     format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 

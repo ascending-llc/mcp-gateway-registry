@@ -8,11 +8,10 @@ from .storage.database import init_database, wait_for_database, MetricsStorage
 from .core.rate_limiter import rate_limiter
 from .core.retention import retention_manager
 from .utils.helpers import hash_api_key
-import os
 
 # Configure logging
 logging.basicConfig(
-    level=os.environ.get("LOGLEVEL", logging.INFO).upper(),
+    level=settings.log_level,
     format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 

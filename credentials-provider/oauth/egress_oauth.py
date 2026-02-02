@@ -36,10 +36,11 @@ import sys
 import time
 from pathlib import Path
 from typing import Dict, Any, Optional, List
+from registry.core.config import settings
 
 # Configure logging
 logging.basicConfig(
-    level=os.environ.get("LOGLEVEL", logging.INFO).upper(),
+    level=settings.LOG_LEVEL,
     format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 

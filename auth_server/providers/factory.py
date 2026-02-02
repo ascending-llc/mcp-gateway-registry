@@ -11,7 +11,7 @@ from ..utils.config_loader import get_provider_config
 from ..core.config import settings
 
 logging.basicConfig(
-    level=os.environ.get("LOGLEVEL", logging.INFO).upper(),
+    level=settings.log_level,
     format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 

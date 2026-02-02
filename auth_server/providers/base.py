@@ -2,11 +2,12 @@
 
 import logging
 from abc import ABC, abstractmethod
-import os
 from typing import Any, Dict, List, Optional
 
+from ..core.config import settings
+
 logging.basicConfig(
-    level=os.environ.get("LOGLEVEL", logging.INFO).upper(),
+    level=settings.log_level,
     format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 

@@ -9,7 +9,6 @@ Based on: docs/design/a2a-protocol-integration.md
 """
 
 import logging
-import os
 import re
 from typing import (
     Dict,
@@ -21,6 +20,7 @@ from typing import (
 import httpx
 from pydantic import BaseModel
 
+from registry.core.config import settings
 from registry.schemas.agent_models import (
     AgentCard,
     SecurityScheme,
@@ -30,7 +30,7 @@ from registry.schemas.agent_models import (
 
 # Configure logging with basicConfig
 logging.basicConfig(
-    level=os.environ.get("LOGLEVEL", logging.INFO).upper(),
+    level=settings.LOG_LEVEL,
     format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 

@@ -22,10 +22,11 @@ from urllib.parse import quote
 
 import requests
 from pydantic import BaseModel, Field, HttpUrl, ConfigDict
+from registry.core.config import settings
 
 # Configure logging
 logging.basicConfig(
-    level=os.environ.get("LOGLEVEL", logging.INFO).upper(),
+    level=settings.LOG_LEVEL,
     format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 

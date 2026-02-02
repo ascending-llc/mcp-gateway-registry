@@ -12,11 +12,12 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
 
 from .base_client import BaseFederationClient
+from ...core.config import settings
 from ...schemas.federation_schema import AsorAgentConfig
 
 
 logging.basicConfig(
-    level=os.environ.get("LOGLEVEL", logging.INFO).upper(),
+    level=settings.LOG_LEVEL,
     format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 

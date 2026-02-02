@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Optional
 
@@ -13,6 +14,18 @@ class Settings:
     # Service settings
     METRICS_SERVICE_PORT: int = int(os.getenv("METRICS_SERVICE_PORT", "8890"))
     METRICS_SERVICE_HOST: str = os.getenv("METRICS_SERVICE_HOST", "0.0.0.0")
+    
+    # Logging settings
+    log_level: int = logging.INFO
+    
+    def __init__(self):
+        # Handle LOG_LEVEL environment variable (supports both int and string formats)
+        if os.getenv("LOG_LEVEL"):
+            try:
+                self.log_level = int(os.getenv("LOG_LEVEL"))
+            except ValueError:
+                # If it's a string like "DEBUG", convert to logging constant
+                self.log_level = getattr(logging, os.getenv("LOG_LEVEL").upper(), logging.INFO)
     
     # OpenTelemetry settings
     OTEL_SERVICE_NAME: str = os.getenv("OTEL_SERVICE_NAME", "mcp-metrics-service")

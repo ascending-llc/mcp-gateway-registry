@@ -5,14 +5,14 @@ Based on: https://raw.githubusercontent.com/modelcontextprotocol/registry/refs/h
 """
 
 import logging
-import os
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
+from ..core.config import settings
 
 
 logging.basicConfig(
-    level=os.environ.get("LOGLEVEL", logging.INFO).upper(),
+    level=settings.LOG_LEVEL,
     format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 

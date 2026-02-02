@@ -6,10 +6,10 @@ following the same pattern as the server transform service.
 """
 
 import logging
-import os
 from typing import Any, Dict, List, Optional
 
 from ..constants import REGISTRY_CONSTANTS
+from ..core.config import settings
 from ..schemas.anthropic_schema import (
     Package,
     PaginationMetadata,
@@ -20,7 +20,7 @@ from ..schemas.anthropic_schema import (
 
 
 logging.basicConfig(
-    level=os.environ.get("LOGLEVEL", logging.INFO).upper(),
+    level=settings.LOG_LEVEL,
     format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 

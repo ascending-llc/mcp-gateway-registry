@@ -8,10 +8,11 @@ import logging
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 from typing import Annotated
+from registry.core.config import settings
 
 # Configure logging
 logging.basicConfig(
-    level=os.environ.get("LOGLEVEL", logging.INFO).upper(),
+    level=settings.LOG_LEVEL,
     format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 

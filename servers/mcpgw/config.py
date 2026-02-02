@@ -4,15 +4,10 @@ import os
 
 from pathlib import Path
 from typing import Optional
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-logging.basicConfig(
-    level=os.environ.get("LOGLEVEL", "INFO"),
-    format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
-)
 logger = logging.getLogger(__name__)
-
 
 class Constants:
     """Application constants that don't change."""
@@ -88,6 +83,12 @@ class Settings(BaseSettings):
         description="Key ID for self-signed JWT tokens"
     )
 
+    # Logging configuration
+    LOG_LEVEL: int = Field(
+        default=logging.INFO,
+        description="Logging level (integer constant from logging module)"
+    )
+
     API_VERSION: str = "v1"
 
     model_config = SettingsConfigDict(
@@ -106,6 +107,14 @@ class Settings(BaseSettings):
         if not v:
             raise ValueError("REGISTRY_URL must be set")
         return v.rstrip("/")
+    
+    @field_validator("LOG_LEVEL", mode='before')
+    @classmethod
+    def convert_log_level(cls, v):
+        """Convert string log level names to integers (e.g., 'DEBUG' -> 10)."""
+        if isinstance(v, str):
+            return getattr(logging, v.upper(), logging.INFO)
+        return v
 
     @property
     def scopes_config_path(self) -> Path:
@@ -135,6 +144,7 @@ class Settings(BaseSettings):
         logger.info(f"  MCP Transport: {self.MCP_TRANSPORT}")
         logger.info(f"  Listen Port: {self.MCP_SERVER_LISTEN_PORT}")
         logger.info(f"  Auth Server URL: {self.AUTH_SERVER_URL}")
+        logger.info(f"  Log Level: {self.LOG_LEVEL}")
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -166,5 +176,11 @@ def parse_arguments() -> argparse.Namespace:
 
 # Create global settings instance
 settings = Settings()
+
+logging.basicConfig(
+    level=settings.LOG_LEVEL,
+    format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
+)
+logger.setLevel(settings.LOG_LEVEL)
 
 settings.log_config()

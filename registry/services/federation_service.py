@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from ..core.config import settings
 from ..schemas.federation_schema import (
     AnthropicFederationConfig,
     FederatedServer,
@@ -25,7 +26,7 @@ from .federation.asor_client import AsorFederationClient
 
 
 logging.basicConfig(
-    level=os.environ.get("LOGLEVEL", logging.INFO).upper(),
+    level=settings.LOG_LEVEL,
     format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 
