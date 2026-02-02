@@ -122,7 +122,7 @@ class TestMCPOAuthService:
                                  refresh_exists=True, refresh_valid=False)
 
         # Mock OAuth flow initiation
-        with patch.object(oauth_service, '_initiate_oauth_flow_response', AsyncMock(
+        with patch.object(oauth_service, '_build_oauth_required_response', AsyncMock(
                 return_value=(False, {
                     "success": True,
                     "authorization_url": "https://example.com/auth",
@@ -163,7 +163,7 @@ class TestMCPOAuthService:
                                  refresh_exists=False, refresh_valid=False)
 
         # Mock OAuth flow initiation
-        with patch.object(oauth_service, '_initiate_oauth_flow_response', AsyncMock(
+        with patch.object(oauth_service, '_build_oauth_required_response', AsyncMock(
                 return_value=(False, {
                     "success": True,
                     "authorization_url": "https://example.com/auth",

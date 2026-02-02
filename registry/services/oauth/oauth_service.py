@@ -488,7 +488,7 @@ class MCPOAuthService:
             # Step 2.2.1.1: Refresh token invalid or missing
             logger.info(f"[Reinitialize] Access token expired for {server_name}, "
                         f"no valid refresh token, initiating OAuth")
-            return await self._initiate_oauth_flow_response(user_id, server)
+            return await self._build_oauth_required_response(user_id, server)
 
         # Branch 2: Access token does not exist
         # Step 3.1.2: Refresh token exists and valid
@@ -499,7 +499,7 @@ class MCPOAuthService:
 
         # Step 3.1.1 / 3.2 / Step 1: No valid tokens
         logger.info(f"[Reinitialize] No valid tokens for {server_name}, initiating OAuth")
-        return await self._initiate_oauth_flow_response(user_id, server)
+        return await self._build_oauth_required_response(user_id, server)
 
     async def _refresh_and_connect(
             self,
@@ -524,7 +524,7 @@ class MCPOAuthService:
             refresh_token_doc, _ = await token_service.get_refresh_token_status(user_id, server_name)
             if not refresh_token_doc:
                 logger.error(f"[Reinitialize] Refresh token disappeared for {server_name}({server_id})")
-                return await self._initiate_oauth_flow_response(user_id, server)
+                return await self._build_oauth_required_response(user_id, server)
 
             # Get and decrypt OAuth config
             oauth_config = server.config.get("oauth")
@@ -554,45 +554,36 @@ class MCPOAuthService:
             else:
                 # Refresh failed - need re-authorization
                 logger.warning(f"[Reinitialize] Token refresh failed for {server_name}: {error}")
-                return await self._initiate_oauth_flow_response(user_id, server)
+                return await self._build_oauth_required_response(user_id, server)
 
         except Exception as e:
             logger.error(f"[Reinitialize] Error in _refresh_and_connect: {e}", exc_info=True)
-            return await self._initiate_oauth_flow_response(user_id, server)
+            return await self._build_oauth_required_response(user_id, server)
 
-    async def _initiate_oauth_flow_response(
+    async def _build_oauth_required_response(
             self,
             user_id: str,
             server: MCPServerDocument
     ) -> Tuple[bool, Dict[str, Any]]:
         """
-        Helper method: Initiate OAuth flow and return response
+        Helper method: Build response indicating OAuth is required
+        
+        Does NOT initiate OAuth flow - frontend should call /{server_id}/oauth/initiate
+        This ensures connection status remains DISCONNECTED until frontend starts OAuth
         
         Args:
             user_id: User ID
             server: Server document containing all configuration
             
         Returns:
-            Tuple[bool, Dict]: (needs_connection=False, response_data with oauth_url)
+            Tuple[bool, Dict]: (needs_connection=False, response_data indicating OAuth required)
         """
-        flow_id, auth_url, error = await self.initiate_oauth_flow(user_id, server)
-
-        if error:
-            return False, {
-                "success": False,
-                "message": f"Failed to initiate OAuth: {error}",
-                "serverId": str(server.id),
-                "server_name": server.serverName,
-                "requires_oauth": server.config.get("requiresOAuth", False)
-            }
-
         return False, {
             "success": True,
             "message": "OAuth authorization required",
             "serverId": str(server.id),
             "server_name": server.serverName,
             "requires_oauth": server.config.get("requiresOAuth", False),
-            "authorization_url": auth_url
         }
 
     def _build_success_response(self, server: MCPServerDocument) -> Dict[str, Any]:
