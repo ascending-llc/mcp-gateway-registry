@@ -272,7 +272,7 @@ class SearchRequest(BaseModel):
     include_disabled: bool = Field(default=False, description="Include disabled results")
 
 
-@router.post("/search")
+@router.post("/search/servers")
 async def search_servers(
         search: SearchRequest,
         user_context: CurrentUser
