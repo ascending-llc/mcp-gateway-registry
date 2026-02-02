@@ -675,11 +675,7 @@ class ServerServiceV1:
         await server.save()
         logger.info(f"Updated server: {server.serverName} (ID: {server.id})")
 
-        # Sync to vector DB in background (non-blocking)
-        enabled = server.config.get('enabled', False) if server.config else False
-        asyncio.create_task(
-            self.mcp_server_repo.sync_by_enabled_status(server, enabled, fields_changed)
-        )
+        asyncio.create_task(self.mcp_server_repo.smart_sync(server))
         return server
 
     async def delete_server(
@@ -817,17 +813,14 @@ class ServerServiceV1:
                 server.config['enabled'] = False
                 await server.save()
                 raise ValueError("Failed to fetch tools from server. Server remains disabled.")
-            # Tools changed, will need re-vectorization
-            fields_changed = None  # Full update
 
         # Update the updatedAt timestamp
         server.updatedAt = _get_current_utc_time()
         await server.save()
         logger.info(f"Toggled server {server.serverName} (ID: {server.id}) enabled to {enabled}")
 
-        # Sync to vector DB based on enabled status (background task)
         asyncio.create_task(
-            self.mcp_server_repo.sync_by_enabled_status(server, enabled, fields_changed)
+            self.mcp_server_repo.sync_by_enabled_status(server, enabled)
         )
         return server
 

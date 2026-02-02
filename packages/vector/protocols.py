@@ -4,7 +4,7 @@ Vector Storage Protocols
 Defines interfaces that models must implement to be stored in vector databases.
 """
 
-from typing import Protocol, runtime_checkable, ClassVar, Any, Set
+from typing import Protocol, runtime_checkable, ClassVar, Any, Set, List
 from langchain_core.documents import Document as LangChainDocument
 
 
@@ -21,8 +21,8 @@ class VectorStorable(Protocol):
             COLLECTION_NAME = "my_collection"
             id: str
 
-            def to_document(self) -> LangChainDocument:
-                return LangChainDocument(page_content="...", metadata={...})
+            def to_documents(self) -> List[LangChainDocument]:
+                return [LangChainDocument(page_content="...", metadata={...})]
 
             @classmethod
             def from_document(cls, document: LangChainDocument) -> dict:
@@ -35,15 +35,6 @@ class VectorStorable(Protocol):
     # Required instance variable
     id: Any
 
-    def to_document(self) -> LangChainDocument:
-        """
-        Convert model instance to LangChain Document for vector storage.
-
-        Returns:
-            LangChain Document with page_content and metadata
-        """
-        raise NotImplementedError()
-
     @classmethod
     def from_document(cls, document: LangChainDocument) -> dict:
         """
@@ -54,33 +45,5 @@ class VectorStorable(Protocol):
 
         Returns:
             Dictionary with model data (may not be complete model instance)
-        """
-        raise NotImplementedError()
-
-    @staticmethod
-    def get_safe_metadata_fields() -> Set[str]:
-        """
-        Get fields that can be updated without re-vectorization.
-
-        Returns:
-            Set of safe metadata field names
-        """
-        raise NotImplementedError()
-
-
-@runtime_checkable
-class ContentGenerator(Protocol):
-    """
-    Protocol for models that can generate searchable content.
-
-    This is used for smart update detection.
-    """
-
-    def generate_content(self) -> str:
-        """
-        Generate searchable text content for vectorization.
-
-        Returns:
-            Combined text string for semantic search
         """
         raise NotImplementedError()
