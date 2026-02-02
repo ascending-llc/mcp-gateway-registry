@@ -827,9 +827,6 @@ class ServerServiceV1:
         if not server:
             raise ValueError("Server not found")
 
-        # Track which fields are being changed
-        fields_changed: Set[str] = set()
-
         # Get current config
         config = server.config or {}
 
@@ -842,19 +839,14 @@ class ServerServiceV1:
         # Update root-level registry fields
         if data.serverName is not None:
             server.serverName = data.serverName
-            fields_changed.add("server_name")  # Weaviate uses snake_case
         if data.path is not None:
             server.path = data.path
-            fields_changed.add("path")
         if data.tags is not None:
             server.tags = [tag.lower() for tag in data.tags]
-            fields_changed.add("tags")
         if data.scope is not None:
             server.scope = data.scope
-            fields_changed.add("scope")
         if data.status is not None:
             server.status = data.status
-            fields_changed.add("status")
 
         # Update config with MCP-specific values only
         updated_config = _update_config_from_request(config, data, server_name=server.serverName)
@@ -874,13 +866,8 @@ class ServerServiceV1:
         server.updatedAt = _get_current_utc_time()
 
         await server.save()
-        logger.info(f"Updated server: {server.serverName} (ID: {server.id})")
-
-        # Sync to vector DB in background (non-blocking)
-        enabled = server.config.get('enabled', False) if server.config else False
-        asyncio.create_task(
-            self.mcp_server_repo.sync_by_enabled_status(server, enabled, fields_changed)
-        )
+        
+        asyncio.create_task(self.mcp_server_repo.smart_sync(server))
         return server
 
     async def delete_server(
@@ -937,7 +924,7 @@ class ServerServiceV1:
         # Use consolidated retrieve_from_server which handles both OAuth and apiKey
         logger.info(f"Fetching tools, resources, and prompts for server {server.serverName}")
         tool_list, resource_list, prompt_list, _, error_msg = await self.retrieve_from_server(
-            server=server, 
+            server=server,
             include_capabilities=False,
             include_resources=True,
             include_prompts=True,
@@ -995,10 +982,7 @@ class ServerServiceV1:
         if not server:
             raise ValueError("Server not found")
 
-        # Track field changes for smart update
-        fields_changed = {"status"}
-
-        # Update enabled field in config only (do not update status field)
+        # Update enabled field in config
         if server.config is None:
             server.config = {}
         server.config['enabled'] = enabled
@@ -1011,18 +995,13 @@ class ServerServiceV1:
                 server.config['enabled'] = False
                 await server.save()
                 raise ValueError("Failed to fetch tools from server. Server remains disabled.")
-            # Tools changed, will need re-vectorization
-            fields_changed = None  # Full update
 
         # Update the updatedAt timestamp
         server.updatedAt = _get_current_utc_time()
         await server.save()
         logger.info(f"Toggled server {server.serverName} (ID: {server.id}) enabled to {enabled}")
-
-        # Sync to vector DB based on enabled status (background task)
-        asyncio.create_task(
-            self.mcp_server_repo.sync_by_enabled_status(server, enabled, fields_changed)
-        )
+        
+        asyncio.create_task(self.mcp_server_repo.smart_sync(server))
         return server
 
     async def get_server_tools(
@@ -1145,7 +1124,8 @@ class ServerServiceV1:
             include_resources: bool = True,
             include_prompts: bool = True,
             user_id: Optional[str] = None,
-    ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[List[Dict[str, Any]]], Optional[List[Dict[str, Any]]], Optional[Dict[str, Any]], Optional[str]]:
+    ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[List[Dict[str, Any]]], Optional[List[Dict[str, Any]]], Optional[
+        Dict[str, Any]], Optional[str]]:
         """
         Consolidated method to retrieve tools, resources, prompts, and optionally capabilities from a server.
         Args:
@@ -1187,7 +1167,7 @@ class ServerServiceV1:
             except AuthenticationError as e:
                 # Other authentication errors
                 return None, None, None, None, f"Authentication error: {str(e)}"
-            
+
             # Get transport type
             transport_type = config.get("type", "streamable-http")
 
@@ -1206,7 +1186,7 @@ class ServerServiceV1:
             # Use the mcp_client with pre-built headers (pure transport layer)
             from registry.core.mcp_client import get_tools_and_capabilities_from_server
             result = await get_tools_and_capabilities_from_server(
-                url, 
+                url,
                 headers=headers,
                 transport_type=transport_type,
                 include_resources=include_resources,
@@ -1219,7 +1199,8 @@ class ServerServiceV1:
                     logger.warning(f"{error_msg} for {server.serverName}")
                     return None, None, None, None, error_msg
 
-                logger.info(f"Retrieved {len(result.tools)} tools, {len(result.resources or [])} resources, {len(result.prompts or [])} prompts, and capabilities from {server.serverName}")
+                logger.info(
+                    f"Retrieved {len(result.tools)} tools, {len(result.resources or [])} resources, {len(result.prompts or [])} prompts, and capabilities from {server.serverName}")
                 return result.tools, result.resources, result.prompts, result.capabilities, None
             else:
                 if result.tools is None:
@@ -1227,7 +1208,8 @@ class ServerServiceV1:
                     logger.warning(f"{error_msg} for {server.serverName}")
                     return None, None, None, None, error_msg
 
-                logger.info(f"Retrieved {len(result.tools)} tools, {len(result.resources or [])} resources, {len(result.prompts or [])} prompts from {server.serverName}")
+                logger.info(
+                    f"Retrieved {len(result.tools)} tools, {len(result.resources or [])} resources, {len(result.prompts or [])} prompts from {server.serverName}")
                 return result.tools, result.resources, result.prompts, None, None
 
         except Exception as e:
@@ -1344,7 +1326,8 @@ class ServerServiceV1:
             self,
             server: MCPServerDocument,
             user_id: Optional[str] = None,
-    ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[List[Dict[str, Any]]], Optional[List[Dict[str, Any]]], Optional[Dict[str, Any]], Optional[str]]:
+    ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[List[Dict[str, Any]]], Optional[List[Dict[str, Any]]], Optional[
+        Dict[str, Any]], Optional[str]]:
         """
         Retrieve tools, resources, prompts, and capabilities from a server using MCP client (legacy method).
 
@@ -1363,7 +1346,8 @@ class ServerServiceV1:
             - If failed, returns (None, None, None, None, error_message)
             - Empty results are acceptable for registration
         """
-        return await self.retrieve_from_server(server, include_capabilities=True, include_resources=True, include_prompts=True, user_id=user_id)
+        return await self.retrieve_from_server(server, include_capabilities=True, include_resources=True,
+                                               include_prompts=True, user_id=user_id)
 
     async def refresh_server_health(
             self,
@@ -1397,7 +1381,8 @@ class ServerServiceV1:
 
         # Use the same validation as registration: retrieve tools, resources, prompts, and capabilities
         # This is a more comprehensive health check than just HTTP GET
-        tool_list, resource_list, prompt_list, capabilities, tool_error = await self.retrieve_tools_and_capabilities_from_server(server, user_id)
+        tool_list, resource_list, prompt_list, capabilities, tool_error = await self.retrieve_tools_and_capabilities_from_server(
+            server, user_id)
 
         if tool_list is None or capabilities is None:
             # Health check failed - cannot retrieve capabilities
@@ -1420,7 +1405,8 @@ class ServerServiceV1:
             }
 
         # Health check passed - capabilities retrieved successfully
-        logger.info(f"Health check passed for {server.serverName}: retrieved {len(tool_list)} tools, {len(resource_list or [])} resources, {len(prompt_list or [])} prompts, and capabilities")
+        logger.info(
+            f"Health check passed for {server.serverName}: retrieved {len(tool_list)} tools, {len(resource_list or [])} resources, {len(prompt_list or [])} prompts, and capabilities")
 
         server.status = "active"
         server.lastError = None
@@ -1451,7 +1437,8 @@ class ServerServiceV1:
         # Store resources and prompts
         config['resources'] = resource_list or []
         config['prompts'] = prompt_list or []
-        logger.info(f"Updated {len(resource_list or [])} resources and {len(prompt_list or [])} prompts for {server.serverName} during health refresh")
+        logger.info(
+            f"Updated {len(resource_list or [])} resources and {len(prompt_list or [])} prompts for {server.serverName} during health refresh")
 
         server.config = config
         await server.save()
