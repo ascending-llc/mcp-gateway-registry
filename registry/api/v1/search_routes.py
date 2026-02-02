@@ -4,15 +4,13 @@ from registry.auth.dependencies import CurrentUser
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Request
-
+from packages.models.enums import ServerEntityType
 from registry.services.search.service import faiss_service
 from registry.core.telemetry_decorators import (
     track_registry_operation,
     track_tool_discovery,
 )
 from packages.vector.enum.enums import SearchType
-from registry.schemas.server_api_schemas import convert_to_detail
-from registry.services.server_service import server_service_v1
 from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
 from ...services.agent_service import agent_service
 
@@ -268,160 +266,21 @@ class ToolDiscoveryResponse(BaseModel):
     matches: List[ToolDiscoveryMatch]
 
 
-@router.post("/search/tools")
-@track_tool_discovery(extract_query=lambda body, **kw: body.get("query", "unknown"))
-async def discover_tools(
-        request: Request,
-        body: dict,
-        user_context: CurrentUser
-) -> ToolDiscoveryResponse:
-    """    
-    Request body:
-    {
-        "query": "search GitHub pull requests",
-        "top_n": 5
-    }
-    
-    Returns:
-    {
-        "query": "search GitHub pull requests",
-        "total_matches": 2,
-        "matches": [
-            {
-                "tool_name": "search_pull_requests",
-                "server_name": "github-copilot",
-                "server_path": "/github",
-                "description": "Search for pull requests...",
-                "input_schema": {...},
-                "discovery_score": 0.9902,
-                "transport_type": "streamable-http"
-            }
-        ]
-    }
-    """
-    query = body.get("query", "")
-    top_n = body.get("top_n", 5)
-
-    if not query:
-        raise HTTPException(
-            status_code=400,
-            detail="query parameter is required"
-        )
-
-    logger.info(f"🔍 Tool discovery from user '{user_context.get('username', 'unknown')}': '{query}'")
-
-    # PROTOTYPE: Hard-code Tavily Search server discovery
-    # In production, this would query your intelligent_tool_finder service
-
-    tavily_server_path = "/tavilysearch"
-    tavily_tools = [
-        {
-            "tool_name": "tavily_search",
-            "description": "Search the web using Tavily's AI-powered search engine",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "The search query"},
-                    "max_results": {"type": "integer", "description": "Maximum number of results to return",
-                                    "default": 5},
-                    "search_depth": {"type": "string", "enum": ["basic", "advanced"], "description": "Search depth",
-                                     "default": "basic"},
-                    "include_domains": {"type": "array", "items": {"type": "string"},
-                                        "description": "Domains to include in search"},
-                    "exclude_domains": {"type": "array", "items": {"type": "string"},
-                                        "description": "Domains to exclude from search"}
-                },
-                "required": ["query"]
-            },
-            "discovery_score": 0.9952
-        },
-        {
-            "tool_name": "tavily_extract",
-            "description": "Extract content from specific URLs using Tavily",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "urls": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of URLs to extract content from"
-                    }
-                },
-                "required": ["urls"]
-            },
-            "discovery_score": 0.9958
-        },
-        {
-            "tool_name": "tavily_map",
-            "description": "Map and analyze a website's structure using Tavily",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "url": {"type": "string", "description": "The URL to map"}
-                },
-                "required": ["url"]
-            },
-            "discovery_score": 0.9963
-        },
-        {
-            "tool_name": "tavily_crawl",
-            "description": "Crawl a website to gather comprehensive information",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "url": {"type": "string", "description": "The URL to crawl"},
-                    "max_depth": {"type": "integer", "description": "Maximum crawl depth", "default": 2}
-                },
-                "required": ["url"]
-            },
-            "discovery_score": 0.9955
-        }
-    ]
-
-    # Filter based on query keywords (simple prototype logic)
-    query_lower = query.lower()
-    matches = []
-
-    for tool in tavily_tools[:top_n]:
-        # Simple keyword matching for prototype
-        tool_desc_lower = tool["description"].lower()
-        tool_name_lower = tool["tool_name"].lower()
-
-        # Boost score if query matches tool name or description
-        score = tool["discovery_score"]
-        if any(word in tool_name_lower or word in tool_desc_lower
-               for word in query_lower.split()):
-            score = min(1.0, score + 0.1)
-
-        matches.append(
-            ToolDiscoveryMatch(
-                tool_name=tool["tool_name"],
-                server_id="6972e222755441652c23090f",
-                server_path=tavily_server_path,
-                description=tool["description"],
-                input_schema=tool["input_schema"],
-                discovery_score=score,
-                transport_type="streamable-http"
-            )
-        )
-
-    # Sort by score
-    matches.sort(key=lambda x: x.discovery_score, reverse=True)
-
-    logger.info(f"✅ Found {len(matches)} tools for query: '{query}'")
-
-    return ToolDiscoveryResponse(
-        query=query,
-        total_matches=len(matches),
-        matches=matches
+class SearchRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=512, description="Natural language query")
+    top_n: int = Field(1, description="Number of results to return")
+    search_type: SearchType = Field(default=SearchType.HYBRID, description="Type of search to perform")
+    type_list: Optional[List[ServerEntityType]] = Field(
+        default_factory=lambda: list(ServerEntityType),
+        description="Type of document to return (default: all types)"
     )
+    include_disabled: bool = Field(default=False, description="Include disabled results")
 
 
 @router.post("/search/servers")
 @track_registry_operation("search", resource_type="server")
 async def search_servers(
-        request: Request,
-        body: dict,
+        search: SearchRequest,
         user_context: CurrentUser
 ):
     """
@@ -432,58 +291,38 @@ async def search_servers(
     {
         "query": "search",
         "top_n": 5,
-        "search_type": "hybrid",  # Optional: "near_text", "bm25", or "hybrid" (default: "hybrid")
+        "search_type": "hybrid",  # Optional: "near_text", near_vector,"bm25", or "hybrid" (default: "hybrid")
+        "type_list": ["server"], # Optional: ["server", "tool", "resource", "prompt"] (default: ["server"])
         "include_disabled": false  # Optional: include disabled servers (default: false)
     }
     
     Returns raw JSON that can be converted to ExtendedMCPServer format.
     """
-    query = body.get("query", "")
-    top_n = body.get("top_n", 10)
-
-    # Get search_type from body or use default (hybrid)
-    search_type_str = body.get("search_type", "hybrid").lower()
-    search_type_mapping = {
-        "near_text": SearchType.NEAR_TEXT,
-        "bm25": SearchType.BM25,
-        "hybrid": SearchType.HYBRID,
-        "similarity_store": SearchType.SIMILARITY_STORE
-    }
-    search_type = search_type_mapping.get(search_type_str, SearchType.HYBRID)
-
-    if search_type_str not in search_type_mapping:
-        logger.warning(f"Invalid search_type '{search_type_str}', using HYBRID")
+    query = search.query
+    top_n = search.top_n
 
     logger.info(f"🔍 Server search from user '{user_context.get('username', 'unknown')}': "
-                f"query='{query}', top_n={top_n}, search_type={search_type}")
+                f"query='{query}', top_n={top_n}, search_type={search.search_type}")
 
-    # Search with reranking using specialized repository
+    filters = {
+        "enabled": not search.include_disabled,
+        "entity_type": [dt.value for dt in search.type_list]
+    }
     search_results = await mcp_server_repo.asearch_with_rerank(
         query=query,
         k=top_n,
         candidate_k=min(top_n * 5, 100),  # Fetch 5x candidates for reranking (max 100)
-        search_type=search_type,
+        search_type=search.search_type,
+        filters=filters
     )
-
     logger.info(
         "Search completed: %d results for query=%r",
         len(search_results),
         query,
     )
-
-    # Convert search results to server details
-    servers = []
-    for search_result in search_results:
-        server_id = search_result.get("server_id")
-        if server_id:
-            server = await server_service_v1.get_server_by_id(server_id=server_id)
-            if server:
-                servers.append(convert_to_detail(server))
-
-    logger.info(f"✅ Found {len(servers)} servers")
-
+    logger.info(f"✅ Found {len(search_results)} servers")
     return {
         "query": query,
-        "total": len(servers),
-        "servers": servers
+        "total": len(search_results),
+        "servers": search_results
     }

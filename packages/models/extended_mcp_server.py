@@ -44,12 +44,17 @@ Key Principle:
 - Identity & Metadata and Additional Fields are stored at root level
 - numTools is a calculated field, not stored in the database
 """
-
+import logging
 from datetime import datetime
 from typing import Any, ClassVar, Dict, List, Optional, Set, Literal
 from pydantic import Field
 from beanie import Document, PydanticObjectId
 from langchain_core.documents import Document as LangChainDocument
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from packages.models.enums import ServerEntityType
+from packages.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class ExtendedMCPServer(Document):
@@ -117,22 +122,17 @@ class ExtendedMCPServer(Document):
     """
 
     # ========== Base Fields (from MCPServerDocument) ==========
-    serverName: str = Field(..., description="Server name for display",
-                            json_schema_extra={"vector_role": "content"})  # Vectorized for search
+    serverName: str = Field(..., description="Server name for display")
     config: Dict[str, Any] = Field(...,
                                    description="MCP server configuration (oauth, apiKey, capabilities, tools, etc.)")
     author: PydanticObjectId = Field(..., description="User who created this server")
 
     # ========== Registry-Specific Root-Level Fields ==========
     # These fields are specific to the registry and should NOT be in config
-    path: str = Field(..., description="API path for this server (e.g., /mcp/github)",
-                      json_schema_extra={"vector_role": "content"})  # Vectorized for search
-    tags: List[str] = Field(default_factory=list, description="Tags for categorization",
-                            json_schema_extra={"vector_role": "metadata"})
-    scope: str = Field(default="private_user", description="Access level: shared_app, shared_user, private_user",
-                       json_schema_extra={"vector_role": "metadata"})
-    status: str = Field(default="active", description="Operational state: active, inactive, error",
-                        json_schema_extra={"vector_role": "metadata"})
+    path: str = Field(..., description="API path for this server (e.g., /mcp/github)")
+    tags: List[str] = Field(default_factory=list, description="Tags for categorization")
+    scope: str = Field(default="private_user", description="Access level: shared_app, shared_user, private_user")
+    status: str = Field(default="active", description="Operational state: active, inactive, error")
     numTools: int = Field(default=0, alias="numTools", description="Number of tools (calculated from toolFunctions)")
     numStars: int = Field(default=0, alias="numStars", description="Number of stars/favorites")
 
@@ -156,94 +156,317 @@ class ExtendedMCPServer(Document):
     # ========== Vector Search Integration (Weaviate) ==========
     COLLECTION_NAME: ClassVar[str] = "Jarvis_Registry"
 
-    def to_document(self) -> LangChainDocument:
+    def to_documents(self) -> List[LangChainDocument]:
         """
-        Convert ExtendedMCPServer to LangChain Document for vector storage.
-        
-        Storage format:
-        - content: Vectorized text (serverName | path | title | description | tools | resources | prompts)
-        - metadata: Non-vectorized fields (serverName, path, scope, status)
+        Convert ExtendedMCPServer to multiple searchable documents.
 
+        Strategy:
+        1. Split by semantic units (server, tools, resources, prompts)
+        2. Apply RecursiveCharacterTextSplitter to oversized content
+        3. Maintain parent-child relationship via server_id
+
+        Returns:
+            List of LangChain Documents with entity_type metadata
         """
-        content = self.generate_content()
+        docs = []
 
-        # Auto-discover metadata fields using annotations
-        metadata = {'collection': self.COLLECTION_NAME}
+        # 1. Server Overview
+        server_docs = self._create_server_docs()
+        docs.extend(server_docs)
 
-        for field_name in self._get_fields_by_role("metadata"):
-            value = getattr(self, field_name, None)
-            metadata_key = self._camel_to_snake(field_name)
-            metadata[metadata_key] = value
+        # 2. Tools
+        tool_functions = self.config.get('toolFunctions', {})
+        for tool_name, tool_data in tool_functions.items():
+            tool_docs = self._create_tool_docs(tool_name, tool_data)
+            docs.extend(tool_docs)
 
-        # Always include server_id for lookups (MongoDB _id)
-        metadata['server_id'] = str(self.id) if self.id else None
+        # 3. Resources
+        resources = self.config.get('resources', [])
+        for resource in resources:
+            resource_docs = self._create_resource_docs(resource)
+            docs.extend(resource_docs)
 
-        return LangChainDocument(
-            page_content=content,
-            metadata=metadata,
+        # 4. Prompts
+        prompts = self.config.get('prompts', [])
+        for prompt in prompts:
+            prompt_docs = self._create_prompt_docs(prompt)
+            docs.extend(prompt_docs)
+
+        logger.info(f"Generated {len(docs)} documents for server {self.serverName} "
+                    f"(server:{len(server_docs)}, tools:{len(tool_functions)}, "
+                    f"resources:{len(resources)}, prompts:{len(prompts)})")
+
+        return docs
+
+    def _create_server_docs(self) -> List[LangChainDocument]:
+        """Create Server Overview document(s) with text splitting if needed."""
+        content = self.generate_server_content()
+
+        base_metadata = self._get_base_metadata(ServerEntityType.SERVER)
+        return self._split_if_needed(content, base_metadata)
+
+    def _create_tool_docs(self, tool_name: str, tool_data: dict) -> List[LangChainDocument]:
+        """Create Tool document(s) with text splitting if needed."""
+        content = self.generate_tool_content(tool_name, tool_data)
+
+        metadata = self._get_base_metadata(ServerEntityType.TOOL)
+        metadata.update({
+            "tool_name": tool_name,
+            "original_mcp_name": tool_data.get('mcpToolName', tool_name)
+        })
+
+        return self._split_if_needed(content, metadata)
+
+    def _create_resource_docs(self, resource: dict) -> List[LangChainDocument]:
+        """Create Resource document(s) with text splitting if needed."""
+        content = self.generate_resource_content(resource)
+
+        metadata = self._get_base_metadata(ServerEntityType.RESOURCE)
+        metadata.update({
+            "resource_name": resource.get('name', ''),
+            "resource_uri": resource.get('uri', '')
+        })
+
+        return self._split_if_needed(content, metadata)
+
+    def _create_prompt_docs(self, prompt: dict) -> List[LangChainDocument]:
+        """Create Prompt document(s) with text splitting if needed."""
+        content = self.generate_prompt_content(prompt)
+
+        metadata = self._get_base_metadata(ServerEntityType.PROMPT)
+        metadata.update({
+            "prompt_name": prompt.get('name', '')
+        })
+
+        return self._split_if_needed(content, metadata)
+
+    def _get_base_metadata(self, entity_type: ServerEntityType) -> Dict[str, Any]:
+        """Get base metadata shared by all document types."""
+        metadata = {
+            "collection": self.COLLECTION_NAME,
+            "entity_type": entity_type,
+            "server_id": str(self.id) if self.id else None,
+            "server_name": self.serverName,
+            "scope": self.scope,
+        }
+        enabled = False
+        if self.config:
+            enabled = self.config.get('enabled')
+        metadata.update({"enabled": enabled})
+        return metadata
+
+    def _split_if_needed(
+            self,
+            content: str,
+            metadata: Dict[str, Any]
+    ) -> List[LangChainDocument]:
+        """
+        Split content if it exceeds MAX_CHUNK_SIZE using RecursiveCharacterTextSplitter.
+
+        Args:
+            content: Original content
+            metadata: Base metadata to attach to all chunks
+
+        Returns:
+            List of LangChain Documents (1 if no split needed, N if split)
+        """
+        if len(content) <= settings.MAX_CHUNK_SIZE:
+            return [LangChainDocument(page_content=content, metadata=metadata)]
+
+        # Split required
+        entity_identifier = metadata.get("tool_name") or metadata.get("server_name") or "unknown"
+        logger.warning(
+            f"Content exceeds {settings.MAX_CHUNK_SIZE} chars ({len(content)} chars), splitting... "
+            f"[{metadata.get('entity_type')}: {entity_identifier}]"
         )
 
-    def generate_content(self) -> str:
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=settings.MAX_CHUNK_SIZE,
+            chunk_overlap=settings.CHUNK_OVERLAP,
+            separators=["\n## ", "\n### ", "\n\n", "\n", " | ", " ", ""],
+            length_function=len
+        )
+
+        chunks = splitter.split_text(content)
+
+        docs = []
+        for i, chunk in enumerate(chunks):
+            chunk_metadata = metadata.copy()
+            chunk_metadata.update({
+                "chunk_index": i,
+                "total_chunks": len(chunks),
+                "is_chunked": True
+            })
+            docs.append(LangChainDocument(page_content=chunk, metadata=chunk_metadata))
+
+        logger.info(f"Split into {len(chunks)} chunks")
+        return docs
+
+    def generate_server_content(self) -> str:
         """
-        Generate combined searchable text for semantic search.
-        
-        Format: serverName | path | config.title | config.description | 
-                toolFunctions (name + description) | 
-                resources (name + description) | 
-                prompts (name + description)
-        
-        Returns:
-            Combined text string separated by |
+        Generate content for Server Overview document.
+
+        Format: serverName | path | title | description |
+                Contains X tools, Y resources, Z prompts | Tags: tags
         """
-        parts = [self.serverName, self.path]
-        # Config fields
-        if self.config:
-            parts.append(self.config.get('title', ''))
-            parts.append(self.config.get('description', ''))
+        parts = [
+            self.serverName,
+            self.path,
+            self.config.get('title', ''),
+            self.config.get('description', '')
+        ]
 
-            # Tool functions
-            tool_functions = self.config.get('toolFunctions', {})
-            for func_data in tool_functions.values():
-                if isinstance(func_data, dict) and 'function' in func_data:
-                    func = func_data['function']
-                    parts.append(func.get('name', ''))
-                    parts.append(func.get('description', ''))
+        # Statistics
+        num_tools = len(self.config.get('toolFunctions', {}))
+        num_resources = len(self.config.get('resources', []))
+        num_prompts = len(self.config.get('prompts', []))
 
-            # Resources
-            resources = self.config.get('resources', [])
-            for res in resources:
-                if isinstance(res, dict):
-                    parts.append(res.get('name', ''))
-                    parts.append(res.get('description', ''))
+        parts.append(f"Contains {num_tools} tools, {num_resources} resources, {num_prompts} prompts")
 
-            # Prompts
-            prompts = self.config.get('prompts', [])
-            for prompt in prompts:
-                if isinstance(prompt, dict):
-                    parts.append(prompt.get('name', ''))
-                    parts.append(prompt.get('description', ''))
+        # Tags
+        if self.tags:
+            parts.append(f"Tags: {', '.join(self.tags)}")
 
-        # Filter out empty strings and join with |
+        return ' | '.join(filter(None, parts))
+
+    def generate_tool_content(self, tool_name: str, tool_data: dict) -> str:
+        """
+        Generate content for Tool document.
+
+        Format: tool_name | description |
+                Parameters: param1 (type, required/optional, description), ...
+        """
+        parts = [tool_name]
+
+        if isinstance(tool_data, dict) and 'function' in tool_data:
+            func = tool_data['function']
+
+            # Description
+            description = func.get('description', '')
+            if description:
+                parts.append(description)
+
+            # Parameters
+            params = func.get('parameters', {})
+            if params and 'properties' in params:
+                param_strs = []
+                required_params = params.get('required', [])
+
+                for param_name, param_schema in params['properties'].items():
+                    param_type = param_schema.get('type', 'unknown')
+                    param_desc = param_schema.get('description', '')
+                    required = 'required' if param_name in required_params else 'optional'
+
+                    # Truncate long descriptions
+                    if len(param_desc) > 200:
+                        param_desc = param_desc[:197] + '...'
+
+                    param_str = f"{param_name} ({param_type}, {required}"
+                    if param_desc:
+                        param_str += f", {param_desc}"
+                    param_str += ")"
+
+                    param_strs.append(param_str)
+
+                if param_strs:
+                    parts.append(f"Parameters: {', '.join(param_strs)}")
+
+        return ' | '.join(filter(None, parts))
+
+    def generate_resource_content(self, resource: dict) -> str:
+        """
+        Generate content for Resource document.
+
+        Format: name | description | URI: uri_template |
+                Example: example_uri | Use case: inferred_use_case
+        """
+        name = resource.get('name', '')
+        description = resource.get('description', '')
+        uri = resource.get('uri', '')
+        mime_type = resource.get('mimeType', '')
+
+        parts = [name, description]
+
+        if uri:
+            parts.append(f"URI template: {uri}")
+
+        if mime_type:
+            parts.append(f"MIME type: {mime_type}")
+
+        return ' | '.join(filter(None, parts))
+
+    def generate_prompt_content(self, prompt: dict) -> str:
+        """
+        Generate content for Prompt document.
+
+        Format: name | description |
+                Required: required_args | Optional: optional_args
+        """
+        name = prompt.get('name', '')
+        description = prompt.get('description', '')
+        arguments = prompt.get('arguments', [])
+
+        parts = [name, description]
+
+        # Separate required and optional arguments
+        required_args = []
+        optional_args = []
+
+        for arg in arguments:
+            arg_name = arg.get('name', '')
+            arg_desc = arg.get('description', '')
+            arg_str = f"{arg_name} ({arg_desc})" if arg_desc else arg_name
+
+            if arg.get('required', False):
+                required_args.append(arg_str)
+            else:
+                optional_args.append(arg_str)
+
+        if required_args:
+            parts.append(f"Required: {', '.join(required_args)}")
+        if optional_args:
+            parts.append(f"Optional: {', '.join(optional_args)}")
+
         return ' | '.join(filter(None, parts))
 
     @classmethod
     def from_document(cls, document: LangChainDocument) -> dict:
         """
-        Create ExtendedMCPServer instance from LangChain Document.
-        
-        Note: This creates a minimal instance from metadata.
-        Full server data should be fetched from MongoDB.
+        Extract metadata from any document type.
 
+        Note: This returns minimal metadata.
+        Full server data should be fetched from MongoDB using server_id.
+
+        Returns:
+            Dict with document metadata including entity_type
         """
         metadata = document.metadata
-        return {
+
+        result = {
             "server_id": metadata.get('server_id'),
-            "path": metadata.get('path'),
-            "scope": metadata.get('scope'),
             "server_name": metadata.get('server_name'),
-            "status": metadata.get('status'),
-            "content": metadata.get('content'),
+            "entity_type": metadata.get('entity_type'),
+            "scope": metadata.get('scope'),
+            "enabled": metadata.get('enabled'),
+            "content": document.page_content
         }
+
+        entity_type = metadata.get('entity_type')
+        if entity_type == ServerEntityType.TOOL:
+            result['tool_name'] = metadata.get('tool_name')
+            result['original_mcp_name'] = metadata.get('original_mcp_name')
+        elif entity_type == ServerEntityType.RESOURCE:
+            result['resource_name'] = metadata.get('resource_name')
+            result['resource_uri'] = metadata.get('resource_uri')
+        elif entity_type == ServerEntityType.PROMPT:
+            result['prompt_name'] = metadata.get('prompt_name')
+
+        # Handle chunked documents
+        if metadata.get('is_chunked'):
+            result['chunk_index'] = metadata.get('chunk_index')
+            result['total_chunks'] = metadata.get('total_chunks')
+
+        return result
 
     @classmethod
     def from_server_info(
@@ -299,39 +522,6 @@ class ExtendedMCPServer(Document):
             tags=server_info.get('tags', []),
             author=server_info.get('author') or PydanticObjectId(),
         )
-
-    @staticmethod
-    def get_safe_metadata_fields() -> Set[str]:
-        """
-        Get safe metadata fields that can be updated without re-vectorization.
-
-        Auto-discovers fields marked with vector_role="metadata".
-
-        Returns:
-            Set of safe field names (matching Weaviate metadata field names in snake_case)
-        """
-        metadata_fields = ExtendedMCPServer._get_fields_by_role("metadata")
-        return {ExtendedMCPServer._camel_to_snake(f) for f in metadata_fields}
-
-    @staticmethod
-    def _camel_to_snake(name: str) -> str:
-        """Convert camelCase to snake_case"""
-        return ''.join(['_' + c.lower() if c.isupper() else c for c in name]).lstrip('_')
-
-    @classmethod
-    def _get_fields_by_role(cls, role: Literal["content", "metadata"]) -> Set[str]:
-        """
-        Automatically discover fields marked with specific vector_role.
-
-        This eliminates manual maintenance of field lists and ensures
-        consistency between field definitions and vector storage logic.
-        """
-        fields = set()
-        for field_name, field_info in cls.model_fields.items():
-            extra = field_info.json_schema_extra
-            if extra and extra.get("vector_role") == role:
-                fields.add(field_name)
-        return fields
 
 
 MCPServerDocument = ExtendedMCPServer
