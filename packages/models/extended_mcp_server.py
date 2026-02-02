@@ -52,6 +52,7 @@ from beanie import Document, PydanticObjectId
 from langchain_core.documents import Document as LangChainDocument
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from packages.models.enums import ServerEntityType
+from packages.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -154,8 +155,6 @@ class ExtendedMCPServer(Document):
 
     # ========== Vector Search Integration (Weaviate) ==========
     COLLECTION_NAME: ClassVar[str] = "Jarvis_Registry"
-    MAX_CHUNK_SIZE: ClassVar[int] = 2048
-    CHUNK_OVERLAP: ClassVar[int] = 200
 
     def to_documents(self) -> List[LangChainDocument]:
         """
@@ -271,16 +270,16 @@ class ExtendedMCPServer(Document):
         Returns:
             List of LangChain Documents (1 if no split needed, N if split)
         """
-        if len(content) <= self.MAX_CHUNK_SIZE:
+        if len(content) <= settings.MAX_CHUNK_SIZE:
             return [LangChainDocument(page_content=content, metadata=metadata)]
 
         # Split required
-        logger.warning(f"Content exceeds {self.MAX_CHUNK_SIZE} chars ({len(content)} chars), splitting... "
+        logger.warning(f"Content exceeds {settings.MAX_CHUNK_SIZE} chars ({len(content)} chars), splitting... "
                        f"[{metadata.get('entity_type')}: {metadata.get('tool_name') or metadata.get('server_name')}]")
 
         splitter = RecursiveCharacterTextSplitter(
-            chunk_size=self.MAX_CHUNK_SIZE,
-            chunk_overlap=self.CHUNK_OVERLAP,
+            chunk_size=settings.MAX_CHUNK_SIZE,
+            chunk_overlap=settings.CHUNK_OVERLAP,
             separators=["\n## ", "\n### ", "\n\n", "\n", " | ", " ", ""],
             length_function=len
         )

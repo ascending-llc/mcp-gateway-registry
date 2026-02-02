@@ -20,7 +20,7 @@ from packages.models._generated import (
 )
 from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 from packages.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
-
+from packages.core.config import settings
 
 class MongoDB:
     """MongoDB connection manager with connection pooling."""
@@ -38,9 +38,9 @@ class MongoDB:
             return
         # Get MongoDB configuration from environment variables
         # Try to get MONGO_URI first (format: mongodb://host:port/dbname)
-        mongo_uri = os.getenv("MONGO_URI", "mongodb://127.0.0.1:27017/jarvis")
-        mongo_username = os.getenv("MONGODB_USERNAME", "")
-        mongo_password = os.getenv("MONGODB_PASSWORD", "")
+        mongo_uri = settings.MONGO_URI
+        mongo_username = settings.MONGODB_USERNAME
+        mongo_password = settings.MONGODB_USERNAME
         # Parse MONGO_URI to extract db_name if present
         # Extract database name from URI
         uri_parts = mongo_uri.rsplit('/', 1)
