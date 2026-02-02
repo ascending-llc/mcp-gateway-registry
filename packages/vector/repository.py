@@ -268,7 +268,7 @@ class Repository(Generic[T]):
             True if update successful
         """
         try:
-            pass
+            return False
         except Exception as e:
             logger.error(f"Incremental update failed: {e}", exc_info=True)
             return False
