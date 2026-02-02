@@ -148,6 +148,9 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.auth
+      args:
+        SCHEMA_VERSION: ${SCHEMA_VERSION:-}
+        GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     environment:
       - AWS_REGION=${AWS_REGION:-us-east-1}
       # Keycloak configuration
@@ -173,6 +176,8 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
       - OTEL_SERVICE_NAME=auth-server
       - REGISTRY_CLIENT_URL=${REGISTRY_CLIENT_URL:-http://registry-frontend}
+      # MongoDB configuration
+      - MONGO_URI=mongodb://registry-mongodb:27017/jarvis
     ports:
       - "8888:8888"
     volumes:
@@ -212,8 +217,6 @@ services:
       - REGISTRY_PASSWORD=${ADMIN_PASSWORD}
       - JWT_SECRET_KEY=${SECRET_KEY}
       - WEAVIATE_HOST=weaviate
-      # MongoDB configuration
-      - MONGO_URI=mongodb://registry-mongodb:27017/jarvis
     volumes:
       - ./auth_server/scopes.yml:/app/auth_server/scopes.yml
     ports:

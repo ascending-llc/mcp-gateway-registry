@@ -12,8 +12,9 @@ interface ServerAuthorizationModalProps {
   serverId: string;
   status: SERVER_CONNECTION | undefined;
   showApiKeyDialog: boolean;
-  setShowApiKeyDialog: (show: boolean) => void;
+  handleCancelAuth: () => void;
   onShowToast?: (message: string, type: 'success' | 'error') => void;
+  onCloseAuthDialog: () => void;
 }
 
 const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
@@ -21,8 +22,9 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
   serverId,
   status,
   showApiKeyDialog,
-  setShowApiKeyDialog,
+  handleCancelAuth,
   onShowToast,
+  onCloseAuthDialog,
 }) => {
   const { refreshServerData, getServerStatusByPolling, cancelPolling } = useServer();
 
@@ -31,20 +33,24 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
   const isConnecting = status === SERVER_CONNECTION.CONNECTING;
   const isAuthenticated = status === SERVER_CONNECTION.CONNECTED;
 
+  const onClose = () => {
+    onCloseAuthDialog();
+  };
+
   const onCancel = () => {
     cancelPolling?.(serverId);
     refreshServerData?.();
-    setShowApiKeyDialog(false);
+    handleCancelAuth();
+    onCloseAuthDialog();
   };
 
   const onClickRevoke = async () => {
     if (isConnecting || isAuthenticated) {
       try {
         setLoading(true);
-        const result = await SERVICES.MCP.cancelAuth(serverId);
+        const result = await SERVICES.MCP.revokeAuth(serverId);
         if (result.success) {
           onShowToast?.(result?.message || 'OAuth flow cancelled', 'success');
-          setShowApiKeyDialog(false);
         } else {
           onShowToast?.(result?.message || 'Unknown error', 'error');
         }
@@ -55,7 +61,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
         refreshServerData?.();
       }
     }
-    setShowApiKeyDialog(false);
+    onCloseAuthDialog();
   };
 
   const oauthInit = async () => {
@@ -65,7 +71,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
       if (result?.authorization_url) {
         window.open(result.authorization_url, '_blank');
         getServerStatusByPolling?.(serverId);
-        setShowApiKeyDialog(false);
+        onCloseAuthDialog();
       } else {
         onShowToast?.('Failed to get auth URL', 'error');
       }
@@ -75,6 +81,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
       setLoading(false);
     }
   };
+
   const handleAuth = async () => {
     try {
       setLoading(true);
@@ -82,11 +89,9 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
       if (result.success) {
         await getServerStatusByPolling?.(serverId, state => {
           if (state === SERVER_CONNECTION.CONNECTED) {
-            cancelPolling?.(serverId);
             onShowToast?.(result?.message || 'Server reinitialized successfully', 'success');
-            setShowApiKeyDialog(false);
+            onCloseAuthDialog();
           } else if (state === SERVER_CONNECTION.DISCONNECTED || state === SERVER_CONNECTION.ERROR) {
-            cancelPolling?.(serverId);
             oauthInit();
           }
         });
@@ -103,7 +108,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
   return (
     <Dialog
       open={showApiKeyDialog}
-      onClose={setShowApiKeyDialog}
+      onClose={onCloseAuthDialog}
       className='fixed inset-0 z-50 flex items-center justify-center p-4'
     >
       <div className='fixed inset-0 bg-black/50' aria-hidden='true' />
@@ -128,10 +133,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
               </span>
             )}
           </div>
-          <button
-            onClick={() => setShowApiKeyDialog(false)}
-            className='text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
-          >
+          <button onClick={onClose} className='text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'>
             <XMarkIcon className='h-6 w-6' />
           </button>
         </div>

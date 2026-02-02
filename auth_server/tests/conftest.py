@@ -24,9 +24,12 @@ def auth_server_app():
 
 @pytest.fixture
 def test_client(auth_server_app) -> Generator[TestClient, None, None]:
-    """Create a test client for the auth server."""
-    with TestClient(auth_server_app) as client:
-        yield client
+    """Create a test client for the auth server with mocked MongoDB."""
+    # Mock MongoDB initialization to prevent actual connection attempts
+    with patch('auth_server.server.init_mongodb'), \
+         patch('packages.database.mongodb.MongoDB.connect_db'):
+        with TestClient(auth_server_app) as client:
+            yield client
 
 
 @pytest.fixture

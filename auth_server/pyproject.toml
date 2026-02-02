@@ -39,7 +39,6 @@ dependencies = [
 
     # Shared packages
     "packages",
-
 ]
 
 [tool.uv]
