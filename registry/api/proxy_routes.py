@@ -596,32 +596,34 @@ async def execute_tool(
             )
         
         # Update metrics context with resolved server name
-        metrics_ctx.set_server_name(server.serverName)
+        server_name = getattr(server, "serverName", None) or server.path.strip("/")
+        metrics_ctx.set_server_name(server_name)
+        
+        # Build target URL using shared helper (check config first to fail early)
+        target_url = _build_target_url(server)
+        
+        # Build MCP JSON-RPC request
+        mcp_request_body = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": arguments
+            }
+        }
+        
+        # Build authenticated headers using shared helper
+        headers = await _build_authenticated_headers(
+            server=server,
+            auth_context=user_context,
+            additional_headers={
+                "X-Tool-Name": tool_name,
+                "Accept": "application/json, text/event-stream"  # MCP servers require both
+            }
+        )
         
         try:
-            target_url = _build_target_url(server)
-            
-            # Build MCP JSON-RPC request
-            mcp_request_body = {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {
-                    "name": tool_name,
-                    "arguments": arguments
-                }
-            }
-            
-            # Build authenticated headers using shared helper
-            headers = await _build_authenticated_headers(
-                server=server,
-                auth_context=user_context,
-                additional_headers={
-                    "X-Tool-Name": tool_name,
-                    "Accept": "application/json, text/event-stream"  # MCP servers require both
-                }
-            )
-            
             # Client can accept both JSON and SSE (as indicated in Accept header)
             accept_sse = True
             
@@ -722,7 +724,7 @@ async def read_resource(
                 detail=f"Server not found: {body.server_id}"
             )
         
-        metrics_ctx.set_server_name(server.serverName)
+        metrics_ctx.set_server_name(getattr(server, "serverName", None) or server.path.strip("/"))
         
         try:
             # Build target URL using shared helper (for future implementation)
@@ -810,7 +812,7 @@ async def execute_prompt(
                 detail=f"Server not found: {body.server_id}"
             )
         
-        metrics_ctx.set_server_name(server.serverName)
+        metrics_ctx.set_server_name(getattr(server, "serverName", None) or server.path.strip("/"))
         
         try:
             # Build target URL using shared helper (for future implementation)
