@@ -224,7 +224,7 @@ class Repository(Generic[T]):
             # Extract new metadata
             new_metadata = {
                 "scope": instance.scope,
-                "enabled": instance.config.get("enabled", False),  # Key field for enable/disable
+                "enabled": instance.config.get("enabled", False) if instance.config else False,  # Key field for enable/disable
             }
             logger.debug(f"Updating metadata for {instance}: {new_metadata}")
 
