@@ -816,7 +816,7 @@ async def execute_prompt(
         
         try:
             # Build target URL using shared helper (for future implementation)
-            target_url = _build_target_url(server)
+            _build_target_url(server)
             
             # MOCK: Return hardcoded prompt response for POC
             topic = arguments.get("topic", "general topic")
