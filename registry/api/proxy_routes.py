@@ -100,7 +100,7 @@ async def _build_authenticated_headers(
         
         # Merge auth headers with case-insensitive override logic
         # Protected headers that won't be overridden by auth headers
-        protected_headers = {"x-user-id", "x-username", "x-client-id", "x-scopes", settings.internal_auth_header.lower(), "accept"}
+        protected_headers = {"x-user-id", "x-username", "x-client-id", "x-scopes", "accept"}
         
         # Build a case-insensitive map of existing header names to their original keys
         lowercase_header_map = {k.lower(): k for k in headers.keys()}
