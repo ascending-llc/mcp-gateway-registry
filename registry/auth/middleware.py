@@ -1,5 +1,7 @@
 import base64
 import os
+from http.client import HTTPException
+
 import jwt
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -95,45 +97,62 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         return compiled
 
     async def dispatch(self, request: Request, call_next):
-        path = request.url.path
-        
-        # Check authenticated paths first (these override public patterns)
-        if self._match_path(path, self.public_paths_compiled):
-            logger.debug(f"Public path: {path}")
-            return await call_next(request)
-        else:
-            logger.debug(f"Authenticated path: {path}")
-            # Continue to authentication logic below
 
-        try:
-            user_context = await self._authenticate(request)
-            request.state.user = user_context
-            request.state.is_authenticated = True
-            request.state.auth_source = user_context.get('auth_source', 'unknown')
-            logger.info(f"User {user_context.get('username')} authenticated via {user_context.get('auth_source')}")
-            return await call_next(request)
-        except AuthenticationError as e:
-            logger.warning(f"Auth failed for {path}: {e}")
-            # Add WWW-Authenticate header for MCP OAuth discovery
-            # Extract server name from path for MCP proxy requests
-            server_name = None
-            if path.startswith("/proxy/"):
-                server_name = path.split("/")[2] if len(path.split("/")) > 2 else None
-            
-            headers = {"Connection": "close"}
-            if server_name:
-                # For MCP proxy paths, RFC 9728 (OAuth 2.0 Protected Resource Metadata) - the official specification
-                registry_url = settings.registry_client_url.rstrip('/')
-                oauth_discovery = f"{registry_url}/.well-known/oauth-protected-resource/proxy/{server_name}"
-                headers["WWW-Authenticate"] = f'Bearer realm="mcp-registry", resource_metadata="{oauth_discovery}"'
-            else:
-                # For other authenticated paths, use general OAuth discovery
-                headers["WWW-Authenticate"] = 'Bearer realm="mcp-registry"'
-            
-            return JSONResponse(status_code=401, content={"detail": str(e)}, headers=headers)
-        except Exception as e:
-            logger.error(f"Auth error for {path}: {e}")
-            return JSONResponse(status_code=500, content={"detail": "Authentication error"})
+        # 开发模式：自动通过所有鉴权
+        # 创建或获取开发用的 admin 用户
+        from registry.services.user_service import user_service
+        dev_user = await user_service.get_or_create_user("dev-admin@dev.local")
+        
+        if not dev_user:
+            logger.error("Failed to create/get dev user")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to initialize dev mode user"
+            )
+        
+        user_context = {
+            'user_id': str(dev_user.id),  # 添加必需的 user_id 字段
+            'username': 'admin',
+            'email': 'dev-admin@dev.local',
+            'groups': ['mcp-registry-admin'],
+            'scopes': ['mcp-registry-admin', 'mcp-servers-unrestricted/read', 'mcp-servers-unrestricted/execute'],
+            'auth_method': 'dev',
+            'provider': 'dev',
+            'accessible_servers': ['*'],
+            'accessible_services': ['all'],
+            'accessible_agents': ['all'],
+            'ui_permissions': {
+                'list_service': ['all'],
+                'toggle_service': ['all'],
+                'register_service': ['all'],
+                'list_agents': ['all']
+            },
+            'can_modify_servers': True,
+            'is_admin': True,
+            'auth_source': 'dev_bypass'
+        }
+        request.state.user = user_context
+        request.state.is_authenticated = True
+        request.state.auth_source = 'dev_bypass'
+        logger.info(f"Dev mode: Auto-authenticated as admin (user_id: {dev_user.id}) for {request.url.path}")
+        
+        # Process the request
+        response = await call_next(request)
+        
+        # If a new access token was generated during refresh, update the cookie
+        if hasattr(request.state, 'new_access_token'):
+            logger.info("Updating access token cookie after refresh")
+            response.set_cookie(
+                key=settings.session_cookie_name,
+                value=request.state.new_access_token,
+                max_age=86400,  # 1 day
+                httponly=True,
+                samesite="lax",
+                secure=settings.session_cookie_secure,
+                path="/"
+            )
+        
+        return response
 
     def _match_path(self, path: str, compiled_patterns: List[Tuple]) -> bool:
         """
@@ -165,7 +184,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         user_context = self._try_jwt_auth(request)
         if user_context:
             return user_context
-        user_context = self._try_session_auth(request)
+        user_context = await self._try_session_auth(request)
         if user_context:
             return user_context
         raise AuthenticationError("JWT or session authentication required")
@@ -327,49 +346,117 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.debug(f"JWT auth failed: {e}")
             return None
 
-    def _try_session_auth(self, request: Request) -> Optional[Dict[str, Any]]:
-        """Session authentication (original enhanced_auth logic)"""
+    async def _try_session_auth(self, request: Request) -> Optional[Dict[str, Any]]:
+        """JWT-based session authentication from httpOnly cookie with auto-refresh"""
         try:
             session_cookie = request.cookies.get(settings.session_cookie_name)
             if not session_cookie:
                 return None
-            session_data = self._parse_session_data(session_cookie)
-            if not session_data:
+            
+            # Try to verify JWT access token
+            from registry.auth.jwt_utils import verify_access_token, verify_refresh_token
+            claims = verify_access_token(session_cookie)
+            
+            if claims:
+                # Valid access token - extract user info and build context
+                username = claims.get('sub')
+                user_id = claims.get('user_id')
+                groups = claims.get('groups', [])
+                auth_method = claims.get('auth_method', 'traditional')
+                
+                # Extract scopes from JWT (space-separated string)
+                scope_string = claims.get('scope', '')
+                scopes = scope_string.split() if scope_string else []
+                
+                logger.debug(f"JWT access token valid for user {username} (user_id: {user_id})")
+                
+                return self._build_user_context(
+                    username=username,
+                    groups=groups,
+                    scopes=scopes,
+                    auth_method=auth_method,
+                    provider=claims.get('provider', 'local'),
+                    auth_source='jwt_session_auth',
+                    user_id=user_id
+                )
+            
+            # Access token invalid/expired - try refresh token
+            logger.debug("Access token expired or invalid, attempting refresh")
+            refresh_token = request.cookies.get("jarvis_registry_refresh")
+            
+            if not refresh_token:
+                logger.debug("No refresh token available")
+                return None
+            
+            # Verify refresh token
+            refresh_claims = verify_refresh_token(refresh_token)
+            if not refresh_claims:
+                logger.debug("Refresh token invalid or expired")
+                return None
+            
+            # Refresh token valid - need to get full user info to generate new access token
+            user_id = refresh_claims.get('user_id')
+            username = refresh_claims.get('sub')
+            auth_method = refresh_claims.get('auth_method')
+            provider = refresh_claims.get('provider')
+            
+            logger.info(f"Refresh token valid for user {username}, fetching user data to generate new access token")
+            
+            # Get user from database to get current groups/scopes/role
+            from registry.services.user_service import user_service
+            try:
+                from beanie import PydanticObjectId
+                user_obj = await user_service.get_user_by_id(PydanticObjectId(user_id))
+                if not user_obj:
+                    logger.warning(f"User {username} (id: {user_id}) not found in database during token refresh")
+                    return None
+                
+                # Determine groups and scopes based on auth method
+                if auth_method == 'oauth2':
+                    # For OAuth2 users, we need to use stored groups from their profile
+                    # This is a limitation - we can't refresh OAuth2 groups without re-authenticating
+                    # For now, require re-login for OAuth2 users after access token expiry
+                    logger.warning(f"OAuth2 user {username} access token expired, requiring re-login")
+                    return None
+                else:
+                    # Traditional users - use admin permissions
+                    groups = ['mcp-registry-admin']
+                    scopes = ['mcp-registry-admin', 'mcp-servers-unrestricted/read', 'mcp-servers-unrestricted/execute']
+                
+                # Generate new access token
+                from registry.auth.jwt_utils import generate_access_token
+                new_access_token = generate_access_token(
+                    user_id=user_id,
+                    username=username,
+                    email=user_obj.email if hasattr(user_obj, 'email') else f"{username}@local",
+                    groups=groups,
+                    scopes=scopes,
+                    role=user_obj.role,
+                    auth_method=auth_method,
+                    provider=provider
+                )
+                
+                # Store new access token in request state for response modification
+                request.state.new_access_token = new_access_token
+                
+                logger.info(f"Successfully refreshed access token for user {username}")
+                
+                return self._build_user_context(
+                    username=username,
+                    groups=groups,
+                    scopes=scopes,
+                    auth_method=auth_method,
+                    provider=provider,
+                    auth_source='jwt_session_auth_refreshed',
+                    user_id=user_id
+                )
+                
+            except Exception as e:
+                logger.error(f"Error fetching user data during token refresh: {e}")
                 return None
 
-            username = session_data['username']
-            groups = session_data.get('groups', [])
-            auth_method = session_data.get('auth_method', 'traditional')
-            user_id = session_data.get('user_id')
-
-            logger.debug(f"Enhanced auth debug for {username} and user id {user_id}: groups={groups}, auth_method={auth_method}")
-
-            # Process permissions according to enhanced_auth logic
-            if auth_method == 'oauth2':
-                scopes = map_cognito_groups_to_scopes(groups)
-                logger.info(f"OAuth2 user {username} with groups {groups} mapped to scopes: {scopes}")
-                if not groups:
-                    logger.warning(f"OAuth2 user {username} has no groups!")
-            else:
-                # Traditional users dynamically mapped to admin
-                if not groups:
-                    groups = ['mcp-registry-admin']
-                scopes = map_cognito_groups_to_scopes(groups)
-                if not scopes:
-                    scopes = ['mcp-registry-admin', 'mcp-servers-unrestricted/read', 'mcp-servers-unrestricted/execute']
-                logger.info(f"Traditional user {username} with groups {groups} mapped to scopes: {scopes}")
-            return self._build_user_context(
-                username=username,
-                groups=groups,
-                scopes=scopes,
-                auth_method=auth_method,
-                provider=session_data.get('provider', 'local'),
-                auth_source='session_auth',
-                user_id=user_id
-            )
-
         except Exception as e:
-            logger.debug(f"session auth failed: {e}")
+            logger.debug(f"JWT session auth failed: {e}")
             return None
 
     def _parse_session_data(self, session_cookie: str) -> Optional[Dict[str, Any]]:

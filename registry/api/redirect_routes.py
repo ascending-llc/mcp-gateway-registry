@@ -12,6 +12,7 @@ import secrets
 from ..core.config import settings
 from auth_server.core.config import settings as auth_settings
 from ..auth.dependencies import create_session_cookie, validate_login_credentials
+from ..auth.jwt_utils import generate_token_pair
 from packages.models._generated import IUser
 from registry.services.user_service import user_service
 from itsdangerous import URLSafeTimedSerializer
@@ -135,31 +136,53 @@ async def oauth2_callback(request: Request, user_info: str, error: str = None, d
                 status_code=302
             )
         
-        session_data = {
-            **userinfo,
-            "user_id": str(user_obj.id),
-            "role": user_obj.role
-        }
-        registry_session = signer.dumps(session_data)
+        # Generate JWT access and refresh tokens
+        access_token, refresh_token = generate_token_pair(
+            user_id=str(user_obj.id),
+            username=userinfo.get("username"),
+            email=userinfo.get("email", ""),
+            groups=userinfo.get("groups", []),
+            scopes=userinfo.get("scopes", []),
+            role=user_obj.role,
+            auth_method="oauth2",
+            provider=userinfo.get("provider", "unknown"),
+            idp_id=userinfo.get("idp_id")
+        )
+        
         response = RedirectResponse(url=settings.registry_client_url.rstrip('/'), status_code=302)
+        
+        # Determine cookie security settings
         cookie_secure_config = auth_settings.oauth2_config.get("session", {}).get("secure", False)
         x_forwarded_proto = request.headers.get("x-forwarded-proto", "")
         is_https = x_forwarded_proto == "https" or request.url.scheme == "https"
-        cookie_secure = cookie_secure_config and is_https   
-
-        cookie_params = {
-         "key": "jarvis_registry_session",
-         "value": registry_session, 
-         "max_age": auth_settings.oauth2_config.get("session", {}).get("max_age_seconds", 28800), 
-         "httponly": auth_settings.oauth2_config.get("session", {}).get("httponly", True),
-         "samesite": auth_settings.oauth2_config.get("session", {}).get("samesite", "lax"),
-         "secure": cookie_secure, 
-         "path": "/"
-        }
-
-        # Set cookie and redirect back to UI
-        response.set_cookie(**cookie_params)
+        cookie_secure = cookie_secure_config and is_https
+        
+        # Set access token cookie (1 day)
+        response.set_cookie(
+            key=settings.session_cookie_name,  # jarvis_registry_session
+            value=access_token,
+            max_age=86400,  # 1 day in seconds
+            httponly=True,
+            samesite="lax",
+            secure=cookie_secure,
+            path="/"
+        )
+        
+        # Set refresh token cookie (7 days)
+        response.set_cookie(
+            key="jarvis_registry_refresh",
+            value=refresh_token,
+            max_age=604800,  # 7 days in seconds
+            httponly=True,
+            samesite="lax",
+            secure=cookie_secure,
+            path="/"
+        )
+        
+        # Clean up temporary cookies
         response.delete_cookie("oauth2_temp_session")
+        
+        logger.info(f"OAuth2 login successful for user {userinfo.get('username')}, JWT tokens set in httpOnly cookies")
         return response
         
     except Exception as e:
@@ -181,7 +204,26 @@ async def login_submit(
     is_api_call = "application/json" in accept_header
     
     if validate_login_credentials(username, password):
-        session_data = create_session_cookie(username)
+        # Get or create user in database
+        user_obj = await user_service.get_or_create_user(email=f"{username}@local")
+        if not user_obj:
+            logger.error(f"Failed to get/create user object for {username}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create user session"
+            )
+        
+        # Generate JWT access and refresh tokens
+        access_token, refresh_token = generate_token_pair(
+            user_id=str(user_obj.id),
+            username=username,
+            email=f"{username}@local",
+            groups=["mcp-registry-admin"],
+            scopes=["mcp-registry-admin", "mcp-servers-unrestricted/read", "mcp-servers-unrestricted/execute"],
+            role=user_obj.role,
+            auth_method="traditional",
+            provider="local"
+        )
         
         if is_api_call:
             # API response for React
@@ -190,27 +232,37 @@ async def login_submit(
             # Traditional redirect response
             response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
         
-        # Security Note: This implementation uses domain cookies for single-tenant deployments
-        # where cross-subdomain authentication is required (e.g., auth.domain.com and registry.domain.com).
-        # For multi-tenant SaaS deployments with tenant-based subdomains, do NOT use domain cookies
-        # as they would allow cross-tenant session sharing. Consider alternative authentication methods
-        # such as token-based auth or separate auth domains per tenant.
-        cookie_params = {
+        # Set access token cookie (1 day)
+        cookie_params_access = {
             "key": settings.session_cookie_name,
-            "value": session_data,
-            "max_age": settings.session_max_age_seconds,
+            "value": access_token,
+            "max_age": 86400,  # 1 day
             "httponly": True,  # Prevents JavaScript access (XSS protection)
             "samesite": "lax",  # CSRF protection
             "secure": settings.session_cookie_secure,  # Only transmit over HTTPS when True
-            "path": "/",  # Explicit path for clarity
+            "path": "/",
+        }
+        
+        # Set refresh token cookie (7 days)
+        cookie_params_refresh = {
+            "key": "jarvis_registry_refresh",
+            "value": refresh_token,
+            "max_age": 604800,  # 7 days
+            "httponly": True,
+            "samesite": "lax",
+            "secure": settings.session_cookie_secure,
+            "path": "/",
         }
 
         # Add domain attribute if configured for cross-subdomain cookie sharing
         if settings.session_cookie_domain:
-            cookie_params["domain"] = settings.session_cookie_domain
+            cookie_params_access["domain"] = settings.session_cookie_domain
+            cookie_params_refresh["domain"] = settings.session_cookie_domain
 
-        response.set_cookie(**cookie_params)
-        logger.info(f"User '{username}' logged in successfully.")
+        response.set_cookie(**cookie_params_access)
+        response.set_cookie(**cookie_params_refresh)
+        
+        logger.info(f"User '{username}' logged in successfully, JWT tokens set in httpOnly cookies")
         return response
     else:
         logger.info(f"Login failed for user '{username}'.")
@@ -236,26 +288,32 @@ async def logout_handler(
     request: Request,
     session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None
 ):
-    """Shared logout logic for both GET and POST requests"""
+    """Shared logout logic for GET and POST requests"""
     try:
         # Check if user was logged in via OAuth2
         provider = None
         if session:
             try:
-                from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
-                serializer = URLSafeTimedSerializer(settings.secret_key)
-                session_data = serializer.loads(session, max_age=settings.session_max_age_seconds)
+                import jwt as pyjwt
+                # Try to decode JWT to check auth method
+                claims = pyjwt.decode(
+                    session,
+                    settings.secret_key,
+                    algorithms=['HS256'],
+                    options={"verify_exp": False}  # Don't verify expiration for logout
+                )
                 
-                if session_data.get('auth_method') == 'oauth2':
-                    provider = session_data.get('provider')
+                if claims.get('auth_method') == 'oauth2':
+                    provider = claims.get('provider')
                     logger.info(f"User was authenticated via OAuth2 provider: {provider}")
                     
-            except (SignatureExpired, BadSignature, Exception) as e:
-                logger.debug(f"Could not decode session for logout: {e}")
+            except Exception as e:
+                logger.debug(f"Could not decode JWT for logout: {e}")
         
-        # Clear local session cookie
+        # Clear all authentication cookies
         response = RedirectResponse(url=f"{settings.registry_client_url}/login", status_code=status.HTTP_303_SEE_OTHER)
-        response.delete_cookie(settings.session_cookie_name)
+        response.delete_cookie(settings.session_cookie_name, path="/")
+        response.delete_cookie("jarvis_registry_refresh", path="/")
         
         # If user was logged in via OAuth2, redirect to provider logout
         if provider:
@@ -265,26 +323,19 @@ async def logout_handler(
             logout_url = f"{auth_external_url}/oauth2/logout/{provider}?redirect_uri={redirect_uri}"
             logger.info(f"Redirecting to {provider} logout: {logout_url}")
             response = RedirectResponse(url=logout_url, status_code=status.HTTP_303_SEE_OTHER)
-            response.delete_cookie(settings.session_cookie_name)
+            response.delete_cookie(settings.session_cookie_name, path="/")
+            response.delete_cookie("jarvis_registry_refresh", path="/")
         
-        logger.info("User logged out.")
+        logger.info("User logged out, JWT cookies cleared")
         return response
         
     except Exception as e:
         logger.error(f"Error during logout: {e}")
         # Fallback to simple logout
         response = RedirectResponse(url=f"{settings.registry_client_url}/login", status_code=status.HTTP_303_SEE_OTHER)
-        response.delete_cookie(settings.session_cookie_name)
+        response.delete_cookie(settings.session_cookie_name, path="/")
+        response.delete_cookie("jarvis_registry_refresh", path="/")
         return response
-
-
-@router.get("/logout")
-async def logout_get(
-    request: Request,
-    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None
-):
-    """Handle logout via GET request (for URL navigation)"""
-    return await logout_handler(request, session)
 
 
 @router.post("/logout")
