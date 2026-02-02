@@ -240,7 +240,7 @@ class ExtendedMCPServer(Document):
 
         return self._split_if_needed(content, metadata)
 
-    def _get_base_metadata(self, entity_type: str) -> Dict[str, Any]:
+    def _get_base_metadata(self, entity_type: ServerEntityType) -> Dict[str, Any]:
         """Get base metadata shared by all document types."""
         metadata = {
             "collection": self.COLLECTION_NAME,
