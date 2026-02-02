@@ -27,7 +27,7 @@ from ..utils.security_mask import (
     hash_username,
     parse_server_and_tool_from_url
 )
-from packages.models import IUser
+
 from ..services.user_service import user_service
 
 from ..models.device_flow import (
