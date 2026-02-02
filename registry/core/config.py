@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     internal_auth_header: str = "X-Jarvis-Auth"  # Internal JWT for gateway-to-MCP-server authentication
     registry_client_url: str = "http://localhost:5173"  # Registry URL for OAuth protected resource metadata
     registry_url: str = "http://localhost:7860"
+    registry_app_name: str = "jarvis-registry-client"  # OAuth client ID for registry web app
     # Embeddings settings
     embeddings_model_name: str = "all-MiniLM-L6-v2"
     embeddings_model_dimensions: int = 384
@@ -108,7 +109,7 @@ class Settings(BaseSettings):
 
     # Note:  It will be overwritten from the .env file.
     JWT_ISSUER: str = "jarvis-auth-server"
-    JWT_AUDIENCE: str = "jarvis-registry"
+    JWT_AUDIENCE: str = "jarvis-services"
     JWT_SELF_SIGNED_KID: str = "self-signed-key-v1"
     API_VERSION: str = "v1"
     LOG_LEVEL: str = "INFO"
