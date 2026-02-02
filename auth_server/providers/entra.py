@@ -9,7 +9,7 @@ from .base import AuthProvider
 from ..utils.config_loader import get_provider_config
 
 logging.basicConfig(
-    level=os.environ.get("LOGLEVEL", "INFO"),
+    level=os.environ.get("LOGLEVEL", logging.INFO).upper(),
     format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 

@@ -25,7 +25,7 @@ from .federation.asor_client import AsorFederationClient
 
 
 logging.basicConfig(
-    level=os.environ.get("LOGLEVEL", "INFO"),
+    level=os.environ.get("LOGLEVEL", logging.INFO).upper(),
     format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 

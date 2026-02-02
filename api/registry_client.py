@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field, HttpUrl, ConfigDict
 
 # Configure logging
 logging.basicConfig(
-    level=os.environ.get("LOGLEVEL", "INFO"),
+    level=os.environ.get("LOGLEVEL", logging.INFO).upper(),
     format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 

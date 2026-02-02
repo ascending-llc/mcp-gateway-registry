@@ -36,7 +36,7 @@ from registry.services.agent_scanner import agent_scanner_service
 
 # Configure logging with basicConfig
 logging.basicConfig(
-    level=os.environ.get("LOGLEVEL", "INFO"),
+    level=os.environ.get("LOGLEVEL", logging.INFO).upper(),
     format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 
