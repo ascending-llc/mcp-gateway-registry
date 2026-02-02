@@ -58,36 +58,15 @@ Metrics client and domain functions for My Service.
 """
 
 import logging
-from pathlib import Path
 from typing import Optional
 
-import yaml
-
-from packages.telemetry.metrics_client import create_metrics_client
+from packages.telemetry.metrics_client import create_metrics_client, load_metrics_config
 
 logger = logging.getLogger(__name__)
 
 
-def _load_metrics_config() -> Optional[dict]:
-    """Load metrics configuration from YAML file."""
-    config_path = Path(__file__).parent.parent.parent / "config" / "metrics" / "my_service.yml"
-
-    if not config_path.exists():
-        logger.debug(f"Metrics config not found at {config_path}, using defaults")
-        return None
-
-    try:
-        with open(config_path) as f:
-            config = yaml.safe_load(f)
-            logger.info(f"Loaded metrics config from {config_path}")
-            return config
-    except Exception as e:
-        logger.warning(f"Failed to load metrics config: {e}")
-        return None
-
-
 # Load configuration and create service-specific metrics client
-_config = _load_metrics_config()
+_config = load_metrics_config("my_service")
 metrics = create_metrics_client("my_service", config=_config)
 
 

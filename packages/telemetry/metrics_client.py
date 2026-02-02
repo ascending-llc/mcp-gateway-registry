@@ -1,14 +1,50 @@
 import logging
 import functools
+from pathlib import Path
 from typing import (
     Dict,
     Optional,
     Any,
 )
+
+import yaml
 from opentelemetry import metrics
 from opentelemetry.metrics import Counter, Histogram
 
 logger = logging.getLogger(__name__)
+
+
+def load_metrics_config(service_name: str, config_path: Optional[str] = None) -> Optional[dict]:
+    """
+    Load metrics configuration from YAML file for a specific service.
+
+    Args:
+        service_name: Name of the service (e.g., 'registry', 'auth_server')
+        config_path: Optional path to the config file. If not provided,
+                    defaults to standard location relative to this file.
+
+    Returns:
+        Configuration dictionary or None if file not found/invalid
+    """
+    if config_path:
+        path = Path(config_path)
+    else:
+        # Default: config/metrics/{service_name}.yml relative to project root
+        # derived from this file's location: packages/telemetry/metrics_client.py
+        path = Path(__file__).parent.parent.parent / "config" / "metrics" / f"{service_name}.yml"
+
+    if not path.exists():
+        logger.debug(f"Metrics config not found at {path}, using defaults")
+        return None
+
+    try:
+        with open(path) as f:
+            config = yaml.safe_load(f)
+            logger.info(f"Loaded metrics config from {path}")
+            return config
+    except Exception as e:
+        logger.warning(f"Failed to load metrics config for {service_name} from {path}: {e}")
+        return None
 
 
 def safe_telemetry(func):
