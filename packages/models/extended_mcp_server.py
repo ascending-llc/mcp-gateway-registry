@@ -274,8 +274,11 @@ class ExtendedMCPServer(Document):
             return [LangChainDocument(page_content=content, metadata=metadata)]
 
         # Split required
-        logger.warning(f"Content exceeds {settings.MAX_CHUNK_SIZE} chars ({len(content)} chars), splitting... "
-                       f"[{metadata.get('entity_type')}: {metadata.get('tool_name') or metadata.get('server_name')}]")
+        entity_identifier = metadata.get("tool_name") or metadata.get("server_name") or "unknown"
+        logger.warning(
+            f"Content exceeds {settings.MAX_CHUNK_SIZE} chars ({len(content)} chars), splitting... "
+            f"[{metadata.get('entity_type')}: {entity_identifier}]"
+        )
 
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=settings.MAX_CHUNK_SIZE,
