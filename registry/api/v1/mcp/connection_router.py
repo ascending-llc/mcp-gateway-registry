@@ -65,7 +65,6 @@ async def reinitialize_server(
                 details={"reinitialized": True, "has_oauth": True}
             )
             logger.info(f"[Reinitialize] Created connection for {server_id}")
-
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content=response_data
