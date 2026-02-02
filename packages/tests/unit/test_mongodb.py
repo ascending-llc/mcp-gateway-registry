@@ -25,7 +25,7 @@ class TestMongoDBConnection:
         assert MongoDB.client is None
         
         # Mock the entire connect flow
-        with patch('packages.database.mongodb.AsyncIOMotorClient') as MockClient, \
+        with patch('packages.database.mongodb.AsyncMongoClient') as MockClient, \
              patch('packages.database.mongodb.init_beanie', new_callable=AsyncMock):
             
             mock_instance = MagicMock()
@@ -33,7 +33,7 @@ class TestMongoDBConnection:
             mock_instance.admin.command = AsyncMock(return_value={"ok": 1})
             mock_instance.__getitem__ = MagicMock(return_value=MagicMock())
             MockClient.return_value = mock_instance
-            
+
             await MongoDB.connect_db("test_db")
             
             # Verify client was created
@@ -44,7 +44,7 @@ class TestMongoDBConnection:
     async def test_connect_db_uses_env_variables(self):
         """Test connect_db reads configuration from settings."""
         with patch('packages.database.mongodb.settings') as mock_settings, \
-             patch('packages.database.mongodb.AsyncIOMotorClient') as MockClient, \
+             patch('packages.database.mongodb.AsyncMongoClient') as MockClient, \
              patch('packages.database.mongodb.init_beanie', new_callable=AsyncMock):
             
             # Configure mock settings
@@ -69,7 +69,7 @@ class TestMongoDBConnection:
     async def test_connect_db_extracts_dbname_from_uri(self):
         """Test connect_db extracts database name from MONGO_URI."""
         with patch('packages.database.mongodb.settings') as mock_settings, \
-             patch('packages.database.mongodb.AsyncIOMotorClient') as MockClient, \
+             patch('packages.database.mongodb.AsyncMongoClient') as MockClient, \
              patch('packages.database.mongodb.init_beanie', new_callable=AsyncMock):
             
             # Configure mock settings
@@ -82,15 +82,14 @@ class TestMongoDBConnection:
             mock_instance.admin.command = AsyncMock(return_value={"ok": 1})
             mock_instance.__getitem__ = MagicMock(return_value=MagicMock())
             MockClient.return_value = mock_instance
-            
             await MongoDB.connect_db()
-            
+
             assert MongoDB.database_name == "extracted_db"
 
     @pytest.mark.asyncio
     async def test_connect_db_initializes_beanie(self):
         """Test connect_db initializes Beanie with all document models."""
-        with patch('packages.database.mongodb.AsyncIOMotorClient') as MockClient, \
+        with patch('packages.database.mongodb.AsyncMongoClient') as MockClient, \
              patch('packages.database.mongodb.init_beanie', new_callable=AsyncMock) as mock_init_beanie:
             
             mock_instance = MagicMock()
@@ -125,21 +124,21 @@ class TestMongoDBConnection:
     @pytest.mark.asyncio
     async def test_connect_db_only_once(self):
         """Test connect_db doesn't reconnect if client already exists."""
-        with patch('packages.database.mongodb.AsyncIOMotorClient') as MockClient, \
+        with patch('packages.database.mongodb.AsyncMongoClient') as MockClient, \
              patch('packages.database.mongodb.init_beanie', new_callable=AsyncMock):
-            
+
             mock_instance = MagicMock()
             mock_instance.admin = MagicMock()
             mock_instance.admin.command = AsyncMock(return_value={"ok": 1})
             mock_instance.__getitem__ = MagicMock(return_value=MagicMock())
             MockClient.return_value = mock_instance
-            
+
             await MongoDB.connect_db("test_db")
             first_call_count = MockClient.call_count
-            
+
             # Call again
             await MongoDB.connect_db("test_db")
-            
+
             # Verify client wasn't recreated
             assert MockClient.call_count == first_call_count
 
@@ -148,12 +147,12 @@ class TestMongoDBConnection:
         """Test close_db closes the client connection."""
         # Create a mock client
         mock_client = MagicMock()
-        mock_client.close = MagicMock()
-        
+        mock_client.close = AsyncMock()
+
         MongoDB.client = mock_client
-        
+
         await MongoDB.close_db()
-        
+
         # Verify close was called and client is None
         mock_client.close.assert_called_once()
         assert MongoDB.client is None
