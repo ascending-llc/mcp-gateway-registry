@@ -9,6 +9,7 @@ Based on: docs/design/a2a-protocol-integration.md
 
 import logging
 from datetime import datetime, timezone
+import os
 from typing import Annotated, Dict, List, Optional, Any
 
 from fastapi import (
@@ -35,8 +36,8 @@ from registry.services.agent_scanner import agent_scanner_service
 
 # Configure logging with basicConfig
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+    level=os.environ.get("LOGLEVEL", "INFO"),
+    format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 
 logger = logging.getLogger(__name__)

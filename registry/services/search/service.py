@@ -8,6 +8,7 @@ Depending on the configuration (discovery_mode), it will either use:
 """
 
 import logging
+import os
 from typing import TYPE_CHECKING
 
 from registry.core.config import settings
@@ -17,9 +18,10 @@ if TYPE_CHECKING:
     from .embedded_service import EmbeddedFaissService
     from .external_service import ExternalVectorSearchService
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+    level=os.environ.get("LOGLEVEL", "INFO"),
+    format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
+
 
 logger = logging.getLogger(__name__)
 

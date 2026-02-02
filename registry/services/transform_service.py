@@ -5,6 +5,7 @@ This bridges our internal data model with the external Anthropic API format.
 """
 
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 from ..constants import REGISTRY_CONSTANTS
@@ -19,8 +20,8 @@ from ..schemas.anthropic_schema import (
 
 
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+    level=os.environ.get("LOGLEVEL", "INFO"),
+    format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 
 logger = logging.getLogger(__name__)

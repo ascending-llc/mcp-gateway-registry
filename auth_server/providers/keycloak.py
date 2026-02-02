@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import time
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
@@ -13,8 +14,8 @@ import requests
 from .base import AuthProvider
 
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+    level=os.environ.get("LOGLEVEL", "INFO"),
+    format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 
 logger = logging.getLogger(__name__)

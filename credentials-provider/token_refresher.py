@@ -31,9 +31,10 @@ from typing import Dict, List, Optional, Tuple
 
 # Configure logging with basicConfig
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+    level=os.environ.get("LOGLEVEL", "INFO"),
+    format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
+
 logger = logging.getLogger(__name__)
 
 

@@ -11,9 +11,10 @@ from typing import Annotated
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=os.environ.get("LOGLEVEL", "INFO"),
     format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
+
 logger = logging.getLogger(__name__)
 
 def parse_arguments():

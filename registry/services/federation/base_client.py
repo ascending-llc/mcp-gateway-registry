@@ -6,14 +6,15 @@ Provides common functionality for all federation clients.
 
 import logging
 from abc import ABC, abstractmethod
+import os
 from typing import Any, Dict, List, Optional
 
 import httpx
 
 
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+    level=os.environ.get("LOGLEVEL", "INFO"),
+    format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
 
 logger = logging.getLogger(__name__)

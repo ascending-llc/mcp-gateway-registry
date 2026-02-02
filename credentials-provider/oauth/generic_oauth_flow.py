@@ -61,9 +61,10 @@ import yaml
 
 # Configure logging first
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+    level=os.environ.get("LOGLEVEL", "INFO"),
+    format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
 )
+
 logger = logging.getLogger("generic-oauth")
 
 # Try to load .env file if python-dotenv is available
