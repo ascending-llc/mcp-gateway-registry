@@ -44,7 +44,6 @@ jobs:
           github-token: ${{ secrets.JARVIS_RELEASE_ACCESS_TOKEN }}
 
   build-and-push-mcpgateway:
-    needs: get-schema-version
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -88,8 +87,6 @@ jobs:
           file: docker/Dockerfile.mcpgw
           build-args: |
             TOOL_DISCOVERY_MODE=external
-            SCHEMA_VERSION=${{ needs.get-schema-version.outputs.schema_version }}
-            GITHUB_TOKEN=${{ secrets.JARVIS_RELEASE_ACCESS_TOKEN }}
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           provenance: false
@@ -202,6 +199,7 @@ jobs:
           provenance: false
 
   build-and-push-auth-server:
+    needs: get-schema-version
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -243,6 +241,9 @@ jobs:
           platforms: linux/amd64
           context: .
           file: docker/Dockerfile.auth
+          build-args: |
+            SCHEMA_VERSION=${{ needs.get-schema-version.outputs.schema_version }}
+            GITHUB_TOKEN=${{ secrets.JARVIS_RELEASE_ACCESS_TOKEN }}
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           provenance: false
