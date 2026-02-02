@@ -6,11 +6,12 @@ that don't belong in the generic Repository class.
 """
 
 import logging
-from typing import Optional, Dict, Set, Any, List
+from typing import Optional, Dict, Any, List
 from packages.models.enums import ServerEntityType
 from packages.models import ExtendedMCPServer
 from packages.vector.repository import Repository
 from packages.vector.client import DatabaseClient, initialize_database
+from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
 
@@ -143,23 +144,23 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
                 'resources': [],
                 'prompts': []
             }
-            
+
             # Query each entity type separately for better logging and debugging
             for entity_type in ServerEntityType:
                 entity_type_value = entity_type.value
-                
+
                 logger.debug(f"Querying {entity_type_value} docs for server_id {server_id}")
-                
+
                 docs = self.adapter.filter_by_metadata(
                     filters={"server_id": server_id, "entity_type": entity_type_value},
                     limit=1000,
                     collection_name=self.collection
                 )
-                
+
                 # Map entity_type to result key (handle plural forms)
                 result_key = entity_type_value if entity_type_value == 'server' else f"{entity_type_value}s"
                 result[result_key] = docs
-                
+
                 logger.debug(f"Found {len(docs)} {entity_type_value} docs for server_id {server_id}")
 
             logger.info(
@@ -378,7 +379,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
 
         return added_count, deleted_count, updated_count
 
-    def build_doc_map(self, docs: List[Any]) -> Dict[str, Any]:
+    def build_doc_map(self, docs: List[Document]) -> Dict[str, Document]:
         """
         Build a lookup map for documents using entity_type and entity name as key.
         
@@ -438,20 +439,20 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
             # Update each entity type separately for better logging
             for entity_type in ServerEntityType:
                 entity_type_value = entity_type.value
-                
+
                 logger.debug(f"Updating metadata for {entity_type_value} docs (server_id: {server_id})")
-                
+
                 # Query existing docs for this entity type
                 existing_docs = self.adapter.filter_by_metadata(
                     filters={"server_id": server_id, "entity_type": entity_type_value},
                     limit=1000,
                     collection_name=self.collection
                 )
-                
+
                 if not existing_docs:
                     logger.debug(f"No {entity_type_value} docs found, skipping")
                     continue
-                
+
                 # Update metadata for each doc
                 success_count = 0
                 for doc in existing_docs:
@@ -465,7 +466,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
                         if result:
                             success_count += 1
                             total_success += 1
-                
+
                 logger.info(f"[{entity_type_value}] Updated metadata for {success_count}/{len(existing_docs)} docs")
 
             logger.info(f"Total: Updated metadata for {total_success}/{total_count} docs")
@@ -502,7 +503,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
         try:
             if not enabled:
                 logger.info(f"Server disabled, updating metadata for '{server_name}' (ID: {server_id})")
-                
+
                 has_docs = False
                 for entity_type in ServerEntityType:
                     docs = self.adapter.filter_by_metadata(
@@ -513,7 +514,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
                     if docs:
                         has_docs = True
                         break
-                
+
                 if not has_docs:
                     logger.debug(f"No existing docs for '{server_name}', nothing to update")
                     return True
@@ -522,7 +523,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
                 # Server enabled: perform smart sync (full content update)
                 logger.info(f"Server enabled, performing smart sync for '{server_name}' (ID: {server_id})")
                 return await self.smart_sync(server)
-                
+
         except Exception as e:
             logger.error(f"Sync by enabled status failed for '{server_name}' (ID: {server_id}): {e}", exc_info=True)
             return False
@@ -546,23 +547,23 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
         """
         await self.ensure_collection()
         log_name = f"'{server_name}' (ID: {server_id})" if server_name else f"ID: {server_id}"
-        
+
         try:
             total_deleted = 0
 
             # Delete each entity type separately for better logging
             for entity_type in ServerEntityType:
                 entity_type_value = entity_type.value
-                
+
                 logger.debug(f"Deleting {entity_type_value} docs for server_id {server_id}")
-                
+
                 # Query docs for this entity type
                 docs = self.adapter.filter_by_metadata(
                     filters={"server_id": server_id, "entity_type": entity_type_value},
                     limit=1000,
                     collection_name=self.collection
                 )
-                
+
                 if docs:
                     doc_ids = [doc.id for doc in docs]
                     self.adapter.delete(ids=doc_ids, collection_name=self.collection)
@@ -570,7 +571,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
                     logger.info(f"[{entity_type_value}] Deleted {len(doc_ids)} documents")
                 else:
                     logger.debug(f"[{entity_type_value}] No documents found")
-            
+
             if total_deleted > 0:
                 logger.info(f"Successfully removed server {log_name} from vector DB (deleted {total_deleted} records)")
                 return True

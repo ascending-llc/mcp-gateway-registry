@@ -169,7 +169,7 @@ class WeaviateStore(VectorStoreAdapter):
             elif isinstance(value, list):
                 if len(value) == 0:
                     logger.warning(f"Empty list for key '{key}', skipping filter")
-                    return None
+                    raise ValueError("Empty list for key '{key}', skipping filter")
                 elif len(value) == 1:
                     return Filter.by_property(key).equal(value[0])
                 else:

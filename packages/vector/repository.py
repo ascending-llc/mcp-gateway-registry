@@ -165,41 +165,7 @@ class Repository(Generic[T]):
         Returns:
             True if updated/created successfully, False otherwise
         """
-        try:
-            mongo_id = str(instance.id)
-
-            # 1. Find all existing documents for this server
-            existing_docs = self.adapter.filter_by_metadata(
-                filters={"server_id": mongo_id},
-                limit=1000,  # Large enough to get all child docs
-                collection_name=self.collection
-            )
-
-            if not existing_docs:
-                logger.warning(f"{self.model_class.__name__} not found in vector DB: {mongo_id}")
-                if create_if_missing:
-                    logger.info(f"Creating new documents for {mongo_id}")
-                    return self.save(instance) is not None
-                return False
-
-            logger.debug(f"Found {len(existing_docs)} existing documents for server {mongo_id}")
-
-            # 2. Check if only safe metadata fields changed
-            # Safe metadata fields that can be updated without re-vectorization
-            safe_fields = {'scope', 'enabled', 'tags'}
-
-            if fields_changed and fields_changed.issubset(safe_fields):
-                # Metadata-only update (no re-vectorization)
-                logger.info(f"Metadata-only update for {mongo_id}: {fields_changed}")
-                return self._update_metadata_only(instance, existing_docs)
-
-            # 3. Content changed → Incremental update
-            logger.info(f"Content update detected for {mongo_id}, performing incremental update")
-            return self._incremental_update(instance, existing_docs)
-
-        except Exception as e:
-            logger.error(f"Update failed for {self.model_class.__name__}: {e}", exc_info=True)
-            return False
+        pass
 
     def _update_metadata_only(
             self,
@@ -244,33 +210,6 @@ class Repository(Generic[T]):
 
         except Exception as e:
             logger.error(f"Metadata update failed: {e}", exc_info=True)
-            return False
-
-    def _incremental_update(
-            self,
-            instance: T,
-            existing_docs: List[Document]
-    ) -> bool:
-        """
-        Incremental update: compare content and update only changed documents.
-
-        Strategy:
-        1. Generate new documents from instance
-        2. Compare with existing documents by entity_type and name
-        3. Delete changed/removed documents
-        4. Add new/changed documents
-
-        Args:
-            instance: Model instance with new content
-            existing_docs: Existing vector documents
-
-        Returns:
-            True if update successful
-        """
-        try:
-            pass
-        except Exception as e:
-            logger.error(f"Incremental update failed: {e}", exc_info=True)
             return False
 
     def _full_update(
@@ -430,7 +369,7 @@ class Repository(Generic[T]):
             docs = []
             for inst in instances:
                 docs.extend(inst.to_documents())
-            
+
             doc_ids = self.adapter.add_documents(
                 documents=docs,
                 collection_name=self.collection

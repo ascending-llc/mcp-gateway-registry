@@ -4,7 +4,7 @@ Vector Storage Protocols
 Defines interfaces that models must implement to be stored in vector databases.
 """
 
-from typing import Protocol, runtime_checkable, ClassVar, Any, Set, List
+from typing import Protocol, runtime_checkable, ClassVar, Any
 from langchain_core.documents import Document as LangChainDocument
 
 
