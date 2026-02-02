@@ -15,14 +15,14 @@ import logging
 import httpx
 import asyncio
 from typing import Dict, List, Optional, Tuple, Any, Set
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from beanie import PydanticObjectId
 from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 from registry.schemas.server_api_schemas import (
     ServerCreateRequest,
     ServerUpdateRequest,
 )
-from registry.utils.crypto_utils import encrypt_auth_fields
+from registry.utils.crypto_utils import encrypt_auth_fields, generate_service_jwt
 from registry.core.mcp_client import get_tools_from_server_with_server_info
 from registry.core.acl_constants import ResourceType
 from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
@@ -96,6 +96,7 @@ async def _build_complete_headers_for_server(
     import base64
     from registry.services.oauth.oauth_service import get_oauth_service
     from registry.utils.crypto_utils import decrypt_auth_fields
+    from registry.core.config import settings
 
     config = server.config or {}
     decrypted_config = decrypt_auth_fields(config)
@@ -104,8 +105,14 @@ async def _build_complete_headers_for_server(
     headers = {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'User-Agent': 'MCP-Gateway-Registry/1.0'
+        'User-Agent': settings.registry_app_name
     }
+    
+    # Always add internal service JWT if user_id is provided
+    if user_id:
+        service_jwt = generate_service_jwt(user_id)
+        headers[settings.internal_auth_header] = f"Bearer {service_jwt}"
+        logger.debug(f"Added internal service JWT to {settings.internal_auth_header} header for user {user_id}")
 
     # 1. Add custom headers FIRST (lowest priority)
     custom_headers = decrypted_config.get("headers", [])

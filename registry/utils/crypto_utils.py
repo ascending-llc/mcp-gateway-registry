@@ -12,8 +12,10 @@ TypeScript equivalent:
 """
 
 import os
+import jwt
+from datetime import datetime, timezone, timedelta
 from registry.utils.log import logger
-from typing import Optional
+from typing import Optional, List
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
@@ -54,6 +56,50 @@ def _get_encryption_key() -> bytes:
         _ENCRYPTION_KEY = key_bytes
     
     return _ENCRYPTION_KEY
+
+
+def generate_service_jwt(user_id: str, username: Optional[str] = None, scopes: Optional[List[str]] = None) -> str:
+    """
+    Generate internal service JWT for MCP server authentication.
+    Used to authenticate registry -> MCP server requests with user context.
+    
+    Args:
+        user_id: User ID to include in JWT
+        username: Optional username/email
+        scopes: Optional list of scopes
+    
+    Returns:
+        JWT token string (without Bearer prefix)
+    """
+    from registry.core.config import settings
+    
+    now = datetime.now(timezone.utc)
+    
+    # Build JWT payload with user context
+    payload = {
+        "user_id": user_id,
+        "sub": username or user_id,
+        "iss": "mcp-registry",
+        "aud": "mcp-server",
+        "iat": now,
+        "exp": now + timedelta(minutes=5),  # Short-lived for service-to-service
+        "jti": f"registry-{now.timestamp()}",
+        "client_id": "mcp-registry",
+        "token_type": "service",
+    }
+    
+    # Add optional fields
+    if scopes:
+        payload["scopes"] = scopes
+    
+    # Sign with registry secret
+    token = jwt.encode(
+        payload,
+        settings.secret_key,
+        algorithm="HS256"
+    )
+    
+    return token
 
 
 def encrypt_value(plaintext: str) -> str:

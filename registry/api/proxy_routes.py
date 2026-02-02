@@ -46,8 +46,7 @@ proxy_client = httpx.AsyncClient(
 async def _build_authenticated_headers(
     server: MCPServerDocument,
     auth_context: Dict[str, Any],
-    additional_headers: Optional[Dict[str, str]] = None,
-    include_internal_jwt: bool = False
+    additional_headers: Optional[Dict[str, str]] = None
 ) -> Dict[str, str]:
     """
     Build complete headers with authentication for MCP server requests.
@@ -55,13 +54,12 @@ async def _build_authenticated_headers(
     
     Supports dual authentication:
     - setting.auth_egress_header: OAuth/external access token (RFC 6750) for MCP server resource access
-    - setting.internal_auth_header: Internal JWT for gateway-to-MCP authentication
+    - setting.internal_auth_header: Internal JWT for gateway-to-MCP authentication (always included)
     
     Args:
         server: MCP server document
         auth_context: Gateway authentication context (user, client_id, scopes, jwt_token)
         additional_headers: Optional additional headers to merge
-        include_internal_jwt: Whether to include internal Jarvis JWT in custom header
     
     Returns:
         Complete headers dict with authentication
@@ -69,36 +67,13 @@ async def _build_authenticated_headers(
     Raises:
         HTTPException: For auth errors (401 with appropriate details)
     """
-    # Enrich user_id if missing (for OAuth tokens from vscode, claude or gpt)
+    # Validate user_id is present (auth-server always includes it in JWT)
     if not auth_context.get("user_id"):
-        sub = auth_context.get("username")
-        if sub:
-            logger.debug(f"user_id missing in auth_context, looking up user for sub/email: {sub}")
-            try:
-                user = await user_service.get_or_create_user(email=sub)
-                if user:
-                    auth_context["user_id"] = str(user.id)
-                    logger.debug(f"✓ Enriched user_id: {auth_context['user_id']} for sub: {sub}")
-                else:
-                    logger.error(f"Failed to get or create user for email/sub: {sub}")
-                    raise HTTPException(
-                        status_code=500,
-                        detail=f"Failed to resolve user identity for email: {sub}"
-                    )
-            except HTTPException:
-                raise
-            except Exception as e:
-                logger.error(f"Failed to enrich user_id: {e}")
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Failed to resolve user identity: {str(e)}"
-                )
-        else:
-            logger.error("Cannot enrich user_id: both user_id and sub/email are missing from auth_context")
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid authentication context: missing user identifier"
-            )
+        logger.error(f"Missing user_id in auth_context. Available keys: {list(auth_context.keys())}")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authentication context: missing user_id"
+        )
     
     # Build base headers (filter out empty values to avoid httpx errors)
     headers = {
@@ -110,12 +85,6 @@ async def _build_authenticated_headers(
     # Remove empty header values (httpx requires non-empty strings)
     headers = {k: v for k, v in headers.items() if v}
     
-    # Add internal Jarvis JWT if requested (for internal authorization)
-    if include_internal_jwt and auth_context.get("jwt_token"):
-        internal_header = settings.internal_auth_header
-        headers[internal_header] = f"Bearer {auth_context['jwt_token']}"
-        logger.debug(f"Added internal JWT to {internal_header} header")
-    
     # Merge additional headers if provided
     if additional_headers:
         headers.update(additional_headers)
@@ -126,13 +95,7 @@ async def _build_authenticated_headers(
     
     # Build complete authentication headers (OAuth, apiKey, custom)
     try:
-        user_id = auth_context.get("user_id")
-        
-        # Debug logging for OAuth troubleshooting
-        if not user_id:
-            logger.error(f"Missing user_id in auth_context for OAuth server {server.serverName}. "
-                          f"Available keys: {list(auth_context.keys())}")
-        
+        user_id = auth_context.get("user_id")  # Already validated above
         auth_headers = await _build_complete_headers_for_server(server, user_id)
         
         # Merge auth headers with case-insensitive override logic
@@ -384,8 +347,7 @@ async def proxy_to_mcp_server(
     headers = await _build_authenticated_headers(
         server=server,
         auth_context=auth_context,
-        additional_headers=headers,
-        include_internal_jwt=True
+        additional_headers=headers
     )
 
     body = await request.body()
@@ -618,8 +580,7 @@ async def execute_tool(
         additional_headers={
             "X-Tool-Name": tool_name,
             "Accept": "application/json, text/event-stream"  # MCP servers require both
-        },
-        include_internal_jwt=True
+        }
     )
     
     # Client can accept both JSON and SSE (as indicated in Accept header)
