@@ -122,7 +122,7 @@ class TestMCPOAuthService:
                                  refresh_exists=True, refresh_valid=False)
 
         # Mock OAuth flow initiation
-        with patch.object(oauth_service, '_initiate_oauth_flow_response', AsyncMock(
+        with patch.object(oauth_service, '_build_oauth_required_response', AsyncMock(
                 return_value=(False, {
                     "success": True,
                     "authorization_url": "https://example.com/auth",
@@ -163,7 +163,7 @@ class TestMCPOAuthService:
                                  refresh_exists=False, refresh_valid=False)
 
         # Mock OAuth flow initiation
-        with patch.object(oauth_service, '_initiate_oauth_flow_response', AsyncMock(
+        with patch.object(oauth_service, '_build_oauth_required_response', AsyncMock(
                 return_value=(False, {
                     "success": True,
                     "authorization_url": "https://example.com/auth",
@@ -180,7 +180,8 @@ class TestMCPOAuthService:
 
     @pytest.mark.asyncio
     async def test_handle_reinitialize_auth_oauth_config_missing(self, oauth_service):
-        """Test handle_reinitialize_auth when OAuth configuration is missing"""
+        """Test handle_reinitialize_auth when OAuth configuration is missing
+        """
         user_id = "test_user"
         mock_server = Mock(spec=MCPServerDocument)
         mock_server.id = ObjectId("507f1f77bcf86cd799439011")
@@ -195,9 +196,8 @@ class TestMCPOAuthService:
         )
 
         assert needs_connection == False
-        assert response_data["success"] == False
-        # The error message from initiate_oauth_flow when oauth config is missing
-        assert "authentication configuration not found" in response_data["message"]
+        assert response_data["success"] == True
+        assert "OAuth authorization required" in response_data["message"]
 
     @pytest.mark.asyncio
     async def test_handle_reinitialize_auth_refresh_failure(self, oauth_service, mock_server):

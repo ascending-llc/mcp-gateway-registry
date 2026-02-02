@@ -22,7 +22,7 @@ class TestSettings:
         
         assert settings.admin_user == "admin"
         assert settings.admin_password == "password"
-        assert settings.session_cookie_name == "mcp_gateway_session"
+        assert settings.session_cookie_name == "jarvis_registry_session"
         assert settings.session_max_age_seconds == 60 * 60 * 8  # 8 hours
         assert settings.embeddings_model_name == "all-MiniLM-L6-v2"
         assert settings.embeddings_model_dimensions == 384

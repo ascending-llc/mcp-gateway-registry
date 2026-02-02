@@ -5,6 +5,7 @@ Configuration is passed via headers instead of environment variables.
 
 import argparse
 import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 import jwt
 import time
@@ -12,8 +13,10 @@ from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-# Import settings and scopes config loader
-from .core.config import settings, load_scopes_config
+# Import database utilities
+from packages.database import init_mongodb, close_mongodb
+
+from .core.config import settings
 
 # Import metrics middleware
 from .metrics_middleware import add_auth_metrics_middleware
@@ -60,12 +63,7 @@ user_token_generation_counts = {}
 MAX_TOKENS_PER_USER_PER_HOUR = settings.max_tokens_per_user_per_hour
 
 from .utils.security_mask import (
-    mask_sensitive_id,
-    hash_username,
-    anonymize_ip,
-    mask_headers,
-    map_groups_to_scopes,
-    parse_server_and_tool_from_url,
+    hash_username
 )
 
 
@@ -145,6 +143,36 @@ def _create_self_signed_jwt(access_payload: dict) -> str:
         raise ValueError(f"Failed to create self-signed JWT: {e}")
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application startup and shutdown lifecycle management."""
+    logger.info("🚀 Starting Auth Server...")
+
+    try:
+        # Initialize MongoDB connection
+        logger.info("🗄️  Initializing MongoDB connection...")
+        await init_mongodb()
+        logger.info("✅ MongoDB connection established")
+        logger.info("✅ Auth server initialized successfully!")
+
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize services: {e}", exc_info=True)
+        raise
+
+    # Application is ready
+    yield
+
+    # Shutdown tasks
+    logger.info("🔄 Shutting down Auth Server...")
+    try:
+        # Close MongoDB connection
+        logger.info("🗄️  Closing MongoDB connection...")
+        await close_mongodb()
+        logger.info("✅ Shutdown completed successfully!")
+    except Exception as e:
+        logger.error(f"❌ Error during shutdown: {e}", exc_info=True)
+
+
 # Create FastAPI app
 api_prefix = settings.auth_server_api_prefix.rstrip('/') if settings.auth_server_api_prefix else ""
 logger.info(f"Auth server API prefix: '{api_prefix}'")
@@ -153,6 +181,7 @@ app = FastAPI(
     title="Jarvis Auth Server",
     description="Authentication server to integrate with Identity Providers like Cognito, Keycloak, Entra ID",
     version="0.1.0",
+    lifespan=lifespan,
     docs_url=f"{api_prefix}/docs" if api_prefix else "/docs",
     redoc_url=f"{api_prefix}/redoc" if api_prefix else "/redoc",
     openapi_url=f"{api_prefix}/openapi.json" if api_prefix else "/openapi.json"
@@ -169,7 +198,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["WWW-Authenticate", "X-User", "X-Username", "X-Client-Id"],
+    expose_headers=["WWW-Authenticate", "X-User-Id", "X-Username", "X-Client-Id","X-Scopes","X-Jarvis-Auth"],
 )
 
 # Add metrics collection middleware
