@@ -197,7 +197,7 @@ class TestAuthRoutes:
 
         with (
             patch(
-                "registry.api.redirect_routes.IUser.find_one", new=AsyncMock(return_value=mock_user)
+                "registry.services.user_service.IUser.find_one", new=AsyncMock(return_value=mock_user)
             ),
             patch(
                 "registry.api.redirect_routes.user_service.get_user_by_user_id",
@@ -225,7 +225,7 @@ class TestAuthRoutes:
         }
 
         with (
-            patch("registry.api.redirect_routes.IUser.find_one", new=AsyncMock(return_value=None)),
+            patch("registry.services.user_service.IUser.find_one", new=AsyncMock(return_value=None)),
             patch("registry.api.redirect_routes.httpx.AsyncClient") as mock_client,
         ):
             mock_client_instance = mock_client.return_value.__aenter__.return_value
