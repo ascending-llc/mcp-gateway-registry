@@ -94,4 +94,5 @@ dev = [
     "factory-boy>=3.3.0",
     "faker>=24.0.0",
     "poethepoet>=0.40.0",
+    "ruff>=0.14.0",
 ]

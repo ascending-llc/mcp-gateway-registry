@@ -36,6 +36,8 @@ members = [
 [dependency-groups]
 dev = [
     "poethepoet>=0.40.0",
+    "ruff>=0.14.0",
+    "pre-commit>=4.0.0",
 ]
 
 [tool.poe.tasks]
@@ -58,3 +60,119 @@ test-auth-server-cov = { shell = "cd auth_server && uv run poe test-cov" }
 # Packages tests
 test-packages = { shell = "cd packages && uv run poe test" }
 test-packages-cov = { shell = "cd packages && uv run poe test-cov" }
+
+# Linting and formatting with Ruff
+lint = { shell = "uv run ruff check .", help = "Check code with Ruff linter" }
+lint-fix = { shell = "uv run ruff check --fix .", help = "Check and auto-fix code with Ruff" }
+format = { shell = "uv run ruff format .", help = "Format code with Ruff" }
+format-check = { shell = "uv run ruff format --check .", help = "Check code formatting without modifying" }
+lint-all = { shell = "uv run ruff check --fix . && uv run ruff format .", help = "Run linter with fixes and formatter" }
+
+[tool.ruff]
+# Target Python 3.12
+target-version = "py312"
+line-length = 100
+
+# Include common Python paths
+include = ["*.py", "*.pyi", "**/pyproject.toml"]
+
+# Exclude common non-code directories
+exclude = [
+    ".git",
+    ".ruff_cache",
+    ".venv",
+    "__pycache__",
+    "*.egg-info",
+    "build",
+    "dist",
+    "htmlcov",
+    ".pytest_cache",
+    "node_modules",
+    "frontend",
+    "data",
+    "logs",
+    "ssl",
+    "secrets",
+]
+
+[tool.ruff.lint]
+# Enable pycodestyle (E, W), Pyflakes (F), isort (I), and additional rules
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings  
+    "F",     # Pyflakes
+    "I",     # isort
+    "N",     # pep8-naming
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "C4",    # flake8-comprehensions
+    "DTZ",   # flake8-datetimez
+    "T10",   # flake8-debugger
+    "ISC",   # flake8-implicit-str-concat
+    "ICN",   # flake8-import-conventions
+    "PIE",   # flake8-pie
+    "PT",    # flake8-pytest-style
+    "Q",     # flake8-quotes
+    "RET",   # flake8-return
+    "SIM",   # flake8-simplify
+    "TID",   # flake8-tidy-imports
+    "ARG",   # flake8-unused-arguments
+    "PTH",   # flake8-use-pathlib
+    "ERA",   # eradicate (commented out code)
+    "PL",    # Pylint
+    "RUF",   # Ruff-specific rules
+]
+
+# Ignore specific rules that may be too strict
+ignore = [
+    "E501",   # Line too long (handled by formatter)
+    "B008",   # Do not perform function calls in argument defaults (FastAPI Depends)
+    "ARG001", # Unused function argument (common in FastAPI dependencies)
+    "ARG002", # Unused method argument (common in abstract methods)
+    "PLR0913", # Too many arguments to function call
+    "PLR2004", # Magic value used in comparison
+    "PT011",  # pytest.raises without match parameter
+    "RET504", # Unnecessary assignment before return
+]
+
+# Allow unused variables when they start with an underscore
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.per-file-ignores]
+# Test files can have additional lenient rules
+"tests/**/*.py" = ["PLR2004", "S101", "ARG001", "PLR0913"]
+"**/test_*.py" = ["PLR2004", "S101", "ARG001", "PLR0913"]
+
+# Scripts and CLI tools can be less strict
+"scripts/**/*.py" = ["T201", "PLR0913"]
+"cli/**/*.py" = ["T201", "PLR0913"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["registry", "auth_server", "packages", "servers"]
+
+[tool.ruff.format]
+# Use double quotes for strings
+quote-style = "double"
+
+# Indent with spaces
+indent-style = "space"
+
+# Use Unix line endings
+line-ending = "auto"
+
+[tool.bandit]
+# Bandit security scanner configuration
+exclude_dirs = [
+    "tests",
+    ".venv",
+    "venv",
+    "htmlcov",
+    ".pytest_cache",
+    "__pycache__",
+    "build",
+    "dist",
+]
+
+skips = [
+    "B101",  # Use of assert (common in tests)
+]

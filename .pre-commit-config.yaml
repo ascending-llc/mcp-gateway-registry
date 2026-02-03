@@ -1,0 +1,71 @@
+# Pre-commit hooks for MCP Gateway Registry
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+
+repos:
+  # Ruff - Fast Python linter and formatter
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      # Run the linter
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        types_or: [python, pyi]
+      # Run the formatter
+      - id: ruff-format
+        types_or: [python, pyi]
+
+  # Basic pre-commit hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+        exclude: '\.json$'
+      - id: check-yaml
+        args: [--safe]
+        exclude: 'mkdocs.yml'
+      - id: check-json
+      - id: check-toml
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-merge-conflict
+      - id: detect-private-key
+        exclude: 'ssl/|secrets/|\.pem$'
+
+  # Security checks with Bandit
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.3
+    hooks:
+      - id: bandit
+        args: [-c, pyproject.toml, -r, .]
+        additional_dependencies: ["bandit[toml]"]
+        exclude: 'tests/|test_.*\.py$|conftest\.py$'
+
+# Global configuration
+default_language_version:
+  python: python3.12
+
+# Exclude patterns
+exclude: |
+  (?x)^(
+      \.git/|
+      \.ruff_cache/|
+      \.pytest_cache/|
+      __pycache__/|
+      \.venv/|
+      venv/|
+      env/|
+      build/|
+      dist/|
+      \.egg-info/|
+      htmlcov/|
+      node_modules/|
+      frontend/|
+      data/|
+      logs/|
+      ssl/|
+      secrets/|
+      .*\.egg-info/
+  )$
