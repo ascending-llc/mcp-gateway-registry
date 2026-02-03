@@ -89,7 +89,7 @@ async def update_resource_permissions(
             deleted_count = await acl_service.delete_acl_entries_for_resource(
                 resource_type=resource_type,
                 resource_id=PydanticObjectId(resource_id),
-                perm_bits_to_delete=PermissionBits.VIEW,
+                perm_bits_to_delete=PermissionBits.VIEW
             )
             logger.info(f"Deleted {deleted_count} VIEW ACL entries for resource {resource_id}")
 
@@ -99,7 +99,7 @@ async def update_resource_permissions(
                 principal_id=None,
                 resource_type=resource_type,
                 resource_id=PydanticObjectId(resource_id),
-                perm_bits=PermissionBits.VIEW,
+                perm_bits=PermissionBits.VIEW
             )
             logger.info(f"Created public ACL entry: {acl_entry.id} for resource {resource_id}")
             updated_count = 1 if acl_entry else 0
@@ -109,7 +109,7 @@ async def update_resource_permissions(
                 resource_type=resource_type,
                 resource_id=PydanticObjectId(resource_id),
                 principal_type=PrincipalType.PUBLIC.value,
-                principal_id=None,
+                principal_id=None
             )
             deleted_count += deleted_public_entry
             logger.info(f"Deleted public ACL entry for resource {resource_id}")

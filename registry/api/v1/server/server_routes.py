@@ -326,7 +326,7 @@ async def create_server(
             principal_id=PydanticObjectId(user_id),
             resource_type=ResourceType.MCPSERVER,
             resource_id=server.id,
-            perm_bits=RoleBits.OWNER,
+            perm_bits=RoleBits.OWNER
         )
 
         logger.info(f"Granted user {user_id} {RoleBits.OWNER} permissions for server Id {server.id}")
