@@ -34,6 +34,7 @@ from registry.schemas.errors import (
     AuthenticationError
 )
 from pymongo.asynchronous.client_session import AsyncClientSession
+from packages.database.decorators import get_current_session
 
 logger = logging.getLogger(__name__)
 
@@ -613,7 +614,6 @@ class ServerServiceV1:
             self,
             data: ServerCreateRequest,
             user_id: str,
-            session: Optional[AsyncClientSession] = None
     ) -> MCPServerDocument:
         """
         Create a new server.
@@ -628,16 +628,17 @@ class ServerServiceV1:
         Raises:
             ValueError: If path+url combination already exists, server_name already exists, or tags contain duplicates (case-insensitive)
         """
+        session = get_current_session()
         # Check if path+url combination already exists
         # Only reject if BOTH path AND url are the same (to allow same path for different services)
-        existing_servers = await MCPServerDocument.find({"path": data.path}).to_list()
+        existing_servers = await MCPServerDocument.find({"path": data.path}, session=session).to_list()
         for existing in existing_servers:
             existing_url = existing.config.get("url") if existing.config else None
             if existing_url == data.url:
                 raise ValueError(f"Server with path '{data.path}' and URL '{data.url}' already exists")
 
         # Check if serverName already exists
-        existing_name = await MCPServerDocument.find_one({"serverName": data.serverName})
+        existing_name = await MCPServerDocument.find_one({"serverName": data.serverName}, session=session)
         if existing_name:
             raise ValueError(f"Server with name '{data.serverName}' already exists")
 
@@ -809,7 +810,6 @@ class ServerServiceV1:
             server_id: str,
             data: ServerUpdateRequest,
             user_id: Optional[str] = None,
-            session: Optional[AsyncClientSession] = None,
     ) -> MCPServerDocument:
         """
         Update a server.
@@ -825,6 +825,7 @@ class ServerServiceV1:
         Raises:
             ValueError: If server not found
         """
+        session = get_current_session()
         server = await self.get_server_by_id(server_id, user_id)
 
         if not server:
@@ -877,7 +878,6 @@ class ServerServiceV1:
             self,
             server_id: str,
             user_id: Optional[str] = None,
-            session: Optional[AsyncClientSession] = None,
     ) -> bool:
         """
         Delete a server.
@@ -897,7 +897,8 @@ class ServerServiceV1:
         except Exception as e:
             raise ValueError("Server not found")
 
-        server = await MCPServerDocument.get(obj_id)
+        session = get_current_session()
+        server = await MCPServerDocument.get(obj_id, session=session)
 
         if not server:
             raise ValueError("Server not found")

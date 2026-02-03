@@ -13,7 +13,7 @@ from pydantic import ValidationError
 from beanie import PydanticObjectId
 from pymongo.asynchronous.client_session import AsyncClientSession
 
-from packages.database import get_tx_session
+from packages.database.decorators import use_transaction
 from registry.auth.dependencies import CurrentUserWithACLMap
 from registry.services.server_service import server_service_v1
 from registry.services.oauth.mcp_service import get_mcp_service
@@ -298,10 +298,10 @@ async def get_server(
     summary="Register Server",
     description="Register a new MCP server",
 )
+@use_transaction
 async def create_server(
     data: ServerCreateRequest,
     user_context: dict = Depends(get_user_context),
-    tx_session: AsyncClientSession = Depends(get_tx_session),
 ):
     """Create a new server"""
     try:
@@ -310,7 +310,6 @@ async def create_server(
         server = await server_service_v1.create_server(
             data=data,
             user_id=user_id,
-            session=tx_session,
         )
 
         if not server:
@@ -323,7 +322,6 @@ async def create_server(
             resource_type=ResourceType.MCPSERVER,
             resource_id=server.id,
             perm_bits=RoleBits.OWNER,
-            session=tx_session,
         )
 
         logger.info(f"Granted user {user_id} {RoleBits.OWNER} permissions for server Id {server.id}")
@@ -366,11 +364,11 @@ async def create_server(
     summary="Update Server",
     description="Update server configuration",
 )
+@use_transaction
 async def update_server(
     server_id: str,
     data: ServerUpdateRequest,
     user_context: dict = Depends(get_user_context),
-    tx_session: AsyncClientSession = Depends(get_tx_session),
 ):
     """Update a server with partial data"""
     try:
@@ -382,7 +380,6 @@ async def update_server(
             server_id=server_id,
             data=data,
             user_id=user_id,
-            session=tx_session,
         )
         
         return convert_to_update_response(server)
@@ -422,10 +419,10 @@ async def update_server(
     summary="Delete Server",
     description="Delete a server",
 )
+@use_transaction
 async def delete_server(
     server_id: str,
     user_context: dict = Depends(get_user_context),
-    tx_session: AsyncClientSession = Depends(get_tx_session),
 ):
     """Delete a server"""
     try:
@@ -435,14 +432,12 @@ async def delete_server(
         successful_delete = await server_service_v1.delete_server(
             server_id=server_id,
             user_id=None,
-            session=tx_session,
         )
 
         if successful_delete:
             deleted_count = await acl_service.delete_acl_entries_for_resource(
                 resource_type=ResourceType.MCPSERVER,
                 resource_id=PydanticObjectId(server_id),
-                session=tx_session,
             )
             logger.info(f"Removed {deleted_count} ACL permissions for server Id {server_id}")
             return None  # 204 No Content
