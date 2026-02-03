@@ -6,14 +6,12 @@ Refactored with centralized configuration and strategy pattern.
 """
 
 import asyncio
-import base64
 import logging
-from typing import List, Dict, Optional, Any
+import httpx
+from typing import List, Dict, Optional, Any, Tuple
 import re
 from urllib.parse import urlparse
 from dataclasses import dataclass
-
-# MCP Client imports
 from mcp import ClientSession
 from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamable_http_client
@@ -21,8 +19,172 @@ from mcp.client.streamable_http import streamable_http_client
 # Internal imports
 from registry.core.mcp_config import mcp_config
 from registry.core.server_strategies import get_server_strategy
+from packages.database.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
+
+
+# ========== Session Management ==========
+# Redis-based session store for downstream MCP servers with TTL
+# Key: f"mcp_session:{user_id}:{server_id}" -> Value: JSON({"session_id": str, "initialized": bool})
+# Sessions expire after 15 minutes of inactivity (MCP server session timeout)
+SESSION_TTL_MINUTES = 15  # MCP session timeout
+SESSION_KEY_PREFIX = "mcp_session:"
+
+
+def get_session(session_key: str) -> Optional[Tuple[str, bool]]:
+    """Get session ID and initialization status from Redis if not expired."""
+    redis_client = get_redis_client()
+    if not redis_client:
+        logger.warning("Redis not available, session management disabled")
+        return None
+    
+    try:
+        redis_key = f"{SESSION_KEY_PREFIX}{session_key}"
+        session_data = redis_client.get(redis_key)
+        
+        if not session_data:
+            return None
+        
+        # Parse JSON data
+        import json
+        data = json.loads(session_data)
+        session_id = data.get("session_id")
+        initialized = data.get("initialized", False)
+        
+        logger.debug(f"Session retrieved from Redis: {session_key} (initialized={initialized})")
+        return (session_id, initialized)
+        
+    except Exception as e:
+        logger.error(f"Failed to get session from Redis: {e}")
+        return None
+
+
+def store_session(session_key: str, session_id: str, initialized: bool = False) -> None:
+    redis_client = get_redis_client()
+    """Store session ID with TTL and initialization status in Redis."""
+    if not redis_client:
+        logger.warning("Redis not available, session not stored")
+        return
+    
+    try:
+        import json
+        redis_key = f"{SESSION_KEY_PREFIX}{session_key}"
+        session_data = json.dumps({
+            "session_id": session_id,
+            "initialized": initialized
+        })
+        
+        # Store with TTL in seconds
+        ttl_seconds = SESSION_TTL_MINUTES * 60
+        redis_client.setex(redis_key, ttl_seconds, session_data)
+        
+        logger.debug(f"Session stored in Redis with {SESSION_TTL_MINUTES}min TTL: {session_key} (initialized={initialized})")
+        
+    except Exception as e:
+        logger.error(f"Failed to store session in Redis: {e}")
+
+
+def clear_session(session_key: str) -> None:
+    redis_client = get_redis_client()
+    """Clear/disconnect a session from Redis."""
+    if not redis_client:
+        logger.warning("Redis not available, session not cleared")
+        return
+    
+    try:
+        redis_key = f"{SESSION_KEY_PREFIX}{session_key}"
+        redis_client.delete(redis_key)
+        logger.info(f"🗑️ Session cleared from Redis: {session_key}")
+        
+    except Exception as e:
+        logger.error(f"Failed to clear session from Redis: {e}")
+
+
+async def initialize_mcp_session(
+    target_url: str,
+    headers: Dict[str, str],
+    session_key: str,
+    transport_type: str = "streamable-http"
+) -> Optional[str]:
+    """
+    Perform MCP initialization handshake using raw JSON-RPC.
+    
+    Sends initialize/initialized handshake and extracts session ID from headers,
+    but does NOT keep the connection open. The session ID is used for subsequent
+    requests which will maintain their own connections.
+    
+    Args:
+        target_url: MCP server URL
+        headers: HTTP headers (including authentication)
+        session_key: Session storage key (user_id:server_id)
+        transport_type: Transport type ("streamable-http" or "sse")
+    
+    Returns:
+        Session ID if successful, None otherwise
+    """
+    logger.info(f"🔄 Initializing MCP session using JSON-RPC ({transport_type} transport)")
+    
+    try:
+        # Create httpx client with custom headers for authentication
+        async with httpx.AsyncClient(headers=headers, timeout=30.0) as http_client:
+            # Send initialize request (JSON-RPC 2.0)
+            init_request = {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {
+                        "name": "mcp-gateway",
+                        "version": "1.0.0"
+                    }
+                }
+            }
+            
+            logger.info(f"📤 Sending initialize request")
+            response = await http_client.post(target_url, json=init_request)
+            response.raise_for_status()
+            
+            # Extract session ID from response headers
+            session_id = response.headers.get("mcp-session-id") or response.headers.get("Mcp-Session-Id")
+            
+            if not session_id:
+                logger.warning(f"⚠️ No session ID in response headers")
+                return None
+            
+            logger.info(f"✅ Session ID received: {session_id}")
+            
+            # Send initialized notification (completes handshake)
+            initialized_notification = {
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized",
+                "params": {}
+            }
+            
+            # Include session ID in subsequent request
+            headers_with_session = {**headers, "Mcp-Session-Id": session_id}
+            
+            logger.info(f"📤 Sending initialized notification")
+            await http_client.post(
+                target_url, 
+                json=initialized_notification,
+                headers=headers_with_session
+            )
+            
+            logger.info(f"✅ MCP session fully initialized: {session_id}")
+            
+            # Store session as initialized
+            store_session(session_key, session_id, initialized=True)
+            
+            return session_id
+                    
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize MCP session: {e}", exc_info=True)
+        # Clear any partial session state
+        clear_session(session_key)
+        return None
 
 
 @dataclass
