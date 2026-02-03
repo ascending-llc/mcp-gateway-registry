@@ -248,10 +248,6 @@ def mock_telemetry_metrics(monkeypatch):
         "registry.core.telemetry_decorators._record_tool_execution",
         Mock()
     )
-    monkeypatch.setattr(
-        "registry.core.telemetry_decorators._record_tool_discovery",
-        Mock()
-    )
 
     yield mock_metrics_client
 

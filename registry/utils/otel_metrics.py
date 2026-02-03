@@ -9,7 +9,6 @@ Usage:
         metrics,
         record_registry_operation,
         record_tool_execution,
-        record_tool_discovery,
         record_server_request,
         record_resource_access,
         record_prompt_execution,
@@ -103,37 +102,6 @@ def record_tool_execution(
 
     if duration_seconds is not None:
         metrics.record_histogram("mcp_tool_execution_duration_seconds", duration_seconds, attributes)
-
-
-def record_tool_discovery(
-    tool_name: str,
-    source: str = "registry",
-    success: bool = True,
-    duration_seconds: Optional[float] = None,
-) -> None:
-    """
-    Record tool discovery operation with optional duration for latency percentiles.
-
-    Requires these metrics in config:
-    - counter: mcp_tool_discovery_total
-    - histogram: mcp_tool_discovery_duration_seconds
-
-    Args:
-        tool_name: Name of the tool discovered
-        source: Source of discovery (e.g., "registry", "server", "search")
-        success: Whether the discovery was successful
-        duration_seconds: Discovery duration in seconds for p50/p95/p99 calculation
-    """
-    attributes = {
-        "tool_name": tool_name,
-        "source": source,
-        "status": "success" if success else "failure",
-    }
-
-    metrics.record_counter("mcp_tool_discovery_total", 1, attributes)
-
-    if duration_seconds is not None:
-        metrics.record_histogram("mcp_tool_discovery_duration_seconds", duration_seconds, attributes)
 
 
 def record_resource_access(

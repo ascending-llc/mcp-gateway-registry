@@ -14,6 +14,7 @@ from registry.core.telemetry_decorators import (
     ResourceAccessMetricsContext,
     PromptExecutionMetricsContext
 )
+from registry.utils.otel_metrics import record_server_request
 from packages.models.extended_mcp_server import MCPServerDocument
 from registry.auth.dependencies import CurrentUser
 from registry.services.server_service import server_service_v1
@@ -582,6 +583,9 @@ async def execute_tool(
         server_name = getattr(server, "serverName", None) or server.path.strip("/")
         metrics_ctx.set_server_name(server_name)
 
+        # Track server request count
+        record_server_request(server_name)
+
         # Build target URL using shared helper
         target_url = _build_target_url(server)
 
@@ -771,6 +775,9 @@ async def read_resource(
         server_name = getattr(server, "serverName", None) or server.path.strip("/")
         metrics_ctx.set_server_name(server_name)
 
+        # Track server request count
+        record_server_request(server_name)
+
         # Build target URL using shared helper (for future implementation)
         _target_url = _build_target_url(server)
 
@@ -880,6 +887,9 @@ async def execute_prompt(
         # Update metrics context with resolved server name
         server_name = getattr(server, "serverName", None) or server.path.strip("/")
         metrics_ctx.set_server_name(server_name)
+
+        # Track server request count
+        record_server_request(server_name)
 
         # Build target URL using shared helper (for future implementation)
         _target_url = _build_target_url(server)
