@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import List, Literal, Optional
 from registry.auth.dependencies import CurrentUser
@@ -302,14 +303,15 @@ async def search_servers(
     # if it includes the server, add tool,resource and prompt.
     # search only server and get server detail from mongo
     if len(search.type_list) == 1 and search.type_list[0] == ServerEntityType.SERVER:
-        filters = {"enabled": search.include_disabled, }
+        filters = {"enabled": not search.include_disabled}
         results = await mcp_server_repo.asearch_with_rerank(query=query,
                                                             search_type=search.search_type,
                                                             filters=filters, k=top_n)
-        search_results = []
-        for result in results:
-            search_results.append(await server_service_v1.get_server_by_id(str(result.get('server_id'))))
-        logger.info(f"search results: {len(search_results)}")
+        server_ids = [str(result.get('server_id')) for result in results]
+        async with asyncio.TaskGroup() as tg:
+            tasks = [tg.create_task(server_service_v1.get_server_by_id(sid)) for sid in server_ids]
+        search_results = [t.result() for t in tasks]
+        logger.info(f"Found {len(search_results)} servers with full details")
     else:
         filters = {
             "enabled": search.include_disabled,
