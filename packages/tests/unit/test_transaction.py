@@ -9,14 +9,14 @@ from packages.database.transaction import get_tx_session
 from packages.database.mongodb import MongoDB
 
 
-def _make_mock_session():
+def _make_mock_session_and_client():
     """
-    Create a mock AsyncClientSession whose start_transaction()
-    returns a coroutine that yields an async context manager.
+    Create a mock client and session with proper context manager behavior.
+    The client's start_session() returns a context manager that yields the session.
+    The session's start_transaction() returns a coroutine that yields a context manager.
     """
     mock_session = AsyncMock()
-    mock_session.end_session = AsyncMock()
-
+    
     @asynccontextmanager
     async def _transaction_context():
         yield
@@ -26,7 +26,19 @@ def _make_mock_session():
         return _transaction_context()
 
     mock_session.start_transaction = _fake_transaction
-    return mock_session
+
+    # Mock client with start_session returning a context manager
+    mock_client = MagicMock()
+    
+    @asynccontextmanager
+    async def _session_context():
+        async with mock_session:
+            yield mock_session
+    
+    # Return a new context manager each time start_session is called
+    mock_client.start_session = MagicMock(side_effect=lambda: _session_context())
+    
+    return mock_client, mock_session
 
 
 class TestGetTxSession:
@@ -42,9 +54,7 @@ class TestGetTxSession:
     @pytest.mark.asyncio
     async def test_yields_session_with_active_transaction(self):
         """Test that get_tx_session yields a session and commits on success."""
-        mock_client = MagicMock()
-        mock_session = _make_mock_session()
-        mock_client.start_session.return_value = mock_session
+        mock_client, mock_session = _make_mock_session_and_client()
         MongoDB.client = mock_client
 
         gen = get_tx_session()
@@ -57,14 +67,13 @@ class TestGetTxSession:
         with pytest.raises(StopAsyncIteration):
             await gen.__anext__()
 
-        mock_session.end_session.assert_called_once()
+        # Verify context manager was exited (cleanup happened)
+        mock_session.__aexit__.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_session_closed_on_exception(self):
         """Test that the session is always closed, even on exceptions."""
-        mock_client = MagicMock()
-        mock_session = _make_mock_session()
-        mock_client.start_session.return_value = mock_session
+        mock_client, mock_session = _make_mock_session_and_client()
         MongoDB.client = mock_client
 
         gen = get_tx_session()
@@ -75,7 +84,8 @@ class TestGetTxSession:
         with pytest.raises(ValueError):
             await gen.athrow(ValueError("test error"))
 
-        mock_session.end_session.assert_called_once()
+        # Verify context manager was exited (cleanup happened)
+        mock_session.__aexit__.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_raises_runtime_error_when_client_not_initialized(self):
@@ -89,9 +99,7 @@ class TestGetTxSession:
     @pytest.mark.asyncio
     async def test_operation_failure_propagated(self):
         """Test that OperationFailure is properly propagated and session closed."""
-        mock_client = MagicMock()
-        mock_session = _make_mock_session()
-        mock_client.start_session.return_value = mock_session
+        mock_client, mock_session = _make_mock_session_and_client()
         MongoDB.client = mock_client
 
         gen = get_tx_session()
@@ -101,14 +109,13 @@ class TestGetTxSession:
         with pytest.raises(OperationFailure):
             await gen.athrow(op_error)
 
-        mock_session.end_session.assert_called_once()
+        # Verify context manager was exited (cleanup happened)
+        mock_session.__aexit__.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_connection_failure_propagated(self):
         """Test that ConnectionFailure is properly propagated and session closed."""
-        mock_client = MagicMock()
-        mock_session = _make_mock_session()
-        mock_client.start_session.return_value = mock_session
+        mock_client, mock_session = _make_mock_session_and_client()
         MongoDB.client = mock_client
 
         gen = get_tx_session()
@@ -118,4 +125,5 @@ class TestGetTxSession:
         with pytest.raises(ConnectionFailure):
             await gen.athrow(conn_error)
 
-        mock_session.end_session.assert_called_once()
+        # Verify context manager was exited (cleanup happened)
+        mock_session.__aexit__.assert_called_once()
