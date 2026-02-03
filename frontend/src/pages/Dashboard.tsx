@@ -53,7 +53,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
 
   return createPortal(
     <div
-      className='fixed top-4 right-4 z-[100] animate-slide-in-top'
+      className='fixed top-4 right-4 z-[100] max-w-full animate-slide-in-top'
       onClick={e => e.stopPropagation()}
       onMouseDown={e => e.stopPropagation()}
     >
@@ -69,7 +69,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
         ) : (
           <ExclamationCircleIcon className='h-5 w-5 mr-3 flex-shrink-0' />
         )}
-        <p className='text-sm font-medium'>{message}</p>
+        <p className='text-sm font-medium max-w-full truncate'>{message}</p>
         <button
           onClick={e => {
             e.stopPropagation();
