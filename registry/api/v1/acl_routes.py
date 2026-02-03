@@ -8,7 +8,9 @@ import asyncio
 import logging
 from fastapi import APIRouter, HTTPException, status as http_status, Depends, Query
 from beanie import PydanticObjectId
+from pymongo.asynchronous.client_session import AsyncClientSession
 
+from packages.database import get_tx_session
 from registry.auth.dependencies import CurrentUserWithACLMap
 from registry.services.access_control_service import acl_service
 from registry.core.acl_constants import PrincipalType, PermissionBits
@@ -74,6 +76,7 @@ async def update_resource_permissions(
     resource_type: str,
     data: UpdateResourcePermissionsRequest,
     user_context: dict = Depends(get_user_context),
+    tx_session: AsyncClientSession = Depends(get_tx_session),
 ) -> UpdateResourcePermissionsResponse:
     validate_resource_type(resource_type)
 
@@ -88,7 +91,8 @@ async def update_resource_permissions(
             deleted_count = await acl_service.delete_acl_entries_for_resource(
                 resource_type=resource_type,
                 resource_id=PydanticObjectId(resource_id),
-                perm_bits_to_delete=PermissionBits.VIEW
+                perm_bits_to_delete=PermissionBits.VIEW,
+                session=tx_session,
             )
             logger.info(f"Deleted {deleted_count} VIEW ACL entries for resource {resource_id}")
 
@@ -98,7 +102,8 @@ async def update_resource_permissions(
                 principal_id=None,
                 resource_type=resource_type,
                 resource_id=PydanticObjectId(resource_id),
-                perm_bits=PermissionBits.VIEW
+                perm_bits=PermissionBits.VIEW,
+                session=tx_session,
             )
             logger.info(f"Created public ACL entry: {acl_entry.id} for resource {resource_id}")
             updated_count = 1 if acl_entry else 0
@@ -108,33 +113,36 @@ async def update_resource_permissions(
                 resource_type=resource_type,
                 resource_id=PydanticObjectId(resource_id),
                 principal_type=PrincipalType.PUBLIC.value,
-                principal_id=None
+                principal_id=None,
+                session=tx_session,
             )
             deleted_count += deleted_public_entry
             logger.info(f"Deleted public ACL entry for resource {resource_id}")
 
         if data.removed:
-            delete_results = await asyncio.gather(*[
-                acl_service.delete_permission(
+            # Execute sequentially within the transaction (sessions are not concurrent-safe)
+            for principal in data.removed:
+                result = await acl_service.delete_permission(
                     resource_type=resource_type,
                     resource_id=PydanticObjectId(resource_id),
                     principal_type=principal.principal_type,
-                    principal_id=PydanticObjectId(principal.principal_id)
-                ) for principal in data.removed
-            ])
-            deleted_count += sum(delete_results)
+                    principal_id=PydanticObjectId(principal.principal_id),
+                    session=tx_session,
+                )
+                deleted_count += result
 
         if data.updated:
-            update_results = await asyncio.gather(*[
-                acl_service.grant_permission(
+            # Execute sequentially within the transaction (sessions are not concurrent-safe)
+            for principal in data.updated:
+                await acl_service.grant_permission(
                     principal_type=principal.principal_type,
                     principal_id=PydanticObjectId(principal.principal_id),
                     resource_type=resource_type,
                     resource_id=PydanticObjectId(resource_id),
                     perm_bits=principal.perm_bits,
-                ) for principal in data.updated
-            ])
-            updated_count += len(update_results)
+                    session=tx_session,
+                )
+                updated_count += 1
 
         logger.info(f"Updated permissions for resource {resource_id}: {updated_count} updated, {deleted_count} deleted")
         return UpdateResourcePermissionsResponse(

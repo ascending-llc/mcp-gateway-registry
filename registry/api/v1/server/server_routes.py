@@ -11,7 +11,9 @@ from typing import Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, status as http_status, Depends
 from pydantic import ValidationError
 from beanie import PydanticObjectId
+from pymongo.asynchronous.client_session import AsyncClientSession
 
+from packages.database import get_tx_session
 from registry.auth.dependencies import CurrentUserWithACLMap
 from registry.core.telemetry_decorators import track_registry_operation
 from registry.services.server_service import server_service_v1
@@ -304,32 +306,30 @@ async def get_server(
 async def create_server(
     data: ServerCreateRequest,
     user_context: dict = Depends(get_user_context),
+    tx_session: AsyncClientSession = Depends(get_tx_session),
 ):
     """Create a new server"""
     try:
         user_id = user_context.get("user_id")
-        
+
         server = await server_service_v1.create_server(
             data=data,
             user_id=user_id,
+            session=tx_session,
         )
 
         if not server:
             logger.error("Server creation failed without exception")
             raise ValueError("Failed to create server")
 
-        acl_entry = await acl_service.grant_permission(
+        await acl_service.grant_permission(
             principal_type=PrincipalType.USER,
             principal_id=PydanticObjectId(user_id),
             resource_type=ResourceType.MCPSERVER,
             resource_id=server.id,
-            perm_bits=RoleBits.OWNER
+            perm_bits=RoleBits.OWNER,
+            session=tx_session,
         )
-        
-        if not acl_entry:
-            await server.delete()
-            logger.error(f"Failed to create ACL entry for server: {server.id}. Rolling back server creation")
-            raise ValueError(f"Failed to create ACL entry for server: {server.id}. Rolling back server creation")
 
         logger.info(f"Granted user {user_id} {RoleBits.OWNER} permissions for server Id {server.id}")
         return convert_to_create_response(server)
@@ -376,6 +376,7 @@ async def update_server(
     server_id: str,
     data: ServerUpdateRequest,
     user_context: dict = Depends(get_user_context),
+    tx_session: AsyncClientSession = Depends(get_tx_session),
 ):
     """Update a server with partial data"""
     try:
@@ -387,6 +388,7 @@ async def update_server(
             server_id=server_id,
             data=data,
             user_id=user_id,
+            session=tx_session,
         )
         
         return convert_to_update_response(server)
@@ -430,6 +432,7 @@ async def update_server(
 async def delete_server(
     server_id: str,
     user_context: dict = Depends(get_user_context),
+    tx_session: AsyncClientSession = Depends(get_tx_session),
 ):
     """Delete a server"""
     try:
@@ -439,12 +442,14 @@ async def delete_server(
         successful_delete = await server_service_v1.delete_server(
             server_id=server_id,
             user_id=None,
+            session=tx_session,
         )
 
         if successful_delete:
             deleted_count = await acl_service.delete_acl_entries_for_resource(
                 resource_type=ResourceType.MCPSERVER,
                 resource_id=PydanticObjectId(server_id),
+                session=tx_session,
             )
             logger.info(f"Removed {deleted_count} ACL permissions for server Id {server_id}")
             return None  # 204 No Content

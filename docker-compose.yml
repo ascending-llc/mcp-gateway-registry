@@ -132,24 +132,6 @@ services:
       - full
       - dev
 
-  seed:
-    image: python:3.12
-    networks:
-      - default
-    volumes:
-      - ./:/app
-    working_dir: /app
-    environment:
-      - MONGO_URI=mongodb://registry-mongodb:27017/jarvis
-    env_file:
-      - .env
-    command: bash -c "pip install -e ./packages  && python scripts/seed_mongodb.py"
-    depends_on:
-      registry-mongodb:
-        condition: service_healthy
-    profiles:
-      - full
-      - dev
 
   registry-redis:
     container_name: registry-redis

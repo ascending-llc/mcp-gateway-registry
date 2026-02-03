@@ -34,6 +34,7 @@ from registry.schemas.errors import (
     AuthenticationError,
 )
 from registry.core.telemetry_decorators import track_tool_discovery
+from pymongo.asynchronous.client_session import AsyncClientSession
 
 logger = logging.getLogger(__name__)
 
@@ -660,9 +661,10 @@ class ServerServiceV1:
         return await MCPServerDocument.find_one({"path": path})
 
     async def create_server(
-        self,
-        data: ServerCreateRequest,
-        user_id: str,
+            self,
+            data: ServerCreateRequest,
+            user_id: str,
+            session: Optional[AsyncClientSession] = None
     ) -> MCPServerDocument:
         """
         Create a new server.
@@ -736,10 +738,8 @@ class ServerServiceV1:
             updatedAt=now,
         )
 
-        await server.insert()
-        logger.info(
-            f"Created server: {server.serverName} (ID: {server.id}, Path: {data.path})"
-        )
+        await server.insert(session=session)
+        logger.info(f"Created server: {server.serverName} (ID: {server.id}, Path: {data.path})")
 
         # Perform health check and tool retrieval after registration
         if data.url:
@@ -760,13 +760,9 @@ class ServerServiceV1:
 
                 if not is_healthy:
                     # Health check failed - delete the server and reject registration
-                    logger.error(
-                        f"Health check failed for {server.serverName}: {status_msg}"
-                    )
-                    await server.delete()
-                    raise ValueError(
-                        f"Server registration rejected: Health check failed - {status_msg}"
-                    )
+                    logger.error(f"Health check failed for {server.serverName}: {status_msg}")
+                    await server.delete(session=session)
+                    raise ValueError(f"Server registration rejected: Health check failed - {status_msg}")
 
                 # Update server with health check results (root-level field)
                 server.lastConnected = _get_current_utc_time()
@@ -875,7 +871,7 @@ class ServerServiceV1:
                 # Save updated server
                 server.config = config
                 server.updatedAt = _get_current_utc_time()
-                await server.save()
+                await server.save(session=session)
             except ValueError:
                 # Re-raise ValueError (our validation errors)
                 raise
@@ -890,14 +886,15 @@ class ServerServiceV1:
                     str(e),
                     exc_info=True,
                 )
-                await server.delete()
+                await server.delete(session=session)
         return server
 
     async def update_server(
-        self,
-        server_id: str,
-        data: ServerUpdateRequest,
-        user_id: Optional[str] = None,
+            self,
+            server_id: str,
+            data: ServerUpdateRequest,
+            user_id: Optional[str] = None,
+            session = Optional[AsyncClientSession],
     ) -> MCPServerDocument:
         """
         Update a server.
@@ -958,15 +955,16 @@ class ServerServiceV1:
         # Update the updatedAt timestamp
         server.updatedAt = _get_current_utc_time()
 
-        await server.save()
+        await server.save(session=session)
 
         asyncio.create_task(self.mcp_server_repo.smart_sync(server))
         return server
 
     async def delete_server(
-        self,
-        server_id: str,
-        user_id: Optional[str] = None,
+            self,
+            server_id: str,
+            user_id: Optional[str] = None,
+            session: Optional[AsyncClientSession] = None,
     ) -> bool:
         """
         Delete a server.
@@ -995,7 +993,7 @@ class ServerServiceV1:
         asyncio.create_task(
             self.mcp_server_repo.delete_by_server_id(server_id, server.serverName)
         )
-        await server.delete()
+        await server.delete(session=session)
         logger.info(f"Deleted server: {server.serverName} (ID: {server.id})")
         return True
 
