@@ -38,6 +38,7 @@ dev = [
     "poethepoet>=0.40.0",
     "ruff>=0.14.0",
     "pre-commit>=4.0.0",
+    "bandit>=1.8.3",
 ]
 
 [tool.poe.tasks]
