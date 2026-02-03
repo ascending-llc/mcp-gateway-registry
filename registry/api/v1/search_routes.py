@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Literal
 
@@ -7,9 +8,7 @@ from pydantic import BaseModel, Field
 from packages.models.enums import ServerEntityType
 from packages.vector.enum.enums import SearchType
 from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
-from registry.auth.dependencies import CurrentUser
-from registry.services.search.service import faiss_service
-
+from registry.services.server_service import server_service_v1
 from ...services.agent_service import agent_service
 
 logger = logging.getLogger(__name__)
@@ -291,21 +290,38 @@ async def search_servers(search: SearchRequest, user_context: CurrentUser):
         f"query='{query}', top_n={top_n}, search_type={search.search_type}"
     )
 
-    filters = {
-        "enabled": not search.include_disabled,
-        "entity_type": [dt.value for dt in search.type_list],
+    # if it includes the server, add tool,resource and prompt.
+    # search only server and get server detail from mongo
+    if len(search.type_list) == 1 and search.type_list[0] == ServerEntityType.SERVER:
+        filters = {"enabled": not search.include_disabled}
+        results = await mcp_server_repo.asearch_with_rerank(query=query,
+                                                            search_type=search.search_type,
+                                                            filters=filters, k=top_n)
+        server_ids = [str(result.get('server_id')) for result in results]
+        async with asyncio.TaskGroup() as tg:
+            tasks = [tg.create_task(server_service_v1.get_server_by_id(sid)) for sid in server_ids]
+        search_results = [t.result() for t in tasks]
+        logger.info(f"Found {len(search_results)} servers with full details")
+    else:
+        filters = {
+            "enabled": search.include_disabled,
+            "entity_type": [dt.value for dt in search.type_list]
+        }
+        search_results = await mcp_server_repo.asearch_with_rerank(
+            query=query,
+            k=top_n,
+            candidate_k=min(top_n * 5, 100),  # Fetch 5x candidates for reranking (max 100)
+            search_type=search.search_type,
+            filters=filters
+        )
+        logger.info(
+            "Search completed: %d results for query=%r",
+            len(search_results),
+            query,
+        )
+        logger.info(f"✅ Found {len(search_results)} servers")
+    return {
+        "query": query,
+        "total": len(search_results),
+        "servers": search_results
     }
-    search_results = await mcp_server_repo.asearch_with_rerank(
-        query=query,
-        k=top_n,
-        candidate_k=min(top_n * 5, 100),  # Fetch 5x candidates for reranking (max 100)
-        search_type=search.search_type,
-        filters=filters,
-    )
-    logger.info(
-        "Search completed: %d results for query=%r",
-        len(search_results),
-        query,
-    )
-    logger.info(f"✅ Found {len(search_results)} servers")
-    return {"query": query, "total": len(search_results), "servers": search_results}

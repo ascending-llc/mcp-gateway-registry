@@ -1241,6 +1241,7 @@ class ServerServiceV1:
                 include_resources=include_resources,
                 include_prompts=include_prompts,
             )
+            server.config["requiresInit"] = True if result.requires_init else False
 
             if include_capabilities:
                 if result.tools is None or result.capabilities is None:

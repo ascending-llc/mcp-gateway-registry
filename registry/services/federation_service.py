@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ..core.config import settings
 from ..schemas.federation_schema import (
     FederationConfig,
 )
@@ -22,8 +23,8 @@ from .federation.anthropic_client import AnthropicFederationClient
 from .federation.asor_client import AsorFederationClient
 
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+    level=settings.log_level,
+    format=settings.log_format
 )
 
 logger = logging.getLogger(__name__)

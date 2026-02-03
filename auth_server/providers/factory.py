@@ -11,8 +11,8 @@ from .entra import EntraIdProvider
 from .keycloak import KeycloakProvider
 
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+    level=settings.log_level,
+    format=settings.log_format
 )
 
 logger = logging.getLogger(__name__)

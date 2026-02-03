@@ -13,12 +13,13 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Dict, List, Any, Optional
+from registry.core.config import settings
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+    level=settings.log_level,
+    format=settings.log_format
 )
 
 logger = logging.getLogger(__name__)

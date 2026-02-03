@@ -9,6 +9,7 @@ from registry.auth.oauth import (
 )
 from registry.models.oauth_models import OAuthTokens
 from registry.schemas.enums import OAuthFlowStatus
+from registry.utils.utils import generate_code_verifier, generate_code_challenge
 from registry.services.oauth.token_service import token_service
 from registry.utils.crypto_utils import decrypt_auth_fields
 from registry.utils.log import logger
@@ -68,6 +69,7 @@ class MCPOAuthService:
             flow_metadata = self.flow_manager.create_flow_metadata(
                 server_id=server_id,
                 server_name=server.serverName,
+                server_path=server.path,
                 user_id=user_id,
                 authorization_url=authorization_url,
                 code_verifier=code_verifier,

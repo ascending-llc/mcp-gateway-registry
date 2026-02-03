@@ -10,12 +10,14 @@ import os
 from datetime import UTC, datetime
 from typing import Any
 
+from .base_client import BaseFederationClient
+from ...core.config import settings
 from ...schemas.federation_schema import AsorAgentConfig
 from .base_client import BaseFederationClient
 
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+    level=settings.log_level,
+    format=settings.log_format
 )
 
 logger = logging.getLogger(__name__)

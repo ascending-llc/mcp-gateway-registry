@@ -3,7 +3,7 @@
 MongoDB to Weaviate Sync Script for MCP Gateway Registry
 
 This script synchronizes MCP servers from MongoDB to Weaviate.
-It reads all servers from MongoDB using server_service_v1 and imports them
+It reads all servers from MongoDB using server_service and imports them
 into Weaviate for semantic search. Already existing servers are skipped.
 
 Usage:
@@ -33,8 +33,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from packages.database.mongodb import MongoDB
 from packages.models.extended_mcp_server import ExtendedMCPServer
 from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
-from registry.services.server_service_v1 import server_service_v1
-
+from registry.services.server_service import server_service_v1
 mcp_server_repo = get_mcp_server_repo()
 
 
