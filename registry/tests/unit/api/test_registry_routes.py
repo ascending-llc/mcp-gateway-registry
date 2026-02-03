@@ -71,7 +71,7 @@ def mock_enhanced_auth_user():
 @pytest.fixture
 def admin_session_cookie():
     """Create a valid admin session cookie (JWT access token)."""
-    from registry.auth.jwt_utils import generate_access_token
+    from registry.utils.crypto_utils import generate_access_token
     from registry.auth.dependencies import map_cognito_groups_to_scopes
     
     groups = ['registry-admins']
@@ -180,7 +180,7 @@ class TestV0ListServers:
         self, mock_enhanced_auth_user, sample_servers_data
     ):
         """Test that regular users see only authorized servers."""
-        from registry.auth.jwt_utils import generate_access_token
+        from registry.utils.crypto_utils import generate_access_token
         from registry.auth.dependencies import map_cognito_groups_to_scopes
         from fastapi.testclient import TestClient
 
@@ -389,7 +389,7 @@ class TestV0ListServerVersions:
         self, mock_enhanced_auth_user, sample_servers_data
     ):
         """Test that users cannot access servers they don't have permission for."""
-        from registry.auth.jwt_utils import generate_access_token
+        from registry.utils.crypto_utils import generate_access_token
         from registry.auth.dependencies import map_cognito_groups_to_scopes
         from fastapi.testclient import TestClient
 

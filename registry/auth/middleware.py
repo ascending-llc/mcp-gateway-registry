@@ -335,7 +335,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 return None
             
             # Try to verify JWT access token
-            from registry.auth.jwt_utils import verify_access_token, verify_refresh_token
+            from registry.utils.crypto_utils import verify_access_token, verify_refresh_token
             claims = verify_access_token(session_cookie)
             
             if claims:
@@ -375,44 +375,37 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 logger.debug("Refresh token invalid or expired")
                 return None
             
-            # Refresh token valid - need to get full user info to generate new access token
+            # Refresh token valid - extract user info from refresh token claims
             user_id = refresh_claims.get('user_id')
             username = refresh_claims.get('sub')
             auth_method = refresh_claims.get('auth_method')
             provider = refresh_claims.get('provider')
             
-            logger.info(f"Refresh token valid for user {username}, fetching user data to generate new access token")
+            # Extract groups and scopes from refresh token
+            groups = refresh_claims.get('groups', [])
+            scope_string = refresh_claims.get('scope', '')
+            scopes = scope_string.split() if scope_string else []
+            role = refresh_claims.get('role', 'user')
+            email = refresh_claims.get('email', f"{username}@local")
             
-            # Get user from database to get current groups/scopes/role
-            from registry.services.user_service import user_service
+            logger.info(f"Refresh token valid for user {username} ({auth_method}), generating new access token")
+            logger.debug(f"User groups from refresh token: {groups}, scopes: {scopes}")
+            
+            # Validate that we have the required information
+            if not groups or not scopes:
+                logger.warning(f"Refresh token for user {username} missing groups or scopes, cannot refresh")
+                return None
+            
+            # Generate new access token using information from refresh token
+            from registry.utils.crypto_utils import generate_access_token
             try:
-                from beanie import PydanticObjectId
-                user_obj = await user_service.get_user_by_id(PydanticObjectId(user_id))
-                if not user_obj:
-                    logger.warning(f"User {username} (id: {user_id}) not found in database during token refresh")
-                    return None
-                
-                # Determine groups and scopes based on auth method
-                if auth_method == 'oauth2':
-                    # For OAuth2 users, we need to use stored groups from their profile
-                    # This is a limitation - we can't refresh OAuth2 groups without re-authenticating
-                    # For now, require re-login for OAuth2 users after access token expiry
-                    logger.warning(f"OAuth2 user {username} access token expired, requiring re-login")
-                    return None
-                else:
-                    # Traditional users - use admin permissions
-                    groups = ['mcp-registry-admin']
-                    scopes = ['mcp-registry-admin', 'mcp-servers-unrestricted/read', 'mcp-servers-unrestricted/execute']
-                
-                # Generate new access token
-                from registry.auth.jwt_utils import generate_access_token
                 new_access_token = generate_access_token(
                     user_id=user_id,
                     username=username,
-                    email=user_obj.email if hasattr(user_obj, 'email') else f"{username}@local",
+                    email=email,
                     groups=groups,
                     scopes=scopes,
-                    role=user_obj.role,
+                    role=role,
                     auth_method=auth_method,
                     provider=provider
                 )
@@ -431,9 +424,8 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                     auth_source='jwt_session_auth_refreshed',
                     user_id=user_id
                 )
-                
             except Exception as e:
-                logger.error(f"Error fetching user data during token refresh: {e}")
+                logger.error(f"Error generating new access token during refresh: {e}")
                 return None
 
         except Exception as e:

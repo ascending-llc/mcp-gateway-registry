@@ -11,8 +11,7 @@ from itsdangerous import URLSafeTimedSerializer
 from registry.api.redirect_routes import (
     get_oauth2_providers,
     oauth2_login_redirect,
-    oauth2_callback,
-    login_submit
+    oauth2_callback
 )
 
 
@@ -271,59 +270,3 @@ class TestAuthRoutes:
                 assert response.status_code == 302
                 # When status_code != 200, it returns oauth2_token_exchange_failed
                 assert "oauth2_token_exchange_failed" in response.headers["location"]
-
-    @pytest.mark.asyncio
-    async def test_login_submit_success(self, mock_request, mock_settings):
-        """Test successful traditional login."""
-        username = "testuser"
-        password = "testpass"
-        
-        # Mock request headers to indicate traditional form submission (not API)
-        mock_request.headers = {"accept": "text/html"}
-        
-        # Mock user object with all required attributes
-        mock_user = Mock()
-        mock_user.id = "test-user-id"
-        mock_user.username = username
-        mock_user.email = f"{username}@local"
-        mock_user.role = "admin"
-        
-        # Mock the token generation to avoid JWT serialization issues
-        mock_tokens = ("mock_access_token", "mock_refresh_token")
-        
-        with patch('registry.api.redirect_routes.validate_login_credentials') as mock_validate, \
-             patch('registry.api.redirect_routes.create_session_cookie') as mock_create_session, \
-             patch('registry.api.redirect_routes.user_service.get_or_create_user', new_callable=AsyncMock) as mock_get_user, \
-             patch('registry.api.redirect_routes.generate_token_pair') as mock_generate_tokens:
-            
-            mock_validate.return_value = True
-            mock_create_session.return_value = "session_data"
-            mock_get_user.return_value = mock_user
-            mock_generate_tokens.return_value = mock_tokens
-            
-            response = await login_submit(mock_request, username, password)
-            
-            assert isinstance(response, RedirectResponse)
-            assert response.status_code == 303
-            assert response.headers["location"] == "/"
-            
-            # Check cookie was set in response
-            assert "set-cookie" in [h[0].decode().lower() for h in response.raw_headers]
-
-    @pytest.mark.asyncio
-    async def test_login_submit_failure(self, mock_request):
-        """Test failed traditional login."""
-        username = "testuser"
-        password = "wrongpass"
-        
-        # Mock request headers to indicate traditional form submission
-        mock_request.headers = {"accept": "text/html"}
-        
-        with patch('registry.api.redirect_routes.validate_login_credentials') as mock_validate:
-            mock_validate.return_value = False
-            
-            response = await login_submit(mock_request, username, password)
-            
-            assert isinstance(response, RedirectResponse)
-            assert response.status_code == 303
-            assert "Invalid+username+or+password" in response.headers["location"]

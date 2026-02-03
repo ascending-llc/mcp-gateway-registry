@@ -42,7 +42,7 @@ def mock_admin_context() -> Dict[str, Any]:
 @pytest.fixture
 def admin_session_cookie():
     """Create a valid admin session cookie (JWT access token)."""
-    from registry.auth.jwt_utils import generate_access_token
+    from registry.utils.crypto_utils import generate_access_token
     from registry.auth.dependencies import map_cognito_groups_to_scopes
     
     groups = ['registry-admins']
@@ -63,7 +63,7 @@ def admin_session_cookie():
 @pytest.fixture
 def user_session_cookie():
     """Create a valid user session cookie (JWT access token)."""
-    from registry.auth.jwt_utils import generate_access_token
+    from registry.utils.crypto_utils import generate_access_token
     from registry.auth.dependencies import map_cognito_groups_to_scopes
     
     groups = ["users"]

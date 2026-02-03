@@ -137,7 +137,7 @@ def create_test_jwt_token(username: str, groups: list, role: str = "user",
     Returns:
         JWT access token string
     """
-    from registry.auth.jwt_utils import generate_access_token
+    from registry.utils.crypto_utils import generate_access_token
     from registry.auth.dependencies import map_cognito_groups_to_scopes
     
     if user_id is None:

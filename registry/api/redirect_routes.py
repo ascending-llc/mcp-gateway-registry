@@ -12,7 +12,7 @@ import secrets
 from ..core.config import settings
 from auth_server.core.config import settings as auth_settings
 from ..auth.dependencies import create_session_cookie, validate_login_credentials
-from ..auth.jwt_utils import generate_token_pair
+from ..utils.crypto_utils import generate_token_pair
 from packages.models._generated import IUser
 from registry.services.user_service import user_service
 from itsdangerous import URLSafeTimedSerializer
@@ -232,99 +232,6 @@ async def oauth2_callback(request: Request, code: str = None, error: str = None,
     except Exception as e:
         logger.error(f"Error in OAuth2 callback: {e}")
         return RedirectResponse(url=f"{settings.registry_client_url}/login?error=oauth2_callback_error", status_code=302)
-
-
-@router.post("/login")
-async def login_submit(
-    request: Request,
-    username: Annotated[str, Form()], 
-    password: Annotated[str, Form()]
-):
-    """Handle login form submission - supports both traditional and API calls"""
-    logger.info(f"Login attempt for username: {username}")
-    
-    # Check if this is an API call (React) or traditional form submission
-    accept_header = request.headers.get("accept", "")
-    is_api_call = "application/json" in accept_header
-    
-    if validate_login_credentials(username, password):
-        # Get or create user in database
-        user_obj = await user_service.get_or_create_user(email=f"{username}@local")
-        if not user_obj:
-            logger.error(f"Failed to get/create user object for {username}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create user session"
-            )
-
-        # Generate JWT access and refresh tokens
-        access_token, refresh_token = generate_token_pair(
-            user_id=str(user_obj.id),
-            username=username,
-            email=f"{username}@local",
-            groups=["mcp-registry-admin"],
-            scopes=["mcp-registry-admin", "mcp-servers-unrestricted/read", "mcp-servers-unrestricted/execute"],
-            role=user_obj.role,
-            auth_method="traditional",
-            provider="local"
-        )
-        
-        if is_api_call:
-            # API response for React
-            response = JSONResponse(content={"success": True, "message": "Login successful"})
-        else:
-            # Traditional redirect response
-            response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-        
-        # Set access token cookie (1 day)
-        cookie_params_access = {
-            "key": settings.session_cookie_name,
-            "value": access_token,
-            "max_age": 86400,  # 1 day
-            "httponly": True,  # Prevents JavaScript access (XSS protection)
-            "samesite": "lax",  # CSRF protection
-            "secure": settings.session_cookie_secure,  # Only transmit over HTTPS when True
-            "path": "/",
-        }
-
-        # Set refresh token cookie (7 days)
-        cookie_params_refresh = {
-            "key": "jarvis_registry_refresh",
-            "value": refresh_token,
-            "max_age": 604800,  # 7 days
-            "httponly": True,
-            "samesite": "lax",
-            "secure": settings.session_cookie_secure,
-            "path": "/",
-        }
-
-        # Add domain attribute if configured for cross-subdomain cookie sharing
-        if settings.session_cookie_domain:
-            cookie_params_access["domain"] = settings.session_cookie_domain
-            cookie_params_refresh["domain"] = settings.session_cookie_domain
-
-        response.set_cookie(**cookie_params_access)
-        response.set_cookie(**cookie_params_refresh)
-
-        logger.info(f"User '{username}' logged in successfully, JWT tokens set in httpOnly cookies")
-        return response
-    else:
-        logger.info(f"Login failed for user '{username}'.")
-        
-        if is_api_call:
-            # API error response for React
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid username or password"
-            )
-        else:
-            # Traditional redirect with error
-            return RedirectResponse(
-                url=f"{settings.registry_client_url}/login?error=Invalid+username+or+password",
-                status_code=status.HTTP_303_SEE_OTHER,
-            )
-
-
 
 
 

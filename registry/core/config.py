@@ -113,6 +113,10 @@ class Settings(BaseSettings):
     JWT_SELF_SIGNED_KID: str = "self-signed-key-v1"
     API_VERSION: str = "v1"
     LOG_LEVEL: str = "INFO"
+    
+    # Encryption key for sensitive data (client secrets, API keys, etc.)
+    # Hex-encoded AES key for encrypting OAuth client secrets and API keys
+    CREDS_KEY: Optional[str] = None
 
     # Local development mode detection
     @property
