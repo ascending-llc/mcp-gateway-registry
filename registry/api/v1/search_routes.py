@@ -8,6 +8,7 @@ from packages.models.enums import ServerEntityType
 from registry.services.search.service import faiss_service
 from packages.vector.enum.enums import SearchType
 from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from services.server_service import server_service_v1
 from ...services.agent_service import agent_service
 
 logger = logging.getLogger(__name__)
@@ -299,37 +300,34 @@ async def search_servers(
                 f"query='{query}', top_n={top_n}, search_type={search.search_type}")
 
     # if it includes the server, add tool,resource and prompt.
-    new_entity_type = search.type_list.copy()
-    if ServerEntityType.SERVER in search.type_list:
-        new_entity_type.extend([ServerEntityType.PROMPT,
-                                ServerEntityType.RESOURCE,
-                                ServerEntityType.TOOL])
-
-    entity_type = list(set([
-        entity_type.value if isinstance(entity_type, ServerEntityType) else entity_type
-        for entity_type in new_entity_type
-    ]))
-
-    logger.info(f"entity_type: {entity_type}")
-
-    filters = {
-        "enabled": not search.include_disabled,
-        "entity_type": entity_type
-    }
-
-    search_results = await mcp_server_repo.asearch_with_rerank(
-        query=query,
-        k=top_n,
-        candidate_k=min(top_n * 5, 100),  # Fetch 5x candidates for reranking (max 100)
-        search_type=search.search_type,
-        filters=filters
-    )
-    logger.info(
-        "Search completed: %d results for query=%r",
-        len(search_results),
-        query,
-    )
-    logger.info(f"✅ Found {len(search_results)} servers")
+    # search only server and get server detail from mongo
+    if len(search.type_list) == 1 and search.type_list[0] == ServerEntityType.SERVER:
+        filters = {"enabled": search.include_disabled, }
+        results = await mcp_server_repo.asearch_with_rerank(query=query,
+                                                            search_type=search.search_type,
+                                                            filters=filters, k=top_n)
+        search_results = []
+        for result in results:
+            search_results.append(await server_service_v1.get_server_by_id(str(result.get('server_id'))))
+        logger.info(f"search results: {len(search_results)}")
+    else:
+        filters = {
+            "enabled": search.include_disabled,
+            "entity_type": [dt.value for dt in search.type_list]
+        }
+        search_results = await mcp_server_repo.asearch_with_rerank(
+            query=query,
+            k=top_n,
+            candidate_k=min(top_n * 5, 100),  # Fetch 5x candidates for reranking (max 100)
+            search_type=search.search_type,
+            filters=filters
+        )
+        logger.info(
+            "Search completed: %d results for query=%r",
+            len(search_results),
+            query,
+        )
+        logger.info(f"✅ Found {len(search_results)} servers")
     return {
         "query": query,
         "total": len(search_results),
