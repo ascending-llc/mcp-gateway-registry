@@ -894,7 +894,7 @@ class ServerServiceV1:
             server_id: str,
             data: ServerUpdateRequest,
             user_id: Optional[str] = None,
-            session = Optional[AsyncClientSession],
+            session: Optional[AsyncClientSession] = None,
     ) -> MCPServerDocument:
         """
         Update a server.

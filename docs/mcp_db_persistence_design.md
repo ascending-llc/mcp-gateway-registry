@@ -1032,17 +1032,36 @@ Response 200:
 
 MongoDB integration provides a scalable, multi-tenant storage backend for MCP server configurations and OAuth tokens, replacing the file-based JSON storage. This design enables sharing the database with other applications (e.g., jarvis-api) using a unified schema.
 
-### Database Selection: PyMongo + Beanie ODM(TBD)
+### Database Selection: PyMongo Async + Beanie ODM
 
 **Selected Stack:**
-- **PyMongo**: Async MongoDB driver for Python (required for FastAPI async endpoints)
+- **PyMongo (async)**: Native async MongoDB driver (`AsyncMongoClient`) - migrated from Motor which is deprecated
 - **Beanie**: Async ODM built on Pydantic models (native FastAPI integration)
 
 **Rationale:**
+- PyMongo 4.x provides native async support via `AsyncMongoClient`, replacing Motor
 - Beanie provides type-safe models with automatic validation via Pydantic
 - Seamless integration with FastAPI's dependency injection and request/response models
 - Built-in support for async operations (critical for high-concurrency scenarios)
 - Automatic index management and migration support
+
+### Transaction Support
+
+**Why:** Multi-step write operations (e.g., creating a server + granting ACL permissions) must be atomic.
+If the ACL grant fails after the server is created, both operations must be rolled back.
+
+**How:** A FastAPI dependency (`get_tx_session`) provides a transactional `AsyncClientSession`.
+
+**Prerequisite:** MongoDB must run as a **replica set** (single-node is fine for local development).
+The `docker-compose.yml` already configures a single-node replica set (`rs0`).
+
+**Session lifecycle:**
+1. `get_tx_session` calls `client.start_session()`
+2. Opens a transaction via `session.start_transaction()`
+3. Yields the session to the endpoint
+4. On success: transaction commits (context manager exit)
+5. On exception: transaction aborts (context manager exit)
+6. Session is always closed in `finally`
 
 ### Data Models
 
