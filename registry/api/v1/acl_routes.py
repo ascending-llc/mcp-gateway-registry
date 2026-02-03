@@ -4,7 +4,6 @@ ACL Management API Routes V1
 RESTful API endpoints for managing ACL permissions using MongoDB.
 """
 
-import asyncio
 import logging
 from fastapi import APIRouter, HTTPException, status as http_status, Depends, Query
 from beanie import PydanticObjectId
