@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 class ToolExecutionRequest(BaseModel):
     """Request to execute a discovered tool"""
+
     server_id: str
     server_path: str
     tool_name: str
@@ -13,6 +14,7 @@ class ToolExecutionRequest(BaseModel):
 
 class ToolExecutionResponse(BaseModel):
     """Response from tool execution"""
+
     success: bool
     server_path: str
     server_id: str
@@ -24,12 +26,14 @@ class ToolExecutionResponse(BaseModel):
 
 class ResourceReadRequest(BaseModel):
     """Request to read an MCP resource"""
+
     server_id: str
     resource_uri: str  # e.g., "tavily://search-results/AI"
 
 
 class ResourceContent(BaseModel):
     """Resource content response"""
+
     uri: str
     mimeType: str
     text: str | None = None
@@ -38,6 +42,7 @@ class ResourceContent(BaseModel):
 
 class ResourceReadResponse(BaseModel):
     """Response from reading a resource"""
+
     success: bool
     server_id: str
     server_path: str
@@ -48,6 +53,7 @@ class ResourceReadResponse(BaseModel):
 
 class PromptExecutionRequest(BaseModel):
     """Request to execute/get an MCP prompt"""
+
     server_id: str
     prompt_name: str
     arguments: dict[str, Any] | None = None
@@ -55,12 +61,14 @@ class PromptExecutionRequest(BaseModel):
 
 class PromptMessage(BaseModel):
     """Prompt message in MCP format"""
+
     role: str  # "system", "user", "assistant"
     content: dict[str, Any]  # {"type": "text", "text": "..."}
 
 
 class PromptExecutionResponse(BaseModel):
     """Response from executing a prompt"""
+
     success: bool
     server_id: str
     server_path: str

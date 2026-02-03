@@ -10,7 +10,7 @@ from registry.utils.log import logger
 def generate_code_verifier() -> str:
     """
     Generate PKCE code_verifier
-    
+
     Python implementation: Use secrets.token_urlsafe to generate secure random string
     """
     return secrets.token_urlsafe(32)

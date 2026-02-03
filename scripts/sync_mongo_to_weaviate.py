@@ -8,11 +8,12 @@ into Weaviate for semantic search. Already existing servers are skipped.
 
 Usage:
     uv run python scripts/sync_mongo_to_weaviate.py [--clean] [--batch-size N]
-    
+
 Options:
     --clean: Delete all existing servers from Weaviate before syncing
     --batch-size N: Number of servers to process per batch (default: 100)
 """
+
 import asyncio
 import os
 import sys
@@ -51,16 +52,26 @@ class SyncStats:
         self.servers_processed: list[dict[str, Any]] = []
         self.errors: list[str] = []
 
-    def add_server(self, server_name: str, server_path: str, tool_count: int, imported: int, skipped: int, failed: int):
+    def add_server(
+        self,
+        server_name: str,
+        server_path: str,
+        tool_count: int,
+        imported: int,
+        skipped: int,
+        failed: int,
+    ):
         """Record server processing stats."""
-        self.servers_processed.append({
-            "name": server_name,
-            "path": server_path,
-            "total_tools": tool_count,
-            "imported": imported,
-            "skipped": skipped,
-            "failed": failed
-        })
+        self.servers_processed.append(
+            {
+                "name": server_name,
+                "path": server_path,
+                "total_tools": tool_count,
+                "imported": imported,
+                "skipped": skipped,
+                "failed": failed,
+            }
+        )
 
     def add_error(self, error: str):
         """Record an error."""
@@ -87,7 +98,8 @@ class SyncStats:
                 status = "✓" if server["imported"] > 0 else "○"
                 print(f"{status} {server['name']:<30} ({server['path']:<20})")
                 print(
-                    f"  Imported: {server['imported']:>3} | Skipped: {server['skipped']:>3} | Failed: {server['failed']:>3}")
+                    f"  Imported: {server['imported']:>3} | Skipped: {server['skipped']:>3} | Failed: {server['failed']:>3}"
+                )
 
         if self.errors:
             print(f"\n{'-' * 80}")
@@ -103,7 +115,9 @@ class SyncStats:
         if self.tools_failed == 0 and self.total_tools > 0:
             print(f"✓ SUCCESS: All {self.total_tools} servers processed successfully!")
         elif self.tools_imported > 0:
-            print(f"⚠ PARTIAL SUCCESS: {self.tools_imported}/{self.total_tools} servers imported ({success_rate:.1f}%)")
+            print(
+                f"⚠ PARTIAL SUCCESS: {self.tools_imported}/{self.total_tools} servers imported ({success_rate:.1f}%)"
+            )
         else:
             print("✗ FAILED: No servers were imported")
         print("=" * 80 + "\n")
@@ -112,10 +126,10 @@ class SyncStats:
 async def check_server_exists(server_id: str) -> bool:
     """
     Check if server already exists in Weaviate.
-    
+
     Args:
         server_id: Server document ID (MongoDB _id)
-        
+
     Returns:
         True if server exists in Weaviate
     """
@@ -156,7 +170,7 @@ async def sync_server(server: Any, stats: SyncStats):
 
         result = await mcp_server_repo.sync_server_to_vector_db(
             server=server,
-            is_delete=False  # No need to delete, we already checked existence
+            is_delete=False,  # No need to delete, we already checked existence
         )
 
         if result and result.get("indexed_tools", 0) > 0:
@@ -226,14 +240,12 @@ async def sync_all_servers(batch_size: int = 100):
         for page in range(1, total_pages + 1):
             print(f"\n{'─' * 80}")
             print(
-                f"BATCH {page}/{total_pages} (Servers {processed_count + 1}-{min(processed_count + batch_size, total)})")
+                f"BATCH {page}/{total_pages} (Servers {processed_count + 1}-{min(processed_count + batch_size, total)})"
+            )
             print(f"{'─' * 80}")
 
             # Fetch current batch
-            servers, _ = await server_service_v1.list_servers(
-                page=page,
-                per_page=batch_size
-            )
+            servers, _ = await server_service_v1.list_servers(page=page, per_page=batch_size)
 
             if not servers:
                 print(f"  No servers returned for page {page}, stopping...")
@@ -249,7 +261,8 @@ async def sync_all_servers(batch_size: int = 100):
 
             print(f"\n{'─' * 80}")
             print(
-                f"Batch {page} completed. Progress: {processed_count}/{total} servers ({processed_count / total * 100:.1f}%)")
+                f"Batch {page} completed. Progress: {processed_count}/{total} servers ({processed_count / total * 100:.1f}%)"
+            )
             print(f"{'─' * 80}")
 
         return stats

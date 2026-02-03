@@ -175,8 +175,7 @@ async def management_create_group(
     _require_admin(user_context)
     try:
         result = await create_keycloak_group(
-            group_name=payload.name,
-            description=payload.description or ""
+            group_name=payload.name, description=payload.description or ""
         )
         return KeycloakGroupSummary(
             id=result.get("id", ""),

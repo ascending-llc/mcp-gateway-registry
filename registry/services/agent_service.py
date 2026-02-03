@@ -111,7 +111,9 @@ def _load_state_file(
             if "disabled" not in state_data:
                 state_data["disabled"] = []
 
-            logger.info(f"Loaded state: {len(state_data['enabled'])} enabled, {len(state_data['disabled'])} disabled")
+            logger.info(
+                f"Loaded state: {len(state_data['enabled'])} enabled, {len(state_data['disabled'])} disabled"
+            )
             return state_data
         logger.info(f"No state file found at {state_file}, initializing empty state")
         return {"enabled": [], "disabled": []}
@@ -192,7 +194,6 @@ class AgentService:
         self.registered_agents: dict[str, AgentCard] = {}
         self.agent_state: dict[str, list[str]] = {"enabled": [], "disabled": []}
 
-
     def load_agents_and_state(self) -> None:
         """Load agent cards and persisted state from disk."""
         logger.info(f"Loading agent cards from {settings.agents_dir}...")
@@ -205,10 +206,7 @@ class AgentService:
         agent_files = list(settings.agents_dir.glob("**/*_agent.json"))
 
         # Additionally filter out agent_state.json if it somehow matches pattern
-        agent_files = [
-            f for f in agent_files
-            if f.name != settings.agent_state_file_path.name
-        ]
+        agent_files = [f for f in agent_files if f.name != settings.agent_state_file_path.name]
 
         logger.info(f"Found {len(agent_files)} agent files in {settings.agents_dir}")
 
@@ -240,16 +238,13 @@ class AgentService:
                         temp_agents[agent_path] = agent_card
 
                     except Exception as e:
-                        logger.error(
-                            f"Failed to validate agent card from {agent_file}: {e}"
-                        )
+                        logger.error(f"Failed to validate agent card from {agent_file}: {e}")
 
             self.registered_agents = temp_agents
             logger.info(f"Successfully loaded {len(self.registered_agents)} agent cards")
 
         # Load persisted state
         self._load_agent_state()
-
 
     def _load_agent_state(self) -> None:
         """Load persisted agent state from disk."""
@@ -268,11 +263,9 @@ class AgentService:
             f"{len(state_data['disabled'])} disabled"
         )
 
-
     def _persist_state(self) -> None:
         """Persist agent state to disk."""
         _persist_state_to_disk(self.agent_state, settings.agent_state_file_path)
-
 
     def register_agent(
         self,
@@ -315,12 +308,10 @@ class AgentService:
         self._persist_state()
 
         logger.info(
-            f"New agent registered: '{agent_card.name}' at path '{path}' "
-            f"(disabled by default)"
+            f"New agent registered: '{agent_card.name}' at path '{path}' (disabled by default)"
         )
 
         return agent_card
-
 
     def get_agent(
         self,
@@ -353,7 +344,6 @@ class AgentService:
             raise ValueError(f"Agent not found at path: {path}")
 
         return agent
-
 
     def list_agents(self) -> list[AgentCard]:
         """
@@ -405,9 +395,7 @@ class AgentService:
 
         # Update rating details using shared service
         updated_details, is_new_rating = rating_service.update_rating_details(
-            agent_dict["rating_details"],
-            username,
-            rating
+            agent_dict["rating_details"], username, rating
         )
         agent_dict["rating_details"] = updated_details
 
@@ -490,7 +478,6 @@ class AgentService:
 
         return updated_agent
 
-
     def delete_agent(
         self,
         path: str,
@@ -542,7 +529,6 @@ class AgentService:
             logger.error(f"Failed to delete agent at path '{path}': {e}", exc_info=True)
             raise ValueError(f"Failed to delete agent: {e}")
 
-
     def enable_agent(
         self,
         path: str,
@@ -574,7 +560,6 @@ class AgentService:
 
         agent_name = self.registered_agents[path].name
         logger.info(f"Enabled agent '{agent_name}' ({path})")
-
 
     def disable_agent(
         self,
@@ -608,7 +593,6 @@ class AgentService:
         agent_name = self.registered_agents[path].name
         logger.info(f"Disabled agent '{agent_name}' ({path})")
 
-
     def is_agent_enabled(
         self,
         path: str,
@@ -634,7 +618,6 @@ class AgentService:
 
         return alternate_path in self.agent_state["enabled"]
 
-
     def get_enabled_agents(self) -> list[str]:
         """
         Get list of enabled agent paths.
@@ -644,7 +627,6 @@ class AgentService:
         """
         return list(self.agent_state["enabled"])
 
-
     def get_disabled_agents(self) -> list[str]:
         """
         Get list of disabled agent paths.
@@ -653,7 +635,6 @@ class AgentService:
             List of disabled agent paths
         """
         return list(self.agent_state["disabled"])
-
 
     async def index_agent(
         self,
@@ -684,7 +665,6 @@ class AgentService:
         except Exception as e:
             logger.error(f"Failed to index agent in FAISS: {e}", exc_info=True)
 
-
     def get_agent_info(
         self,
         path: str,
@@ -703,7 +683,6 @@ class AgentService:
         except ValueError:
             return None
 
-
     def get_all_agents(self) -> list[AgentCard]:
         """
         Get all registered agents.
@@ -712,7 +691,6 @@ class AgentService:
             List of all agent cards
         """
         return self.list_agents()
-
 
     def remove_agent(
         self,
@@ -732,7 +710,6 @@ class AgentService:
             return True
         except ValueError:
             return False
-
 
     def toggle_agent(
         self,

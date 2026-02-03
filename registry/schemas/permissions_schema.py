@@ -5,7 +5,6 @@ These schemas define the request and response models for the
 ACL Management endpoints based on the API documentation.
 """
 
-
 from pydantic import BaseModel, Field
 
 from registry.core.acl_constants import PrincipalType
@@ -16,6 +15,7 @@ class PermissionPrincipalIn(BaseModel):
     principal_type: PrincipalType
     perm_bits: int | None = 0
     accessRoleId: str | None = None
+
 
 class UpdateResourcePermissionsRequest(BaseModel):
     updated: list[PermissionPrincipalIn] = Field(default_factory=list)

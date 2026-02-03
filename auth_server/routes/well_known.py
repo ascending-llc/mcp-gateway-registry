@@ -25,12 +25,12 @@ from ..providers.factory import get_auth_provider
 def _get_auth_server_urls():
     """
     Get both base URL and full URL for the auth server.
-    
+
     Returns:
         tuple: (base_url, auth_server_url) where:
             - base_url: Root origin without prefix (for issuer, per RFC 8414)
             - auth_server_url: Full URL with prefix (for OAuth operational endpoints)
-        
+
     Raises:
         HTTPException: If AUTH_SERVER_EXTERNAL_URL is not set
     """
@@ -40,7 +40,7 @@ def _get_auth_server_urls():
         logger.error("AUTH_SERVER_EXTERNAL_URL is not configured in settings")
         raise HTTPException(
             status_code=500,
-            detail="Server configuration error: AUTH_SERVER_EXTERNAL_URL not configured"
+            detail="Server configuration error: AUTH_SERVER_EXTERNAL_URL not configured",
         )
 
     # Base URL is auth_server_url minus the prefix (for RFC 8414 issuer)
@@ -48,7 +48,7 @@ def _get_auth_server_urls():
     if settings.auth_server_api_prefix:
         prefix = settings.auth_server_api_prefix.rstrip("/")
         if auth_server_url.endswith(prefix):
-            base_url = auth_server_url[:-len(prefix)].rstrip("/")
+            base_url = auth_server_url[: -len(prefix)].rstrip("/")
 
     return base_url, auth_server_url
 
@@ -57,10 +57,10 @@ def _get_auth_server_urls():
 async def oauth_authorization_server_metadata():
     """
     OAuth 2.0 Authorization Server Metadata (RFC 8414).
-    
+
     Provides metadata about the OAuth 2.0 authorization server to enable
     automatic client configuration and discovery.
-    
+
     Per RFC 8414, the issuer MUST be at the root origin without any prefix.
     Operational endpoints use auth_server_url which includes the prefix.
     """
@@ -80,16 +80,20 @@ async def oauth_authorization_server_metadata():
         "grant_types_supported": [
             "authorization_code",
             "refresh_token",
-            "urn:ietf:params:oauth:grant-type:device_code"
+            "urn:ietf:params:oauth:grant-type:device_code",
         ],
-        "token_endpoint_auth_methods_supported": ["client_secret_post", "client_secret_basic", "none"],
+        "token_endpoint_auth_methods_supported": [
+            "client_secret_post",
+            "client_secret_basic",
+            "none",
+        ],
         "code_challenge_methods_supported": ["S256"],
         "scopes_supported": [
             "mcp-registry-admin",
             "mcp-servers-unrestricted/read",
-            "mcp-servers-unrestricted/execute"
+            "mcp-servers-unrestricted/execute",
         ],
-        "service_documentation": f"{auth_server_url}/docs"
+        "service_documentation": f"{auth_server_url}/docs",
     }
 
 
@@ -97,10 +101,10 @@ async def oauth_authorization_server_metadata():
 async def openid_configuration():
     """
     OpenID Connect Discovery endpoint.
-    
+
     Provides OpenID Connect configuration metadata for clients that
     expect OIDC discovery.
-    
+
     Per OIDC spec, the issuer MUST be at the root origin without any prefix.
     Operational endpoints include the prefix if configured.
     use auth_server_url which includes the prefix.
@@ -122,13 +126,17 @@ async def openid_configuration():
         "subject_types_supported": ["public"],
         "id_token_signing_alg_values_supported": ["HS256", "RS256"],
         "scopes_supported": ["openid", "profile", "email"],
-        "token_endpoint_auth_methods_supported": ["client_secret_post", "client_secret_basic", "none"],
+        "token_endpoint_auth_methods_supported": [
+            "client_secret_post",
+            "client_secret_basic",
+            "none",
+        ],
         "claims_supported": ["sub", "email", "name", "groups"],
         "grant_types_supported": [
             "authorization_code",
             "refresh_token",
-            "urn:ietf:params:oauth:grant-type:device_code"
-        ]
+            "urn:ietf:params:oauth:grant-type:device_code",
+        ],
     }
 
 
@@ -136,12 +144,12 @@ async def openid_configuration():
 async def jwks_endpoint():
     """
     JSON Web Key Set (JWKS) endpoint.
-    
+
     Provides public keys for JWT token verification. This endpoint forwards
-    the JWKS from the configured authentication provider (Cognito, Keycloak, 
+    the JWKS from the configured authentication provider (Cognito, Keycloak,
     Entra ID) based on AUTH_PROVIDER environment variable.
-    
-    For self-signed tokens (HS256), returns empty key set since symmetric 
+
+    For self-signed tokens (HS256), returns empty key set since symmetric
     keys are not publicly exposed.
     """
     try:
@@ -164,6 +172,4 @@ async def jwks_endpoint():
         # Fallback: Return empty key set for self-signed tokens
         # HS256 uses symmetric keys (SECRET_KEY), which should not be publicly exposed
         logger.warning("Falling back to empty JWKS (for self-signed HS256 tokens)")
-        return {
-            "keys": []
-        }
+        return {"keys": []}

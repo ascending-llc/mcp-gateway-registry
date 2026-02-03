@@ -226,8 +226,7 @@ def transform_to_agent_list(
 
     # Transform to ServerResponse objects
     agent_responses = [
-        transform_to_agent_response(agent, include_registry_meta=True)
-        for agent in page_agents
+        transform_to_agent_response(agent, include_registry_meta=True) for agent in page_agents
     ]
 
     # Determine next cursor

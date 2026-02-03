@@ -4,6 +4,7 @@ Integration tests for .well-known OAuth 2.0 discovery endpoints.
 Tests RFC 8414 (OAuth 2.0 Authorization Server Metadata) and
 OIDC Discovery implementations.
 """
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -37,7 +38,9 @@ class TestWellKnownRoutes:
 
         # Verify device flow support
         assert "device_authorization_endpoint" in data
-        assert data["device_authorization_endpoint"] == "http://localhost:8888/auth/oauth2/device/code"
+        assert (
+            data["device_authorization_endpoint"] == "http://localhost:8888/auth/oauth2/device/code"
+        )
 
         # Verify grant types
         assert "grant_types_supported" in data
@@ -156,7 +159,10 @@ class TestWellKnownRoutes:
         assert oauth_data["authorization_endpoint"] == oidc_data["authorization_endpoint"]
         assert oauth_data["token_endpoint"] == oidc_data["token_endpoint"]
         assert oauth_data["jwks_uri"] == oidc_data["jwks_uri"]
-        assert oauth_data["device_authorization_endpoint"] == oidc_data["device_authorization_endpoint"]
+        assert (
+            oauth_data["device_authorization_endpoint"]
+            == oidc_data["device_authorization_endpoint"]
+        )
 
     def test_well_known_endpoints_without_env_var(self, test_client: TestClient):
         """Test .well-known endpoints when AUTH_SERVER_EXTERNAL_URL is not configured in settings."""
@@ -179,7 +185,7 @@ class TestWellKnownRoutes:
         endpoints = [
             "/.well-known/oauth-authorization-server",
             "/.well-known/openid-configuration",
-            "/.well-known/jwks.json"
+            "/.well-known/jwks.json",
         ]
 
         for endpoint in endpoints:

@@ -4,6 +4,7 @@ Vector Database Exceptions
 Custom exceptions for vector database operations.
 """
 
+
 class VectorDatabaseError(Exception):
     """Base exception for vector database operations."""
 

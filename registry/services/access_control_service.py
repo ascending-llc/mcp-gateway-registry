@@ -4,7 +4,7 @@ from typing import Any
 from beanie import PydanticObjectId
 
 from packages.models._generated import (
-	IAccessRole,
+    IAccessRole,
 )
 from packages.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
 from registry.core.acl_constants import PermissionBits, PrincipalType, ResourceType
@@ -15,275 +15,277 @@ from registry.utils.log import logger
 
 
 class ACLService:
-	def _principal_result_obj(self, principal_type: str, obj: Any) -> PermissionPrincipalOut:
-		"""
-		Helper to construct the PermissionPrincipalOut for users and groups.
-		"""
-		return PermissionPrincipalOut(
-			principal_type=principal_type,
-			principal_id=str(obj.id),
-			name=getattr(obj, "name", None),
-			email=getattr(obj, "email", None),
-			accessRoleId=str(getattr(obj, "accessRoleId", "")) if hasattr(obj, "accessRoleId") and obj.accessRoleId is not None else ""
-		)
+    def _principal_result_obj(self, principal_type: str, obj: Any) -> PermissionPrincipalOut:
+        """
+        Helper to construct the PermissionPrincipalOut for users and groups.
+        """
+        return PermissionPrincipalOut(
+            principal_type=principal_type,
+            principal_id=str(obj.id),
+            name=getattr(obj, "name", None),
+            email=getattr(obj, "email", None),
+            accessRoleId=str(getattr(obj, "accessRoleId", ""))
+            if hasattr(obj, "accessRoleId") and obj.accessRoleId is not None
+            else "",
+        )
 
-	async def grant_permission(
-		self,
-		principal_type: str,
-		principal_id: PydanticObjectId | str | None,
-		resource_type: str,
-		resource_id: PydanticObjectId,
-		role_id: PydanticObjectId | None = None,
-		perm_bits: int | None = None,
-	) -> IAclEntry:
-		"""
-		Grant ACL permission to a principal (user or group) for a specific resource.
+    async def grant_permission(
+        self,
+        principal_type: str,
+        principal_id: PydanticObjectId | str | None,
+        resource_type: str,
+        resource_id: PydanticObjectId,
+        role_id: PydanticObjectId | None = None,
+        perm_bits: int | None = None,
+    ) -> IAclEntry:
+        """
+        Grant ACL permission to a principal (user or group) for a specific resource.
 
-		Args:
-			principal_type (str): Type of principal ('user', 'group', etc.).
-			principal_id (Any): ID of the principal (user ID, group ID, etc.).
-			resource_type (str): Type of resource (see ResourceType enum).
-			resource_id (PydanticObjectId): Resource document ID.
-			role_id (Optional[PydanticObjectId]): Optional role ID to derive permission bits.
-			perm_bits (Optional[int]): Permission bits to assign (overrides role if provided).
+        Args:
+                principal_type (str): Type of principal ('user', 'group', etc.).
+                principal_id (Any): ID of the principal (user ID, group ID, etc.).
+                resource_type (str): Type of resource (see ResourceType enum).
+                resource_id (PydanticObjectId): Resource document ID.
+                role_id (Optional[PydanticObjectId]): Optional role ID to derive permission bits.
+                perm_bits (Optional[int]): Permission bits to assign (overrides role if provided).
 
-		Returns:
-			IAclEntry: The upserted or newly created ACL entry.
+        Returns:
+                IAclEntry: The upserted or newly created ACL entry.
 
-		Raises:
-			ValueError: If required parameters are missing or invalid, or if upsert fails.
-		"""
-		if principal_type in ["user", "group"] and not principal_id:
-			raise ValueError("principal_id must be set for user/group principal_type")
+        Raises:
+                ValueError: If required parameters are missing or invalid, or if upsert fails.
+        """
+        if principal_type in ["user", "group"] and not principal_id:
+            raise ValueError("principal_id must be set for user/group principal_type")
 
-		if not role_id and not perm_bits:
-			raise ValueError("Permission bits must be set via perm_bits or role_id")
+        if not role_id and not perm_bits:
+            raise ValueError("Permission bits must be set via perm_bits or role_id")
 
-		if role_id:
-			access_role = await IAccessRole.find_one({"_id": role_id})
-			if not access_role:
-				raise ValueError("Role not found")
-			perm_bits = access_role.permBits
+        if role_id:
+            access_role = await IAccessRole.find_one({"_id": role_id})
+            if not access_role:
+                raise ValueError("Role not found")
+            perm_bits = access_role.permBits
 
-		# Check if an ACL entry already exists for this principal/resource
-		try:
-			acl_entry = await IAclEntry.find_one({
-				"principalType": principal_type,
-				"principalId": principal_id,
-				"resourceType": resource_type,
-				"resourceId": resource_id
-			})
-			now = datetime.now(UTC)
-			if acl_entry:
-				acl_entry.permBits = perm_bits
-				acl_entry.roleId = role_id
-				acl_entry.grantedAt = now
-				acl_entry.updatedAt = now
-				await acl_entry.save()
-				return acl_entry
-			new_entry = IAclEntry(
-				principalType=principal_type,
-				principalId=principal_id,
-				resourceType=resource_type,
-				resourceId=resource_id,
-				permBits=perm_bits,
-				grantedAt=now,
-				createdAt=now,
-				updatedAt=now
-			)
-			await new_entry.insert()
-			return new_entry
-		except Exception as e:
-			logger.error(f"Error upserting ACL entry: {e}")
-			raise ValueError(f"Error upserting ACL permissions: {e}")
+        # Check if an ACL entry already exists for this principal/resource
+        try:
+            acl_entry = await IAclEntry.find_one(
+                {
+                    "principalType": principal_type,
+                    "principalId": principal_id,
+                    "resourceType": resource_type,
+                    "resourceId": resource_id,
+                }
+            )
+            now = datetime.now(UTC)
+            if acl_entry:
+                acl_entry.permBits = perm_bits
+                acl_entry.roleId = role_id
+                acl_entry.grantedAt = now
+                acl_entry.updatedAt = now
+                await acl_entry.save()
+                return acl_entry
+            new_entry = IAclEntry(
+                principalType=principal_type,
+                principalId=principal_id,
+                resourceType=resource_type,
+                resourceId=resource_id,
+                permBits=perm_bits,
+                grantedAt=now,
+                createdAt=now,
+                updatedAt=now,
+            )
+            await new_entry.insert()
+            return new_entry
+        except Exception as e:
+            logger.error(f"Error upserting ACL entry: {e}")
+            raise ValueError(f"Error upserting ACL permissions: {e}")
 
-	async def delete_acl_entries_for_resource(
-		self,
-		resource_type: str,
-		resource_id: PydanticObjectId,
-		perm_bits_to_delete: int | None = None
-	) -> int:
-		"""
-		Bulk delete ACL entries for a given resource, optionally deleting all entries with permBits less than or equal to the specified value.
+    async def delete_acl_entries_for_resource(
+        self,
+        resource_type: str,
+        resource_id: PydanticObjectId,
+        perm_bits_to_delete: int | None = None,
+    ) -> int:
+        """
+        Bulk delete ACL entries for a given resource, optionally deleting all entries with permBits less than or equal to the specified value.
 
-		Args:
-			resource_type (str): Type of resource (see ResourceType enum).
-			resource_id (PydanticObjectId): Resource document ID.
-			perm_bits_to_delete (Optional[int]): If specified, delete all entries with permBits less than or equal to this value.
+        Args:
+                resource_type (str): Type of resource (see ResourceType enum).
+                resource_id (PydanticObjectId): Resource document ID.
+                perm_bits_to_delete (Optional[int]): If specified, delete all entries with permBits less than or equal to this value.
 
-		Returns:
-			int: Number of ACL entries deleted.
+        Returns:
+                int: Number of ACL entries deleted.
 
-		Raises:
-			None (returns 0 on error).
-		"""
-		try:
-			query = {
-				"resourceType": resource_type,
-				"resourceId": resource_id
-			}
+        Raises:
+                None (returns 0 on error).
+        """
+        try:
+            query = {"resourceType": resource_type, "resourceId": resource_id}
 
-			if perm_bits_to_delete:
-				query["permBits"] = {"$lte": perm_bits_to_delete}
+            if perm_bits_to_delete:
+                query["permBits"] = {"$lte": perm_bits_to_delete}
 
-			result = await IAclEntry.find(query).delete()
-			return result.deleted_count
-		except Exception as e:
-			logger.error(f"Error deleting ACL entries for resource {resource_type} with ID {resource_id}: {e}")
-			return 0
+            result = await IAclEntry.find(query).delete()
+            return result.deleted_count
+        except Exception as e:
+            logger.error(
+                f"Error deleting ACL entries for resource {resource_type} with ID {resource_id}: {e}"
+            )
+            return 0
 
-	async def get_permissions_map_for_user_id(
-		self,
-		principal_type: str,
-		principal_id: PydanticObjectId,
-	) -> dict:
-		"""
-		Return a permissions map for a user, showing access rights for each resource type and resource ID.
+    async def get_permissions_map_for_user_id(
+        self,
+        principal_type: str,
+        principal_id: PydanticObjectId,
+    ) -> dict:
+        """
+        Return a permissions map for a user, showing access rights for each resource type and resource ID.
 
-		Args:
-			principal_type (str): Type of principal ('user', 'group', etc.).
-			principal_id (str): ID of the principal (user ID, group ID, etc.).
+        Args:
+                principal_type (str): Type of principal ('user', 'group', etc.).
+                principal_id (str): ID of the principal (user ID, group ID, etc.).
 
-		Returns:
-			dict: Mapping of resource types to resource IDs, each with a dict of permission flags (VIEW, EDIT, DELETE, SHARE).
+        Returns:
+                dict: Mapping of resource types to resource IDs, each with a dict of permission flags (VIEW, EDIT, DELETE, SHARE).
 
-		Example:
-		{
-			"mcpServer": {
-				"resourceId1": {"VIEW": True, "EDIT": True, "DELETE": True, "SHARE": False},
-				"resourceId2": {"VIEW": True, "EDIT": False, "DELETE": False, "SHARE": False}
-			},
-			"agent": {
-				"resourceId3": {"VIEW": True, "EDIT": True, "DELETE": True, "SHARE": True}
-			}
-		}
+        Example:
+        {
+                "mcpServer": {
+                        "resourceId1": {"VIEW": True, "EDIT": True, "DELETE": True, "SHARE": False},
+                        "resourceId2": {"VIEW": True, "EDIT": False, "DELETE": False, "SHARE": False}
+                },
+                "agent": {
+                        "resourceId3": {"VIEW": True, "EDIT": True, "DELETE": True, "SHARE": True}
+                }
+        }
 
-		Raises:
-			None (returns empty dict on error).
-		"""
+        Raises:
+                None (returns empty dict on error).
+        """
 
-		try:
-			resource_types = [rt.value for rt in ResourceType]
-			query = {
-				"principalType": {"$in": [principal_type, PrincipalType.PUBLIC.value]},
-				"resourceType": {"$in": resource_types},
-				"$or": [
-					{"principalId": principal_id},
-					{"principalId": None}
-				]
-			}
-			acl_entries = await IAclEntry.find(query).to_list()
-			result = {rt.value: {} for rt in ResourceType}
-			specific = [e for e in acl_entries if e.principalType != PrincipalType.PUBLIC.value and e.principalId is not None]
-			public = [e for e in acl_entries if e.principalType == PrincipalType.PUBLIC.value]
-			for entry in specific + public:
-				rtype = entry.resourceType
-				rid = str(entry.resourceId)
-				if rid in result[rtype]:
-					continue
-				result[rtype][rid] = {
-					"VIEW": entry.permBits >= PermissionBits.VIEW,
-					"EDIT": entry.permBits >= PermissionBits.EDIT,
-					"DELETE": entry.permBits >= PermissionBits.DELETE,
-					"SHARE": entry.permBits >= PermissionBits.SHARE,
-				}
-			return result
-		except Exception as e:
-			logger.error(f"Error fetching ACL permissions map for user id: {principal_id}: {e}")
-			return {}
+        try:
+            resource_types = [rt.value for rt in ResourceType]
+            query = {
+                "principalType": {"$in": [principal_type, PrincipalType.PUBLIC.value]},
+                "resourceType": {"$in": resource_types},
+                "$or": [{"principalId": principal_id}, {"principalId": None}],
+            }
+            acl_entries = await IAclEntry.find(query).to_list()
+            result = {rt.value: {} for rt in ResourceType}
+            specific = [
+                e
+                for e in acl_entries
+                if e.principalType != PrincipalType.PUBLIC.value and e.principalId is not None
+            ]
+            public = [e for e in acl_entries if e.principalType == PrincipalType.PUBLIC.value]
+            for entry in specific + public:
+                rtype = entry.resourceType
+                rid = str(entry.resourceId)
+                if rid in result[rtype]:
+                    continue
+                result[rtype][rid] = {
+                    "VIEW": entry.permBits >= PermissionBits.VIEW,
+                    "EDIT": entry.permBits >= PermissionBits.EDIT,
+                    "DELETE": entry.permBits >= PermissionBits.DELETE,
+                    "SHARE": entry.permBits >= PermissionBits.SHARE,
+                }
+            return result
+        except Exception as e:
+            logger.error(f"Error fetching ACL permissions map for user id: {principal_id}: {e}")
+            return {}
 
-	async def delete_permission(
-		self,
-		resource_type: str,
-		resource_id: PydanticObjectId,
-		principal_type: str,
-		principal_id: PydanticObjectId | str | None
-	) -> int:
-		"""
-		Remove a single ACL entry for a given resource, principal type, and principal ID.
+    async def delete_permission(
+        self,
+        resource_type: str,
+        resource_id: PydanticObjectId,
+        principal_type: str,
+        principal_id: PydanticObjectId | str | None,
+    ) -> int:
+        """
+        Remove a single ACL entry for a given resource, principal type, and principal ID.
 
-		Args:
-			resource_type (str): Type of resource (see ResourceType enum).
-			resource_id (PydanticObjectId): Resource document ID.
-			principal_type (str): Type of principal ('user', 'group', etc.).
-			principal_id (Any): ID of the principal (user ID, group ID, etc.).
+        Args:
+                resource_type (str): Type of resource (see ResourceType enum).
+                resource_id (PydanticObjectId): Resource document ID.
+                principal_type (str): Type of principal ('user', 'group', etc.).
+                principal_id (Any): ID of the principal (user ID, group ID, etc.).
 
-		Returns:
-			int: Number of deleted entries (0 or 1).
+        Returns:
+                int: Number of deleted entries (0 or 1).
 
-		Raises:
-			None (returns 0 on error).
-		"""
-		try:
-			query = {
-				"resourceType": resource_type,
-				"resourceId": resource_id,
-				"principalType": principal_type,
-				"principalId": principal_id
-			}
-			result = await IAclEntry.find(query).delete()
-			return result.deleted_count
-		except Exception as e:
-			logger.error(f"Error revoking ACL entry for resource {resource_type} with ID {resource_id}: {e}")
-			return 0
+        Raises:
+                None (returns 0 on error).
+        """
+        try:
+            query = {
+                "resourceType": resource_type,
+                "resourceId": resource_id,
+                "principalType": principal_type,
+                "principalId": principal_id,
+            }
+            result = await IAclEntry.find(query).delete()
+            return result.deleted_count
+        except Exception as e:
+            logger.error(
+                f"Error revoking ACL entry for resource {resource_type} with ID {resource_id}: {e}"
+            )
+            return 0
 
-	async def search_principals(
-		self,
-		query: str,
-		limit: int = 30,
-		principal_types: list[str] | None = None,
-	) -> list[PermissionPrincipalOut]:
-		"""
-		Search for principals (users, groups, agents) matching the query string.
-		"""
-		query = (query or "").strip()
-		if not query or len(query) < 2:
-			raise ValueError("Query string must be at least 2 characters long.")
+    async def search_principals(
+        self,
+        query: str,
+        limit: int = 30,
+        principal_types: list[str] | None = None,
+    ) -> list[PermissionPrincipalOut]:
+        """
+        Search for principals (users, groups, agents) matching the query string.
+        """
+        query = (query or "").strip()
+        if not query or len(query) < 2:
+            raise ValueError("Query string must be at least 2 characters long.")
 
+        valid_types = {PrincipalType.USER.value, PrincipalType.GROUP.value}
+        type_filters = None
+        if principal_types:
+            if isinstance(principal_types, str):
+                types = [t.strip() for t in principal_types.split(",") if t.strip()]
+            else:
+                types = [str(t).strip() for t in principal_types if str(t).strip()]
+            type_filters = [t for t in types if t in valid_types]
+            if not type_filters:
+                type_filters = None
 
-		valid_types = {PrincipalType.USER.value, PrincipalType.GROUP.value}
-		type_filters = None
-		if principal_types:
-			if isinstance(principal_types, str):
-				types = [t.strip() for t in principal_types.split(",") if t.strip()]
-			else:
-				types = [str(t).strip() for t in principal_types if str(t).strip()]
-			type_filters = [t for t in types if t in valid_types]
-			if not type_filters:
-				type_filters = None
+        results = []
+        if not type_filters or PrincipalType.USER.value in type_filters:
+            for user in await user_service.search_users(query):
+                results.append(self._principal_result_obj(PrincipalType.USER.value, user))
 
-		results = []
-		if not type_filters or PrincipalType.USER.value in type_filters:
-			for user in await user_service.search_users(query):
-				results.append(self._principal_result_obj(PrincipalType.USER.value, user))
+        if not type_filters or PrincipalType.GROUP.value in type_filters:
+            for group in await group_service.search_groups(query):
+                results.append(self._principal_result_obj(PrincipalType.GROUP.value, group))
+        return results[:limit]
 
-		if not type_filters or PrincipalType.GROUP.value in type_filters:
-			for group in await group_service.search_groups(query):
-				results.append(self._principal_result_obj(PrincipalType.GROUP.value, group))
-		return results[:limit]
+    async def get_resource_permissions(
+        self,
+        resource_type: str,
+        resource_id: PydanticObjectId,
+    ) -> dict[str, Any]:
+        """
+        Get all ACL permissions for a specific resource.
+        """
+        try:
+            acl_entries = await IAclEntry.find(
+                {"resourceType": resource_type, "resourceId": resource_id}
+            ).to_list()
 
-	async def get_resource_permissions(
-		self,
-		resource_type: str,
-		resource_id: PydanticObjectId,
-	) -> dict[str, Any]:
-		"""
-		Get all ACL permissions for a specific resource.
-		"""
-		try:
-			acl_entries = await IAclEntry.find({
-				"resourceType": resource_type,
-				"resourceId": resource_id
-			}).to_list()
-
-			return {
-				"permissions": acl_entries
-			}
-		except Exception as e:
-			logger.error(f"Error fetching resource permissions for {resource_type} {resource_id}: {e}")
-			raise
-
-
+            return {"permissions": acl_entries}
+        except Exception as e:
+            logger.error(
+                f"Error fetching resource permissions for {resource_type} {resource_id}: {e}"
+            )
+            raise
 
 
 # Singleton instance

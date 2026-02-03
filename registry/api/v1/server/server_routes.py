@@ -58,13 +58,14 @@ def get_user_context(user_context: CurrentUserWithACLMap):
     """Extract user context from authentication dependency"""
     return user_context
 
+
 def check_admin_permission(user_context: dict) -> bool:
     """
     Check if user has admin permissions.
 
     Args:
         user_context: User context dictionary from authentication
-        
+
     Returns:
         True if user has admin scope, False otherwise
     """
@@ -73,9 +74,7 @@ def check_admin_permission(user_context: dict) -> bool:
 
 
 def apply_connection_status_to_server(
-    server_item,
-    status: dict[str, Any] | None,
-    fallback_requires_oauth: bool = False
+    server_item, status: dict[str, Any] | None, fallback_requires_oauth: bool = False
 ) -> None:
     """
     Apply connection status to a server response object.
@@ -92,6 +91,7 @@ def apply_connection_status_to_server(
 
 
 # ==================== Endpoints ====================
+
 
 @router.get(
     "/servers",
@@ -110,7 +110,7 @@ async def list_servers(
     """
     List servers with optional filtering and pagination.
     Includes connection status (connection_state, requires_oauth, error) for each server.
-    
+
     Query Parameters:
     - query: Free-text search across server_name, description, tags
     - scope: Filter by access level (shared_app, shared_user, private_user)
@@ -123,14 +123,14 @@ async def list_servers(
         if scope and scope not in ["shared_app", "shared_user", "private_user"]:
             raise HTTPException(
                 status_code=http_status.HTTP_400_BAD_REQUEST,
-                detail="Invalid scope. Must be one of: shared_app, shared_user, private_user"
+                detail="Invalid scope. Must be one of: shared_app, shared_user, private_user",
             )
 
         # Validate status if provided
         if status and status not in ["active", "inactive", "error"]:
             raise HTTPException(
                 status_code=http_status.HTTP_400_BAD_REQUEST,
-                detail="Invalid status. Must be one of: active, inactive, error"
+                detail="Invalid status. Must be one of: active, inactive, error",
             )
 
         servers, total = await server_service_v1.list_servers(
@@ -140,7 +140,7 @@ async def list_servers(
             page=page,
             per_page=per_page,
             user_id=None,
-            acl_permissions_map=user_context.get("acl_permission_map", {})
+            acl_permissions_map=user_context.get("acl_permission_map", {}),
         )
 
         # Convert to response models
@@ -152,14 +152,14 @@ async def list_servers(
             mcp_service = await get_mcp_service()
 
             connection_status = await get_servers_connection_status(
-                user_id=user_id,
-                servers=servers,
-                mcp_service=mcp_service
+                user_id=user_id, servers=servers, mcp_service=mcp_service
             )
             # Enrich each server item with connection status
             for server_item in server_items:
                 status = connection_status.get(str(server_item.id))
-                apply_connection_status_to_server(server_item, status, fallback_requires_oauth=False)
+                apply_connection_status_to_server(
+                    server_item, status, fallback_requires_oauth=False
+                )
 
         except Exception as e:
             logger.warning(f"Error getting connection status: {e}", exc_info=True)
@@ -174,7 +174,7 @@ async def list_servers(
                 page=page,
                 per_page=per_page,
                 total_pages=total_pages,
-            )
+            ),
         )
 
     except HTTPException:
@@ -183,7 +183,7 @@ async def list_servers(
         logger.error(f"Error listing servers: {e}", exc_info=True)
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error while listing servers"
+            detail="Internal server error while listing servers",
         )
 
 
@@ -198,17 +198,17 @@ async def get_server_stats(
 ):
     """
     Get system-wide statistics.
-    
+
     **Admin Only Endpoint**
-    
+
     Returns comprehensive statistics about:
     - Total servers and breakdown by scope, status, and transport
     - Total tokens and breakdown by type, expiry status
     - Active users count
     - Total tools across all servers
-    
-    Note: This endpoint uses MongoDB aggregation pipelines and is only 
-    available when using MongoDB storage backend. File-based storage 
+
+    Note: This endpoint uses MongoDB aggregation pipelines and is only
+    available when using MongoDB storage backend. File-based storage
     will return a simplified version or 501 Not Implemented.
     """
     try:
@@ -218,7 +218,7 @@ async def get_server_stats(
                 detail={
                     "error": "forbidden",
                     "message": "Admin access required to view system statistics",
-                }
+                },
             )
 
         # Get statistics from service
@@ -232,7 +232,7 @@ async def get_server_stats(
         logger.error(f"Error getting server statistics: {e}", exc_info=True)
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error while getting statistics"
+            detail="Internal server error while getting statistics",
         )
 
 
@@ -249,7 +249,9 @@ async def get_server(
     """Get detailed information about a server by ID, including connection status"""
     try:
         acl_permission_map = user_context.get("acl_permission_map", {})
-        check_required_permission(acl_permission_map, ResourceType.MCPSERVER.value, server_id, "VIEW")
+        check_required_permission(
+            acl_permission_map, ResourceType.MCPSERVER.value, server_id, "VIEW"
+        )
 
         server = await server_service_v1.get_server_by_id(
             server_id=server_id,
@@ -257,8 +259,7 @@ async def get_server(
         )
         if not server:
             raise HTTPException(
-                status_code=http_status.HTTP_404_NOT_FOUND,
-                detail="Server not found"
+                status_code=http_status.HTTP_404_NOT_FOUND, detail="Server not found"
             )
 
         # Convert to response model
@@ -267,14 +268,14 @@ async def get_server(
             user_id = user_context.get("user_id")
             mcp_service = await get_mcp_service()
             server_status = await get_single_server_connection_status(
-                user_id=user_id,
-                server_id=server.id,
-                mcp_service=mcp_service
+                user_id=user_id, server_id=server.id, mcp_service=mcp_service
             )
             apply_connection_status_to_server(server_detail, server_status)
 
         except Exception as e:
-            logger.warning(f"Error getting connection status for {server.serverName}: {e}", exc_info=True)
+            logger.warning(
+                f"Error getting connection status for {server.serverName}: {e}", exc_info=True
+            )
             # Apply error state with custom error message
             fallback_requires_oauth = server.config.get("requires_oauth", False)
             apply_connection_status_to_server(server_detail, None, fallback_requires_oauth)
@@ -288,8 +289,9 @@ async def get_server(
         logger.error(f"Error getting server {server_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error while getting server"
+            detail="Internal server error while getting server",
         )
+
 
 @router.post(
     "/servers",
@@ -320,15 +322,21 @@ async def create_server(
             principal_id=PydanticObjectId(user_id),
             resource_type=ResourceType.MCPSERVER,
             resource_id=server.id,
-            perm_bits=RoleBits.OWNER
+            perm_bits=RoleBits.OWNER,
         )
 
         if not acl_entry:
             await server.delete()
-            logger.error(f"Failed to create ACL entry for server: {server.id}. Rolling back server creation")
-            raise ValueError(f"Failed to create ACL entry for server: {server.id}. Rolling back server creation")
+            logger.error(
+                f"Failed to create ACL entry for server: {server.id}. Rolling back server creation"
+            )
+            raise ValueError(
+                f"Failed to create ACL entry for server: {server.id}. Rolling back server creation"
+            )
 
-        logger.info(f"Granted user {user_id} {RoleBits.OWNER} permissions for server Id {server.id}")
+        logger.info(
+            f"Granted user {user_id} {RoleBits.OWNER} permissions for server Id {server.id}"
+        )
         return convert_to_create_response(server)
 
     except ValueError as e:
@@ -341,24 +349,18 @@ async def create_server(
                 detail={
                     "error": "unauthorized",
                     "message": error_msg,
-                }
+                },
             )
 
         # Business logic errors (e.g., duplicate path, duplicate tags)
-        raise HTTPException(
-            status_code=http_status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
     except ValidationError as e:
-        raise HTTPException(
-            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Error creating server: {e}", exc_info=True)
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error while creating server"
+            detail="Internal server error while creating server",
         )
 
 
@@ -377,7 +379,9 @@ async def update_server(
     try:
         user_id = user_context.get("user_id")
         acl_permission_map = user_context.get("acl_permission_map", {})
-        check_required_permission(acl_permission_map, ResourceType.MCPSERVER.value, server_id, "EDIT")
+        check_required_permission(
+            acl_permission_map, ResourceType.MCPSERVER.value, server_id, "EDIT"
+        )
 
         server = await server_service_v1.update_server(
             server_id=server_id,
@@ -397,14 +401,11 @@ async def update_server(
                 detail={
                     "error": "not_found",
                     "message": error_msg,
-                }
+                },
             )
 
         # Other validation errors
-        raise HTTPException(
-            status_code=http_status.HTTP_400_BAD_REQUEST,
-            detail=error_msg
-        )
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=error_msg)
 
     except HTTPException:
         raise
@@ -412,7 +413,7 @@ async def update_server(
         logger.error(f"Error updating server {server_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error while updating server"
+            detail="Internal server error while updating server",
         )
 
 
@@ -429,7 +430,9 @@ async def delete_server(
     """Delete a server"""
     try:
         acl_permission_map = user_context.get("acl_permission_map", {})
-        check_required_permission(acl_permission_map, ResourceType.MCPSERVER.value, server_id, "DELETE")
+        check_required_permission(
+            acl_permission_map, ResourceType.MCPSERVER.value, server_id, "DELETE"
+        )
 
         successful_delete = await server_service_v1.delete_server(
             server_id=server_id,
@@ -445,7 +448,6 @@ async def delete_server(
             return  # 204 No Content
         raise ValueError(f"Failed to delete server {server_id}. Skipping ACL cleanup")
 
-
     except ValueError as e:
         error_msg = str(e)
 
@@ -456,13 +458,10 @@ async def delete_server(
                 detail={
                     "error": "not_found",
                     "message": "Server not found",
-                }
+                },
             )
 
-        raise HTTPException(
-            status_code=http_status.HTTP_400_BAD_REQUEST,
-            detail=error_msg
-        )
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=error_msg)
 
     except HTTPException:
         raise
@@ -470,8 +469,9 @@ async def delete_server(
         logger.error(f"Error deleting server {server_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error while deleting server"
+            detail="Internal server error while deleting server",
         )
+
 
 @router.post(
     "/servers/{server_id}/toggle",
@@ -487,7 +487,9 @@ async def toggle_server(
     """Toggle server enabled/disabled status. When enabling, fetches tools from server."""
     try:
         acl_permission_map = user_context.get("acl_permission_map", {})
-        check_required_permission(acl_permission_map, ResourceType.MCPSERVER.value, server_id, "EDIT")
+        check_required_permission(
+            acl_permission_map, ResourceType.MCPSERVER.value, server_id, "EDIT"
+        )
 
         user_id = user_context.get("user_id")
 
@@ -508,13 +510,10 @@ async def toggle_server(
                 detail={
                     "error": "not_found",
                     "message": "Server not found",
-                }
+                },
             )
 
-        raise HTTPException(
-            status_code=http_status.HTTP_400_BAD_REQUEST,
-            detail=error_msg
-        )
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=error_msg)
 
     except HTTPException:
         raise
@@ -522,7 +521,7 @@ async def toggle_server(
         logger.error(f"Error toggling server {server_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error while toggling server"
+            detail="Internal server error while toggling server",
         )
 
 
@@ -539,7 +538,9 @@ async def get_server_tools(
     """Get server tools"""
     try:
         acl_permission_map = user_context.get("acl_permission_map", {})
-        check_required_permission(acl_permission_map, ResourceType.MCPSERVER.value, server_id, "VIEW")
+        check_required_permission(
+            acl_permission_map, ResourceType.MCPSERVER.value, server_id, "VIEW"
+        )
 
         server, tools = await server_service_v1.get_server_tools(
             server_id=server_id,
@@ -557,7 +558,7 @@ async def get_server_tools(
                 detail={
                     "error": "forbidden",
                     "message": error_msg,
-                }
+                },
             )
 
         if "not found" in error_msg.lower():
@@ -566,13 +567,10 @@ async def get_server_tools(
                 detail={
                     "error": "not_found",
                     "message": "Server not found",
-                }
+                },
             )
 
-        raise HTTPException(
-            status_code=http_status.HTTP_400_BAD_REQUEST,
-            detail=error_msg
-        )
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=error_msg)
 
     except HTTPException:
         raise
@@ -580,7 +578,7 @@ async def get_server_tools(
         logger.error(f"Error getting tools for server {server_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error while getting server tools"
+            detail="Internal server error while getting server tools",
         )
 
 
@@ -610,8 +608,10 @@ async def refresh_server_health(
                 status_code=http_status.HTTP_400_BAD_REQUEST,
                 detail={
                     "error": "health_check_failed",
-                    "message": health_info.get("status_message", "Failed to retrieve tools from server"),
-                }
+                    "message": health_info.get(
+                        "status_message", "Failed to retrieve tools from server"
+                    ),
+                },
             )
 
         server = health_info["server"]
@@ -627,13 +627,10 @@ async def refresh_server_health(
                 detail={
                     "error": "not_found",
                     "message": "Server not found",
-                }
+                },
             )
 
-        raise HTTPException(
-            status_code=http_status.HTTP_400_BAD_REQUEST,
-            detail=error_msg
-        )
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=error_msg)
 
     except HTTPException:
         raise
@@ -641,5 +638,5 @@ async def refresh_server_health(
         logger.error(f"Error refreshing health for server {server_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error while refreshing server health"
+            detail="Internal server error while refreshing server health",
         )

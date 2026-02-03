@@ -1,4 +1,3 @@
-
 from pydantic import BaseModel, Field
 
 from packages.core.config import settings
@@ -8,6 +7,7 @@ from ..enum.enums import EmbeddingProvider, VectorStoreType
 
 class VectorStoreConfig(BaseModel):
     """Base class for vector store configuration."""
+
     type: str
 
     @classmethod
@@ -18,6 +18,7 @@ class VectorStoreConfig(BaseModel):
 
 class EmbeddingModelConfig(BaseModel):
     """Base class for embedding model configuration."""
+
     provider: str
 
     @classmethod
@@ -80,6 +81,7 @@ def get_registered_embedding_models() -> list:
 @register_vector_store_config(VectorStoreType.WEAVIATE.value)
 class WeaviateConfig(VectorStoreConfig):
     """Weaviate vector store configuration."""
+
     host: str = Field(description="Weaviate host")
     port: int = Field(description="Weaviate port")
     api_key: str | None = Field(default=None, description="API key")
@@ -117,13 +119,14 @@ class WeaviateConfig(VectorStoreConfig):
             host=host.strip(),
             port=port_int,
             api_key=settings.WEAVIATE_API_KEY,
-            collection_prefix=collection_prefix
+            collection_prefix=collection_prefix,
         )
 
 
 @register_embedding_model_config(EmbeddingProvider.OPENAI.value)
 class OpenAIEmbeddingConfig(EmbeddingModelConfig):
     """OpenAI embedding model configuration."""
+
     api_key: str = Field(description="OpenAI API key")
     model: str = Field(description="Model name")
 
@@ -146,15 +149,14 @@ class OpenAIEmbeddingConfig(EmbeddingModelConfig):
             model = "text-embedding-3-small"
 
         return cls(
-            provider=EmbeddingProvider.OPENAI.value,
-            api_key=api_key.strip(),
-            model=model.strip()
+            provider=EmbeddingProvider.OPENAI.value, api_key=api_key.strip(), model=model.strip()
         )
 
 
 @register_embedding_model_config(EmbeddingProvider.AWS_BEDROCK.value)
 class BedrockEmbeddingConfig(EmbeddingModelConfig):
     """AWS Bedrock embedding model configuration."""
+
     region: str = Field(description="AWS region")
     model: str = Field(description="Bedrock model ID")
     access_key_id: str | None = Field(default=None, description="AWS access key ID")
@@ -201,11 +203,11 @@ class BackendConfig(BaseModel):
     def from_env(cls) -> "BackendConfig":
         """
         Create unified config from environment variables with validation.
-        
+
         Required env vars:
         - VECTOR_STORE_TYPE: weaviate
         - EMBEDDING_PROVIDER: openai | aws_bedrock
-        
+
         Raises:
             ValueError: If required env vars missing or invalid
         """
@@ -247,7 +249,7 @@ class BackendConfig(BaseModel):
 
         return cls(
             vector_store_config=vector_store_class.from_env(),
-            embedding_model_config=embedding_class.from_env()
+            embedding_model_config=embedding_class.from_env(),
         )
 
     @property

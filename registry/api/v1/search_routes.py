@@ -115,8 +115,8 @@ def _user_can_access_agent(agent_path: str, user_context: dict) -> bool:
     summary="Unified semantic search for MCP servers and tools",
 )
 async def semantic_search(
-        request: Request,
-        search_request: SemanticSearchRequest,
+    request: Request,
+    search_request: SemanticSearchRequest,
 ) -> SemanticSearchResponse:
     """
     Run a semantic search against MCP servers (and their tools) using FAISS embeddings.
@@ -138,9 +138,7 @@ async def semantic_search(
             max_results=search_request.max_results,
         )
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except RuntimeError as exc:
         logger.error("FAISS search service unavailable: %s", exc, exc_info=True)
         raise HTTPException(
@@ -200,19 +198,12 @@ async def semantic_search(
 
         agent_card_obj = agent_service.get_agent_info(agent_path)
         agent_card_dict = (
-            agent_card_obj.model_dump()
-            if agent_card_obj
-            else agent.get("agent_card", {})
+            agent_card_obj.model_dump() if agent_card_obj else agent.get("agent_card", {})
         )
 
         tags = agent_card_dict.get("tags", []) or agent.get("tags", [])
         raw_skills = agent_card_dict.get("skills", []) or agent.get("skills", [])
-        skills = [
-            skill.get("name")
-            if isinstance(skill, dict)
-            else skill
-            for skill in raw_skills
-        ]
+        skills = [skill.get("name") if isinstance(skill, dict) else skill for skill in raw_skills]
 
         filtered_agents.append(
             AgentSearchResult(
@@ -220,17 +211,14 @@ async def semantic_search(
                 agent_name=agent_card_dict.get(
                     "name", agent.get("agent_name", agent_path.strip("/"))
                 ),
-                description=agent_card_dict.get(
-                    "description", agent.get("description")
-                ),
+                description=agent_card_dict.get("description", agent.get("description")),
                 tags=tags or [],
                 skills=[s for s in skills if s],
                 trust_level=agent_card_dict.get("trust_level"),
                 visibility=agent_card_dict.get("visibility"),
                 is_enabled=agent_card_dict.get("is_enabled", False),
                 relevance_score=agent.get("relevance_score", 0.0),
-                match_context=agent.get("match_context")
-                              or agent_card_dict.get("description"),
+                match_context=agent.get("match_context") or agent_card_dict.get("description"),
             )
         )
 
@@ -247,6 +235,7 @@ async def semantic_search(
 
 class ToolDiscoveryMatch(BaseModel):
     """A discovered tool with metadata for execution"""
+
     tool_name: str
     server_id: str
     server_path: str
@@ -258,6 +247,7 @@ class ToolDiscoveryMatch(BaseModel):
 
 class ToolDiscoveryResponse(BaseModel):
     """Response from tool discovery"""
+
     query: str
     total_matches: int
     matches: list[ToolDiscoveryMatch]
@@ -266,23 +256,22 @@ class ToolDiscoveryResponse(BaseModel):
 class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=512, description="Natural language query")
     top_n: int = Field(1, description="Number of results to return")
-    search_type: SearchType = Field(default=SearchType.HYBRID, description="Type of search to perform")
+    search_type: SearchType = Field(
+        default=SearchType.HYBRID, description="Type of search to perform"
+    )
     type_list: list[ServerEntityType] | None = Field(
         default_factory=lambda: list(ServerEntityType),
-        description="Type of document to return (default: all types)"
+        description="Type of document to return (default: all types)",
     )
     include_disabled: bool = Field(default=False, description="Include disabled results")
 
 
 @router.post("/search/servers")
-async def search_servers(
-        search: SearchRequest,
-        user_context: CurrentUser
-):
+async def search_servers(search: SearchRequest, user_context: CurrentUser):
     """
     Search for MCP servers with their tools, resources, and prompts.
     POC endpoint returning raw JSON with dual-format tool definitions.
-    
+
     Request body:
     {
         "query": "search",
@@ -291,25 +280,27 @@ async def search_servers(
         "type_list": ["server"], # Optional: ["server", "tool", "resource", "prompt"] (default: ["server"])
         "include_disabled": false  # Optional: include disabled servers (default: false)
     }
-    
+
     Returns raw JSON that can be converted to ExtendedMCPServer format.
     """
     query = search.query
     top_n = search.top_n
 
-    logger.info(f"🔍 Server search from user '{user_context.get('username', 'unknown')}': "
-                f"query='{query}', top_n={top_n}, search_type={search.search_type}")
+    logger.info(
+        f"🔍 Server search from user '{user_context.get('username', 'unknown')}': "
+        f"query='{query}', top_n={top_n}, search_type={search.search_type}"
+    )
 
     filters = {
         "enabled": not search.include_disabled,
-        "entity_type": [dt.value for dt in search.type_list]
+        "entity_type": [dt.value for dt in search.type_list],
     }
     search_results = await mcp_server_repo.asearch_with_rerank(
         query=query,
         k=top_n,
         candidate_k=min(top_n * 5, 100),  # Fetch 5x candidates for reranking (max 100)
         search_type=search.search_type,
-        filters=filters
+        filters=filters,
     )
     logger.info(
         "Search completed: %d results for query=%r",
@@ -317,8 +308,4 @@ async def search_servers(
         query,
     )
     logger.info(f"✅ Found {len(search_results)} servers")
-    return {
-        "query": query,
-        "total": len(search_results),
-        "servers": search_results
-    }
+    return {"query": query, "total": len(search_results), "servers": search_results}

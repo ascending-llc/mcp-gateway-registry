@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     model_config = ConfigDict(
         env_file=".env",
         case_sensitive=False,
-        extra="ignore"  # Ignore extra environment variables
+        extra="ignore",  # Ignore extra environment variables
     )
 
     # Auth settings
@@ -25,9 +25,15 @@ class Settings(BaseSettings):
     auth_server_url: str = "http://localhost:8888"
     auth_server_external_url: str = "http://localhost:8888"  # External URL for OAuth redirects
     auth_server_api_prefix: str = ""  # API prefix for auth server routes (e.g., "/auth")
-    auth_egress_header: str = "Authorization"  # RFC 6750: OAuth access token for MCP server resource access
-    internal_auth_header: str = "X-Jarvis-Auth"  # Internal JWT for gateway-to-MCP-server authentication
-    registry_client_url: str = "http://localhost:5173"  # Registry URL for OAuth protected resource metadata
+    auth_egress_header: str = (
+        "Authorization"  # RFC 6750: OAuth access token for MCP server resource access
+    )
+    internal_auth_header: str = (
+        "X-Jarvis-Auth"  # Internal JWT for gateway-to-MCP-server authentication
+    )
+    registry_client_url: str = (
+        "http://localhost:5173"  # Registry URL for OAuth protected resource metadata
+    )
     registry_url: str = "http://localhost:7860"
     registry_app_name: str = "jarvis-registry-client"  # OAuth client ID for registry web app
     # Embeddings settings
@@ -35,7 +41,9 @@ class Settings(BaseSettings):
     embeddings_model_dimensions: int = 384
 
     # Health check settings
-    health_check_interval_seconds: int = 300  # 5 minutes for automatic background checks (configurable via env var)
+    health_check_interval_seconds: int = (
+        300  # 5 minutes for automatic background checks (configurable via env var)
+    )
     health_check_timeout_seconds: int = 2  # Very fast timeout for user-driven actions
 
     # WebSocket performance settings
@@ -50,8 +58,12 @@ class Settings(BaseSettings):
     wellknown_cache_ttl: int = 300  # 5 minutes
 
     # Vector search / tool discovery settings
-    tool_discovery_mode: str = "external"  # "embedded" (FAISS+transformers) or "external" (MCP service)
-    external_vector_search_url: str = "http://localhost:8000/mcp"  # Used when tool_discovery_mode=external
+    tool_discovery_mode: str = (
+        "external"  # "embedded" (FAISS+transformers) or "external" (MCP service)
+    )
+    external_vector_search_url: str = (
+        "http://localhost:8000/mcp"  # Used when tool_discovery_mode=external
+    )
 
     # Security scanning settings (MCP Servers)
     security_scan_enabled: bool = True
@@ -66,7 +78,9 @@ class Settings(BaseSettings):
     agent_security_scan_enabled: bool = True
     agent_security_scan_on_registration: bool = True
     agent_security_block_unsafe_agents: bool = True
-    agent_security_analyzers: str = "yara,spec"  # Comma-separated: yara, spec, heuristic, llm, endpoint
+    agent_security_analyzers: str = (
+        "yara,spec"  # Comma-separated: yara, spec, heuristic, llm, endpoint
+    )
     agent_security_scan_timeout: int = 60  # 1 minute
     agent_security_add_pending_tag: bool = True
     a2a_scanner_llm_api_key: str = ""  # Optional Azure OpenAI API key for LLM-based analysis
@@ -101,12 +115,15 @@ class Settings(BaseSettings):
             if not self.auth_server_url.endswith(prefix):
                 self.auth_server_url = f"{self.auth_server_url.rstrip('/')}{prefix}"
             if not self.auth_server_external_url.endswith(prefix):
-                self.auth_server_external_url = f"{self.auth_server_external_url.rstrip('/')}{prefix}"
+                self.auth_server_external_url = (
+                    f"{self.auth_server_external_url.rstrip('/')}{prefix}"
+                )
 
         # Validate tool_discovery_mode
         if self.tool_discovery_mode not in ["embedded", "external"]:
             raise ValueError(
-                f"Invalid tool_discovery_mode: {self.tool_discovery_mode}. Must be 'embedded' or 'external'")
+                f"Invalid tool_discovery_mode: {self.tool_discovery_mode}. Must be 'embedded' or 'external'"
+            )
 
     @property
     def use_external_discovery(self) -> bool:

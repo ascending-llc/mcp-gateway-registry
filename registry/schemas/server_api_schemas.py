@@ -14,13 +14,17 @@ from registry.utils.crypto_utils import decrypt_auth_fields
 
 # ==================== Request Schemas ====================
 
+
 class ServerCreateRequest(BaseModel):
     """Request schema for creating a new server"""
+
     serverName: str = Field(..., alias="serverName", description="Name of the MCP server")
     path: str = Field(..., description="Unique path/route for the server")
     description: str | None = Field(default="", description="Server description")
     url: str | None = Field(default=None, description="Backend proxy URL")
-    scope: str = Field(default="private_user", description="Access scope: shared_app, shared_user, or private_user")
+    scope: str = Field(
+        default="private_user", description="Access scope: shared_app, shared_user, or private_user"
+    )
     tags: list[str] = Field(default_factory=list, description="Server tags")
     num_tools: int = Field(default=0, description="Number of tools")
     num_stars: int = Field(default=0, description="Star count")
@@ -28,8 +32,12 @@ class ServerCreateRequest(BaseModel):
     license: str | None = Field(default=None, description="License type")
     auth_type: str | None = Field(default=None, description="Authentication type")
     auth_provider: str | None = Field(default=None, description="Authentication provider")
-    supported_transports: list[str] = Field(default_factory=list, description="Supported transports")
-    transport: str | dict[str, Any] | None = Field(default=None, description="Transport configuration (string or dict)")
+    supported_transports: list[str] = Field(
+        default_factory=list, description="Supported transports"
+    )
+    transport: str | dict[str, Any] | None = Field(
+        default=None, description="Transport configuration (string or dict)"
+    )
     startup: bool = Field(default=False, description="Start on system startup")
     chat_menu: bool = Field(default=True, description="Show in chat menu")
     tool_list: list[dict[str, Any]] = Field(default_factory=list, description="List of tools")
@@ -40,8 +48,13 @@ class ServerCreateRequest(BaseModel):
     requires_oauth: bool = Field(default=False, description="Requires OAuth")
     oauth: dict[str, Any] | None = Field(default=None, description="OAuth configuration")
     custom_user_vars: dict[str, Any] | None = Field(default=None, description="Custom variables")
-    apiKey: dict[str, Any] | None = Field(default=None, description="API Key authentication configuration")
-    enabled: bool | None = Field(default=None, description="Whether the server is enabled (auto-set to False during registration)")
+    apiKey: dict[str, Any] | None = Field(
+        default=None, description="API Key authentication configuration"
+    )
+    enabled: bool | None = Field(
+        default=None,
+        description="Whether the server is enabled (auto-set to False during registration)",
+    )
 
     class ConfigDict:
         populate_by_name = True  # Allow both serverName and server_name
@@ -66,6 +79,7 @@ class ServerCreateRequest(BaseModel):
 
 class ServerUpdateRequest(BaseModel):
     """Request schema for updating a server (partial update)"""
+
     serverName: str | None = Field(None, alias="serverName")
     path: str | None = None
     description: str | None = None
@@ -129,13 +143,16 @@ class ServerUpdateRequest(BaseModel):
 
 class ServerToggleRequest(BaseModel):
     """Request schema for toggling server status"""
+
     enabled: bool = Field(..., description="Enable or disable the server")
 
 
 # ==================== Response Schemas ====================
 
+
 class ToolSchema(BaseModel):
     """Schema for a tool definition"""
+
     name: str
     description: str
     inputSchema: dict[str, Any] | None = None
@@ -146,6 +163,7 @@ class ToolSchema(BaseModel):
 
 class ServerListItemResponse(BaseModel):
     """Response schema for a server in the list"""
+
     id: str = Field(..., description="Server ID")
     serverName: str = Field(..., alias="serverName")
     title: str | None = Field(None, description="Display title for the server")
@@ -154,9 +172,13 @@ class ServerListItemResponse(BaseModel):
     url: str | None = None
     apiKey: dict[str, Any] | None = None
     oauth: dict[str, Any] | None = None
-    requiresOAuth: bool = Field(False, alias="requiresOAuth", description="Whether OAuth is required")
+    requiresOAuth: bool = Field(
+        False, alias="requiresOAuth", description="Whether OAuth is required"
+    )
     capabilities: str | None = Field(None, description="JSON string of server capabilities")
-    oauthMetadata: dict[str, Any] | None = Field(None, alias="oauthMetadata", description="OAuth metadata from autodiscovery")
+    oauthMetadata: dict[str, Any] | None = Field(
+        None, alias="oauthMetadata", description="OAuth metadata from autodiscovery"
+    )
     tools: str | None = Field(None, description="Comma-separated list of tool names")
     author: str | None = Field(None, description="Author user ID")
     scope: str
@@ -199,6 +221,7 @@ class ServerListItemResponse(BaseModel):
 
 class ServerDetailResponse(BaseModel):
     """Response schema for detailed server information"""
+
     id: str
     serverName: str = Field(..., alias="serverName")
     title: str | None = Field(None, description="Display title for the server")
@@ -207,14 +230,22 @@ class ServerDetailResponse(BaseModel):
     url: str | None = None
     apiKey: dict[str, Any] | None = None
     oauth: dict[str, Any] | None = None
-    requiresOAuth: bool = Field(False, alias="requiresOAuth", description="Whether OAuth is required")
+    requiresOAuth: bool = Field(
+        False, alias="requiresOAuth", description="Whether OAuth is required"
+    )
     capabilities: str | None = Field(None, description="JSON string of server capabilities")
-    oauthMetadata: dict[str, Any] | None = Field(None, alias="oauthMetadata", description="OAuth metadata from autodiscovery")
+    oauthMetadata: dict[str, Any] | None = Field(
+        None, alias="oauthMetadata", description="OAuth metadata from autodiscovery"
+    )
     tools: str | None = Field(None, description="Comma-separated list of tool names")
-    toolFunctions: dict[str, Any] | None = Field(None, alias="toolFunctions", description="Complete OpenAI function schemas with mcpToolName")
+    toolFunctions: dict[str, Any] | None = Field(
+        None, alias="toolFunctions", description="Complete OpenAI function schemas with mcpToolName"
+    )
     resources: list[dict[str, Any]] | None = Field(None, description="List of available resources")
     prompts: list[dict[str, Any]] | None = Field(None, description="List of available prompts")
-    initDuration: int | None = Field(None, alias="initDuration", description="Initialization duration in ms")
+    initDuration: int | None = Field(
+        None, alias="initDuration", description="Initialization duration in ms"
+    )
     author: str | None = Field(None, description="Author user ID")
     scope: str
     status: str
@@ -258,6 +289,7 @@ class ServerDetailResponse(BaseModel):
 
 class ServerCreateResponse(BaseModel):
     """Response schema for server creation - flattened structure matching API doc"""
+
     serverName: str = Field(..., alias="serverName")
     title: str | None = None
     description: str | None = None
@@ -267,9 +299,13 @@ class ServerCreateResponse(BaseModel):
     oauth: dict[str, Any] | None = None
     requiresOAuth: bool = Field(False, alias="requiresOAuth")
     capabilities: str | None = None
-    oauthMetadata: dict[str, Any] | None = Field(None, alias="oauthMetadata", description="OAuth metadata from autodiscovery")
+    oauthMetadata: dict[str, Any] | None = Field(
+        None, alias="oauthMetadata", description="OAuth metadata from autodiscovery"
+    )
     tools: str | None = None
-    toolFunctions: dict[str, Any] | None = Field(None, alias="toolFunctions", description="Complete OpenAI function schemas with mcpToolName")
+    toolFunctions: dict[str, Any] | None = Field(
+        None, alias="toolFunctions", description="Complete OpenAI function schemas with mcpToolName"
+    )
     resources: list[dict[str, Any]] | None = Field(None, description="List of available resources")
     prompts: list[dict[str, Any]] | None = Field(None, description="List of available prompts")
     initDuration: int | None = Field(None, alias="initDuration")
@@ -317,6 +353,7 @@ class ServerCreateResponse(BaseModel):
 
 class ServerUpdateResponse(BaseModel):
     """Response schema for server update"""
+
     id: str
     serverName: str = Field(..., alias="serverName")
     path: str
@@ -334,6 +371,7 @@ class ServerUpdateResponse(BaseModel):
 
 class ServerToggleResponse(BaseModel):
     """Response schema for server toggle"""
+
     id: str
     serverName: str = Field(..., alias="serverName")
     path: str
@@ -348,6 +386,7 @@ class ServerToggleResponse(BaseModel):
 
 class ServerToolsResponse(BaseModel):
     """Response schema for server tools"""
+
     id: str
     serverName: str = Field(..., alias="serverName")
     path: str
@@ -362,6 +401,7 @@ class ServerToolsResponse(BaseModel):
 
 class ServerHealthResponse(BaseModel):
     """Response schema for server health refresh"""
+
     id: str
     serverName: str = Field(..., alias="serverName")
     status: str
@@ -382,6 +422,7 @@ class ServerHealthResponse(BaseModel):
 
 class PaginationMetadata(BaseModel):
     """Pagination metadata"""
+
     total: int
     page: int
     per_page: int
@@ -390,22 +431,27 @@ class PaginationMetadata(BaseModel):
 
 class ServerListResponse(BaseModel):
     """Response schema for server list with pagination"""
+
     servers: list[ServerListItemResponse]
     pagination: PaginationMetadata
 
 
 class ErrorResponse(BaseModel):
     """Error response schema"""
+
     error: str
     message: str
 
 
 class ServerStatsResponse(BaseModel):
     """Response schema for server statistics (Admin only)"""
+
     total_servers: int = Field(..., description="Total number of servers")
     servers_by_scope: dict[str, int] = Field(..., description="Server count grouped by scope")
     servers_by_status: dict[str, int] = Field(..., description="Server count grouped by status")
-    servers_by_transport: dict[str, int] = Field(..., description="Server count grouped by transport type")
+    servers_by_transport: dict[str, int] = Field(
+        ..., description="Server count grouped by transport type"
+    )
     total_tokens: int = Field(..., description="Total number of tokens")
     tokens_by_type: dict[str, int] = Field(..., description="Token count grouped by type")
     active_tokens: int = Field(..., description="Number of active (non-expired) tokens")
@@ -419,6 +465,7 @@ class ServerStatsResponse(BaseModel):
 
 # ==================== Helper Functions ====================
 
+
 def _get_config_field(server, field: str, default=None):
     """Extract a field from server.config with fallback to default"""
     if not server or not hasattr(server, "config") or not server.config:
@@ -429,10 +476,10 @@ def _get_config_field(server, field: str, default=None):
 def _mask_oauth_client_secret(oauth_config: dict[str, Any] | None) -> dict[str, Any] | None:
     """
     Mask OAuth client_secret to show only the last 6 characters.
-    
+
     Args:
         oauth_config: OAuth configuration dictionary
-        
+
     Returns:
         OAuth config with masked client_secret (only last 6 characters visible)
     """
@@ -455,10 +502,10 @@ def _mask_oauth_client_secret(oauth_config: dict[str, Any] | None) -> dict[str, 
 def _mask_apikey(apikey_config: dict[str, Any] | None) -> dict[str, Any] | None:
     """
     Mask API Key to show only the last 6 characters.
-    
+
     Args:
         apikey_config: API Key configuration dictionary
-        
+
     Returns:
         API Key config with masked key (only last 6 characters visible)
     """
@@ -530,7 +577,9 @@ def convert_to_list_item(server) -> ServerListItemResponse:
         tags=server.tags,
         numTools=num_tools,
         numStars=server.numStars,
-        enabled=config.get("enabled", True),  # Read enabled from config, default to True for backward compatibility
+        enabled=config.get(
+            "enabled", True
+        ),  # Read enabled from config, default to True for backward compatibility
         lastConnected=server.lastConnected,
         createdAt=server.createdAt or datetime.now(),
         updatedAt=server.updatedAt or datetime.now(),
@@ -578,7 +627,11 @@ def convert_to_detail(server) -> ServerDetailResponse:
     # Format lastError as ISO string if present
     last_error_str = None
     if server.lastError:
-        last_error_str = server.lastError.isoformat() if isinstance(server.lastError, datetime) else str(server.lastError)
+        last_error_str = (
+            server.lastError.isoformat()
+            if isinstance(server.lastError, datetime)
+            else str(server.lastError)
+        )
 
     return ServerDetailResponse(
         id=str(server.id),
@@ -605,7 +658,9 @@ def convert_to_detail(server) -> ServerDetailResponse:
         tags=server.tags,
         numTools=num_tools,
         numStars=server.numStars,
-        enabled=config.get("enabled", True),  # Read enabled from config, default to True for backward compatibility
+        enabled=config.get(
+            "enabled", True
+        ),  # Read enabled from config, default to True for backward compatibility
         lastConnected=server.lastConnected,
         lastError=last_error_str,
         errorMessage=server.errorMessage if hasattr(server, "errorMessage") else None,
@@ -661,7 +716,9 @@ def convert_to_create_response(server) -> ServerCreateResponse:
         tags=server.tags,
         numTools=num_tools,
         numStars=server.numStars,
-        enabled=config.get("enabled", True),  # Read enabled from config, default to True for backward compatibility
+        enabled=config.get(
+            "enabled", True
+        ),  # Read enabled from config, default to True for backward compatibility
         lastConnected=server.lastConnected,
         lastError=last_error,
         errorMessage=server.errorMessage if hasattr(server, "errorMessage") else None,
@@ -710,11 +767,13 @@ def convert_to_tools_response(server, tool_functions: dict[str, Any]) -> ServerT
         for func_key, func_def in tool_functions.items():
             if isinstance(func_def, dict) and "function" in func_def:
                 func = func_def["function"]
-                tools_list.append({
-                    "name": func.get("name", ""),
-                    "description": func.get("description", ""),
-                    "inputSchema": func.get("parameters", {})
-                })
+                tools_list.append(
+                    {
+                        "name": func.get("name", ""),
+                        "description": func.get("description", ""),
+                        "inputSchema": func.get("parameters", {}),
+                    }
+                )
 
     return ServerToolsResponse(
         id=str(server.id),

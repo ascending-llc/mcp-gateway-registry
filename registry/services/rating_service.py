@@ -77,10 +77,12 @@ def update_rating_details(
 
     # If no existing rating from this user, append a new one
     if not user_found:
-        rating_details.append({
-            "user": username,
-            "rating": rating,
-        })
+        rating_details.append(
+            {
+                "user": username,
+                "rating": rating,
+            }
+        )
         logger.info(f"Added new rating for user {username}: {rating}")
 
         # Maintain a rotating buffer of MAX_RATINGS_PER_RESOURCE entries
@@ -113,8 +115,6 @@ def calculate_average_rating(rating_details: list[dict[str, Any]]) -> float:
     all_ratings = [entry["rating"] for entry in rating_details]
     average = float(sum(all_ratings) / len(all_ratings))
 
-    logger.debug(
-        f"Calculated average rating: {average:.2f} from {len(all_ratings)} ratings"
-    )
+    logger.debug(f"Calculated average rating: {average:.2f} from {len(all_ratings)} ratings")
 
     return average

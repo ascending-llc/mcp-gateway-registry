@@ -17,7 +17,7 @@ class MCPService:
     async def initialize(self) -> None:
         """
         Initialize all services
-        
+
         Raises:
             Exception: If any service initialization fails
         """

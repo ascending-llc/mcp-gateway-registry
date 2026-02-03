@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logging.basicConfig(
     level=os.environ.get("LOGLEVEL", "INFO"),
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s"
+    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -25,14 +25,14 @@ class Constants:
 class Settings(BaseSettings):
     """
     Application settings loaded from environment variables.
-    
+
     All settings can be overridden via environment variables with the same name.
     For nested configs, use double underscore (e.g., REGISTRY__URL).
     """
+
     # Registry configuration
     REGISTRY_URL: str = Field(
-        default="http://localhost:7860",
-        description="Base URL of the MCP Gateway Registry"
+        default="http://localhost:7860", description="Base URL of the MCP Gateway Registry"
     )
 
     @property
@@ -51,40 +51,30 @@ class Settings(BaseSettings):
 
     # Server configuration
     MCP_TRANSPORT: str = Field(
-        default=Constants.DEFAULT_MCP_TRANSPORT,
-        description="Transport type for the MCP server"
+        default=Constants.DEFAULT_MCP_TRANSPORT, description="Transport type for the MCP server"
     )
     MCP_SERVER_LISTEN_PORT: str = Field(
         default=Constants.DEFAULT_MCP_SERVER_LISTEN_PORT,
-        description="Port for the MCP server to listen on"
+        description="Port for the MCP server to listen on",
     )
 
     # Auth server configuration
     AUTH_SERVER_URL: str = Field(
-        default="http://localhost:8888",
-        description="URL of the authentication server"
+        default="http://localhost:8888", description="URL of the authentication server"
     )
 
     INTERNAL_AUTH_HEADER: str = Field(
         default="X-Jarvis-Auth",
-        description="Header name for internal JWT authentication (RFC 8707 compliant)"
+        description="Header name for internal JWT authentication (RFC 8707 compliant)",
     )
     # JWT authentication configuration
     SECRET_KEY: str | None = Field(
-        default=None,
-        description="Secret key for JWT token validation (HS256)"
+        default=None, description="Secret key for JWT token validation (HS256)"
     )
-    JWT_ISSUER: str = Field(
-        default="jarvis-auth-server",
-        description="Expected JWT token issuer"
-    )
-    JWT_AUDIENCE: str = Field(
-        default="jarvis-registry",
-        description="Expected JWT token audience"
-    )
+    JWT_ISSUER: str = Field(default="jarvis-auth-server", description="Expected JWT token issuer")
+    JWT_AUDIENCE: str = Field(default="jarvis-registry", description="Expected JWT token audience")
     JWT_SELF_SIGNED_KID: str = Field(
-        default="self-signed-key-v1",
-        description="Key ID for self-signed JWT tokens"
+        default="self-signed-key-v1", description="Key ID for self-signed JWT tokens"
     )
 
     API_VERSION: str = "v1"
@@ -110,7 +100,7 @@ class Settings(BaseSettings):
     def scopes_config_path(self) -> Path:
         """
         Determine the path to scopes.yml configuration file.
-        
+
         Returns:
             Path: Path to scopes.yml file
         """
@@ -139,9 +129,9 @@ class Settings(BaseSettings):
 def parse_arguments() -> argparse.Namespace:
     """
     Parse command line arguments.
-    
+
     Command line arguments override environment variables.
-    
+
     Returns:
         argparse.Namespace: Parsed command line arguments
     """

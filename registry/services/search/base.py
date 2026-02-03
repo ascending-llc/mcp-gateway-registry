@@ -20,10 +20,12 @@ class VectorSearchService(ABC):
         """Initialize the search service (load models, connect to external service, etc.)."""
 
     @abstractmethod
-    async def add_or_update_service(self, service_path: str, server_info: dict[str, Any], is_enabled: bool = False):
+    async def add_or_update_service(
+        self, service_path: str, server_info: dict[str, Any], is_enabled: bool = False
+    ):
         """
         Add or update a service in the search index.
-        
+
         Args:
             service_path: Unique identifier for the service (e.g., "/weather")
             server_info: Dictionary containing service metadata (name, description, tags, etc.)
@@ -34,7 +36,7 @@ class VectorSearchService(ABC):
     async def remove_service(self, service_path: str):
         """
         Remove a service from the search index.
-        
+
         Args:
             service_path: Unique identifier for the service to remove
         """
@@ -45,17 +47,17 @@ class VectorSearchService(ABC):
         query: str | None = None,
         tags: list[str] | None = None,
         top_k: int = 10,
-        filters: dict[str, Any] | None = None
+        filters: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """
         Search for services matching the query and/or filters.
-        
+
         Args:
             query: Natural language query for semantic search
             tags: List of tags to filter by
             top_k: Maximum number of results to return
             filters: Additional filters (e.g., {"is_enabled": True})
-            
+
         Returns:
             List of matching services with metadata and relevance scores
         """

@@ -102,14 +102,13 @@ class Repository(Generic[T]):
             docs = instance.to_documents()
             logger.debug(f"Generated {len(docs)} documents for saving")
 
-            doc_ids = self.adapter.add_documents(
-                documents=docs,
-                collection_name=self.collection
-            )
+            doc_ids = self.adapter.add_documents(documents=docs, collection_name=self.collection)
 
             if doc_ids and len(doc_ids) > 0:
-                logger.info(f"Saved {len(docs)} documents for {self.model_class.__name__} "
-                            f"(IDs: {len(doc_ids)} returned)")
+                logger.info(
+                    f"Saved {len(docs)} documents for {self.model_class.__name__} "
+                    f"(IDs: {len(doc_ids)} returned)"
+                )
                 return doc_ids
 
             logger.warning(f"Save returned empty IDs for {self.model_class.__name__}")
@@ -130,10 +129,7 @@ class Repository(Generic[T]):
             Model instance if found, None otherwise
         """
         try:
-            docs = self.adapter.get_by_ids(
-                ids=[doc_id],
-                collection_name=self.collection
-            )
+            docs = self.adapter.get_by_ids(ids=[doc_id], collection_name=self.collection)
             if docs and len(docs) > 0:
                 data = self.model_class.from_document(docs[0])
                 logger.debug(f"Retrieved {self.model_class.__name__} with ID: {doc_id}")
@@ -147,10 +143,7 @@ class Repository(Generic[T]):
             return None
 
     def update(
-            self,
-            instance: T,
-            fields_changed: set[str] | None = None,
-            create_if_missing: bool = False
+        self, instance: T, fields_changed: set[str] | None = None, create_if_missing: bool = False
     ) -> bool:
         """
         Update model instance with smart change detection.
@@ -169,11 +162,7 @@ class Repository(Generic[T]):
             True if updated/created successfully, False otherwise
         """
 
-    def _update_metadata_only(
-            self,
-            instance: T,
-            existing_docs: list[Document]
-    ) -> bool:
+    def _update_metadata_only(self, instance: T, existing_docs: list[Document]) -> bool:
         """
         Update only metadata fields for all documents (no re-vectorization).
 
@@ -186,7 +175,9 @@ class Repository(Generic[T]):
         """
         try:
             if not hasattr(self.adapter, "update_metadata"):
-                logger.warning("Adapter doesn't support update_metadata, falling back to full update")
+                logger.warning(
+                    "Adapter doesn't support update_metadata, falling back to full update"
+                )
                 return self._full_update(instance, existing_docs)
 
             # Extract new metadata
@@ -200,9 +191,7 @@ class Repository(Generic[T]):
             success_count = 0
             for doc in existing_docs:
                 result = self.adapter.update_metadata(
-                    doc_id=doc.id,
-                    metadata=new_metadata,
-                    collection_name=self.collection
+                    doc_id=doc.id, metadata=new_metadata, collection_name=self.collection
                 )
                 if result:
                     success_count += 1
@@ -214,11 +203,7 @@ class Repository(Generic[T]):
             logger.error(f"Metadata update failed: {e}", exc_info=True)
             return False
 
-    def _incremental_update(
-            self,
-            instance: T,
-            existing_docs: list[Document]
-    ) -> bool:
+    def _incremental_update(self, instance: T, existing_docs: list[Document]) -> bool:
         """
         Incremental update: compare content and update only changed documents.
 
@@ -238,11 +223,7 @@ class Repository(Generic[T]):
         # TODO: Implement incremental update logic. For now, this is a stub.
         return False
 
-    def _full_update(
-            self,
-            instance: T,
-            existing_docs: list[Document]
-    ) -> bool:
+    def _full_update(self, instance: T, existing_docs: list[Document]) -> bool:
         """
         Full update: delete all old docs and save new ones (fallback strategy).
 
@@ -317,17 +298,13 @@ class Repository(Generic[T]):
 
         return doc_map
 
-    def upsert(
-            self,
-            instance: T,
-            fields_changed: set[str] | None = None
-    ) -> bool:
+    def upsert(self, instance: T, fields_changed: set[str] | None = None) -> bool:
         """
         Upsert (Update or Insert) model instance.
-        
+
         This is a convenience method that always creates the document if it doesn't exist.
         Equivalent to: update(instance, fields_changed=fields_changed, create_if_missing=True)
-        
+
         Args:
             instance: Model instance to upsert
             fields_changed: Set of field names that changed (optional, for optimization)
@@ -350,9 +327,7 @@ class Repository(Generic[T]):
             if is_server_id:
                 # Delete all documents for this server
                 docs = self.adapter.filter_by_metadata(
-                    filters={"server_id": doc_id},
-                    limit=1000,
-                    collection_name=self.collection
+                    filters={"server_id": doc_id}, limit=1000, collection_name=self.collection
                 )
 
                 if not docs:
@@ -395,10 +370,7 @@ class Repository(Generic[T]):
             for inst in instances:
                 docs.extend(inst.to_documents())
 
-            doc_ids = self.adapter.add_documents(
-                documents=docs,
-                collection_name=self.collection
-            )
+            doc_ids = self.adapter.add_documents(documents=docs, collection_name=self.collection)
 
             successful = len(doc_ids) if doc_ids else 0
             total = len(instances)
@@ -430,22 +402,20 @@ class Repository(Generic[T]):
         try:
             if hasattr(self.adapter, "delete_by_filter"):
                 deleted = self.adapter.delete_by_filter(
-                    filters=filters,
-                    collection_name=self.collection
+                    filters=filters, collection_name=self.collection
                 )
                 logger.info(f"Deleted {deleted} {self.model_class.__name__} instances by filter")
                 return deleted
-            logger.warning(f"Adapter {type(self.adapter).__name__} does not support delete_by_filter")
+            logger.warning(
+                f"Adapter {type(self.adapter).__name__} does not support delete_by_filter"
+            )
             return 0
         except Exception as e:
             logger.error(f"Delete by filter failed: {e}", exc_info=True)
             raise RepositoryError("Failed to delete by filter") from e
 
     def batch_update_by_filter(
-            self,
-            filters: Any,
-            update_data: dict[str, Any],
-            limit: int = 1000
+        self, filters: Any, update_data: dict[str, Any], limit: int = 1000
     ) -> int:
         """
         Batch update instances matching filter conditions.
@@ -481,9 +451,7 @@ class Repository(Generic[T]):
                     doc_ids = [str(inst.id) for inst in instances]
 
                     return self.adapter.batch_update_properties(
-                        doc_ids=doc_ids,
-                        properties=update_data,
-                        collection_name=self.collection
+                        doc_ids=doc_ids, properties=update_data, collection_name=self.collection
                     )
 
             # Full update with re-vectorization (slow path)
@@ -512,11 +480,11 @@ class Repository(Generic[T]):
     # ========================================
 
     def search(
-            self,
-            query: str,
-            search_type: SearchType = SearchType.HYBRID,
-            k: int = 10,
-            filters: Any | None = None
+        self,
+        query: str,
+        search_type: SearchType = SearchType.HYBRID,
+        k: int = 10,
+        filters: Any | None = None,
     ) -> list[T]:
         """
         Search for model instances using natural language query.
@@ -536,7 +504,7 @@ class Repository(Generic[T]):
                 search_type=search_type,
                 k=k,
                 filters=filters,
-                collection_name=self.collection
+                collection_name=self.collection,
             )
 
             instances = []
@@ -554,11 +522,7 @@ class Repository(Generic[T]):
             logger.error(f"Search failed: {e}", exc_info=True)
             return []
 
-    def filter(
-            self,
-            filters: Any,
-            limit: int = 10
-    ) -> list[T]:
+    def filter(self, filters: Any, limit: int = 10) -> list[T]:
         """
         Filter model instances by metadata conditions (no semantic search).
 
@@ -571,9 +535,7 @@ class Repository(Generic[T]):
         """
         try:
             results = self.adapter.filter_by_metadata(
-                filters=filters,
-                limit=limit,
-                collection_name=self.collection
+                filters=filters, limit=limit, collection_name=self.collection
             )
 
             instances = []
@@ -592,14 +554,14 @@ class Repository(Generic[T]):
             return []
 
     def search_with_rerank(
-            self,
-            query: str,
-            k: int = 10,
-            candidate_k: int | None = None,
-            search_type: SearchType = SearchType.HYBRID,
-            filters: Any | None = None,
-            reranker_type: RerankerProvider = RerankerProvider.FLASHRANK,
-            reranker_kwargs: dict[str, Any] | None = None
+        self,
+        query: str,
+        k: int = 10,
+        candidate_k: int | None = None,
+        search_type: SearchType = SearchType.HYBRID,
+        filters: Any | None = None,
+        reranker_type: RerankerProvider = RerankerProvider.FLASHRANK,
+        reranker_kwargs: dict[str, Any] | None = None,
     ) -> list[T]:
         """
         Search with reranking for improved relevance.
@@ -630,7 +592,7 @@ class Repository(Generic[T]):
                 filters=filters,
                 reranker_type=reranker_type,
                 reranker_kwargs=reranker_kwargs or {},
-                collection_name=self.collection
+                collection_name=self.collection,
             )
 
             instances = []
@@ -641,7 +603,9 @@ class Repository(Generic[T]):
                 except Exception as e:
                     logger.warning(f"Failed to convert document: {e}")
 
-            logger.info(f"Rerank search returned {len(instances)} {self.model_class.__name__} instances")
+            logger.info(
+                f"Rerank search returned {len(instances)} {self.model_class.__name__} instances"
+            )
             return instances
 
         except Exception as e:
@@ -652,11 +616,7 @@ class Repository(Generic[T]):
     # Retriever Methods (for LangChain integration)
     # ========================================
 
-    def get_retriever(
-            self,
-            search_type: SearchType = SearchType.HYBRID,
-            k: int = 10
-    ):
+    def get_retriever(self, search_type: SearchType = SearchType.HYBRID, k: int = 10):
         """
         Get a LangChain retriever for RAG applications.
 
@@ -671,15 +631,15 @@ class Repository(Generic[T]):
             adapter=self.adapter,
             collection_name=self.collection,
             search_type=search_type,
-            search_kwargs={"k": k}
+            search_kwargs={"k": k},
         )
 
     def get_compression_retriever(
-            self,
-            reranker_type: RerankerProvider,
-            search_type: SearchType = SearchType.HYBRID,
-            search_kwargs: dict | None = None,
-            reranker_kwargs: dict | None = None,
+        self,
+        reranker_type: RerankerProvider,
+        search_type: SearchType = SearchType.HYBRID,
+        search_kwargs: dict | None = None,
+        reranker_kwargs: dict | None = None,
     ) -> ContextualCompressionRetriever:
         """
         Get a compression retriever with reranking support.
@@ -696,18 +656,13 @@ class Repository(Generic[T]):
         from .retrievers.reranker import create_reranker
 
         base_retriever = self.get_retriever(
-            search_type=search_type,
-            k=search_kwargs.get("k", 10) if search_kwargs else 10
+            search_type=search_type, k=search_kwargs.get("k", 10) if search_kwargs else 10
         )
 
-        reranker = create_reranker(
-            reranker_type=reranker_type,
-            **(reranker_kwargs or {})
-        )
+        reranker = create_reranker(reranker_type=reranker_type, **(reranker_kwargs or {}))
 
         return ContextualCompressionRetriever(
-            base_compressor=reranker,
-            base_retriever=base_retriever
+            base_compressor=reranker, base_retriever=base_retriever
         )
 
     # ========================================

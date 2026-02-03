@@ -43,21 +43,14 @@ def mock_admin_context() -> dict[str, Any]:
 @pytest.fixture
 def admin_session_cookie():
     """Create a valid admin session cookie."""
-    return create_session_cookie(
-        settings.admin_user,
-        auth_method="traditional",
-        provider="local"
-    )
+    return create_session_cookie(settings.admin_user, auth_method="traditional", provider="local")
 
 
 @pytest.fixture
 def user_session_cookie():
     """Create a valid user session cookie."""
     return create_session_cookie(
-        "testuser",
-        auth_method="oauth2",
-        provider="cognito",
-        groups=["users"]
+        "testuser", auth_method="oauth2", provider="cognito", groups=["users"]
     )
 
 
@@ -84,7 +77,7 @@ def sample_agent_card() -> AgentCard:
         version="1.0.0",
         tags=["test"],
         skills=[],
-        visibility="public"
+        visibility="public",
     )
 
 
@@ -106,14 +99,17 @@ class TestRateAgent:
 
         app.dependency_overrides[nginx_proxied_auth] = _mock_auth
 
-        with patch.object(
-            agent_service,
-            "get_agent_info",
-            return_value=sample_agent_card,
-        ), patch.object(
-            agent_service,
-            "update_rating",
-            return_value=4.5,
+        with (
+            patch.object(
+                agent_service,
+                "get_agent_info",
+                return_value=sample_agent_card,
+            ),
+            patch.object(
+                agent_service,
+                "update_rating",
+                return_value=4.5,
+            ),
         ):
             response = authenticated_client.post(
                 "/api/agents/test-agent/rate",
@@ -266,14 +262,17 @@ class TestRateAgent:
 
         app.dependency_overrides[nginx_proxied_auth] = _mock_auth
 
-        with patch.object(
-            agent_service,
-            "get_agent_info",
-            return_value=sample_agent_card,
-        ), patch.object(
-            agent_service,
-            "update_rating",
-            side_effect=ValueError("Failed to save rating"),
+        with (
+            patch.object(
+                agent_service,
+                "get_agent_info",
+                return_value=sample_agent_card,
+            ),
+            patch.object(
+                agent_service,
+                "update_rating",
+                side_effect=ValueError("Failed to save rating"),
+            ),
         ):
             response = authenticated_client.post(
                 "/api/agents/test-agent/rate",
@@ -301,14 +300,17 @@ class TestRateAgent:
         app.dependency_overrides[nginx_proxied_auth] = _mock_auth
 
         for rating_value in [1, 2, 3, 4, 5]:
-            with patch.object(
-                agent_service,
-                "get_agent_info",
-                return_value=sample_agent_card,
-            ), patch.object(
-                agent_service,
-                "update_rating",
-                return_value=float(rating_value),
+            with (
+                patch.object(
+                    agent_service,
+                    "get_agent_info",
+                    return_value=sample_agent_card,
+                ),
+                patch.object(
+                    agent_service,
+                    "update_rating",
+                    return_value=float(rating_value),
+                ),
             ):
                 response = authenticated_client.post(
                     "/api/agents/test-agent/rate",
@@ -334,15 +336,18 @@ class TestRateAgent:
 
         app.dependency_overrides[nginx_proxied_auth] = _mock_auth
 
-        with patch.object(
-            agent_service,
-            "get_agent_info",
-            return_value=sample_agent_card,
-        ) as mock_get_agent, patch.object(
-            agent_service,
-            "update_rating",
-            return_value=5.0,
-        ) as mock_update:
+        with (
+            patch.object(
+                agent_service,
+                "get_agent_info",
+                return_value=sample_agent_card,
+            ) as mock_get_agent,
+            patch.object(
+                agent_service,
+                "update_rating",
+                return_value=5.0,
+            ) as mock_update,
+        ):
             # Test with path - the URL already has the correct format
             response = authenticated_client.post(
                 "/api/agents/test-agent/rate",
@@ -392,14 +397,17 @@ class TestRateAgent:
 
         app.dependency_overrides[nginx_proxied_auth] = _mock_auth
 
-        with patch.object(
-            agent_service,
-            "get_agent_info",
-            return_value=private_agent,
-        ), patch.object(
-            agent_service,
-            "update_rating",
-            return_value=5.0,
+        with (
+            patch.object(
+                agent_service,
+                "get_agent_info",
+                return_value=private_agent,
+            ),
+            patch.object(
+                agent_service,
+                "update_rating",
+                return_value=5.0,
+            ),
         ):
             response = authenticated_client.post(
                 "/api/agents/private-agent/rate",
@@ -448,14 +456,17 @@ class TestRateAgent:
 
         app.dependency_overrides[nginx_proxied_auth] = _mock_auth
 
-        with patch.object(
-            agent_service,
-            "get_agent_info",
-            return_value=group_agent,
-        ), patch.object(
-            agent_service,
-            "update_rating",
-            return_value=4.0,
+        with (
+            patch.object(
+                agent_service,
+                "get_agent_info",
+                return_value=group_agent,
+            ),
+            patch.object(
+                agent_service,
+                "update_rating",
+                return_value=4.0,
+            ),
         ):
             response = authenticated_client.post(
                 "/api/agents/group-agent/rate",

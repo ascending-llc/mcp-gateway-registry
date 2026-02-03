@@ -76,7 +76,7 @@ def client():
             "id": "test_user_id",
             "groups": ["registry-admins"],
             "scopes": ["registry-admins"],
-            "is_admin": True
+            "is_admin": True,
         }
         request.state.is_authenticated = True
         response = await call_next(request)
@@ -88,10 +88,14 @@ def client():
     # Mock server_service_v1
     with patch("registry.api.v1.mcp.connection_router.server_service_v1", mock_server_service_v1):
         # Mock connection status service functions
-        with patch("registry.api.v1.mcp.connection_router.get_servers_connection_status",
-                   mock_get_servers_connection_status):
-            with patch("registry.api.v1.mcp.connection_router.get_single_server_connection_status",
-                       mock_get_single_server_connection_status):
+        with patch(
+            "registry.api.v1.mcp.connection_router.get_servers_connection_status",
+            mock_get_servers_connection_status,
+        ):
+            with patch(
+                "registry.api.v1.mcp.connection_router.get_single_server_connection_status",
+                mock_get_single_server_connection_status,
+            ):
                 yield TestClient(app)
 
 
@@ -113,7 +117,10 @@ class TestConnectionRouter:
         mock_mcp_service.connection_service.disconnect_user_connection.return_value = True
 
         # Mock OAuth service to return needs_connection=True and response data
-        mock_mcp_service.oauth_service.handle_reinitialize_auth.return_value = (True, {"status": "success"})
+        mock_mcp_service.oauth_service.handle_reinitialize_auth.return_value = (
+            True,
+            {"status": "success"},
+        )
 
         # Mock connection service to successfully create connection
         mock_mcp_service.connection_service.create_user_connection.return_value = None
@@ -150,7 +157,10 @@ class TestConnectionRouter:
         mock_mcp_service.connection_service.disconnect_user_connection.return_value = False
 
         # Mock OAuth service to return needs_connection=True and response data
-        mock_mcp_service.oauth_service.handle_reinitialize_auth.return_value = (True, {"status": "success"})
+        mock_mcp_service.oauth_service.handle_reinitialize_auth.return_value = (
+            True,
+            {"status": "success"},
+        )
 
         # Mock connection service to successfully create connection
         mock_mcp_service.connection_service.create_user_connection.return_value = None
@@ -177,7 +187,9 @@ class TestConnectionRouter:
         mock_mcp_service.connection_service.disconnect_user_connection.return_value = True
 
         # Mock OAuth service to raise an exception
-        mock_mcp_service.oauth_service.handle_reinitialize_auth.side_effect = Exception("OAuth error")
+        mock_mcp_service.oauth_service.handle_reinitialize_auth.side_effect = Exception(
+            "OAuth error"
+        )
 
         response = client.post(f"/mcp/{TEST_SERVER_ID}/reinitialize")
 
@@ -200,10 +212,15 @@ class TestConnectionRouter:
         mock_mcp_service.connection_service.disconnect_user_connection.return_value = True
 
         # Mock OAuth service to return needs_connection=True and response data
-        mock_mcp_service.oauth_service.handle_reinitialize_auth.return_value = (True, {"status": "success"})
+        mock_mcp_service.oauth_service.handle_reinitialize_auth.return_value = (
+            True,
+            {"status": "success"},
+        )
 
         # Mock connection service to fail creating connection
-        mock_mcp_service.connection_service.create_user_connection.side_effect = Exception("Connection failed")
+        mock_mcp_service.connection_service.create_user_connection.side_effect = Exception(
+            "Connection failed"
+        )
 
         response = client.post(f"/mcp/{TEST_SERVER_ID}/reinitialize")
 
@@ -227,7 +244,7 @@ class TestConnectionRouter:
                 "server_id": TEST_SERVER_ID,
                 "server_name": TEST_SERVER_NAME,
                 "connection_state": ConnectionState.CONNECTED,
-                "requires_oauth": True
+                "requires_oauth": True,
             }
         ]
 
@@ -280,7 +297,7 @@ class TestConnectionRouter:
         # Mock get_single_server_connection_status to return status
         mock_get_single_server_connection_status.return_value = {
             "connection_state": ConnectionState.CONNECTED,
-            "requires_oauth": True
+            "requires_oauth": True,
         }
 
         response = client.get(f"/mcp/connection/status/{TEST_SERVER_ID}")

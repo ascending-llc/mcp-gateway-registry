@@ -28,13 +28,7 @@ except json.JSONDecodeError as e:
 
 # Build ExternalSecret `data` entries dynamically
 data_entries = [
-    {
-        "secretKey": key,
-        "remoteRef": {
-            "key": SECRET_NAME,
-            "property": key
-        }
-    }
+    {"secretKey": key, "remoteRef": {"key": SECRET_NAME, "property": key}}
     for key in secret_dict.keys()
 ]
 
@@ -42,21 +36,13 @@ data_entries = [
 external_secret = {
     "apiVersion": "external-secrets.io/v1",
     "kind": "ExternalSecret",
-    "metadata": {
-        "name": EXTERNAL_SECRET_NAME
-    },
+    "metadata": {"name": EXTERNAL_SECRET_NAME},
     "spec": {
         "refreshInterval": "1h",
-        "secretStoreRef": {
-            "name": SECRETSTORE_NAME,
-            "kind": "SecretStore"
-        },
-        "target": {
-            "name": EXTERNAL_SECRET_NAME,
-            "creationPolicy": "Owner"
-        },
-        "data": data_entries
-    }
+        "secretStoreRef": {"name": SECRETSTORE_NAME, "kind": "SecretStore"},
+        "target": {"name": EXTERNAL_SECRET_NAME, "creationPolicy": "Owner"},
+        "data": data_entries,
+    },
 }
 
 # Ensure directory exists

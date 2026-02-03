@@ -31,21 +31,21 @@ class TokenService:
         return f"mcp:{service_name}:refresh"
 
     async def store_oauth_client_token(
-            self,
-            user_id: str,
-            service_name: str,
-            tokens: OAuthTokens,
-            metadata: dict[str, Any] | None = None
+        self,
+        user_id: str,
+        service_name: str,
+        tokens: OAuthTokens,
+        metadata: dict[str, Any] | None = None,
     ) -> Token:
         """
         Store OAuth client token (access token)
-        
+
         Args:
             user_id: User ID
             service_name: Service name (e.g., notion, agentcore, etc.)
             tokens: OAuth tokens object
             metadata: Additional metadata (e.g., OAuth configuration)
-            
+
         Returns:
             Created or updated Token document
         """
@@ -57,11 +57,13 @@ class TokenService:
         expires_at = self._calculate_expiration(tokens.expires_in)
 
         # Check if token exists
-        existing_token = await Token.find_one({
-            "userId": PydanticObjectId(user_obj_id),
-            "type": TokenType.MCP_OAUTH_CLIENT.value,
-            "identifier": identifier,
-        })
+        existing_token = await Token.find_one(
+            {
+                "userId": PydanticObjectId(user_obj_id),
+                "type": TokenType.MCP_OAUTH_CLIENT.value,
+                "identifier": identifier,
+            }
+        )
 
         if existing_token:
             # Update existing token
@@ -81,22 +83,22 @@ class TokenService:
             token=tokens.access_token,
             expiresAt=expires_at,
             metadata=metadata or {},
-            email=user.email
+            email=user.email,
         )
         await token_doc.insert()
         logger.info(f"Created OAuth client token for user={user_id}, service={service_name}")
         return token_doc
 
     async def store_oauth_refresh_token(
-            self,
-            user_id: str,
-            service_name: str,
-            tokens: OAuthTokens,
-            metadata: dict[str, Any] | None = None
+        self,
+        user_id: str,
+        service_name: str,
+        tokens: OAuthTokens,
+        metadata: dict[str, Any] | None = None,
     ) -> Token | None:
         """
         Store OAuth refresh token
-        
+
         Args:
             user_id: User ID
             service_name: Service name
@@ -116,11 +118,13 @@ class TokenService:
         expires_at = datetime.now(UTC) + timedelta(days=365)
 
         # Check if token exists
-        existing_token = await Token.find_one({
-            "userId": PydanticObjectId(user_obj_id),
-            "type": TokenType.MCP_OAUTH_REFRESH.value,
-            "identifier": identifier
-        })
+        existing_token = await Token.find_one(
+            {
+                "userId": PydanticObjectId(user_obj_id),
+                "type": TokenType.MCP_OAUTH_REFRESH.value,
+                "identifier": identifier,
+            }
+        )
 
         if existing_token:
             # Update existing token
@@ -139,7 +143,7 @@ class TokenService:
             identifier=identifier,
             token=tokens.refresh_token,
             expiresAt=expires_at,
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
         token_doc.email = user.email
         await token_doc.insert()
@@ -147,75 +151,64 @@ class TokenService:
         return token_doc
 
     async def store_oauth_tokens(
-            self,
-            user_id: str,
-            service_name: str,
-            tokens: OAuthTokens,
-            metadata: dict[str, Any] | None = None
+        self,
+        user_id: str,
+        service_name: str,
+        tokens: OAuthTokens,
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Token | None]:
         """
         Store complete OAuth tokens (access + refresh)
-        
+
         This is the main storage method, which stores both access token and refresh token
-        
+
         Args:
             user_id: User ID
             service_name: Service name
             tokens: OAuth tokens object
             metadata: Additional metadata (e.g., OAuth configuration)
-            
+
         Returns:
             Dictionary containing client and refresh tokens
         """
         try:
             # Store access token
             client_token = await self.store_oauth_client_token(
-                user_id=user_id,
-                service_name=service_name,
-                tokens=tokens,
-                metadata=metadata
+                user_id=user_id, service_name=service_name, tokens=tokens, metadata=metadata
             )
 
             # Store refresh token (if exists)
             refresh_token = await self.store_oauth_refresh_token(
-                user_id=user_id,
-                service_name=service_name,
-                tokens=tokens,
-                metadata=metadata
+                user_id=user_id, service_name=service_name, tokens=tokens, metadata=metadata
             )
 
-            return {
-                "client": client_token,
-                "refresh": refresh_token
-            }
+            return {"client": client_token, "refresh": refresh_token}
 
         except Exception as e:
             logger.error(f"Failed to store OAuth tokens: {e}", exc_info=True)
             raise
 
-    async def get_oauth_client_token(
-            self,
-            user_id: str,
-            service_name: str
-    ) -> Token | None:
+    async def get_oauth_client_token(self, user_id: str, service_name: str) -> Token | None:
         """
         Get OAuth client token
-        
+
         Args:
             user_id: User ID
             service_name: Service name
-            
+
         Returns:
             Token document or None
         """
         identifier = self._get_client_identifier(service_name)
         user_obj_id = await self.get_user_by_user_id(user_id)
 
-        token = await Token.find_one({
-            "userId": PydanticObjectId(user_obj_id),
-            "type": TokenType.MCP_OAUTH_CLIENT.value,
-            "identifier": identifier
-        })
+        token = await Token.find_one(
+            {
+                "userId": PydanticObjectId(user_obj_id),
+                "type": TokenType.MCP_OAUTH_CLIENT.value,
+                "identifier": identifier,
+            }
+        )
         logger.debug(f"OAuth client token for user={user_id}, service={service_name}")
 
         # Check if token is expired
@@ -225,29 +218,27 @@ class TokenService:
 
         return token
 
-    async def get_oauth_refresh_token(
-            self,
-            user_id: str,
-            service_name: str
-    ) -> Token | None:
+    async def get_oauth_refresh_token(self, user_id: str, service_name: str) -> Token | None:
         """
         Get OAuth refresh token
-        
+
         Args:
             user_id: User ID
             service_name: Service name
-            
+
         Returns:
             Token document or None
         """
         identifier = self._get_refresh_identifier(service_name)
         user_obj_id = await self.get_user_by_user_id(user_id)
 
-        token = await Token.find_one({
-            "userId": PydanticObjectId(user_obj_id),
-            "type": TokenType.MCP_OAUTH_REFRESH.value,
-            "identifier": identifier
-        })
+        token = await Token.find_one(
+            {
+                "userId": PydanticObjectId(user_obj_id),
+                "type": TokenType.MCP_OAUTH_REFRESH.value,
+                "identifier": identifier,
+            }
+        )
 
         # Check if token is expired
         if token and self._is_token_expired(token):
@@ -256,18 +247,14 @@ class TokenService:
 
         return token
 
-    async def get_oauth_tokens(
-            self,
-            user_id: str,
-            service_name: str
-    ) -> OAuthTokens | None:
+    async def get_oauth_tokens(self, user_id: str, service_name: str) -> OAuthTokens | None:
         """
         Get complete OAuth tokens and convert to OAuthTokens object
-        
+
         Args:
             user_id: User ID
             service_name: Service name
-            
+
         Returns:
             OAuthTokens object or None
         """
@@ -284,21 +271,17 @@ class TokenService:
             refresh_token=refresh_token.token if refresh_token else None,
             token_type="Bearer",
             expires_in=self._calculate_expires_in(client_token.expiresAt),
-            expires_at=int(client_token.expiresAt.timestamp()) if client_token.expiresAt else None
+            expires_at=int(client_token.expiresAt.timestamp()) if client_token.expiresAt else None,
         )
 
-    async def delete_oauth_tokens(
-            self,
-            user_id: str,
-            service_name: str
-    ) -> bool:
+    async def delete_oauth_tokens(self, user_id: str, service_name: str) -> bool:
         """
         Delete user's OAuth tokens
-        
+
         Args:
             user_id: User ID
             service_name: Service name
-            
+
         Returns:
             Whether deletion was successful
         """
@@ -306,19 +289,23 @@ class TokenService:
 
         # Delete client token
         client_identifier = self._get_client_identifier(service_name)
-        client_result = await Token.find_one({
-            "userId": PydanticObjectId(user_obj_id),
-            "type": TokenType.MCP_OAUTH_CLIENT.value,
-            "identifier": client_identifier
-        })
+        client_result = await Token.find_one(
+            {
+                "userId": PydanticObjectId(user_obj_id),
+                "type": TokenType.MCP_OAUTH_CLIENT.value,
+                "identifier": client_identifier,
+            }
+        )
 
         # Delete refresh token
         refresh_identifier = self._get_refresh_identifier(service_name)
-        refresh_result = await Token.find_one({
-            "userId": PydanticObjectId(user_obj_id),
-            "type": TokenType.MCP_OAUTH_REFRESH.value,
-            "identifier": refresh_identifier
-        })
+        refresh_result = await Token.find_one(
+            {
+                "userId": PydanticObjectId(user_obj_id),
+                "type": TokenType.MCP_OAUTH_REFRESH.value,
+                "identifier": refresh_identifier,
+            }
+        )
 
         deleted_count = 0
         if client_result:
@@ -330,23 +317,23 @@ class TokenService:
             deleted_count += 1
 
         if deleted_count > 0:
-            logger.info(f"Deleted {deleted_count} tokens for user={user_id}, service={service_name}")
+            logger.info(
+                f"Deleted {deleted_count} tokens for user={user_id}, service={service_name}"
+            )
             return True
 
         return False
 
     async def get_user_tokens(
-            self,
-            user_id: str,
-            token_type: TokenType | None = None
+        self, user_id: str, token_type: TokenType | None = None
     ) -> list[Token]:
         """
         Get all user tokens
-        
+
         Args:
             user_id: User ID
             token_type: Optional token type filter (TokenType.MCP_OAUTH_CLIENT or TokenType.MCP_OAUTH_REFRESH)
-            
+
         Returns:
             List of Token documents
         """
@@ -366,7 +353,7 @@ class TokenService:
     async def cleanup_expired_tokens(self) -> int:
         """
         Clean up all expired tokens
-        
+
         Returns:
             Number of tokens cleaned up
         """
@@ -386,11 +373,7 @@ class TokenService:
 
         return count
 
-    async def is_access_token_expired(
-            self,
-            user_id: str,
-            service_name: str
-    ) -> bool:
+    async def is_access_token_expired(self, user_id: str, service_name: str) -> bool:
         """
         Check if access token is expired or missing
 
@@ -404,11 +387,7 @@ class TokenService:
 
         return self._is_token_expired(client_token)
 
-    async def has_refresh_token(
-            self,
-            user_id: str,
-            service_name: str
-    ) -> bool:
+    async def has_refresh_token(self, user_id: str, service_name: str) -> bool:
         """
         Check if user has a valid refresh token
 
@@ -423,13 +402,11 @@ class TokenService:
         return not self._is_token_expired(refresh_token)
 
     async def get_access_token_status(
-            self,
-            user_id: str,
-            service_name: str
+        self, user_id: str, service_name: str
     ) -> tuple[Token | None, bool]:
         """
         Get access token and its validity status
-        
+
         Returns:
             tuple: (token_doc, is_valid)
                 - token_doc: Token document or None if not exists
@@ -438,11 +415,13 @@ class TokenService:
         identifier = self._get_client_identifier(service_name)
         user_obj_id = await self.get_user_by_user_id(user_id)
 
-        token = await Token.find_one({
-            "userId": PydanticObjectId(user_obj_id),
-            "type": TokenType.MCP_OAUTH_CLIENT.value,
-            "identifier": identifier
-        })
+        token = await Token.find_one(
+            {
+                "userId": PydanticObjectId(user_obj_id),
+                "type": TokenType.MCP_OAUTH_CLIENT.value,
+                "identifier": identifier,
+            }
+        )
 
         if not token:
             return None, False
@@ -451,13 +430,11 @@ class TokenService:
         return token, is_valid
 
     async def get_refresh_token_status(
-            self,
-            user_id: str,
-            service_name: str
+        self, user_id: str, service_name: str
     ) -> tuple[Token | None, bool]:
         """
         Get refresh token and its validity status
-        
+
         Returns:
             tuple: (token_doc, is_valid)
                 - token_doc: Token document or None if not exists
@@ -466,11 +443,13 @@ class TokenService:
         identifier = self._get_refresh_identifier(service_name)
         user_obj_id = await self.get_user_by_user_id(user_id)
 
-        token = await Token.find_one({
-            "userId": PydanticObjectId(user_obj_id),
-            "type": TokenType.MCP_OAUTH_REFRESH.value,
-            "identifier": identifier
-        })
+        token = await Token.find_one(
+            {
+                "userId": PydanticObjectId(user_obj_id),
+                "type": TokenType.MCP_OAUTH_REFRESH.value,
+                "identifier": identifier,
+            }
+        )
 
         if not token:
             return None, False
@@ -481,10 +460,10 @@ class TokenService:
     def _calculate_expiration(self, expires_in: int | None) -> datetime:
         """
         Calculate token expiration time
-        
+
         Args:
             expires_in: Expiration time (in seconds)
-            
+
         Returns:
             datetime object of expiration time
         """
@@ -497,10 +476,10 @@ class TokenService:
     def _calculate_expires_in(self, expires_at: datetime) -> int:
         """
         Calculate remaining valid time
-        
+
         Args:
             expires_at: Expiration time
-            
+
         Returns:
             Remaining seconds
         """

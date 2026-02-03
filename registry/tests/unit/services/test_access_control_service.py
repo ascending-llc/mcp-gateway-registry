@@ -24,7 +24,7 @@ class TestACLService:
                 principal_id={"id": "user1"},
                 resource_type=ResourceType.MCPSERVER.value,
                 resource_id=PydanticObjectId(),
-                perm_bits=PermissionBits.EDIT
+                perm_bits=PermissionBits.EDIT,
             )
             new_entry.insert.assert_awaited()
 
@@ -42,7 +42,7 @@ class TestACLService:
                 principal_id={"id": "user1"},
                 resource_type=ResourceType.MCPSERVER.value,
                 resource_id=PydanticObjectId(),
-                perm_bits=PermissionBits.EDIT
+                perm_bits=PermissionBits.EDIT,
             )
             existing_entry.save.assert_awaited()
 
@@ -55,7 +55,7 @@ class TestACLService:
                 principal_id=None,
                 resource_type=ResourceType.MCPSERVER.value,
                 resource_id=PydanticObjectId(),
-                perm_bits=PermissionBits.EDIT
+                perm_bits=PermissionBits.EDIT,
             )
 
     @pytest.mark.asyncio
@@ -66,7 +66,7 @@ class TestACLService:
                 principal_type="user",
                 principal_id={"id": "user1"},
                 resource_type=ResourceType.MCPSERVER.value,
-                resource_id=PydanticObjectId()
+                resource_id=PydanticObjectId(),
             )
 
     @pytest.mark.asyncio
@@ -77,8 +77,7 @@ class TestACLService:
         mock_result.deleted_count = 2
         mock_acl_entry.find.return_value.delete = AsyncMock(return_value=mock_result)
         deleted = await service.delete_acl_entries_for_resource(
-            resource_type=ResourceType.MCPSERVER.value,
-            resource_id=PydanticObjectId()
+            resource_type=ResourceType.MCPSERVER.value, resource_id=PydanticObjectId()
         )
         assert deleted == 2
 
@@ -88,8 +87,7 @@ class TestACLService:
         service = ACLService()
         mock_acl_entry.find.return_value.delete = AsyncMock(side_effect=Exception("fail"))
         deleted = await service.delete_acl_entries_for_resource(
-            resource_type=ResourceType.MCPSERVER.value,
-            resource_id=PydanticObjectId()
+            resource_type=ResourceType.MCPSERVER.value, resource_id=PydanticObjectId()
         )
         assert deleted == 0
 
@@ -117,7 +115,7 @@ class TestACLService:
             resource_type=ResourceType.MCPSERVER.value,
             resource_id=PydanticObjectId(),
             principal_type="user",
-            principal_id=PydanticObjectId()
+            principal_id=PydanticObjectId(),
         )
         assert deleted_count == 1
 
@@ -130,6 +128,6 @@ class TestACLService:
             resource_type=ResourceType.MCPSERVER.value,
             resource_id=PydanticObjectId(),
             principal_type="user",
-            principal_id="user1"
+            principal_id="user1",
         )
         assert deleted == 0

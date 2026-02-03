@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class RegistryMetricsMiddleware(BaseHTTPMiddleware):
     """
     Middleware to collect registry operation and request metrics.
-    
+
     Tracks:
     - Registry operations (server CRUD, search, health)
     - Request headers for nginx config analysis
@@ -53,7 +53,7 @@ class RegistryMetricsMiddleware(BaseHTTPMiddleware):
             "POST": "create",
             "PUT": "update",
             "PATCH": "update",
-            "DELETE": "delete"
+            "DELETE": "delete",
         }
 
         operation = method_mapping.get(method, "unknown")
@@ -89,7 +89,7 @@ class RegistryMetricsMiddleware(BaseHTTPMiddleware):
             "operation": operation,
             "resource_type": resource_type,
             "resource_id": resource_id,
-            "path": path
+            "path": path,
         }
 
     def extract_user_info(self, request: Request) -> str:
@@ -106,11 +106,13 @@ class RegistryMetricsMiddleware(BaseHTTPMiddleware):
         path = request.url.path
 
         # Skip static files and non-API endpoints
-        if (path.startswith("/static/") or
-            path.startswith("/favicon.ico") or
-            path == "/" or
-            path == "/docs" or
-            path == "/openapi.json"):
+        if (
+            path.startswith("/static/")
+            or path.startswith("/favicon.ico")
+            or path == "/"
+            or path == "/docs"
+            or path == "/openapi.json"
+        ):
             return False
 
         return True
@@ -168,7 +170,7 @@ class RegistryMetricsMiddleware(BaseHTTPMiddleware):
                     duration_ms=duration_ms,
                     resource_id=operation_info["resource_id"],
                     user_id=user_hash,
-                    error_code=error_code
+                    error_code=error_code,
                 )
             )
 
@@ -179,7 +181,7 @@ class RegistryMetricsMiddleware(BaseHTTPMiddleware):
                         path=operation_info["path"],
                         method=request.method,
                         headers_info=headers_info,
-                        status_code=response.status_code if response else 500
+                        status_code=response.status_code if response else 500,
                     )
                 )
 
@@ -187,8 +189,7 @@ class RegistryMetricsMiddleware(BaseHTTPMiddleware):
             if operation_info["resource_type"] == "search" and success:
                 asyncio.create_task(
                     self._emit_discovery_metric_from_request(
-                        request=request,
-                        duration_ms=duration_ms
+                        request=request, duration_ms=duration_ms
                     )
                 )
 
@@ -202,7 +203,7 @@ class RegistryMetricsMiddleware(BaseHTTPMiddleware):
         duration_ms: float,
         resource_id: str = "",
         user_id: str = "",
-        error_code: str = None
+        error_code: str = None,
     ):
         """Emit registry operation metric asynchronously."""
         try:
@@ -213,17 +214,13 @@ class RegistryMetricsMiddleware(BaseHTTPMiddleware):
                 duration_ms=duration_ms,
                 resource_id=resource_id,
                 user_id=user_id,
-                error_code=error_code
+                error_code=error_code,
             )
         except Exception as e:
             logger.debug(f"Failed to emit registry metric: {e}")
 
     async def _emit_headers_metric(
-        self,
-        path: str,
-        method: str,
-        headers_info: dict[str, Any],
-        status_code: int
+        self, path: str, method: str, headers_info: dict[str, Any], status_code: int
     ):
         """Emit custom metric with request header information for nginx config analysis."""
         try:
@@ -241,16 +238,12 @@ class RegistryMetricsMiddleware(BaseHTTPMiddleware):
                 },
                 metadata={
                     "headers_sample": str(headers_info)[:500]  # Truncated sample
-                }
+                },
             )
         except Exception as e:
             logger.debug(f"Failed to emit headers metric: {e}")
 
-    async def _emit_discovery_metric_from_request(
-        self,
-        request: Request,
-        duration_ms: float
-    ):
+    async def _emit_discovery_metric_from_request(self, request: Request, duration_ms: float):
         """Emit discovery metric for search operations."""
         try:
             # Extract query from request parameters
@@ -262,9 +255,7 @@ class RegistryMetricsMiddleware(BaseHTTPMiddleware):
             results_count = -1  # Indicates count not available
 
             await self.metrics_client.emit_discovery_metric(
-                query=query,
-                results_count=results_count,
-                duration_ms=duration_ms
+                query=query, results_count=results_count, duration_ms=duration_ms
             )
         except Exception as e:
             logger.debug(f"Failed to emit discovery metric: {e}")
@@ -273,7 +264,7 @@ class RegistryMetricsMiddleware(BaseHTTPMiddleware):
 def add_registry_metrics_middleware(app, service_name: str = "registry"):
     """
     Convenience function to add registry metrics middleware to a FastAPI app.
-    
+
     Args:
         app: FastAPI application instance
         service_name: Name of the service for metrics identification

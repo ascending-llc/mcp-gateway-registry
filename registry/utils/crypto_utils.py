@@ -31,10 +31,10 @@ _ENCRYPTION_KEY: bytes | None = None
 def _get_encryption_key() -> bytes:
     """
     Get the encryption key from environment variable.
-    
+
     Returns:
         bytes: encryption key from CREDS_KEY (hex decoded)
-        
+
     Raises:
         ValueError: If CREDS_KEY is not set or invalid
     """
@@ -43,9 +43,7 @@ def _get_encryption_key() -> bytes:
     if _ENCRYPTION_KEY is None:
         creds_key = os.environ.get("CREDS_KEY")
         if not creds_key:
-            raise ValueError(
-                "CREDS_KEY environment variable must be set for encryption/decryption"
-            )
+            raise ValueError("CREDS_KEY environment variable must be set for encryption/decryption")
 
         # Decode from hex (matching TypeScript: Buffer.from(process.env.CREDS_KEY, 'hex'))
         try:
@@ -58,16 +56,18 @@ def _get_encryption_key() -> bytes:
     return _ENCRYPTION_KEY
 
 
-def generate_service_jwt(user_id: str, username: str | None = None, scopes: list[str] | None = None) -> str:
+def generate_service_jwt(
+    user_id: str, username: str | None = None, scopes: list[str] | None = None
+) -> str:
     """
     Generate internal service JWT for MCP server authentication.
     Used to authenticate registry -> MCP server requests with user context.
-    
+
     Args:
         user_id: User ID to include in JWT
         username: Optional username/email
         scopes: Optional list of scopes
-    
+
     Returns:
         JWT token string (without Bearer prefix)
     """
@@ -92,11 +92,7 @@ def generate_service_jwt(user_id: str, username: str | None = None, scopes: list
         payload["scopes"] = scopes
 
     # Sign with registry secret
-    token = jwt.encode(
-        payload,
-        settings.secret_key,
-        algorithm="HS256"
-    )
+    token = jwt.encode(payload, settings.secret_key, algorithm="HS256")
 
     return token
 
@@ -104,19 +100,19 @@ def generate_service_jwt(user_id: str, username: str | None = None, scopes: list
 def encrypt_value(plaintext: str) -> str:
     """
     Encrypts a value using AES-CBC with a random IV.
-    
+
     This implementation is compatible with the TypeScript encryptV2 function:
     - Uses AES-CBC encryption (matching Web Crypto API)
     - Generates a random 16-byte IV for each encryption
     - Returns format: hex(iv):hex(ciphertext)
     - NO padding (Web Crypto API handles this automatically)
-    
+
     Args:
         plaintext: The plaintext string to encrypt
-        
+
     Returns:
         str: Encrypted string in format "iv_hex:ciphertext_hex"
-        
+
     Raises:
         ValueError: If CREDS_KEY is not configured
         Exception: If encryption fails
@@ -140,11 +136,7 @@ def encrypt_value(plaintext: str) -> str:
         padded_data = plaintext_bytes + bytes([padding_length] * padding_length)
 
         # Create cipher
-        cipher = Cipher(
-            algorithms.AES(key),
-            modes.CBC(gen_iv),
-            backend=default_backend()
-        )
+        cipher = Cipher(algorithms.AES(key), modes.CBC(gen_iv), backend=default_backend())
         encryptor = cipher.encryptor()
 
         # Encrypt
@@ -161,21 +153,21 @@ def encrypt_value(plaintext: str) -> str:
 def decrypt_value(encrypted_value: str) -> str:
     """
     Decrypts an encrypted value using AES-CBC.
-    
+
     This implementation is compatible with the TypeScript decryptV2 function:
     - Expects format: hex(iv):hex(ciphertext)
     - Uses AES-CBC decryption (matching Web Crypto API)
     - Returns original plaintext
-    
+
     If the value doesn't contain a colon separator, it's assumed to be
     already decrypted and returned as-is (for backward compatibility).
-    
+
     Args:
         encrypted_value: The encrypted string in format "iv_hex:ciphertext_hex"
-        
+
     Returns:
         str: Decrypted plaintext string
-        
+
     Raises:
         ValueError: If CREDS_KEY is not configured or format is invalid
         Exception: If decryption fails
@@ -205,11 +197,7 @@ def decrypt_value(encrypted_value: str) -> str:
             raise ValueError(f"Invalid IV length: expected {IV_LENGTH}, got {len(gen_iv)}")
 
         # Create cipher
-        cipher = Cipher(
-            algorithms.AES(key),
-            modes.CBC(gen_iv),
-            backend=default_backend()
-        )
+        cipher = Cipher(algorithms.AES(key), modes.CBC(gen_iv), backend=default_backend())
         decryptor = cipher.decryptor()
 
         # Decrypt
@@ -230,17 +218,17 @@ def decrypt_value(encrypted_value: str) -> str:
 def encrypt_auth_fields(config: dict) -> dict:
     """
     Encrypt sensitive authentication fields in server config.
-    
+
     Handles two authentication patterns:
     1. authentication.client_secret (when type=oauth)
     2. apiKey.key
-    
+
     Args:
         config: Server configuration dictionary
-        
+
     Returns:
         dict: Config with encrypted sensitive fields
-    
+
     Note:
         If CREDS_KEY is not set, values will be stored as plaintext.
         A warning will be logged in this case.
@@ -305,17 +293,17 @@ def encrypt_auth_fields(config: dict) -> dict:
 def decrypt_auth_fields(config: dict) -> dict:
     """
     Decrypt sensitive authentication fields in server config.
-    
+
     Handles two authentication patterns:
     1. authentication.client_secret (when type=oauth)
     2. apiKey.key
-    
+
     Args:
         config: Server configuration dictionary with encrypted fields
-        
+
     Returns:
         dict: Config with decrypted sensitive fields
-    
+
     Note:
         If CREDS_KEY is not set, encrypted values will be returned as-is (still encrypted).
         This prevents the API from crashing when CREDS_KEY is not configured.

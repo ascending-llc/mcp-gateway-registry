@@ -68,11 +68,11 @@ from .utils.security_mask import hash_username
 def validate_scope_subset(user_scopes: list[str], requested_scopes: list[str]) -> bool:
     """
     Validate that requested scopes are a subset of user's current scopes.
-    
+
     Args:
         user_scopes: List of scopes the user currently has
         requested_scopes: List of scopes being requested for the token
-        
+
     Returns:
         True if requested scopes are valid (subset of user scopes), False otherwise
     """
@@ -90,13 +90,14 @@ def validate_scope_subset(user_scopes: list[str], requested_scopes: list[str]) -
 
     return is_valid
 
+
 def check_rate_limit(username: str) -> bool:
     """
     Check if user has exceeded token generation rate limit.
-    
+
     Args:
         username: Username to check
-        
+
     Returns:
         True if under rate limit, False if exceeded
     """
@@ -118,21 +119,26 @@ def check_rate_limit(username: str) -> bool:
     current_count = user_token_generation_counts.get(rate_key, 0)
 
     if current_count >= MAX_TOKENS_PER_USER_PER_HOUR:
-        logger.warning(f"Rate limit exceeded for user {hash_username(username)}: {current_count} tokens this hour")
+        logger.warning(
+            f"Rate limit exceeded for user {hash_username(username)}: {current_count} tokens this hour"
+        )
         return False
 
     # Increment counter
     user_token_generation_counts[rate_key] = current_count + 1
     return True
 
+
 def _create_self_signed_jwt(access_payload: dict) -> str:
     try:
         headers = {
             "kid": JWT_SELF_SIGNED_KID,  # Static key ID for self-signed tokens
             "typ": "JWT",
-            "alg": "HS256"
+            "alg": "HS256",
         }
-        access_token = jwt.encode(access_payload, settings.secret_key, algorithm="HS256" , headers=headers)
+        access_token = jwt.encode(
+            access_payload, settings.secret_key, algorithm="HS256", headers=headers
+        )
         return access_token
     except Exception as e:
         logger.error(f"Failed to create self-signed JWT: {e}")
@@ -180,12 +186,16 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url=f"{api_prefix}/docs" if api_prefix else "/docs",
     redoc_url=f"{api_prefix}/redoc" if api_prefix else "/redoc",
-    openapi_url=f"{api_prefix}/openapi.json" if api_prefix else "/openapi.json"
+    openapi_url=f"{api_prefix}/openapi.json" if api_prefix else "/openapi.json",
 )
 
 # Add CORS middleware to support browser-based OAuth clients (like Claude Desktop)
 # Parse CORS origins from settings (comma-separated list or "*")
-cors_origins_list = [origin.strip() for origin in settings.cors_origins.split(",")] if settings.cors_origins != "*" else ["*"]
+cors_origins_list = (
+    [origin.strip() for origin in settings.cors_origins.split(",")]
+    if settings.cors_origins != "*"
+    else ["*"]
+)
 logger.info(f"CORS origins configured: {cors_origins_list}")
 
 app.add_middleware(
@@ -194,7 +204,14 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["WWW-Authenticate", "X-User-Id", "X-Username", "X-Client-Id","X-Scopes","X-Jarvis-Auth"],
+    expose_headers=[
+        "WWW-Authenticate",
+        "X-User-Id",
+        "X-Username",
+        "X-Client-Id",
+        "X-Scopes",
+        "X-Jarvis-Auth",
+    ],
 )
 
 # Add metrics collection middleware
@@ -211,10 +228,12 @@ app.include_router(oauth_flow_router, prefix=api_prefix)
 # Include internal-only routes (mounted under the same API prefix)
 app.include_router(internal_router, prefix=api_prefix)
 
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "simplified-auth-server"}
+
 
 @app.get(f"{api_prefix}/config")
 async def get_auth_config():
@@ -227,11 +246,9 @@ async def get_auth_config():
             return {
                 "auth_type": "keycloak",
                 "description": "Keycloak JWT token validation",
-                "required_headers": [
-                    "Authorization: Bearer <token>"
-                ],
+                "required_headers": ["Authorization: Bearer <token>"],
                 "optional_headers": [],
-                "provider_info": provider_info
+                "provider_info": provider_info,
             }
         return {
             "auth_type": "cognito",
@@ -239,20 +256,19 @@ async def get_auth_config():
             "required_headers": [
                 "Authorization: Bearer <token>",
                 "X-User-Pool-Id: <pool_id>",
-                "X-Client-Id: <client_id>"
+                "X-Client-Id: <client_id>",
             ],
-            "optional_headers": [
-                "X-Region: <region> (default: us-east-1)"
-            ],
-            "provider_info": provider_info
+            "optional_headers": ["X-Region: <region> (default: us-east-1)"],
+            "provider_info": provider_info,
         }
     except Exception as e:
         logger.error(f"Error getting auth config: {e}")
         return {
             "auth_type": "unknown",
             "description": f"Error getting provider config: {e}",
-            "error": str(e)
+            "error": str(e),
         }
+
 
 def parse_arguments():
     """Parse command line arguments."""
@@ -281,6 +297,7 @@ def parse_arguments():
 
     return parser.parse_args()
 
+
 def main():
     """Run the server"""
     args = parse_arguments()
@@ -293,6 +310,7 @@ def main():
     logger.info(f"Default region: {args.region}")
 
     uvicorn.run(app, host=args.host, port=args.port)
+
 
 if __name__ == "__main__":
     main()

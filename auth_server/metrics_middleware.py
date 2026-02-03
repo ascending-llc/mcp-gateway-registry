@@ -57,7 +57,7 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
 
         # Scalability configuration
         self.max_sessions = 1000  # Limit concurrent sessions
-        self.session_ttl = 3600   # 1 hour TTL
+        self.session_ttl = 3600  # 1 hour TTL
         self.cleanup_interval = 300  # Cleanup every 5 minutes
         self.last_cleanup = time.time()
 
@@ -110,6 +110,7 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
 
         try:
             from urllib.parse import urlparse
+
             parsed_url = urlparse(original_url)
             path = parsed_url.path.strip("/")
             path_parts = path.split("/") if path else []
@@ -125,7 +126,7 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
             "request_id": None,
             "protocol_version": None,
             "client_info": {},
-            "params": {}
+            "params": {},
         }
 
         try:
@@ -202,7 +203,9 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
                 auth_method = response.headers.get("X-Auth-Method", "unknown")
 
                 # Track session timing for protocol flow analysis
-                session_key = f"{server_name}:{user_hash}" if user_hash else f"{server_name}:anonymous"
+                session_key = (
+                    f"{server_name}:{user_hash}" if user_hash else f"{server_name}:anonymous"
+                )
                 method = tool_info.get("method", "unknown")
 
                 # Perform periodic cleanup to prevent memory leaks
@@ -243,7 +246,7 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
                     server_name=server_name,
                     user_hash=user_hash,
                     error_code=error_code,
-                    request_id=request_id
+                    request_id=request_id,
                 )
             )
 
@@ -258,7 +261,7 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
                         user_hash=user_hash,
                         error_code=error_code,
                         request_id=request_id,
-                        auth_method=auth_method
+                        auth_method=auth_method,
                     )
                 )
 
@@ -270,7 +273,7 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
                         current_method=method,
                         server_name=server_name,
                         user_hash=user_hash,
-                        request_id=request_id
+                        request_id=request_id,
                     )
                 )
 
@@ -284,7 +287,7 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
         server_name: str,
         user_hash: str,
         error_code: str = None,
-        request_id: str = None
+        request_id: str = None,
     ):
         """
         Emit authentication metric asynchronously.
@@ -296,28 +299,28 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
             payload = {
                 "service": self.service_name,
                 "version": "1.0.0",
-                "metrics": [{
-                    "type": "auth_request",
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "value": 1.0,
-                    "duration_ms": duration_ms,
-                    "dimensions": {
-                        "success": success,
-                        "method": method,
-                        "server": server_name,
-                        "user_hash": user_hash
-                    },
-                    "metadata": {
-                        "error_code": error_code,
-                        "request_id": request_id or f"req_{uuid.uuid4().hex[:16]}"
+                "metrics": [
+                    {
+                        "type": "auth_request",
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "value": 1.0,
+                        "duration_ms": duration_ms,
+                        "dimensions": {
+                            "success": success,
+                            "method": method,
+                            "server": server_name,
+                            "user_hash": user_hash,
+                        },
+                        "metadata": {
+                            "error_code": error_code,
+                            "request_id": request_id or f"req_{uuid.uuid4().hex[:16]}",
+                        },
                     }
-                }]
+                ],
             }
 
             await self.client.post(
-                f"{self.metrics_url}/metrics",
-                json=payload,
-                headers={"X-API-Key": self.api_key}
+                f"{self.metrics_url}/metrics", json=payload, headers={"X-API-Key": self.api_key}
             )
         except Exception as e:
             logger.debug(f"Failed to emit auth metric: {e}")
@@ -331,7 +334,7 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
         user_hash: str,
         error_code: str = None,
         request_id: str = None,
-        auth_method: str = "unknown"
+        auth_method: str = "unknown",
     ):
         """
         Emit tool execution metric for the specialized tool_metrics table.
@@ -347,7 +350,9 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
 
             # If no client_info in current request, try to get it from session
             if not client_info or client_info.get("name") == "unknown":
-                session_key = f"{server_name}:{user_hash}" if user_hash else f"{server_name}:anonymous"
+                session_key = (
+                    f"{server_name}:{user_hash}" if user_hash else f"{server_name}:anonymous"
+                )
                 stored_client_info = self.session_client_info.get(session_key, {})
                 if stored_client_info:
                     client_info = stored_client_info
@@ -366,7 +371,7 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
                     "user_hash": user_hash,
                     "server_path": f"/{server_name}/",
                     "client_name": client_info.get("name", "unknown"),
-                    "client_version": client_info.get("version", "unknown")
+                    "client_version": client_info.get("version", "unknown"),
                 },
                 "metadata": {
                     "error_code": error_code,
@@ -377,20 +382,14 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
                     "actual_tool_name": actual_tool_name,
                     "method_type": method_name,
                     "input_size_bytes": len(json.dumps(tool_info.get("params", {})).encode()),
-                    "output_size_bytes": 0  # Will be updated if response available
-                }
+                    "output_size_bytes": 0,  # Will be updated if response available
+                },
             }
 
-            payload = {
-                "service": self.service_name,
-                "version": "1.0.0",
-                "metrics": [metric_data]
-            }
+            payload = {"service": self.service_name, "version": "1.0.0", "metrics": [metric_data]}
 
             await self.client.post(
-                f"{self.metrics_url}/metrics",
-                json=payload,
-                headers={"X-API-Key": self.api_key}
+                f"{self.metrics_url}/metrics", json=payload, headers={"X-API-Key": self.api_key}
             )
         except Exception as e:
             logger.debug(f"Failed to emit tool execution metric: {e}")
@@ -401,7 +400,7 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
         current_method: str,
         server_name: str,
         user_hash: str,
-        request_id: str
+        request_id: str,
     ):
         """
         Emit protocol flow latency metrics based on session timing data.
@@ -419,81 +418,89 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
             # Initialize -> Tools List latency
             if "initialize" in session_data and "tools/list" in session_data:
                 init_to_list_latency = session_data["tools/list"] - session_data["initialize"]
-                if init_to_list_latency > 0 and init_to_list_latency < 300:  # Max 5 minutes reasonable
-                    latency_metrics.append({
-                        "type": "protocol_latency",
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "value": init_to_list_latency,
-                        "dimensions": {
-                            "flow_step": "initialize_to_tools_list",
-                            "server_name": server_name,
-                            "user_hash": user_hash,
-                            "session_key": session_key
-                        },
-                        "metadata": {
-                            "request_id": request_id,
-                            "latency_seconds": init_to_list_latency,
-                            "from_method": "initialize",
-                            "to_method": "tools/list"
+                if (
+                    init_to_list_latency > 0 and init_to_list_latency < 300
+                ):  # Max 5 minutes reasonable
+                    latency_metrics.append(
+                        {
+                            "type": "protocol_latency",
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "value": init_to_list_latency,
+                            "dimensions": {
+                                "flow_step": "initialize_to_tools_list",
+                                "server_name": server_name,
+                                "user_hash": user_hash,
+                                "session_key": session_key,
+                            },
+                            "metadata": {
+                                "request_id": request_id,
+                                "latency_seconds": init_to_list_latency,
+                                "from_method": "initialize",
+                                "to_method": "tools/list",
+                            },
                         }
-                    })
+                    )
 
             # Tools List -> Tools Call latency
             if "tools/list" in session_data and "tools/call" in session_data:
                 list_to_call_latency = session_data["tools/call"] - session_data["tools/list"]
-                if list_to_call_latency > 0 and list_to_call_latency < 300:  # Max 5 minutes reasonable
-                    latency_metrics.append({
-                        "type": "protocol_latency",
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "value": list_to_call_latency,
-                        "dimensions": {
-                            "flow_step": "tools_list_to_tools_call",
-                            "server_name": server_name,
-                            "user_hash": user_hash,
-                            "session_key": session_key
-                        },
-                        "metadata": {
-                            "request_id": request_id,
-                            "latency_seconds": list_to_call_latency,
-                            "from_method": "tools/list",
-                            "to_method": "tools/call"
+                if (
+                    list_to_call_latency > 0 and list_to_call_latency < 300
+                ):  # Max 5 minutes reasonable
+                    latency_metrics.append(
+                        {
+                            "type": "protocol_latency",
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "value": list_to_call_latency,
+                            "dimensions": {
+                                "flow_step": "tools_list_to_tools_call",
+                                "server_name": server_name,
+                                "user_hash": user_hash,
+                                "session_key": session_key,
+                            },
+                            "metadata": {
+                                "request_id": request_id,
+                                "latency_seconds": list_to_call_latency,
+                                "from_method": "tools/list",
+                                "to_method": "tools/call",
+                            },
                         }
-                    })
+                    )
 
             # Initialize -> Tools Call (total flow latency)
             if "initialize" in session_data and "tools/call" in session_data:
                 total_flow_latency = session_data["tools/call"] - session_data["initialize"]
                 if total_flow_latency > 0 and total_flow_latency < 600:  # Max 10 minutes reasonable
-                    latency_metrics.append({
-                        "type": "protocol_latency",
-                        "timestamp": datetime.utcnow().isoformat(),
-                        "value": total_flow_latency,
-                        "dimensions": {
-                            "flow_step": "full_protocol_flow",
-                            "server_name": server_name,
-                            "user_hash": user_hash,
-                            "session_key": session_key
-                        },
-                        "metadata": {
-                            "request_id": request_id,
-                            "latency_seconds": total_flow_latency,
-                            "from_method": "initialize",
-                            "to_method": "tools/call"
+                    latency_metrics.append(
+                        {
+                            "type": "protocol_latency",
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "value": total_flow_latency,
+                            "dimensions": {
+                                "flow_step": "full_protocol_flow",
+                                "server_name": server_name,
+                                "user_hash": user_hash,
+                                "session_key": session_key,
+                            },
+                            "metadata": {
+                                "request_id": request_id,
+                                "latency_seconds": total_flow_latency,
+                                "from_method": "initialize",
+                                "to_method": "tools/call",
+                            },
                         }
-                    })
+                    )
 
             # Emit metrics if we have any
             if latency_metrics:
                 payload = {
                     "service": self.service_name,
                     "version": "1.0.0",
-                    "metrics": latency_metrics
+                    "metrics": latency_metrics,
                 }
 
                 await self.client.post(
-                    f"{self.metrics_url}/metrics",
-                    json=payload,
-                    headers={"X-API-Key": self.api_key}
+                    f"{self.metrics_url}/metrics", json=payload, headers={"X-API-Key": self.api_key}
                 )
 
             # Cleanup is now handled by _cleanup_sessions_if_needed method
@@ -505,7 +512,7 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
 def add_auth_metrics_middleware(app, service_name: str = "auth-server"):
     """
     Convenience function to add auth metrics middleware to a FastAPI app.
-    
+
     Args:
         app: FastAPI application instance
         service_name: Name of the service for metrics identification

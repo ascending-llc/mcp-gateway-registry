@@ -40,7 +40,7 @@ EXAMPLES:
 - Code analysis → discover_tools("analyze code") then execute_tool with code analysis tool
 - Any external API → discover_tools(description) then execute_tool with appropriate parameters
 
-ALWAYS proactively discover and use available tools when user requests could benefit from external data, APIs, or specialized functionality."""
+ALWAYS proactively discover and use available tools when user requests could benefit from external data, APIs, or specialized functionality.""",
 )
 
 # Add header swap middleware (must be BEFORE AuthMiddleware)
@@ -54,10 +54,11 @@ mcp.add_middleware(AuthMiddleware())
 # MCP Prompts - Guide AI Assistant Behavior (Claude, ChatGPT, etc.)
 # ============================================================================
 
+
 @mcp.prompt()
 def gateway_capabilities():
     """📚 Overview of MCP Gateway capabilities and available services.
-    
+
     Use this prompt to understand what services and tools are available through the gateway.
     This is automatically invoked when you need to know what you can do.
     """
@@ -143,15 +144,18 @@ Registry URL: {settings.REGISTRY_URL}
 Total Available: 100+ MCP servers with diverse tools, resources, and prompts.
 """
 
+
 # ============================================================================
 # Custom HTTP Routes
 # ============================================================================
+
 
 @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
 async def _health_check_route(request):
     """Health check endpoint for the MCP Gateway server."""
     logger.debug("Health check endpoint called.")
     return JSONResponse({"status": "ok"})
+
 
 # ============================================================================
 # Search and Discovery Tools
@@ -172,6 +176,7 @@ for tool_name, tool_func in registry_api.get_tools():
 # ============================================================================
 # Main Entry Point
 # ============================================================================
+
 
 def main():
     """
@@ -202,7 +207,7 @@ def main():
         mcp.run(
             transport=settings.MCP_TRANSPORT,
             host="0.0.0.0",
-            port=int(settings.MCP_SERVER_LISTEN_PORT)
+            port=int(settings.MCP_SERVER_LISTEN_PORT),
         )
     except KeyboardInterrupt:
         logger.info("Server shutdown requested by user")

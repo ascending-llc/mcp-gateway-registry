@@ -8,7 +8,9 @@ from fastapi import status as http_status
 from registry.core.acl_constants import ResourceType
 
 
-def check_required_permission(acl_permission_map: dict, resource_type: str, resource_id: str, required_permission: str) -> None:
+def check_required_permission(
+    acl_permission_map: dict, resource_type: str, resource_id: str, required_permission: str
+) -> None:
     """
     Checks if a user has the required permission for a given resource using the provided ACL permission map.
 
@@ -27,9 +29,10 @@ def check_required_permission(acl_permission_map: dict, resource_type: str, reso
             status_code=http_status.HTTP_403_FORBIDDEN,
             detail={
                 "error": "forbidden",
-                "message": f"You do not have {required_permission} permissions for this server."
-            }
+                "message": f"You do not have {required_permission} permissions for this server.",
+            },
         )
+
 
 def validate_resource_type(resource_type: str) -> None:
     if resource_type not in [rt.value for rt in ResourceType]:
@@ -37,6 +40,6 @@ def validate_resource_type(resource_type: str) -> None:
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail={
                 "error": "invalid_resource_type",
-                "message": f"Resource type '{resource_type}' is not valid."
-            }
+                "message": f"Resource type '{resource_type}' is not valid.",
+            },
         )

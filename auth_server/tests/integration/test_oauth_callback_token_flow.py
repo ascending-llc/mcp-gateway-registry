@@ -4,6 +4,7 @@ Integration tests for OAuth callback flow with standard token exchange.
 Tests the refactored oauth2_callback that always uses OAuth client flow
 and registry redirect endpoint that calls /oauth2/token to decode JWT.
 """
+
 import secrets
 from unittest.mock import AsyncMock, patch
 
@@ -39,14 +40,18 @@ class TestOAuth2CallbackStandardFlow:
     @patch("auth_server.routes.oauth_flow.exchange_code_for_token")
     @patch("auth_server.routes.oauth_flow.get_user_info")
     def test_oauth_callback_always_generates_authorization_code(
-        self, mock_get_user_info, mock_exchange_token, test_client_oauth_callback,
-        clear_device_storage, mock_user_service
+        self,
+        mock_get_user_info,
+        mock_exchange_token,
+        test_client_oauth_callback,
+        clear_device_storage,
+        mock_user_service,
     ):
         """Test that oauth2_callback always generates authorization code (for both external clients and registry)."""
         # Mock provider token exchange
         mock_exchange_token.return_value = {
             "access_token": "provider_access_token",
-            "id_token": "provider_id_token"
+            "id_token": "provider_id_token",
         }
 
         # Mock user info from provider
@@ -55,7 +60,7 @@ class TestOAuth2CallbackStandardFlow:
             "preferred_username": "testuser",
             "email": "test@example.com",
             "name": "Test User",
-            "groups": ["user-group"]
+            "groups": ["user-group"],
         }
 
         # Mock settings
@@ -71,7 +76,7 @@ class TestOAuth2CallbackStandardFlow:
                         "username_claim": "preferred_username",
                         "email_claim": "email",
                         "name_claim": "name",
-                        "groups_claim": "groups"
+                        "groups_claim": "groups",
                     }
                 }
             }
@@ -84,13 +89,14 @@ class TestOAuth2CallbackStandardFlow:
 
             # Create a valid session cookie
             from itsdangerous import URLSafeTimedSerializer
+
             test_signer = URLSafeTimedSerializer("test-secret-key")
 
             session_data = {
                 "state": "test-state-123",
                 "client_state": None,
                 "provider": "keycloak",
-                "redirect_uri": "http://localhost:3000/redirect"
+                "redirect_uri": "http://localhost:3000/redirect",
             }
             temp_session = test_signer.dumps(session_data)
 
@@ -99,12 +105,9 @@ class TestOAuth2CallbackStandardFlow:
                 # Make callback request
                 response = test_client_oauth_callback.get(
                     f"{API_PREFIX}/oauth2/callback/keycloak",
-                    params={
-                        "code": "provider_auth_code",
-                        "state": "test-state-123"
-                    },
+                    params={"code": "provider_auth_code", "state": "test-state-123"},
                     cookies={"oauth2_temp_session": temp_session},
-                    follow_redirects=False
+                    follow_redirects=False,
                 )
 
             # Should redirect with authorization code
@@ -115,6 +118,7 @@ class TestOAuth2CallbackStandardFlow:
 
             # Extract authorization code
             import urllib.parse
+
             parsed_url = urllib.parse.urlparse(location)
             query_params = urllib.parse.parse_qs(parsed_url.query)
             auth_code = query_params.get("code", [None])[0]
@@ -135,13 +139,17 @@ class TestOAuth2CallbackStandardFlow:
     @patch("auth_server.routes.oauth_flow.exchange_code_for_token")
     @patch("auth_server.routes.oauth_flow.get_user_info")
     def test_oauth_callback_external_client_with_client_id(
-        self, mock_get_user_info, mock_exchange_token, test_client_oauth_callback,
-        clear_device_storage, mock_user_service
+        self,
+        mock_get_user_info,
+        mock_exchange_token,
+        test_client_oauth_callback,
+        clear_device_storage,
+        mock_user_service,
     ):
         """Test oauth2_callback with explicit client_id (external OAuth client)."""
         mock_exchange_token.return_value = {
             "access_token": "provider_access_token",
-            "id_token": "provider_id_token"
+            "id_token": "provider_id_token",
         }
 
         mock_get_user_info.return_value = {
@@ -149,7 +157,7 @@ class TestOAuth2CallbackStandardFlow:
             "preferred_username": "externaluser",
             "email": "external@example.com",
             "name": "External User",
-            "groups": ["external-group"]
+            "groups": ["external-group"],
         }
 
         with patch("auth_server.routes.oauth_flow.settings") as mock_settings:
@@ -164,7 +172,7 @@ class TestOAuth2CallbackStandardFlow:
                         "username_claim": "preferred_username",
                         "email_claim": "email",
                         "name_claim": "name",
-                        "groups_claim": "groups"
+                        "groups_claim": "groups",
                     }
                 }
             }
@@ -175,6 +183,7 @@ class TestOAuth2CallbackStandardFlow:
             mock_settings.secret_key = "test-secret-key"
 
             from itsdangerous import URLSafeTimedSerializer
+
             test_signer = URLSafeTimedSerializer("test-secret-key")
 
             # Session with explicit client_id
@@ -186,20 +195,17 @@ class TestOAuth2CallbackStandardFlow:
                 "client_id": "external-client-123",
                 "client_redirect_uri": "http://external-app.com/callback",
                 "code_challenge": "test-challenge",
-                "code_challenge_method": "S256"
+                "code_challenge_method": "S256",
             }
             temp_session = test_signer.dumps(session_data)
 
             with patch("auth_server.routes.oauth_flow.signer", test_signer):
                 response = test_client_oauth_callback.get(
-                f"{API_PREFIX}/oauth2/callback/keycloak",
-                params={
-                    "code": "provider_auth_code",
-                    "state": "test-state-456"
-                },
-                cookies={"oauth2_temp_session": temp_session},
-                follow_redirects=False
-            )
+                    f"{API_PREFIX}/oauth2/callback/keycloak",
+                    params={"code": "provider_auth_code", "state": "test-state-456"},
+                    cookies={"oauth2_temp_session": temp_session},
+                    follow_redirects=False,
+                )
 
             # Should redirect to external client with state
             assert response.status_code == 302
@@ -210,6 +216,7 @@ class TestOAuth2CallbackStandardFlow:
 
             # Extract and verify authorization code
             import urllib.parse
+
             parsed_url = urllib.parse.urlparse(location)
             query_params = urllib.parse.parse_qs(parsed_url.query)
             auth_code = query_params.get("code", [None])[0]
@@ -223,13 +230,17 @@ class TestOAuth2CallbackStandardFlow:
     @patch("auth_server.routes.oauth_flow.exchange_code_for_token")
     @patch("auth_server.routes.oauth_flow.jwt.decode")
     def test_oauth_callback_keycloak_id_token_parsing(
-        self, mock_jwt_decode, mock_exchange_token, test_client_oauth_callback,
-        clear_device_storage, mock_user_service
+        self,
+        mock_jwt_decode,
+        mock_exchange_token,
+        test_client_oauth_callback,
+        clear_device_storage,
+        mock_user_service,
     ):
         """Test that Keycloak ID token is properly parsed."""
         mock_exchange_token.return_value = {
             "access_token": "keycloak_access",
-            "id_token": "keycloak_id_token"
+            "id_token": "keycloak_id_token",
         }
 
         # Mock JWT decode for ID token
@@ -238,7 +249,7 @@ class TestOAuth2CallbackStandardFlow:
             "preferred_username": "keycloakuser",
             "email": "keycloak@example.com",
             "name": "Keycloak User",
-            "groups": ["/admin", "/users"]
+            "groups": ["/admin", "/users"],
         }
 
         with patch("auth_server.routes.oauth_flow.settings") as mock_settings:
@@ -249,7 +260,7 @@ class TestOAuth2CallbackStandardFlow:
                         "client_id": "test-client",
                         "client_secret": "test-secret",
                         "token_url": "http://keycloak/token",
-                        "user_info_url": "http://keycloak/userinfo"
+                        "user_info_url": "http://keycloak/userinfo",
                     }
                 }
             }
@@ -261,29 +272,28 @@ class TestOAuth2CallbackStandardFlow:
             mock_settings.secret_key = "test-secret-key"
 
             from itsdangerous import URLSafeTimedSerializer
+
             test_signer = URLSafeTimedSerializer("test-secret-key")
 
             session_data = {
                 "state": "test-state-789",
                 "client_state": None,
                 "provider": "keycloak",
-                "redirect_uri": "http://localhost:3000/redirect"
+                "redirect_uri": "http://localhost:3000/redirect",
             }
             temp_session = test_signer.dumps(session_data)
 
             with patch("auth_server.routes.oauth_flow.signer", test_signer):
                 response = test_client_oauth_callback.get(
                     f"{API_PREFIX}/oauth2/callback/keycloak",
-                    params={
-                        "code": "keycloak_code",
-                        "state": "test-state-789"
-                    },
+                    params={"code": "keycloak_code", "state": "test-state-789"},
                     cookies={"oauth2_temp_session": temp_session},
-                    follow_redirects=False
+                    follow_redirects=False,
                 )
 
                 # Extract authorization code
                 import urllib.parse
+
                 location = response.headers["location"]
                 parsed_url = urllib.parse.urlparse(location)
                 query_params = urllib.parse.parse_qs(parsed_url.query)
@@ -313,7 +323,7 @@ class TestOAuth2CallbackStandardFlow:
                         "preferred_username": "newuser",
                         "email": "new@example.com",
                         "name": "New User",
-                        "groups": []
+                        "groups": [],
                     }
 
                     with patch("auth_server.routes.oauth_flow.settings") as mock_settings:
@@ -328,7 +338,7 @@ class TestOAuth2CallbackStandardFlow:
                                     "username_claim": "preferred_username",
                                     "email_claim": "email",
                                     "name_claim": "name",
-                                    "groups_claim": "groups"
+                                    "groups_claim": "groups",
                                 }
                             }
                         }
@@ -340,13 +350,14 @@ class TestOAuth2CallbackStandardFlow:
                         mock_settings.secret_key = "test-secret-key"
 
                         from itsdangerous import URLSafeTimedSerializer
+
                         test_signer = URLSafeTimedSerializer("test-secret-key")
 
                         session_data = {
                             "state": "test-state",
                             "client_state": None,
                             "provider": "keycloak",
-                            "redirect_uri": "http://localhost:3000/redirect"
+                            "redirect_uri": "http://localhost:3000/redirect",
                         }
                         temp_session = test_signer.dumps(session_data)
 
@@ -355,7 +366,7 @@ class TestOAuth2CallbackStandardFlow:
                                 f"{API_PREFIX}/oauth2/callback/keycloak",
                                 params={"code": "code", "state": "test-state"},
                                 cookies={"oauth2_temp_session": temp_session},
-                                follow_redirects=False
+                                follow_redirects=False,
                             )
 
                             # Still should generate authorization code (user_id is None)
@@ -363,6 +374,7 @@ class TestOAuth2CallbackStandardFlow:
                             location = response.headers["location"]
 
                             import urllib.parse
+
                             parsed_url = urllib.parse.urlparse(location)
                             query_params = urllib.parse.parse_qs(parsed_url.query)
                             auth_code = query_params.get("code", [None])[0]
@@ -392,14 +404,14 @@ class TestOAuth2TokenEndpoint:
                 "username": "testuser",
                 "email": "test@example.com",
                 "groups": ["user-group"],
-                "idp_id": "provider-sub-123"
+                "idp_id": "provider-sub-123",
             },
             "client_id": "test-client",
             "expires_at": current_time + 600,
             "used": False,
             "redirect_uri": "http://localhost/callback",
             "resource": None,
-            "created_at": current_time
+            "created_at": current_time,
         }
 
         # Exchange code for token
@@ -412,8 +424,8 @@ class TestOAuth2TokenEndpoint:
                     "grant_type": "authorization_code",
                     "code": auth_code,
                     "client_id": "test-client",
-                    "redirect_uri": "http://localhost/callback"
-                }
+                    "redirect_uri": "http://localhost/callback",
+                },
             )
 
             assert response.status_code == 200
@@ -448,7 +460,7 @@ class TestOAuth2TokenEndpoint:
             "expires_at": current_time + 600,
             "used": True,  # Already used
             "redirect_uri": "http://localhost/callback",
-            "created_at": current_time
+            "created_at": current_time,
         }
 
         response = test_client_oauth_callback.post(
@@ -457,8 +469,8 @@ class TestOAuth2TokenEndpoint:
                 "grant_type": "authorization_code",
                 "code": auth_code,
                 "client_id": "test-client",
-                "redirect_uri": "http://localhost/callback"
-            }
+                "redirect_uri": "http://localhost/callback",
+            },
         )
 
         assert response.status_code == 400

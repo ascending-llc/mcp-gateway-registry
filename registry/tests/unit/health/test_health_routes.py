@@ -1,6 +1,7 @@
 """
 Unit tests for health monitoring routes.
 """
+
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -19,13 +20,17 @@ class TestHealthRoutes:
         """Create a valid session cookie for testing."""
         from registry.auth.dependencies import create_session_cookie
         from registry.core.config import settings
+
         # Use admin user for traditional auth, or oauth2 for regular users
-        return create_session_cookie(settings.admin_user, auth_method="traditional", provider="local")
+        return create_session_cookie(
+            settings.admin_user, auth_method="traditional", provider="local"
+        )
 
     @pytest.fixture
     def mock_websocket(self, mock_session_cookie):
         """Create a mock WebSocket."""
         from registry.core.config import settings
+
         websocket = Mock(spec=WebSocket)
         websocket.client = "127.0.0.1:12345"
         websocket.accept = AsyncMock()
@@ -47,7 +52,7 @@ class TestHealthRoutes:
             mock_service.remove_websocket_connection = AsyncMock()
             mock_service.get_all_health_status.return_value = {
                 "service1": {"status": "healthy", "last_check": "2023-01-01T00:00:00Z"},
-                "service2": {"status": "unhealthy", "last_check": "2023-01-01T00:00:00Z"}
+                "service2": {"status": "unhealthy", "last_check": "2023-01-01T00:00:00Z"},
             }
             yield mock_service
 
@@ -57,12 +62,14 @@ class TestHealthRoutes:
         # No longer mocking signer since we're using real create_session_cookie
 
     @pytest.mark.asyncio
-    async def test_websocket_endpoint_normal_operation(self, mock_websocket, mock_health_service, mock_signer):
+    async def test_websocket_endpoint_normal_operation(
+        self, mock_websocket, mock_health_service, mock_signer
+    ):
         """Test normal WebSocket operation."""
         # Setup receive_text to raise WebSocketDisconnect after one call
         mock_websocket.receive_text.side_effect = [
             "ping",  # First call succeeds
-            WebSocketDisconnect()  # Second call disconnects
+            WebSocketDisconnect(),  # Second call disconnects
         ]
 
         await websocket_endpoint(mock_websocket)
@@ -75,7 +82,9 @@ class TestHealthRoutes:
         assert mock_websocket.receive_text.call_count >= 1
 
     @pytest.mark.asyncio
-    async def test_websocket_endpoint_disconnect(self, mock_websocket, mock_health_service, mock_signer):
+    async def test_websocket_endpoint_disconnect(
+        self, mock_websocket, mock_health_service, mock_signer
+    ):
         """Test WebSocket disconnection handling."""
         # Setup immediate disconnect
         mock_websocket.receive_text.side_effect = WebSocketDisconnect()
@@ -87,7 +96,9 @@ class TestHealthRoutes:
         mock_health_service.remove_websocket_connection.assert_called_once_with(mock_websocket)
 
     @pytest.mark.asyncio
-    async def test_websocket_endpoint_exception(self, mock_websocket, mock_health_service, mock_signer):
+    async def test_websocket_endpoint_exception(
+        self, mock_websocket, mock_health_service, mock_signer
+    ):
         """Test WebSocket exception handling."""
         # Setup exception during operation
         mock_websocket.receive_text.side_effect = Exception("Connection error")
@@ -99,7 +110,9 @@ class TestHealthRoutes:
         mock_health_service.remove_websocket_connection.assert_called_once_with(mock_websocket)
 
     @pytest.mark.asyncio
-    async def test_websocket_endpoint_add_connection_failure(self, mock_websocket, mock_health_service, mock_signer):
+    async def test_websocket_endpoint_add_connection_failure(
+        self, mock_websocket, mock_health_service, mock_signer
+    ):
         """Test handling of failure when adding WebSocket connection."""
         # Setup add_websocket_connection to return False (connection rejected)
         mock_health_service.add_websocket_connection.return_value = False
@@ -111,7 +124,9 @@ class TestHealthRoutes:
         mock_health_service.remove_websocket_connection.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_websocket_endpoint_remove_connection_failure(self, mock_websocket, mock_health_service, mock_signer):
+    async def test_websocket_endpoint_remove_connection_failure(
+        self, mock_websocket, mock_health_service, mock_signer
+    ):
         """Test handling of failure when removing WebSocket connection."""
         # Setup normal operation but remove fails
         mock_websocket.receive_text.side_effect = WebSocketDisconnect()
@@ -131,7 +146,7 @@ class TestHealthRoutes:
         """Test successful HTTP health status retrieval."""
         expected_status = {
             "service1": {"status": "healthy", "last_check": "2023-01-01T00:00:00Z"},
-            "service2": {"status": "unhealthy", "last_check": "2023-01-01T00:00:00Z"}
+            "service2": {"status": "unhealthy", "last_check": "2023-01-01T00:00:00Z"},
         }
 
         result = await health_status_http()
@@ -167,7 +182,9 @@ class TestHealthRoutes:
         assert len(routes) >= 2  # WebSocket and HTTP endpoints
 
         # Find WebSocket route
-        websocket_routes = [r for r in routes if hasattr(r, "path") and r.path == "/ws/health_status"]
+        websocket_routes = [
+            r for r in routes if hasattr(r, "path") and r.path == "/ws/health_status"
+        ]
         assert len(websocket_routes) >= 1
 
         # Check if both WebSocket and HTTP routes exist for same path
@@ -175,14 +192,16 @@ class TestHealthRoutes:
         assert "/ws/health_status" in route_paths
 
     @pytest.mark.asyncio
-    async def test_websocket_multiple_messages(self, mock_websocket, mock_health_service, mock_signer):
+    async def test_websocket_multiple_messages(
+        self, mock_websocket, mock_health_service, mock_signer
+    ):
         """Test WebSocket handling multiple messages before disconnect."""
         # Setup multiple messages then disconnect
         mock_websocket.receive_text.side_effect = [
             "ping",
             "heartbeat",
             "status",
-            WebSocketDisconnect()
+            WebSocketDisconnect(),
         ]
 
         await websocket_endpoint(mock_websocket)

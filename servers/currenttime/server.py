@@ -13,9 +13,10 @@ from pydantic import Field
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s"
+    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
 )
 logger = logging.getLogger(__name__)
+
 
 def parse_arguments():
     """Parse command line arguments with defaults matching environment variables."""
@@ -44,7 +45,9 @@ args = parse_arguments()
 
 # Log parsed arguments for debugging
 logger.info(f"Parsed arguments - port: {args.port}, transport: {args.transport}")
-logger.info(f"Environment variables - MCP_TRANSPORT: {os.environ.get('MCP_TRANSPORT', 'NOT SET')}, MCP_SERVER_LISTEN_PORT: {os.environ.get('MCP_SERVER_LISTEN_PORT', 'NOT SET')}")
+logger.info(
+    f"Environment variables - MCP_TRANSPORT: {os.environ.get('MCP_TRANSPORT', 'NOT SET')}, MCP_SERVER_LISTEN_PORT: {os.environ.get('MCP_SERVER_LISTEN_PORT', 'NOT SET')}"
+)
 
 # Initialize FastMCP server
 mcp = FastMCP("CurrentTimeAPI", host="0.0.0.0", port=int(args.port))
@@ -77,7 +80,6 @@ The user's location is: {location}
     return system_prompt
 
 
-
 from datetime import datetime
 
 import pytz
@@ -103,10 +105,13 @@ def get_current_time_in_timezone(timezone_name):
 
 @mcp.tool()
 def current_time_by_timezone(
-    tz_name: Annotated[str, Field(
-        default="America/New_York",
-        description="Name of the timezone for which to find out the current time"
-    )] = "America/New_York"
+    tz_name: Annotated[
+        str,
+        Field(
+            default="America/New_York",
+            description="Name of the timezone for which to find out the current time",
+        ),
+    ] = "America/New_York",
 ) -> str:
     """
     Get the current time for a specified timezone using the timeapi.io API.
@@ -127,6 +132,7 @@ def current_time_by_timezone(
         return current_time.strftime("%Y-%m-%d %H:%M:%S %Z%z")
     except Exception as e:
         return f"Error: {e!s}"
+
 
 @mcp.resource("config://app")
 def get_config() -> str:

@@ -12,13 +12,15 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+
 class RatingRequest(BaseModel):
     rating: int
 
+
 @router.post("/tokens/generate")
 async def generate_user_token(
-        request: Request,
-        user_context: CurrentUser,
+    request: Request,
+    user_context: CurrentUser,
 ):
     """
     Generate a JWT token for the authenticated user.
@@ -43,21 +45,14 @@ async def generate_user_token(
             body = await request.json()
         except Exception as e:
             logger.warning(f"Invalid JSON in token generation request: {e}")
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid JSON in request body"
-            )
+            raise HTTPException(status_code=400, detail="Invalid JSON in request body")
 
         requested_scopes = body.get("requested_scopes", [])
         expires_in_hours = body.get("expires_in_hours", 8)
         description = body.get("description", "")
 
         # Validate expires_in_hours
-        if (
-            not isinstance(expires_in_hours, int)
-            or expires_in_hours <= 0
-            or expires_in_hours > 24
-        ):
+        if not isinstance(expires_in_hours, int) or expires_in_hours <= 0 or expires_in_hours > 24:
             raise HTTPException(
                 status_code=400,
                 detail="expires_in_hours must be an integer between 1 and 24",
@@ -75,7 +70,7 @@ async def generate_user_token(
                 "username": user_context["username"],
                 "scopes": user_context["scopes"],
                 "groups": user_context["groups"],
-                "user_id": user_context["user_id"]
+                "user_id": user_context["user_id"],
             },
             "requested_scopes": requested_scopes,
             "expires_in_hours": expires_in_hours,
@@ -84,9 +79,7 @@ async def generate_user_token(
 
         # Call auth server internal API (no authentication needed since both are trusted internal services)
         async with httpx.AsyncClient() as client:
-            headers = {
-                "Content-Type": "application/json"
-            }
+            headers = {"Content-Type": "application/json"}
 
             auth_server_url = settings.auth_server_url
             response = await client.post(
@@ -98,9 +91,7 @@ async def generate_user_token(
 
             if response.status_code == 200:
                 token_data = response.json()
-                logger.info(
-                    f"Successfully generated token for user '{user_context['username']}'"
-                )
+                logger.info(f"Successfully generated token for user '{user_context['username']}'")
 
                 # Format response to match expected structure (including refresh token)
                 formatted_response = {
@@ -148,7 +139,7 @@ async def generate_user_token(
 
 @router.get("/admin/tokens")
 async def get_admin_tokens(
-        user_context: CurrentUser,
+    user_context: CurrentUser,
 ):
     """
     Admin-only endpoint to retrieve JWT tokens from Keycloak.
@@ -179,9 +170,7 @@ async def get_admin_tokens(
         m2m_client_secret = os.getenv("KEYCLOAK_M2M_CLIENT_SECRET")
 
         if not m2m_client_secret:
-            raise HTTPException(
-                status_code=500, detail="Keycloak M2M client secret not configured"
-            )
+            raise HTTPException(status_code=500, detail="Keycloak M2M client secret not configured")
 
         # Get tokens from Keycloak mcp-gateway realm using M2M client_credentials
         token_url = f"{KEYCLOAK_ADMIN_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token"
@@ -224,15 +213,11 @@ async def get_admin_tokens(
             }
 
     except httpx.HTTPStatusError as e:
-        logger.error(
-            f"Failed to retrieve Keycloak tokens: HTTP {e.response.status_code}"
-        )
+        logger.error(f"Failed to retrieve Keycloak tokens: HTTP {e.response.status_code}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to authenticate with Keycloak: HTTP {e.response.status_code}",
         )
     except Exception as e:
         logger.error(f"Unexpected error retrieving Keycloak tokens: {e}")
-        raise HTTPException(
-            status_code=500, detail="Internal error retrieving Keycloak tokens"
-        )
+        raise HTTPException(status_code=500, detail="Internal error retrieving Keycloak tokens")

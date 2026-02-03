@@ -45,9 +45,9 @@ router = APIRouter()
 
 
 async def _perform_agent_security_scan_on_registration(
-        path: str,
-        agent_card: AgentCard,
-        agent_card_dict: dict,
+    path: str,
+    agent_card: AgentCard,
+    agent_card_dict: dict,
 ) -> bool:
     """Perform security scan on newly registered agent.
 
@@ -113,9 +113,7 @@ async def _perform_agent_security_scan_on_registration(
                 logger.warning(f"Disabled agent {path} due to failed security scan")
 
                 # Update FAISS with disabled state
-                await faiss_service.add_or_update_entity(
-                    path, agent_card_dict, "a2a_agent", False
-                )
+                await faiss_service.add_or_update_entity(path, agent_card_dict, "a2a_agent", False)
                 return False  # Agent disabled
 
         else:
@@ -134,8 +132,8 @@ class RatingRequest(BaseModel):
 
 
 def _normalize_path(
-        path: str | None,
-        agent_name: str | None = None,
+    path: str | None,
+    agent_name: str | None = None,
 ) -> str:
     """
     Normalize agent path format.
@@ -155,9 +153,7 @@ def _normalize_path(
     """
     if path is None:
         if not agent_name:
-            raise ValueError(
-                "Path is required or agent_name must be provided for auto-generation"
-            )
+            raise ValueError("Path is required or agent_name must be provided for auto-generation")
         path = agent_name.lower().replace(" ", "-")
 
     if not path.startswith("/"):
@@ -170,9 +166,9 @@ def _normalize_path(
 
 
 def _check_agent_permission(
-        permission: str,
-        agent_name: str,
-        user_context: CurrentUser,
+    permission: str,
+    agent_name: str,
+    user_context: CurrentUser,
 ) -> None:
     """
     Check if user has permission for agent operation.
@@ -188,9 +184,9 @@ def _check_agent_permission(
     from ..auth.dependencies import user_has_ui_permission_for_service
 
     if not user_has_ui_permission_for_service(
-            permission,
-            agent_name,
-            user_context.get("ui_permissions", {}),
+        permission,
+        agent_name,
+        user_context.get("ui_permissions", {}),
     ):
         logger.warning(
             f"User {user_context['username']} attempted to perform {permission} "
@@ -203,8 +199,8 @@ def _check_agent_permission(
 
 
 def _filter_agents_by_access(
-        agents: list[AgentCard],
-        user_context: CurrentUser,
+    agents: list[AgentCard],
+    user_context: CurrentUser,
 ) -> list[AgentCard]:
     """
     Filter agents based on user access permissions.
@@ -232,7 +228,9 @@ def _filter_agents_by_access(
 
         # Check if user has agent-level restrictions from UI-Scopes
         if "all" not in accessible_agent_list and agent.path not in accessible_agent_list:
-            logger.debug(f"Agent {agent.path} filtered out: not in accessible agents {accessible_agent_list}")
+            logger.debug(
+                f"Agent {agent.path} filtered out: not in accessible agents {accessible_agent_list}"
+            )
             continue
 
         if agent.visibility == "public":
@@ -255,8 +253,8 @@ def _filter_agents_by_access(
 
 @router.post("/agents/register")
 async def register_agent(
-        request: AgentRegistrationRequest,
-        user_context: CurrentUser,
+    request: AgentRegistrationRequest,
+    user_context: CurrentUser,
 ):
     """
     Register a new A2A agent in the registry.
@@ -393,9 +391,7 @@ async def register_agent(
                 "url": str(agent_card.url),
                 "num_skills": len(agent_card.skills),
                 "registered_at": (
-                    agent_card.registered_at.isoformat()
-                    if agent_card.registered_at
-                    else None
+                    agent_card.registered_at.isoformat() if agent_card.registered_at else None
                 ),
                 "is_enabled": is_enabled,
             },
@@ -405,10 +401,10 @@ async def register_agent(
 
 @router.get("/agents")
 async def list_agents(
-        query: str | None = Query(None, description="Search query string"),
-        enabled_only: bool = Query(False, description="Show only enabled agents"),
-        visibility: str | None = Query(None, description="Filter by visibility"),
-        user_context: CurrentUser = None,
+    query: str | None = Query(None, description="Search query string"),
+    enabled_only: bool = Query(False, description="Show only enabled agents"),
+    visibility: str | None = Query(None, description="Filter by visibility"),
+    user_context: CurrentUser = None,
 ):
     """
     List all agents filtered by user permissions.
@@ -428,7 +424,9 @@ async def list_agents(
     if user_context:
         logger.debug(f"[GET_AGENTS_DEBUG] Username: {user_context.get('username', 'NOT PRESENT')}")
         logger.debug(f"[GET_AGENTS_DEBUG] Scopes: {user_context.get('scopes', 'NOT PRESENT')}")
-        logger.debug(f"[GET_AGENTS_DEBUG] Auth method: {user_context.get('auth_method', 'NOT PRESENT')}")
+        logger.debug(
+            f"[GET_AGENTS_DEBUG] Auth method: {user_context.get('auth_method', 'NOT PRESENT')}"
+        )
 
     all_agents = agent_service.get_all_agents()
 
@@ -486,10 +484,11 @@ async def list_agents(
 # IMPORTANT: Specific routes with path suffixes (/health, /rate, /rating, /toggle)
 # must come BEFORE catch-all {path:path} routes to prevent FastAPI from matching them incorrectly
 
+
 @router.post("/agents/{path:path}/health")
 async def check_agent_health(
-        path: str,
-        user_context: CurrentUser,
+    path: str,
+    user_context: CurrentUser,
 ):
     """Perform a live /ping health check against an agent endpoint."""
     path = _normalize_path(path)
@@ -549,9 +548,7 @@ async def check_agent_health(
 
     last_checked_iso = datetime.now(UTC).isoformat()
 
-    logger.info(
-        f"Agent health check for {path} ({ping_url}) completed with status {status_label}"
-    )
+    logger.info(f"Agent health check for {path} ({ping_url}) completed with status {status_label}")
 
     return {
         "agent_path": path,
@@ -566,9 +563,9 @@ async def check_agent_health(
 
 @router.post("/agents/{path:path}/rate")
 async def rate_agent(
-        path: str,
-        request: RatingRequest,
-        user_context: CurrentUser,
+    path: str,
+    request: RatingRequest,
+    user_context: CurrentUser,
 ):
     """Save integer ratings to agent card."""
     path = _normalize_path(path)
@@ -612,8 +609,8 @@ async def rate_agent(
 
 @router.get("/agents/{path:path}/rating")
 async def get_agent_rating(
-        path: str,
-        user_context: CurrentUser,
+    path: str,
+    user_context: CurrentUser,
 ):
     """Get agent rating information."""
     path = _normalize_path(path)
@@ -640,9 +637,9 @@ async def get_agent_rating(
 
 @router.post("/agents/{path:path}/toggle")
 async def toggle_agent(
-        path: str,
-        enabled: bool,
-        user_context: CurrentUser,
+    path: str,
+    enabled: bool,
+    user_context: CurrentUser,
 ):
     """
     Enable or disable an agent.
@@ -700,8 +697,8 @@ async def toggle_agent(
 
 @router.get("/agents/{path:path}")
 async def get_agent(
-        path: str,
-        user_context: CurrentUser,
+    path: str,
+    user_context: CurrentUser,
 ):
     """
     Get a single agent by path.
@@ -732,8 +729,7 @@ async def get_agent(
 
     if not accessible:
         logger.warning(
-            f"User {user_context['username']} attempted to access agent {path} "
-            f"without permission"
+            f"User {user_context['username']} attempted to access agent {path} without permission"
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -745,9 +741,9 @@ async def get_agent(
 
 @router.put("/agents/{path:path}")
 async def update_agent(
-        path: str,
-        request: AgentRegistrationRequest,
-        user_context: CurrentUser,
+    path: str,
+    request: AgentRegistrationRequest,
+    user_context: CurrentUser,
 ):
     """
     Update an existing agent card.
@@ -777,9 +773,7 @@ async def update_agent(
 
     _check_agent_permission("modify_service", existing_agent.name, user_context)
 
-    if not user_context["is_admin"] and existing_agent.registered_by != user_context[
-        "username"
-    ]:
+    if not user_context["is_admin"] and existing_agent.registered_by != user_context["username"]:
         logger.warning(
             f"User {user_context['username']} attempted to update agent {path} "
             f"owned by {existing_agent.registered_by}"
@@ -851,8 +845,7 @@ async def update_agent(
     )
 
     logger.info(
-        f"Agent '{updated_agent.name}' ({path}) updated by user "
-        f"'{user_context['username']}'"
+        f"Agent '{updated_agent.name}' ({path}) updated by user '{user_context['username']}'"
     )
 
     return updated_agent.model_dump()
@@ -860,8 +853,8 @@ async def update_agent(
 
 @router.delete("/agents/{path:path}")
 async def delete_agent(
-        path: str,
-        user_context: CurrentUser,
+    path: str,
+    user_context: CurrentUser,
 ):
     """
     Delete an agent from the registry.
@@ -887,12 +880,9 @@ async def delete_agent(
             detail=f"Agent not found at path '{path}'",
         )
 
-    if not user_context["is_admin"] and existing_agent.registered_by != user_context[
-        "username"
-    ]:
+    if not user_context["is_admin"] and existing_agent.registered_by != user_context["username"]:
         logger.warning(
-            f"User {user_context['username']} attempted to delete agent {path} "
-            f"without permission"
+            f"User {user_context['username']} attempted to delete agent {path} without permission"
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -909,9 +899,7 @@ async def delete_agent(
 
     await faiss_service.remove_entity(path)
 
-    logger.info(
-        f"Agent at path '{path}' deleted by user '{user_context['username']}'"
-    )
+    logger.info(f"Agent at path '{path}' deleted by user '{user_context['username']}'")
 
     return JSONResponse(
         status_code=status.HTTP_204_NO_CONTENT,
@@ -921,10 +909,10 @@ async def delete_agent(
 
 @router.post("/agents/discover")
 async def discover_agents_by_skills(
-        skills: list[str],
-        tags: list[str] | None = None,
-        max_results: int = Query(10, ge=1, le=100),
-        user_context: CurrentUser = None,
+    skills: list[str],
+    tags: list[str] | None = None,
+    max_results: int = Query(10, ge=1, le=100),
+    user_context: CurrentUser = None,
 ):
     """
     Discover agents by required skills.
@@ -949,9 +937,7 @@ async def discover_agents_by_skills(
             detail="At least one skill must be specified",
         )
 
-    logger.info(
-        f"User {user_context['username']} discovering agents with skills: {skills}"
-    )
+    logger.info(f"User {user_context['username']} discovering agents with skills: {skills}")
 
     all_agents = agent_service.get_all_agents()
     accessible_agents = _filter_agents_by_access(all_agents, user_context)
@@ -964,9 +950,9 @@ async def discover_agents_by_skills(
         if not agent_service.is_agent_enabled(agent.path):
             continue
 
-        agent_skills = set(
-            skill.id.lower() for skill in agent.skills
-        ) | set(skill.name.lower() for skill in agent.skills)
+        agent_skills = set(skill.id.lower() for skill in agent.skills) | set(
+            skill.name.lower() for skill in agent.skills
+        )
 
         skill_matches = required_skills & agent_skills
         if not skill_matches:
@@ -976,9 +962,7 @@ async def discover_agents_by_skills(
         tag_matches = required_tags & agent_tags if required_tags else set()
 
         skill_match_score = len(skill_matches) / len(required_skills)
-        tag_match_score = (
-            len(tag_matches) / len(required_tags) if required_tags else 0.0
-        )
+        tag_match_score = len(tag_matches) / len(required_tags) if required_tags else 0.0
 
         trust_boost = {
             "unverified": 0.0,
@@ -1015,9 +999,7 @@ async def discover_agents_by_skills(
     matched_agents.sort(key=lambda x: x["relevance_score"], reverse=True)
     matched_agents = matched_agents[:max_results]
 
-    logger.info(
-        f"Found {len(matched_agents)} agents matching skills: {skills}"
-    )
+    logger.info(f"Found {len(matched_agents)} agents matching skills: {skills}")
 
     return {
         "agents": matched_agents,
@@ -1030,9 +1012,9 @@ async def discover_agents_by_skills(
 
 @router.post("/agents/discover/semantic")
 async def discover_agents_semantic(
-        query: str,
-        max_results: int = Query(10, ge=1, le=100),
-        user_context: CurrentUser = None,
+    query: str,
+    max_results: int = Query(10, ge=1, le=100),
+    user_context: CurrentUser = None,
 ):
     """
     Discover agents using natural language semantic search.
@@ -1056,9 +1038,7 @@ async def discover_agents_semantic(
             detail="Query cannot be empty",
         )
 
-    logger.info(
-        f"User {user_context['username']} semantic search for agents: {query}"
-    )
+    logger.info(f"User {user_context['username']} semantic search for agents: {query}")
 
     try:
         results = await faiss_service.search_entities(
@@ -1102,9 +1082,7 @@ async def discover_agents_semantic(
                 }
             )
 
-        logger.info(
-            f"Semantic search returned {len(accessible_results)} agents for query: {query}"
-        )
+        logger.info(f"Semantic search returned {len(accessible_results)} agents for query: {query}")
 
         return {
             "agents": accessible_results,

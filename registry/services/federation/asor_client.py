@@ -31,7 +31,7 @@ class AsorFederationClient(BaseFederationClient):
         auth_env_var: str | None = None,
         tenant_url: str | None = None,
         timeout_seconds: int = 30,
-        retry_attempts: int = 3
+        retry_attempts: int = 3,
     ):
         """
         Initialize ASOR federation client.
@@ -65,9 +65,7 @@ class AsorFederationClient(BaseFederationClient):
             logger.debug(f"Token starts with: {access_token_env[:50]}...")
             self._access_token = access_token_env
             # Set a reasonable expiry (1 hour from now)
-            self._token_expiry = datetime.now(UTC).replace(
-                microsecond=0
-            ) + timedelta(hours=1)
+            self._token_expiry = datetime.now(UTC).replace(microsecond=0) + timedelta(hours=1)
             return self._access_token
 
         # Check if we have a valid cached token (only for client credentials)
@@ -91,6 +89,7 @@ class AsorFederationClient(BaseFederationClient):
                     # Decode base64 client_id if needed
                     try:
                         import base64
+
                         decoded_client_id = base64.b64decode(client_id).decode("utf-8")
                         client_id = decoded_client_id
                         logger.info(f"Decoded base64 client_id: {client_id}")
@@ -114,25 +113,20 @@ class AsorFederationClient(BaseFederationClient):
 
         # Use Basic Auth like agentcore integration
         import base64
+
         credentials = f"{client_id}:{client_secret}"
         credentials_b64 = base64.b64encode(credentials.encode()).decode()
 
         headers = {
             "Authorization": f"Basic {credentials_b64}",
             "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "application/json"
+            "Accept": "application/json",
         }
 
-        data = {
-            "grant_type": "client_credentials"
-        }
+        data = {"grant_type": "client_credentials"}
 
         try:
-            response = self.client.post(
-                token_url,
-                data=data,
-                headers=headers
-            )
+            response = self.client.post(token_url, data=data, headers=headers)
             response.raise_for_status()
             token_data = response.json()
 
@@ -140,9 +134,9 @@ class AsorFederationClient(BaseFederationClient):
             expires_in = token_data.get("expires_in", 3600)
 
             # Set expiry slightly before actual expiry (5 min buffer)
-            self._token_expiry = datetime.now(UTC).replace(
-                microsecond=0
-            ) + timedelta(seconds=expires_in - 300)
+            self._token_expiry = datetime.now(UTC).replace(microsecond=0) + timedelta(
+                seconds=expires_in - 300
+            )
 
             logger.info(f"Successfully obtained access token (expires in {expires_in}s)")
             return self._access_token
@@ -156,9 +150,7 @@ class AsorFederationClient(BaseFederationClient):
             return None
 
     def fetch_agent(
-        self,
-        agent_id: str,
-        agent_config: AsorAgentConfig | None = None
+        self, agent_id: str, agent_config: AsorAgentConfig | None = None
     ) -> dict[str, Any] | None:
         """
         Fetch a single agent from ASOR.
@@ -185,7 +177,7 @@ class AsorFederationClient(BaseFederationClient):
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "Authorization": f"Bearer {access_token}"
+            "Authorization": f"Bearer {access_token}",
         }
 
         # Make request
@@ -223,7 +215,7 @@ class AsorFederationClient(BaseFederationClient):
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "Authorization": f"Bearer {access_token}"
+            "Authorization": f"Bearer {access_token}",
         }
 
         logger.info(f"ASOR DEBUG - Headers: {headers}")
@@ -250,10 +242,7 @@ class AsorFederationClient(BaseFederationClient):
 
         return agents
 
-    def fetch_all_agents(
-        self,
-        agent_configs: list[AsorAgentConfig]
-    ) -> list[dict[str, Any]]:
+    def fetch_all_agents(self, agent_configs: list[AsorAgentConfig]) -> list[dict[str, Any]]:
         """
         Fetch multiple agents from ASOR.
 
@@ -271,7 +260,6 @@ class AsorFederationClient(BaseFederationClient):
             return self.list_all_agents()
 
         for config in agent_configs:
-
             agent_data = self.fetch_agent(config.id, config)
             if agent_data:
                 agents.append(agent_data)
@@ -281,11 +269,7 @@ class AsorFederationClient(BaseFederationClient):
         logger.info(f"Successfully fetched {len(agents)}/{len(agent_configs)} agents")
         return agents
 
-    def fetch_server(
-        self,
-        server_name: str,
-        **kwargs
-    ) -> dict[str, Any] | None:
+    def fetch_server(self, server_name: str, **kwargs) -> dict[str, Any] | None:
         """
         Fetch a single server (agent) from ASOR.
 
@@ -298,11 +282,7 @@ class AsorFederationClient(BaseFederationClient):
         """
         return self.fetch_agent(server_name, kwargs.get("agent_config"))
 
-    def fetch_all_servers(
-        self,
-        server_names: list[str],
-        **kwargs
-    ) -> list[dict[str, Any]]:
+    def fetch_all_servers(self, server_names: list[str], **kwargs) -> list[dict[str, Any]]:
         """
         Fetch multiple servers (agents) from ASOR.
 
@@ -314,17 +294,11 @@ class AsorFederationClient(BaseFederationClient):
             List of server data dictionaries
         """
         # Convert server names to agent configs
-        agent_configs = [
-            AsorAgentConfig(id=name)
-            for name in server_names
-        ]
+        agent_configs = [AsorAgentConfig(id=name) for name in server_names]
         return self.fetch_all_agents(agent_configs)
 
     def _transform_agent_response(
-        self,
-        response: dict[str, Any],
-        agent_id: str,
-        agent_config: AsorAgentConfig | None
+        self, response: dict[str, Any], agent_id: str, agent_config: AsorAgentConfig | None
     ) -> dict[str, Any]:
         """
         Transform ASOR API response to internal gateway format.
@@ -369,7 +343,7 @@ class AsorFederationClient(BaseFederationClient):
                 "agent_id": agent_id,
                 "capabilities": capabilities,
                 "tools": tools,
-                "config_metadata": {}
+                "config_metadata": {},
             },
             "cached_at": datetime.now(UTC).isoformat(),
             "is_read_only": True,

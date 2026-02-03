@@ -19,13 +19,11 @@ router = APIRouter(prefix="/mcp", tags=["oauth"])
 
 @router.get("/{server_id}/oauth/initiate")
 async def initiate_oauth_flow(
-        server_id: str,
-        user_context: CurrentUser,
-        mcp_service: MCPService = Depends(get_mcp_service)
+    server_id: str, user_context: CurrentUser, mcp_service: MCPService = Depends(get_mcp_service)
 ) -> JSONResponse:
     """
     Initialize OAuth flow
-    
+
     Notes: GET /:serverName/oauth/initiate
     TypeScript implementation: Directly call MCPOAuthHandler.initiateOAuthFlow()
     """
@@ -37,45 +35,54 @@ async def initiate_oauth_flow(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
 
         flow_id, auth_url, error = await mcp_service.oauth_service.initiate_oauth_flow(
-            user_id=user_id,
-            server=server
+            user_id=user_id, server=server
         )
         if error:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
 
         if not flow_id or not auth_url:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                                detail="Failed to initiate OAuth flow")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to initiate OAuth flow",
+            )
 
-        return JSONResponse(status_code=status.HTTP_200_OK,
-                            content={"flow_id": flow_id,
-                                     "authorization_url": auth_url,
-                                     "server_id": server_id,
-                                     "user_id": user_id,
-                                     "server_name": server.serverName})
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "flow_id": flow_id,
+                "authorization_url": auth_url,
+                "server_id": server_id,
+                "user_id": user_id,
+                "server_name": server.serverName,
+            },
+        )
     except HTTPException:
         # Re-raise HTTP exceptions with their original status code
         raise
     except Exception as e:
         logger.error(f"Failed to initialize OAuth flow: {e!s}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"Failed to initialize OAuth flow: {e!s}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to initialize OAuth flow: {e!s}",
+        )
 
 
 @router.get("/{server_name}/oauth/callback")
 async def oauth_callback(
-        server_name: str,
-        request: Request,
-        code: str | None = Query(None, description="OAuth authorization code"),
-        state: str | None = Query(None, description="State parameter (format: flow_id##security_token)"),
-        error: str | None = Query(None, description="OAuth error message"),
-        mcp_service: MCPService = Depends(get_mcp_service)
+    server_name: str,
+    request: Request,
+    code: str | None = Query(None, description="OAuth authorization code"),
+    state: str | None = Query(
+        None, description="State parameter (format: flow_id##security_token)"
+    ),
+    error: str | None = Query(None, description="OAuth error message"),
+    mcp_service: MCPService = Depends(get_mcp_service),
 ) -> RedirectResponse:
     """
     OAuth callback handler
-    
+
     Notes: /:serverName/oauth/callback
-    
+
     Process:
     1. Check for errors returned by OAuth provider
     2. Validate required parameters (code, state)
@@ -101,9 +108,11 @@ async def oauth_callback(
         # 3. Decode flow_id from state (state format: flow_id##security_token)
         try:
             flow_id, security_token = mcp_service.oauth_service.flow_manager.decode_state(state)
-            logger.info(f"[MCP OAuth] Callback received: server={server_name}, "
-                        f"flow_id={flow_id}, code={'present' if code else 'missing'}, "
-                        f"security_token_length={len(security_token)}")
+            logger.info(
+                f"[MCP OAuth] Callback received: server={server_name}, "
+                f"flow_id={flow_id}, code={'present' if code else 'missing'}, "
+                f"security_token_length={len(security_token)}"
+            )
         except ValueError as e:
             logger.error(f"[MCP OAuth] Failed to decode state: {e}")
             return _redirect_to_page(request, server_name, error_msg="invalid_state_format")
@@ -111,15 +120,15 @@ async def oauth_callback(
         # Check if flow is already completed
         flow = mcp_service.oauth_service.flow_manager.get_flow(flow_id)
         if flow and flow.status == OAuthFlowStatus.COMPLETED:
-            logger.warning(f"[MCP OAuth] Flow already completed, preventing duplicate token exchange: {flow_id}")
+            logger.warning(
+                f"[MCP OAuth] Flow already completed, preventing duplicate token exchange: {flow_id}"
+            )
             return _redirect_to_page(request, server_name, flag="success")
 
         # 4. Complete OAuth flow (validate state + exchange tokens)
         logger.debug(f"[MCP OAuth] Completing OAuth flow for {server_name}")
         success, error_msg = await mcp_service.oauth_service.complete_oauth_flow(
-            flow_id=flow_id,
-            authorization_code=code,
-            state=state
+            flow_id=flow_id, authorization_code=code, state=state
         )
 
         if not success:
@@ -135,8 +144,10 @@ async def oauth_callback(
             if flow and flow.user_id:
                 user_id = flow.user_id
                 server_id = flow.server_id  # Extract server_id from flow
-                logger.debug(f"[MCP OAuth] Attempting to reconnect {server_name}"
-                             f" (server_id: {server_id}) with new OAuth tokens")
+                logger.debug(
+                    f"[MCP OAuth] Attempting to reconnect {server_name}"
+                    f" (server_id: {server_id}) with new OAuth tokens"
+                )
 
                 # Create user connection with CONNECTED state
                 await mcp_service.connection_service.create_user_connection(
@@ -146,29 +157,38 @@ async def oauth_callback(
                     details={
                         "oauth_completed": True,
                         "flow_id": flow_id,
-                        "created_at": time.time()
-                    }
+                        "created_at": time.time(),
+                    },
                 )
-                logger.info(f"[MCP OAuth] Successfully reconnected {server_name}"
-                            f" (server_id: {server_id}) for user {user_id}")
+                logger.info(
+                    f"[MCP OAuth] Successfully reconnected {server_name}"
+                    f" (server_id: {server_id}) for user {user_id}"
+                )
 
                 # Clear any reconnection attempts
                 try:
                     reconnection_manager = get_reconnection_manager(
-                        mcp_service=mcp_service,
-                        oauth_service=mcp_service.oauth_service
+                        mcp_service=mcp_service, oauth_service=mcp_service.oauth_service
                     )
-                    reconnection_manager.clear_reconnection(user_id, server_id)  # Use server_id instead of server_name
-                    logger.debug(f"[MCP OAuth] Cleared reconnection attempts"
-                                 f" for {server_name} (server_id: {server_id})")
+                    reconnection_manager.clear_reconnection(
+                        user_id, server_id
+                    )  # Use server_id instead of server_name
+                    logger.debug(
+                        f"[MCP OAuth] Cleared reconnection attempts"
+                        f" for {server_name} (server_id: {server_id})"
+                    )
                 except Exception as e:
-                    logger.error(f"[MCP OAuth] Could not clear reconnection (manager not initialized): {e}")
+                    logger.error(
+                        f"[MCP OAuth] Could not clear reconnection (manager not initialized): {e}"
+                    )
 
                 logger.debug(f"[MCP OAuth] User connection created for {server_name}")
 
         except Exception as error:
-            logger.error(f"[MCP OAuth] Failed to reconnect {server_name} after OAuth, "
-                         f"but tokens are saved: {error}")
+            logger.error(
+                f"[MCP OAuth] Failed to reconnect {server_name} after OAuth, "
+                f"but tokens are saved: {error}"
+            )
 
         # 6. Redirect to success page
         return _redirect_to_page(request, server_name, flag="success")
@@ -180,20 +200,18 @@ async def oauth_callback(
 
 @router.get("/oauth/tokens/{flow_id}")
 async def get_oauth_tokens(
-        flow_id: str,
-        current_user: CurrentUser,
-        mcp_service: MCPService = Depends(get_mcp_service)
+    flow_id: str, current_user: CurrentUser, mcp_service: MCPService = Depends(get_mcp_service)
 ) -> dict[str, Any]:
     """
     Get OAuth tokens
-    
+
     Notes: GET /oauth/tokens/:flowId
     TypeScript implementation: Get tokens via flowManager.getFlowState()
-    
+
     Parameters:
     - flow_id: Flow ID
     - current_user: Current user information
-    
+
     Returns:
     - OAuth tokens
     """
@@ -202,39 +220,40 @@ async def get_oauth_tokens(
 
         # 1. Verify flow_id belongs to current user
         if not flow_id.startswith(f"{user_id}") and not flow_id.startswith("system:"):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                                detail="No permission to access this flow")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="No permission to access this flow"
+            )
 
         # 2. Get tokens by flow ID
         tokens = await mcp_service.oauth_service.get_tokens_by_flow_id(flow_id)
         if not tokens:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                                detail="Tokens not found or flow not completed")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tokens not found or flow not completed",
+            )
 
         # 3. Return tokens
-        return {
-            "tokens": tokens.dict() if hasattr(tokens, "dict") else tokens
-        }
+        return {"tokens": tokens.dict() if hasattr(tokens, "dict") else tokens}
     except HTTPException:
         # Re-raise HTTP exceptions with their original status code
         raise
     except Exception as e:
         logger.error(f"Failed to get OAuth tokens: {e!s}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"Failed to get tokens: {e!s}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get tokens: {e!s}"
+        )
 
 
 @router.get("/oauth/status/{flow_id}")
 async def get_oauth_status(
-        flow_id: str,
-        mcp_service: MCPService = Depends(get_mcp_service)
+    flow_id: str, mcp_service: MCPService = Depends(get_mcp_service)
 ) -> dict[str, Any]:
     """
     Check OAuth flow status
-    
+
     Notes: GET /oauth/status/:flowId
     TypeScript implementation: Get status via flowManager.getFlowState()
-    
+
     """
     try:
         # Get flow status
@@ -246,22 +265,20 @@ async def get_oauth_status(
         logger.error(f"Failed to check OAuth flow status: {e!s}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to check flow status: {e!s}"
+            detail=f"Failed to check flow status: {e!s}",
         )
 
 
 @router.post("/oauth/cancel/{server_id}")
 async def cancel_oauth_flow(
-        server_id: str,
-        current_user: CurrentUser,
-        mcp_service: MCPService = Depends(get_mcp_service)
+    server_id: str, current_user: CurrentUser, mcp_service: MCPService = Depends(get_mcp_service)
 ) -> dict[str, Any]:
     """
     Cancel OAuth flow
-    
+
     Notes: POST /oauth/cancel/:serverName
     TypeScript implementation: Directly call flowManager.failFlow()
-    
+
     Process:
     1. Cancel the OAuth flow
     2. Update user connection state to DISCONNECTED
@@ -279,7 +296,8 @@ async def cancel_oauth_flow(
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=error_msg or "Failed to cancel OAuth flow")
+                detail=error_msg or "Failed to cancel OAuth flow",
+            )
 
         # 2. Update user connection state to DISCONNECTED
         try:
@@ -290,8 +308,8 @@ async def cancel_oauth_flow(
                 details={
                     "oauth_cancelled": True,
                     "cancelled_at": time.time(),
-                    "reason": "User cancelled OAuth flow"
-                }
+                    "reason": "User cancelled OAuth flow",
+                },
             )
             logger.info(f"[OAuth Cancel] Updated connection state to DISCONNECTED for {server_id}")
         except Exception as e:
@@ -302,7 +320,7 @@ async def cancel_oauth_flow(
             "message": f"OAuth flow for {mcp_server.serverName} cancelled successfully",
             "server_id": server_id,
             "user_id": user_id,
-            "server_name": mcp_server.serverName
+            "server_name": mcp_server.serverName,
         }
     except HTTPException:
         # Re-raise HTTP exceptions with their original status code
@@ -311,22 +329,20 @@ async def cancel_oauth_flow(
         logger.error(f"Failed to cancel OAuth flow: {e!s}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to cancel flow: {e!s}"
+            detail=f"Failed to cancel flow: {e!s}",
         )
 
 
 @router.post("/oauth/refresh/{server_id}")
 async def refresh_oauth_tokens(
-        server_id: str,
-        current_user: CurrentUser,
-        mcp_service: MCPService = Depends(get_mcp_service)
+    server_id: str, current_user: CurrentUser, mcp_service: MCPService = Depends(get_mcp_service)
 ) -> dict[str, Any]:
     """
     Refresh OAuth tokens
-    
+
     Notes: POST /oauth/refresh/:serverName
     TypeScript implementation: Call MCPOAuthHandler.refreshOAuthTokens()
-    
+
     Process:
     1. Refresh OAuth tokens
     2. Update user connection state to CONNECTED
@@ -340,11 +356,14 @@ async def refresh_oauth_tokens(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
 
         # 1. Refresh OAuth tokens
-        success, error_msg = await mcp_service.oauth_service.validate_and_refresh_tokens(user_id, mcp_server)
+        success, error_msg = await mcp_service.oauth_service.validate_and_refresh_tokens(
+            user_id, mcp_server
+        )
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=error_msg or "Failed to refresh tokens")
+                detail=error_msg or "Failed to refresh tokens",
+            )
 
         logger.info(f"[OAuth Refresh] Successfully refreshed tokens for {server_id}")
 
@@ -358,12 +377,11 @@ async def refresh_oauth_tokens(
                     user_id=user_id,
                     server_id=server_id,
                     state=ConnectionState.CONNECTED,
-                    details={
-                        "oauth_refreshed": True,
-                        "refreshed_at": time.time()
-                    }
+                    details={"oauth_refreshed": True, "refreshed_at": time.time()},
                 )
-                logger.info(f"[OAuth Refresh] Updated connection state to CONNECTED for {server_id}")
+                logger.info(
+                    f"[OAuth Refresh] Updated connection state to CONNECTED for {server_id}"
+                )
             else:
                 # Create new connection if it doesn't exist
                 await mcp_service.connection_service.create_user_connection(
@@ -373,23 +391,26 @@ async def refresh_oauth_tokens(
                     details={
                         "oauth_refreshed": True,
                         "created_at": time.time(),
-                        "refreshed_at": time.time()
-                    }
+                        "refreshed_at": time.time(),
+                    },
                 )
-                logger.info(f"[OAuth Refresh] Created new connection with CONNECTED state for {server_id}")
+                logger.info(
+                    f"[OAuth Refresh] Created new connection with CONNECTED state for {server_id}"
+                )
         except Exception as e:
             logger.warning(f"[OAuth Refresh] Failed to update connection state: {e}")
 
         # 3. Clear any reconnection attempts
         try:
             reconnection_manager = get_reconnection_manager(
-                mcp_service=mcp_service,
-                oauth_service=mcp_service.oauth_service
+                mcp_service=mcp_service, oauth_service=mcp_service.oauth_service
             )
             reconnection_manager.clear_reconnection(user_id, server_id)
             logger.debug(f"[OAuth Refresh] Cleared reconnection attempts for {server_id}")
         except Exception as e:
-            logger.warning(f"[OAuth Refresh] Could not clear reconnection (manager not initialized): {e}")
+            logger.warning(
+                f"[OAuth Refresh] Could not clear reconnection (manager not initialized): {e}"
+            )
 
         return {
             "success": True,
@@ -403,15 +424,15 @@ async def refresh_oauth_tokens(
         raise
     except Exception as e:
         logger.error(f"Failed to refresh OAuth tokens: {e!s}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"Failed to refresh tokens: {e!s}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to refresh tokens: {e!s}",
+        )
 
 
 @router.delete("/oauth/token/{server_id}")
 async def delete_oauth_tokens(
-        server_id: str,
-        current_user: CurrentUser,
-        mcp_service: MCPService = Depends(get_mcp_service)
+    server_id: str, current_user: CurrentUser, mcp_service: MCPService = Depends(get_mcp_service)
 ) -> dict[str, Any]:
     """
     Delete the OAuth token for this user
@@ -428,7 +449,9 @@ async def delete_oauth_tokens(
         if disconnected:
             logger.info(f"[Delete OAuth Tokens] Disconnected {server_id} for user {user_id}")
         results = await token_service.delete_oauth_tokens(user_id, server.serverName)
-        logger.info(f"[Delete OAuth Tokens] Deleted OAuth tokens for {server_id}, results: {results}")
+        logger.info(
+            f"[Delete OAuth Tokens] Deleted OAuth tokens for {server_id}, results: {results}"
+        )
         message = "successfully" if results else "failed"
         return {
             "success": results,
@@ -438,16 +461,18 @@ async def delete_oauth_tokens(
         }
     except HTTPException as e:
         logger.error(f"Failed to delete OAuth tokens: {e!s}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"Failed to delete tokens: {e!s}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete tokens: {e!s}",
+        )
 
 
 # ==================== Helper Functions ====================
 
-def _redirect_to_page(request: Request,
-                      server_name: str,
-                      flag: str = "error",
-                      error_msg: str = None) -> RedirectResponse:
+
+def _redirect_to_page(
+    request: Request, server_name: str, flag: str = "error", error_msg: str = None
+) -> RedirectResponse:
     """
     Generate a response that redirects to frontend OAuth callback page.
         /oauth-callback?type=success&serverName=value

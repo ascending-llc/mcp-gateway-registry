@@ -32,13 +32,15 @@ def load_scopes_config() -> dict:
     except Exception:
         # Logging is not directly available here; re-raise or return empty
         return {}
+
+
 class AuthSettings(BaseSettings):
     """Auth server settings with environment variable support."""
 
     model_config = ConfigDict(
         env_file=".env",
         case_sensitive=False,
-        extra="ignore"  # Ignore extra environment variables
+        extra="ignore",  # Ignore extra environment variables
     )
 
     # ==================== Core Settings ====================
@@ -150,7 +152,9 @@ class AuthSettings(BaseSettings):
             if not self.auth_server_url.endswith(prefix):
                 self.auth_server_url = f"{self.auth_server_url.rstrip('/')}{prefix}"
             if not self.auth_server_external_url.endswith(prefix):
-                self.auth_server_external_url = f"{self.auth_server_external_url.rstrip('/')}{prefix}"
+                self.auth_server_external_url = (
+                    f"{self.auth_server_external_url.rstrip('/')}{prefix}"
+                )
 
     @field_validator("auth_provider")
     @classmethod

@@ -2,7 +2,6 @@
 Unit tests for Anthropic API transformation service.
 """
 
-
 import pytest
 
 from registry.schemas.anthropic_schema import (
@@ -111,10 +110,7 @@ class TestTransformService:
         assert result.meta is not None
         assert "io.mcpgateway/registry" in result.meta
         assert result.meta["io.mcpgateway/registry"]["health_status"] == "healthy"
-        assert (
-            result.meta["io.mcpgateway/registry"]["last_checked"]
-            == "2025-10-12T10:00:00Z"
-        )
+        assert result.meta["io.mcpgateway/registry"]["last_checked"] == "2025-10-12T10:00:00Z"
 
     def test_transform_to_server_response_without_meta(self):
         """Test transforming to ServerResponse without registry metadata."""

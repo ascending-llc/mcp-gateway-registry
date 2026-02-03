@@ -32,46 +32,47 @@ from registry.services.server_service import _build_complete_headers_for_server,
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["MCP Proxy"])
-MCPGW_PATH="/mcpgw"
+MCPGW_PATH = "/mcpgw"
 
 # Shared httpx client for connection pooling
 proxy_client = httpx.AsyncClient(
     timeout=httpx.Timeout(30.0, read=60.0),
     follow_redirects=True,
-    limits=httpx.Limits(max_connections=100, max_keepalive_connections=20)
+    limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
 )
 
 
 async def _build_authenticated_headers(
     server: MCPServerDocument,
     auth_context: dict[str, Any],
-    additional_headers: dict[str, str] | None = None
+    additional_headers: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """
     Build complete headers with authentication for MCP server requests.
     Consolidates auth logic used by all proxy endpoints.
-    
+
     Supports dual authentication:
     - setting.auth_egress_header: OAuth/external access token (RFC 6750) for MCP server resource access
     - setting.internal_auth_header: Internal JWT for gateway-to-MCP authentication (always included)
-    
+
     Args:
         server: MCP server document
         auth_context: Gateway authentication context (user, client_id, scopes, jwt_token)
         additional_headers: Optional additional headers to merge
-    
+
     Returns:
         Complete headers dict with authentication
-        
+
     Raises:
         HTTPException: For auth errors (401 with appropriate details)
     """
     # Validate user_id is present (auth-server always includes it in JWT)
     if not auth_context.get("user_id"):
-        logger.error(f"Missing user_id in auth_context. Available keys: {list(auth_context.keys())}")
+        logger.error(
+            f"Missing user_id in auth_context. Available keys: {list(auth_context.keys())}"
+        )
         raise HTTPException(
-            status_code=401,
-            detail="Invalid authentication context: missing user_id"
+            status_code=401, detail="Invalid authentication context: missing user_id"
         )
 
     # Build base headers (filter out empty values to avoid httpx errors)
@@ -125,35 +126,26 @@ async def _build_authenticated_headers(
         raise HTTPException(
             status_code=401,
             detail="OAuth re-authentication required",
-            headers={"X-OAuth-URL": e.auth_url or ""}
+            headers={"X-OAuth-URL": e.auth_url or ""},
         )
     except MissingUserIdError as e:
-        raise HTTPException(
-            status_code=401,
-            detail=f"User authentication required: {e!s}"
-        )
+        raise HTTPException(status_code=401, detail=f"User authentication required: {e!s}")
     except (OAuthTokenError, AuthenticationError) as e:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Authentication error: {e!s}"
-        )
+        raise HTTPException(status_code=401, detail=f"Authentication error: {e!s}")
 
 
-def _build_target_url(
-    server: MCPServerDocument,
-    remaining_path: str = ""
-) -> str:
+def _build_target_url(server: MCPServerDocument, remaining_path: str = "") -> str:
     """
     Build complete target URL for proxying to MCP server.
     Consolidates URL building logic used across all proxy endpoints.
-    
+
     Args:
         server: MCP server document
         remaining_path: Optional path to append after server base URL
-    
+
     Returns:
         Complete target URL
-        
+
     Raises:
         HTTPException: If server URL is not configured
     """
@@ -161,10 +153,7 @@ def _build_target_url(
     base_url = config.get("url")
 
     if not base_url:
-        raise HTTPException(
-            status_code=500,
-            detail="Server URL not configured"
-        )
+        raise HTTPException(status_code=500, detail="Server URL not configured")
 
     # If no remaining path, return base URL as-is
     if not remaining_path:
@@ -178,24 +167,21 @@ def _build_target_url(
 
 
 async def _proxy_json_rpc_request(
-    target_url: str,
-    json_body: dict[str, Any],
-    headers: dict[str, str],
-    accept_sse: bool = False
+    target_url: str, json_body: dict[str, Any], headers: dict[str, str], accept_sse: bool = False
 ) -> Response:
     """
     Proxy a JSON-RPC request to an MCP server with SSE support.
     Consolidates proxy logic used by tool/resource/prompt endpoints.
-    
+
     Args:
         target_url: Backend MCP server URL
         json_body: MCP JSON-RPC request body
         headers: Complete request headers (including auth)
         accept_sse: Whether client accepts SSE responses
-    
+
     Returns:
         FastAPI Response (SSE stream or JSON)
-        
+
     Raises:
         HTTPException: For timeout or proxy errors
     """
@@ -203,11 +189,7 @@ async def _proxy_json_rpc_request(
         # For JSON-RPC, we always POST with JSON content
         if not accept_sse:
             # Regular JSON request (most common case)
-            response = await proxy_client.post(
-                target_url,
-                json=json_body,
-                headers=headers
-            )
+            response = await proxy_client.post(target_url, json=json_body, headers=headers)
 
             # Log error responses for debugging
             if response.status_code >= 400:
@@ -215,7 +197,9 @@ async def _proxy_json_rpc_request(
                     error_body = response.content.decode("utf-8")
                     logger.error(f"Backend error response ({response.status_code}): {error_body}")
                 except Exception:
-                    logger.error(f"Backend error response ({response.status_code}): [binary content]")
+                    logger.error(
+                        f"Backend error response ({response.status_code}): [binary content]"
+                    )
 
             # Forward all headers including mcp-session-id
             response_headers = dict(response.headers)
@@ -223,16 +207,11 @@ async def _proxy_json_rpc_request(
                 content=response.content,
                 status_code=response.status_code,
                 headers=response_headers,
-                media_type=response.headers.get("content-type")
+                media_type=response.headers.get("content-type"),
             )
 
         # Client accepts SSE - use streaming to check response type
-        stream_context = proxy_client.stream(
-            "POST",
-            target_url,
-            json=json_body,
-            headers=headers
-        )
+        stream_context = proxy_client.stream("POST", target_url, json=json_body, headers=headers)
         backend_response = await stream_context.__aenter__()
 
         backend_content_type = backend_response.headers.get("content-type", "")
@@ -246,9 +225,13 @@ async def _proxy_json_rpc_request(
             if backend_response.status_code >= 400:
                 try:
                     error_body = content_bytes.decode("utf-8")
-                    logger.error(f"Backend error response ({backend_response.status_code}): {error_body}")
+                    logger.error(
+                        f"Backend error response ({backend_response.status_code}): {error_body}"
+                    )
                 except Exception:
-                    logger.error(f"Backend error response ({backend_response.status_code}): [binary content]")
+                    logger.error(
+                        f"Backend error response ({backend_response.status_code}): [binary content]"
+                    )
 
             # Forward all headers including mcp-session-id
             response_headers = dict(backend_response.headers)
@@ -256,7 +239,7 @@ async def _proxy_json_rpc_request(
                 content=content_bytes,
                 status_code=backend_response.status_code,
                 headers=response_headers,
-                media_type=backend_content_type or "application/json"
+                media_type=backend_content_type or "application/json",
             )
 
         # Backend returned SSE - stream it without buffering
@@ -264,11 +247,9 @@ async def _proxy_json_rpc_request(
 
         # Start with all backend headers, then override with SSE-specific ones
         response_headers = dict(backend_response.headers)
-        response_headers.update({
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection": "keep-alive"
-        })
+        response_headers.update(
+            {"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"}
+        )
 
         # Stream content from backend to client - cleanup when done
         async def stream_sse():
@@ -286,39 +267,27 @@ async def _proxy_json_rpc_request(
             stream_sse(),
             status_code=backend_response.status_code,
             media_type="text/event-stream",
-            headers=response_headers
+            headers=response_headers,
         )
 
     except httpx.TimeoutException:
         logger.error(f"Timeout proxying to {target_url}")
-        raise HTTPException(
-            status_code=504,
-            detail="Gateway timeout"
-        )
+        raise HTTPException(status_code=504, detail="Gateway timeout")
     except httpx.HTTPError as e:
         logger.error(f"HTTP error proxying to {target_url}: {e}")
-        raise HTTPException(
-            status_code=502,
-            detail=f"Bad gateway: {e!s}"
-        )
+        raise HTTPException(status_code=502, detail=f"Bad gateway: {e!s}")
     except Exception as e:
         logger.error(f"Error proxying to {target_url}: {e}")
-        raise HTTPException(
-            status_code=502,
-            detail=f"Bad gateway: {e!s}"
-        )
+        raise HTTPException(status_code=502, detail=f"Bad gateway: {e!s}")
 
 
 async def proxy_to_mcp_server(
-    request: Request,
-    target_url: str,
-    auth_context: dict[str, Any],
-    server: MCPServerDocument
+    request: Request, target_url: str, auth_context: dict[str, Any], server: MCPServerDocument
 ) -> Response:
     """
     Proxy request to MCP server with auth headers.
     Handles both regular HTTP and SSE streaming, including OAuth token injection.
-    
+
     Args:
         request: Incoming FastAPI request
         target_url: Backend MCP server URL
@@ -346,9 +315,7 @@ async def proxy_to_mcp_server(
     # Build complete authentication headers using shared helper
     # This already handles all header merging with case-insensitive logic
     headers = await _build_authenticated_headers(
-        server=server,
-        auth_context=auth_context,
-        additional_headers=headers
+        server=server, auth_context=auth_context, additional_headers=headers
     )
 
     body = await request.body()
@@ -364,10 +331,7 @@ async def proxy_to_mcp_server(
         if not client_accepts_sse:
             # Regular HTTP request (most common case for MCP JSON-RPC)
             response = await proxy_client.request(
-                method=request.method,
-                url=target_url,
-                headers=headers,
-                content=body
+                method=request.method, url=target_url, headers=headers, content=body
             )
 
             # Log error responses for debugging
@@ -376,7 +340,9 @@ async def proxy_to_mcp_server(
                     error_body = response.content.decode("utf-8")
                     logger.error(f"Backend error response ({response.status_code}): {error_body}")
                 except Exception:
-                    logger.error(f"Backend error response ({response.status_code}): [binary content, {len(response.content)} bytes]")
+                    logger.error(
+                        f"Backend error response ({response.status_code}): [binary content, {len(response.content)} bytes]"
+                    )
 
             # Forward all headers including mcp-session-id
             response_headers = dict(response.headers)
@@ -384,7 +350,7 @@ async def proxy_to_mcp_server(
                 content=response.content,
                 status_code=response.status_code,
                 headers=response_headers,
-                media_type=response.headers.get("content-type")
+                media_type=response.headers.get("content-type"),
             )
 
         # Client accepts SSE - check if backend returns SSE
@@ -392,17 +358,16 @@ async def proxy_to_mcp_server(
 
         # Manually manage stream lifecycle (can't use async with - it closes too early)
         stream_context = proxy_client.stream(
-            request.method,
-            target_url,
-            headers=headers,
-            content=body
+            request.method, target_url, headers=headers, content=body
         )
         backend_response = await stream_context.__aenter__()
 
         backend_content_type = backend_response.headers.get("content-type", "")
         is_sse = "text/event-stream" in backend_content_type
 
-        logger.debug(f"Backend: status={backend_response.status_code}, content-type={backend_content_type or 'none'}")
+        logger.debug(
+            f"Backend: status={backend_response.status_code}, content-type={backend_content_type or 'none'}"
+        )
 
         # If backend doesn't return SSE, read full response and close stream
         if not is_sse:
@@ -413,9 +378,13 @@ async def proxy_to_mcp_server(
             if backend_response.status_code >= 400:
                 try:
                     error_body = content_bytes.decode("utf-8")
-                    logger.error(f"Backend error response ({backend_response.status_code}): {error_body}")
+                    logger.error(
+                        f"Backend error response ({backend_response.status_code}): {error_body}"
+                    )
                 except Exception:
-                    logger.error(f"Backend error response ({backend_response.status_code}): [binary content, {len(content_bytes)} bytes]")
+                    logger.error(
+                        f"Backend error response ({backend_response.status_code}): [binary content, {len(content_bytes)} bytes]"
+                    )
 
             # Forward all headers including mcp-session-id
             response_headers = dict(backend_response.headers)
@@ -423,7 +392,7 @@ async def proxy_to_mcp_server(
                 content=content_bytes,
                 status_code=backend_response.status_code,
                 headers=response_headers,
-                media_type=backend_content_type or "application/octet-stream"
+                media_type=backend_content_type or "application/octet-stream",
             )
 
         # Backend is returning true SSE - keep stream open and forward it
@@ -431,12 +400,14 @@ async def proxy_to_mcp_server(
 
         # Start with all backend headers, then override with SSE-specific ones
         response_headers = dict(backend_response.headers)
-        response_headers.update({
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection": "keep-alive",
-            "Content-Type": "text/event-stream"
-        })
+        response_headers.update(
+            {
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+                "Content-Type": "text/event-stream",
+            }
+        )
 
         # Stream content from backend to client - cleanup when done
         async def stream_sse():
@@ -454,36 +425,30 @@ async def proxy_to_mcp_server(
             stream_sse(),
             status_code=backend_response.status_code,
             media_type="text/event-stream",
-            headers=response_headers
+            headers=response_headers,
         )
 
     except httpx.TimeoutException:
         logger.error(f"Timeout proxying to {target_url}")
-        return JSONResponse(
-            status_code=504,
-            content={"error": "Gateway timeout"}
-        )
+        return JSONResponse(status_code=504, content={"error": "Gateway timeout"})
     except Exception as e:
         logger.error(f"Error proxying to {target_url}: {e}")
-        return JSONResponse(
-            status_code=502,
-            content={"error": "Bad gateway", "detail": str(e)}
-        )
+        return JSONResponse(status_code=502, content={"error": "Bad gateway", "detail": str(e)})
 
 
 async def extract_server_path_from_request(request_path: str) -> str | None:
     """
     Extract registered server path prefix from request URL.
-    
+
     Tries progressively shorter path segments until finding a registered server.
     For example, "/github/repos/list" will check:
     1. /github/repos/list
-    2. /github/repos  
+    2. /github/repos
     3. /github
-    
+
     Args:
         request_path: Full incoming request path (e.g., /github/repos/list)
-        
+
     Returns:
         Registered server path if found, None otherwise
     """
@@ -501,6 +466,7 @@ async def extract_server_path_from_request(request_path: str) -> str | None:
 
     return None
 
+
 @router.post(
     "/tools/call",
     response_model=None,
@@ -515,23 +481,20 @@ async def extract_server_path_from_request(request_path: str) -> str | None:
                         "server_id": "12345",
                         "server_path": "/tavilysearch",
                         "tool_name": "tavily_search_mcp_tavily_search",
-                        "result": {"data": "..."}
-                    }
+                        "result": {"data": "..."},
+                    },
                 },
-                "text/event-stream": {
-                    "example": "event: message\ndata: {...}\n\n"
-                }
-            }
+                "text/event-stream": {"example": "event: message\ndata: {...}\n\n"},
+            },
         }
-    }
+    },
 )
 async def execute_tool(
-    body: ToolExecutionRequest,
-    user_context: CurrentUser
+    body: ToolExecutionRequest, user_context: CurrentUser
 ) -> Response | ToolExecutionResponse:
     """
     Execute a tool on an MCP server.
-    
+
     Request body:
     {
         "server_id": "12345",
@@ -541,7 +504,7 @@ async def execute_tool(
             "query": "Donald Trump news"
         }
     }
-    
+
     Returns:
         - SSE stream (text/event-stream) if backend returns SSE format
         - JSON (ToolExecutionResponse) otherwise
@@ -557,10 +520,7 @@ async def execute_tool(
     )
 
     if not server:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Server not found: {body.server_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Server not found: {body.server_id}")
 
     # Build target URL using shared helper
     target_url = _build_target_url(server)
@@ -570,17 +530,14 @@ async def execute_tool(
         "jsonrpc": "2.0",
         "id": 1,
         "method": "tools/call",
-        "params": {
-            "name": tool_name,
-            "arguments": arguments
-        }
+        "params": {"name": tool_name, "arguments": arguments},
     }
     logger.info(f"📤 MCP JSON-RPC request body: {json.dumps(mcp_request_body, indent=2)}")
 
     # Prepare base headers for downstream MCP server
     additional_headers = {
         "X-Tool-Name": tool_name,
-        "Accept": "application/json, text/event-stream"  # MCP servers require both
+        "Accept": "application/json, text/event-stream",  # MCP servers require both
     }
 
     # Check if server requires initialization (default True for safety/compatibility)
@@ -599,7 +556,9 @@ async def execute_tool(
 
             if session_initialized:
                 additional_headers["mcp-Session-Id"] = stored_session_id
-                logger.info(f"🔗 Reusing initialized session for {server.serverName}: {stored_session_id}")
+                logger.info(
+                    f"🔗 Reusing initialized session for {server.serverName}: {stored_session_id}"
+                )
 
         if not stored_session_id:
             init_headers = await _build_authenticated_headers(
@@ -609,20 +568,22 @@ async def execute_tool(
             )
             # Get transport type from server config (default to streamable-http)
             transport_type = server.config.get("type", "streamable-http")
-            session_id = await initialize_mcp_session(target_url, init_headers, session_key, transport_type)
+            session_id = await initialize_mcp_session(
+                target_url, init_headers, session_key, transport_type
+            )
 
             if session_id:
                 additional_headers["mcp-Session-Id"] = session_id
             else:
-                logger.warning("⚠️ Failed to initialize session, will attempt tool call without session")
+                logger.warning(
+                    "⚠️ Failed to initialize session, will attempt tool call without session"
+                )
     else:
         logger.debug("⚡ Stateless server (requiresInit=False), skipping session management")
 
     # Build final authenticated headers with session ID (if applicable)
     headers = await _build_authenticated_headers(
-        server=server,
-        auth_context=user_context,
-        additional_headers=additional_headers
+        server=server, auth_context=user_context, additional_headers=additional_headers
     )
 
     # Client can accept both JSON and SSE (as indicated in Accept header)
@@ -634,7 +595,7 @@ async def execute_tool(
             target_url=target_url,
             json_body=mcp_request_body,
             headers=headers,
-            accept_sse=accept_sse
+            accept_sse=accept_sse,
         )
 
         # If response is SSE, return it directly
@@ -644,10 +605,18 @@ async def execute_tool(
 
         # Parse response body
         try:
-            result_text = response.body.decode("utf-8") if isinstance(response.body, bytes) else str(response.body)
+            result_text = (
+                response.body.decode("utf-8")
+                if isinstance(response.body, bytes)
+                else str(response.body)
+            )
             result = json.loads(result_text)
         except Exception:
-            result = {"raw": response.body.decode("utf-8") if isinstance(response.body, bytes) else str(response.body)}
+            result = {
+                "raw": response.body.decode("utf-8")
+                if isinstance(response.body, bytes)
+                else str(response.body)
+            }
 
         # Check for non-200 status code or MCP error in result
         if response.status_code != 200 and response.status_code != 202:
@@ -704,26 +673,25 @@ async def execute_tool(
                         "server_id": "12345",
                         "server_path": "/tavilysearch",
                         "resource_uri": "tavily://search-results/AI",
-                        "contents": [{"uri": "...", "mimeType": "...", "text": "..."}]
-                    }
+                        "contents": [{"uri": "...", "mimeType": "...", "text": "..."}],
+                    },
                 }
-            }
+            },
         }
-    }
+    },
 )
 async def read_resource(
-    body: ResourceReadRequest,
-    user_context: CurrentUser
+    body: ResourceReadRequest, user_context: CurrentUser
 ) -> Response | ResourceReadResponse:
     """
     Read/access an MCP resource.
-    
+
     Request body:
     {
         "server_id": "12345",
         "resource_uri": "tavily://search-results/AI"
     }
-    
+
     Returns:
         Resource contents (text, JSON, binary, etc.)
     """
@@ -731,15 +699,10 @@ async def read_resource(
     username = user_context.get("username", "unknown")
 
     server = await server_service_v1.get_server_by_id(body.server_id)
-    logger.info(
-        f"📄 Resource read from user '{username}': {resource_uri} on {body.server_id}"
-    )
+    logger.info(f"📄 Resource read from user '{username}': {resource_uri} on {body.server_id}")
 
     if not server:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Server not found: {body.server_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Server not found: {body.server_id}")
 
     # Build target URL using shared helper (for future implementation)
     target_url = _build_target_url(server)
@@ -756,20 +719,17 @@ async def read_resource(
             {
                 "uri": resource_uri,
                 "mimeType": "application/json",
-                "text": '{"results": [{"title": "AI News", "snippet": "Latest AI developments..."}]}'
+                "text": '{"results": [{"title": "AI News", "snippet": "Latest AI developments..."}]}',
             }
-        ]
+        ],
     )
 
 
 @router.delete("/sessions/{server_id}")
-async def clear_session_endpoint(
-    server_id: str,
-    user_context: CurrentUser
-) -> JSONResponse:
+async def clear_session_endpoint(server_id: str, user_context: CurrentUser) -> JSONResponse:
     """
     Clear/disconnect MCP session for a server (useful for debugging stale sessions).
-    
+
     DELETE /api/v1/proxy/sessions/{server_id}
     """
     user_id = user_context.get("user_id", "unknown")
@@ -782,8 +742,8 @@ async def clear_session_endpoint(
         content={
             "success": True,
             "message": f"Session cleared for server {server_id}",
-            "session_key": session_key
-        }
+            "session_key": session_key,
+        },
     )
 
 
@@ -801,20 +761,19 @@ async def clear_session_endpoint(
                         "server_id": "12345",
                         "server_path": "/tavilysearch",
                         "prompt_name": "research_assistant",
-                        "messages": [{"role": "...", "content": {...}}]
-                    }
+                        "messages": [{"role": "...", "content": {...}}],
+                    },
                 }
-            }
+            },
         }
-    }
+    },
 )
 async def execute_prompt(
-    body: PromptExecutionRequest,
-    user_context: CurrentUser
+    body: PromptExecutionRequest, user_context: CurrentUser
 ) -> Response | PromptExecutionResponse:
     """
     Execute an MCP prompt (get prompt template with arguments filled in).
-    
+
     Request body:
     {
         "server_id": "12345",
@@ -824,7 +783,7 @@ async def execute_prompt(
             "depth": "comprehensive"
         }
     }
-    
+
     Returns:
         Prompt messages ready for LLM consumption
     """
@@ -833,15 +792,10 @@ async def execute_prompt(
     username = user_context.get("username", "unknown")
 
     server = await server_service_v1.get_server_by_id(body.server_id)
-    logger.info(
-        f"💬 Prompt execution from user '{username}': {prompt_name} on {body.server_id}"
-    )
+    logger.info(f"💬 Prompt execution from user '{username}': {prompt_name} on {body.server_id}")
 
     if not server:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Server not found: {body.server_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Server not found: {body.server_id}")
 
     # Build target URL using shared helper (for future implementation)
     target_url = _build_target_url(server)
@@ -850,7 +804,9 @@ async def execute_prompt(
     topic = arguments.get("topic", "general topic")
     depth = arguments.get("depth", "basic")
 
-    logger.info(f"✅ (MOCK) Returning prompt messages for: {prompt_name} (topic={topic}, depth={depth})")
+    logger.info(
+        f"✅ (MOCK) Returning prompt messages for: {prompt_name} (topic={topic}, depth={depth})"
+    )
 
     return PromptExecutionResponse(
         success=True,
@@ -863,17 +819,11 @@ async def execute_prompt(
                 "role": "system",
                 "content": {
                     "type": "text",
-                    "text": f"You are a research assistant specializing in {topic}. Provide {depth} analysis."
-                }
+                    "text": f"You are a research assistant specializing in {topic}. Provide {depth} analysis.",
+                },
             },
-            {
-                "role": "user",
-                "content": {
-                    "type": "text",
-                    "text": f"Research and analyze: {topic}"
-                }
-            }
-        ]
+            {"role": "user", "content": {"type": "text", "text": f"Research and analyze: {topic}"}},
+        ],
     )
 
 
@@ -883,7 +833,7 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
     """
     Dynamic catch-all route for MCP server proxying.
     This replaces nginx {{LOCATION_BLOCKS}}.
-    
+
     CRITICAL: This catch-all route matches ANY path pattern, so it must be defined LAST.
     FastAPI matches routes in order, so this will capture all unmatched routes.
     """
@@ -903,11 +853,7 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
     config = server.config or {}
     if not config.get("enabled", False):
         return JSONResponse(
-            status_code=503,
-            content={
-                "error": "Service disabled",
-                "service": server.path
-            }
+            status_code=503, content={"error": "Service disabled", "service": server.path}
         )
     # Get auth context from middleware (already validated by AuthMiddleware)
     auth_context = getattr(request.state, "user", None)
@@ -916,7 +862,7 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
         raise HTTPException(status_code=401, detail="Authentication required")
 
     # Extract remaining path after server path
-    remaining_path = path[len(server_path):].lstrip("/")
+    remaining_path = path[len(server_path) :].lstrip("/")
 
     # Build target URL using shared helper
     target_url = _build_target_url(server, remaining_path)
@@ -924,10 +870,7 @@ async def dynamic_mcp_proxy(request: Request, full_path: str):
     # Proxy the request
     logger.info(f"Proxying {request.method} {path} → {target_url}")
     return await proxy_to_mcp_server(
-        request=request,
-        target_url=target_url,
-        auth_context=auth_context,
-        server= server
+        request=request, target_url=target_url, auth_context=auth_context, server=server
     )
 
 
@@ -935,4 +878,3 @@ async def shutdown_proxy_client():
     """Cleanup proxy client on shutdown."""
     await proxy_client.aclose()
     logger.info("Proxy client closed")
-

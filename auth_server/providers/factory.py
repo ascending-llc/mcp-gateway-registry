@@ -18,18 +18,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_auth_provider(
-        provider_type: str | None = None
-) -> AuthProvider:
+def get_auth_provider(provider_type: str | None = None) -> AuthProvider:
     """Factory function to get the appropriate auth provider.
-    
+
     Args:
         provider_type: Type of provider to create ('cognito', 'keycloak', or 'entra').
                       If None, uses AUTH_PROVIDER environment variable.
-                      
+
     Returns:
         AuthProvider instance configured for the specified provider
-        
+
     Raises:
         ValueError: If provider type is unknown or required config is missing
     """
@@ -74,8 +72,10 @@ def _create_keycloak_provider() -> KeycloakProvider:
             "Please set these environment variables."
         )
 
-    logger.info(f"Initializing Keycloak provider for realm"
-                f" '{realm}' at {keycloak_url} (external: {keycloak_external_url})")
+    logger.info(
+        f"Initializing Keycloak provider for realm"
+        f" '{realm}' at {keycloak_url} (external: {keycloak_external_url})"
+    )
 
     return KeycloakProvider(
         keycloak_url=keycloak_url,
@@ -84,7 +84,7 @@ def _create_keycloak_provider() -> KeycloakProvider:
         client_id=client_id,
         client_secret=client_secret,
         m2m_client_id=m2m_client_id,
-        m2m_client_secret=m2m_client_secret
+        m2m_client_secret=m2m_client_secret,
     )
 
 
@@ -114,14 +114,16 @@ def _create_cognito_provider() -> CognitoProvider:
             "Please set these environment variables."
         )
 
-    logger.info(f"Initializing Cognito provider for user pool '{user_pool_id}' in region '{region}'")
+    logger.info(
+        f"Initializing Cognito provider for user pool '{user_pool_id}' in region '{region}'"
+    )
 
     return CognitoProvider(
         user_pool_id=user_pool_id,
         client_id=client_id,
         client_secret=client_secret,
         region=region,
-        domain=domain
+        domain=domain,
     )
 
 
@@ -181,7 +183,8 @@ def _create_entra_provider() -> EntraIdProvider:
         )
 
     logger.info(
-        f"Initializing Entra ID provider for tenant '{tenant_id}' with scopes={scopes}, grant_type={grant_type}")
+        f"Initializing Entra ID provider for tenant '{tenant_id}' with scopes={scopes}, grant_type={grant_type}"
+    )
 
     return EntraIdProvider(
         tenant_id=tenant_id,
@@ -199,7 +202,7 @@ def _create_entra_provider() -> EntraIdProvider:
         username_claim=username_claim,
         groups_claim=groups_claim,
         email_claim=email_claim,
-        name_claim=name_claim
+        name_claim=name_claim,
     )
 
 
@@ -209,14 +212,11 @@ def _get_provider_health_info() -> dict:
         provider = get_auth_provider()
         if hasattr(provider, "get_provider_info"):
             return provider.get_provider_info()
-        return {
-            "provider_type": os.environ.get("AUTH_PROVIDER", "cognito"),
-            "status": "unknown"
-        }
+        return {"provider_type": os.environ.get("AUTH_PROVIDER", "cognito"), "status": "unknown"}
     except Exception as e:
         logger.error(f"Failed to get provider health info: {e}")
         return {
             "provider_type": os.environ.get("AUTH_PROVIDER", "cognito"),
             "status": "error",
-            "error": str(e)
+            "error": str(e),
         }

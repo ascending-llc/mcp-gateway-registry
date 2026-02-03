@@ -5,6 +5,7 @@ Helper script to get ASOR access token for federation.
 This script performs the 3-legged OAuth flow to get an access token
 that can be used for ASOR federation in the MCP Gateway.
 """
+
 import os
 import urllib.parse
 
@@ -15,6 +16,7 @@ CLIENT_ID = os.getenv("ASOR_CLIENT_ID")
 CLIENT_SECRET = os.getenv("ASOR_CLIENT_SECRET")
 TENANT_NAME = os.getenv("ASOR_TENANT_NAME")
 HOSTNAME = os.getenv("ASOR_HOSTNAME")
+
 
 def get_asor_token():
     """Get ASOR access token via 3-legged OAuth flow"""
@@ -30,7 +32,7 @@ def get_asor_token():
         "response_type": "code",
         "client_id": CLIENT_ID,
         "redirect_uri": "https://localhost:7860/callback",
-        "scope": "Agent System of Record"
+        "scope": "Agent System of Record",
     }
 
     print("Step 1: Get Authorization Code")
@@ -55,7 +57,7 @@ def get_asor_token():
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET,
         "code": auth_code,
-        "redirect_uri": "https://localhost:7860/callback"
+        "redirect_uri": "https://localhost:7860/callback",
     }
 
     try:
@@ -86,6 +88,7 @@ def get_asor_token():
     except Exception as e:
         print(f"❌ Error during token exchange: {e}")
         return None
+
 
 if __name__ == "__main__":
     get_asor_token()

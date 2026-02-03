@@ -1,6 +1,7 @@
 """
 Pytest configuration and shared fixtures.
 """
+
 import asyncio
 import tempfile
 from collections.abc import AsyncGenerator, Generator
@@ -128,17 +129,15 @@ def admin_session_cookie():
     """Create a valid admin session cookie for testing."""
     from registry.auth.dependencies import create_session_cookie
     from registry.core.config import settings
-    return create_session_cookie(
-        settings.admin_user,
-        auth_method="traditional",
-        provider="local"
-    )
+
+    return create_session_cookie(settings.admin_user, auth_method="traditional", provider="local")
 
 
 @pytest.fixture
 def test_client(admin_session_cookie) -> TestClient:
     """Create a test client for the FastAPI application with admin authentication."""
     from registry.core.config import settings
+
     return TestClient(app, cookies={settings.session_cookie_name: admin_session_cookie})
 
 
@@ -146,10 +145,11 @@ def test_client(admin_session_cookie) -> TestClient:
 async def async_client(admin_session_cookie) -> AsyncGenerator[AsyncClient, None]:
     """Create an async client for testing with admin authentication."""
     from registry.core.config import settings
+
     async with AsyncClient(
         app=app,
         base_url="http://test",
-        cookies={settings.session_cookie_name: admin_session_cookie}
+        cookies={settings.session_cookie_name: admin_session_cookie},
     ) as client:
         yield client
 
@@ -158,9 +158,8 @@ async def async_client(admin_session_cookie) -> AsyncGenerator[AsyncClient, None
 def authenticated_headers(admin_session_cookie) -> dict[str, str]:
     """Create headers for authenticated requests."""
     from registry.core.config import settings
-    return {
-        "Cookie": f"{settings.session_cookie_name}={admin_session_cookie}"
-    }
+
+    return {"Cookie": f"{settings.session_cookie_name}={admin_session_cookie}"}
 
 
 @pytest.fixture

@@ -1,6 +1,7 @@
 """
 Unit tests for authentication dependencies.
 """
+
 from unittest.mock import Mock, patch
 
 import pytest
@@ -101,9 +102,10 @@ class TestAuthDependencies:
 
     def test_get_current_user_expired_session(self, mock_settings):
         """Test getting current user with expired session."""
-        with patch("registry.auth.dependencies.settings", mock_settings), \
-             patch("registry.auth.dependencies.signer") as mock_signer:
-
+        with (
+            patch("registry.auth.dependencies.settings", mock_settings),
+            patch("registry.auth.dependencies.signer") as mock_signer,
+        ):
             mock_signer.loads.side_effect = SignatureExpired("Session expired")
 
             with pytest.raises(HTTPException) as exc_info:
@@ -114,9 +116,10 @@ class TestAuthDependencies:
 
     def test_get_current_user_invalid_signature(self, mock_settings):
         """Test getting current user with invalid signature."""
-        with patch("registry.auth.dependencies.settings", mock_settings), \
-             patch("registry.auth.dependencies.signer") as mock_signer:
-
+        with (
+            patch("registry.auth.dependencies.settings", mock_settings),
+            patch("registry.auth.dependencies.signer") as mock_signer,
+        ):
             mock_signer.loads.side_effect = BadSignature("Invalid signature")
 
             with pytest.raises(HTTPException) as exc_info:
@@ -130,6 +133,7 @@ class TestAuthDependencies:
         with patch("registry.auth.dependencies.settings", mock_settings):
             # Create a session cookie without username field using the real signer
             from registry.auth.dependencies import signer
+
             session_data = {"other_field": "value"}  # No username field
             session_cookie = signer.dumps(session_data)
 

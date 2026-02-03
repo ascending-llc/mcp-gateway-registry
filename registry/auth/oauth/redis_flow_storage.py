@@ -106,7 +106,7 @@ class RedisFlowStorage:
                 completed_at=float(data["completed_at"]) if data.get("completed_at") else None,
                 tokens=tokens,
                 error=data.get("error") or None,
-                metadata=metadata
+                metadata=metadata,
             )
 
         except Exception as e:
@@ -135,7 +135,9 @@ class RedisFlowStorage:
 
             # Scan all flow keys
             for key in self.redis.scan_iter(match=pattern, count=100):
-                flow = self.get_flow(key.decode() if isinstance(key, bytes) else key.replace(self.KEY_PREFIX, ""))
+                flow = self.get_flow(
+                    key.decode() if isinstance(key, bytes) else key.replace(self.KEY_PREFIX, "")
+                )
                 if flow and flow.user_id == user_id and flow.server_id == server_id:
                     flows.append(flow)
 
@@ -148,7 +150,7 @@ class RedisFlowStorage:
     def cleanup_expired(self, ttl: int = DEFAULT_TTL) -> int:
         """
         Clean up expired flows
-        
+
         """
         try:
             pattern = f"{self.KEY_PREFIX}*"

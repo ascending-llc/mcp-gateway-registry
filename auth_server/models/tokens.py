@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 class TokenValidationResponse(BaseModel):
     """Response model for token validation"""
+
     valid: bool
     scopes: list[str] = []
     error: str | None = None
@@ -19,6 +20,7 @@ class TokenValidationResponse(BaseModel):
 
 class GenerateTokenRequest(BaseModel):
     """Request model for token generation"""
+
     user_context: dict[str, Any]
     requested_scopes: list[str] = []
     expires_in_hours: int = 8  # Will be updated from server DEFAULT_TOKEN_LIFETIME_HOURS
@@ -27,6 +29,7 @@ class GenerateTokenRequest(BaseModel):
 
 class GenerateTokenResponse(BaseModel):
     """Response model for token generation"""
+
     access_token: str
     refresh_token: str | None = None
     token_type: str = "Bearer"

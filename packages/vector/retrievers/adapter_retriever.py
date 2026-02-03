@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class AdapterRetriever(BaseRetriever):
     """
     Custom retriever that uses VectorStoreAdapter with configurable search types.
-    
+
     Supports multiple search strategies: NEAR_TEXT, BM25, HYBRID.
     """
 
@@ -27,41 +27,31 @@ class AdapterRetriever(BaseRetriever):
     class Config:
         arbitrary_types_allowed = True  # Allow VectorStoreAdapter type
 
-    def _get_relevant_documents(self,
-                                query: str,
-                                *,
-                                run_manager: CallbackManagerForRetrieverRun
-                                ) -> list[Document]:
+    def _get_relevant_documents(
+        self, query: str, *, run_manager: CallbackManagerForRetrieverRun
+    ) -> list[Document]:
         try:
             if self.search_type == SearchType.NEAR_TEXT:
                 return self.adapter.near_text(
-                    query=query,
-                    collection_name=self.collection_name,
-                    **self.search_kwargs
+                    query=query, collection_name=self.collection_name, **self.search_kwargs
                 )
             if self.search_type == SearchType.BM25:
                 return self.adapter.bm25_search(
-                    query=query,
-                    collection_name=self.collection_name,
-                    **self.search_kwargs
+                    query=query, collection_name=self.collection_name, **self.search_kwargs
                 )
             if self.search_type == SearchType.HYBRID:
                 return self.adapter.hybrid_search(
-                    query=query,
-                    collection_name=self.collection_name,
-                    **self.search_kwargs
+                    query=query, collection_name=self.collection_name, **self.search_kwargs
                 )
             if self.search_type == SearchType.SIMILARITY_STORE:
                 return self.adapter.similarity_search(
-                    query=query,
-                    collection_name=self.collection_name,
-                    **self.search_kwargs
+                    query=query, collection_name=self.collection_name, **self.search_kwargs
                 )
             return self.adapter.search(
                 query=query,
                 search_type=self.search_type,
                 collection_name=self.collection_name,
-                **self.search_kwargs
+                **self.search_kwargs,
             )
         except Exception as e:
             logger.error(f"Retrieval failed: {e}")

@@ -1,6 +1,7 @@
 """
 Unit tests for server service.
 """
+
 import json
 from pathlib import Path
 from typing import Any
@@ -29,11 +30,14 @@ class TestServerService:
         assert server_service._path_to_filename("/simple") == "simple.json"
         assert server_service._path_to_filename("/test.json") == "test.json"
 
-    def test_register_server_success(self, server_service: ServerServiceV1, sample_server: dict[str, Any]):
+    def test_register_server_success(
+        self, server_service: ServerServiceV1, sample_server: dict[str, Any]
+    ):
         """Test successful server registration."""
-        with patch.object(server_service, "save_server_to_file", return_value=True), \
-             patch.object(server_service, "save_service_state"):
-
+        with (
+            patch.object(server_service, "save_server_to_file", return_value=True),
+            patch.object(server_service, "save_service_state"),
+        ):
             result = server_service.register_server(sample_server)
 
             assert result is True
@@ -41,29 +45,39 @@ class TestServerService:
             assert server_service.registered_servers[sample_server["path"]] == sample_server
             assert server_service.service_state[sample_server["path"]] is False
 
-    def test_register_server_duplicate_path(self, server_service: ServerServiceV1, sample_server: dict[str, Any]):
+    def test_register_server_duplicate_path(
+        self, server_service: ServerServiceV1, sample_server: dict[str, Any]
+    ):
         """Test registering server with duplicate path fails."""
         # First registration
-        with patch.object(server_service, "save_server_to_file", return_value=True), \
-             patch.object(server_service, "save_service_state"):
+        with (
+            patch.object(server_service, "save_server_to_file", return_value=True),
+            patch.object(server_service, "save_service_state"),
+        ):
             server_service.register_server(sample_server)
 
         # Second registration with same path should fail
         result = server_service.register_server(sample_server)
         assert result is False
 
-    def test_register_server_save_failure(self, server_service: ServerServiceV1, sample_server: dict[str, Any]):
+    def test_register_server_save_failure(
+        self, server_service: ServerServiceV1, sample_server: dict[str, Any]
+    ):
         """Test server registration fails when file save fails."""
         with patch.object(server_service, "save_server_to_file", return_value=False):
             result = server_service.register_server(sample_server)
             assert result is False
             assert sample_server["path"] not in server_service.registered_servers
 
-    def test_update_server_success(self, server_service: ServerServiceV1, sample_server: dict[str, Any]):
+    def test_update_server_success(
+        self, server_service: ServerServiceV1, sample_server: dict[str, Any]
+    ):
         """Test successful server update."""
         # First register the server
-        with patch.object(server_service, "save_server_to_file", return_value=True), \
-             patch.object(server_service, "save_service_state"):
+        with (
+            patch.object(server_service, "save_server_to_file", return_value=True),
+            patch.object(server_service, "save_service_state"),
+        ):
             server_service.register_server(sample_server)
 
         # Update the server
@@ -74,18 +88,27 @@ class TestServerService:
             result = server_service.update_server(sample_server["path"], updated_server)
 
             assert result is True
-            assert server_service.registered_servers[sample_server["path"]]["server_name"] == "Updated Name"
+            assert (
+                server_service.registered_servers[sample_server["path"]]["server_name"]
+                == "Updated Name"
+            )
 
-    def test_update_server_not_found(self, server_service: ServerServiceV1, sample_server: dict[str, Any]):
+    def test_update_server_not_found(
+        self, server_service: ServerServiceV1, sample_server: dict[str, Any]
+    ):
         """Test updating non-existent server fails."""
         result = server_service.update_server("/nonexistent", sample_server)
         assert result is False
 
-    def test_update_server_save_failure(self, server_service: ServerServiceV1, sample_server: dict[str, Any]):
+    def test_update_server_save_failure(
+        self, server_service: ServerServiceV1, sample_server: dict[str, Any]
+    ):
         """Test server update fails when file save fails."""
         # First register the server
-        with patch.object(server_service, "save_server_to_file", return_value=True), \
-             patch.object(server_service, "save_service_state"):
+        with (
+            patch.object(server_service, "save_server_to_file", return_value=True),
+            patch.object(server_service, "save_service_state"),
+        ):
             server_service.register_server(sample_server)
 
         # Try to update with save failure
@@ -93,11 +116,15 @@ class TestServerService:
             result = server_service.update_server(sample_server["path"], sample_server)
             assert result is False
 
-    def test_toggle_service_success(self, server_service: ServerServiceV1, sample_server: dict[str, Any]):
+    def test_toggle_service_success(
+        self, server_service: ServerServiceV1, sample_server: dict[str, Any]
+    ):
         """Test successful service toggle."""
         # Register server first
-        with patch.object(server_service, "save_server_to_file", return_value=True), \
-             patch.object(server_service, "save_service_state"):
+        with (
+            patch.object(server_service, "save_server_to_file", return_value=True),
+            patch.object(server_service, "save_service_state"),
+        ):
             server_service.register_server(sample_server)
 
         # Toggle to enabled
@@ -123,35 +150,45 @@ class TestServerService:
         assert server_service.get_server_info("/nonexistent") is None
 
         # Register server and test retrieval
-        with patch.object(server_service, "save_server_to_file", return_value=True), \
-             patch.object(server_service, "save_service_state"):
+        with (
+            patch.object(server_service, "save_server_to_file", return_value=True),
+            patch.object(server_service, "save_service_state"),
+        ):
             server_service.register_server(sample_server)
 
         result = server_service.get_server_info(sample_server["path"])
         assert result == sample_server
 
-    def test_get_all_servers(self, server_service: ServerServiceV1, sample_servers: dict[str, dict[str, Any]]):
+    def test_get_all_servers(
+        self, server_service: ServerServiceV1, sample_servers: dict[str, dict[str, Any]]
+    ):
         """Test getting all servers."""
         # Empty case
         assert server_service.get_all_servers() == {}
 
         # Add servers
-        with patch.object(server_service, "save_server_to_file", return_value=True), \
-             patch.object(server_service, "save_service_state"):
+        with (
+            patch.object(server_service, "save_server_to_file", return_value=True),
+            patch.object(server_service, "save_service_state"),
+        ):
             for server in sample_servers.values():
                 server_service.register_server(server)
 
         result = server_service.get_all_servers()
         assert len(result) == len(sample_servers)
 
-    def test_is_service_enabled(self, server_service: ServerServiceV1, sample_server: dict[str, Any]):
+    def test_is_service_enabled(
+        self, server_service: ServerServiceV1, sample_server: dict[str, Any]
+    ):
         """Test checking if service is enabled."""
         # Non-existent service
         assert server_service.is_service_enabled("/nonexistent") is False
 
         # Register server (defaults to disabled)
-        with patch.object(server_service, "save_server_to_file", return_value=True), \
-             patch.object(server_service, "save_service_state"):
+        with (
+            patch.object(server_service, "save_server_to_file", return_value=True),
+            patch.object(server_service, "save_service_state"),
+        ):
             server_service.register_server(sample_server)
 
         assert server_service.is_service_enabled(sample_server["path"]) is False
@@ -161,14 +198,18 @@ class TestServerService:
             server_service.toggle_service(sample_server["path"], True)
             assert server_service.is_service_enabled(sample_server["path"]) is True
 
-    def test_get_enabled_services(self, server_service: ServerServiceV1, sample_servers: dict[str, dict[str, Any]]):
+    def test_get_enabled_services(
+        self, server_service: ServerServiceV1, sample_servers: dict[str, dict[str, Any]]
+    ):
         """Test getting enabled services."""
         # Empty case
         assert server_service.get_enabled_services() == []
 
         # Register servers
-        with patch.object(server_service, "save_server_to_file", return_value=True), \
-             patch.object(server_service, "save_service_state"):
+        with (
+            patch.object(server_service, "save_server_to_file", return_value=True),
+            patch.object(server_service, "save_service_state"),
+        ):
             for server in sample_servers.values():
                 server_service.register_server(server)
 
@@ -186,7 +227,13 @@ class TestServerService:
 
     @patch("builtins.open", new_callable=mock_open)
     @patch("json.dump")
-    def test_save_server_to_file(self, mock_json_dump, mock_file, server_service: ServerServiceV1, sample_server: dict[str, Any]):
+    def test_save_server_to_file(
+        self,
+        mock_json_dump,
+        mock_file,
+        server_service: ServerServiceV1,
+        sample_server: dict[str, Any],
+    ):
         """Test saving server to file."""
         result = server_service.save_server_to_file(sample_server)
 
@@ -195,7 +242,9 @@ class TestServerService:
         mock_json_dump.assert_called_once_with(sample_server, mock_file.return_value, indent=2)
 
     @patch("builtins.open", side_effect=OSError("File error"))
-    def test_save_server_to_file_failure(self, mock_file, server_service: ServerServiceV1, sample_server: dict[str, Any]):
+    def test_save_server_to_file_failure(
+        self, mock_file, server_service: ServerServiceV1, sample_server: dict[str, Any]
+    ):
         """Test server file save failure."""
         result = server_service.save_server_to_file(sample_server)
         assert result is False
@@ -208,7 +257,9 @@ class TestServerService:
         server_service.save_service_state()
 
         mock_file.assert_called_once()
-        mock_json_dump.assert_called_once_with(server_service.service_state, mock_file.return_value, indent=2)
+        mock_json_dump.assert_called_once_with(
+            server_service.service_state, mock_file.return_value, indent=2
+        )
 
     @patch("builtins.open", side_effect=OSError("File error"))
     def test_save_service_state_failure(self, mock_file, server_service: ServerServiceV1):
@@ -230,12 +281,17 @@ class TestServerService:
 
     @patch("builtins.open", new_callable=mock_open, read_data='{"test": true, "test2": false}')
     @patch("json.load")
-    def test_load_service_state_with_file(self, mock_json_load, mock_file, server_service: ServerServiceV1):
+    def test_load_service_state_with_file(
+        self, mock_json_load, mock_file, server_service: ServerServiceV1
+    ):
         """Test loading service state from existing file."""
         mock_json_load.return_value = {"/test": True, "/test2": False}
 
         # Set up registered servers
-        server_service.registered_servers = {"/test": {"server_name": "Test"}, "/test2": {"server_name": "Test2"}}
+        server_service.registered_servers = {
+            "/test": {"server_name": "Test"},
+            "/test2": {"server_name": "Test2"},
+        }
 
         with patch("registry.services.server_service.settings") as mock_settings:
             mock_settings.service_state_file.exists.return_value = True
@@ -257,7 +313,9 @@ class TestServerService:
 
     @patch("json.load", side_effect=json.JSONDecodeError("Bad JSON", "", 0))
     @patch("builtins.open", new_callable=mock_open)
-    def test_load_service_state_json_error(self, mock_file, mock_json_load, server_service: ServerServiceV1):
+    def test_load_service_state_json_error(
+        self, mock_file, mock_json_load, server_service: ServerServiceV1
+    ):
         """Test loading service state with JSON decode error."""
         server_service.registered_servers = {"/test": {"server_name": "Test"}}
 
@@ -281,7 +339,9 @@ class TestServerService:
 
             assert server_service.registered_servers == {}
 
-    def test_load_servers_and_state_with_servers(self, server_service: ServerServiceV1, sample_server: dict[str, Any]):
+    def test_load_servers_and_state_with_servers(
+        self, server_service: ServerServiceV1, sample_server: dict[str, Any]
+    ):
         """Test loading servers from files."""
         test_fixtures_dir = Path(__file__).parent.parent.parent / "fixtures" / "servers"
 
@@ -314,9 +374,10 @@ class TestServerService:
             mock_settings.servers_dir = mock_servers_dir
             mock_settings.state_file_path.name = "state.json"
 
-            with patch("builtins.open", side_effect=OSError("File error")), \
-                 patch.object(server_service, "_load_service_state"):
-
+            with (
+                patch("builtins.open", side_effect=OSError("File error")),
+                patch.object(server_service, "_load_service_state"),
+            ):
                 server_service.load_servers_and_state()
 
                 # Should continue loading other files and not crash
@@ -336,10 +397,11 @@ class TestServerService:
             mock_settings.servers_dir = mock_servers_dir
             mock_settings.state_file_path.name = "state.json"
 
-            with patch("builtins.open", new_callable=mock_open), \
-                 patch("json.load", side_effect=json.JSONDecodeError("Bad JSON", "", 0)), \
-                 patch.object(server_service, "_load_service_state"):
-
+            with (
+                patch("builtins.open", new_callable=mock_open),
+                patch("json.load", side_effect=json.JSONDecodeError("Bad JSON", "", 0)),
+                patch.object(server_service, "_load_service_state"),
+            ):
                 server_service.load_servers_and_state()
 
                 # Should continue and not crash
@@ -359,10 +421,11 @@ class TestServerService:
             mock_settings.servers_dir = mock_servers_dir
             mock_settings.state_file_path.name = "state.json"
 
-            with patch("builtins.open", new_callable=mock_open), \
-                 patch("json.load") as mock_json_load, \
-                 patch.object(server_service, "_load_service_state"):
-
+            with (
+                patch("builtins.open", new_callable=mock_open),
+                patch("json.load") as mock_json_load,
+                patch.object(server_service, "_load_service_state"),
+            ):
                 mock_json_load.return_value = {"server_name": "No Path Server"}
 
                 server_service.load_servers_and_state()
@@ -393,14 +456,15 @@ class TestBuildCompleteHeaders:
     def mock_oauth_server(self):
         """Create mock OAuth server."""
         from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+
         server = Mock(spec=MCPServerDocument)
         server.serverName = "oauth-server"
         server.config = {
             "requiresOAuth": True,
             "oauth": {
                 "authorizationUrl": "https://oauth.example.com/authorize",
-                "tokenUrl": "https://oauth.example.com/token"
-            }
+                "tokenUrl": "https://oauth.example.com/token",
+            },
         }
         return server
 
@@ -408,41 +472,34 @@ class TestBuildCompleteHeaders:
     def mock_apikey_server(self):
         """Create mock API key server."""
         from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+
         server = Mock(spec=MCPServerDocument)
         server.serverName = "apikey-server"
-        server.config = {
-            "apiKey": {
-                "key": "test-api-key-123",
-                "authorization_type": "bearer"
-            }
-        }
+        server.config = {"apiKey": {"key": "test-api-key-123", "authorization_type": "bearer"}}
         return server
 
     @pytest.fixture
     def mock_basic_auth_server(self):
         """Create mock Basic auth server."""
         from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+
         server = Mock(spec=MCPServerDocument)
         server.serverName = "basic-auth-server"
-        server.config = {
-            "apiKey": {
-                "key": "username:password",
-                "authorization_type": "basic"
-            }
-        }
+        server.config = {"apiKey": {"key": "username:password", "authorization_type": "basic"}}
         return server
 
     @pytest.fixture
     def mock_custom_auth_server(self):
         """Create mock custom auth server."""
         from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+
         server = Mock(spec=MCPServerDocument)
         server.serverName = "custom-auth-server"
         server.config = {
             "apiKey": {
                 "key": "custom-token-xyz",
                 "authorization_type": "custom",
-                "custom_header": "X-API-Key"
+                "custom_header": "X-API-Key",
             }
         }
         return server
@@ -451,14 +508,10 @@ class TestBuildCompleteHeaders:
     def mock_custom_headers_server(self):
         """Create mock server with custom headers."""
         from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+
         server = Mock(spec=MCPServerDocument)
         server.serverName = "custom-headers-server"
-        server.config = {
-            "headers": [
-                {"X-Custom-Header": "value1"},
-                {"X-Another-Header": "value2"}
-            ]
-        }
+        server.config = {"headers": [{"X-Custom-Header": "value1"}, {"X-Another-Header": "value2"}]}
         return server
 
     @pytest.mark.asyncio
@@ -468,9 +521,10 @@ class TestBuildCompleteHeaders:
 
         from registry.services.server_service import _build_complete_headers_for_server
 
-        with patch("registry.services.oauth.oauth_service.get_oauth_service") as mock_oauth_svc, \
-             patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
-
+        with (
+            patch("registry.services.oauth.oauth_service.get_oauth_service") as mock_oauth_svc,
+            patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt,
+        ):
             mock_decrypt.return_value = mock_oauth_server.config
 
             # Mock OAuth service
@@ -486,8 +540,7 @@ class TestBuildCompleteHeaders:
             assert headers["Content-Type"] == "application/json"
             assert headers["Accept"] == "application/json"
             oauth_service.get_valid_access_token.assert_called_once_with(
-                user_id="user-123",
-                server=mock_oauth_server
+                user_id="user-123", server=mock_oauth_server
             )
 
     @pytest.mark.asyncio
@@ -513,9 +566,10 @@ class TestBuildCompleteHeaders:
         from registry.schemas.errors import OAuthReAuthRequiredError
         from registry.services.server_service import _build_complete_headers_for_server
 
-        with patch("registry.services.oauth.oauth_service.get_oauth_service") as mock_oauth_svc, \
-             patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
-
+        with (
+            patch("registry.services.oauth.oauth_service.get_oauth_service") as mock_oauth_svc,
+            patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt,
+        ):
             mock_decrypt.return_value = mock_oauth_server.config
 
             # Mock OAuth service returns auth_url
@@ -540,9 +594,10 @@ class TestBuildCompleteHeaders:
         from registry.schemas.errors import OAuthTokenError
         from registry.services.server_service import _build_complete_headers_for_server
 
-        with patch("registry.services.oauth.oauth_service.get_oauth_service") as mock_oauth_svc, \
-             patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
-
+        with (
+            patch("registry.services.oauth.oauth_service.get_oauth_service") as mock_oauth_svc,
+            patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt,
+        ):
             mock_decrypt.return_value = mock_oauth_server.config
 
             # Mock OAuth service returns error
@@ -566,16 +621,15 @@ class TestBuildCompleteHeaders:
         from registry.schemas.errors import OAuthTokenError
         from registry.services.server_service import _build_complete_headers_for_server
 
-        with patch("registry.services.oauth.oauth_service.get_oauth_service") as mock_oauth_svc, \
-             patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
-
+        with (
+            patch("registry.services.oauth.oauth_service.get_oauth_service") as mock_oauth_svc,
+            patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt,
+        ):
             mock_decrypt.return_value = mock_oauth_server.config
 
             # Mock OAuth service returns None for all
             oauth_service = AsyncMock()
-            oauth_service.get_valid_access_token = AsyncMock(
-                return_value=(None, None, None)
-            )
+            oauth_service.get_valid_access_token = AsyncMock(return_value=(None, None, None))
             mock_oauth_svc.return_value = oauth_service
 
             with pytest.raises(OAuthTokenError) as exc_info:
@@ -646,13 +700,12 @@ class TestBuildCompleteHeaders:
         from registry.services.server_service import _build_complete_headers_for_server
 
         # Add custom headers to OAuth config
-        mock_oauth_server.config["headers"] = [
-            {"X-Custom-Header": "custom-value"}
-        ]
+        mock_oauth_server.config["headers"] = [{"X-Custom-Header": "custom-value"}]
 
-        with patch("registry.services.oauth.oauth_service.get_oauth_service") as mock_oauth_svc, \
-             patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
-
+        with (
+            patch("registry.services.oauth.oauth_service.get_oauth_service") as mock_oauth_svc,
+            patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt,
+        ):
             mock_decrypt.return_value = mock_oauth_server.config
 
             oauth_service = AsyncMock()
@@ -702,16 +755,15 @@ class TestBuildCompleteHeaders:
             "requiresOAuth": True,
             "oauth": {
                 "authorizationUrl": "https://oauth.example.com/authorize",
-                "tokenUrl": "https://oauth.example.com/token"
+                "tokenUrl": "https://oauth.example.com/token",
             },
-            "headers": [
-                {"Authorization": "Bearer custom-should-be-overridden"}
-            ]
+            "headers": [{"Authorization": "Bearer custom-should-be-overridden"}],
         }
 
-        with patch("registry.services.oauth.oauth_service.get_oauth_service") as mock_oauth_svc, \
-             patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
-
+        with (
+            patch("registry.services.oauth.oauth_service.get_oauth_service") as mock_oauth_svc,
+            patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt,
+        ):
             mock_decrypt.return_value = server.config
 
             oauth_service = AsyncMock()
@@ -734,13 +786,8 @@ class TestBuildCompleteHeaders:
         server = Mock(spec=MCPServerDocument)
         server.serverName = "apikey-priority-server"
         server.config = {
-            "apiKey": {
-                "key": "apikey-token-wins",
-                "authorization_type": "bearer"
-            },
-            "headers": [
-                {"Authorization": "Bearer custom-should-be-overridden"}
-            ]
+            "apiKey": {"key": "apikey-token-wins", "authorization_type": "bearer"},
+            "headers": [{"Authorization": "Bearer custom-should-be-overridden"}],
         }
 
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
@@ -763,19 +810,18 @@ class TestBuildCompleteHeaders:
         server.serverName = "oauth-custom-order"
         server.config = {
             "requiresOAuth": True,
-            "oauth": {
-                "authorizationUrl": "https://oauth.example.com/authorize"
-            },
+            "oauth": {"authorizationUrl": "https://oauth.example.com/authorize"},
             "headers": [
                 {"X-Custom-1": "value1"},
                 {"X-Custom-2": "value2"},
-                {"Content-Type": "application/custom"}  # Will override base header
-            ]
+                {"Content-Type": "application/custom"},  # Will override base header
+            ],
         }
 
-        with patch("registry.services.oauth.oauth_service.get_oauth_service") as mock_oauth_svc, \
-             patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
-
+        with (
+            patch("registry.services.oauth.oauth_service.get_oauth_service") as mock_oauth_svc,
+            patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt,
+        ):
             mock_decrypt.return_value = server.config
 
             oauth_service = AsyncMock()
@@ -805,14 +851,8 @@ class TestBuildCompleteHeaders:
         server = Mock(spec=MCPServerDocument)
         server.serverName = "apikey-custom-order"
         server.config = {
-            "apiKey": {
-                "key": "test-key",
-                "authorization_type": "bearer"
-            },
-            "headers": [
-                {"X-App-Id": "app-123"},
-                {"Authorization": "Bearer should-be-overridden"}
-            ]
+            "apiKey": {"key": "test-key", "authorization_type": "bearer"},
+            "headers": [{"X-App-Id": "app-123"}, {"Authorization": "Bearer should-be-overridden"}],
         }
 
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
@@ -837,7 +877,7 @@ class TestBuildCompleteHeaders:
         server.config = {
             "headers": [
                 {"Accept": ["application/json", "application/xml"]},
-                {"X-Custom-List": ["value1", "value2", "value3"]}
+                {"X-Custom-List": ["value1", "value2", "value3"]},
             ]
         }
 
@@ -858,12 +898,7 @@ class TestBuildCompleteHeaders:
 
         server = Mock(spec=MCPServerDocument)
         server.serverName = "no-auth-custom-headers"
-        server.config = {
-            "headers": [
-                {"X-API-Version": "v2"},
-                {"X-Request-ID": "req-123"}
-            ]
-        }
+        server.config = {"headers": [{"X-API-Version": "v2"}, {"X-Request-ID": "req-123"}]}
 
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
             mock_decrypt.return_value = server.config
@@ -894,12 +929,7 @@ class TestBuildCompleteHeaders:
 
         server = Mock(spec=MCPServerDocument)
         server.serverName = "basic-auth-encoded"
-        server.config = {
-            "apiKey": {
-                "key": encoded_creds,
-                "authorization_type": "basic"
-            }
-        }
+        server.config = {"apiKey": {"key": encoded_creds, "authorization_type": "basic"}}
 
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
             mock_decrypt.return_value = server.config
@@ -919,12 +949,7 @@ class TestBuildCompleteHeaders:
 
         server = Mock(spec=MCPServerDocument)
         server.serverName = "basic-auth-plain"
-        server.config = {
-            "apiKey": {
-                "key": "username:password",
-                "authorization_type": "basic"
-            }
-        }
+        server.config = {"apiKey": {"key": "username:password", "authorization_type": "basic"}}
 
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
             mock_decrypt.return_value = server.config
@@ -946,7 +971,7 @@ class TestBuildCompleteHeaders:
         server.config = {
             "apiKey": {
                 "key": "custom-token",
-                "authorization_type": "custom"
+                "authorization_type": "custom",
                 # Missing "custom_header" field
             }
         }
@@ -969,12 +994,7 @@ class TestBuildCompleteHeaders:
 
         server = Mock(spec=MCPServerDocument)
         server.serverName = "unknown-auth-type"
-        server.config = {
-            "apiKey": {
-                "key": "test-key",
-                "authorization_type": "unknown_type"
-            }
-        }
+        server.config = {"apiKey": {"key": "test-key", "authorization_type": "unknown_type"}}
 
         with patch("registry.utils.crypto_utils.decrypt_auth_fields") as mock_decrypt:
             mock_decrypt.return_value = server.config
@@ -983,7 +1003,6 @@ class TestBuildCompleteHeaders:
 
             # Should default to Bearer
             assert headers["Authorization"] == "Bearer test-key"
-
 
 
 @pytest.mark.unit
@@ -1006,7 +1025,7 @@ class TestValidateAndMergeOAuthMetadata:
         oauth_config = {
             "authorization_url": "https://oauth.example.com/authorize",
             "token_url": "https://oauth.example.com/token",
-            "client_id": "client-123"
+            "client_id": "client-123",
         }
 
         result = _validate_and_merge_oauth_metadata(oauth_config, None)
@@ -1022,7 +1041,7 @@ class TestValidateAndMergeOAuthMetadata:
         oauth_metadata = {
             "authorization_servers": ["https://accounts.google.com"],
             "token_endpoint": "https://oauth2.googleapis.com/token",
-            "issuer": "https://accounts.google.com"
+            "issuer": "https://accounts.google.com",
         }
 
         result = _validate_and_merge_oauth_metadata(None, oauth_metadata)
@@ -1040,7 +1059,7 @@ class TestValidateAndMergeOAuthMetadata:
             "authorization_servers": ["http://localhost:3080/"],  # WRONG
             "token_endpoint": "http://localhost:3080/oauth/token",
             "issuer": "http://localhost:3080",
-            "scopes_supported": ["read", "write"]
+            "scopes_supported": ["read", "write"],
         }
 
         # Database config (admin-configured, authoritative)
@@ -1048,7 +1067,7 @@ class TestValidateAndMergeOAuthMetadata:
             "authorization_servers": ["https://accounts.google.com"],  # CORRECT
             "token_endpoint": "https://oauth2.googleapis.com/token",
             "client_id": "client-123",
-            "client_secret": "secret-xyz"
+            "client_secret": "secret-xyz",
         }
 
         result = _validate_and_merge_oauth_metadata(oauth_config, oauth_metadata)
@@ -1069,15 +1088,13 @@ class TestValidateAndMergeOAuthMetadata:
         """Test that all database config fields are preserved in merge."""
         from registry.services.server_service import _validate_and_merge_oauth_metadata
 
-        oauth_metadata = {
-            "issuer": "https://old-issuer.com"
-        }
+        oauth_metadata = {"issuer": "https://old-issuer.com"}
 
         oauth_config = {
             "authorization_url": "https://new.com/auth",
             "token_url": "https://new.com/token",
             "client_id": "new-client",
-            "scope": "openid email profile"
+            "scope": "openid email profile",
         }
 
         result = _validate_and_merge_oauth_metadata(oauth_config, oauth_metadata)
@@ -1097,13 +1114,11 @@ class TestValidateAndMergeOAuthMetadata:
 
         oauth_metadata = {
             "issuer": "https://issuer.com",
-            "authorization_servers": ["https://old.com"]
+            "authorization_servers": ["https://old.com"],
         }
         oauth_metadata_copy = oauth_metadata.copy()
 
-        oauth_config = {
-            "authorization_servers": ["https://new.com"]
-        }
+        oauth_config = {"authorization_servers": ["https://new.com"]}
         oauth_config_copy = oauth_config.copy()
 
         result = _validate_and_merge_oauth_metadata(oauth_config, oauth_metadata)

@@ -2,6 +2,7 @@
 Abstract base classes for connection management.
 Defines interfaces for connection lifecycle and state management.
 """
+
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -13,6 +14,7 @@ from registry.schemas.enums import ConnectionState
 @dataclass
 class Connection(ABC):
     """Basic connection interface"""
+
     server_id: str
     connection_state: ConnectionState
     last_activity: float = field(default_factory=time.time)
@@ -40,39 +42,31 @@ class ConnectionManager(ABC):
     """Connection Manager Abstract Interface"""
 
     @abstractmethod
-    async def get_connection(
-            self,
-            user_id: str,
-            server_id: str
-    ) -> Connection | None:
+    async def get_connection(self, user_id: str, server_id: str) -> Connection | None:
         pass
 
     @abstractmethod
     async def update_connection_state(
-            self,
-            user_id: str,
-            server_id: str,
-            state: ConnectionState,
-            details: dict[str, Any] | None = None
+        self,
+        user_id: str,
+        server_id: str,
+        state: ConnectionState,
+        details: dict[str, Any] | None = None,
     ) -> None:
         """update user connection state"""
 
     @abstractmethod
     async def create_user_connection(
-            self,
-            user_id: str,
-            server_id: str,
-            initial_state: ConnectionState = ConnectionState.CONNECTING,
-            details: dict[str, Any] | None = None
+        self,
+        user_id: str,
+        server_id: str,
+        initial_state: ConnectionState = ConnectionState.CONNECTING,
+        details: dict[str, Any] | None = None,
     ) -> Connection:
         """Create new user-level connection"""
 
     @abstractmethod
-    async def disconnect_user_connection(
-            self,
-            user_id: str,
-            server_id: str
-    ) -> bool:
+    async def disconnect_user_connection(self, user_id: str, server_id: str) -> bool:
         """Disconnect user connection"""
 
     @abstractmethod
@@ -83,6 +77,7 @@ class ConnectionManager(ABC):
 @dataclass
 class ConnectionStateContext:
     """Connection status context - used for status parsing"""
+
     user_id: str
     server_name: str
     server_id: str

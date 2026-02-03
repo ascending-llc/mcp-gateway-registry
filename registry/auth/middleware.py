@@ -59,28 +59,32 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         #     "/api/{versions}/mcp/{path:path}",
         #     "/api/search/{path:path}",
         # ])
-        self.public_paths_compiled = self._compile_patterns([
-            "/",
-            "/health",
-            "/docs",
-            "/openapi.json",
-            "/static/{path:path}",
-            "/redirect",
-            "/redirect/{provider}",
-            "/api/auth/providers",
-            "/api/auth/config",
-            "/api/auth/login",
-            f"/api/{settings.API_VERSION}/mcp/{{server_name}}/oauth/callback",  # OAuth callback is public
-            "/.well-known/{path:path}",  # OAuth discovery endpoints must be public
-        ])
+        self.public_paths_compiled = self._compile_patterns(
+            [
+                "/",
+                "/health",
+                "/docs",
+                "/openapi.json",
+                "/static/{path:path}",
+                "/redirect",
+                "/redirect/{provider}",
+                "/api/auth/providers",
+                "/api/auth/config",
+                "/api/auth/login",
+                f"/api/{settings.API_VERSION}/mcp/{{server_name}}/oauth/callback",  # OAuth callback is public
+                "/.well-known/{path:path}",  # OAuth discovery endpoints must be public
+            ]
+        )
 
         # =====================================================================
         # INTERNAL PATHS (Admin/Internal - Require Basic Auth)
         # =====================================================================
         # Define patterns for internal/admin endpoints that use Basic authentication.
-        self.internal_paths_compiled = self._compile_patterns([
-            "/api/internal/{path:path}",                   # Internal admin endpoints
-        ])
+        self.internal_paths_compiled = self._compile_patterns(
+            [
+                "/api/internal/{path:path}",  # Internal admin endpoints
+            ]
+        )
         logger.info(
             f"Auth middleware initialized with Starlette routing: "
             f"{len(self.public_paths_compiled)} public, "
@@ -109,14 +113,16 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.debug(f"Public path: {path}")
             return await call_next(request)
         logger.debug(f"Authenticated path: {path}")
-            # Continue to authentication logic below
+        # Continue to authentication logic below
 
         try:
             user_context = await self._authenticate(request)
             request.state.user = user_context
             request.state.is_authenticated = True
             request.state.auth_source = user_context.get("auth_source", "unknown")
-            logger.info(f"User {user_context.get('username')} authenticated via {user_context.get('auth_source')}")
+            logger.info(
+                f"User {user_context.get('username')} authenticated via {user_context.get('auth_source')}"
+            )
             return await call_next(request)
         except AuthenticationError as e:
             logger.warning(f"Auth failed for {path}: {e}")
@@ -130,8 +136,12 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             if server_name:
                 # For MCP proxy paths, RFC 9728 (OAuth 2.0 Protected Resource Metadata) - the official specification
                 registry_url = settings.registry_client_url.rstrip("/")
-                oauth_discovery = f"{registry_url}/.well-known/oauth-protected-resource/proxy/{server_name}"
-                headers["WWW-Authenticate"] = f'Bearer realm="mcp-registry", resource_metadata="{oauth_discovery}"'
+                oauth_discovery = (
+                    f"{registry_url}/.well-known/oauth-protected-resource/proxy/{server_name}"
+                )
+                headers["WWW-Authenticate"] = (
+                    f'Bearer realm="mcp-registry", resource_metadata="{oauth_discovery}"'
+                )
             else:
                 # For other authenticated paths, use general OAuth discovery
                 headers["WWW-Authenticate"] = 'Bearer realm="mcp-registry"'
@@ -155,7 +165,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
     async def _authenticate(self, request: Request) -> dict[str, Any]:
         """
         Unified authentication logic (simple and efficient)
-        
+
         1. Internal paths (/api/internal/*) → Basic Auth
         2. Authenticated paths (including /api/auth/me, /api/servers/*, /proxy/*, /api/mcp/*) → JWT or Session Auth
         3. Other paths → Session Auth
@@ -208,10 +218,14 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             return self._build_user_context(
                 username=username,
                 groups=["mcp-registry-admin"],
-                scopes=["mcp-registry-admin", "mcp-servers-unrestricted/read", "mcp-servers-unrestricted/execute"],
+                scopes=[
+                    "mcp-registry-admin",
+                    "mcp-servers-unrestricted/read",
+                    "mcp-servers-unrestricted/execute",
+                ],
                 auth_method="basic",
                 provider="basic",
-                auth_source="basic_auth"
+                auth_source="basic_auth",
             )
 
         except Exception as e:
@@ -241,7 +255,9 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
                 # Check if this is our self-signed token
                 if kid and kid != settings.JWT_SELF_SIGNED_KID:
-                    logger.debug(f"JWT token has wrong kid: {kid}, expected: {settings.JWT_SELF_SIGNED_KID}")
+                    logger.debug(
+                        f"JWT token has wrong kid: {kid}, expected: {settings.JWT_SELF_SIGNED_KID}"
+                    )
                     return None
             except Exception as e:
                 logger.debug(f"Failed to decode JWT header: {e}")
@@ -253,34 +269,34 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 # because the audience is now the resource URL (RFC 8707 Resource Indicators)
                 # which varies per endpoint (/proxy/mcpgw, /proxy/server2, etc.)
                 # Issuer validation provides sufficient security for self-signed tokens
-                is_self_signed = (kid == settings.JWT_SELF_SIGNED_KID)
+                is_self_signed = kid == settings.JWT_SELF_SIGNED_KID
 
                 decode_options = {
                     "verify_exp": True,
                     "verify_iat": True,
                     "verify_iss": True,
-                    "verify_aud": not is_self_signed  # Skip aud check for self-signed tokens
+                    "verify_aud": not is_self_signed,  # Skip aud check for self-signed tokens
                 }
 
                 decode_kwargs = {
                     "algorithms": ["HS256"],
                     "issuer": settings.JWT_ISSUER,
                     "options": decode_options,
-                    "leeway": 30  # 30 second leeway for clock skew
+                    "leeway": 30,  # 30 second leeway for clock skew
                 }
 
                 # Only validate audience for provider tokens (not self-signed)
                 if not is_self_signed:
                     decode_kwargs["audience"] = settings.JWT_AUDIENCE
                 else:
-                    logger.info("Skipping audience validation for self-signed token (RFC 8707 Resource Indicators)")
+                    logger.info(
+                        "Skipping audience validation for self-signed token (RFC 8707 Resource Indicators)"
+                    )
 
-                claims = jwt.decode(
-                    access_token,
-                    settings.secret_key,
-                    **decode_kwargs
+                claims = jwt.decode(access_token, settings.secret_key, **decode_kwargs)
+                logger.info(
+                    f"JWT claims validated: sub={claims.get('sub')}, aud={claims.get('aud')}, scope={claims.get('scope')}"
                 )
-                logger.info(f"JWT claims validated: sub={claims.get('sub')}, aud={claims.get('aud')}, scope={claims.get('scope')}")
             except jwt.ExpiredSignatureError:
                 logger.debug("JWT token has expired")
                 return None
@@ -314,7 +330,9 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             # Log token validation success with additional details
             token_type = claims.get("token_type", "unknown")
             description = claims.get("description", "")
-            logger.info(f"JWT token validated for user: {username}, type: {token_type}, scopes: {scopes}")
+            logger.info(
+                f"JWT token validated for user: {username}, type: {token_type}, scopes: {scopes}"
+            )
             if description:
                 logger.debug(f"Token description: {description}")
             user_id = claims.get("user_id")
@@ -327,7 +345,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 scopes=scopes,
                 auth_method="jwt",
                 provider="jwt",
-                auth_source="jwt_auth"
+                auth_source="jwt_auth",
             )
         except Exception as e:
             logger.debug(f"JWT auth failed: {e}")
@@ -348,12 +366,16 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             auth_method = session_data.get("auth_method", "traditional")
             user_id = session_data.get("user_id")
 
-            logger.debug(f"Enhanced auth debug for {username} and user id {user_id}: groups={groups}, auth_method={auth_method}")
+            logger.debug(
+                f"Enhanced auth debug for {username} and user id {user_id}: groups={groups}, auth_method={auth_method}"
+            )
 
             # Process permissions according to enhanced_auth logic
             if auth_method == "oauth2":
                 scopes = map_cognito_groups_to_scopes(groups)
-                logger.info(f"OAuth2 user {username} with groups {groups} mapped to scopes: {scopes}")
+                logger.info(
+                    f"OAuth2 user {username} with groups {groups} mapped to scopes: {scopes}"
+                )
                 if not groups:
                     logger.warning(f"OAuth2 user {username} has no groups!")
             else:
@@ -362,8 +384,14 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                     groups = ["mcp-registry-admin"]
                 scopes = map_cognito_groups_to_scopes(groups)
                 if not scopes:
-                    scopes = ["mcp-registry-admin", "mcp-servers-unrestricted/read", "mcp-servers-unrestricted/execute"]
-                logger.info(f"Traditional user {username} with groups {groups} mapped to scopes: {scopes}")
+                    scopes = [
+                        "mcp-registry-admin",
+                        "mcp-servers-unrestricted/read",
+                        "mcp-servers-unrestricted/execute",
+                    ]
+                logger.info(
+                    f"Traditional user {username} with groups {groups} mapped to scopes: {scopes}"
+                )
             return self._build_user_context(
                 username=username,
                 groups=groups,
@@ -371,7 +399,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 auth_method=auth_method,
                 provider=session_data.get("provider", "local"),
                 auth_source="session_auth",
-                user_id=user_id
+                user_id=user_id,
             )
 
         except Exception as e:
@@ -386,25 +414,35 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             # Sets the default value for traditionally authenticated users (from the original get_user_session_data).
             if data.get("auth_method") != "oauth2":
                 data.setdefault("groups", ["mcp-registry-admin"])
-                data.setdefault("scopes", ["mcp-servers-unrestricted/read",
-                                           "mcp-servers-unrestricted/execute"])
+                data.setdefault(
+                    "scopes", ["mcp-servers-unrestricted/read", "mcp-servers-unrestricted/execute"]
+                )
             return data
 
         except SignatureExpired as e:
             logger.warning(f"Session cookie expired: {e}")
             return None
         except BadSignature as e:
-            logger.warning(f"Session cookie has invalid signature (likely from different server): {e}")
+            logger.warning(
+                f"Session cookie has invalid signature (likely from different server): {e}"
+            )
             return None
         except Exception as e:
             logger.warning(f"Session cookie parse error: {e}")
             return None
 
-    def _build_user_context(self, username: str, groups: list, scopes: list,
-                            auth_method: str, provider: str,
-                            auth_source: str = None, user_id: str = None) -> dict[str, Any]:
+    def _build_user_context(
+        self,
+        username: str,
+        groups: list,
+        scopes: list,
+        auth_method: str,
+        provider: str,
+        auth_source: str = None,
+        user_id: str = None,
+    ) -> dict[str, Any]:
         """
-            Construct the complete user context (from the original enhanced_auth logic).
+        Construct the complete user context (from the original enhanced_auth logic).
         """
         ui_permissions = get_ui_permissions_for_user(scopes)
         accessible_servers = get_user_accessible_servers(scopes)

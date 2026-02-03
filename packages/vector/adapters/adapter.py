@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class VectorStoreAdapter(ABC):
     """
     Vector Store Adapter
-    
+
     Design Pattern: Adapter Pattern
 
     Responsibilities:
@@ -27,7 +27,7 @@ class VectorStoreAdapter(ABC):
     def __init__(self, embedding, config: dict[str, Any], embedding_config: dict[str, Any] = None):
         """
         Initialize adapter with embedding and config.
-        
+
         Args:
             embedding: LangChain embedding instance
             config: Database configuration
@@ -57,10 +57,10 @@ class VectorStoreAdapter(ABC):
     def _create_vector_store(self, collection_name: str) -> VectorStore:
         """
         Create LangChain VectorStore instance for collection.
-        
+
         Args:
             collection_name: Name of the collection
-            
+
         Returns:
             LangChain VectorStore instance (WeaviateVectorStore, etc.)
         """
@@ -76,10 +76,10 @@ class VectorStoreAdapter(ABC):
     def get_vector_store(self, collection_name: str | None = None) -> VectorStore:
         """
         Get or create LangChain VectorStore for collection.
-        
+
         Args:
             collection_name: Collection name (uses default if None)
-            
+
         Returns:
             LangChain VectorStore instance
         """
@@ -96,18 +96,18 @@ class VectorStoreAdapter(ABC):
     # ========================================
 
     def similarity_search(
-            self,
-            query: str,
-            k: int = 10,
-            filters: Any = None,
-            collection_name: str | None = None,
-            **kwargs
+        self,
+        query: str,
+        k: int = 10,
+        filters: Any = None,
+        collection_name: str | None = None,
+        **kwargs,
     ) -> list[Document]:
         """
         Proxy to VectorStore.similarity_search() with smart filter handling.
-        
+
         Automatically converts dict filters to native format.
-        
+
         Args:
             query: Search query text
             k: Number of results
@@ -117,10 +117,10 @@ class VectorStoreAdapter(ABC):
                 - None → no filtering
             collection_name: Target collection
             **kwargs: Additional parameters
-        
+
         Returns:
             List of LangChain Document objects
-            
+
         """
         store = self.get_vector_store(collection_name)
 
@@ -132,12 +132,12 @@ class VectorStoreAdapter(ABC):
     def normalize_filters(self, filters: Any) -> Any:
         """
         Normalize filters to native format.
-        
+
         Handles both native and dict formats automatically.
-        
+
         Args:
             filters: Any filter format
-            
+
         Returns:
             Native filter format for the database
         """
@@ -160,10 +160,10 @@ class VectorStoreAdapter(ABC):
     def _is_native_filter(self, filters: Any) -> bool:
         """
         Check if filters is already in native format.
-        
+
         Args:
             filters: Filter object to check
-            
+
         Returns:
             True if native format
         """
@@ -172,53 +172,45 @@ class VectorStoreAdapter(ABC):
     def _dict_to_native_filter(self, filters: dict[str, Any]) -> Any:
         """
         Convert dict to native filter format.
-        
+
         Handles basic conversions:
         - Simple equality: {"key": "value"}
         - Operators: {"key": {"$gt": 100}}
         - Combining with $and, $or
-        
+
         Args:
             filters: Dict filters
-            
+
         Returns:
             Native filter object
         """
 
     def add_documents(
-            self,
-            documents: list[Document],
-            collection_name: str | None = None,
-            **kwargs
+        self, documents: list[Document], collection_name: str | None = None, **kwargs
     ) -> list[str]:
         """
         Proxy to VectorStore.add_documents()
-        
+
         Args:
             documents: List of LangChain Document objects
             collection_name: Target collection
             **kwargs: Additional parameters
-        
+
         Returns:
             List of assigned document IDs
         """
         store = self.get_vector_store(collection_name)
         return store.add_documents(documents, **kwargs)
 
-    def delete(
-            self,
-            ids: list[str],
-            collection_name: str | None = None,
-            **kwargs
-    ) -> bool | None:
+    def delete(self, ids: list[str], collection_name: str | None = None, **kwargs) -> bool | None:
         """
         Proxy to VectorStore.delete()
-        
+
         Args:
             ids: List of document IDs to delete
             collection_name: Target collection
             **kwargs: Additional parameters
-        
+
         Returns:
             True if successful, False/None otherwise
         """
@@ -234,21 +226,17 @@ class VectorStoreAdapter(ABC):
     # Subclasses should implement these
     # ========================================
 
-    def get_by_id(
-            self,
-            doc_id: str,
-            collection_name: str | None = None
-    ) -> Document | None:
+    def get_by_id(self, doc_id: str, collection_name: str | None = None) -> Document | None:
         """
         Extended feature: Get document by ID
-        
+
         VectorStore doesn't provide this functionality.
         Subclasses must implement using database-specific APIs.
-        
+
         Args:
             doc_id: Document ID
             collection_name: Target collection
-            
+
         Returns:
             LangChain Document or None if not found
         """
@@ -257,18 +245,14 @@ class VectorStoreAdapter(ABC):
             "Use database-specific API to retrieve document by ID."
         )
 
-    def get_by_ids(
-            self,
-            ids: list[str],
-            collection_name: str | None = None
-    ) -> list[Document]:
+    def get_by_ids(self, ids: list[str], collection_name: str | None = None) -> list[Document]:
         """
         Extended feature: Get multiple documents by IDs
-        
+
         Args:
             ids: List of document IDs
             collection_name: Target collection
-            
+
         Returns:
             List of LangChain Documents (may be less than requested if some IDs not found)
         """
@@ -279,61 +263,63 @@ class VectorStoreAdapter(ABC):
 
     @abstractmethod
     def filter_by_metadata(
-            self,
-            filters: Any,
-            limit: int,
-            collection_name: str | None = None,
-            **kwargs
+        self, filters: Any, limit: int, collection_name: str | None = None, **kwargs
     ) -> list[Document]:
         """
         Extended feature: Filter documents by metadata only (no vector search)
-        
+
         Automatically converts dict filters to native format.
-        
+
         Args:
             filters: Filter object (auto-converted if dict)
             limit: Maximum number of results
             collection_name: Target collection
-            
+
         Returns:
             List of matching LangChain Documents
-            
+
         """
         raise NotImplementedError()
 
     @abstractmethod
-    def bm25_search(self,
-                    query: str,
-                    k: int = 10,
-                    filters: Any = None,
-                    collection_name: str | None = None,
-                    **kwargs) -> list[Document]:
+    def bm25_search(
+        self,
+        query: str,
+        k: int = 10,
+        filters: Any = None,
+        collection_name: str | None = None,
+        **kwargs,
+    ) -> list[Document]:
         """
-            Extended feature: BM25 search (Keyword search)
+        Extended feature: BM25 search (Keyword search)
         """
         raise NotImplementedError()
 
     @abstractmethod
-    def hybrid_search(self,
-                      query: str,
-                      k: int = 10,
-                      alpha: float = 0.5,
-                      filters: Any = None,
-                      collection_name: str | None = None,
-                      **kwargs) -> list[Document]:
+    def hybrid_search(
+        self,
+        query: str,
+        k: int = 10,
+        alpha: float = 0.5,
+        filters: Any = None,
+        collection_name: str | None = None,
+        **kwargs,
+    ) -> list[Document]:
         """
         Extended feature: Hybrid search
         """
         raise NotImplementedError()
 
     @abstractmethod
-    def near_text(self,
-                  query: str,
-                  k: int = 10,
-                  alpha: float = 0.5,
-                  filters: Any = None,
-                  collection_name: str | None = None,
-                  **kwargs) -> list[Document]:
+    def near_text(
+        self,
+        query: str,
+        k: int = 10,
+        alpha: float = 0.5,
+        filters: Any = None,
+        collection_name: str | None = None,
+        **kwargs,
+    ) -> list[Document]:
         """
         Extended feature: Near text
         find objects with the nearest vector to an input text
@@ -341,35 +327,37 @@ class VectorStoreAdapter(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def search(self,
-               query: str,
-               search_type: SearchType = SearchType.NEAR_TEXT,
-               k: int = 10,
-               filters: Any = None,
-               collection_name: str | None = None,
-               **kwargs) -> list[Document]:
+    def search(
+        self,
+        query: str,
+        search_type: SearchType = SearchType.NEAR_TEXT,
+        k: int = 10,
+        filters: Any = None,
+        collection_name: str | None = None,
+        **kwargs,
+    ) -> list[Document]:
         """
         Extended feature: Search by search type
         """
         raise NotImplementedError()
 
     def search_with_rerank(
-            self,
-            query: str,
-            k: int = 10,
-            candidate_k: int | None = None,
-            search_type: SearchType = SearchType.HYBRID,
-            filters: Any = None,
-            reranker_type: str = "flashrank",
-            reranker_kwargs: dict[str, Any] | None = None,
-            collection_name: str | None = None,
-            **kwargs
+        self,
+        query: str,
+        k: int = 10,
+        candidate_k: int | None = None,
+        search_type: SearchType = SearchType.HYBRID,
+        filters: Any = None,
+        reranker_type: str = "flashrank",
+        reranker_kwargs: dict[str, Any] | None = None,
+        collection_name: str | None = None,
+        **kwargs,
     ) -> list[Document]:
         """
         Extended feature: Search with reranking for improved relevance.
-        
+
         Fetches candidate_k results, reranks them, returns top k.
-        
+
         Args:
             query: Search query
             k: Final number of results
@@ -379,7 +367,7 @@ class VectorStoreAdapter(ABC):
             reranker_type: Reranker to use
             reranker_kwargs: Additional reranker parameters
             collection_name: Target collection
-            
+
         Returns:
             List of reranked Documents
         """
@@ -391,10 +379,10 @@ class VectorStoreAdapter(ABC):
     def list_collections(self) -> list[str]:
         """
         Extended feature: List all collections
-        
+
         VectorStore doesn't provide this functionality.
         Subclasses should implement using database-specific APIs.
-        
+
         Returns:
             List of collection names
         """
@@ -404,20 +392,17 @@ class VectorStoreAdapter(ABC):
     def collection_exists(self, collection_name: str) -> bool:
         """
         Extended feature: Check if collection exists
-        
+
         Args:
             collection_name: Collection name to check
-            
+
         Returns:
             True if collection exists
         """
         return collection_name in self.list_collections()
 
     def update_metadata(
-            self,
-            doc_id: str,
-            metadata: dict[str, Any],
-            collection_name: str | None = None
+        self, doc_id: str, metadata: dict[str, Any], collection_name: str | None = None
     ) -> bool:
         """
         Update metadata fields only without re-vectorization.
@@ -438,22 +423,18 @@ class VectorStoreAdapter(ABC):
             "Falling back to full update with re-vectorization."
         )
 
-    def delete_by_filter(
-            self,
-            filters: Any,
-            collection_name: str | None = None
-    ) -> int:
+    def delete_by_filter(self, filters: Any, collection_name: str | None = None) -> int:
         """
         Extended feature: Delete documents by filter conditions
-        
+
         Automatically converts dict filters to native format before deletion.
-        
+
         Args:
             filters: Filter object (auto-converted if dict)
                 - Dict: {"field": "value"} or {"field": {"$in": ["val1", "val2"]}}
                 - Native format: Database-specific filter object
             collection_name: Target collection
-            
+
         Returns:
             Number of deleted documents
         """
@@ -476,5 +457,5 @@ class VectorStoreAdapter(ABC):
             "type": type(self).__name__,
             "default_collection": self._default_collection,
             "initialized_collections": list(self._stores.keys()),
-            "config": {k: v for k, v in self.config.items() if k not in ["api_key", "password"]}
+            "config": {k: v for k, v in self.config.items() if k not in ["api_key", "password"]},
         }

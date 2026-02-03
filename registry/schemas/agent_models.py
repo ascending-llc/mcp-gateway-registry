@@ -138,6 +138,7 @@ def _validate_url_format(
 
     try:
         from urllib.parse import urlparse
+
         parsed = urlparse(url)
         if not parsed.netloc:
             raise ValueError("URL must include a valid hostname")
@@ -170,9 +171,7 @@ def _validate_security_references(
     for requirement in security:
         for scheme_name in requirement.keys():
             if scheme_name not in security_schemes:
-                raise ValueError(
-                    f"Security requirement references undefined scheme: {scheme_name}"
-                )
+                raise ValueError(f"Security requirement references undefined scheme: {scheme_name}")
 
     return security
 
@@ -231,9 +230,7 @@ class SecurityScheme(BaseModel):
         """Validate security type is one of the supported types."""
         valid_types = ["apiKey", "http", "oauth2", "openIdConnect"]
         if v not in valid_types:
-            raise ValueError(
-                f"Security type must be one of: {', '.join(valid_types)}"
-            )
+            raise ValueError(f"Security type must be one of: {', '.join(valid_types)}")
         return v
 
     @field_validator("in_")
@@ -246,9 +243,7 @@ class SecurityScheme(BaseModel):
         if v is not None:
             valid_locations = ["header", "query", "cookie"]
             if v not in valid_locations:
-                raise ValueError(
-                    f"API key location must be one of: {', '.join(valid_locations)}"
-                )
+                raise ValueError(f"API key location must be one of: {', '.join(valid_locations)}")
         return v
 
 
@@ -552,9 +547,7 @@ class AgentCard(BaseModel):
         """Validate visibility value."""
         valid_values = ["public", "private", "group-restricted"]
         if v not in valid_values:
-            raise ValueError(
-                f"Visibility must be one of: {', '.join(valid_values)}"
-            )
+            raise ValueError(f"Visibility must be one of: {', '.join(valid_values)}")
         return v
 
     @field_validator("trust_level")
@@ -566,9 +559,7 @@ class AgentCard(BaseModel):
         """Validate trust level value."""
         valid_levels = ["unverified", "community", "verified", "trusted"]
         if v not in valid_levels:
-            raise ValueError(
-                f"Trust level must be one of: {', '.join(valid_levels)}"
-            )
+            raise ValueError(f"Trust level must be one of: {', '.join(valid_levels)}")
         return v
 
     @field_validator("tags", mode="before")
@@ -613,9 +604,7 @@ class AgentCard(BaseModel):
     ) -> "AgentCard":
         """Validate group-restricted visibility has allowed groups."""
         if self.visibility == "group-restricted" and not self.allowed_groups:
-            raise ValueError(
-                "Group-restricted visibility requires at least one allowed group"
-            )
+            raise ValueError("Group-restricted visibility requires at least one allowed group")
         return self
 
 

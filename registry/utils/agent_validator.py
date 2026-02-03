@@ -131,36 +131,26 @@ def _validate_security_schemes(
 
         valid_types = ["apiKey", "http", "oauth2", "openIdConnect"]
         if scheme.type not in valid_types:
-            errors.append(
-                f"Scheme '{scheme_name}': invalid type '{scheme.type}'"
-            )
+            errors.append(f"Scheme '{scheme_name}': invalid type '{scheme.type}'")
 
         if scheme.type == "apiKey":
             if not scheme.in_:
                 errors.append(f"Scheme '{scheme_name}': 'in' is required for apiKey")
 
             if not scheme.name:
-                errors.append(
-                    f"Scheme '{scheme_name}': 'name' is required for apiKey"
-                )
+                errors.append(f"Scheme '{scheme_name}': 'name' is required for apiKey")
 
         if scheme.type == "http":
             if not scheme.scheme:
-                errors.append(
-                    f"Scheme '{scheme_name}': 'scheme' is required for http"
-                )
+                errors.append(f"Scheme '{scheme_name}': 'scheme' is required for http")
 
         if scheme.type == "oauth2":
             if not scheme.flows:
-                errors.append(
-                    f"Scheme '{scheme_name}': 'flows' is required for oauth2"
-                )
+                errors.append(f"Scheme '{scheme_name}': 'flows' is required for oauth2")
 
         if scheme.type == "openIdConnect":
             if not scheme.openid_connect_url:
-                errors.append(
-                    f"Scheme '{scheme_name}': openIdConnect URL required"
-                )
+                errors.append(f"Scheme '{scheme_name}': openIdConnect URL required")
 
     return errors
 
@@ -315,9 +305,7 @@ def validate_agent_card(
 
         if not reachable:
             warnings.append(f"Agent endpoint unreachable: {error_msg}")
-            logger.warning(
-                f"Agent {agent_card.name} endpoint unreachable: {error_msg}"
-            )
+            logger.warning(f"Agent {agent_card.name} endpoint unreachable: {error_msg}")
 
     if errors:
         logger.error(f"Agent card validation failed: {errors}")

@@ -1,6 +1,7 @@
 """
 Integration tests for semantic search routes.
 """
+
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -93,8 +94,10 @@ class TestSearchRoutes:
             ],
         }
 
-        with patch("registry.api.v1.search_routes.faiss_service") as mock_faiss, \
-                patch("registry.api.v1.search_routes.agent_service") as mock_agent_service:
+        with (
+            patch("registry.api.v1.search_routes.faiss_service") as mock_faiss,
+            patch("registry.api.v1.search_routes.agent_service") as mock_agent_service,
+        ):
             mock_faiss.search_mixed = AsyncMock(return_value=mock_results)
             mock_agent = Mock()
             mock_agent.model_dump.return_value = {
@@ -137,7 +140,6 @@ class TestSearchRoutes:
         assert "temporarily unavailable" in response.json()["detail"]
 
 
-
 @pytest.mark.integration
 @pytest.mark.search
 class TestServerSearchRoutes:
@@ -173,20 +175,17 @@ class TestServerSearchRoutes:
 
     def test_search_servers_success_with_hybrid_search(self, test_client: TestClient):
         """Successful server search with hybrid search type."""
-        mock_search_results = [
-            {"server_id": "test-server-1", "relevance_score": 0.95}
-        ]
+        mock_search_results = [{"server_id": "test-server-1", "relevance_score": 0.95}]
 
-        with patch("registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock) as mock_search:
+        with patch(
+            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank",
+            new_callable=AsyncMock,
+        ) as mock_search:
             mock_search.return_value = mock_search_results
 
             response = test_client.post(
                 "/api/v1/search/servers",
-                json={
-                    "query": "test query",
-                    "top_n": 5,
-                    "search_type": "hybrid"
-                }
+                json={"query": "test query", "top_n": 5, "search_type": "hybrid"},
             )
 
         assert response.status_code == 200
@@ -210,16 +209,15 @@ class TestServerSearchRoutes:
 
         mock_search_results = []
 
-        with patch("registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock) as mock_search:
+        with patch(
+            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank",
+            new_callable=AsyncMock,
+        ) as mock_search:
             mock_search.return_value = mock_search_results
 
             response = test_client.post(
                 "/api/v1/search/servers",
-                json={
-                    "query": "semantic query",
-                    "top_n": 3,
-                    "search_type": "near_text"
-                }
+                json={"query": "semantic query", "top_n": 3, "search_type": "near_text"},
             )
 
         assert response.status_code == 200
@@ -234,16 +232,15 @@ class TestServerSearchRoutes:
 
         mock_search_results = []
 
-        with patch("registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock) as mock_search:
+        with patch(
+            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank",
+            new_callable=AsyncMock,
+        ) as mock_search:
             mock_search.return_value = mock_search_results
 
             response = test_client.post(
                 "/api/v1/search/servers",
-                json={
-                    "query": "keyword query",
-                    "top_n": 10,
-                    "search_type": "bm25"
-                }
+                json={"query": "keyword query", "top_n": 10, "search_type": "bm25"},
             )
 
         assert response.status_code == 200
@@ -258,7 +255,10 @@ class TestServerSearchRoutes:
 
         mock_search_results = []
 
-        with patch("registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock) as mock_search:
+        with patch(
+            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank",
+            new_callable=AsyncMock,
+        ) as mock_search:
             mock_search.return_value = mock_search_results
 
             response = test_client.post(
@@ -266,8 +266,8 @@ class TestServerSearchRoutes:
                 json={
                     "query": "test",
                     "top_n": 5,
-                    "search_type": "SIMILARITY_STORE"  # Use uppercase to match enum value
-                }
+                    "search_type": "SIMILARITY_STORE",  # Use uppercase to match enum value
+                },
             )
 
         assert response.status_code == 200
@@ -282,15 +282,14 @@ class TestServerSearchRoutes:
 
         mock_search_results = []
 
-        with patch("registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock) as mock_search:
+        with patch(
+            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank",
+            new_callable=AsyncMock,
+        ) as mock_search:
             mock_search.return_value = mock_search_results
 
             response = test_client.post(
-                "/api/v1/search/servers",
-                json={
-                    "query": "test",
-                    "top_n": 5
-                }
+                "/api/v1/search/servers", json={"query": "test", "top_n": 5}
             )
 
         assert response.status_code == 200
@@ -303,11 +302,7 @@ class TestServerSearchRoutes:
         """Server search rejects invalid search_type with validation error."""
         response = test_client.post(
             "/api/v1/search/servers",
-            json={
-                "query": "test",
-                "top_n": 5,
-                "search_type": "invalid_type"
-            }
+            json={"query": "test", "top_n": 5, "search_type": "invalid_type"},
         )
 
         # Pydantic validates enum values and returns 422 for invalid values
@@ -318,15 +313,14 @@ class TestServerSearchRoutes:
         """Server search respects the top_n parameter."""
         mock_search_results = []
 
-        with patch("registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock) as mock_search:
+        with patch(
+            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank",
+            new_callable=AsyncMock,
+        ) as mock_search:
             mock_search.return_value = mock_search_results
 
             response = test_client.post(
-                "/api/v1/search/servers",
-                json={
-                    "query": "test",
-                    "top_n": 3
-                }
+                "/api/v1/search/servers", json={"query": "test", "top_n": 3}
             )
 
         assert response.status_code == 200
@@ -339,15 +333,14 @@ class TestServerSearchRoutes:
         """Server search uses reranking with candidate_k."""
         mock_search_results = []
 
-        with patch("registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock) as mock_search:
+        with patch(
+            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank",
+            new_callable=AsyncMock,
+        ) as mock_search:
             mock_search.return_value = mock_search_results
 
             response = test_client.post(
-                "/api/v1/search/servers",
-                json={
-                    "query": "test",
-                    "top_n": 5
-                }
+                "/api/v1/search/servers", json={"query": "test", "top_n": 5}
             )
 
         assert response.status_code == 200
@@ -360,15 +353,18 @@ class TestServerSearchRoutes:
         """Server search caps candidate_k at 100."""
         mock_search_results = []
 
-        with patch("registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock) as mock_search:
+        with patch(
+            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank",
+            new_callable=AsyncMock,
+        ) as mock_search:
             mock_search.return_value = mock_search_results
 
             response = test_client.post(
                 "/api/v1/search/servers",
                 json={
                     "query": "test",
-                    "top_n": 50  # Would be 250 without cap
-                }
+                    "top_n": 50,  # Would be 250 without cap
+                },
             )
 
         assert response.status_code == 200
@@ -379,13 +375,7 @@ class TestServerSearchRoutes:
 
     def test_search_servers_empty_query(self, test_client: TestClient):
         """Server search rejects empty query string."""
-        response = test_client.post(
-            "/api/v1/search/servers",
-            json={
-                "query": "",
-                "top_n": 10
-            }
-        )
+        response = test_client.post("/api/v1/search/servers", json={"query": "", "top_n": 10})
 
         # Query has min_length=1, so empty string returns validation error
         assert response.status_code == 422
@@ -397,15 +387,14 @@ class TestServerSearchRoutes:
             {"server_id": "test-id-1", "server_name": "Test Server", "relevance_score": 0.9}
         ]
 
-        with patch("registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock) as mock_search:
+        with patch(
+            "registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank",
+            new_callable=AsyncMock,
+        ) as mock_search:
             mock_search.return_value = mock_search_results
 
             response = test_client.post(
-                "/api/v1/search/servers",
-                json={
-                    "query": "test",
-                    "top_n": 5
-                }
+                "/api/v1/search/servers", json={"query": "test", "top_n": 5}
             )
 
         assert response.status_code == 200

@@ -1,6 +1,7 @@
 """
 Pytest configuration and shared fixtures for auth_server tests.
 """
+
 import os
 from collections.abc import Generator
 from unittest.mock import Mock, patch
@@ -20,6 +21,7 @@ os.environ["SECRET_KEY"] = "test-secret-key-for-testing"
 def auth_server_app():
     """Import and return the auth server FastAPI app."""
     from auth_server.server import app
+
     return app
 
 
@@ -27,8 +29,10 @@ def auth_server_app():
 def test_client(auth_server_app) -> Generator[TestClient, None, None]:
     """Create a test client for the auth server with mocked MongoDB."""
     # Mock MongoDB initialization to prevent actual connection attempts
-    with patch("auth_server.server.init_mongodb"), \
-         patch("packages.database.mongodb.MongoDB.connect_db"):
+    with (
+        patch("auth_server.server.init_mongodb"),
+        patch("packages.database.mongodb.MongoDB.connect_db"),
+    ):
         with TestClient(auth_server_app) as client:
             yield client
 
@@ -39,13 +43,7 @@ def mock_auth_provider():
     mock_provider = Mock()
     mock_provider.get_jwks.return_value = {
         "keys": [
-            {
-                "kty": "RSA",
-                "use": "sig",
-                "kid": "test-key-id",
-                "n": "test-modulus",
-                "e": "AQAB"
-            }
+            {"kty": "RSA", "use": "sig", "kid": "test-key-id", "n": "test-modulus", "e": "AQAB"}
         ]
     }
 

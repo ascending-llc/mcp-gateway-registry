@@ -30,7 +30,9 @@ async def websocket_endpoint(websocket: WebSocket):
         # Try different ways to access cookies from WebSocket
         if hasattr(websocket, "cookies") and websocket.cookies:
             session_cookie = websocket.cookies.get(settings.session_cookie_name)
-            logger.debug(f"WebSocket cookies found via websocket.cookies: {list(websocket.cookies.keys())}")
+            logger.debug(
+                f"WebSocket cookies found via websocket.cookies: {list(websocket.cookies.keys())}"
+            )
 
         # Alternative: Try to get cookies from headers
         if not session_cookie and hasattr(websocket, "headers"):
@@ -55,8 +57,7 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 # Validate session
                 session_data = signer.loads(
-                    session_cookie,
-                    max_age=settings.session_max_age_seconds
+                    session_cookie, max_age=settings.session_max_age_seconds
                 )
                 username = session_data.get("username")
                 if username:
@@ -72,7 +73,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.close(code=1008, reason="Authentication failed")
                 return
         else:
-            logger.warning(f"WebSocket connection without valid session cookie from {websocket.client}")
+            logger.warning(
+                f"WebSocket connection without valid session cookie from {websocket.client}"
+            )
             await websocket.close(code=1008, reason="Authentication required")
             return
 
@@ -103,7 +106,7 @@ async def websocket_endpoint(websocket: WebSocket):
 @router.get("/ws/health_status")
 async def health_status_http():
     """HTTP endpoint that returns the same health status data as the WebSocket endpoint.
-    
+
     This handles cases where health checks are done via HTTP GET instead of WebSocket.
     """
     return health_service.get_all_health_status()

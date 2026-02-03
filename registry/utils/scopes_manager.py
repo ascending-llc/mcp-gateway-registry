@@ -42,6 +42,7 @@ def _write_scopes_file(scopes_data: dict[str, Any]) -> None:
     try:
         # Make a backup copy
         import shutil
+
         shutil.copy2(scopes_file, backup_file)
 
         # Write directly to the file
@@ -51,7 +52,9 @@ def _write_scopes_file(scopes_data: dict[str, Any]) -> None:
                 def ignore_aliases(self, data):
                     return True
 
-            yaml.dump(scopes_data, f, default_flow_style=False, sort_keys=False, Dumper=NoAnchorDumper)
+            yaml.dump(
+                scopes_data, f, default_flow_style=False, sort_keys=False, Dumper=NoAnchorDumper
+            )
 
         logger.info(f"Successfully updated scopes file at {scopes_file}")
 
@@ -82,9 +85,9 @@ def _create_server_entry(server_path: str, tools: list[str]) -> dict[str, Any]:
             "tools/list",
             "tools/call",
             "resources/list",
-            "resources/templates/list"
+            "resources/templates/list",
         ],
-        "tools": tools
+        "tools": tools,
     }
 
 
@@ -108,17 +111,15 @@ async def add_server_to_scopes(server_path: str, server_name: str, tools: list[s
         server_entry = _create_server_entry(server_path, tools)
 
         # Add to unrestricted scope sections only
-        sections = [
-            "mcp-servers-unrestricted/read",
-            "mcp-servers-unrestricted/execute"
-        ]
+        sections = ["mcp-servers-unrestricted/read", "mcp-servers-unrestricted/execute"]
 
         modified = False
         for section in sections:
             if section in scopes_data:
                 # Check if server already exists in this section
-                existing = [s for s in scopes_data[section]
-                           if s.get("server") == server_entry["server"]]
+                existing = [
+                    s for s in scopes_data[section] if s.get("server") == server_entry["server"]
+                ]
 
                 if existing:
                     # Update existing entry
@@ -169,15 +170,16 @@ async def remove_server_from_scopes(server_path: str) -> bool:
             "mcp-servers-unrestricted/read",
             "mcp-servers-unrestricted/execute",
             "mcp-servers-restricted/read",
-            "mcp-servers-restricted/execute"
+            "mcp-servers-restricted/execute",
         ]
 
         modified = False
         for section in sections:
             if section in scopes_data:
                 original_length = len(scopes_data[section])
-                scopes_data[section] = [s for s in scopes_data[section]
-                                        if s.get("server") != server_name]
+                scopes_data[section] = [
+                    s for s in scopes_data[section] if s.get("server") != server_name
+                ]
 
                 if len(scopes_data[section]) < original_length:
                     logger.info(f"Removed server {server_path} from section {section}")
@@ -213,6 +215,7 @@ async def trigger_auth_server_reload() -> bool:
 
         # Create Basic Auth header
         import base64
+
         credentials = f"{admin_user}:{admin_password}"
         encoded_credentials = base64.b64encode(credentials.encode()).decode()
 
@@ -220,13 +223,15 @@ async def trigger_auth_server_reload() -> bool:
             response = await client.post(
                 "http://auth-server:8888/internal/reload-scopes",
                 headers={"Authorization": f"Basic {encoded_credentials}"},
-                timeout=10.0
+                timeout=10.0,
             )
 
             if response.status_code == 200:
                 logger.info("Successfully triggered auth server scope reload")
                 return True
-            logger.error(f"Failed to reload auth server scopes: {response.status_code} - {response.text}")
+            logger.error(
+                f"Failed to reload auth server scopes: {response.status_code} - {response.text}"
+            )
             return False
 
     except Exception as e:
@@ -308,7 +313,9 @@ async def add_server_to_groups(server_path: str, group_names: list[str]) -> bool
 
         # Get the tools from the last health check
         tool_list = server_info.get("tool_list", [])
-        tool_names = [tool["name"] for tool in tool_list if isinstance(tool, dict) and "name" in tool]
+        tool_names = [
+            tool["name"] for tool in tool_list if isinstance(tool, dict) and "name" in tool
+        ]
 
         logger.info(f"Found {len(tool_names)} tools for server {server_path}: {tool_names}")
 
@@ -322,8 +329,9 @@ async def add_server_to_groups(server_path: str, group_names: list[str]) -> bool
         for group_name in group_names:
             if group_name in scopes_data:
                 # Check if server already exists in this group
-                existing = [s for s in scopes_data[group_name]
-                           if s.get("server") == server_entry["server"]]
+                existing = [
+                    s for s in scopes_data[group_name] if s.get("server") == server_entry["server"]
+                ]
 
                 if existing:
                     # Update existing entry
@@ -392,6 +400,7 @@ async def remove_server_from_groups(server_path: str, group_names: list[str]) ->
     try:
         # Get server info to get the actual server_name
         from ..services.server_service import server_service
+
         server_info = server_service.get_server_info(server_path)
 
         # Read current scopes
@@ -401,14 +410,19 @@ async def remove_server_from_groups(server_path: str, group_names: list[str]) ->
         server_name = server_path.lstrip("/")
 
         # Get the display name for UI-Scopes (from server_info if available)
-        server_display_name = server_info.get("server_name", server_path.lstrip("/").rstrip("/")) if server_info else server_path.lstrip("/").rstrip("/")
+        server_display_name = (
+            server_info.get("server_name", server_path.lstrip("/").rstrip("/"))
+            if server_info
+            else server_path.lstrip("/").rstrip("/")
+        )
 
         modified = False
         for group_name in group_names:
             if group_name in scopes_data:
                 original_length = len(scopes_data[group_name])
-                scopes_data[group_name] = [s for s in scopes_data[group_name]
-                                          if s.get("server") != server_name]
+                scopes_data[group_name] = [
+                    s for s in scopes_data[group_name] if s.get("server") != server_name
+                ]
 
                 if len(scopes_data[group_name]) < original_length:
                     logger.info(f"Removed server {server_path} from group {group_name}")
@@ -422,9 +436,16 @@ async def remove_server_from_groups(server_path: str, group_names: list[str]) ->
                 for group_name in group_names:
                     if group_name in scopes_data["UI-Scopes"]:
                         if "list_service" in scopes_data["UI-Scopes"][group_name]:
-                            if server_display_name in scopes_data["UI-Scopes"][group_name]["list_service"]:
-                                scopes_data["UI-Scopes"][group_name]["list_service"].remove(server_display_name)
-                                logger.info(f"Removed {server_display_name} from UI-Scopes[{group_name}].list_service")
+                            if (
+                                server_display_name
+                                in scopes_data["UI-Scopes"][group_name]["list_service"]
+                            ):
+                                scopes_data["UI-Scopes"][group_name]["list_service"].remove(
+                                    server_display_name
+                                )
+                                logger.info(
+                                    f"Removed {server_display_name} from UI-Scopes[{group_name}].list_service"
+                                )
 
             # Write back the updated scopes
             _write_scopes_file(scopes_data)
@@ -442,10 +463,7 @@ async def remove_server_from_groups(server_path: str, group_names: list[str]) ->
         return False
 
 
-async def create_group_in_scopes(
-    group_name: str,
-    description: str = ""
-) -> bool:
+async def create_group_in_scopes(group_name: str, description: str = "") -> bool:
     """
     Create a new group entry in scopes.yml and add it to group_mappings.
 
@@ -493,7 +511,9 @@ async def create_group_in_scopes(
 
         # Write back the updated scopes
         _write_scopes_file(scopes_data)
-        logger.info(f"Successfully added group {group_name} to scopes.yml, group_mappings, and UI-Scopes")
+        logger.info(
+            f"Successfully added group {group_name} to scopes.yml, group_mappings, and UI-Scopes"
+        )
 
         # Trigger auth server reload
         await trigger_auth_server_reload()
@@ -505,10 +525,7 @@ async def create_group_in_scopes(
         return False
 
 
-async def delete_group_from_scopes(
-    group_name: str,
-    remove_from_mappings: bool = True
-) -> bool:
+async def delete_group_from_scopes(group_name: str, remove_from_mappings: bool = True) -> bool:
     """
     Delete a group from scopes.yml and optionally from group_mappings.
 
@@ -592,7 +609,7 @@ async def list_groups_from_scopes() -> dict[str, Any]:
                     "name": key,
                     "server_count": server_count,
                     "servers": server_names,
-                    "in_mappings": []
+                    "in_mappings": [],
                 }
 
         # Check which groups are in group_mappings
@@ -604,23 +621,14 @@ async def list_groups_from_scopes() -> dict[str, Any]:
 
         logger.info(f"Found {len(groups)} groups in scopes.yml")
 
-        return {
-            "total_count": len(groups),
-            "groups": groups
-        }
+        return {"total_count": len(groups), "groups": groups}
 
     except Exception as e:
         logger.error(f"Failed to list groups from scopes: {e}")
-        return {
-            "total_count": 0,
-            "groups": {},
-            "error": str(e)
-        }
+        return {"total_count": 0, "groups": {}, "error": str(e)}
 
 
-async def group_exists_in_scopes(
-    group_name: str
-) -> bool:
+async def group_exists_in_scopes(group_name: str) -> bool:
     """
     Check if a group exists in scopes.yml.
 

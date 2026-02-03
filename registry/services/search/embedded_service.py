@@ -25,9 +25,12 @@ try:
     import faiss
     import numpy as np
     from sentence_transformers import SentenceTransformer
+
     FAISS_AVAILABLE = True
 except ImportError as e:
-    logger.warning(f"FAISS dependencies not available: {e}. Use discovery_mode=external or install dependencies.")
+    logger.warning(
+        f"FAISS dependencies not available: {e}. Use discovery_mode=external or install dependencies."
+    )
     FAISS_AVAILABLE = False
     faiss = None
     np = None
@@ -55,7 +58,7 @@ class EmbeddedFaissService(VectorSearchService):
     def __init__(self, settings):
         """
         Initialize the embedded FAISS service.
-        
+
         Args:
             settings: Application settings object
         """
@@ -90,18 +93,25 @@ class EmbeddedFaissService(VectorSearchService):
 
             # Set cache path for sentence transformers
             import os
+
             original_st_home = os.environ.get("SENTENCE_TRANSFORMERS_HOME")
             os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(model_cache_path)
 
             # Check if local model exists
             model_path = self.settings.embeddings_model_dir
-            model_exists = model_path.exists() and any(model_path.iterdir()) if model_path.exists() else False
+            model_exists = (
+                model_path.exists() and any(model_path.iterdir()) if model_path.exists() else False
+            )
 
             if model_exists:
-                logger.info(f"Loading SentenceTransformer model from local path: {self.settings.embeddings_model_dir}")
+                logger.info(
+                    f"Loading SentenceTransformer model from local path: {self.settings.embeddings_model_dir}"
+                )
                 self.embedding_model = SentenceTransformer(str(self.settings.embeddings_model_dir))
             else:
-                logger.info(f"Local model not found at {self.settings.embeddings_model_dir}, downloading from Hugging Face")
+                logger.info(
+                    f"Local model not found at {self.settings.embeddings_model_dir}, downloading from Hugging Face"
+                )
                 self.embedding_model = SentenceTransformer(str(self.settings.EMBEDDINGS_MODEL_NAME))
 
             # Restore original environment variable
@@ -129,11 +139,18 @@ class EmbeddedFaissService(VectorSearchService):
                     self.metadata_store = loaded_metadata.get("metadata", {})
                     self.next_id_counter = loaded_metadata.get("next_id", 0)
 
-                logger.info(f"FAISS data loaded. Index size: {self.faiss_index.ntotal if self.faiss_index else 0}. Next ID: {self.next_id_counter}")
+                logger.info(
+                    f"FAISS data loaded. Index size: {self.faiss_index.ntotal if self.faiss_index else 0}. Next ID: {self.next_id_counter}"
+                )
 
                 # Check dimension compatibility
-                if self.faiss_index and self.faiss_index.d != self.settings.embeddings_model_dimensions:
-                    logger.warning(f"Loaded FAISS index dimension ({self.faiss_index.d}) differs from expected ({self.settings.embeddings_model_dimensions}). Re-initializing.")
+                if (
+                    self.faiss_index
+                    and self.faiss_index.d != self.settings.embeddings_model_dimensions
+                ):
+                    logger.warning(
+                        f"Loaded FAISS index dimension ({self.faiss_index.d}) differs from expected ({self.settings.embeddings_model_dimensions}). Re-initializing."
+                    )
                     self._initialize_new_index()
 
             except Exception as e:
@@ -145,7 +162,9 @@ class EmbeddedFaissService(VectorSearchService):
 
     def _initialize_new_index(self):
         """Initialize a new FAISS index."""
-        self.faiss_index = faiss.IndexIDMap(faiss.IndexFlatL2(self.settings.embeddings_model_dimensions))
+        self.faiss_index = faiss.IndexIDMap(
+            faiss.IndexFlatL2(self.settings.embeddings_model_dimensions)
+        )
         self.metadata_store = {}
         self.next_id_counter = 0
 
@@ -159,15 +178,19 @@ class EmbeddedFaissService(VectorSearchService):
             # Ensure directory exists
             self.settings.servers_dir.mkdir(parents=True, exist_ok=True)
 
-            logger.info(f"Saving FAISS index to {self.settings.faiss_index_path} (Size: {self.faiss_index.ntotal})")
+            logger.info(
+                f"Saving FAISS index to {self.settings.faiss_index_path} (Size: {self.faiss_index.ntotal})"
+            )
             faiss.write_index(self.faiss_index, str(self.settings.faiss_index_path))
 
             logger.info(f"Saving FAISS metadata to {self.settings.faiss_metadata_path}")
             with open(self.settings.faiss_metadata_path, "w") as f:
-                json.dump({
-                    "metadata": self.metadata_store,
-                    "next_id": self.next_id_counter
-                }, f, indent=2, cls=_PydanticAwareJSONEncoder)
+                json.dump(
+                    {"metadata": self.metadata_store, "next_id": self.next_id_counter},
+                    f,
+                    indent=2,
+                    cls=_PydanticAwareJSONEncoder,
+                )
 
             logger.info("FAISS data saved successfully.")
         except Exception as e:
@@ -191,10 +214,7 @@ class EmbeddedFaissService(VectorSearchService):
 
         tools_section = "\n".join(tool_snippets)
         return (
-            f"Name: {name}\n"
-            f"Description: {description}\n"
-            f"Tags: {tag_string}\n"
-            f"Tools:\n{tools_section}"
+            f"Name: {name}\nDescription: {description}\nTags: {tag_string}\nTools:\n{tools_section}"
         ).strip()
 
     def _get_text_for_agent(self, agent_card) -> str:
@@ -206,8 +226,7 @@ class EmbeddedFaissService(VectorSearchService):
         if agent_card.skills:
             skill_names = [skill.name for skill in agent_card.skills]
             skill_descriptions = [
-                f"{skill.name}: {skill.description}"
-                for skill in agent_card.skills
+                f"{skill.name}: {skill.description}" for skill in agent_card.skills
             ]
             skills_text = "Skills: " + ", ".join(skill_names)
             skills_text += "\nSkill Details: " + " | ".join(skill_descriptions)
@@ -228,10 +247,14 @@ class EmbeddedFaissService(VectorSearchService):
 
         return "\n".join(text_parts)
 
-    async def add_or_update_service(self, service_path: str, server_info: dict[str, Any], is_enabled: bool = False):
+    async def add_or_update_service(
+        self, service_path: str, server_info: dict[str, Any], is_enabled: bool = False
+    ):
         """Add or update a service in the FAISS index."""
         if self.embedding_model is None or self.faiss_index is None:
-            logger.error("Embedding model or FAISS index not initialized. Cannot add/update service in FAISS.")
+            logger.error(
+                "Embedding model or FAISS index not initialized. Cannot add/update service in FAISS."
+            )
             return
 
         logger.info(f"Attempting to add/update service '{service_path}' in FAISS.")
@@ -246,14 +269,20 @@ class EmbeddedFaissService(VectorSearchService):
             current_faiss_id = existing_entry["id"]
             if existing_entry.get("text_for_embedding") == text_to_embed:
                 needs_new_embedding = False
-                logger.info(f"Text for embedding for '{service_path}' has not changed. Will update metadata store only if server_info differs.")
+                logger.info(
+                    f"Text for embedding for '{service_path}' has not changed. Will update metadata store only if server_info differs."
+                )
             else:
-                logger.info(f"Text for embedding for '{service_path}' has changed. Re-embedding required.")
+                logger.info(
+                    f"Text for embedding for '{service_path}' has changed. Re-embedding required."
+                )
         else:
             # New service
             current_faiss_id = self.next_id_counter
             self.next_id_counter += 1
-            logger.info(f"New service '{service_path}'. Assigning new FAISS ID: {current_faiss_id}.")
+            logger.info(
+                f"New service '{service_path}'. Assigning new FAISS ID: {current_faiss_id}."
+            )
             needs_new_embedding = True
 
         if needs_new_embedding:
@@ -267,36 +296,49 @@ class EmbeddedFaissService(VectorSearchService):
                     try:
                         num_removed = self.faiss_index.remove_ids(ids_to_remove)
                         if num_removed > 0:
-                            logger.info(f"Removed {num_removed} old vector(s) for FAISS ID {current_faiss_id} ({service_path}).")
+                            logger.info(
+                                f"Removed {num_removed} old vector(s) for FAISS ID {current_faiss_id} ({service_path})."
+                            )
                         else:
-                            logger.info(f"No old vector found for FAISS ID {current_faiss_id} ({service_path}) during update, or ID not in index.")
+                            logger.info(
+                                f"No old vector found for FAISS ID {current_faiss_id} ({service_path}) during update, or ID not in index."
+                            )
                     except Exception as e_remove:
-                        logger.warning(f"Issue removing FAISS ID {current_faiss_id} for {service_path}: {e_remove}. Proceeding to add.")
+                        logger.warning(
+                            f"Issue removing FAISS ID {current_faiss_id} for {service_path}: {e_remove}. Proceeding to add."
+                        )
 
                 self.faiss_index.add_with_ids(embedding_np, np.array([current_faiss_id]))
-                logger.info(f"Added/Updated vector for '{service_path}' with FAISS ID {current_faiss_id}.")
+                logger.info(
+                    f"Added/Updated vector for '{service_path}' with FAISS ID {current_faiss_id}."
+                )
             except Exception as e:
-                logger.error(f"Error encoding or adding embedding for '{service_path}': {e}", exc_info=True)
+                logger.error(
+                    f"Error encoding or adding embedding for '{service_path}': {e}", exc_info=True
+                )
                 return
 
         # Update metadata store
         enriched_server_info = server_info.copy()
         enriched_server_info["is_enabled"] = is_enabled
 
-        if (existing_entry is None or
-            needs_new_embedding or
-            existing_entry.get("full_server_info") != enriched_server_info):
-
+        if (
+            existing_entry is None
+            or needs_new_embedding
+            or existing_entry.get("full_server_info") != enriched_server_info
+        ):
             self.metadata_store[service_path] = {
                 "id": current_faiss_id,
                 "text_for_embedding": text_to_embed,
                 "full_server_info": enriched_server_info,
-                "entity_type": server_info.get("entity_type", "mcp_server")
+                "entity_type": server_info.get("entity_type", "mcp_server"),
             }
             logger.debug(f"Updated faiss_metadata_store for '{service_path}'.")
             await self._save_data()
         else:
-            logger.debug(f"No changes to FAISS vector or enriched full_server_info for '{service_path}'. Skipping save.")
+            logger.debug(
+                f"No changes to FAISS vector or enriched full_server_info for '{service_path}'. Skipping save."
+            )
 
     async def remove_service(self, service_path: str):
         """Remove a service from the FAISS index and metadata store."""
@@ -312,7 +354,9 @@ class EmbeddedFaissService(VectorSearchService):
                 # Remove from FAISS index
                 # Note: FAISS doesn't support direct removal, but we can remove from metadata
                 # The vector will remain in the index but won't be accessible via metadata
-                logger.info(f"Removing service '{service_path}' with FAISS ID {service_id} from index")
+                logger.info(
+                    f"Removing service '{service_path}' with FAISS ID {service_id} from index"
+                )
 
             # Remove from metadata store
             del self.metadata_store[service_path]
@@ -322,7 +366,9 @@ class EmbeddedFaissService(VectorSearchService):
             await self._save_data()
 
         except Exception as e:
-            logger.error(f"Failed to remove service '{service_path}' from FAISS: {e}", exc_info=True)
+            logger.error(
+                f"Failed to remove service '{service_path}' from FAISS: {e}", exc_info=True
+            )
 
     async def add_or_update_agent(
         self,
@@ -360,9 +406,7 @@ class EmbeddedFaissService(VectorSearchService):
             # New agent
             current_faiss_id = self.next_id_counter
             self.next_id_counter += 1
-            logger.info(
-                f"New agent '{agent_path}'. Assigning new FAISS ID: {current_faiss_id}."
-            )
+            logger.info(f"New agent '{agent_path}'. Assigning new FAISS ID: {current_faiss_id}.")
             needs_new_embedding = True
 
         if needs_new_embedding:
@@ -406,14 +450,15 @@ class EmbeddedFaissService(VectorSearchService):
                 return
 
         # Update metadata store
-        agent_card_dict = agent_card.model_dump() if hasattr(agent_card, "model_dump") else agent_card
+        agent_card_dict = (
+            agent_card.model_dump() if hasattr(agent_card, "model_dump") else agent_card
+        )
 
         if (
             existing_entry is None
             or needs_new_embedding
             or existing_entry.get("full_agent_card") != agent_card_dict
         ):
-
             self.metadata_store[agent_path] = {
                 "id": current_faiss_id,
                 "entity_type": "a2a_agent",
@@ -432,17 +477,13 @@ class EmbeddedFaissService(VectorSearchService):
         try:
             # Check if agent exists in metadata
             if agent_path not in self.metadata_store:
-                logger.warning(
-                    f"Agent '{agent_path}' not found in FAISS metadata store"
-                )
+                logger.warning(f"Agent '{agent_path}' not found in FAISS metadata store")
                 return
 
             # Get the FAISS ID for this agent
             agent_id = self.metadata_store[agent_path].get("id")
             if agent_id is not None and self.faiss_index:
-                logger.info(
-                    f"Removing agent '{agent_path}' with FAISS ID {agent_id} from index"
-                )
+                logger.info(f"Removing agent '{agent_path}' with FAISS ID {agent_id} from index")
 
             # Remove from metadata store
             del self.metadata_store[agent_path]
@@ -557,7 +598,9 @@ class EmbeddedFaissService(VectorSearchService):
         except Exception:
             return 0.0
 
-    def _extract_matching_tools(self, query: str, server_info: dict[str, Any]) -> list[dict[str, Any]]:
+    def _extract_matching_tools(
+        self, query: str, server_info: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Extract tool matches using simple keyword overlap."""
         tools = server_info.get("tool_list") or []
         if not tools:
@@ -638,18 +681,14 @@ class EmbeddedFaissService(VectorSearchService):
             return {"servers": [], "tools": [], "agents": []}
 
         top_k = min(max_results, total_vectors)
-        query_embedding = await asyncio.to_thread(
-            self.embedding_model.encode, [query.strip()]
-        )
+        query_embedding = await asyncio.to_thread(self.embedding_model.encode, [query.strip()])
         query_np = np.array([query_embedding[0]], dtype=np.float32)
 
         distances, indices = self.faiss_index.search(query_np, top_k)
         distance_row = distances[0]
         id_row = indices[0]
 
-        id_to_path = {
-            entry.get("id"): path for path, entry in self.metadata_store.items()
-        }
+        id_to_path = {entry.get("id"): path for path, entry in self.metadata_store.items()}
 
         server_results: list[dict[str, Any]] = []
         tool_results: list[dict[str, Any]] = []
@@ -775,11 +814,11 @@ class EmbeddedFaissService(VectorSearchService):
         query: str | None = None,
         tags: list[str] | None = None,
         top_k: int = 10,
-        filters: dict[str, Any] | None = None
+        filters: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """
         Search for services using FAISS semantic search and/or tag filtering.
-        
+
         Note: This is a simplified interface. The full implementation in mcpgw/server.py
         has more sophisticated ranking logic. This is mainly for compatibility.
         """
@@ -797,11 +836,9 @@ class EmbeddedFaissService(VectorSearchService):
 
                 # Check if all requested tags are present
                 if all(tag in service_tags for tag in tags):
-                    results.append({
-                        "service_path": service_path,
-                        "server_info": server_info,
-                        "score": 1.0
-                    })
+                    results.append(
+                        {"service_path": service_path, "server_info": server_info, "score": 1.0}
+                    )
 
         # Semantic search with FAISS
         elif query and self.embedding_model and self.faiss_index:
@@ -814,7 +851,7 @@ class EmbeddedFaissService(VectorSearchService):
                 distances, faiss_ids = await asyncio.to_thread(
                     self.faiss_index.search,
                     query_embedding_np,
-                    min(top_k, self.faiss_index.ntotal) if self.faiss_index.ntotal > 0 else 1
+                    min(top_k, self.faiss_index.ntotal) if self.faiss_index.ntotal > 0 else 1,
                 )
 
                 # Convert results
@@ -825,11 +862,15 @@ class EmbeddedFaissService(VectorSearchService):
                     # Find service by FAISS ID
                     for service_path, entry in self.metadata_store.items():
                         if entry["id"] == int(faiss_id):
-                            results.append({
-                                "service_path": service_path,
-                                "server_info": entry.get("full_server_info", {}),
-                                "score": float(1.0 / (1.0 + distance))  # Convert distance to similarity
-                            })
+                            results.append(
+                                {
+                                    "service_path": service_path,
+                                    "server_info": entry.get("full_server_info", {}),
+                                    "score": float(
+                                        1.0 / (1.0 + distance)
+                                    ),  # Convert distance to similarity
+                                }
+                            )
                             break
             except Exception as e:
                 logger.error(f"FAISS search failed: {e}", exc_info=True)

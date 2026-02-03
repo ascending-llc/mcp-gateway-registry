@@ -17,10 +17,7 @@ def update_pyproject_version(pyproject_path: Path, new_version: str) -> None:
 
     # Update version line (handle spaces around =)
     updated = re.sub(
-        r'^version\s*=\s*"[^"]+"',
-        f'version = "{new_version}"',
-        content,
-        flags=re.MULTILINE
+        r'^version\s*=\s*"[^"]+"', f'version = "{new_version}"', content, flags=re.MULTILINE
     )
 
     if updated != content:

@@ -4,7 +4,9 @@ from unittest.mock import patch
 
 import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+sys.path.insert(
+    0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+)
 
 from registry.auth.oauth.reconnection.tracker import OAuthReconnectionTracker
 
@@ -17,13 +19,12 @@ def tracker_and_data():
         "tracker": tracker,
         "user_id": "user_id",
         "server_name": "server_name",
-        "another_server": "another_server"
+        "another_server": "another_server",
     }
 
 
 @pytest.mark.unit
 class TestOAuthReconnectionTracker:
-
     # ========== setFailed tests ==========
     def test_set_failed_should_record_failed_reconnection_attempt(self, tracker_and_data):
         """Should record failed reconnection attempt"""
@@ -135,7 +136,9 @@ class TestOAuthReconnectionTracker:
 
         assert tracker.is_active(user_id, server_name) == False
 
-    def test_is_active_should_return_true_when_server_marked_as_reconnecting(self, tracker_and_data):
+    def test_is_active_should_return_true_when_server_marked_as_reconnecting(
+        self, tracker_and_data
+    ):
         """Should return True when server marked as reconnecting"""
         tracker = tracker_and_data["tracker"]
         user_id = tracker_and_data["user_id"]
@@ -179,7 +182,9 @@ class TestOAuthReconnectionTracker:
         assert tracker.is_active(user_id, server_name) == False
         assert tracker.is_active(user_id, another_server) == True
 
-    def test_remove_active_should_handle_clearing_non_existent_state_gracefully(self, tracker_and_data):
+    def test_remove_active_should_handle_clearing_non_existent_state_gracefully(
+        self, tracker_and_data
+    ):
         """Should handle clearing non-existent state gracefully"""
         tracker = tracker_and_data["tracker"]
         user_id = tracker_and_data["user_id"]
@@ -268,7 +273,9 @@ class TestOAuthReconnectionTracker:
         assert tracker.is_active(user_id, server_name) == True
 
     @patch("time.time")
-    def test_should_handle_timeout_checking_with_is_still_reconnecting(self, mock_time, tracker_and_data):
+    def test_should_handle_timeout_checking_with_is_still_reconnecting(
+        self, mock_time, tracker_and_data
+    ):
         """Should handle timeout checking with is_still_reconnecting"""
         tracker = tracker_and_data["tracker"]
         user_id = tracker_and_data["user_id"]
@@ -292,7 +299,9 @@ class TestOAuthReconnectionTracker:
         assert tracker.is_active(user_id, server_name) == True
 
     @patch("time.time")
-    def test_should_handle_multiple_servers_with_different_timeout_periods(self, mock_time, tracker_and_data):
+    def test_should_handle_multiple_servers_with_different_timeout_periods(
+        self, mock_time, tracker_and_data
+    ):
         """Should handle multiple servers with different timeout periods"""
         tracker = tracker_and_data["tracker"]
         user_id = tracker_and_data["user_id"]
@@ -317,7 +326,9 @@ class TestOAuthReconnectionTracker:
         # Advance another 2 minutes + 1ms (server1 at 5min 1ms, server2 at 2min 1ms)
         mock_time.return_value = now + 5 * 60 + 0.001
         assert tracker.is_still_reconnecting(user_id, server_name) == False  # server1 timeout
-        assert tracker.is_still_reconnecting(user_id, another_server) == True  # server2 still active
+        assert (
+            tracker.is_still_reconnecting(user_id, another_server) == True
+        )  # server2 still active
 
         # Advance another 3 minutes (server2 at 5min 1ms)
         mock_time.return_value = now + 8 * 60 + 0.001
@@ -382,7 +393,9 @@ class TestOAuthReconnectionTracker:
         assert tracker.is_active(user_id, another_server) == False
 
     @patch("time.time")
-    def test_should_handle_timeout_check_for_non_existent_entries_gracefully(self, mock_time, tracker_and_data):
+    def test_should_handle_timeout_check_for_non_existent_entries_gracefully(
+        self, mock_time, tracker_and_data
+    ):
         """Should handle timeout check for non-existent entries gracefully"""
         tracker = tracker_and_data["tracker"]
         user_id = tracker_and_data["user_id"]
@@ -406,8 +419,9 @@ class TestOAuthReconnectionTracker:
 
     # ========== isStillReconnecting tests ==========
     @patch("time.time")
-    def test_is_still_reconnecting_should_return_true_for_active_entries_within_timeout(self, mock_time,
-                                                                                        tracker_and_data):
+    def test_is_still_reconnecting_should_return_true_for_active_entries_within_timeout(
+        self, mock_time, tracker_and_data
+    ):
         """Should return True for active entries within timeout"""
         tracker = tracker_and_data["tracker"]
         user_id = tracker_and_data["user_id"]
@@ -424,7 +438,9 @@ class TestOAuthReconnectionTracker:
         assert tracker.is_still_reconnecting(user_id, server_name) == True
 
     @patch("time.time")
-    def test_is_still_reconnecting_should_return_false_for_timed_out_entries(self, mock_time, tracker_and_data):
+    def test_is_still_reconnecting_should_return_false_for_timed_out_entries(
+        self, mock_time, tracker_and_data
+    ):
         """Should return False for timed out entries"""
         tracker = tracker_and_data["tracker"]
         user_id = tracker_and_data["user_id"]
@@ -444,7 +460,9 @@ class TestOAuthReconnectionTracker:
         # But is_active should still return True (simple check)
         assert tracker.is_active(user_id, server_name) == True
 
-    def test_is_still_reconnecting_should_return_false_for_non_existent_entries(self, tracker_and_data):
+    def test_is_still_reconnecting_should_return_false_for_non_existent_entries(
+        self, tracker_and_data
+    ):
         """Should return False for non-existent entries"""
         tracker = tracker_and_data["tracker"]
         user_id = tracker_and_data["user_id"]
@@ -476,7 +494,9 @@ class TestOAuthReconnectionTracker:
         assert tracker.is_active(user_id, server_name) == False
 
     @patch("time.time")
-    def test_cleanup_if_timed_out_should_not_cleanup_active_entries_and_return_false(self, mock_time, tracker_and_data):
+    def test_cleanup_if_timed_out_should_not_cleanup_active_entries_and_return_false(
+        self, mock_time, tracker_and_data
+    ):
         """Should not cleanup active entries and return False"""
         tracker = tracker_and_data["tracker"]
         user_id = tracker_and_data["user_id"]
@@ -494,7 +514,9 @@ class TestOAuthReconnectionTracker:
         assert was_cleaned_up == False
         assert tracker.is_active(user_id, server_name) == True
 
-    def test_cleanup_if_timed_out_should_return_false_for_non_existent_entries(self, tracker_and_data):
+    def test_cleanup_if_timed_out_should_return_false_for_non_existent_entries(
+        self, tracker_and_data
+    ):
         """Should return False for non-existent entries"""
         tracker = tracker_and_data["tracker"]
 
@@ -503,7 +525,9 @@ class TestOAuthReconnectionTracker:
 
     # ========== Timestamp tracking edge case tests ==========
     @patch("time.time")
-    def test_should_update_timestamp_when_setting_active_on_already_active_server(self, mock_time, tracker_and_data):
+    def test_should_update_timestamp_when_setting_active_on_already_active_server(
+        self, mock_time, tracker_and_data
+    ):
         """Should update timestamp when setting active on already active server"""
         tracker = tracker_and_data["tracker"]
         user_id = tracker_and_data["user_id"]
@@ -533,7 +557,9 @@ class TestOAuthReconnectionTracker:
         assert tracker.is_still_reconnecting(user_id, server_name) == False
 
     @patch("time.time")
-    def test_should_handle_same_server_for_different_users_independently(self, mock_time, tracker_and_data):
+    def test_should_handle_same_server_for_different_users_independently(
+        self, mock_time, tracker_and_data
+    ):
         """Should handle same server for different users independently"""
         tracker = tracker_and_data["tracker"]
         user_id = tracker_and_data["user_id"]

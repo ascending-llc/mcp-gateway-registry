@@ -30,7 +30,7 @@ class KeycloakProvider(AuthProvider):
         client_secret: str,
         keycloak_external_url: str | None = None,
         m2m_client_id: str | None = None,
-        m2m_client_secret: str | None = None
+        m2m_client_secret: str | None = None,
     ):
         """Initialize Keycloak provider.
 
@@ -66,14 +66,11 @@ class KeycloakProvider(AuthProvider):
         self.logout_url = f"{self.external_realm_url}/protocol/openid-connect/logout"
         self.config_url = f"{self.realm_url}/.well-known/openid_configuration"
 
-        logger.debug(f"Initialized Keycloak provider for realm '{realm}' at {keycloak_url} (external: {self.keycloak_external_url})")
+        logger.debug(
+            f"Initialized Keycloak provider for realm '{realm}' at {keycloak_url} (external: {self.keycloak_external_url})"
+        )
 
-
-    def validate_token(
-        self,
-        token: str,
-        **kwargs: Any
-    ) -> dict[str, Any]:
+    def validate_token(self, token: str, **kwargs: Any) -> dict[str, Any]:
         """Validate Keycloak JWT token."""
         try:
             logger.debug("Validating Keycloak JWT token")
@@ -93,6 +90,7 @@ class KeycloakProvider(AuthProvider):
             for key in jwks.get("keys", []):
                 if key.get("kid") == kid:
                     from jwt import PyJWK
+
                     signing_key = PyJWK(key).key
                     break
 
@@ -102,8 +100,8 @@ class KeycloakProvider(AuthProvider):
             # Validate and decode token - accept multiple valid issuers
             valid_issuers = [
                 self.external_realm_url,  # External URL: https://mcpgateway.ddns.net/realms/mcp-gateway
-                self.realm_url,           # Internal URL: http://keycloak:8080/realms/mcp-gateway
-                f"http://localhost:8080/realms/{self.realm}"  # Localhost URL for development
+                self.realm_url,  # Internal URL: http://keycloak:8080/realms/mcp-gateway
+                f"http://localhost:8080/realms/{self.realm}",  # Localhost URL for development
             ]
 
             claims = None
@@ -116,11 +114,7 @@ class KeycloakProvider(AuthProvider):
                         algorithms=["RS256"],
                         issuer=issuer,
                         audience=["account", self.client_id, self.m2m_client_id],
-                        options={
-                            "verify_exp": True,
-                            "verify_iat": True,
-                            "verify_aud": True
-                        }
+                        options={"verify_exp": True, "verify_iat": True, "verify_aud": True},
                     )
                     logger.debug(f"Token validation successful with issuer: {issuer}")
                     break
@@ -131,7 +125,9 @@ class KeycloakProvider(AuthProvider):
             if claims is None:
                 raise last_error or ValueError("Token validation failed with all valid issuers")
 
-            logger.debug(f"Token validation successful for user: {claims.get('preferred_username', 'unknown')}")
+            logger.debug(
+                f"Token validation successful for user: {claims.get('preferred_username', 'unknown')}"
+            )
 
             # Extract user info from claims
             return {
@@ -142,7 +138,7 @@ class KeycloakProvider(AuthProvider):
                 "scopes": claims.get("scope", "").split() if claims.get("scope") else [],
                 "client_id": claims.get("azp", claims.get("aud", self.client_id)),
                 "method": "keycloak",
-                "data": claims
+                "data": claims,
             }
 
         except jwt.ExpiredSignatureError:
@@ -155,14 +151,12 @@ class KeycloakProvider(AuthProvider):
             logger.error(f"Keycloak token validation error: {e}")
             raise ValueError(f"Token validation failed: {e}")
 
-
     def get_jwks(self) -> dict[str, Any]:
         """Get JSON Web Key Set from Keycloak with caching."""
         current_time = time.time()
 
         # Check if cache is still valid
-        if (self._jwks_cache and
-            (current_time - self._jwks_cache_time) < self._jwks_cache_ttl):
+        if self._jwks_cache and (current_time - self._jwks_cache_time) < self._jwks_cache_ttl:
             logger.debug("Using cached JWKS")
             return self._jwks_cache
 
@@ -181,12 +175,7 @@ class KeycloakProvider(AuthProvider):
             logger.error(f"Failed to retrieve JWKS from Keycloak: {e}")
             raise ValueError(f"Cannot retrieve JWKS: {e}")
 
-
-    def exchange_code_for_token(
-        self,
-        code: str,
-        redirect_uri: str
-    ) -> dict[str, Any]:
+    def exchange_code_for_token(self, code: str, redirect_uri: str) -> dict[str, Any]:
         """Exchange authorization code for access token."""
         try:
             logger.debug("Exchanging authorization code for token")
@@ -196,7 +185,7 @@ class KeycloakProvider(AuthProvider):
                 "code": code,
                 "client_id": self.client_id,
                 "client_secret": self.client_secret,
-                "redirect_uri": redirect_uri
+                "redirect_uri": redirect_uri,
             }
 
             response = requests.post(self.token_url, data=data, timeout=10)
@@ -211,11 +200,7 @@ class KeycloakProvider(AuthProvider):
             logger.error(f"Failed to exchange code for token: {e}")
             raise ValueError(f"Token exchange failed: {e}")
 
-
-    def get_user_info(
-        self,
-        access_token: str
-    ) -> dict[str, Any]:
+    def get_user_info(self, access_token: str) -> dict[str, Any]:
         """Get user information from Keycloak."""
         try:
             logger.debug("Fetching user info from Keycloak")
@@ -225,7 +210,9 @@ class KeycloakProvider(AuthProvider):
             response.raise_for_status()
 
             user_info = response.json()
-            logger.debug(f"User info retrieved for: {user_info.get('preferred_username', 'unknown')}")
+            logger.debug(
+                f"User info retrieved for: {user_info.get('preferred_username', 'unknown')}"
+            )
 
             return user_info
 
@@ -233,13 +220,7 @@ class KeycloakProvider(AuthProvider):
             logger.error(f"Failed to get user info: {e}")
             raise ValueError(f"User info retrieval failed: {e}")
 
-
-    def get_auth_url(
-        self,
-        redirect_uri: str,
-        state: str,
-        scope: str | None = None
-    ) -> str:
+    def get_auth_url(self, redirect_uri: str, state: str, scope: str | None = None) -> str:
         """Get Keycloak authorization URL."""
         logger.debug(f"Generating auth URL with redirect_uri: {redirect_uri}")
 
@@ -248,7 +229,7 @@ class KeycloakProvider(AuthProvider):
             "response_type": "code",
             "scope": scope or "openid email profile",
             "redirect_uri": redirect_uri,
-            "state": state
+            "state": state,
         }
 
         auth_url = f"{self.auth_url}?{urlencode(params)}"
@@ -256,29 +237,18 @@ class KeycloakProvider(AuthProvider):
 
         return auth_url
 
-
-    def get_logout_url(
-        self,
-        redirect_uri: str
-    ) -> str:
+    def get_logout_url(self, redirect_uri: str) -> str:
         """Get Keycloak logout URL."""
         logger.debug(f"Generating logout URL with redirect_uri: {redirect_uri}")
 
-        params = {
-            "client_id": self.client_id,
-            "post_logout_redirect_uri": redirect_uri
-        }
+        params = {"client_id": self.client_id, "post_logout_redirect_uri": redirect_uri}
 
         logout_url = f"{self.logout_url}?{urlencode(params)}"
         logger.debug(f"Generated logout URL: {logout_url}")
 
         return logout_url
 
-
-    def refresh_token(
-        self,
-        refresh_token: str
-    ) -> dict[str, Any]:
+    def refresh_token(self, refresh_token: str) -> dict[str, Any]:
         """Refresh an access token using a refresh token."""
         try:
             logger.debug("Refreshing access token")
@@ -287,7 +257,7 @@ class KeycloakProvider(AuthProvider):
                 "grant_type": "refresh_token",
                 "refresh_token": refresh_token,
                 "client_id": self.client_id,
-                "client_secret": self.client_secret
+                "client_secret": self.client_secret,
             }
 
             response = requests.post(self.token_url, data=data, timeout=10)
@@ -302,21 +272,16 @@ class KeycloakProvider(AuthProvider):
             logger.error(f"Failed to refresh token: {e}")
             raise ValueError(f"Token refresh failed: {e}")
 
-
-    def validate_m2m_token(
-        self,
-        token: str
-    ) -> dict[str, Any]:
+    def validate_m2m_token(self, token: str) -> dict[str, Any]:
         """Validate a machine-to-machine token."""
         # M2M tokens use the same validation as regular tokens
         return self.validate_token(token)
-
 
     def get_m2m_token(
         self,
         client_id: str | None = None,
         client_secret: str | None = None,
-        scope: str | None = None
+        scope: str | None = None,
     ) -> dict[str, Any]:
         """Get machine-to-machine token using client credentials."""
         try:
@@ -326,7 +291,7 @@ class KeycloakProvider(AuthProvider):
                 "grant_type": "client_credentials",
                 "client_id": client_id or self.m2m_client_id,
                 "client_secret": client_secret or self.m2m_client_secret,
-                "scope": scope or "openid"
+                "scope": scope or "openid",
             }
 
             response = requests.post(self.token_url, data=data, timeout=10)
@@ -340,7 +305,6 @@ class KeycloakProvider(AuthProvider):
         except requests.RequestException as e:
             logger.error(f"Failed to get M2M token: {e}")
             raise ValueError(f"M2M token generation failed: {e}")
-
 
     @lru_cache(maxsize=1)
     def _get_openid_configuration(self) -> dict[str, Any]:
@@ -359,7 +323,6 @@ class KeycloakProvider(AuthProvider):
             logger.error(f"Failed to get OpenID configuration: {e}")
             raise ValueError(f"OpenID configuration retrieval failed: {e}")
 
-
     def _check_keycloak_health(self) -> bool:
         """Check if Keycloak is healthy and accessible."""
         try:
@@ -368,7 +331,6 @@ class KeycloakProvider(AuthProvider):
             return response.status_code == 200
         except Exception:
             return False
-
 
     def get_provider_info(self) -> dict[str, Any]:
         """Get provider-specific information."""
@@ -383,7 +345,7 @@ class KeycloakProvider(AuthProvider):
                 "userinfo": self.userinfo_url,
                 "jwks": self.jwks_url,
                 "logout": self.logout_url,
-                "config": self.config_url
+                "config": self.config_url,
             },
-            "healthy": self._check_keycloak_health()
+            "healthy": self._check_keycloak_health(),
         }

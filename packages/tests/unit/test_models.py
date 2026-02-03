@@ -96,7 +96,7 @@ class TestExtendedMCPServerStructure:
                         "name": "create_repo",
                         "description": "Create a repository",
                         "parameters": {"type": "object", "properties": {}},
-                    }
+                    },
                 }
             },
             "initDuration": 170,

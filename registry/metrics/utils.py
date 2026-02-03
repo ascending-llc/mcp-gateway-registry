@@ -66,5 +66,5 @@ def extract_headers_for_analysis(headers: dict[str, str]) -> dict[str, Any]:
         "origin": headers.get("origin", "unknown"),
         "referer_present": bool(headers.get("referer")),
         "connection": headers.get("connection", "unknown"),
-        "upgrade": headers.get("upgrade", "unknown")
+        "upgrade": headers.get("upgrade", "unknown"),
     }

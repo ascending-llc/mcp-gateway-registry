@@ -60,4 +60,5 @@ def setup_logging():
 
     return root_logger
 
+
 logger = setup_logging()

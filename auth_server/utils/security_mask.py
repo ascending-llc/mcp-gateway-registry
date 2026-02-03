@@ -113,6 +113,7 @@ def parse_server_and_tool_from_url(original_url: str) -> tuple[str | None, str |
     """
     try:
         from urllib.parse import urlparse
+
         parsed_url = urlparse(original_url)
         path = parsed_url.path.strip("/")
         path_parts = path.split("/") if path else []

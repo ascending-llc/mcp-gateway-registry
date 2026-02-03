@@ -10,9 +10,7 @@ from registry.utils.log import logger
 
 
 async def get_servers_connection_status(
-        user_id: str,
-        servers: list[Any],
-        mcp_service: MCPService | None = None
+    user_id: str, servers: list[Any], mcp_service: MCPService | None = None
 ) -> dict[str, dict[str, Any]]:
     """
     Get connection status for multiple servers.
@@ -27,13 +25,11 @@ async def get_servers_connection_status(
     # Retrieve the status resolver
     flow_manager = get_flow_state_manager()
     reconnection_mgr = get_reconnection_manager(
-        mcp_service=mcp_service,
-        oauth_service=mcp_service.oauth_service
+        mcp_service=mcp_service, oauth_service=mcp_service.oauth_service
     )
 
     status_resolver = get_status_resolver(
-        flow_state_manager=flow_manager,
-        reconnection_manager=reconnection_mgr
+        flow_state_manager=flow_manager, reconnection_manager=reconnection_mgr
     )
 
     # Retrieve application-level and user-level connections
@@ -60,7 +56,7 @@ async def get_servers_connection_status(
                 server_config=server.config,
                 connection=connection,
                 is_oauth_server=requires_oauth,
-                idle_timeout=idle_timeout_seconds
+                idle_timeout=idle_timeout_seconds,
             )
 
             # Resolve the status
@@ -68,20 +64,20 @@ async def get_servers_connection_status(
             connection_status[server_id] = server_status
 
         except Exception as e:
-            logger.error(f"Failed to retrieve connection status for {server_name}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to retrieve connection status for {server_name}: {e}", exc_info=True
+            )
             connection_status[server_id] = {
                 "connection_state": ConnectionState.ERROR.value,
                 "requires_oauth": requires_oauth,
-                "error": f"Failed to retrieve connection status: {e!s}"
+                "error": f"Failed to retrieve connection status: {e!s}",
             }
 
     return connection_status
 
 
 async def get_single_server_connection_status(
-        user_id: str,
-        server_id: str,
-        mcp_service: MCPService | None = None
+    user_id: str, server_id: str, mcp_service: MCPService | None = None
 ) -> dict[str, Any]:
     """
     Get connection status for a single server.
@@ -95,21 +91,20 @@ async def get_single_server_connection_status(
 
     flow_manager = get_flow_state_manager()
     reconnection_mgr = get_reconnection_manager(
-        mcp_service=mcp_service,
-        oauth_service=mcp_service.oauth_service
+        mcp_service=mcp_service, oauth_service=mcp_service.oauth_service
     )
 
     status_resolver = get_status_resolver(
-        flow_state_manager=flow_manager,
-        reconnection_manager=reconnection_mgr
+        flow_state_manager=flow_manager, reconnection_manager=reconnection_mgr
     )
 
     app_connections = mcp_service.connection_service.app_connections
     user_connections = mcp_service.connection_service.get_user_connections(user_id)
 
     # Determine if it is an OAuth server.
-    requires_oauth = server_docs.config.get("requires_oauth", False) or \
-                     server_docs.config.get("requiresOAuth", False)
+    requires_oauth = server_docs.config.get("requires_oauth", False) or server_docs.config.get(
+        "requiresOAuth", False
+    )
 
     # Connection idle time
     if requires_oauth:

@@ -34,7 +34,7 @@ def sample_server_data():
                         "name": "test_tool1",
                         "description": "Test tool 1",
                         "parameters": {"type": "object", "properties": {}},
-                    }
+                    },
                 }
             },
             "initDuration": 150,

@@ -1,6 +1,7 @@
 """
 Integration tests for server routes.
 """
+
 from datetime import UTC
 from unittest.mock import AsyncMock, patch
 
@@ -11,7 +12,9 @@ from registry.main import app
 from registry.tests.fixtures.factories import ServerInfoFactory
 
 
-@pytest.mark.skip(reason="Requires rewrite for ServerServiceV1 MongoDB API and new server_routes architecture (PR-113)")
+@pytest.mark.skip(
+    reason="Requires rewrite for ServerServiceV1 MongoDB API and new server_routes architecture (PR-113)"
+)
 @pytest.mark.integration
 @pytest.mark.servers
 class TestServerRoutes:
@@ -38,27 +41,31 @@ class TestServerRoutes:
         """Test successful server registration."""
         server_data = ServerInfoFactory()
 
-        with patch("registry.api.server_routes.server_service_v1") as mock_service, \
-             patch("registry.services.search.service.faiss_service") as mock_faiss, \
-             patch("registry.health.service.health_service") as mock_health:
-
+        with (
+            patch("registry.api.server_routes.server_service_v1") as mock_service,
+            patch("registry.services.search.service.faiss_service") as mock_faiss,
+            patch("registry.health.service.health_service") as mock_health,
+        ):
             mock_service.register_server.return_value = True
             mock_faiss.add_or_update_service = AsyncMock()
             mock_health.broadcast_health_update = AsyncMock()
             mock_service.get_enabled_services.return_value = []
             mock_service.get_server_info.return_value = None
 
-            response = test_client.post("/api/register", data={
-                "name": server_data["server_name"],
-                "description": server_data["description"],
-                "path": server_data["path"],
-                "proxy_pass_url": server_data["proxy_pass_url"],
-                "tags": ",".join(server_data["tags"]),
-                "num_tools": server_data["num_tools"],
-                "num_stars": server_data["num_stars"],
-                "is_python": server_data["is_python"],
-                "license": server_data["license"],
-            })
+            response = test_client.post(
+                "/api/register",
+                data={
+                    "name": server_data["server_name"],
+                    "description": server_data["description"],
+                    "path": server_data["path"],
+                    "proxy_pass_url": server_data["proxy_pass_url"],
+                    "tags": ",".join(server_data["tags"]),
+                    "num_tools": server_data["num_tools"],
+                    "num_stars": server_data["num_stars"],
+                    "is_python": server_data["is_python"],
+                    "license": server_data["license"],
+                },
+            )
 
             assert response.status_code == 201
             data = response.json()
@@ -72,12 +79,15 @@ class TestServerRoutes:
         with patch("registry.api.server_routes.server_service_v1") as mock_service:
             mock_service.register_server.return_value = False
 
-            response = test_client.post("/api/register", data={
-                "name": server_data["server_name"],
-                "description": server_data["description"],
-                "path": server_data["path"],
-                "proxy_pass_url": server_data["proxy_pass_url"],
-            })
+            response = test_client.post(
+                "/api/register",
+                data={
+                    "name": server_data["server_name"],
+                    "description": server_data["description"],
+                    "path": server_data["path"],
+                    "proxy_pass_url": server_data["proxy_pass_url"],
+                },
+            )
 
             assert response.status_code == 400
             data = response.json()
@@ -87,19 +97,18 @@ class TestServerRoutes:
         """Test successful service toggle."""
         server_data = ServerInfoFactory()
 
-        with patch("registry.api.server_routes.server_service_v1") as mock_service, \
-             patch("registry.services.search.service.faiss_service") as mock_faiss, \
-             patch("registry.health.service.health_service") as mock_health:
-
+        with (
+            patch("registry.api.server_routes.server_service_v1") as mock_service,
+            patch("registry.services.search.service.faiss_service") as mock_faiss,
+            patch("registry.health.service.health_service") as mock_health,
+        ):
             mock_service.get_server_info.return_value = server_data
             mock_service.toggle_service.return_value = True
             mock_faiss.add_or_update_service = AsyncMock()
             mock_health.broadcast_health_update = AsyncMock()
             mock_service.get_enabled_services.return_value = []
 
-            response = test_client.post(f"/api/toggle{server_data['path']}", data={
-                "enabled": "on"
-            })
+            response = test_client.post(f"/api/toggle{server_data['path']}", data={"enabled": "on"})
 
             assert response.status_code == 200
             data = response.json()
@@ -111,9 +120,7 @@ class TestServerRoutes:
         with patch("registry.api.server_routes.server_service_v1") as mock_service:
             mock_service.get_server_info.return_value = None
 
-            response = test_client.post("/api/toggle/nonexistent", data={
-                "enabled": "on"
-            })
+            response = test_client.post("/api/toggle/nonexistent", data={"enabled": "on"})
 
             assert response.status_code == 404
 
@@ -141,10 +148,7 @@ class TestServerRoutes:
 
     def test_get_all_server_details(self, test_client: TestClient, mock_authenticated_user):
         """Test getting all server details."""
-        servers = {
-            "/test1": ServerInfoFactory(),
-            "/test2": ServerInfoFactory()
-        }
+        servers = {"/test1": ServerInfoFactory(), "/test2": ServerInfoFactory()}
 
         with patch("registry.api.server_routes.server_service_v1") as mock_service:
             mock_service.get_all_servers.return_value = servers
@@ -160,12 +164,14 @@ class TestServerRoutes:
     def test_refresh_service_success(self, test_client: TestClient, mock_authenticated_user):
         """Test refreshing service."""
         from datetime import datetime
+
         server_data = ServerInfoFactory()
 
-        with patch("registry.api.server_routes.server_service_v1") as mock_service, \
-             patch("registry.services.search.service.faiss_service") as mock_faiss, \
-             patch("registry.api.server_routes.health_service") as mock_health:
-
+        with (
+            patch("registry.api.server_routes.server_service_v1") as mock_service,
+            patch("registry.services.search.service.faiss_service") as mock_faiss,
+            patch("registry.api.server_routes.health_service") as mock_health,
+        ):
             mock_service.get_server_info.return_value = server_data
             mock_service.is_service_enabled.return_value = True
             mock_service.user_can_access_server_path.return_value = True
@@ -218,20 +224,25 @@ class TestServerRoutes:
         """Test successful server edit submission."""
         server_data = ServerInfoFactory()
 
-        with patch("registry.api.server_routes.server_service_v1") as mock_service, \
-             patch("registry.services.search.service.faiss_service") as mock_faiss:
-
+        with (
+            patch("registry.api.server_routes.server_service_v1") as mock_service,
+            patch("registry.services.search.service.faiss_service") as mock_faiss,
+        ):
             mock_service.get_server_info.return_value = server_data
             mock_service.update_server.return_value = True
             mock_service.is_service_enabled.return_value = False
             mock_service.get_enabled_services.return_value = []
             mock_faiss.add_or_update_service = AsyncMock()
 
-            response = test_client.post(f"/api/edit{server_data['path']}", data={
-                "name": "Updated Name",
-                "description": server_data["description"],
-                "proxy_pass_url": server_data["proxy_pass_url"],
-            }, follow_redirects=False)
+            response = test_client.post(
+                f"/api/edit{server_data['path']}",
+                data={
+                    "name": "Updated Name",
+                    "description": server_data["description"],
+                    "proxy_pass_url": server_data["proxy_pass_url"],
+                },
+                follow_redirects=False,
+            )
 
             # Should redirect to main page
             assert response.status_code == 303
@@ -242,9 +253,12 @@ class TestServerRoutes:
         with patch("registry.api.server_routes.server_service_v1") as mock_service:
             mock_service.get_server_info.return_value = None
 
-            response = test_client.post("/api/edit/nonexistent", data={
-                "name": "Test",
-                "proxy_pass_url": "http://localhost:8000",
-            })
+            response = test_client.post(
+                "/api/edit/nonexistent",
+                data={
+                    "name": "Test",
+                    "proxy_pass_url": "http://localhost:8000",
+                },
+            )
 
             assert response.status_code == 404

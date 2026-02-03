@@ -1,6 +1,7 @@
 """
 Unit tests for authentication routes.
 """
+
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -59,7 +60,7 @@ class TestAuthRoutes:
             "groups": [],
             "provider": "entra",
             "auth_method": "oauth2",
-            "idp_id": "12345-6789"
+            "idp_id": "12345-6789",
         }
 
         # Use the same signer as the auth routes
@@ -72,7 +73,7 @@ class TestAuthRoutes:
         """Test successful OAuth2 providers fetch."""
         mock_providers = [
             {"name": "google", "display_name": "Google"},
-            {"name": "github", "display_name": "GitHub"}
+            {"name": "github", "display_name": "GitHub"},
         ]
 
         with patch("httpx.AsyncClient") as mock_client:
@@ -90,7 +91,9 @@ class TestAuthRoutes:
     async def test_get_oauth2_providers_failure(self):
         """Test OAuth2 providers fetch failure."""
         with patch("httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.get.side_effect = Exception("Network error")
+            mock_client.return_value.__aenter__.return_value.get.side_effect = Exception(
+                "Network error"
+            )
 
             providers = await get_oauth2_providers()
 
@@ -192,9 +195,16 @@ class TestAuthRoutes:
             "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTIzNDUiLCJzdWIiOiJ0ZXN0dXNlciIsImVtYWlsIjoidGVzdEB0ZXN0LmNvbSIsIm5hbWUiOiJUZXN0IFVzZXIiLCJncm91cHMiOltdLCJwcm92aWRlciI6ImtleWNsb2FrIn0.test"
         }
 
-        with patch("registry.api.redirect_routes.IUser.find_one", new=AsyncMock(return_value=mock_user)), \
-             patch("registry.api.redirect_routes.user_service.get_user_by_user_id", new=AsyncMock(return_value=mock_user)), \
-             patch("registry.api.redirect_routes.httpx.AsyncClient") as mock_client:
+        with (
+            patch(
+                "registry.api.redirect_routes.IUser.find_one", new=AsyncMock(return_value=mock_user)
+            ),
+            patch(
+                "registry.api.redirect_routes.user_service.get_user_by_user_id",
+                new=AsyncMock(return_value=mock_user),
+            ),
+            patch("registry.api.redirect_routes.httpx.AsyncClient") as mock_client,
+        ):
             mock_client_instance = mock_client.return_value.__aenter__.return_value
             mock_client_instance.post = AsyncMock(return_value=mock_response)
 
@@ -214,8 +224,10 @@ class TestAuthRoutes:
             "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0dXNlciIsImVtYWlsIjoidGVzdEB0ZXN0LmNvbSIsIm5hbWUiOiJUZXN0IFVzZXIiLCJncm91cHMiOltdLCJwcm92aWRlciI6ImtleWNsb2FrIn0.test"
         }
 
-        with patch("registry.api.redirect_routes.IUser.find_one", new=AsyncMock(return_value=None)), \
-             patch("registry.api.redirect_routes.httpx.AsyncClient") as mock_client:
+        with (
+            patch("registry.api.redirect_routes.IUser.find_one", new=AsyncMock(return_value=None)),
+            patch("registry.api.redirect_routes.httpx.AsyncClient") as mock_client,
+        ):
             mock_client_instance = mock_client.return_value.__aenter__.return_value
             mock_client_instance.post = AsyncMock(return_value=mock_response)
 
@@ -228,7 +240,12 @@ class TestAuthRoutes:
     @pytest.mark.asyncio
     async def test_oauth2_callback_with_error(self, mock_request, mock_user_info):
         """Test OAuth2 callback with error parameter."""
-        response = await oauth2_callback(mock_request, mock_user_info, error="oauth2_error", details="Provider error",)
+        response = await oauth2_callback(
+            mock_request,
+            mock_user_info,
+            error="oauth2_error",
+            details="Provider error",
+        )
 
         assert isinstance(response, RedirectResponse)
         assert response.status_code == 302
@@ -247,7 +264,9 @@ class TestAuthRoutes:
     @pytest.mark.asyncio
     async def test_oauth2_callback_oauth2_callback_failed(self, mock_request, mock_user_info):
         """Test OAuth2 callback with callback failed error."""
-        response = await oauth2_callback(mock_request, mock_user_info, error="oauth2_callback_failed")
+        response = await oauth2_callback(
+            mock_request, mock_user_info, error="oauth2_callback_failed"
+        )
 
         assert isinstance(response, RedirectResponse)
         assert response.status_code == 302
@@ -281,9 +300,10 @@ class TestAuthRoutes:
         # Mock request headers to indicate traditional form submission (not API)
         mock_request.headers = {"accept": "text/html"}
 
-        with patch("registry.api.redirect_routes.validate_login_credentials") as mock_validate, \
-             patch("registry.api.redirect_routes.create_session_cookie") as mock_create_session:
-
+        with (
+            patch("registry.api.redirect_routes.validate_login_credentials") as mock_validate,
+            patch("registry.api.redirect_routes.create_session_cookie") as mock_create_session,
+        ):
             mock_validate.return_value = True
             mock_create_session.return_value = "session_data"
 

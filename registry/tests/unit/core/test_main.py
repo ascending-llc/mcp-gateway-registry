@@ -1,6 +1,7 @@
 """
 Unit tests for main application module.
 """
+
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -18,16 +19,17 @@ class TestMainApplication:
     @pytest.fixture
     def mock_services(self):
         """Mock all services used in lifespan."""
-        with patch("registry.main.vector_service") as mock_vector_service, \
-             patch("registry.main.health_service") as mock_health_service, \
-             patch("registry.main.agent_service") as mock_agent_service, \
-             patch("registry.main.init_mongodb") as mock_init_mongodb, \
-             patch("registry.main.close_mongodb") as mock_close_mongodb, \
-             patch("registry.main.init_redis") as mock_init_redis, \
-             patch("registry.main.close_redis") as mock_close_redis, \
-             patch("registry.main.get_federation_service") as mock_get_federation, \
-             patch("registry.main.shutdown_proxy_client") as mock_shutdown_proxy:
-
+        with (
+            patch("registry.main.vector_service") as mock_vector_service,
+            patch("registry.main.health_service") as mock_health_service,
+            patch("registry.main.agent_service") as mock_agent_service,
+            patch("registry.main.init_mongodb") as mock_init_mongodb,
+            patch("registry.main.close_mongodb") as mock_close_mongodb,
+            patch("registry.main.init_redis") as mock_init_redis,
+            patch("registry.main.close_redis") as mock_close_redis,
+            patch("registry.main.get_federation_service") as mock_get_federation,
+            patch("registry.main.shutdown_proxy_client") as mock_shutdown_proxy,
+        ):
             # Configure mocks
             mock_vector_service.initialize = AsyncMock()
             mock_vector_service._initialized = False  # Skip index update
@@ -63,7 +65,7 @@ class TestMainApplication:
                 "init_redis": mock_init_redis,
                 "close_redis": mock_close_redis,
                 "get_federation_service": mock_get_federation,
-                "shutdown_proxy_client": mock_shutdown_proxy
+                "shutdown_proxy_client": mock_shutdown_proxy,
             }
 
     @pytest.mark.asyncio
@@ -76,11 +78,15 @@ class TestMainApplication:
             mock_services["vector_service"].initialize.assert_called_once()
             mock_services["health_service"].initialize.assert_called_once()
 
-    @pytest.mark.skip(reason="Agent service failure doesn't crash startup in current implementation")
+    @pytest.mark.skip(
+        reason="Agent service failure doesn't crash startup in current implementation"
+    )
     @pytest.mark.asyncio
     async def test_lifespan_startup_server_service_failure(self, mock_services):
         """Test startup failure during agent service initialization."""
-        mock_services["agent_service"].load_agents_and_state.side_effect = Exception("Agent load failed")
+        mock_services["agent_service"].load_agents_and_state.side_effect = Exception(
+            "Agent load failed"
+        )
 
         test_app = FastAPI()
 
@@ -142,7 +148,10 @@ class TestMainApplication:
     def test_app_configuration(self):
         """Test FastAPI app configuration."""
         assert app.title == "MCP Gateway Registry"
-        assert app.description == "A registry and management system for Model Context Protocol (MCP) servers"
+        assert (
+            app.description
+            == "A registry and management system for Model Context Protocol (MCP) servers"
+        )
         assert app.version == "1.0.0"
 
     def test_app_routes_registered(self):
@@ -151,9 +160,7 @@ class TestMainApplication:
         client = TestClient(app)
 
         # Test basic health endpoint (should not require auth)
-        with patch("registry.main.vector_service"), \
-             patch("registry.main.health_service"):
-
+        with patch("registry.main.vector_service"), patch("registry.main.health_service"):
             response = client.get("/health")
             assert response.status_code == 200
             assert response.json() == {"status": "healthy", "service": "mcp-gateway-registry"}
@@ -162,7 +169,9 @@ class TestMainApplication:
         """Test that static files are properly mounted."""
         # Check if static files mount exists
         # Note: Static files may not be mounted in the registry app if frontend is served separately
-        static_mounts = [mount for mount in app.routes if hasattr(mount, "name") and mount.name == "static"]
+        static_mounts = [
+            mount for mount in app.routes if hasattr(mount, "name") and mount.name == "static"
+        ]
         # Accept either having static files or not (depends on deployment configuration)
         # Just verify the check doesn't crash
         if len(static_mounts) > 0:

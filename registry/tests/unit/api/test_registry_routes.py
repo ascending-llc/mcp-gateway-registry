@@ -72,11 +72,7 @@ def mock_enhanced_auth_user():
 @pytest.fixture
 def admin_session_cookie():
     """Create a valid admin session cookie."""
-    return create_session_cookie(
-        settings.admin_user,
-        auth_method="traditional",
-        provider="local"
-    )
+    return create_session_cookie(settings.admin_user, auth_method="traditional", provider="local")
 
 
 @pytest.fixture
@@ -141,20 +137,22 @@ class TestV0ListServers:
 
         app.dependency_overrides[enhanced_auth] = mock_enhanced_auth_admin
 
-        with patch.object(
-            server_service, "get_all_servers", return_value=sample_servers_data
-        ), patch.object(
-            server_service, "is_service_enabled", return_value=True
-        ), patch.object(
-            health_service,
-            "_get_service_health_data",
-            return_value={
-                "status": "healthy",
-                "last_checked_iso": "2025-10-12T10:00:00Z",
-                "num_tools": 0,
-            },
+        with (
+            patch.object(server_service, "get_all_servers", return_value=sample_servers_data),
+            patch.object(server_service, "is_service_enabled", return_value=True),
+            patch.object(
+                health_service,
+                "_get_service_health_data",
+                return_value={
+                    "status": "healthy",
+                    "last_checked_iso": "2025-10-12T10:00:00Z",
+                    "num_tools": 0,
+                },
+            ),
         ):
-            response = authenticated_client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers")
+            response = authenticated_client.get(
+                f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers"
+            )
 
             assert response.status_code == status.HTTP_200_OK
             data = response.json()
@@ -182,7 +180,7 @@ class TestV0ListServers:
             user_context["username"],
             auth_method=user_context["auth_method"],
             provider=user_context["provider"],
-            groups=user_context["groups"]
+            groups=user_context["groups"],
         )
 
         # User should only see servers they have permission for
@@ -192,20 +190,22 @@ class TestV0ListServers:
         def mock_is_enabled(path):
             return path in filtered_servers
 
-        with patch.object(
-            server_service,
-            "get_all_servers_with_permissions",
-            return_value=filtered_servers,
-        ), patch.object(
-            server_service, "is_service_enabled", side_effect=mock_is_enabled
-        ), patch.object(
-            health_service,
-            "_get_service_health_data",
-            return_value={
-                "status": "healthy",
-                "last_checked_iso": "2025-10-12T10:00:00Z",
-                "num_tools": 11,
-            },
+        with (
+            patch.object(
+                server_service,
+                "get_all_servers_with_permissions",
+                return_value=filtered_servers,
+            ),
+            patch.object(server_service, "is_service_enabled", side_effect=mock_is_enabled),
+            patch.object(
+                health_service,
+                "_get_service_health_data",
+                return_value={
+                    "status": "healthy",
+                    "last_checked_iso": "2025-10-12T10:00:00Z",
+                    "num_tools": 11,
+                },
+            ),
         ):
             client = TestClient(app)
             # Set the session cookie in the request
@@ -219,26 +219,30 @@ class TestV0ListServers:
             assert len(data["servers"]) == 1
             assert data["servers"][0]["server"]["name"] == "io.mcpgateway/mcpgw"
 
-    def test_list_servers_pagination(self, mock_enhanced_auth_admin, sample_servers_data, authenticated_client):
+    def test_list_servers_pagination(
+        self, mock_enhanced_auth_admin, sample_servers_data, authenticated_client
+    ):
         """Test server list pagination with limit."""
         from registry.auth.dependencies import enhanced_auth
 
         app.dependency_overrides[enhanced_auth] = mock_enhanced_auth_admin
 
-        with patch.object(
-            server_service, "get_all_servers", return_value=sample_servers_data
-        ), patch.object(
-            server_service, "is_service_enabled", return_value=True
-        ), patch.object(
-            health_service,
-            "_get_service_health_data",
-            return_value={
-                "status": "healthy",
-                "last_checked_iso": "2025-10-12T10:00:00Z",
-                "num_tools": 0,
-            },
+        with (
+            patch.object(server_service, "get_all_servers", return_value=sample_servers_data),
+            patch.object(server_service, "is_service_enabled", return_value=True),
+            patch.object(
+                health_service,
+                "_get_service_health_data",
+                return_value={
+                    "status": "healthy",
+                    "last_checked_iso": "2025-10-12T10:00:00Z",
+                    "num_tools": 0,
+                },
+            ),
         ):
-            response = authenticated_client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers?limit=2")
+            response = authenticated_client.get(
+                f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers?limit=2"
+            )
 
             assert response.status_code == status.HTTP_200_OK
             data = response.json()
@@ -257,20 +261,22 @@ class TestV0ListServers:
 
         app.dependency_overrides[enhanced_auth] = mock_enhanced_auth_admin
 
-        with patch.object(
-            server_service, "get_all_servers", return_value=sample_servers_data
-        ), patch.object(
-            server_service, "is_service_enabled", return_value=True
-        ), patch.object(
-            health_service,
-            "_get_service_health_data",
-            return_value={
-                "status": "healthy",
-                "last_checked_iso": "2025-10-12T10:00:00Z",
-                "num_tools": 3,
-            },
+        with (
+            patch.object(server_service, "get_all_servers", return_value=sample_servers_data),
+            patch.object(server_service, "is_service_enabled", return_value=True),
+            patch.object(
+                health_service,
+                "_get_service_health_data",
+                return_value={
+                    "status": "healthy",
+                    "last_checked_iso": "2025-10-12T10:00:00Z",
+                    "num_tools": 3,
+                },
+            ),
         ):
-            response = authenticated_client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers")
+            response = authenticated_client.get(
+                f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers"
+            )
 
             assert response.status_code == status.HTTP_200_OK
             data = response.json()
@@ -310,29 +316,35 @@ class TestV0ListServers:
 class TestV0ListServerVersions:
     """Test suite for GET /{api_version}/servers/{serverName}/versions endpoint."""
 
-    def test_list_versions_success(self, mock_enhanced_auth_admin, sample_servers_data, authenticated_client):
+    def test_list_versions_success(
+        self, mock_enhanced_auth_admin, sample_servers_data, authenticated_client
+    ):
         """Test listing versions for a server."""
         from registry.auth.dependencies import enhanced_auth
 
         app.dependency_overrides[enhanced_auth] = mock_enhanced_auth_admin
 
-        with patch.object(
-            server_service,
-            "get_server_info",
-            return_value=sample_servers_data["/server-a"],
-        ), patch.object(
-            server_service, "is_service_enabled", return_value=True
-        ), patch.object(
-            health_service,
-            "_get_service_health_data",
-            return_value={
-                "status": "healthy",
-                "last_checked_iso": "2025-10-12T10:00:00Z",
-                "num_tools": 3,
-            },
+        with (
+            patch.object(
+                server_service,
+                "get_server_info",
+                return_value=sample_servers_data["/server-a"],
+            ),
+            patch.object(server_service, "is_service_enabled", return_value=True),
+            patch.object(
+                health_service,
+                "_get_service_health_data",
+                return_value={
+                    "status": "healthy",
+                    "last_checked_iso": "2025-10-12T10:00:00Z",
+                    "num_tools": 3,
+                },
+            ),
         ):
             # URL-encode the server name
-            response = authenticated_client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fserver-a/versions")
+            response = authenticated_client.get(
+                f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fserver-a/versions"
+            )
 
             assert response.status_code == status.HTTP_200_OK
             data = response.json()
@@ -350,27 +362,31 @@ class TestV0ListServerVersions:
         app.dependency_overrides[enhanced_auth] = mock_enhanced_auth_admin
 
         with patch.object(server_service, "get_server_info", return_value=None):
-            response = authenticated_client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fnonexistent/versions")
+            response = authenticated_client.get(
+                f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fnonexistent/versions"
+            )
 
             assert response.status_code == status.HTTP_404_NOT_FOUND
 
         app.dependency_overrides.clear()
 
-    def test_list_versions_invalid_name_format(self, mock_enhanced_auth_admin, authenticated_client):
+    def test_list_versions_invalid_name_format(
+        self, mock_enhanced_auth_admin, authenticated_client
+    ):
         """Test listing versions with invalid server name format."""
         from registry.auth.dependencies import enhanced_auth
 
         app.dependency_overrides[enhanced_auth] = mock_enhanced_auth_admin
 
-        response = authenticated_client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/invalid-format/versions")
+        response = authenticated_client.get(
+            f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/invalid-format/versions"
+        )
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
         app.dependency_overrides.clear()
 
-    def test_list_versions_unauthorized_user(
-        self, mock_enhanced_auth_user, sample_servers_data
-    ):
+    def test_list_versions_unauthorized_user(self, mock_enhanced_auth_user, sample_servers_data):
         """Test that users cannot access servers they don't have permission for."""
         from fastapi.testclient import TestClient
 
@@ -381,7 +397,7 @@ class TestV0ListServerVersions:
             user_context["username"],
             auth_method=user_context["auth_method"],
             provider=user_context["provider"],
-            groups=user_context["groups"]
+            groups=user_context["groups"],
         )
 
         with patch.object(
@@ -391,7 +407,9 @@ class TestV0ListServerVersions:
         ):
             client = TestClient(app)
             client.cookies.set(settings.session_cookie_name, user_session_cookie)
-            response = client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fserver-a/versions")
+            response = client.get(
+                f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fserver-a/versions"
+            )
 
             # User doesn't have permission to Server A
             assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -404,26 +422,30 @@ class TestV0ListServerVersions:
 class TestV0GetServerVersion:
     """Test suite for GET /{api_version}/servers/{serverName}/versions/{version} endpoint."""
 
-    def test_get_version_latest(self, mock_enhanced_auth_admin, sample_servers_data, authenticated_client):
+    def test_get_version_latest(
+        self, mock_enhanced_auth_admin, sample_servers_data, authenticated_client
+    ):
         """Test getting server details with 'latest' version."""
         from registry.auth.dependencies import enhanced_auth
 
         app.dependency_overrides[enhanced_auth] = mock_enhanced_auth_admin
 
-        with patch.object(
-            server_service,
-            "get_server_info",
-            return_value=sample_servers_data["/server-a"],
-        ), patch.object(
-            server_service, "is_service_enabled", return_value=True
-        ), patch.object(
-            health_service,
-            "_get_service_health_data",
-            return_value={
-                "status": "healthy",
-                "last_checked_iso": "2025-10-12T10:00:00Z",
-                "num_tools": 3,
-            },
+        with (
+            patch.object(
+                server_service,
+                "get_server_info",
+                return_value=sample_servers_data["/server-a"],
+            ),
+            patch.object(server_service, "is_service_enabled", return_value=True),
+            patch.object(
+                health_service,
+                "_get_service_health_data",
+                return_value={
+                    "status": "healthy",
+                    "last_checked_iso": "2025-10-12T10:00:00Z",
+                    "num_tools": 3,
+                },
+            ),
         ):
             response = authenticated_client.get(
                 f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fserver-a/versions/latest"
@@ -439,28 +461,34 @@ class TestV0GetServerVersion:
 
         app.dependency_overrides.clear()
 
-    def test_get_version_specific(self, mock_enhanced_auth_admin, sample_servers_data, authenticated_client):
+    def test_get_version_specific(
+        self, mock_enhanced_auth_admin, sample_servers_data, authenticated_client
+    ):
         """Test getting server details with specific version."""
         from registry.auth.dependencies import enhanced_auth
 
         app.dependency_overrides[enhanced_auth] = mock_enhanced_auth_admin
 
-        with patch.object(
-            server_service,
-            "get_server_info",
-            return_value=sample_servers_data["/server-a"],
-        ), patch.object(
-            server_service, "is_service_enabled", return_value=True
-        ), patch.object(
-            health_service,
-            "_get_service_health_data",
-            return_value={
-                "status": "healthy",
-                "last_checked_iso": "2025-10-12T10:00:00Z",
-                "num_tools": 3,
-            },
+        with (
+            patch.object(
+                server_service,
+                "get_server_info",
+                return_value=sample_servers_data["/server-a"],
+            ),
+            patch.object(server_service, "is_service_enabled", return_value=True),
+            patch.object(
+                health_service,
+                "_get_service_health_data",
+                return_value={
+                    "status": "healthy",
+                    "last_checked_iso": "2025-10-12T10:00:00Z",
+                    "num_tools": 3,
+                },
+            ),
         ):
-            response = authenticated_client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fserver-a/versions/1.0.0")
+            response = authenticated_client.get(
+                f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fserver-a/versions/1.0.0"
+            )
 
             assert response.status_code == status.HTTP_200_OK
             data = response.json()
@@ -469,7 +497,9 @@ class TestV0GetServerVersion:
 
         app.dependency_overrides.clear()
 
-    def test_get_version_unsupported(self, mock_enhanced_auth_admin, sample_servers_data, authenticated_client):
+    def test_get_version_unsupported(
+        self, mock_enhanced_auth_admin, sample_servers_data, authenticated_client
+    ):
         """Test getting unsupported version returns 404."""
         from registry.auth.dependencies import enhanced_auth
 
@@ -480,7 +510,9 @@ class TestV0GetServerVersion:
             "get_server_info",
             return_value=sample_servers_data["/server-a"],
         ):
-            response = authenticated_client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fserver-a/versions/2.0.0")
+            response = authenticated_client.get(
+                f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fserver-a/versions/2.0.0"
+            )
 
             assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -509,20 +541,22 @@ class TestV0GetServerVersion:
 
         app.dependency_overrides[enhanced_auth] = mock_enhanced_auth_admin
 
-        with patch.object(
-            server_service,
-            "get_server_info",
-            return_value=sample_servers_data["/server-a"],
-        ), patch.object(
-            server_service, "is_service_enabled", return_value=True
-        ), patch.object(
-            health_service,
-            "_get_service_health_data",
-            return_value={
-                "status": "healthy",
-                "last_checked_iso": "2025-10-12T10:00:00Z",
-                "num_tools": 3,
-            },
+        with (
+            patch.object(
+                server_service,
+                "get_server_info",
+                return_value=sample_servers_data["/server-a"],
+            ),
+            patch.object(server_service, "is_service_enabled", return_value=True),
+            patch.object(
+                health_service,
+                "_get_service_health_data",
+                return_value={
+                    "status": "healthy",
+                    "last_checked_iso": "2025-10-12T10:00:00Z",
+                    "num_tools": 3,
+                },
+            ),
         ):
             response = authenticated_client.get(
                 f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/servers/io.mcpgateway%2Fserver-a/versions/latest"

@@ -66,13 +66,13 @@ class VectorStoreFactory:
     @classmethod
     def create_adapter(cls, config: BackendConfig | None = None) -> VectorStoreAdapter:
         """Create vector store adapter.
-        
+
         Args:
             config: BackendConfig instance (uses env vars if None)
-        
+
         Returns:
             VectorStoreAdapter instance
-        
+
         Raises:
             UnsupportedBackendError: Unsupported database or embedding type
             DependencyMissingError: Required LangChain packages not installed
@@ -94,16 +94,10 @@ class VectorStoreFactory:
     def _validate_config(cls, config: BackendConfig) -> None:
         """Validate configuration."""
         if config.vector_store_type not in get_registered_vector_stores():
-            raise UnsupportedBackendError(
-                config.vector_store_type,
-                get_registered_vector_stores()
-            )
+            raise UnsupportedBackendError(config.vector_store_type, get_registered_vector_stores())
 
         if config.embedding_provider not in get_registered_embeddings():
-            raise UnsupportedBackendError(
-                config.embedding_provider,
-                get_registered_embeddings()
-            )
+            raise UnsupportedBackendError(config.embedding_provider, get_registered_embeddings())
 
         logger.info(
             f"Creating adapter: vector_store={config.vector_store_type}, "
@@ -146,7 +140,7 @@ class VectorStoreFactory:
             install_cmd = "pip install " + " ".join(missing_packages)
             raise DependencyMissingError(
                 packages_str,
-                f"Required packages not installed: {packages_str}. Install with: {install_cmd}"
+                f"Required packages not installed: {packages_str}. Install with: {install_cmd}",
             )
         raise DependencyMissingError("unknown", str(error))
 

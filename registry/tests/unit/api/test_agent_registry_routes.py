@@ -95,11 +95,7 @@ def sample_agent_card() -> dict[str, Any]:
 @pytest.fixture
 def admin_session_cookie():
     """Create a valid admin session cookie."""
-    return create_session_cookie(
-        settings.admin_user,
-        auth_method="traditional",
-        provider="local"
-    )
+    return create_session_cookie(settings.admin_user, auth_method="traditional", provider="local")
 
 
 @pytest.fixture
@@ -720,9 +716,7 @@ class TestErrorHandling:
         """Test invalid agent name format returns 404."""
         from registry.auth.dependencies import nginx_proxied_auth
 
-        app.dependency_overrides[nginx_proxied_auth] = (
-            mock_nginx_proxied_auth_admin
-        )
+        app.dependency_overrides[nginx_proxied_auth] = mock_nginx_proxied_auth_admin
 
         response = authenticated_client.get(
             f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/agents/invalid-format/versions"
@@ -742,18 +736,13 @@ class TestErrorHandling:
         from registry.auth.dependencies import nginx_proxied_auth
 
         def _mock_no_auth(session=None):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Unauthorized"
-            )
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
         app.dependency_overrides[nginx_proxied_auth] = _mock_no_auth
 
         # Use TestClient without auth cookie to test missing auth
         client = TestClient(app)
-        response = client.get(
-            f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/agents"
-        )
+        response = client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/agents")
 
         # Should fail due to auth dependency
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -769,18 +758,19 @@ class TestErrorHandling:
         """Test disabled agent returns 404."""
         from registry.auth.dependencies import nginx_proxied_auth
 
-        app.dependency_overrides[nginx_proxied_auth] = (
-            mock_nginx_proxied_auth_admin
-        )
+        app.dependency_overrides[nginx_proxied_auth] = mock_nginx_proxied_auth_admin
 
-        with patch.object(
-            agent_service,
-            "get_agent",
-            return_value=sample_agent_card,
-        ), patch.object(
-            agent_service,
-            "is_agent_enabled",
-            return_value=False,
+        with (
+            patch.object(
+                agent_service,
+                "get_agent",
+                return_value=sample_agent_card,
+            ),
+            patch.object(
+                agent_service,
+                "is_agent_enabled",
+                return_value=False,
+            ),
         ):
             response = authenticated_client.get(
                 f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/agents/io.mcpgateway%2Fagents%2Fcode-reviewer/versions/latest"

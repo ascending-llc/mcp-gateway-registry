@@ -27,9 +27,10 @@ class TestMongoDBConnection:
         assert MongoDB.client is None
 
         # Mock the entire connect flow
-        with patch("packages.database.mongodb.AsyncIOMotorClient") as MockClient, \
-             patch("packages.database.mongodb.init_beanie", new_callable=AsyncMock):
-
+        with (
+            patch("packages.database.mongodb.AsyncIOMotorClient") as MockClient,
+            patch("packages.database.mongodb.init_beanie", new_callable=AsyncMock),
+        ):
             mock_instance = MagicMock()
             mock_instance.admin = MagicMock()
             mock_instance.admin.command = AsyncMock(return_value={"ok": 1})
@@ -45,10 +46,11 @@ class TestMongoDBConnection:
     @pytest.mark.asyncio
     async def test_connect_db_uses_env_variables(self):
         """Test connect_db reads configuration from settings."""
-        with patch("packages.database.mongodb.settings") as mock_settings, \
-             patch("packages.database.mongodb.AsyncIOMotorClient") as MockClient, \
-             patch("packages.database.mongodb.init_beanie", new_callable=AsyncMock):
-
+        with (
+            patch("packages.database.mongodb.settings") as mock_settings,
+            patch("packages.database.mongodb.AsyncIOMotorClient") as MockClient,
+            patch("packages.database.mongodb.init_beanie", new_callable=AsyncMock),
+        ):
             # Configure mock settings
             mock_settings.MONGO_URI = "mongodb://testhost:27017/testdb"
             mock_settings.MONGODB_USERNAME = "testuser"
@@ -70,10 +72,11 @@ class TestMongoDBConnection:
     @pytest.mark.asyncio
     async def test_connect_db_extracts_dbname_from_uri(self):
         """Test connect_db extracts database name from MONGO_URI."""
-        with patch("packages.database.mongodb.settings") as mock_settings, \
-             patch("packages.database.mongodb.AsyncIOMotorClient") as MockClient, \
-             patch("packages.database.mongodb.init_beanie", new_callable=AsyncMock):
-
+        with (
+            patch("packages.database.mongodb.settings") as mock_settings,
+            patch("packages.database.mongodb.AsyncIOMotorClient") as MockClient,
+            patch("packages.database.mongodb.init_beanie", new_callable=AsyncMock),
+        ):
             # Configure mock settings
             mock_settings.MONGO_URI = "mongodb://localhost:27017/extracted_db"
             mock_settings.MONGODB_USERNAME = None
@@ -92,9 +95,12 @@ class TestMongoDBConnection:
     @pytest.mark.asyncio
     async def test_connect_db_initializes_beanie(self):
         """Test connect_db initializes Beanie with all document models."""
-        with patch("packages.database.mongodb.AsyncIOMotorClient") as MockClient, \
-             patch("packages.database.mongodb.init_beanie", new_callable=AsyncMock) as mock_init_beanie:
-
+        with (
+            patch("packages.database.mongodb.AsyncIOMotorClient") as MockClient,
+            patch(
+                "packages.database.mongodb.init_beanie", new_callable=AsyncMock
+            ) as mock_init_beanie,
+        ):
             mock_instance = MagicMock()
             mock_instance.admin = MagicMock()
             mock_instance.admin.command = AsyncMock(return_value={"ok": 1})
@@ -116,9 +122,9 @@ class TestMongoDBConnection:
             model_names = [model.__name__ for model in document_models]
 
             assert "IUser" in model_names
-            assert ("MCPServerDocument" in model_names or "ExtendedMCPServer" in model_names)
+            assert "MCPServerDocument" in model_names or "ExtendedMCPServer" in model_names
             assert "IAccessRole" in model_names
-            assert ("IAclEntry" in model_names or "ExtendedAclEntry" in model_names)
+            assert "IAclEntry" in model_names or "ExtendedAclEntry" in model_names
             assert "IGroup" in model_names
             assert "Token" in model_names
             assert "IAction" in model_names
@@ -127,9 +133,10 @@ class TestMongoDBConnection:
     @pytest.mark.asyncio
     async def test_connect_db_only_once(self):
         """Test connect_db doesn't reconnect if client already exists."""
-        with patch("packages.database.mongodb.AsyncIOMotorClient") as MockClient, \
-             patch("packages.database.mongodb.init_beanie", new_callable=AsyncMock):
-
+        with (
+            patch("packages.database.mongodb.AsyncIOMotorClient") as MockClient,
+            patch("packages.database.mongodb.init_beanie", new_callable=AsyncMock),
+        ):
             mock_instance = MagicMock()
             mock_instance.admin = MagicMock()
             mock_instance.admin.command = AsyncMock(return_value={"ok": 1})

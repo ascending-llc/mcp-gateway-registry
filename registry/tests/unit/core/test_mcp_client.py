@@ -1,6 +1,7 @@
 """
 Unit tests for mcp_client functions.
 """
+
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -24,7 +25,7 @@ class TestMCPClient:
             "Content-Type": "application/json",
             "Accept": "application/json",
             "Authorization": "Bearer test-token-123",
-            "User-Agent": "MCP-Gateway-Registry/1.0"
+            "User-Agent": "MCP-Gateway-Registry/1.0",
         }
 
     @pytest.fixture
@@ -33,12 +34,7 @@ class TestMCPClient:
         tool = Mock()
         tool.name = "test_tool"
         tool.description = "Test tool description"
-        tool.inputSchema = {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string"}
-            }
-        }
+        tool.inputSchema = {"type": "object", "properties": {"query": {"type": "string"}}}
 
         response = Mock()
         response.tools = [tool]
@@ -50,17 +46,20 @@ class TestMCPClient:
         return {
             "tools": {"listChanged": True},
             "resources": {"subscribe": False},
-            "prompts": {"listChanged": False}
+            "prompts": {"listChanged": False},
         }
 
     @pytest.mark.asyncio
-    async def test_get_from_streamable_http_with_headers(self, mock_headers, mock_tools_response, mock_capabilities):
+    async def test_get_from_streamable_http_with_headers(
+        self, mock_headers, mock_tools_response, mock_capabilities
+    ):
         """Test _get_from_streamable_http accepts pre-built headers."""
         base_url = "http://localhost:8000/mcp/"
 
-        with patch("registry.core.mcp_client.streamable_http_client") as mock_client, \
-             patch("registry.core.mcp_client.get_server_strategy") as mock_strategy:
-
+        with (
+            patch("registry.core.mcp_client.streamable_http_client") as mock_client,
+            patch("registry.core.mcp_client.get_server_strategy") as mock_strategy,
+        ):
             # Mock strategy
             strategy = Mock()
             strategy.modify_url = Mock(return_value=base_url)
@@ -90,7 +89,7 @@ class TestMCPClient:
                     base_url=base_url,
                     headers=mock_headers,
                     transport_type="streamable-http",
-                    include_capabilities=True
+                    include_capabilities=True,
                 )
 
             # Verify result is MCPServerData object
@@ -98,13 +97,16 @@ class TestMCPClient:
             assert result.capabilities == mock_capabilities
 
     @pytest.mark.asyncio
-    async def test_get_from_streamable_http_without_capabilities(self, mock_headers, mock_tools_response):
+    async def test_get_from_streamable_http_without_capabilities(
+        self, mock_headers, mock_tools_response
+    ):
         """Test _get_from_streamable_http can skip capabilities."""
         base_url = "http://localhost:8000/mcp/"
 
-        with patch("registry.core.mcp_client.streamable_http_client") as mock_client, \
-             patch("registry.core.mcp_client.get_server_strategy") as mock_strategy:
-
+        with (
+            patch("registry.core.mcp_client.streamable_http_client") as mock_client,
+            patch("registry.core.mcp_client.get_server_strategy") as mock_strategy,
+        ):
             strategy = Mock()
             strategy.modify_url = Mock(return_value=base_url)
             mock_strategy.return_value = strategy
@@ -125,21 +127,24 @@ class TestMCPClient:
                     base_url=base_url,
                     headers=mock_headers,
                     transport_type="streamable-http",
-                    include_capabilities=False
+                    include_capabilities=False,
                 )
 
             assert result.tools is not None
             assert result.capabilities is None
 
     @pytest.mark.asyncio
-    async def test_get_from_sse_with_headers(self, mock_headers, mock_tools_response, mock_capabilities):
+    async def test_get_from_sse_with_headers(
+        self, mock_headers, mock_tools_response, mock_capabilities
+    ):
         """Test _get_from_sse accepts pre-built headers."""
         base_url = "http://localhost:8000/sse"
 
-        with patch("registry.core.mcp_client.sse_client") as mock_client, \
-             patch("registry.core.mcp_client.get_server_strategy") as mock_strategy, \
-             patch("httpx.AsyncClient"):
-
+        with (
+            patch("registry.core.mcp_client.sse_client") as mock_client,
+            patch("registry.core.mcp_client.get_server_strategy") as mock_strategy,
+            patch("httpx.AsyncClient"),
+        ):
             strategy = Mock()
             strategy.modify_url = Mock(return_value=base_url)
             mock_strategy.return_value = strategy
@@ -167,7 +172,7 @@ class TestMCPClient:
                     base_url=base_url,
                     headers=mock_headers,
                     transport_type="sse",
-                    include_capabilities=True
+                    include_capabilities=True,
                 )
 
             assert result.tools is not None
@@ -180,17 +185,13 @@ class TestMCPClient:
 
         with patch("registry.core.mcp_client._get_from_streamable_http") as mock_get:
             from registry.core.mcp_client import MCPServerData
+
             mock_get.return_value = MCPServerData(
-                tools=["tool1"],
-                resources=[],
-                prompts=[],
-                capabilities={"tools": {}}
+                tools=["tool1"], resources=[], prompts=[], capabilities={"tools": {}}
             )
 
             result = await get_tools_and_capabilities_from_server(
-                base_url=base_url,
-                headers=mock_headers,
-                transport_type="streamable-http"
+                base_url=base_url, headers=mock_headers, transport_type="streamable-http"
             )
 
             assert result.tools == ["tool1"]
@@ -212,17 +213,13 @@ class TestMCPClient:
 
         with patch("registry.core.mcp_client._get_from_sse") as mock_get:
             from registry.core.mcp_client import MCPServerData
+
             mock_get.return_value = MCPServerData(
-                tools=["tool2"],
-                resources=[],
-                prompts=[],
-                capabilities={"resources": {}}
+                tools=["tool2"], resources=[], prompts=[], capabilities={"resources": {}}
             )
 
             result = await get_tools_and_capabilities_from_server(
-                base_url=base_url,
-                headers=mock_headers,
-                transport_type="sse"
+                base_url=base_url, headers=mock_headers, transport_type="sse"
             )
 
             assert result.tools == ["tool2"]
@@ -244,21 +241,19 @@ class TestMCPClient:
 
         from registry.core.mcp_client import MCPServerData
 
-        with patch("registry.core.mcp_client.detect_server_transport") as mock_detect, \
-             patch("registry.core.mcp_client._get_from_streamable_http") as mock_get:
-
+        with (
+            patch("registry.core.mcp_client.detect_server_transport") as mock_detect,
+            patch("registry.core.mcp_client._get_from_streamable_http") as mock_get,
+        ):
             mock_detect.return_value = "streamable-http"
             mock_get.return_value = MCPServerData(
-                tools=["tool"],
-                resources=[],
-                prompts=[],
-                capabilities={}
+                tools=["tool"], resources=[], prompts=[], capabilities={}
             )
 
             result = await get_tools_and_capabilities_from_server(
                 base_url=base_url,
                 headers=mock_headers,
-                transport_type=None  # Auto-detect
+                transport_type=None,  # Auto-detect
             )
 
             mock_detect.assert_called_once_with(base_url)
@@ -269,14 +264,15 @@ class TestMCPClient:
         """Test that None headers default to MCP base headers."""
         base_url = "http://localhost:8000/mcp/"
 
-        with patch("registry.core.mcp_client.streamable_http_client") as mock_client, \
-             patch("registry.core.mcp_client.get_server_strategy") as mock_strategy, \
-             patch("registry.core.mcp_client.mcp_config") as mock_config:
-
+        with (
+            patch("registry.core.mcp_client.streamable_http_client") as mock_client,
+            patch("registry.core.mcp_client.get_server_strategy") as mock_strategy,
+            patch("registry.core.mcp_client.mcp_config") as mock_config,
+        ):
             # Mock default headers
             mock_config.DEFAULT_HEADERS = {
                 "Content-Type": "application/json",
-                "Accept": "application/json"
+                "Accept": "application/json",
             }
 
             strategy = Mock()
@@ -299,7 +295,7 @@ class TestMCPClient:
                     base_url=base_url,
                     headers=None,  # Should use defaults
                     transport_type="streamable-http",
-                    include_capabilities=False
+                    include_capabilities=False,
                 )
 
             # Would verify default headers were used in actual httpx call
@@ -309,9 +305,10 @@ class TestMCPClient:
         """Test timeout returns MCPServerData with None fields."""
         base_url = "http://localhost:8000/mcp/"
 
-        with patch("registry.core.mcp_client.streamable_http_client") as mock_client, \
-             patch("registry.core.mcp_client.get_server_strategy"):
-
+        with (
+            patch("registry.core.mcp_client.streamable_http_client") as mock_client,
+            patch("registry.core.mcp_client.get_server_strategy"),
+        ):
             # Simulate timeout
             mock_context = AsyncMock()
             mock_context.__aenter__ = AsyncMock(side_effect=TimeoutError("Connection timeout"))
@@ -321,7 +318,7 @@ class TestMCPClient:
                 base_url=base_url,
                 headers=mock_headers,
                 transport_type="streamable-http",
-                include_capabilities=True
+                include_capabilities=True,
             )
 
             assert result.tools is None
@@ -332,9 +329,10 @@ class TestMCPClient:
         """Test connection error returns MCPServerData with None fields."""
         base_url = "http://localhost:8000/mcp/"
 
-        with patch("registry.core.mcp_client.streamable_http_client") as mock_client, \
-             patch("registry.core.mcp_client.get_server_strategy"):
-
+        with (
+            patch("registry.core.mcp_client.streamable_http_client") as mock_client,
+            patch("registry.core.mcp_client.get_server_strategy"),
+        ):
             # Simulate connection error
             mock_context = AsyncMock()
             mock_context.__aenter__ = AsyncMock(side_effect=Exception("Connection refused"))
@@ -344,7 +342,7 @@ class TestMCPClient:
                 base_url=base_url,
                 headers=mock_headers,
                 transport_type="streamable-http",
-                include_capabilities=True
+                include_capabilities=True,
             )
 
             assert result.tools is None

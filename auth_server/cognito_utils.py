@@ -8,10 +8,18 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-def generate_token(client_id: str, client_secret: str, user_pool_id: str, region: str, scopes: list[str] = None, domain: str = None) -> dict:
+
+def generate_token(
+    client_id: str,
+    client_secret: str,
+    user_pool_id: str,
+    region: str,
+    scopes: list[str] = None,
+    domain: str = None,
+) -> dict:
     """
     Generate a token using the client credentials flow
-    
+
     Args:
         client_id: Cognito App Client ID
         client_secret: Cognito App Client Secret
@@ -19,7 +27,7 @@ def generate_token(client_id: str, client_secret: str, user_pool_id: str, region
         region: AWS region
         scopes: List of scopes to request (optional)
         domain: Optional custom domain name (e.g., 'mcp-gateway')
-        
+
     Returns:
         Dict containing access token and metadata
     """
@@ -33,14 +41,12 @@ def generate_token(client_id: str, client_secret: str, user_pool_id: str, region
             user_pool_id_wo_underscore = user_pool_id.replace("_", "")
             cognito_domain = f"https://{user_pool_id_wo_underscore}.auth.{region}.amazoncognito.com"
 
-        headers = {
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
         data = {
             "grant_type": "client_credentials",
             "client_id": client_id,
-            "client_secret": client_secret
+            "client_secret": client_secret,
         }
 
         if scopes:

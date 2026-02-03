@@ -43,7 +43,7 @@ class AnthropicRegistryStrategy(ServerBehaviorStrategy):
     def modify_url(self, url: str) -> str:
         """
         Add instance_id parameter for Anthropic registry servers.
-        
+
         Anthropic registry servers (streamable-http and sse) require
         instance_id=default query parameter.
         """
@@ -55,7 +55,9 @@ class AnthropicRegistryStrategy(ServerBehaviorStrategy):
             modified_url = url
 
         if modified_url != url:
-            logger.debug(f"Added instance_id parameter for Anthropic server: {url} -> {modified_url}")
+            logger.debug(
+                f"Added instance_id parameter for Anthropic server: {url} -> {modified_url}"
+            )
 
         return modified_url
 
@@ -67,10 +69,10 @@ class AnthropicRegistryStrategy(ServerBehaviorStrategy):
 def get_server_strategy(server_info: dict) -> ServerBehaviorStrategy:
     """
     Factory function to get appropriate strategy based on server info.
-    
+
     Args:
         server_info: Server configuration dictionary containing tags and other metadata
-        
+
     Returns:
         Appropriate ServerBehaviorStrategy instance
     """

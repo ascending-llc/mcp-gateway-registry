@@ -21,9 +21,7 @@ class Repository(BaseModel):
     """Repository metadata for MCP server source code."""
 
     url: str = Field(..., description="Repository URL for browsing source code")
-    source: str = Field(
-        ..., description="Repository hosting service identifier (e.g., 'github')"
-    )
+    source: str = Field(..., description="Repository hosting service identifier (e.g., 'github')")
     id: str | None = Field(None, description="Repository ID from hosting service")
     subfolder: str | None = Field(None, description="Path within monorepo")
 
@@ -58,13 +56,9 @@ class Package(BaseModel):
     registryType: str = Field(..., description="Registry type (npm, pypi, oci, etc.)")
     identifier: str = Field(..., description="Package identifier or URL")
     version: str = Field(..., description="Specific package version")
-    registryBaseUrl: str | None = Field(
-        None, description="Base URL of package registry"
-    )
+    registryBaseUrl: str | None = Field(None, description="Base URL of package registry")
     transport: dict[str, Any] = Field(..., description="Transport configuration")
-    runtimeHint: str | None = Field(
-        None, description="Runtime hint (npx, uvx, docker, etc.)"
-    )
+    runtimeHint: str | None = Field(None, description="Runtime hint (npx, uvx, docker, etc.)")
 
 
 class ServerDetail(BaseModel):

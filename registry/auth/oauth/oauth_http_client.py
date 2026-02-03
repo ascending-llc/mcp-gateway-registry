@@ -16,10 +16,7 @@ class OAuthHttpClient:
         self._http_client = httpx.AsyncClient(timeout=30.0)
 
     def build_authorization_url(
-            self,
-            flow_metadata: MCPOAuthFlowMetadata,
-            code_challenge: str,
-            flow_id: str
+        self, flow_metadata: MCPOAuthFlowMetadata, code_challenge: str, flow_id: str
     ) -> str:
         """Build authorization URL"""
         client_info = flow_metadata.client_info
@@ -28,7 +25,9 @@ class OAuthHttpClient:
         state = flow_metadata.state
 
         if not state.startswith(flow_id):
-            logger.warning(f"State format issue: state does not start with flow_id. state={state}, flow_id={flow_id}")
+            logger.warning(
+                f"State format issue: state does not start with flow_id. state={state}, flow_id={flow_id}"
+            )
 
         redirect_uri = client_info.redirect_uris[0] if client_info.redirect_uris else ""
         logger.debug(f"redirect_uri={redirect_uri}")
@@ -39,7 +38,7 @@ class OAuthHttpClient:
             "scope": client_info.scope or "",
             "state": state,
             "code_challenge": code_challenge,
-            "code_challenge_method": "S256"
+            "code_challenge_method": "S256",
         }
 
         # Add additional parameters
@@ -56,9 +55,7 @@ class OAuthHttpClient:
         return full_url
 
     async def exchange_code_for_tokens(
-            self,
-            flow_metadata: MCPOAuthFlowMetadata,
-            authorization_code: str
+        self, flow_metadata: MCPOAuthFlowMetadata, authorization_code: str
     ) -> OAuthTokens | None:
         """Exchange authorization code for tokens"""
         try:
@@ -77,9 +74,10 @@ class OAuthHttpClient:
                 "grant_type": "authorization_code",
                 "code": authorization_code,
                 "code_verifier": flow_metadata.code_verifier,
-                "redirect_uri": flow_metadata.client_info.redirect_uris[
-                    0] if flow_metadata.client_info.redirect_uris else "",
-                "client_id": flow_metadata.client_info.client_id
+                "redirect_uri": flow_metadata.client_info.redirect_uris[0]
+                if flow_metadata.client_info.redirect_uris
+                else "",
+                "client_id": flow_metadata.client_info.client_id,
             }
 
             # Add client_secret if exists
@@ -98,12 +96,16 @@ class OAuthHttpClient:
             # Prepare request headers
             headers = {
                 "Content-Type": "application/x-www-form-urlencoded",
-                "Accept": "application/json"
+                "Accept": "application/json",
             }
 
             # Handle client authentication
             auth_method = flow_metadata.metadata.token_endpoint_auth_methods_supported
-            if auth_method and "client_secret_basic" in auth_method and flow_metadata.client_info.client_secret:
+            if (
+                auth_method
+                and "client_secret_basic" in auth_method
+                and flow_metadata.client_info.client_secret
+            ):
                 # Basic authentication
                 credentials = f"{flow_metadata.client_info.client_id}:{flow_metadata.client_info.client_secret}"
                 encoded_credentials = base64.b64encode(credentials.encode()).decode()
@@ -115,11 +117,7 @@ class OAuthHttpClient:
             logger.debug(f"Exchanging code for tokens at {token_url}")
 
             # Send request
-            response = await self._http_client.post(
-                token_url,
-                data=data,
-                headers=headers
-            )
+            response = await self._http_client.post(token_url, data=data, headers=headers)
 
             if response.status_code != 200:
                 logger.error(f"Token exchange failed: {response.status_code} - {response.text}")
@@ -139,7 +137,7 @@ class OAuthHttpClient:
                 expires_in=token_data.get("expires_in"),
                 refresh_token=token_data.get("refresh_token"),
                 scope=token_data.get("scope"),
-                expires_at=expires_at
+                expires_at=expires_at,
             )
 
         except Exception as e:
@@ -147,9 +145,7 @@ class OAuthHttpClient:
             return None
 
     async def refresh_tokens(
-            self,
-            oauth_config: dict[str, Any],
-            refresh_token: str
+        self, oauth_config: dict[str, Any], refresh_token: str
     ) -> OAuthTokens | None:
         """Refresh tokens using OAuth config from MongoDB"""
         try:
@@ -180,12 +176,14 @@ class OAuthHttpClient:
             # Prepare request headers
             headers = {
                 "Content-Type": "application/x-www-form-urlencoded",
-                "Accept": "application/json"
+                "Accept": "application/json",
             }
 
             # Handle client authentication
-            auth_method = oauth_config.get("token_endpoint_auth_methods_supported",
-                                           ["client_secret_basic", "client_secret_post"])
+            auth_method = oauth_config.get(
+                "token_endpoint_auth_methods_supported",
+                ["client_secret_basic", "client_secret_post"],
+            )
             if "client_secret_basic" in auth_method and "client_secret" in oauth_config:
                 # Basic authentication
                 credentials = f"{oauth_config['client_id']}:{oauth_config['client_secret']}"
@@ -198,11 +196,7 @@ class OAuthHttpClient:
             logger.debug(f"Refreshing tokens at {token_url}")
 
             # Send request
-            response = await self._http_client.post(
-                token_url,
-                data=data,
-                headers=headers
-            )
+            response = await self._http_client.post(token_url, data=data, headers=headers)
 
             if response.status_code != 200:
                 logger.error(f"Token refresh failed: {response.status_code} - {response.text}")
@@ -222,7 +216,7 @@ class OAuthHttpClient:
                 expires_in=token_data.get("expires_in"),
                 refresh_token=token_data.get("refresh_token"),
                 scope=token_data.get("scope"),
-                expires_at=expires_at
+                expires_at=expires_at,
             )
 
         except Exception as e:
@@ -230,9 +224,7 @@ class OAuthHttpClient:
             return None
 
     def _transform_tokens(
-            self,
-            token_data: dict[str, Any],
-            token_transform: TokenTransformConfig | None
+        self, token_data: dict[str, Any], token_transform: TokenTransformConfig | None
     ) -> dict[str, Any]:
         """Transform token format"""
         if not token_transform:

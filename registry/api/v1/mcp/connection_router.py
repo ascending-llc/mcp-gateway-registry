@@ -18,18 +18,16 @@ router = APIRouter(prefix="/mcp", tags=["connection"])
 
 @router.post("/{server_id}/reinitialize")
 async def reinitialize_server(
-        server_id: str,
-        current_user: CurrentUser,
-        mcp_service: MCPService = Depends(get_mcp_service)
+    server_id: str, current_user: CurrentUser, mcp_service: MCPService = Depends(get_mcp_service)
 ) -> JSONResponse:
     """
     Reinitialize MCP server connection
-    
+
     Process:
     1. Disconnect existing connection
     2. Check OAuth token status and handle refresh if needed
     3. Create new connection if tokens are valid
-    
+
     Notes: POST /:serverName/reinitialize (TypeScript reference)
     """
     try:
@@ -50,12 +48,13 @@ async def reinitialize_server(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
         if not server.config:
             logger.info(f"[Reinitialize] Server {server_id} config not found")
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server config not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Server config not found"
+            )
 
         # Step 3: Handle OAuth authentication
         needs_connection, response_data = await mcp_service.oauth_service.handle_reinitialize_auth(
-            user_id=user_id,
-            server=server
+            user_id=user_id, server=server
         )
 
         # Step 4: Create connection if tokens are valid
@@ -64,13 +63,10 @@ async def reinitialize_server(
                 user_id=user_id,
                 server_id=server_id,
                 initial_state=ConnectionState.CONNECTED,
-                details={"reinitialized": True, "has_oauth": True}
+                details={"reinitialized": True, "has_oauth": True},
             )
             logger.info(f"[Reinitialize] Created connection for {server_id}")
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content=response_data
-        )
+        return JSONResponse(status_code=status.HTTP_200_OK, content=response_data)
 
     except HTTPException:
         raise
@@ -78,20 +74,20 @@ async def reinitialize_server(
         logger.error(f"[Reinitialize] Unexpected error for {server_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {e!s}")
+            detail=f"Internal server error: {e!s}",
+        )
 
 
 @DeprecationWarning
 @router.get("/connection/status")
 async def get_all_connection_status(
-        current_user: CurrentUser,
-        mcp_service: MCPService = Depends(get_mcp_service)
+    current_user: CurrentUser, mcp_service: MCPService = Depends(get_mcp_service)
 ) -> dict[str, Any]:
     """
     Get connection status for all MCP servers
-    
+
     Returns comprehensive connection status for all configured servers.
-    
+
     Notes: GET /connection/status (TypeScript reference)
     """
     try:
@@ -103,26 +99,21 @@ async def get_all_connection_status(
         logger.info(f"Found {len(all_services)} servers")
 
         connection_status = await get_servers_connection_status(
-            user_id=user_id,
-            servers=all_services,
-            mcp_service=mcp_service
+            user_id=user_id, servers=all_services, mcp_service=mcp_service
         )
-        return {
-            "success": True,
-            "connectionStatus": connection_status
-        }
+        return {"success": True, "connectionStatus": connection_status}
 
     except Exception as e:
         logger.error(f"Failed to get connection status: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail="Failed to get connection status")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get connection status",
+        )
 
 
 @router.get("/connection/status/{server_id}")
 async def get_server_connection_status(
-        server_id: str,
-        current_user: CurrentUser,
-        mcp_service: MCPService = Depends(get_mcp_service)
+    server_id: str, current_user: CurrentUser, mcp_service: MCPService = Depends(get_mcp_service)
 ) -> dict[str, Any]:
     """
     Get connection status for a specific MCP server by server ID
@@ -139,40 +130,38 @@ async def get_server_connection_status(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Server not found")
 
         server_status = await get_single_server_connection_status(
-            user_id=user_id,
-            server_id=server_id,
-            mcp_service=mcp_service
+            user_id=user_id, server_id=server_id, mcp_service=mcp_service
         )
         return {
             "success": True,
             "serverName": server.serverName,
             "connectionState": server_status["connection_state"],
             "requiresOAuth": server_status["requires_oauth"],
-            "serverId": server_id
+            "serverId": server_id,
         }
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to get status for {server_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"Failed to get connection status for {server_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get connection status for {server_id}",
+        )
 
 
 @DeprecationWarning
 @router.get("/{server_name}/auth-values")
 async def check_auth_values(
-        server_name: str,
-        current_user: CurrentUser,
-        mcp_service: MCPService = Depends(get_mcp_service)
+    server_name: str, current_user: CurrentUser, mcp_service: MCPService = Depends(get_mcp_service)
 ) -> dict[str, Any]:
     """
     Check which authentication values are set for an MCP server
-    
+
     Returns boolean flags indicating which auth variables have values set,
     without exposing the actual credential values.
-    
+
     Notes: GET /:serverName/auth-values (TypeScript reference)
-    
+
     Security: Only returns boolean flags, never actual credential values
     """
     try:
@@ -182,19 +171,15 @@ async def check_auth_values(
         # Check if OAuth tokens exist
         tokens = await mcp_service.oauth_service.get_tokens(user_id, server_name)
 
-        auth_value_flags = {
-            "oauth_tokens": tokens is not None
-        }
+        auth_value_flags = {"oauth_tokens": tokens is not None}
 
         # TODO: Check custom user vars from config if needed
         # For now, just return OAuth token status
-        return {
-            "success": True,
-            "server_name": server_name,
-            "auth_value_flags": auth_value_flags
-        }
+        return {"success": True, "server_name": server_name, "auth_value_flags": auth_value_flags}
 
     except Exception as e:
         logger.error(f"Failed to check auth values for {server_name}: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"Failed to check auth values for {server_name}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to check auth values for {server_name}",
+        )

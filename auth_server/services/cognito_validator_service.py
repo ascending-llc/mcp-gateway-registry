@@ -1,6 +1,7 @@
 """
 Service module for Cognito token validation.
 """
+
 import json
 import logging
 
@@ -14,6 +15,7 @@ from ..core.config import settings
 from ..utils.security_mask import hash_username
 
 logger = logging.getLogger(__name__)
+
 
 class SimplifiedCognitoValidator:
     """
@@ -40,17 +42,17 @@ class SimplifiedCognitoValidator:
                 response.raise_for_status()
                 jwks = response.json()
                 self._jwks_cache[cache_key] = jwks
-                logger.debug(f"Retrieved JWKS for {cache_key} with {len(jwks.get('keys', []))} keys")
+                logger.debug(
+                    f"Retrieved JWKS for {cache_key} with {len(jwks.get('keys', []))} keys"
+                )
             except Exception as e:
                 logger.error(f"Failed to retrieve JWKS from {jwks_url}: {e}")
                 raise ValueError(f"Cannot retrieve JWKS: {e}")
         return self._jwks_cache[cache_key]
 
-    def validate_jwt_token(self,
-                           access_token: str,
-                           user_pool_id: str,
-                           client_id: str,
-                           region: str = None) -> dict:
+    def validate_jwt_token(
+        self, access_token: str, user_pool_id: str, client_id: str, region: str = None
+    ) -> dict:
         if not region:
             region = self.default_region
         try:
@@ -65,10 +67,12 @@ class SimplifiedCognitoValidator:
                 if key.get("kid") == kid:
                     try:
                         from jwt.algorithms import RSAAlgorithm
+
                         signing_key = RSAAlgorithm.from_jwk(key)
                     except (ImportError, AttributeError):
                         try:
                             from jwt.algorithms import get_default_algorithms
+
                             algorithms = get_default_algorithms()
                             signing_key = algorithms["RS256"].from_jwk(key)
                         except (ImportError, AttributeError):
@@ -88,7 +92,7 @@ class SimplifiedCognitoValidator:
                     "verify_aud": False,
                     "verify_exp": True,
                     "verify_iat": True,
-                }
+                },
             )
 
             token_use = claims.get("token_use")
@@ -97,7 +101,9 @@ class SimplifiedCognitoValidator:
 
             token_client_id = claims.get("client_id")
             if token_client_id and token_client_id != client_id:
-                logger.warning(f"Token issued for different client: {token_client_id} vs expected {client_id}")
+                logger.warning(
+                    f"Token issued for different client: {token_client_id} vs expected {client_id}"
+                )
 
             logger.info("Successfully validated JWT token for client/user")
             return claims
@@ -129,9 +135,11 @@ class SimplifiedCognitoValidator:
                 "user_attributes": user_attributes,
                 "user_status": response.get("UserStatus"),
                 "token_use": "access",
-                "auth_method": "boto3"
+                "auth_method": "boto3",
             }
-            logger.info(f"Successfully validated token via boto3 for user {hash_username(result['username'])}")
+            logger.info(
+                f"Successfully validated token via boto3 for user {hash_username(result['username'])}"
+            )
             return result
         except ClientError as e:
             error_code = e.response["Error"]["Code"]
@@ -162,9 +170,9 @@ class SimplifiedCognitoValidator:
                     "verify_exp": True,
                     "verify_iat": True,
                     "verify_iss": True,
-                    "verify_aud": True
+                    "verify_aud": True,
                 },
-                leeway=30
+                leeway=30,
             )
 
             token_use = claims.get("token_use")
@@ -185,7 +193,7 @@ class SimplifiedCognitoValidator:
                 "expires_at": claims.get("exp"),
                 "scopes": scopes,
                 "groups": [],
-                "token_type": "user_generated"
+                "token_type": "user_generated",
             }
         except jwt.ExpiredSignatureError:
             error_msg = "Self-signed token has expired"
@@ -200,7 +208,9 @@ class SimplifiedCognitoValidator:
             logger.error(error_msg)
             raise ValueError(f"Self-signed token validation failed: {e}")
 
-    def validate_token(self, access_token: str, user_pool_id: str, client_id: str, region: str = None) -> dict:
+    def validate_token(
+        self, access_token: str, user_pool_id: str, client_id: str, region: str = None
+    ) -> dict:
         if not region:
             region = self.default_region
         try:
@@ -225,7 +235,7 @@ class SimplifiedCognitoValidator:
                 "username": jwt_claims.get("cognito:username") or jwt_claims.get("username") or "",
                 "expires_at": jwt_claims.get("exp"),
                 "scopes": scopes,
-                "groups": jwt_claims.get("cognito:groups", [])
+                "groups": jwt_claims.get("cognito:groups", []),
             }
         except ValueError as jwt_error:
             logger.debug(f"JWT validation failed: {jwt_error}, trying boto3")
@@ -239,8 +249,10 @@ class SimplifiedCognitoValidator:
                     "username": boto3_data.get("username") or "",
                     "user_attributes": boto3_data.get("user_attributes", {}),
                     "scopes": [],
-                    "groups": []
+                    "groups": [],
                 }
             except ValueError as boto3_error:
                 logger.debug(f"Boto3 validation failed: {boto3_error}")
-                raise ValueError(f"All validation methods failed. JWT: {jwt_error}, Boto3: {boto3_error}")
+                raise ValueError(
+                    f"All validation methods failed. JWT: {jwt_error}, Boto3: {boto3_error}"
+                )

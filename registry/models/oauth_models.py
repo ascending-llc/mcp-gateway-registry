@@ -9,6 +9,7 @@ from registry.schemas.enums import OAuthFlowStatus
 
 class OAuthTokens(BaseModel):
     """OAuth tokens"""
+
     access_token: str = Field(..., description="Access token")
     token_type: str = Field("Bearer", description="Token type")
     expires_in: int | None = Field(None, description="Expiration time (seconds)")
@@ -22,34 +23,34 @@ class OAuthTokens(BaseModel):
         """Calculate expires_at based on expires_in"""
         if v is None and values.get("expires_in") is not None:
             import time
+
             return int(time.time()) + values["expires_in"]
         return v
 
 
 class OAuthClientInformation(BaseModel):
     """OAuth client information"""
+
     client_id: str = Field(..., description="Client ID")
     client_secret: str | None = Field(None, description="Client secret")
     redirect_uris: list[str] | None = Field(None, description="Redirect URI list")
     scope: str | None = Field(None, description="Authorization scope")
     grant_types: list[str] | None = Field(None, description="Grant type list")
     additional_params: dict[str, Any] | None = Field(
-        None, description="Additional OAuth parameters")
+        None, description="Additional OAuth parameters"
+    )
 
 
 class OAuthMetadata(BaseModel):
     """OAuth metadata"""
+
     issuer: str | None = Field(None, description="Issuer")
     authorization_endpoint: str = Field(..., description="Authorization endpoint")
     token_endpoint: str = Field(..., description="Token endpoint")
     registration_endpoint: str | None = Field(None, description="Registration endpoint")
     scopes_supported: list[str] | None = Field(None, description="Supported scopes")
-    response_types_supported: list[str] | None = Field(
-        None, description="Supported response types"
-    )
-    grant_types_supported: list[str] | None = Field(
-        None, description="Supported grant types"
-    )
+    response_types_supported: list[str] | None = Field(None, description="Supported response types")
+    grant_types_supported: list[str] | None = Field(None, description="Supported grant types")
     token_endpoint_auth_methods_supported: list[str] | None = Field(
         None, description="Supported token endpoint authentication methods"
     )
@@ -60,32 +61,22 @@ class OAuthMetadata(BaseModel):
 
 class OAuthProtectedResourceMetadata(BaseModel):
     """OAuth protected resource metadata"""
+
     resource: str | None = Field(None, description="Resource identifier")
-    authorization_servers: list[str] | None = Field(
-        None, description="Authorization server list"
-    )
+    authorization_servers: list[str] | None = Field(None, description="Authorization server list")
     scopes_supported: list[str] | None = Field(None, description="Supported scopes")
 
 
 class TokenTransformConfig(BaseModel):
     """Token transformation configuration"""
+
     provider: str | None = Field(None, description="Provider name")
-    access_token_path: str | None = Field(
-        None, description="Access token path in response"
-    )
-    refresh_token_path: str | None = Field(
-        None, description="Refresh token path in response"
-    )
-    expires_in_path: str | None = Field(
-        None, description="Expiration time path in response"
-    )
-    token_type_path: str | None = Field(
-        None, description="Token type path in response"
-    )
+    access_token_path: str | None = Field(None, description="Access token path in response")
+    refresh_token_path: str | None = Field(None, description="Refresh token path in response")
+    expires_in_path: str | None = Field(None, description="Expiration time path in response")
+    token_type_path: str | None = Field(None, description="Token type path in response")
     scope_path: str | None = Field(None, description="Scope path in response")
-    field_mappings: dict[str, str] | None = Field(
-        None, description="Field mapping configuration"
-    )
+    field_mappings: dict[str, str] | None = Field(None, description="Field mapping configuration")
     value_transforms: dict[str, Any] | None = Field(
         None, description="Value transformation configuration"
     )
@@ -93,6 +84,7 @@ class TokenTransformConfig(BaseModel):
 
 class MCPOAuthFlowMetadata(BaseModel):
     """MCP OAuth flow metadata"""
+
     server_name: str = Field(..., description="Server name")
     server_id: str = Field(..., description="Server id")
     user_id: str = Field(..., description="User ID")
@@ -112,6 +104,7 @@ class MCPOAuthFlowMetadata(BaseModel):
 @dataclass
 class OAuthFlow:
     """OAuth flow"""
+
     flow_id: str
     server_id: str
     server_name: str
@@ -119,7 +112,9 @@ class OAuthFlow:
     code_verifier: str
     state: str
     status: OAuthFlowStatus = OAuthFlowStatus.PENDING
-    created_at: float = field(default_factory=time.time)  # Use dataclasses.field instead of Pydantic Field
+    created_at: float = field(
+        default_factory=time.time
+    )  # Use dataclasses.field instead of Pydantic Field
     completed_at: float | None = None
     tokens: OAuthTokens | None = None
     error: str | None = None

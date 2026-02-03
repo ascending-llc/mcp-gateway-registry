@@ -1,6 +1,7 @@
 """
 Unit tests for FAISS search service.
 """
+
 import json
 
 # Mock FAISS dependencies before importing EmbeddedFaissService
@@ -48,10 +49,15 @@ class TestFaissService:
     def faiss_service_instance(self, mock_settings):
         """Create a fresh FAISS service for testing."""
         # Mock FAISS_AVAILABLE to True before creating instance
-        with patch("registry.services.search.embedded_service.FAISS_AVAILABLE", True), \
-             patch("registry.services.search.embedded_service.faiss", mock_faiss), \
-             patch("registry.services.search.embedded_service.np", np), \
-             patch("registry.services.search.embedded_service.SentenceTransformer", mock_sentence_transformer):
+        with (
+            patch("registry.services.search.embedded_service.FAISS_AVAILABLE", True),
+            patch("registry.services.search.embedded_service.faiss", mock_faiss),
+            patch("registry.services.search.embedded_service.np", np),
+            patch(
+                "registry.services.search.embedded_service.SentenceTransformer",
+                mock_sentence_transformer,
+            ),
+        ):
             return EmbeddedFaissService(mock_settings)
 
     def test_get_text_for_embedding(self, faiss_service_instance):
@@ -59,7 +65,7 @@ class TestFaissService:
         server_info = {
             "server_name": "Test Server",
             "description": "A test server for demonstration",
-            "tags": ["test", "demo", "example"]
+            "tags": ["test", "demo", "example"],
         }
 
         result = faiss_service_instance._get_text_for_embedding(server_info)
@@ -89,9 +95,10 @@ class TestFaissService:
     @pytest.mark.asyncio
     async def test_initialize_success(self, faiss_service_instance, mock_settings):
         """Test successful service initialization."""
-        with patch.object(faiss_service_instance, "_load_embedding_model") as mock_load_model, \
-             patch.object(faiss_service_instance, "_load_faiss_data") as mock_load_data:
-
+        with (
+            patch.object(faiss_service_instance, "_load_embedding_model") as mock_load_model,
+            patch.object(faiss_service_instance, "_load_faiss_data") as mock_load_data,
+        ):
             mock_load_model.return_value = None
             mock_load_data.return_value = None
 
@@ -103,11 +110,14 @@ class TestFaissService:
     @pytest.mark.asyncio
     async def test_load_embedding_model_local_exists(self, faiss_service_instance, mock_settings):
         """Test loading embedding model from local path when it exists."""
-        with patch("registry.services.search.embedded_service.SentenceTransformer") as mock_transformer, \
-             patch("os.environ") as mock_env, \
-             patch.object(Path, "exists") as mock_exists, \
-             patch.object(Path, "iterdir") as mock_iterdir:
-
+        with (
+            patch(
+                "registry.services.search.embedded_service.SentenceTransformer"
+            ) as mock_transformer,
+            patch("os.environ") as mock_env,
+            patch.object(Path, "exists") as mock_exists,
+            patch.object(Path, "iterdir") as mock_iterdir,
+        ):
             # Mock local model exists
             mock_exists.return_value = True
             mock_iterdir.return_value = [Path("model.bin")]
@@ -121,13 +131,18 @@ class TestFaissService:
             assert faiss_service_instance.embedding_model == mock_transformer_instance
 
     @pytest.mark.asyncio
-    async def test_load_embedding_model_download_from_hf(self, faiss_service_instance, mock_settings):
+    async def test_load_embedding_model_download_from_hf(
+        self, faiss_service_instance, mock_settings
+    ):
         """Test downloading embedding model from Hugging Face."""
-        with patch("registry.services.search.embedded_service.SentenceTransformer") as mock_transformer, \
-             patch("os.environ") as mock_env, \
-             patch.object(Path, "exists") as mock_exists, \
-             patch.object(Path, "iterdir") as mock_iterdir:
-
+        with (
+            patch(
+                "registry.services.search.embedded_service.SentenceTransformer"
+            ) as mock_transformer,
+            patch("os.environ") as mock_env,
+            patch.object(Path, "exists") as mock_exists,
+            patch.object(Path, "iterdir") as mock_iterdir,
+        ):
             # Mock local model doesn't exist
             mock_exists.return_value = False
             mock_iterdir.return_value = []
@@ -147,11 +162,14 @@ class TestFaissService:
     @pytest.mark.asyncio
     async def test_load_embedding_model_exception(self, faiss_service_instance, mock_settings):
         """Test handling exception during model loading."""
-        with patch("registry.services.search.embedded_service.SentenceTransformer") as mock_transformer, \
-             patch("os.environ") as mock_env, \
-             patch.object(Path, "exists") as mock_exists, \
-             patch.object(Path, "iterdir") as mock_iterdir:
-
+        with (
+            patch(
+                "registry.services.search.embedded_service.SentenceTransformer"
+            ) as mock_transformer,
+            patch("os.environ") as mock_env,
+            patch.object(Path, "exists") as mock_exists,
+            patch.object(Path, "iterdir") as mock_iterdir,
+        ):
             # Mock local model doesn't exist
             mock_exists.return_value = False
             mock_iterdir.return_value = []
@@ -169,10 +187,11 @@ class TestFaissService:
     @pytest.mark.asyncio
     async def test_load_faiss_data_existing_files(self, faiss_service_instance, mock_settings):
         """Test loading existing FAISS index and metadata."""
-        with patch("registry.services.search.embedded_service.faiss", mock_faiss), \
-             patch("builtins.open", create=True) as mock_open, \
-             patch.object(Path, "exists") as mock_exists:
-
+        with (
+            patch("registry.services.search.embedded_service.faiss", mock_faiss),
+            patch("builtins.open", create=True) as mock_open,
+            patch.object(Path, "exists") as mock_exists,
+        ):
             # Mock files exist
             mock_exists.return_value = True
 
@@ -182,10 +201,7 @@ class TestFaissService:
             mock_faiss.read_index.return_value = mock_index
 
             # Mock metadata file
-            mock_metadata = {
-                "metadata": {"service1": {"id": 1, "text": "test"}},
-                "next_id": 2
-            }
+            mock_metadata = {"metadata": {"service1": {"id": 1, "text": "test"}}, "next_id": 2}
             mock_file = Mock()
             mock_file.read.return_value = json.dumps(mock_metadata)
             mock_open.return_value.__enter__.return_value = mock_file
@@ -202,11 +218,12 @@ class TestFaissService:
     @pytest.mark.asyncio
     async def test_load_faiss_data_dimension_mismatch(self, faiss_service_instance, mock_settings):
         """Test handling dimension mismatch in loaded index."""
-        with patch("registry.services.search.embedded_service.faiss", mock_faiss), \
-             patch("builtins.open", create=True) as mock_open, \
-             patch.object(faiss_service_instance, "_initialize_new_index") as mock_init, \
-             patch.object(Path, "exists") as mock_exists:
-
+        with (
+            patch("registry.services.search.embedded_service.faiss", mock_faiss),
+            patch("builtins.open", create=True) as mock_open,
+            patch.object(faiss_service_instance, "_initialize_new_index") as mock_init,
+            patch.object(Path, "exists") as mock_exists,
+        ):
             # Mock files exist
             mock_exists.return_value = True
 
@@ -227,8 +244,10 @@ class TestFaissService:
     @pytest.mark.asyncio
     async def test_load_faiss_data_no_files(self, faiss_service_instance, mock_settings):
         """Test initialization when no existing files found."""
-        with patch.object(faiss_service_instance, "_initialize_new_index") as mock_init, \
-             patch.object(Path, "exists") as mock_exists:
+        with (
+            patch.object(faiss_service_instance, "_initialize_new_index") as mock_init,
+            patch.object(Path, "exists") as mock_exists,
+        ):
             # Mock files don't exist
             mock_exists.return_value = False
 
@@ -239,9 +258,10 @@ class TestFaissService:
     @pytest.mark.asyncio
     async def test_save_data_success(self, faiss_service_instance, mock_settings):
         """Test successful data saving."""
-        with patch("registry.services.search.embedded_service.faiss", mock_faiss), \
-             patch("builtins.open", create=True) as mock_open:
-
+        with (
+            patch("registry.services.search.embedded_service.faiss", mock_faiss),
+            patch("builtins.open", create=True) as mock_open,
+        ):
             # Setup service state
             mock_index = Mock()
             mock_index.ntotal = 5
@@ -308,11 +328,13 @@ class TestFaissService:
         server_info = {
             "server_name": "New Server",
             "description": "A new test server",
-            "tags": ["new", "test"]
+            "tags": ["new", "test"],
         }
 
-        with patch("asyncio.to_thread") as mock_to_thread, \
-             patch.object(faiss_service_instance, "_save_data") as mock_save:
+        with (
+            patch("asyncio.to_thread") as mock_to_thread,
+            patch.object(faiss_service_instance, "_save_data") as mock_save,
+        ):
             # Mock asyncio.to_thread to return the embedding when encode is called
             mock_to_thread.return_value = mock_embedding
 
@@ -335,7 +357,7 @@ class TestFaissService:
         server_info = {
             "server_name": "Test Server",
             "description": "Test description",
-            "tags": ["test"]
+            "tags": ["test"],
         }
         existing_text = faiss_service_instance._get_text_for_embedding(server_info)
 
@@ -343,7 +365,7 @@ class TestFaissService:
             "existing_service": {
                 "id": 1,
                 "text_for_embedding": existing_text,
-                "full_server_info": {"server_name": "Test Server", "is_enabled": False}
+                "full_server_info": {"server_name": "Test Server", "is_enabled": False},
             }
         }
 
@@ -353,11 +375,18 @@ class TestFaissService:
         faiss_service_instance.faiss_index = mock_index
 
         with patch.object(faiss_service_instance, "_save_data") as mock_save:
-            await faiss_service_instance.add_or_update_service("existing_service", server_info, True)
+            await faiss_service_instance.add_or_update_service(
+                "existing_service", server_info, True
+            )
 
         # Should update metadata but not re-embed (text hasn't changed, but is_enabled has)
         mock_save.assert_called_once()
-        assert faiss_service_instance.metadata_store["existing_service"]["full_server_info"]["is_enabled"] is True
+        assert (
+            faiss_service_instance.metadata_store["existing_service"]["full_server_info"][
+                "is_enabled"
+            ]
+            is True
+        )
 
     @pytest.mark.asyncio
     async def test_add_or_update_service_encoding_error(self, faiss_service_instance):
@@ -379,7 +408,9 @@ class TestFaissService:
             await faiss_service_instance.add_or_update_service("test_service", server_info)
 
     @pytest.mark.asyncio
-    async def test_search_mixed_returns_servers_and_tools(self, faiss_service_instance, mock_settings):
+    async def test_search_mixed_returns_servers_and_tools(
+        self, faiss_service_instance, mock_settings
+    ):
         """Test semantic search happy path for servers and tools."""
         mock_model = Mock()
         query_embedding = [[0.1] * 384]
@@ -392,11 +423,13 @@ class TestFaissService:
 
         mock_index = Mock()
         mock_index.ntotal = 2
+
         # FAISS search returns (distances, indices) tuple
         # Each is shape (n, k) where n=number of queries, k=top_k results
         # Use a function to return the actual arrays, not a Mock
         def search_impl(query_np, k):
             return (mock_distances, mock_indices)
+
         mock_index.search = search_impl
         faiss_service_instance.faiss_index = mock_index
 
@@ -436,11 +469,13 @@ class TestFaissService:
                     "trust_level": "verified",
                     "is_enabled": True,
                 },
-            }
+            },
         }
 
-        with patch("asyncio.to_thread") as mock_to_thread, \
-             patch.object(faiss_service_instance, "_extract_matching_tools") as mock_extract_tools:
+        with (
+            patch("asyncio.to_thread") as mock_to_thread,
+            patch.object(faiss_service_instance, "_extract_matching_tools") as mock_extract_tools,
+        ):
             # Mock asyncio.to_thread to return the embedding
             mock_to_thread.return_value = query_embedding
 
@@ -450,7 +485,7 @@ class TestFaissService:
                     "tool_name": "alpha_tool",
                     "description": "Alpha tool handles tokens",
                     "raw_score": 0.8,
-                    "match_context": "Alpha tool handles tokens"
+                    "match_context": "Alpha tool handles tokens",
                 }
             ]
 
@@ -496,13 +531,12 @@ class TestFaissService:
         faiss_service_instance.faiss_index.ntotal = 0
 
         with pytest.raises(ValueError):
-            await faiss_service_instance.search_mixed(
-                query="  ", entity_types=None, max_results=5
-            )
+            await faiss_service_instance.search_mixed(query="  ", entity_types=None, max_results=5)
 
     def test_global_service_instance(self):
         """Test that the global service instance is accessible."""
         from registry.services.search.service import faiss_service
+
         assert faiss_service is not None
         # Note: faiss_service could be either EmbeddedFaissService or ExternalVectorSearchService
         # depending on settings.use_external_discovery

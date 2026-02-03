@@ -3,9 +3,10 @@
 MCP Gateway Registry - Modern FastAPI Application
 
 A clean, domain-driven FastAPI app for managing MCP (Model Context Protocol) servers.
-This main.py file serves as the application coordinator, importing and registering 
+This main.py file serves as the application coordinator, importing and registering
 domain routers while handling core app configuration.
 """
+
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -77,7 +78,10 @@ async def lifespan(app: FastAPI):
                     await vector_service.add_or_update_agent(agent_card.path, agent_card)
                     logger.debug(f"Updated vector index for agent: {agent_card.path}")
                 except Exception as e:
-                    logger.error(f"Failed to update vector index for agent {agent_card.path}: {e}", exc_info=True)
+                    logger.error(
+                        f"Failed to update vector index for agent {agent_card.path}: {e}",
+                        exc_info=True,
+                    )
 
             logger.info(f"✅ Vector search index updated with {len(all_agents)} services")
         else:
@@ -90,13 +94,17 @@ async def lifespan(app: FastAPI):
         logger.info("🔗 Initializing federation service...")
         federation_service = get_federation_service()
         if federation_service.config.is_any_federation_enabled():
-            logger.info(f"Federation enabled for: {', '.join(federation_service.config.get_enabled_federations())}")
+            logger.info(
+                f"Federation enabled for: {', '.join(federation_service.config.get_enabled_federations())}"
+            )
 
             # Sync on startup if configured
             sync_on_startup = (
-                    (
-                            federation_service.config.anthropic.enabled and federation_service.config.anthropic.sync_on_startup) or
-                    (federation_service.config.asor.enabled and federation_service.config.asor.sync_on_startup)
+                federation_service.config.anthropic.enabled
+                and federation_service.config.anthropic.sync_on_startup
+            ) or (
+                federation_service.config.asor.enabled
+                and federation_service.config.asor.sync_on_startup
             )
 
             if sync_on_startup:
@@ -106,7 +114,9 @@ async def lifespan(app: FastAPI):
                     for source, servers in sync_results.items():
                         logger.info(f"✅ Synced {len(servers)} servers from {source}")
                 except Exception as e:
-                    logger.error(f"⚠️ Federation sync failed (continuing with startup): {e}", exc_info=True)
+                    logger.error(
+                        f"⚠️ Federation sync failed (continuing with startup): {e}", exc_info=True
+                    )
         else:
             logger.info("Federation is disabled")
         logger.info("✅ All services initialized successfully!")
@@ -150,33 +160,30 @@ app = FastAPI(
     openapi_tags=[
         {
             "name": "Authentication",
-            "description": "OAuth2 and session-based authentication endpoints"
+            "description": "OAuth2 and session-based authentication endpoints",
         },
         {
             "name": "Server Management",
-            "description": "MCP server registration and management. Requires JWT Bearer token authentication."
+            "description": "MCP server registration and management. Requires JWT Bearer token authentication.",
         },
         {
             "name": "Agent Management",
-            "description": "A2A agent registration and management. Requires JWT Bearer token authentication."
+            "description": "A2A agent registration and management. Requires JWT Bearer token authentication.",
         },
         {
             "name": "Management API",
-            "description": "IAM and user management operations. Requires JWT Bearer token with admin permissions."
+            "description": "IAM and user management operations. Requires JWT Bearer token with admin permissions.",
         },
         {
             "name": "Semantic Search",
-            "description": "Vector-based semantic search for agents. Requires JWT Bearer token authentication."
+            "description": "Vector-based semantic search for agents. Requires JWT Bearer token authentication.",
         },
-        {
-            "name": "Health Monitoring",
-            "description": "Service health check endpoints"
-        },
+        {"name": "Health Monitoring", "description": "Service health check endpoints"},
         {
             "name": "Anthropic Registry API",
-            "description": "Anthropic-compatible registry API (v0.1) for MCP server discovery"
-        }
-    ]
+            "description": "Anthropic-compatible registry API (v0.1) for MCP server discovery",
+        },
+    ],
 )
 
 # Add CORS middleware for React development and Docker deployment
@@ -188,9 +195,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.add_middleware(
-    UnifiedAuthMiddleware
-)
+app.add_middleware(UnifiedAuthMiddleware)
 
 if hasattr(settings, "static_dir") and Path(settings.static_dir).exists():
     app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
@@ -201,13 +206,19 @@ else:
 # Register API routers with /api prefix
 app.include_router(meta_router, prefix="/api/auth", tags=["Authentication metadata"])
 app.include_router(servers_router, prefix="/api", tags=["Server Management"])
-app.include_router(servers_router_v1, prefix=f"/api/{settings.API_VERSION}", tags=["Server Management V1"])
+app.include_router(
+    servers_router_v1, prefix=f"/api/{settings.API_VERSION}", tags=["Server Management V1"]
+)
 app.include_router(agent_router, prefix="/api", tags=["Agent Management"])
 app.include_router(management_router, prefix="/api")
 app.include_router(search_router, prefix=f"/api/{settings.API_VERSION}", tags=["Semantic Search"])
 app.include_router(health_router, prefix="/api/health", tags=["Health Monitoring"])
-app.include_router(oauth_router, prefix=f"/api/{settings.API_VERSION}", tags=["MCP  Oauth Management"])
-app.include_router(connection_router, prefix=f"/api/{settings.API_VERSION}", tags=["MCP  Connection Management"])
+app.include_router(
+    oauth_router, prefix=f"/api/{settings.API_VERSION}", tags=["MCP  Oauth Management"]
+)
+app.include_router(
+    connection_router, prefix=f"/api/{settings.API_VERSION}", tags=["MCP  Connection Management"]
+)
 app.include_router(acl_router, prefix=f"/api/{settings.API_VERSION}", tags=["ACL Management"])
 app.include_router(auth_provider_router, tags=["Authentication"])
 
@@ -236,7 +247,7 @@ def custom_openapi():
             "scheme": "bearer",
             "bearerFormat": "JWT",
             "description": "JWT Bearer token obtained from Keycloak OAuth2 authentication. "
-                           "Include in Authorization header as: `Authorization: Bearer <token>`"
+            "Include in Authorization header as: `Authorization: Bearer <token>`",
         }
     }
 
@@ -272,7 +283,7 @@ async def get_current_user(user_context: CurrentUserWithACLMap):
         "can_modify_servers": user_context.get("can_modify_servers", False),
         "is_admin": user_context.get("is_admin", False),
         "user_id": user_context.get("user_id"),
-        "acl_permission_map": user_context.get("acl_permission_map", {})
+        "acl_permission_map": user_context.get("acl_permission_map", {}),
     }
 
 
@@ -299,10 +310,4 @@ if __name__ == "__main__":
 
     log_level = os.getenv("LOG_LEVEL", "INFO").lower()
 
-    uvicorn.run(
-        "registry.main:app",
-        host="0.0.0.0",
-        port=7860,
-        reload=True,
-        log_level=log_level
-    )
+    uvicorn.run("registry.main:app", host="0.0.0.0", port=7860, reload=True, log_level=log_level)

@@ -58,8 +58,12 @@ class BeanieModelGenerator:
         "object": "Dict",
     }
 
-    def __init__(self, output_dir: str, github_repo: str = "ascending-llc/jarvis-api",
-                 github_token: str | None = None):
+    def __init__(
+        self,
+        output_dir: str,
+        github_repo: str = "ascending-llc/jarvis-api",
+        github_token: str | None = None,
+    ):
         self.output_dir = Path(output_dir)
         self.generated_dir = self.output_dir / "_generated"
         self.generated_dir.mkdir(parents=True, exist_ok=True)
@@ -148,7 +152,7 @@ class BeanieModelGenerator:
 
             headers = {
                 "User-Agent": "Jarvis-Schema-Downloader",
-                "Accept": "application/vnd.github.v3+json"
+                "Accept": "application/vnd.github.v3+json",
             }
 
             if self.github_token:
@@ -212,7 +216,7 @@ class BeanieModelGenerator:
 
             headers = {
                 "User-Agent": "Jarvis-Schema-Downloader",
-                "Accept": "application/vnd.github.v3+json"
+                "Accept": "application/vnd.github.v3+json",
             }
 
             if self.github_token:
@@ -377,7 +381,9 @@ class BeanieModelGenerator:
                         # Generate class name from field name
                         nested_class_name = self._field_name_to_class_name(field_name)
 
-                    nested_model = self._generate_nested_model(nested_class_name, properties, items.get("required", []))
+                    nested_model = self._generate_nested_model(
+                        nested_class_name, properties, items.get("required", [])
+                    )
                     self.nested_models.append(nested_model)
 
         # Handle nested object
@@ -393,7 +399,9 @@ class BeanieModelGenerator:
                     # Generate class name from field name
                     nested_class_name = self._field_name_to_class_name(field_name)
 
-                nested_model = self._generate_nested_model(nested_class_name, properties, field_def.get("required", []))
+                nested_model = self._generate_nested_model(
+                    nested_class_name, properties, field_def.get("required", [])
+                )
                 self.nested_models.append(nested_model)
 
                 # Recursively extract nested models from sub-properties
@@ -419,7 +427,9 @@ class BeanieModelGenerator:
 
         return field_name
 
-    def _generate_nested_model(self, class_name: str, properties: dict[str, Any], required_fields: list[str]) -> list[str]:
+    def _generate_nested_model(
+        self, class_name: str, properties: dict[str, Any], required_fields: list[str]
+    ) -> list[str]:
         """
         Generate a nested Pydantic BaseModel class
 
@@ -582,21 +592,25 @@ class BeanieModelGenerator:
 
         if field_def.get("type") == "string":
             if "minLength" in field_def:
-                field_attrs.append(f'min_length={field_def["minLength"]}')
+                field_attrs.append(f"min_length={field_def['minLength']}")
             if "maxLength" in field_def:
-                field_attrs.append(f'max_length={field_def["maxLength"]}')
-            if "pattern" in field_def and field_type != "PydanticObjectId" and not field_type.startswith("Link"):
+                field_attrs.append(f"max_length={field_def['maxLength']}")
+            if (
+                "pattern" in field_def
+                and field_type != "PydanticObjectId"
+                and not field_type.startswith("Link")
+            ):
                 pattern = field_def["pattern"]
                 field_attrs.append(f'pattern=r"{pattern}"')
 
         if field_attrs:
-            field_call = f'Field({", ".join(field_attrs)})'
+            field_call = f"Field({', '.join(field_attrs)})"
         else:
             field_call = "Field(...)"
 
         result = f"    {python_field_name}: {field_type} = {field_call}"
         if comments:
-            result += f'  # {", ".join(comments)}'
+            result += f"  # {', '.join(comments)}"
 
         return result
 
@@ -712,7 +726,7 @@ class BeanieModelGenerator:
         if index_def.get("sparse"):
             options.append("sparse=True")
         if "expireAfterSeconds" in index_def:
-            options.append(f'expireAfterSeconds={index_def["expireAfterSeconds"]}')
+            options.append(f"expireAfterSeconds={index_def['expireAfterSeconds']}")
 
         # Handle partialFilterExpression
         if "x-partialFilterExpression" in index_def:
@@ -727,9 +741,9 @@ class BeanieModelGenerator:
         if has_options:
             # With options → IndexModel object
             self.imported_types.add("IndexModel")
-            return f'IndexModel([{", ".join(field_list)}], {", ".join(options)})'
+            return f"IndexModel([{', '.join(field_list)}], {', '.join(options)})"
         # No options → list
-        return f'[{", ".join(field_list)}]'
+        return f"[{', '.join(field_list)}]"
 
     def _convert_filter_expression(self, filter_expr: str) -> str | None:
         """Convert MongoDB filter expression from JS format to Python dict format"""
@@ -769,7 +783,7 @@ class BeanieModelGenerator:
             datetime_imports.append("timezone")
 
         if datetime_imports:
-            imports.append(f'from datetime import {", ".join(datetime_imports)}')
+            imports.append(f"from datetime import {', '.join(datetime_imports)}")
 
         typing_imports = []
         if "List" in self.imported_types:
@@ -782,13 +796,13 @@ class BeanieModelGenerator:
         typing_imports.append("Any")
 
         if typing_imports:
-            imports.append(f'from typing import {", ".join(sorted(typing_imports))}')
+            imports.append(f"from typing import {', '.join(sorted(typing_imports))}")
 
         # Pydantic imports
         pydantic_imports = ["Field"]
         if "BaseModel" in self.imported_types:
             pydantic_imports.append("BaseModel")
-        imports.append(f'from pydantic import {", ".join(pydantic_imports)}')
+        imports.append(f"from pydantic import {', '.join(pydantic_imports)}")
 
         beanie_imports = ["Document"]
         if "PydanticObjectId" in self.imported_types:
@@ -796,7 +810,7 @@ class BeanieModelGenerator:
         if "Link" in self.imported_types:
             beanie_imports.append("Link")
 
-        imports.append(f'from beanie import {", ".join(beanie_imports)}')
+        imports.append(f"from beanie import {', '.join(beanie_imports)}")
 
         # Add IndexModel import if needed
         if "IndexModel" in self.imported_types:
@@ -936,7 +950,7 @@ class BeanieModelGenerator:
         lines.append("")
         lines.append("```bash")
         lines.append(f"uv run import-schemas --tag {version} \\")
-        lines.append(f'  --files {" ".join(files)} \\')
+        lines.append(f"  --files {' '.join(files)} \\")
         lines.append("  --output-dir ./models \\")
         lines.append("  --token $(gh auth token)")
         lines.append("```")
@@ -989,7 +1003,7 @@ Examples:
 
 GitHub Release URL format:
   https://github.com/{repo}/releases/download/{tag}/{filename}
-        """
+        """,
     )
 
     # Mode selection
@@ -997,7 +1011,7 @@ GitHub Release URL format:
         "--mode",
         choices=["local", "remote"],
         default="remote",
-        help="Mode: local (read from local directory) or remote (download from GitHub). Default: remote"
+        help="Mode: local (read from local directory) or remote (download from GitHub). Default: remote",
     )
 
     # Common arguments
@@ -1005,33 +1019,31 @@ GitHub Release URL format:
         "--files",
         nargs="+",
         required=False,
-        help="JSON schema filenames to convert (e.g., user.json token.json). If not specified, all .json files will be processed."
+        help="JSON schema filenames to convert (e.g., user.json token.json). If not specified, all .json files will be processed.",
     )
     parser.add_argument(
-        "--output-dir",
-        required=True,
-        help="Output directory for generated Python models"
+        "--output-dir", required=True, help="Output directory for generated Python models"
     )
 
     # Local mode arguments
     parser.add_argument(
         "--input-dir",
-        help="[Local mode] Input directory containing JSON schema files (required for --mode local)"
+        help="[Local mode] Input directory containing JSON schema files (required for --mode local)",
     )
 
     # Remote mode arguments
     parser.add_argument(
         "--tag",
-        help="[Remote mode] GitHub Release tag/version (e.g., asc0.4.0) (required for --mode remote)"
+        help="[Remote mode] GitHub Release tag/version (e.g., asc0.4.0) (required for --mode remote)",
     )
     parser.add_argument(
         "--repo",
         default="ascending-llc/jarvis-api",
-        help="[Remote mode] GitHub repository (default: ascending-llc/jarvis-api)"
+        help="[Remote mode] GitHub repository (default: ascending-llc/jarvis-api)",
     )
     parser.add_argument(
         "--token",
-        help="[Remote mode] GitHub Personal Access Token (for private repos). Can also use GITHUB_TOKEN env var"
+        help="[Remote mode] GitHub Personal Access Token (for private repos). Can also use GITHUB_TOKEN env var",
     )
 
     args = parser.parse_args()
@@ -1051,9 +1063,7 @@ GitHub Release URL format:
     print(f"Mode: {args.mode.upper()}")
 
     generator = BeanieModelGenerator(
-        output_dir=args.output_dir,
-        github_repo=args.repo,
-        github_token=args.token
+        output_dir=args.output_dir, github_repo=args.repo, github_token=args.token
     )
 
     # Clean up existing files and caches to prevent import issues

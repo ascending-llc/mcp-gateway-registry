@@ -27,10 +27,10 @@ class CognitoProvider(AuthProvider):
         client_id: str,
         client_secret: str,
         region: str,
-        domain: str | None = None
+        domain: str | None = None,
     ):
         """Initialize Cognito provider.
-        
+
         Args:
             user_pool_id: AWS Cognito User Pool ID
             client_id: OAuth2 client ID
@@ -59,18 +59,17 @@ class CognitoProvider(AuthProvider):
         self.token_url = f"{self.cognito_domain}/oauth2/token"
         self.auth_url = f"{self.cognito_domain}/oauth2/authorize"
         self.userinfo_url = f"{self.cognito_domain}/oauth2/userInfo"
-        self.jwks_url = f"https://cognito-idp.{region}.amazonaws.com/{user_pool_id}/.well-known/jwks.json"
+        self.jwks_url = (
+            f"https://cognito-idp.{region}.amazonaws.com/{user_pool_id}/.well-known/jwks.json"
+        )
         self.logout_url = f"{self.cognito_domain}/logout"
         self.issuer = f"https://cognito-idp.{region}.amazonaws.com/{user_pool_id}"
 
-        logger.debug(f"Initialized Cognito provider for user pool '{user_pool_id}' in region '{region}'")
+        logger.debug(
+            f"Initialized Cognito provider for user pool '{user_pool_id}' in region '{region}'"
+        )
 
-
-    def validate_token(
-        self,
-        token: str,
-        **kwargs: Any
-    ) -> dict[str, Any]:
+    def validate_token(self, token: str, **kwargs: Any) -> dict[str, Any]:
         """Validate Cognito JWT token."""
         try:
             logger.debug("Validating Cognito JWT token")
@@ -90,6 +89,7 @@ class CognitoProvider(AuthProvider):
             for key in jwks.get("keys", []):
                 if key.get("kid") == kid:
                     from jwt import PyJWK
+
                     signing_key = PyJWK(key).key
                     break
 
@@ -103,14 +103,12 @@ class CognitoProvider(AuthProvider):
                 algorithms=["RS256"],
                 issuer=self.issuer,
                 audience=self.client_id,
-                options={
-                    "verify_exp": True,
-                    "verify_iat": True,
-                    "verify_aud": True
-                }
+                options={"verify_exp": True, "verify_iat": True, "verify_aud": True},
             )
 
-            logger.debug(f"Token validation successful for user: {claims.get('username', 'unknown')}")
+            logger.debug(
+                f"Token validation successful for user: {claims.get('username', 'unknown')}"
+            )
 
             # Extract user info from claims
             return {
@@ -121,7 +119,7 @@ class CognitoProvider(AuthProvider):
                 "scopes": claims.get("scope", "").split() if claims.get("scope") else [],
                 "client_id": claims.get("client_id", self.client_id),
                 "method": "cognito",
-                "data": claims
+                "data": claims,
             }
 
         except jwt.ExpiredSignatureError:
@@ -134,14 +132,12 @@ class CognitoProvider(AuthProvider):
             logger.error(f"Cognito token validation error: {e}")
             raise ValueError(f"Token validation failed: {e}")
 
-
     def get_jwks(self) -> dict[str, Any]:
         """Get JSON Web Key Set from Cognito with caching."""
         current_time = time.time()
 
         # Check if cache is still valid
-        if (self._jwks_cache and
-            (current_time - self._jwks_cache_time) < self._jwks_cache_ttl):
+        if self._jwks_cache and (current_time - self._jwks_cache_time) < self._jwks_cache_ttl:
             logger.debug("Using cached JWKS")
             return self._jwks_cache
 
@@ -160,12 +156,7 @@ class CognitoProvider(AuthProvider):
             logger.error(f"Failed to retrieve JWKS from Cognito: {e}")
             raise ValueError(f"Cannot retrieve JWKS: {e}")
 
-
-    def exchange_code_for_token(
-        self,
-        code: str,
-        redirect_uri: str
-    ) -> dict[str, Any]:
+    def exchange_code_for_token(self, code: str, redirect_uri: str) -> dict[str, Any]:
         """Exchange authorization code for access token."""
         try:
             logger.debug("Exchanging authorization code for token")
@@ -175,12 +166,10 @@ class CognitoProvider(AuthProvider):
                 "code": code,
                 "client_id": self.client_id,
                 "client_secret": self.client_secret,
-                "redirect_uri": redirect_uri
+                "redirect_uri": redirect_uri,
             }
 
-            headers = {
-                "Content-Type": "application/x-www-form-urlencoded"
-            }
+            headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
             response = requests.post(self.token_url, data=data, headers=headers, timeout=10)
             response.raise_for_status()
@@ -194,11 +183,7 @@ class CognitoProvider(AuthProvider):
             logger.error(f"Failed to exchange code for token: {e}")
             raise ValueError(f"Token exchange failed: {e}")
 
-
-    def get_user_info(
-        self,
-        access_token: str
-    ) -> dict[str, Any]:
+    def get_user_info(self, access_token: str) -> dict[str, Any]:
         """Get user information from Cognito."""
         try:
             logger.debug("Fetching user info from Cognito")
@@ -216,13 +201,7 @@ class CognitoProvider(AuthProvider):
             logger.error(f"Failed to get user info: {e}")
             raise ValueError(f"User info retrieval failed: {e}")
 
-
-    def get_auth_url(
-        self,
-        redirect_uri: str,
-        state: str,
-        scope: str | None = None
-    ) -> str:
+    def get_auth_url(self, redirect_uri: str, state: str, scope: str | None = None) -> str:
         """Get Cognito authorization URL."""
         logger.debug(f"Generating auth URL with redirect_uri: {redirect_uri}")
 
@@ -231,7 +210,7 @@ class CognitoProvider(AuthProvider):
             "response_type": "code",
             "scope": scope or "openid email profile",
             "redirect_uri": redirect_uri,
-            "state": state
+            "state": state,
         }
 
         auth_url = f"{self.auth_url}?{urlencode(params)}"
@@ -239,29 +218,18 @@ class CognitoProvider(AuthProvider):
 
         return auth_url
 
-
-    def get_logout_url(
-        self,
-        redirect_uri: str
-    ) -> str:
+    def get_logout_url(self, redirect_uri: str) -> str:
         """Get Cognito logout URL."""
         logger.debug(f"Generating logout URL with redirect_uri: {redirect_uri}")
 
-        params = {
-            "client_id": self.client_id,
-            "logout_uri": redirect_uri
-        }
+        params = {"client_id": self.client_id, "logout_uri": redirect_uri}
 
         logout_url = f"{self.logout_url}?{urlencode(params)}"
         logger.debug(f"Generated logout URL: {logout_url}")
 
         return logout_url
 
-
-    def refresh_token(
-        self,
-        refresh_token: str
-    ) -> dict[str, Any]:
+    def refresh_token(self, refresh_token: str) -> dict[str, Any]:
         """Refresh an access token using a refresh token."""
         try:
             logger.debug("Refreshing access token")
@@ -270,12 +238,10 @@ class CognitoProvider(AuthProvider):
                 "grant_type": "refresh_token",
                 "refresh_token": refresh_token,
                 "client_id": self.client_id,
-                "client_secret": self.client_secret
+                "client_secret": self.client_secret,
             }
 
-            headers = {
-                "Content-Type": "application/x-www-form-urlencoded"
-            }
+            headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
             response = requests.post(self.token_url, data=data, headers=headers, timeout=10)
             response.raise_for_status()
@@ -289,21 +255,16 @@ class CognitoProvider(AuthProvider):
             logger.error(f"Failed to refresh token: {e}")
             raise ValueError(f"Token refresh failed: {e}")
 
-
-    def validate_m2m_token(
-        self,
-        token: str
-    ) -> dict[str, Any]:
+    def validate_m2m_token(self, token: str) -> dict[str, Any]:
         """Validate a machine-to-machine token."""
         # M2M tokens use the same validation as regular tokens in Cognito
         return self.validate_token(token)
-
 
     def get_m2m_token(
         self,
         client_id: str | None = None,
         client_secret: str | None = None,
-        scope: str | None = None
+        scope: str | None = None,
     ) -> dict[str, Any]:
         """Get machine-to-machine token using client credentials."""
         try:
@@ -312,15 +273,13 @@ class CognitoProvider(AuthProvider):
             data = {
                 "grant_type": "client_credentials",
                 "client_id": client_id or self.client_id,
-                "client_secret": client_secret or self.client_secret
+                "client_secret": client_secret or self.client_secret,
             }
 
             if scope:
                 data["scope"] = scope
 
-            headers = {
-                "Content-Type": "application/x-www-form-urlencoded"
-            }
+            headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
             response = requests.post(self.token_url, data=data, headers=headers, timeout=10)
             response.raise_for_status()
@@ -334,7 +293,6 @@ class CognitoProvider(AuthProvider):
             logger.error(f"Failed to get M2M token: {e}")
             raise ValueError(f"M2M token generation failed: {e}")
 
-
     def get_provider_info(self) -> dict[str, Any]:
         """Get provider-specific information."""
         return {
@@ -347,7 +305,7 @@ class CognitoProvider(AuthProvider):
                 "token": self.token_url,
                 "userinfo": self.userinfo_url,
                 "jwks": self.jwks_url,
-                "logout": self.logout_url
+                "logout": self.logout_url,
             },
-            "issuer": self.issuer
+            "issuer": self.issuer,
         }

@@ -1,6 +1,7 @@
 """
 Test data factories for generating mock data.
 """
+
 from typing import Any
 
 import factory
@@ -20,7 +21,11 @@ class ServerInfoFactory(factory.DictFactory):
     num_tools = factory.LazyFunction(lambda: fake.random_int(min=0, max=20))
     num_stars = factory.LazyFunction(lambda: fake.random_int(min=0, max=100))
     is_python = factory.LazyFunction(lambda: fake.boolean())
-    license = factory.LazyFunction(lambda: fake.random_element(elements=["MIT", "Apache-2.0", "GPL-3.0", "BSD-3-Clause", "N/A"]))
+    license = factory.LazyFunction(
+        lambda: fake.random_element(
+            elements=["MIT", "Apache-2.0", "GPL-3.0", "BSD-3-Clause", "N/A"]
+        )
+    )
     tool_list = factory.LazyFunction(list)
 
 
@@ -29,19 +34,21 @@ class ToolInfoFactory(factory.DictFactory):
 
     name = factory.LazyFunction(lambda: fake.word())
     description = factory.LazyFunction(lambda: fake.sentence())
-    input_schema = factory.LazyFunction(lambda: {
-        "type": "object",
-        "properties": {
-            "query": {"type": "string", "description": "The query parameter"}
-        },
-        "required": ["query"]
-    })
+    input_schema = factory.LazyFunction(
+        lambda: {
+            "type": "object",
+            "properties": {"query": {"type": "string", "description": "The query parameter"}},
+            "required": ["query"],
+        }
+    )
 
 
 class HealthStatusFactory(factory.DictFactory):
     """Factory for creating health status dictionaries."""
 
-    status = factory.LazyFunction(lambda: fake.random_element(elements=["healthy", "unhealthy", "unknown"]))
+    status = factory.LazyFunction(
+        lambda: fake.random_element(elements=["healthy", "unhealthy", "unknown"])
+    )
     last_checked_iso = factory.LazyFunction(lambda: fake.iso8601())
     num_tools = factory.LazyFunction(lambda: fake.random_int(min=0, max=20))
 

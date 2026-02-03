@@ -34,7 +34,7 @@ async def init_redis() -> None:
             socket_timeout=5,
             retry_on_timeout=True,
             health_check_interval=30,
-            max_connections=50
+            max_connections=50,
         )
 
         # Test connection
@@ -69,7 +69,7 @@ async def close_redis() -> None:
 def get_redis_client() -> Redis | None:
     """
     Get the global Redis client instance.
-    
+
     Returns:
         Redis client if initialized, None otherwise
     """

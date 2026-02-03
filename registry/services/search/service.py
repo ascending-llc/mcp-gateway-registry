@@ -27,16 +27,18 @@ logger = logging.getLogger(__name__)
 def create_vector_search_service() -> VectorSearchService:
     """
     Factory function to create the appropriate vector search service based on configuration.
-    
+
     Returns:
         VectorSearchService: Either EmbeddedFaissService or ExternalVectorSearchService (Weaviate-based)
     """
     if settings.use_external_discovery:
         logger.info("Initializing Weaviate-based vector search service for MCP tools")
         from .external_service import ExternalVectorSearchService
+
         return ExternalVectorSearchService()
     logger.info("Initializing EMBEDDED FAISS vector search service")
     from .embedded_service import EmbeddedFaissService
+
     return EmbeddedFaissService(settings)
 
 

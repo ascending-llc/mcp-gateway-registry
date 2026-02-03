@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class OAuth2ConfigLoader:
     """Singleton OAuth2 configuration loader with environment variable substitution.
-    
+
     This class ensures that the OAuth2 configuration is loaded only once and
     cached for subsequent access. It supports bash-style default values in
     environment variables (e.g., ${VAR_NAME:-default_value}).
@@ -33,7 +33,7 @@ class OAuth2ConfigLoader:
 
     def __init__(self):
         """Initialize the configuration loader.
-        
+
         Note: This will only execute once due to singleton pattern.
         """
         # Prevent re-initialization
@@ -46,7 +46,7 @@ class OAuth2ConfigLoader:
 
     def _load_config(self) -> dict[str, Any]:
         """Load OAuth2 providers configuration from oauth2_providers.yml.
-        
+
         Returns:
             Dict containing OAuth2 providers configuration with environment
             variables substituted.
@@ -78,12 +78,12 @@ class OAuth2ConfigLoader:
 
     def _substitute_env_vars(self, config: Any) -> Any:
         """Recursively substitute environment variables in configuration.
-        
+
         Supports bash-style default values: ${VAR_NAME:-default_value}
-        
+
         Args:
             config: Configuration value (dict, list, or str)
-            
+
         Returns:
             Configuration with environment variables substituted
         """
@@ -118,12 +118,12 @@ class OAuth2ConfigLoader:
 
     def _auto_derive_cognito_domain(self, user_pool_id: str) -> str:
         """Auto-derive Cognito domain from User Pool ID.
-        
+
         Example: us-east-1_KmP5A3La3 → us-east-1kmp5a3la3
-        
+
         Args:
             user_pool_id: AWS Cognito User Pool ID
-            
+
         Returns:
             Derived domain string
         """
@@ -138,7 +138,7 @@ class OAuth2ConfigLoader:
     @property
     def config(self) -> dict[str, Any]:
         """Get the loaded OAuth2 configuration.
-        
+
         Returns:
             Dictionary containing the OAuth2 configuration
         """
@@ -151,10 +151,10 @@ class OAuth2ConfigLoader:
 
     def reload(self) -> dict[str, Any]:
         """Force reload the configuration from file.
-        
+
         This method can be used to refresh the configuration without
         restarting the application.
-        
+
         Returns:
             Dictionary containing the reloaded OAuth2 configuration
         """
@@ -165,10 +165,10 @@ class OAuth2ConfigLoader:
 
     def get_provider_config(self, provider_name: str) -> dict[str, Any] | None:
         """Get configuration for a specific provider.
-        
+
         Args:
             provider_name: Name of the provider (e.g., 'keycloak', 'cognito', 'entra')
-            
+
         Returns:
             Provider configuration dictionary or None if not found
         """
@@ -176,7 +176,7 @@ class OAuth2ConfigLoader:
 
     def get_enabled_providers(self) -> list:
         """Get list of all enabled provider names.
-        
+
         Returns:
             List of enabled provider names
         """
@@ -193,16 +193,16 @@ _config_loader: OAuth2ConfigLoader | None = None
 
 def get_oauth2_config(reload: bool = False) -> dict[str, Any]:
     """Get the OAuth2 configuration (singleton access).
-    
+
     This is a convenience function that provides access to the singleton
     OAuth2ConfigLoader instance.
-    
+
     Args:
         reload: If True, force reload the configuration from file
-        
+
     Returns:
         Dictionary containing the OAuth2 configuration
-        
+
     Example:
         >>> config = get_oauth2_config()
         >>> keycloak_config = config.get('providers', {}).get('keycloak')
@@ -220,13 +220,13 @@ def get_oauth2_config(reload: bool = False) -> dict[str, Any]:
 
 def get_provider_config(provider_name: str) -> dict[str, Any] | None:
     """Get configuration for a specific provider.
-    
+
     Args:
         provider_name: Name of the provider (e.g., 'keycloak', 'cognito', 'entra')
-        
+
     Returns:
         Provider configuration dictionary or None if not found
-        
+
     Example:
         >>> entra_config = get_provider_config('entra')
         >>> if entra_config:
@@ -242,10 +242,10 @@ def get_provider_config(provider_name: str) -> dict[str, Any] | None:
 
 def get_enabled_providers() -> list:
     """Get list of all enabled provider names.
-    
+
     Returns:
         List of enabled provider names
-        
+
     Example:
         >>> enabled = get_enabled_providers()
         >>> print(f"Enabled providers: {enabled}")
@@ -256,4 +256,3 @@ def get_enabled_providers() -> list:
         _config_loader = OAuth2ConfigLoader()
 
     return _config_loader.get_enabled_providers()
-

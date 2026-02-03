@@ -17,5 +17,5 @@ __all__ = [
     "OAuthProtectedResourceMetadata",
     "OAuthTokens",
     "TokenTransformConfig",
-    "TokenType"
+    "TokenType",
 ]

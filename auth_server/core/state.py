@@ -9,6 +9,7 @@ when routes are refactored or imported from tests.
 In production these should be replaced by a persistent store
 (Redis, database, etc.).
 """
+
 from typing import Any
 
 # Device flow storage (in-memory, will migrate to Redis/MongoDB later)

@@ -37,10 +37,12 @@ class MCPClientConfig:
     ANTHROPIC_TAG: str = "anthropic-registry"
 
     # Header defaults
-    DEFAULT_HEADERS: dict[str, str] = field(default_factory=lambda: {
-        "Accept": "application/json, text/event-stream",
-        "Content-Type": "application/json"
-    })
+    DEFAULT_HEADERS: dict[str, str] = field(
+        default_factory=lambda: {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+        }
+    )
 
     # HTTP status codes considered healthy
     HEALTHY_STATUS_CODES: list = field(default_factory=lambda: [200, 400, 405])

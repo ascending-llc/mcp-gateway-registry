@@ -30,5 +30,5 @@ __all__ = [
     "extract_server_name_from_url",
     "get_enhanced_mcp_client",
     "get_metrics_collector",
-    "hash_user_id"
+    "hash_user_id",
 ]

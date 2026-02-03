@@ -1,6 +1,7 @@
 """
 Unit tests for the configuration module.
 """
+
 import os
 from pathlib import Path
 from unittest.mock import patch
@@ -64,7 +65,10 @@ class TestSettings:
         assert settings.servers_dir == settings.container_registry_dir / "servers"
         assert settings.static_dir == settings.container_registry_dir / "static"
         assert settings.templates_dir == settings.container_registry_dir / "templates"
-        assert settings.embeddings_model_dir == settings.container_registry_dir / "models" / settings.embeddings_model_name
+        assert (
+            settings.embeddings_model_dir
+            == settings.container_registry_dir / "models" / settings.embeddings_model_name
+        )
 
     @pytest.mark.skip(reason="state_file_path, faiss paths removed in PR-113 (MongoDB migration)")
     @patch.dict(os.environ, {}, clear=True)
@@ -89,13 +93,16 @@ class TestSettings:
 
         assert settings.nginx_config_path == Path("/etc/nginx/conf.d/nginx_rev_proxy.conf")
 
-    @patch.dict("os.environ", {
-        "ADMIN_USER": "testuser",
-        "ADMIN_PASSWORD": "testpass",
-        "SECRET_KEY": "test-secret",
-        "EMBEDDINGS_MODEL_NAME": "test-model",
-        "HEALTH_CHECK_INTERVAL_SECONDS": "120"
-    })
+    @patch.dict(
+        "os.environ",
+        {
+            "ADMIN_USER": "testuser",
+            "ADMIN_PASSWORD": "testpass",
+            "SECRET_KEY": "test-secret",
+            "EMBEDDINGS_MODEL_NAME": "test-model",
+            "HEALTH_CHECK_INTERVAL_SECONDS": "120",
+        },
+    )
     def test_environment_variables(self):
         """Test that environment variables are loaded correctly."""
         settings = Settings()
@@ -123,8 +130,7 @@ class TestSettings:
         custom_registry_dir = Path("/custom/registry")
 
         settings = Settings(
-            container_app_dir=custom_app_dir,
-            container_registry_dir=custom_registry_dir
+            container_app_dir=custom_app_dir, container_registry_dir=custom_registry_dir
         )
 
         assert settings.container_app_dir == custom_app_dir

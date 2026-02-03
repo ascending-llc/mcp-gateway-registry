@@ -35,11 +35,7 @@ class TestJWTAudienceValidation:
             "iat": current_time,
         }
 
-        headers = {
-            "kid": JWT_SELF_SIGNED_KID,
-            "typ": "JWT",
-            "alg": "HS256"
-        }
+        headers = {"kid": JWT_SELF_SIGNED_KID, "typ": "JWT", "alg": "HS256"}
 
         token = jwt.encode(token_payload, settings.secret_key, algorithm="HS256", headers=headers)
 
@@ -48,7 +44,7 @@ class TestJWTAudienceValidation:
             settings.secret_key,
             algorithms=["HS256"],
             issuer=JWT_ISSUER,
-            options={"verify_aud": False}
+            options={"verify_aud": False},
         )
 
         assert claims["aud"] == resource_url
@@ -70,11 +66,7 @@ class TestJWTAudienceValidation:
             "iat": current_time,
         }
 
-        headers = {
-            "kid": "provider-key-id",
-            "typ": "JWT",
-            "alg": "HS256"
-        }
+        headers = {"kid": "provider-key-id", "typ": "JWT", "alg": "HS256"}
 
         token = jwt.encode(token_payload, settings.secret_key, algorithm="HS256", headers=headers)
 
@@ -84,7 +76,7 @@ class TestJWTAudienceValidation:
             algorithms=["HS256"],
             issuer=JWT_ISSUER,
             audience=JWT_AUDIENCE,
-            options={"verify_aud": True}
+            options={"verify_aud": True},
         )
 
         assert claims["aud"] == JWT_AUDIENCE
@@ -105,11 +97,7 @@ class TestJWTAudienceValidation:
             "iat": current_time,
         }
 
-        headers = {
-            "kid": "provider-key-id",
-            "typ": "JWT",
-            "alg": "HS256"
-        }
+        headers = {"kid": "provider-key-id", "typ": "JWT", "alg": "HS256"}
 
         token = jwt.encode(token_payload, settings.secret_key, algorithm="HS256", headers=headers)
 
@@ -120,7 +108,7 @@ class TestJWTAudienceValidation:
                 algorithms=["HS256"],
                 issuer=JWT_ISSUER,
                 audience=JWT_AUDIENCE,
-                options={"verify_aud": True}
+                options={"verify_aud": True},
             )
 
     def test_resource_url_in_token_payload(self):
@@ -140,11 +128,7 @@ class TestJWTAudienceValidation:
             "iat": current_time,
         }
 
-        headers = {
-            "kid": JWT_SELF_SIGNED_KID,
-            "typ": "JWT",
-            "alg": "HS256"
-        }
+        headers = {"kid": JWT_SELF_SIGNED_KID, "typ": "JWT", "alg": "HS256"}
 
         token = jwt.encode(token_payload, settings.secret_key, algorithm="HS256", headers=headers)
 
@@ -153,7 +137,7 @@ class TestJWTAudienceValidation:
             settings.secret_key,
             algorithms=["HS256"],
             issuer=JWT_ISSUER,
-            options={"verify_aud": False}
+            options={"verify_aud": False},
         )
 
         assert claims["aud"] == resource_url

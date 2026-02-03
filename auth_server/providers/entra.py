@@ -22,26 +22,26 @@ class EntraIdProvider(AuthProvider):
     """Microsoft Entra ID authentication provider implementation."""
 
     def __init__(
-            self,
-            tenant_id: str,
-            client_id: str,
-            client_secret: str,
-            auth_url: str,
-            token_url: str,
-            jwks_url: str,
-            logout_url: str,
-            userinfo_url: str,
-            graph_url: str | None = None,
-            m2m_scope: str | None = None,
-            scopes: list | None = None,
-            grant_type: str = "authorization_code",
-            username_claim: str = "preferred_username",
-            groups_claim: str = "groups",
-            email_claim: str = "email",
-            name_claim: str = "name"
+        self,
+        tenant_id: str,
+        client_id: str,
+        client_secret: str,
+        auth_url: str,
+        token_url: str,
+        jwks_url: str,
+        logout_url: str,
+        userinfo_url: str,
+        graph_url: str | None = None,
+        m2m_scope: str | None = None,
+        scopes: list | None = None,
+        grant_type: str = "authorization_code",
+        username_claim: str = "preferred_username",
+        groups_claim: str = "groups",
+        email_claim: str = "email",
+        name_claim: str = "name",
     ):
         """Initialize Entra ID provider.
-        
+
         Args:
             tenant_id: Azure AD tenant ID (or 'common' for multi-tenant)
             client_id: Azure AD application (client) ID
@@ -97,15 +97,13 @@ class EntraIdProvider(AuthProvider):
         self.issuer_v1 = f"https://sts.windows.net/{tenant_id}/"
         self.valid_issuers = [self.issuer_v2, self.issuer_v1]
 
-        logger.debug(f"Initialized Entra ID provider for tenant '{tenant_id}' with "
-                     f"scopes={self.scopes}, grant_type={self.grant_type}, graph_url={self.graph_url}, "
-                     f"claims: username={username_claim}, email={email_claim}, groups={groups_claim}, name={name_claim}")
+        logger.debug(
+            f"Initialized Entra ID provider for tenant '{tenant_id}' with "
+            f"scopes={self.scopes}, grant_type={self.grant_type}, graph_url={self.graph_url}, "
+            f"claims: username={username_claim}, email={email_claim}, groups={groups_claim}, name={name_claim}"
+        )
 
-    def validate_token(
-        self,
-        token: str,
-        **kwargs: Any
-    ) -> dict[str, Any]:
+    def validate_token(self, token: str, **kwargs: Any) -> dict[str, Any]:
         """Validate Entra ID JWT token.
 
         Args:
@@ -144,6 +142,7 @@ class EntraIdProvider(AuthProvider):
             for key in jwks.get("keys", []):
                 if key.get("kid") == kid:
                     from jwt import PyJWK
+
                     signing_key = PyJWK(key).key
                     break
 
@@ -156,7 +155,9 @@ class EntraIdProvider(AuthProvider):
 
             # Check if issuer is valid (v1.0 or v2.0)
             if token_issuer not in self.valid_issuers:
-                raise ValueError(f"Invalid issuer: {token_issuer}. Expected one of: {self.valid_issuers}")
+                raise ValueError(
+                    f"Invalid issuer: {token_issuer}. Expected one of: {self.valid_issuers}"
+                )
 
             # Validate and decode token with the correct issuer
             claims = jwt.decode(
@@ -165,15 +166,13 @@ class EntraIdProvider(AuthProvider):
                 algorithms=["RS256"],
                 issuer=self.issuer,
                 audience=[self.client_id, f"api://{self.client_id}"],
-                options={
-                    "verify_exp": True,
-                    "verify_iat": True,
-                    "verify_aud": True
-                }
+                options={"verify_exp": True, "verify_iat": True, "verify_aud": True},
             )
 
             # Extract user info from claims using configured claim mappings
-            username = claims.get(self.username_claim) or claims.get("sub")  # Fallback to 'sub' as last resort
+            username = claims.get(self.username_claim) or claims.get(
+                "sub"
+            )  # Fallback to 'sub' as last resort
             email = claims.get(self.email_claim)
 
             # Extract groups - handle both string and list claims
@@ -190,7 +189,7 @@ class EntraIdProvider(AuthProvider):
                 "scopes": claims.get("scp", "").split() if claims.get("scp") else [],
                 "client_id": claims.get("azp", claims.get("appid", self.client_id)),
                 "method": "entra",
-                "data": claims
+                "data": claims,
             }
 
         except jwt.ExpiredSignatureError:
@@ -207,8 +206,7 @@ class EntraIdProvider(AuthProvider):
         """Get JSON Web Key Set from Entra ID with caching."""
         current_time = time.time()
         # Check if cache is still valid
-        if (self._jwks_cache and
-                (current_time - self._jwks_cache_time) < self._jwks_cache_ttl):
+        if self._jwks_cache and (current_time - self._jwks_cache_time) < self._jwks_cache_ttl:
             logger.debug("Using cached JWKS")
             return self._jwks_cache
 
@@ -227,11 +225,7 @@ class EntraIdProvider(AuthProvider):
             logger.error(f"Failed to retrieve JWKS from Entra ID: {e}")
             raise ValueError(f"Cannot retrieve JWKS: {e}")
 
-    def exchange_code_for_token(
-        self,
-        code: str,
-        redirect_uri: str
-    ) -> dict[str, Any]:
+    def exchange_code_for_token(self, code: str, redirect_uri: str) -> dict[str, Any]:
         """Exchange authorization code for access token."""
         try:
             logger.debug("Exchanging authorization code for token")
@@ -242,7 +236,7 @@ class EntraIdProvider(AuthProvider):
                 "client_id": self.client_id,
                 "client_secret": self.client_secret,
                 "redirect_uri": redirect_uri,
-                "scope": " ".join(self.scopes)
+                "scope": " ".join(self.scopes),
             }
 
             headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -259,17 +253,13 @@ class EntraIdProvider(AuthProvider):
             logger.error(f"Failed to exchange code for token: {e}")
             raise ValueError(f"Token exchange failed: {e}")
 
-    def _extract_user_info_from_token(
-            self,
-            token: str,
-            token_type: str
-    ) -> dict[str, Any] | None:
+    def _extract_user_info_from_token(self, token: str, token_type: str) -> dict[str, Any] | None:
         """Extract user information from JWT token.
-        
+
         Args:
             token: JWT token string
             token_type: Type of token ('id' or 'access')
-            
+
         Returns:
             Dict with user info or None if extraction fails
         """
@@ -280,26 +270,25 @@ class EntraIdProvider(AuthProvider):
 
             # Extract username with fallback chain
             username = (
-                    token_claims.get(self.username_claim) or
-                    token_claims.get("preferred_username") or
-                    token_claims.get("upn") or
-                    token_claims.get("unique_name")
+                token_claims.get(self.username_claim)
+                or token_claims.get("preferred_username")
+                or token_claims.get("upn")
+                or token_claims.get("unique_name")
             )
             # Extract email
-            email = (
-                    token_claims.get(self.email_claim) or
-                    token_claims.get("upn")
-            )
+            email = token_claims.get(self.email_claim) or token_claims.get("upn")
             # Extract name
-            name = (token_claims.get(self.name_claim) or
-                    token_claims.get("displayName") or
-                    token_claims.get("given_name"))
+            name = (
+                token_claims.get(self.name_claim)
+                or token_claims.get("displayName")
+                or token_claims.get("given_name")
+            )
             user_info = {
                 "username": username,
                 "email": email,
                 "name": name,
                 "id": token_claims.get("oid") or token_claims.get("sub"),
-                "groups": []
+                "groups": [],
             }
             logger.info(f"User info extracted from {token_type} token: {username}")
             return user_info
@@ -308,18 +297,15 @@ class EntraIdProvider(AuthProvider):
             logger.warning(f"Failed to extract user info from {token_type} token: {e}")
             return None
 
-    def _fetch_user_info_from_graph(
-            self,
-            access_token: str
-    ) -> dict[str, Any]:
+    def _fetch_user_info_from_graph(self, access_token: str) -> dict[str, Any]:
         """Fetch user information from Microsoft Graph API.
-        
+
         Args:
             access_token: OAuth2 access token
-            
+
         Returns:
             Dict containing user information
-            
+
         Raises:
             ValueError: If Graph API request fails
         """
@@ -351,7 +337,7 @@ class EntraIdProvider(AuthProvider):
                 "id": graph_data.get("id"),
                 "job_title": graph_data.get("jobTitle"),
                 "office_location": graph_data.get("officeLocation"),
-                "groups": []
+                "groups": [],
             }
             logger.info(f"User info fetched from Microsoft Graph API: {user_info}")
             return user_info
@@ -360,15 +346,12 @@ class EntraIdProvider(AuthProvider):
             logger.error(f"Failed to fetch user info from Graph API: {e}")
             raise ValueError(f"Graph API request failed: {e}")
 
-    def get_user_groups(
-            self,
-            access_token: str
-    ) -> list:
+    def get_user_groups(self, access_token: str) -> list:
         """Get user's group memberships from Microsoft Graph API.
-        
+
         Args:
             access_token: OAuth2 access token
-            
+
         Returns:
             List of group display names
         """
@@ -392,18 +375,14 @@ class EntraIdProvider(AuthProvider):
             logger.warning(f"Failed to fetch user groups: {e}")
             return []
 
-    def get_user_info(
-            self,
-            access_token: str,
-            id_token: str | None = None
-    ) -> dict[str, Any]:
+    def get_user_info(self, access_token: str, id_token: str | None = None) -> dict[str, Any]:
         """Get user information from token or Microsoft Graph API.
-        
+
         This method supports flexible user info extraction:
         1. Extract from id_token (preferred) or access_token based on ENTRA_TOKEN_KIND config
         2. Fallback to Microsoft Graph API if token extraction fails
         3. Groups are automatically included (fetched from Graph API using access_token)
-        
+
         Args:
             access_token: OAuth2 access token (required for Graph API calls)
             id_token: Optional ID token (preferred for user identity extraction)
@@ -430,7 +409,9 @@ class EntraIdProvider(AuthProvider):
                 logger.debug("Extracting user info from access token")
                 user_info = self._extract_user_info_from_token(access_token, "access")
             else:
-                logger.warning(f"Token kind '{token_kind}' not available or token missing, falling back to Graph API")
+                logger.warning(
+                    f"Token kind '{token_kind}' not available or token missing, falling back to Graph API"
+                )
 
             # Fallback to Microsoft Graph API if token extraction failed
             if not user_info:
@@ -441,19 +422,16 @@ class EntraIdProvider(AuthProvider):
             groups = self.get_user_groups(access_token)
             user_info["groups"] = groups
 
-            logger.info(f"User info retrieved: {user_info.get('username')} with {len(groups)} groups")
+            logger.info(
+                f"User info retrieved: {user_info.get('username')} with {len(groups)} groups"
+            )
             return user_info
 
         except Exception as e:
             logger.error(f"Failed to get user info: {e}")
             raise ValueError(f"User info retrieval failed: {e}")
 
-    def get_auth_url(
-        self,
-        redirect_uri: str,
-        state: str,
-        scope: str | None = None
-    ) -> str:
+    def get_auth_url(self, redirect_uri: str, state: str, scope: str | None = None) -> str:
         """Get Entra ID authorization URL.
 
         Args:
@@ -466,22 +444,20 @@ class EntraIdProvider(AuthProvider):
         """
         logger.debug(f"Generating auth URL with redirect_uri: {redirect_uri}")
 
-        params = {"client_id": self.client_id,
-                  "response_type": "code",
-                  "scope": scope or " ".join(self.scopes),
-                  "redirect_uri": redirect_uri,
-                  "state": state,
-                  }
+        params = {
+            "client_id": self.client_id,
+            "response_type": "code",
+            "scope": scope or " ".join(self.scopes),
+            "redirect_uri": redirect_uri,
+            "state": state,
+        }
 
         auth_url = f"{self.auth_url}?{urlencode(params)}"
         logger.debug(f"Generated auth URL: {auth_url}")
 
         return auth_url
 
-    def get_logout_url(
-        self,
-        redirect_uri: str
-    ) -> str:
+    def get_logout_url(self, redirect_uri: str) -> str:
         """Get Entra ID logout URL.
 
         Args:
@@ -492,20 +468,14 @@ class EntraIdProvider(AuthProvider):
         """
         logger.debug(f"Generating logout URL with redirect_uri: {redirect_uri}")
 
-        params = {
-            "client_id": self.client_id,
-            "post_logout_redirect_uri": redirect_uri
-        }
+        params = {"client_id": self.client_id, "post_logout_redirect_uri": redirect_uri}
 
         logout_url = f"{self.logout_url}?{urlencode(params)}"
         logger.debug(f"Generated logout URL: {logout_url}")
 
         return logout_url
 
-    def refresh_token(
-        self,
-        refresh_token: str
-    ) -> dict[str, Any]:
+    def refresh_token(self, refresh_token: str) -> dict[str, Any]:
         """Refresh an access token using a refresh token.
 
         Args:
@@ -525,12 +495,10 @@ class EntraIdProvider(AuthProvider):
                 "refresh_token": refresh_token,
                 "client_id": self.client_id,
                 "client_secret": self.client_secret,
-                "scope": " ".join(self.scopes)
+                "scope": " ".join(self.scopes),
             }
 
-            headers = {
-                "Content-Type": "application/x-www-form-urlencoded"
-            }
+            headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
             response = requests.post(self.token_url, data=data, headers=headers, timeout=10)
             response.raise_for_status()
@@ -544,10 +512,7 @@ class EntraIdProvider(AuthProvider):
             logger.error(f"Failed to refresh token: {e}")
             raise ValueError(f"Token refresh failed: {e}")
 
-    def validate_m2m_token(
-        self,
-        token: str
-    ) -> dict[str, Any]:
+    def validate_m2m_token(self, token: str) -> dict[str, Any]:
         """Validate a machine-to-machine token.
 
         Args:
@@ -565,7 +530,7 @@ class EntraIdProvider(AuthProvider):
         self,
         client_id: str | None = None,
         client_secret: str | None = None,
-        scope: str | None = None
+        scope: str | None = None,
     ) -> dict[str, Any]:
         """Get machine-to-machine token using client credentials.
 
@@ -597,7 +562,7 @@ class EntraIdProvider(AuthProvider):
                 "grant_type": "client_credentials",
                 "client_id": client_id or self.client_id,
                 "client_secret": client_secret or self.client_secret,
-                "scope": scope or self.m2m_scope
+                "scope": scope or self.m2m_scope,
             }
             headers = {"Content-Type": "application/x-www-form-urlencoded"}
             response = requests.post(self.token_url, data=data, headers=headers, timeout=10)
@@ -625,10 +590,7 @@ class EntraIdProvider(AuthProvider):
                 "token": self.token_url,
                 "userinfo": self.userinfo_url,
                 "jwks": self.jwks_url,
-                "logout": self.logout_url
+                "logout": self.logout_url,
             },
-            "issuers": {
-                "v2": self.issuer_v2,
-                "v1": self.issuer_v1
-            }
+            "issuers": {"v2": self.issuer_v2, "v1": self.issuer_v1},
         }

@@ -29,7 +29,7 @@ class AnthropicFederationClient(BaseFederationClient):
         endpoint: str,
         api_version: str = "v0.1",
         timeout_seconds: int = 30,
-        retry_attempts: int = 3
+        retry_attempts: int = 3,
     ):
         """
         Initialize Anthropic federation client.
@@ -44,9 +44,7 @@ class AnthropicFederationClient(BaseFederationClient):
         self.api_version = api_version
 
     def fetch_server(
-        self,
-        server_name: str,
-        server_config: AnthropicServerConfig | None = None
+        self, server_name: str, server_config: AnthropicServerConfig | None = None
     ) -> dict[str, Any] | None:
         """
         Fetch a single server from Anthropic Registry.
@@ -79,8 +77,7 @@ class AnthropicFederationClient(BaseFederationClient):
         return self._transform_server_response(response, server_name, server_config)
 
     def fetch_all_servers(
-        self,
-        server_configs: list[AnthropicServerConfig]
+        self, server_configs: list[AnthropicServerConfig]
     ) -> list[dict[str, Any]]:
         """
         Fetch multiple servers from Anthropic Registry.
@@ -94,7 +91,6 @@ class AnthropicFederationClient(BaseFederationClient):
         servers = []
 
         for config in server_configs:
-
             server_data = self.fetch_server(config.name, config)
             if server_data:
                 servers.append(server_data)
@@ -108,7 +104,7 @@ class AnthropicFederationClient(BaseFederationClient):
         self,
         response: dict[str, Any],
         server_name: str,
-        server_config: AnthropicServerConfig | None
+        server_config: AnthropicServerConfig | None,
     ) -> dict[str, Any]:
         """
         Transform Anthropic API response to internal gateway format.
@@ -179,10 +175,7 @@ class AnthropicFederationClient(BaseFederationClient):
             "requires_auth": False,
             "auth_headers": [],
             "tags": list(set(tags)),  # Remove duplicates
-            "metadata": {
-                "original_response": response,
-                "config_metadata": {}
-            },
+            "metadata": {"original_response": response, "config_metadata": {}},
             "cached_at": datetime.now(UTC).isoformat(),
             "is_read_only": True,
             "attribution_label": "Anthropic MCP Registry",

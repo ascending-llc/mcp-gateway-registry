@@ -32,10 +32,7 @@ logger = logging.getLogger(__name__)
 class FederationService:
     """Service for managing federated registry integrations."""
 
-    def __init__(
-        self,
-        config_path: str | None = None
-    ):
+    def __init__(self, config_path: str | None = None):
         """
         Initialize federation service.
 
@@ -44,10 +41,7 @@ class FederationService:
         """
         # Set default paths
         if config_path is None:
-            config_path = os.getenv(
-                "FEDERATION_CONFIG_PATH",
-                "/app/config/federation.json"
-            )
+            config_path = os.getenv("FEDERATION_CONFIG_PATH", "/app/config/federation.json")
 
         self.config_path = config_path
 
@@ -64,12 +58,16 @@ class FederationService:
         self.asor_client: AsorFederationClient | None = None
         if self.config.asor.enabled:
             # Extract tenant URL from endpoint or use default
-            tenant_url = self.config.asor.endpoint.split("/api")[0] if "/api" in self.config.asor.endpoint else self.config.asor.endpoint
+            tenant_url = (
+                self.config.asor.endpoint.split("/api")[0]
+                if "/api" in self.config.asor.endpoint
+                else self.config.asor.endpoint
+            )
 
             self.asor_client = AsorFederationClient(
                 endpoint=self.config.asor.endpoint,
                 auth_env_var=self.config.asor.auth_env_var,
-                tenant_url=tenant_url
+                tenant_url=tenant_url,
             )
 
         logger.info(f"Federation service initialized with config: {config_path}")
@@ -142,9 +140,7 @@ class FederationService:
             return []
 
         # Fetch servers
-        servers = self.anthropic_client.fetch_all_servers(
-            self.config.anthropic.servers
-        )
+        servers = self.anthropic_client.fetch_all_servers(self.config.anthropic.servers)
 
         # Save servers as files to external mount
         import json
@@ -169,7 +165,9 @@ class FederationService:
                 logger.info(f"Saved Anthropic server file: {server_name} -> {file_path}")
 
             except Exception as e:
-                logger.error(f"Failed to save Anthropic server {server_data.get('server_name', 'unknown')}: {e}")
+                logger.error(
+                    f"Failed to save Anthropic server {server_data.get('server_name', 'unknown')}: {e}"
+                )
 
         return servers
 
@@ -185,9 +183,7 @@ class FederationService:
             return []
 
         # Fetch agents
-        agents = self.asor_client.fetch_all_agents(
-            self.config.asor.agents
-        )
+        agents = self.asor_client.fetch_all_agents(self.config.asor.agents)
 
         # Register agents with the agent service
         from ..schemas.agent_models import AgentCard
@@ -206,11 +202,13 @@ class FederationService:
             skills_data = agent_data.get("skills", [])
             skills = []
             for skill in skills_data:
-                skills.append({
-                    "name": skill.get("name", ""),
-                    "description": skill.get("description", ""),
-                    "id": skill.get("id", "")
-                })
+                skills.append(
+                    {
+                        "name": skill.get("name", ""),
+                        "description": skill.get("description", ""),
+                        "id": skill.get("id", ""),
+                    }
+                )
 
             # Convert ASOR agent data to AgentCard format
             agent_card = AgentCard(
@@ -227,7 +225,7 @@ class FederationService:
                 tags=["asor", "federated", "workday"],
                 visibility="public",
                 registered_by="asor-federation",
-                registered_at=datetime.now(UTC)
+                registered_at=datetime.now(UTC),
             )
 
             try:
@@ -241,14 +239,14 @@ class FederationService:
                 logger.info(f"Registered ASOR agent: {agent_card.name} at {agent_card.path}")
 
             except Exception as e:
-                logger.error(f"Failed to register ASOR agent {agent_data.get('name', 'unknown')}: {e}")
+                logger.error(
+                    f"Failed to register ASOR agent {agent_data.get('name', 'unknown')}: {e}"
+                )
 
         return agents
 
     def get_federated_servers(
-        self,
-        source: str | None = None,
-        force_refresh: bool = False
+        self, source: str | None = None, force_refresh: bool = False
     ) -> list[dict[str, Any]]:
         """
         Get federated servers by syncing from sources.
@@ -271,17 +269,15 @@ class FederationService:
         return servers
 
     def get_federated_items(
-        self,
-        source: str | None = None,
-        force_refresh: bool = False
+        self, source: str | None = None, force_refresh: bool = False
     ) -> dict[str, list[dict[str, Any]]]:
         """
         Get both federated servers and agents from specified source or all sources.
-        
+
         Args:
             source: Federation source name (e.g., "anthropic", "asor") or None for all
             force_refresh: Ignored (always syncs fresh)
-            
+
         Returns:
             Dict with 'servers' and 'agents' keys containing respective federated items
         """
@@ -300,13 +296,14 @@ class FederationService:
     def _update_server_state(self, server_path: str, enabled: bool) -> None:
         """
         Update server_state.json to enable/disable a server.
-        
+
         Args:
             server_path: Server path (e.g., "/ai.klavis-strata")
             enabled: Whether to enable the server
         """
         try:
             from ..core.config import settings
+
             state_file = settings.servers_dir / "server_state.json"
 
             # Load existing state

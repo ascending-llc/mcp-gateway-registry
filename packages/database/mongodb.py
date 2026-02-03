@@ -18,13 +18,14 @@ from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDo
 
 class MongoDB:
     """MongoDB connection manager with connection pooling."""
+
     client: AsyncIOMotorClient | None = None
 
     @classmethod
     async def connect_db(cls, db_name: str | None = None):
         """
         Initialize MongoDB connection with connection pooling.
-        
+
         Args:
             db_name: Database name. If not provided, uses default or MONGODB_DB_NAME env var.
         """
@@ -98,7 +99,7 @@ class MongoDB:
                     Token,
                     IAction,
                     Key,
-                ]
+                ],
             )
         except Exception:
             raise
@@ -119,17 +120,16 @@ class MongoDB:
     def get_client(cls) -> AsyncIOMotorClient:
         """
         Get the MongoDB client instance.
-        
+
         Returns:
             AsyncIOMotorClient: The Motor client instance.
-            
+
         Raises:
             RuntimeError: If the database connection is not initialized.
         """
         if cls.client is None:
             raise RuntimeError(
-                "Database connection is not initialized. "
-                "Call MongoDB.connect_db() first."
+                "Database connection is not initialized. Call MongoDB.connect_db() first."
             )
         return cls.client
 
@@ -137,17 +137,16 @@ class MongoDB:
     def get_database(cls):
         """
         Get the MongoDB database instance.
-        
+
         Returns:
             Database: The Motor database instance.
-            
+
         Raises:
             RuntimeError: If the database connection is not initialized.
         """
         if cls.client is None:
             raise RuntimeError(
-                "Database connection is not initialized. "
-                "Call MongoDB.connect_db() first."
+                "Database connection is not initialized. Call MongoDB.connect_db() first."
             )
         return cls.client[cls.database_name]
 
@@ -156,7 +155,7 @@ class MongoDB:
 async def init_mongodb(db_name: str | None = None):
     """
     Initialize MongoDB connection. To be called during FastAPI startup.
-    
+
     Args:
         mongodb_url: MongoDB connection URL
         db_name: Database name

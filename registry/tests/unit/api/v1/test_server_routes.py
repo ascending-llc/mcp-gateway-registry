@@ -34,14 +34,25 @@ async def test_create_server_route_creates_acl_entry():
     mock_server = MagicMock()
     mock_server.id = "server123"
 
-
-    with patch("registry.api.v1.server.server_routes.server_service_v1.create_server", new=AsyncMock(return_value=mock_server)) as mock_create_server, \
-        patch("registry.api.v1.server.server_routes.acl_service.grant_permission", new=AsyncMock(return_value=MagicMock())) as mock_grant_permission, \
-        patch("registry.api.v1.server.server_routes.convert_to_create_response", return_value={"id": "server123"}) as mock_convert:
-
+    with (
+        patch(
+            "registry.api.v1.server.server_routes.server_service_v1.create_server",
+            new=AsyncMock(return_value=mock_server),
+        ) as mock_create_server,
+        patch(
+            "registry.api.v1.server.server_routes.acl_service.grant_permission",
+            new=AsyncMock(return_value=MagicMock()),
+        ) as mock_grant_permission,
+        patch(
+            "registry.api.v1.server.server_routes.convert_to_create_response",
+            return_value={"id": "server123"},
+        ) as mock_convert,
+    ):
         response = await create_server(data, user_context)
 
-        mock_create_server.assert_awaited_once_with(data=data, user_id=user_context.get("user_id", ""))
+        mock_create_server.assert_awaited_once_with(
+            data=data, user_id=user_context.get("user_id", "")
+        )
         mock_grant_permission.assert_awaited_once()
         assert response == {"id": "server123"}
 

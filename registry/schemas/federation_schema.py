@@ -1,16 +1,17 @@
 """Simplified federation configuration schemas."""
 
-
 from pydantic import BaseModel, Field
 
 
 class AnthropicServerConfig(BaseModel):
     """Anthropic server configuration."""
+
     name: str
 
 
 class AnthropicFederationConfig(BaseModel):
     """Anthropic federation configuration."""
+
     enabled: bool = False
     endpoint: str = "https://registry.modelcontextprotocol.io"
     sync_on_startup: bool = False
@@ -19,11 +20,13 @@ class AnthropicFederationConfig(BaseModel):
 
 class AsorAgentConfig(BaseModel):
     """ASOR agent configuration."""
+
     id: str
 
 
 class AsorFederationConfig(BaseModel):
     """ASOR federation configuration."""
+
     enabled: bool = False
     endpoint: str = "https://wcpdev-services1.wd103.myworkday.com/ccx/api/asor/v1/awsasor_wcpdev1"
     auth_env_var: str | None = None
@@ -33,6 +36,7 @@ class AsorFederationConfig(BaseModel):
 
 class FederationConfig(BaseModel):
     """Root federation configuration."""
+
     anthropic: AnthropicFederationConfig = Field(default_factory=AnthropicFederationConfig)
     asor: AsorFederationConfig = Field(default_factory=AsorFederationConfig)
 
@@ -53,6 +57,7 @@ class FederationConfig(BaseModel):
 # Add missing FederatedServer class for compatibility
 class FederatedServer(BaseModel):
     """Federated server configuration."""
+
     name: str
     endpoint: str
     enabled: bool = True

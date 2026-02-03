@@ -258,7 +258,9 @@ class AgentScannerService:
                             raw_output["analysis_results"][analyzer_name] = {"findings": []}
                         raw_output["analysis_results"][analyzer_name]["findings"].append(finding)
 
-                logger.debug(f"A2A scanner output:\n{json.dumps(raw_output, indent=2, default=str)}")
+                logger.debug(
+                    f"A2A scanner output:\n{json.dumps(raw_output, indent=2, default=str)}"
+                )
                 return raw_output
 
             except subprocess.TimeoutExpired as e:

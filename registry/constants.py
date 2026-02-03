@@ -72,8 +72,7 @@ class RegistryConstants(BaseModel):
     # Comma-separated list of tags that identify external registry servers
     # Example: "anthropic-registry,workday-asor,custom-registry"
     EXTERNAL_REGISTRY_TAGS: str = os.getenv(
-        "EXTERNAL_REGISTRY_TAGS",
-        "anthropic-registry,workday-asor"
+        "EXTERNAL_REGISTRY_TAGS", "anthropic-registry,workday-asor"
     )
     # Weaviate Configuration
     WEAVIATE_HOST: str = os.getenv("WEAVIATE_HOST", "weaviate")

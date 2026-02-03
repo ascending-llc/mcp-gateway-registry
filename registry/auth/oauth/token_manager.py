@@ -12,12 +12,7 @@ class OAuthTokenManager:
         self.tokens: dict[str, dict[str, OAuthTokens]] = {}  # user_id -> {server_id -> tokens}
         self._lock = asyncio.Lock()
 
-    async def store_tokens(
-            self,
-            user_id: str,
-            server_id: str,
-            tokens: OAuthTokens
-    ) -> None:
+    async def store_tokens(self, user_id: str, server_id: str, tokens: OAuthTokens) -> None:
         """Store tokens"""
         async with self._lock:
             if user_id not in self.tokens:
@@ -67,12 +62,7 @@ class OAuthTokenManager:
                 return valid_tokens
             return {}
 
-    async def refresh_tokens(
-            self,
-            user_id: str,
-            server_id: str,
-            new_tokens: OAuthTokens
-    ) -> bool:
+    async def refresh_tokens(self, user_id: str, server_id: str, new_tokens: OAuthTokens) -> bool:
         """Refresh tokens"""
         async with self._lock:
             if user_id not in self.tokens:

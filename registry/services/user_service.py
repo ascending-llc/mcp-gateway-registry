@@ -7,7 +7,6 @@ from registry.utils.log import logger
 
 
 class UserService:
-
     async def find_by_source_id(self, source_id: str) -> IUser | None:
         """Find a user by idOnTheSource (Entra ID or similar)."""
         if not source_id:
@@ -51,7 +50,7 @@ class UserService:
                 "role": "USER",
                 "provider": "local",
                 "createdAt": now,
-                "updatedAt": now
+                "updatedAt": now,
             }
             collection = IUser.get_pymongo_collection()
             await collection.insert_one(user_data)
@@ -64,11 +63,11 @@ class UserService:
         Search users by name, email, or username. Returns IUser model objects.
         """
         try:
-            search_query =  {
+            search_query = {
                 "$or": [
                     {"email": {"$regex": query, "$options": "i"}},
                     {"name": {"$regex": query, "$options": "i"}},
-                    {"username": {"$regex": query, "$options": "i"}}
+                    {"username": {"$regex": query, "$options": "i"}},
                 ]
             }
             results = await IUser.find(search_query).to_list()
@@ -76,5 +75,6 @@ class UserService:
         except Exception as e:
             logger.error(f"Error searching users with query '{search_query}': {e}")
             return []
+
 
 user_service = UserService()

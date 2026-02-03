@@ -15,18 +15,18 @@ T = TypeVar("T")
 class DatabaseClient:
     """
     Lightweight database manager.
-    
+
     Core responsibilities:
     - Configuration management
     - Connection lifecycle (initialize/close)
     - Repository factory (for_model)
     - Direct adapter access for advanced users
-    
+
     Recommended usage:
         db = initialize_database()
         tools_repo = db.for_model(McpTool)  # High-level Model API
         tools = tools_repo.search("query")
-        
+
     Advanced usage:
         adapter = db.adapter  # Low-level Document API
         docs = adapter.similarity_search(collection_name="...", query="...")
@@ -42,10 +42,10 @@ class DatabaseClient:
     def initialize(self, config: BackendConfig | None = None) -> None:
         """
         Initialize database client with configuration.
-        
+
         Args:
             config: Database configuration (uses instance config if not provided)
-            
+
         Raises:
             ValueError: If no configuration is provided
             RuntimeError: If initialization fails
@@ -102,9 +102,9 @@ class DatabaseClient:
     def adapter(self) -> VectorStoreAdapter:
         """
         Get direct access to the underlying adapter.
-        
+
         For advanced users who need low-level Document operations.
-        
+
         """
         self._ensure_initialized()
         return self._adapter
@@ -112,7 +112,7 @@ class DatabaseClient:
     def get_info(self) -> dict[str, Any]:
         """
         Get client information and status.
-        
+
         Returns:
             Dictionary with client status and configuration
         """
@@ -149,7 +149,7 @@ def get_db_client() -> DatabaseClient:
 def initialize_database(config: BackendConfig | None = None) -> DatabaseClient:
     """
     Initialize the global database client.
-    
+
     If config is None, automatically loads from environment variables.
 
     Args:

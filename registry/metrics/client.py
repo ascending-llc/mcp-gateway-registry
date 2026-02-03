@@ -30,7 +30,7 @@ class MetricsClient:
         service_version: str = "1.0.0",
         metrics_url: str = None,
         api_key: str = None,
-        timeout: float = 5.0
+        timeout: float = 5.0,
     ):
         self.service_name = service_name
         self.service_version = service_version
@@ -44,7 +44,7 @@ class MetricsClient:
         value: float = 1.0,
         duration_ms: float | None = None,
         dimensions: dict[str, Any] | None = None,
-        metadata: dict[str, Any] | None = None
+        metadata: dict[str, Any] | None = None,
     ) -> bool:
         """Emit a metric to the metrics service."""
         try:
@@ -54,20 +54,20 @@ class MetricsClient:
             payload = {
                 "service": self.service_name,
                 "version": self.service_version,
-                "metrics": [{
-                    "type": metric_type,
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "value": value,
-                    "duration_ms": duration_ms,
-                    "dimensions": dimensions or {},
-                    "metadata": metadata or {}
-                }]
+                "metrics": [
+                    {
+                        "type": metric_type,
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "value": value,
+                        "duration_ms": duration_ms,
+                        "dimensions": dimensions or {},
+                        "metadata": metadata or {},
+                    }
+                ],
             }
 
             response = await self.client.post(
-                f"{self.metrics_url}/metrics",
-                json=payload,
-                headers={"X-API-Key": self.api_key}
+                f"{self.metrics_url}/metrics", json=payload, headers={"X-API-Key": self.api_key}
             )
 
             return response.status_code == 200
@@ -83,7 +83,7 @@ class MetricsClient:
         duration_ms: float,
         resource_id: str | None = None,
         user_id: str | None = None,
-        error_code: str | None = None
+        error_code: str | None = None,
     ) -> bool:
         """Emit registry operation metric."""
         return await self._emit_metric(
@@ -95,11 +95,9 @@ class MetricsClient:
                 "resource_type": resource_type,
                 "success": success,
                 "resource_id": resource_id or "",
-                "user_id": user_id or ""
+                "user_id": user_id or "",
             },
-            metadata={
-                "error_code": error_code
-            }
+            metadata={"error_code": error_code},
         )
 
     async def emit_discovery_metric(
@@ -110,7 +108,7 @@ class MetricsClient:
         top_k_services: int | None = None,
         top_n_tools: int | None = None,
         embedding_time_ms: float | None = None,
-        faiss_search_time_ms: float | None = None
+        faiss_search_time_ms: float | None = None,
     ) -> bool:
         """Emit tool discovery metric."""
         return await self._emit_metric(
@@ -121,12 +119,12 @@ class MetricsClient:
                 "query": query[:100],
                 "results_count": results_count,
                 "top_k_services": top_k_services,
-                "top_n_tools": top_n_tools
+                "top_n_tools": top_n_tools,
             },
             metadata={
                 "embedding_time_ms": embedding_time_ms,
-                "faiss_search_time_ms": faiss_search_time_ms
-            }
+                "faiss_search_time_ms": faiss_search_time_ms,
+            },
         )
 
     async def emit_tool_execution_metric(
@@ -138,7 +136,7 @@ class MetricsClient:
         duration_ms: float,
         input_size_bytes: int | None = None,
         output_size_bytes: int | None = None,
-        error_code: str | None = None
+        error_code: str | None = None,
     ) -> bool:
         """Emit tool execution metric."""
         return await self._emit_metric(
@@ -149,32 +147,24 @@ class MetricsClient:
                 "tool_name": tool_name,
                 "server_path": server_path,
                 "server_name": server_name,
-                "success": success
+                "success": success,
             },
             metadata={
                 "error_code": error_code,
                 "input_size_bytes": input_size_bytes,
-                "output_size_bytes": output_size_bytes
-            }
+                "output_size_bytes": output_size_bytes,
+            },
         )
 
     async def emit_health_metric(
-        self,
-        endpoint: str,
-        status_code: int,
-        duration_ms: float,
-        healthy: bool = True
+        self, endpoint: str, status_code: int, duration_ms: float, healthy: bool = True
     ) -> bool:
         """Emit health check metric."""
         return await self._emit_metric(
             metric_type="health_check",
             value=1.0,
             duration_ms=duration_ms,
-            dimensions={
-                "endpoint": endpoint,
-                "status_code": status_code,
-                "healthy": healthy
-            }
+            dimensions={"endpoint": endpoint, "status_code": status_code, "healthy": healthy},
         )
 
     async def emit_custom_metric(
@@ -183,7 +173,7 @@ class MetricsClient:
         value: float,
         duration_ms: float | None = None,
         dimensions: dict[str, Any] | None = None,
-        metadata: dict[str, Any] | None = None
+        metadata: dict[str, Any] | None = None,
     ) -> bool:
         """Emit custom metric with arbitrary data."""
         custom_dimensions = {"metric_name": metric_name}
@@ -195,7 +185,7 @@ class MetricsClient:
             value=value,
             duration_ms=duration_ms,
             dimensions=custom_dimensions,
-            metadata=metadata
+            metadata=metadata,
         )
 
 
@@ -207,7 +197,7 @@ def create_metrics_client(service_name: str = "registry", **kwargs) -> MetricsCl
 class MetricsCollector:
     """
     Metrics collection service for MCP operations.
-    
+
     Uses dependency injection to provide clean, testable metrics collection
     for MCP client calls and other registry operations.
     """
@@ -232,7 +222,7 @@ class MetricsCollector:
     async def track_tool_discovery(self, server_url: str):
         """
         Context manager to track tool discovery operations.
-        
+
         Usage:
             async with metrics.track_tool_discovery(server_url) as tracker:
                 tools = await get_tools_from_server(server_url)
@@ -244,12 +234,7 @@ class MetricsCollector:
 
         start_time = time.perf_counter()
         server_name = extract_server_name_from_url(server_url)
-        tracker = _ToolDiscoveryTracker(
-            self.metrics_client,
-            server_name,
-            server_url,
-            start_time
-        )
+        tracker = _ToolDiscoveryTracker(self.metrics_client, server_name, server_url, start_time)
 
         try:
             yield tracker
@@ -268,11 +253,7 @@ class MetricsCollector:
 
         start_time = time.perf_counter()
         server_name = extract_server_name_from_url(server_url)
-        tracker = _HealthCheckTracker(
-            self.metrics_client,
-            server_name,
-            start_time
-        )
+        tracker = _HealthCheckTracker(self.metrics_client, server_name, start_time)
 
         try:
             yield tracker
@@ -315,7 +296,7 @@ class _ToolDiscoveryTracker:
             await self.metrics_client.emit_discovery_metric(
                 query=f"tools_from_{self.server_name}",
                 results_count=self.tools_count if self.success else 0,
-                duration_ms=duration_ms
+                duration_ms=duration_ms,
             )
 
             # Emit tool execution metric for MCP protocol interaction
@@ -326,7 +307,7 @@ class _ToolDiscoveryTracker:
                 success=self.success,
                 duration_ms=duration_ms,
                 output_size_bytes=self.tools_count * 100 if self.success else 0,
-                error_code=self.error_code
+                error_code=self.error_code,
             )
         except Exception as e:
             logger.debug(f"Failed to emit tool discovery metrics: {e}")
@@ -360,7 +341,7 @@ class _HealthCheckTracker:
                 endpoint=f"/health/{self.server_name}",
                 status_code=200 if self.success else 500,
                 duration_ms=duration_ms,
-                healthy=self.success
+                healthy=self.success,
             )
         except Exception as e:
             logger.debug(f"Failed to emit health check metric: {e}")
@@ -385,7 +366,7 @@ class _NoOpTracker:
 class EnhancedMCPClientService:
     """
     Enhanced MCP client service with metrics collection.
-    
+
     Uses dependency injection to cleanly add metrics to MCP operations
     without modifying the original client.
     """
@@ -394,12 +375,11 @@ class EnhancedMCPClientService:
         self.metrics_collector = metrics_collector
         # Import here to avoid circular imports
         from ..core.mcp_client import mcp_client_service
+
         self.original_client = mcp_client_service
 
     async def get_tools_from_server_with_server_info(
-        self,
-        base_url: str,
-        server_info: dict = None
+        self, base_url: str, server_info: dict = None
     ) -> list[dict] | None:
         """Get tools from MCP server with metrics collection."""
         async with self.metrics_collector.track_tool_discovery(base_url) as tracker:
@@ -428,7 +408,7 @@ def get_metrics_collector() -> MetricsCollector:
 
 
 def get_enhanced_mcp_client(
-    metrics_collector: MetricsCollector = Depends(get_metrics_collector)
+    metrics_collector: MetricsCollector = Depends(get_metrics_collector),
 ) -> EnhancedMCPClientService:
     """Dependency to get the enhanced MCP client service."""
     return EnhancedMCPClientService(metrics_collector)

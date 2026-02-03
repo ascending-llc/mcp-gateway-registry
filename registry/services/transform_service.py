@@ -132,9 +132,7 @@ def transform_to_server_detail(server_info: dict[str, Any]) -> ServerDetail:
     )
 
     # Try to extract repository info
-    repository = _extract_repository_from_description(
-        server_info.get("description", "")
-    )
+    repository = _extract_repository_from_description(server_info.get("description", ""))
 
     # Build metadata
     namespace = REGISTRY_CONSTANTS.ANTHROPIC_SERVER_NAMESPACE
@@ -233,8 +231,7 @@ def transform_to_server_list(
 
     # Transform to ServerResponse objects
     server_responses = [
-        transform_to_server_response(server, include_registry_meta=True)
-        for server in page_servers
+        transform_to_server_response(server, include_registry_meta=True) for server in page_servers
     ]
 
     # Determine next cursor

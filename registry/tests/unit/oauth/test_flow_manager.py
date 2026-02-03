@@ -5,7 +5,9 @@ import time
 import pytest
 
 # Add project root to Python path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+sys.path.insert(
+    0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+)
 
 from registry.auth.oauth.flow_state_manager import FlowStateManager
 from registry.schemas.enums import OAuthFlowStatus
@@ -76,7 +78,7 @@ class TestFlowStateManager:
             "client_secret": "test-secret",
             "scope": ["read", "write"],
             "authorization_url": authorization_url,
-            "token_url": "https://example.com/oauth/token"
+            "token_url": "https://example.com/oauth/token",
         }
 
         metadata = manager.create_flow_metadata(
@@ -103,11 +105,16 @@ class TestFlowStateManager:
             "client_id": "test-client",
             "scope": ["read"],
             "authorization_url": "https://example.com/auth",
-            "token_url": "https://example.com/token"
+            "token_url": "https://example.com/token",
         }
         metadata = manager.create_flow_metadata(
-            server_name, server_id, user_id, "https://example.com/auth",
-            code_verifier, oauth_config, flow_id
+            server_name,
+            server_id,
+            user_id,
+            "https://example.com/auth",
+            code_verifier,
+            oauth_config,
+            flow_id,
         )
 
         flow = manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
@@ -131,11 +138,16 @@ class TestFlowStateManager:
             "client_id": "test-client",
             "scope": ["read"],
             "authorization_url": "https://example.com/auth",
-            "token_url": "https://example.com/token"
+            "token_url": "https://example.com/token",
         }
         metadata = manager.create_flow_metadata(
-            server_name, server_id, user_id, "https://example.com/auth",
-            code_verifier, oauth_config, flow_id
+            server_name,
+            server_id,
+            user_id,
+            "https://example.com/auth",
+            code_verifier,
+            oauth_config,
+            flow_id,
         )
         manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
 
@@ -169,11 +181,16 @@ class TestFlowStateManager:
             "client_id": "test-client",
             "scope": ["read"],
             "authorization_url": "https://example.com/auth",
-            "token_url": "https://example.com/token"
+            "token_url": "https://example.com/token",
         }
         metadata = manager.create_flow_metadata(
-            server_name, server_id, user_id, "https://example.com/auth",
-            code_verifier, oauth_config, flow_id
+            server_name,
+            server_id,
+            user_id,
+            "https://example.com/auth",
+            code_verifier,
+            oauth_config,
+            flow_id,
         )
         flow = manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
 
@@ -198,21 +215,23 @@ class TestFlowStateManager:
             "client_id": "test-client",
             "scope": ["read"],
             "authorization_url": "https://example.com/auth",
-            "token_url": "https://example.com/token"
+            "token_url": "https://example.com/token",
         }
         metadata = manager.create_flow_metadata(
-            server_name, server_id, user_id, "https://example.com/auth",
-            code_verifier, oauth_config, flow_id
+            server_name,
+            server_id,
+            user_id,
+            "https://example.com/auth",
+            code_verifier,
+            oauth_config,
+            flow_id,
         )
         manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
 
         # Complete the flow
         from registry.models.oauth_models import OAuthTokens
-        tokens = OAuthTokens(
-            access_token="test-token",
-            token_type="Bearer",
-            expires_in=3600
-        )
+
+        tokens = OAuthTokens(access_token="test-token", token_type="Bearer", expires_in=3600)
         manager.complete_flow(flow_id, tokens)
 
         # Verify the flow was updated
@@ -227,11 +246,8 @@ class TestFlowStateManager:
         flow_id = "non-existent-flow"
 
         from registry.models.oauth_models import OAuthTokens
-        tokens = OAuthTokens(
-            access_token="test-token",
-            token_type="Bearer",
-            expires_in=3600
-        )
+
+        tokens = OAuthTokens(access_token="test-token", token_type="Bearer", expires_in=3600)
 
         # Should not raise an exception
         manager.complete_flow(flow_id, tokens)
@@ -251,11 +267,16 @@ class TestFlowStateManager:
             "client_id": "test-client",
             "scope": ["read"],
             "authorization_url": "https://example.com/auth",
-            "token_url": "https://example.com/token"
+            "token_url": "https://example.com/token",
         }
         metadata = manager.create_flow_metadata(
-            server_name, server_id, user_id, "https://example.com/auth",
-            code_verifier, oauth_config, flow_id
+            server_name,
+            server_id,
+            user_id,
+            "https://example.com/auth",
+            code_verifier,
+            oauth_config,
+            flow_id,
         )
         manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
 
@@ -291,11 +312,16 @@ class TestFlowStateManager:
             "client_id": "test-client",
             "scope": ["read"],
             "authorization_url": "https://example.com/auth",
-            "token_url": "https://example.com/token"
+            "token_url": "https://example.com/token",
         }
         metadata = manager.create_flow_metadata(
-            server_name, server_id, user_id, "https://example.com/auth",
-            code_verifier, oauth_config, flow_id
+            server_name,
+            server_id,
+            user_id,
+            "https://example.com/auth",
+            code_verifier,
+            oauth_config,
+            flow_id,
         )
         manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
 
@@ -322,11 +348,16 @@ class TestFlowStateManager:
             "client_id": "test-client",
             "scope": ["read"],
             "authorization_url": "https://example.com/auth",
-            "token_url": "https://example.com/token"
+            "token_url": "https://example.com/token",
         }
         metadata = manager.create_flow_metadata(
-            server_name, server_id, user_id, "https://example.com/auth",
-            code_verifier, oauth_config, flow_id
+            server_name,
+            server_id,
+            user_id,
+            "https://example.com/auth",
+            code_verifier,
+            oauth_config,
+            flow_id,
         )
         manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
 
@@ -352,14 +383,19 @@ class TestFlowStateManager:
             "client_id": "test-client",
             "scope": ["read"],
             "authorization_url": "https://example.com/auth",
-            "token_url": "https://example.com/token"
+            "token_url": "https://example.com/token",
         }
 
         for i in range(3):
             flow_id = f"flow-{i}"
             metadata = manager.create_flow_metadata(
-                server_name, server_id, user_id, "https://example.com/auth",
-                code_verifier, oauth_config, flow_id
+                server_name,
+                server_id,
+                user_id,
+                "https://example.com/auth",
+                code_verifier,
+                oauth_config,
+                flow_id,
             )
             manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
 
@@ -404,11 +440,16 @@ class TestFlowStateManager:
                 "client_id": "test-client",
                 "scope": ["read"],
                 "authorization_url": "https://example.com/auth",
-                "token_url": "https://example.com/token"
+                "token_url": "https://example.com/token",
             }
             metadata = manager.create_flow_metadata(
-                server_name, server_id, user_id, "https://example.com/auth",
-                code_verifier, oauth_config, flow_id
+                server_name,
+                server_id,
+                user_id,
+                "https://example.com/auth",
+                code_verifier,
+                oauth_config,
+                flow_id,
             )
             flow = manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
             # Make first flow expired
@@ -443,11 +484,16 @@ class TestFlowStateManagerIntegration:
             "client_id": "test-client",
             "scope": ["read"],
             "authorization_url": "https://example.com/auth",
-            "token_url": "https://example.com/token"
+            "token_url": "https://example.com/token",
         }
         metadata = manager.create_flow_metadata(
-            server_name, server_id, user_id, "https://example.com/auth",
-            code_verifier, oauth_config, flow_id
+            server_name,
+            server_id,
+            user_id,
+            "https://example.com/auth",
+            code_verifier,
+            oauth_config,
+            flow_id,
         )
         manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
 
@@ -458,11 +504,12 @@ class TestFlowStateManagerIntegration:
 
         # Complete the flow
         from registry.models.oauth_models import OAuthTokens
+
         tokens = OAuthTokens(
             access_token="test-access-token",
             refresh_token="test-refresh-token",
             token_type="Bearer",
-            expires_in=3600
+            expires_in=3600,
         )
         manager.complete_flow(flow_id, tokens)
 
@@ -494,11 +541,16 @@ class TestFlowStateManagerIntegration:
                 "client_id": "test-client",
                 "scope": ["read"],
                 "authorization_url": "https://example.com/auth",
-                "token_url": "https://example.com/token"
+                "token_url": "https://example.com/token",
             }
             metadata = manager.create_flow_metadata(
-                server_name, server_id, user_id, "https://example.com/auth",
-                code_verifier, oauth_config, flow_id
+                server_name,
+                server_id,
+                user_id,
+                "https://example.com/auth",
+                code_verifier,
+                oauth_config,
+                flow_id,
             )
             manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
             flows.append(flow_id)

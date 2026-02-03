@@ -17,6 +17,7 @@ class BatchResult:
         failed: Number of failed items
         errors: List of error details with UUIDs and messages
     """
+
     total: int
     successful: int
     failed: int
