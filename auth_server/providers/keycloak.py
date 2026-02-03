@@ -12,10 +12,7 @@ import requests
 from ..core.config import settings
 from .base import AuthProvider
 
-logging.basicConfig(
-    level=settings.log_level,
-    format=settings.log_format
-)
+logging.basicConfig(level=settings.log_level, format=settings.log_format)
 
 logger = logging.getLogger(__name__)
 

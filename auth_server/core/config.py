@@ -98,11 +98,11 @@ class AuthSettings(BaseSettings):
     entra_client_id: str | None = None
     entra_client_secret: str | None = None
     entra_token_kind: str = "id"  # "id" or "access"
-    
+
     # ==================== Logging Settings ====================
     log_level: int = logging.INFO  # Default to INFO (20), can be overridden by LOG_LEVEL env var
     log_format: str = "%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s"
-    
+
     # ==================== Metrics Settings ====================
     metrics_service_url: str = "http://localhost:8890"
     metrics_api_key: str = ""

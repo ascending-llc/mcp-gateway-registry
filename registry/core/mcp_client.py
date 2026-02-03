@@ -190,6 +190,7 @@ async def initialize_mcp_session(
 @dataclass
 class MCPServerData:
     """MCP server data container for tools, resources, prompts, and capabilities."""
+
     tools: list[dict[str, Any]] | None
     resources: list[dict[str, Any]] | None
     prompts: list[dict[str, Any]] | None
@@ -388,7 +389,8 @@ async def _is_requires_init(get_session_id):
         session_id = get_session_id() if callable(get_session_id) else None
         requires_init = session_id is not None
         logger.info(
-            f"streamable-http: session_id={'present' if session_id else 'absent'}, requiresInit={requires_init}")
+            f"streamable-http: session_id={'present' if session_id else 'absent'}, requiresInit={requires_init}"
+        )
     except Exception as e:
         logger.warning(f"Failed to get session_id: {e}, assuming stateless")
         requires_init = False
@@ -505,7 +507,7 @@ async def _get_from_streamable_http(
                         resources=resource_list,
                         prompts=prompt_list,
                         capabilities=capabilities,
-                        requires_init=requires_init
+                        requires_init=requires_init,
                     )
 
     except TimeoutError:
@@ -662,7 +664,7 @@ async def _get_from_sse(
                             resources=resource_list,
                             prompts=prompt_list,
                             capabilities=capabilities,
-                            requires_init=requires_init
+                            requires_init=requires_init,
                         )
         finally:
             httpx.AsyncClient.request = original_request

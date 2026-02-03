@@ -96,15 +96,15 @@ class FlowStateManager:
         return flow_id, security_token
 
     def create_flow_metadata(
-            self,
-            server_name: str,
-            server_path: str,
-            server_id: str,
-            user_id: str,
-            authorization_url: str,
-            code_verifier: str,
-            oauth_config: dict[str, Any],
-            flow_id: str
+        self,
+        server_name: str,
+        server_path: str,
+        server_id: str,
+        user_id: str,
+        authorization_url: str,
+        code_verifier: str,
+        oauth_config: dict[str, Any],
+        flow_id: str,
     ) -> MCPOAuthFlowMetadata:
         """Create OAuth flow metadata"""
         # Generate secure state parameter (flow_id##random_token)
@@ -122,7 +122,7 @@ class FlowStateManager:
             state=state,
             code_verifier=code_verifier,
             client_info=self._create_client_info(oauth_config, server_path),
-            metadata=self._create_oauth_metadata(oauth_config)
+            metadata=self._create_oauth_metadata(oauth_config),
         )
 
     def create_flow(
@@ -339,7 +339,9 @@ class FlowStateManager:
             logger.debug(f"Found {len(user_flows)} flows in memory for {user_id}/{server_id}")
             return user_flows
 
-    def _create_client_info(self, oauth_config: dict[str, Any], server_path: str) -> OAuthClientInformation:
+    def _create_client_info(
+        self, oauth_config: dict[str, Any], server_path: str
+    ) -> OAuthClientInformation:
         """
         Build OAuth client information from server configuration
         """

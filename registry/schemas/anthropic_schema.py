@@ -11,10 +11,7 @@ from pydantic import BaseModel, Field
 
 from ..core.config import settings
 
-logging.basicConfig(
-    level=settings.log_level,
-    format=settings.log_format
-)
+logging.basicConfig(level=settings.log_level, format=settings.log_format)
 
 
 logger = logging.getLogger(__name__)

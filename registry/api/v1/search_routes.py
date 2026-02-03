@@ -297,9 +297,9 @@ async def search_servers(search: SearchRequest, user_context: CurrentUser):
     # search only server and get server detail from mongo
     if len(search.type_list) == 1 and search.type_list[0] == ServerEntityType.SERVER:
         filters = {"enabled": not search.include_disabled}
-        results = await mcp_server_repo.asearch_with_rerank(query=query,
-                                                            search_type=search.search_type,
-                                                            filters=filters, k=top_n)
+        results = await mcp_server_repo.asearch_with_rerank(
+            query=query, search_type=search.search_type, filters=filters, k=top_n
+        )
         server_ids = [str(result.get("server_id")) for result in results]
         async with asyncio.TaskGroup() as tg:
             tasks = [tg.create_task(server_service_v1.get_server_by_id(sid)) for sid in server_ids]
@@ -308,14 +308,14 @@ async def search_servers(search: SearchRequest, user_context: CurrentUser):
     else:
         filters = {
             "enabled": search.include_disabled,
-            "entity_type": [dt.value for dt in search.type_list]
+            "entity_type": [dt.value for dt in search.type_list],
         }
         search_results = await mcp_server_repo.asearch_with_rerank(
             query=query,
             k=top_n,
             candidate_k=min(top_n * 5, 100),  # Fetch 5x candidates for reranking (max 100)
             search_type=search.search_type,
-            filters=filters
+            filters=filters,
         )
         logger.info(
             "Search completed: %d results for query=%r",
@@ -323,8 +323,4 @@ async def search_servers(search: SearchRequest, user_context: CurrentUser):
             query,
         )
         logger.info(f"✅ Found {len(search_results)} servers")
-    return {
-        "query": query,
-        "total": len(search_results),
-        "servers": search_results
-    }
+    return {"query": query, "total": len(search_results), "servers": search_results}

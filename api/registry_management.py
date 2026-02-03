@@ -187,10 +187,7 @@ from registry_client import (
 from registry.core.config import settings
 
 # Configure logging
-logging.basicConfig(
-    level=settings.log_level,
-    format=settings.log_format
-)
+logging.basicConfig(level=settings.log_level, format=settings.log_format)
 
 logger = logging.getLogger(__name__)
 

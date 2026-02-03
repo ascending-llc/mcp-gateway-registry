@@ -265,7 +265,7 @@ class TestMCPOAuthService:
 
         # Mock flow manager methods
         oauth_service.flow_manager.generate_flow_id = Mock(return_value="test_flow_id")
-        
+
         # Create a proper metadata mock with required attributes
         mock_metadata = Mock()
         mock_metadata.client_info = Mock()

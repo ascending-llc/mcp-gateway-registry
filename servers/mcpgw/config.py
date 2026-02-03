@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
+
 class Constants:
     """Application constants that don't change."""
 
@@ -73,12 +74,11 @@ class Settings(BaseSettings):
 
     # Logging configuration
     log_level: int = Field(
-        default=logging.INFO,
-        description="Logging level (integer constant from logging module)"
+        default=logging.INFO, description="Logging level (integer constant from logging module)"
     )
     log_format: str = Field(
         default="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
-        description="Logging format string"
+        description="Logging format string",
     )
 
     API_VERSION: str = "v1"
@@ -99,7 +99,7 @@ class Settings(BaseSettings):
         if not v:
             raise ValueError("REGISTRY_URL must be set")
         return v.rstrip("/")
-    
+
     @field_validator("LOG_LEVEL", mode="before")
     @classmethod
     def convert_log_level(cls, v):
@@ -169,10 +169,7 @@ def parse_arguments() -> argparse.Namespace:
 # Create global settings instance
 settings = Settings()
 
-logging.basicConfig(
-    level=settings.log_level,
-    format=settings.log_format
-)
+logging.basicConfig(level=settings.log_level, format=settings.log_format)
 logger.setLevel(settings.log_level)
 
 settings.log_config()

@@ -22,10 +22,7 @@ from pydantic import (
 from ..core.config import settings
 
 # Configure logging with basicConfig
-logging.basicConfig(
-    level=settings.log_level,
-    format=settings.log_format
-)
+logging.basicConfig(level=settings.log_level, format=settings.log_format)
 
 logger = logging.getLogger(__name__)
 

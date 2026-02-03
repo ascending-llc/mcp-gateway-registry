@@ -22,10 +22,7 @@ from registry.schemas.agent_models import (
 )
 
 # Configure logging with basicConfig
-logging.basicConfig(
-    level=settings.log_level,
-    format=settings.log_format
-)
+logging.basicConfig(level=settings.log_level, format=settings.log_format)
 
 logger = logging.getLogger(__name__)
 

@@ -99,12 +99,7 @@ def client():
     mock_server.id = ObjectId(TEST_SERVER_ID)
     mock_server.serverName = "test_server"
     mock_server.path = "/test_server"  # Path stored in DB includes leading slash
-    mock_server.config = {
-        "oauth": {
-            "provider": "github",
-            "client_id": "test_client_id"
-        }
-    }
+    mock_server.config = {"oauth": {"provider": "github", "client_id": "test_client_id"}}
 
     with patch("registry.api.v1.mcp.oauth_router.server_service_v1") as mock_server_service:
         mock_server_service.get_server_by_id = AsyncMock(return_value=mock_server)
@@ -278,7 +273,10 @@ class TestOAuthRouter:
         # Make the request with code and state, disable redirect following
         # Note: The router path is /{server_path}/oauth/callback where server_path is a path segment
         # So the URL /mcp/test_server/oauth/callback has server_path="test_server"
-        response = client.get("/mcp/test_server/oauth/callback?code=auth_code&state=test_user-flow123##security_token", follow_redirects=False)
+        response = client.get(
+            "/mcp/test_server/oauth/callback?code=auth_code&state=test_user-flow123##security_token",
+            follow_redirects=False,
+        )
 
         # Should redirect to success page
         assert response.status_code == 307

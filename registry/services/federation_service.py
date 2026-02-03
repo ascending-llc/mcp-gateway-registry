@@ -22,10 +22,7 @@ from ..schemas.federation_schema import (
 from .federation.anthropic_client import AnthropicFederationClient
 from .federation.asor_client import AsorFederationClient
 
-logging.basicConfig(
-    level=settings.log_level,
-    format=settings.log_format
-)
+logging.basicConfig(level=settings.log_level, format=settings.log_format)
 
 logger = logging.getLogger(__name__)
 
