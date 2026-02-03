@@ -1,6 +1,6 @@
 """Simplified federation configuration schemas."""
 
-from typing import List, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -14,7 +14,7 @@ class AnthropicFederationConfig(BaseModel):
     enabled: bool = False
     endpoint: str = "https://registry.modelcontextprotocol.io"
     sync_on_startup: bool = False
-    servers: List[AnthropicServerConfig] = Field(default_factory=list)
+    servers: list[AnthropicServerConfig] = Field(default_factory=list)
 
 
 class AsorAgentConfig(BaseModel):
@@ -26,21 +26,21 @@ class AsorFederationConfig(BaseModel):
     """ASOR federation configuration."""
     enabled: bool = False
     endpoint: str = "https://wcpdev-services1.wd103.myworkday.com/ccx/api/asor/v1/awsasor_wcpdev1"
-    auth_env_var: Optional[str] = None
+    auth_env_var: str | None = None
     sync_on_startup: bool = False
-    agents: List[AsorAgentConfig] = Field(default_factory=list)
+    agents: list[AsorAgentConfig] = Field(default_factory=list)
 
 
 class FederationConfig(BaseModel):
     """Root federation configuration."""
     anthropic: AnthropicFederationConfig = Field(default_factory=AnthropicFederationConfig)
     asor: AsorFederationConfig = Field(default_factory=AsorFederationConfig)
-    
+
     def is_any_federation_enabled(self) -> bool:
         """Check if any federation is enabled."""
         return self.anthropic.enabled or self.asor.enabled
-    
-    def get_enabled_federations(self) -> List[str]:
+
+    def get_enabled_federations(self) -> list[str]:
         """Get list of enabled federation names."""
         enabled = []
         if self.anthropic.enabled:

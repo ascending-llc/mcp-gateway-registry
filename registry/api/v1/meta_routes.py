@@ -21,8 +21,7 @@ async def get_oauth2_providers():
                 providers = data.get("providers", [])
                 logger.info(f"Successfully fetched {len(providers)} OAuth2 providers: {providers}")
                 return providers
-            else:
-                logger.warning(f"Auth server returned non-200 status: {response.status_code}, body: {response.text}")
+            logger.warning(f"Auth server returned non-200 status: {response.status_code}, body: {response.text}")
     except Exception as e:
         logger.warning(f"Failed to fetch OAuth2 providers from auth server: {e}", exc_info=True)
     return []

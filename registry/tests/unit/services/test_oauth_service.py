@@ -1,11 +1,13 @@
-import pytest
 from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 from bson import ObjectId
-from registry.services.oauth.oauth_service import MCPOAuthService
+
 from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+from registry.auth.oauth import FlowStateManager
 from registry.models.oauth_models import OAuthTokens
 from registry.schemas.enums import OAuthFlowStatus
-from registry.auth.oauth import FlowStateManager
+from registry.services.oauth.oauth_service import MCPOAuthService
 from registry.services.oauth.token_service import token_service
 
 
@@ -105,7 +107,7 @@ class TestMCPOAuthService:
                                  refresh_exists=True, refresh_valid=True)
 
         # Mock successful token refresh
-        with patch.object(oauth_service, '_refresh_and_connect', AsyncMock(
+        with patch.object(oauth_service, "_refresh_and_connect", AsyncMock(
                 return_value=(True, {"success": True, "message": "Refreshed successfully"})
         )):
             needs_connection, response_data = await oauth_service.handle_reinitialize_auth(
@@ -122,7 +124,7 @@ class TestMCPOAuthService:
                                  refresh_exists=True, refresh_valid=False)
 
         # Mock OAuth flow initiation
-        with patch.object(oauth_service, '_build_oauth_required_response', AsyncMock(
+        with patch.object(oauth_service, "_build_oauth_required_response", AsyncMock(
                 return_value=(False, {
                     "success": True,
                     "authorization_url": "https://example.com/auth",
@@ -145,7 +147,7 @@ class TestMCPOAuthService:
                                  refresh_exists=True, refresh_valid=True)
 
         # Mock successful token refresh
-        with patch.object(oauth_service, '_refresh_and_connect', AsyncMock(
+        with patch.object(oauth_service, "_refresh_and_connect", AsyncMock(
                 return_value=(True, {"success": True, "message": "Refreshed successfully"})
         )):
             needs_connection, response_data = await oauth_service.handle_reinitialize_auth(
@@ -163,7 +165,7 @@ class TestMCPOAuthService:
                                  refresh_exists=False, refresh_valid=False)
 
         # Mock OAuth flow initiation
-        with patch.object(oauth_service, '_build_oauth_required_response', AsyncMock(
+        with patch.object(oauth_service, "_build_oauth_required_response", AsyncMock(
                 return_value=(False, {
                     "success": True,
                     "authorization_url": "https://example.com/auth",
@@ -207,7 +209,7 @@ class TestMCPOAuthService:
                                  refresh_exists=True, refresh_valid=True)
 
         # Mock refresh failure
-        with patch.object(oauth_service, '_refresh_and_connect', AsyncMock(
+        with patch.object(oauth_service, "_refresh_and_connect", AsyncMock(
                 return_value=(False, {
                     "success": True,
                     "authorization_url": "https://example.com/auth"
@@ -238,7 +240,7 @@ class TestMCPOAuthService:
         )
 
         # Mock crypto utils
-        with patch('registry.services.oauth.oauth_service.decrypt_auth_fields',
+        with patch("registry.services.oauth.oauth_service.decrypt_auth_fields",
                    return_value=mock_server.config["oauth"]):
             flow_id, auth_url, error = await oauth_service.initiate_oauth_flow(
                 user_id, mock_server

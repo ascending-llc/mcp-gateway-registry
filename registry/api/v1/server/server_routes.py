@@ -7,45 +7,47 @@ This is a complete rewrite independent of the legacy server_routes.py.
 
 import logging
 import math
-from typing import Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, status as http_status, Depends
-from pydantic import ValidationError
+from typing import Any
+
 from beanie import PydanticObjectId
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi import status as http_status
+from pydantic import ValidationError
 
 from registry.auth.dependencies import CurrentUserWithACLMap
-from registry.services.server_service import server_service_v1
-from registry.services.oauth.mcp_service import get_mcp_service
-from registry.services.oauth.connection_status_service import (
-    get_servers_connection_status,
-    get_single_server_connection_status
-)
-from registry.services.access_control_service import acl_service
-from registry.services.permissions_utils import (
-    check_required_permission,
-)
 from registry.core.acl_constants import PrincipalType, ResourceType, RoleBits
 from registry.schemas.enums import ConnectionState
 from registry.schemas.server_api_schemas import (
-    ServerListResponse,
-    ServerDetailResponse,
+    PaginationMetadata,
     ServerCreateRequest,
     ServerCreateResponse,
-    ServerUpdateRequest,
-    ServerUpdateResponse,
+    ServerDetailResponse,
+    ServerHealthResponse,
+    ServerListResponse,
+    ServerStatsResponse,
     ServerToggleRequest,
     ServerToggleResponse,
     ServerToolsResponse,
-    ServerHealthResponse,
-    ServerStatsResponse,
-    PaginationMetadata,
-    convert_to_list_item,
-    convert_to_detail,
+    ServerUpdateRequest,
+    ServerUpdateResponse,
     convert_to_create_response,
-    convert_to_update_response,
+    convert_to_detail,
+    convert_to_health_response,
+    convert_to_list_item,
     convert_to_toggle_response,
     convert_to_tools_response,
-    convert_to_health_response,
+    convert_to_update_response,
 )
+from registry.services.access_control_service import acl_service
+from registry.services.oauth.connection_status_service import (
+    get_servers_connection_status,
+    get_single_server_connection_status,
+)
+from registry.services.oauth.mcp_service import get_mcp_service
+from registry.services.permissions_utils import (
+    check_required_permission,
+)
+from registry.services.server_service import server_service_v1
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +74,7 @@ def check_admin_permission(user_context: dict) -> bool:
 
 def apply_connection_status_to_server(
     server_item,
-    status: Optional[Dict[str, Any]],
+    status: dict[str, Any] | None,
     fallback_requires_oauth: bool = False
 ) -> None:
     """
@@ -92,15 +94,15 @@ def apply_connection_status_to_server(
 # ==================== Endpoints ====================
 
 @router.get(
-    f"/servers",
+    "/servers",
     response_model=ServerListResponse,
     summary="List Servers",
     description="List all servers with filtering, searching, and pagination. Includes connection status for each server.",
 )
 async def list_servers(
-    query: Optional[str] = None,
-    scope: Optional[str] = None,
-    status: Optional[str] = None,
+    query: str | None = None,
+    scope: str | None = None,
+    status: str | None = None,
     page: int = 1,
     per_page: int = 20,
     user_context: dict = Depends(get_user_context),
@@ -123,7 +125,7 @@ async def list_servers(
                 status_code=http_status.HTTP_400_BAD_REQUEST,
                 detail="Invalid scope. Must be one of: shared_app, shared_user, private_user"
             )
-        
+
         # Validate status if provided
         if status and status not in ["active", "inactive", "error"]:
             raise HTTPException(
@@ -140,15 +142,15 @@ async def list_servers(
             user_id=None,
             acl_permissions_map=user_context.get("acl_permission_map", {})
         )
-        
+
         # Convert to response models
         server_items = [convert_to_list_item(server) for server in servers]
-        
+
         # Get connection status and enrich server items
         try:
-            user_id = user_context.get('user_id')
+            user_id = user_context.get("user_id")
             mcp_service = await get_mcp_service()
-            
+
             connection_status = await get_servers_connection_status(
                 user_id=user_id,
                 servers=servers,
@@ -158,13 +160,13 @@ async def list_servers(
             for server_item in server_items:
                 status = connection_status.get(str(server_item.id))
                 apply_connection_status_to_server(server_item, status, fallback_requires_oauth=False)
-        
+
         except Exception as e:
             logger.warning(f"Error getting connection status: {e}", exc_info=True)
 
         # Calculate pagination metadata
         total_pages = math.ceil(total / per_page) if total > 0 else 0
-        
+
         return ServerListResponse(
             servers=server_items,
             pagination=PaginationMetadata(
@@ -174,7 +176,7 @@ async def list_servers(
                 total_pages=total_pages,
             )
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -186,7 +188,7 @@ async def list_servers(
 
 
 @router.get(
-    f"/servers/stats",
+    "/servers/stats",
     response_model=ServerStatsResponse,
     summary="Get System Statistics",
     description="Get system-wide statistics (Admin only). Includes server, token, and user metrics using MongoDB aggregation pipelines.",
@@ -218,12 +220,12 @@ async def get_server_stats(
                     "message": "Admin access required to view system statistics",
                 }
             )
-        
+
         # Get statistics from service
         stats = await server_service_v1.get_stats()
-        
+
         return ServerStatsResponse(**stats)
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -235,7 +237,7 @@ async def get_server_stats(
 
 
 @router.get(
-    f"/servers/{{server_id}}",
+    "/servers/{server_id}",
     response_model=ServerDetailResponse,
     summary="Get Server Details",
     description="Get detailed information about a specific server, including connection status",
@@ -258,11 +260,11 @@ async def get_server(
                 status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Server not found"
             )
-        
+
         # Convert to response model
         server_detail = convert_to_detail(server)
         try:
-            user_id = user_context.get('user_id')
+            user_id = user_context.get("user_id")
             mcp_service = await get_mcp_service()
             server_status = await get_single_server_connection_status(
                 user_id=user_id,
@@ -270,16 +272,16 @@ async def get_server(
                 mcp_service=mcp_service
             )
             apply_connection_status_to_server(server_detail, server_status)
-        
+
         except Exception as e:
             logger.warning(f"Error getting connection status for {server.serverName}: {e}", exc_info=True)
             # Apply error state with custom error message
             fallback_requires_oauth = server.config.get("requires_oauth", False)
             apply_connection_status_to_server(server_detail, None, fallback_requires_oauth)
-            server_detail.error = f"Failed to get connection status: {str(e)}"
-        
+            server_detail.error = f"Failed to get connection status: {e!s}"
+
         return server_detail
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -290,7 +292,7 @@ async def get_server(
         )
 
 @router.post(
-    f"/servers",
+    "/servers",
     response_model=ServerCreateResponse,
     status_code=http_status.HTTP_201_CREATED,
     summary="Register Server",
@@ -303,7 +305,7 @@ async def create_server(
     """Create a new server"""
     try:
         user_id = user_context.get("user_id")
-        
+
         server = await server_service_v1.create_server(
             data=data,
             user_id=user_id,
@@ -320,7 +322,7 @@ async def create_server(
             resource_id=server.id,
             perm_bits=RoleBits.OWNER
         )
-        
+
         if not acl_entry:
             await server.delete()
             logger.error(f"Failed to create ACL entry for server: {server.id}. Rolling back server creation")
@@ -328,7 +330,7 @@ async def create_server(
 
         logger.info(f"Granted user {user_id} {RoleBits.OWNER} permissions for server Id {server.id}")
         return convert_to_create_response(server)
-        
+
     except ValueError as e:
         error_msg = str(e)
 
@@ -361,7 +363,7 @@ async def create_server(
 
 
 @router.patch(
-    f"/servers/{{server_id}}",
+    "/servers/{server_id}",
     response_model=ServerUpdateResponse,
     summary="Update Server",
     description="Update server configuration",
@@ -382,12 +384,12 @@ async def update_server(
             data=data,
             user_id=user_id,
         )
-        
+
         return convert_to_update_response(server)
-        
+
     except ValueError as e:
         error_msg = str(e)
-        
+
         # Check if server not found
         if "not found" in error_msg.lower():
             raise HTTPException(
@@ -397,13 +399,13 @@ async def update_server(
                     "message": error_msg,
                 }
             )
-        
+
         # Other validation errors
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=error_msg
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -415,7 +417,7 @@ async def update_server(
 
 
 @router.delete(
-    f"/servers/{{server_id}}",
+    "/servers/{server_id}",
     status_code=http_status.HTTP_204_NO_CONTENT,
     summary="Delete Server",
     description="Delete a server",
@@ -440,14 +442,13 @@ async def delete_server(
                 resource_id=PydanticObjectId(server_id),
             )
             logger.info(f"Removed {deleted_count} ACL permissions for server Id {server_id}")
-            return None  # 204 No Content
-        else:
-            raise ValueError(f"Failed to delete server {server_id}. Skipping ACL cleanup")
+            return  # 204 No Content
+        raise ValueError(f"Failed to delete server {server_id}. Skipping ACL cleanup")
 
-        
+
     except ValueError as e:
         error_msg = str(e)
-        
+
         # Not found
         if "not found" in error_msg.lower():
             raise HTTPException(
@@ -457,12 +458,12 @@ async def delete_server(
                     "message": "Server not found",
                 }
             )
-        
+
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=error_msg
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -473,7 +474,7 @@ async def delete_server(
         )
 
 @router.post(
-    f"/servers/{{server_id}}/toggle",
+    "/servers/{server_id}/toggle",
     response_model=ServerToggleResponse,
     summary="Toggle Server Status",
     description="Enable or disable a server",
@@ -487,20 +488,20 @@ async def toggle_server(
     try:
         acl_permission_map = user_context.get("acl_permission_map", {})
         check_required_permission(acl_permission_map, ResourceType.MCPSERVER.value, server_id, "EDIT")
-        
+
         user_id = user_context.get("user_id")
-    
+
         server = await server_service_v1.toggle_server_status(
             server_id=server_id,
             enabled=data.enabled,
             user_id=user_id,
         )
-        
+
         return convert_to_toggle_response(server, data.enabled)
-        
+
     except ValueError as e:
         error_msg = str(e)
-        
+
         if "not found" in error_msg.lower():
             raise HTTPException(
                 status_code=http_status.HTTP_404_NOT_FOUND,
@@ -509,12 +510,12 @@ async def toggle_server(
                     "message": "Server not found",
                 }
             )
-        
+
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=error_msg
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -526,7 +527,7 @@ async def toggle_server(
 
 
 @router.get(
-    f"/servers/{{server_id}}/tools",
+    "/servers/{server_id}/tools",
     response_model=ServerToolsResponse,
     summary="Get Server Tools",
     description="Get the list of tools provided by a server",
@@ -544,12 +545,12 @@ async def get_server_tools(
             server_id=server_id,
             user_id=None,
         )
-        
+
         return convert_to_tools_response(server, tools)
-        
+
     except ValueError as e:
         error_msg = str(e)
-        
+
         if "access denied" in error_msg.lower():
             raise HTTPException(
                 status_code=http_status.HTTP_403_FORBIDDEN,
@@ -558,7 +559,7 @@ async def get_server_tools(
                     "message": error_msg,
                 }
             )
-        
+
         if "not found" in error_msg.lower():
             raise HTTPException(
                 status_code=http_status.HTTP_404_NOT_FOUND,
@@ -567,12 +568,12 @@ async def get_server_tools(
                     "message": "Server not found",
                 }
             )
-        
+
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=error_msg
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -584,7 +585,7 @@ async def get_server_tools(
 
 
 @router.post(
-    f"/servers/{{server_id}}/refresh",
+    "/servers/{server_id}/refresh",
     response_model=ServerHealthResponse,
     summary="Refresh Server Health",
     description="Refresh server health status and check connectivity",
@@ -602,7 +603,7 @@ async def refresh_server_health(
             server_id=server_id,
             user_id=user_id,
         )
-        
+
         # Check if health check failed
         if health_info["status"] == "unhealthy":
             raise HTTPException(
@@ -612,14 +613,14 @@ async def refresh_server_health(
                     "message": health_info.get("status_message", "Failed to retrieve tools from server"),
                 }
             )
-        
+
         server = health_info["server"]
-        
+
         return convert_to_health_response(server, health_info)
-        
+
     except ValueError as e:
         error_msg = str(e)
-        
+
         if "not found" in error_msg.lower():
             raise HTTPException(
                 status_code=http_status.HTTP_404_NOT_FOUND,
@@ -628,12 +629,12 @@ async def refresh_server_health(
                     "message": "Server not found",
                 }
             )
-        
+
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail=error_msg
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:

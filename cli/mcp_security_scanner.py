@@ -13,12 +13,10 @@ import os
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 from pydantic import BaseModel, Field
-
 
 # Configure logging
 logging.basicConfig(
@@ -51,7 +49,7 @@ class SecurityScanResult(BaseModel):
 
 
 def _get_llm_api_key(
-    cli_value: Optional[str] = None
+    cli_value: str | None = None
 ) -> str:
     """Retrieve LLM API key from CLI argument or environment variable.
 
@@ -85,8 +83,8 @@ def _ensure_output_directory() -> Path:
 def _run_mcp_scanner(
     server_url: str,
     analyzers: str = DEFAULT_ANALYZERS,
-    api_key: Optional[str] = None,
-    headers: Optional[str] = None
+    api_key: str | None = None,
+    headers: str | None = None
 ) -> dict:
     """Run mcp-scanner command and return raw output.
 
@@ -116,7 +114,7 @@ def _run_mcp_scanner(
 
     # Add headers if provided - parse JSON and extract bearer token
     if headers:
-        logger.info(f"Adding custom headers for scanning")
+        logger.info("Adding custom headers for scanning")
         try:
             headers_dict = json.loads(headers)
             # Check for X-Authorization header with Bearer token
@@ -153,8 +151,8 @@ def _run_mcp_scanner(
         stdout = result.stdout.strip()
 
         # Remove ANSI color codes that can interfere with JSON parsing
-        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-        stdout = ansi_escape.sub('', stdout)
+        ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+        stdout = ansi_escape.sub("", stdout)
 
         # Find the start of JSON array - look for '[\n  {' pattern (array with objects)
         # This is more robust than just finding first '[' or '{'
@@ -162,14 +160,14 @@ def _run_mcp_scanner(
 
         # Try to find JSON array start
         for i in range(len(stdout) - 1):
-            if stdout[i] == '[' and (i == 0 or stdout[i-1] in '\n\r'):
+            if stdout[i] == "[" and (i == 0 or stdout[i-1] in "\n\r"):
                 # Found '[' at start of line, likely start of JSON
                 json_start = i
                 break
 
         # Fallback: find any '[' followed by whitespace and '{'
         if json_start == -1:
-            pattern = r'\[\s*\{'
+            pattern = r"\[\s*\{"
             match = re.search(pattern, stdout)
             if match:
                 json_start = match.start()
@@ -256,7 +254,7 @@ def _analyze_scan_results(
     # Determine if safe: no critical or high severity issues
     is_safe = (critical_count == 0 and high_count == 0)
 
-    logger.info(f"Security analysis results:")
+    logger.info("Security analysis results:")
     logger.info(f"  Critical Issues: {critical_count}")
     logger.info(f"  High Severity: {high_count}")
     logger.info(f"  Medium Severity: {medium_count}")
@@ -289,7 +287,7 @@ def _save_scan_output(
     safe_url = server_url.replace("https://", "").replace("http://", "").replace("/", "_")
 
     # Create date-based subdirectory for archival
-    timestamp = datetime.now(timezone.utc)
+    timestamp = datetime.now(UTC)
     date_folder = timestamp.strftime("%Y-%m-%d")
     archive_dir = output_dir / date_folder
     archive_dir.mkdir(exist_ok=True)
@@ -299,7 +297,7 @@ def _save_scan_output(
     archived_filename = f"scan_{safe_url}_{timestamp_str}.json"
     archived_file = archive_dir / archived_filename
 
-    with open(archived_file, 'w') as f:
+    with open(archived_file, "w") as f:
         json.dump(raw_output, f, indent=2, default=str)
 
     logger.info(f"Archived scan output saved to: {archived_file}")
@@ -311,7 +309,7 @@ def _save_scan_output(
     latest_filename = f"{server_name}.json"
     latest_file = output_dir / latest_filename
 
-    with open(latest_file, 'w') as f:
+    with open(latest_file, "w") as f:
         json.dump(raw_output, f, indent=2, default=str)
 
     logger.info(f"Latest scan output saved to: {latest_file}")
@@ -362,7 +360,7 @@ def _disable_unsafe_server(
 
 def _extract_server_path_from_url(
     server_url: str
-) -> Optional[str]:
+) -> str | None:
     """Extract server path from URL.
 
     Args:
@@ -377,15 +375,14 @@ def _extract_server_path_from_url(
         from urllib.parse import urlparse
 
         parsed = urlparse(server_url)
-        path_parts = [p for p in parsed.path.split('/') if p and p != 'mcp']
+        path_parts = [p for p in parsed.path.split("/") if p and p != "mcp"]
 
         if path_parts:
             server_path = f"/{path_parts[0]}"
             logger.debug(f"Extracted server path '{server_path}' from URL '{server_url}'")
             return server_path
-        else:
-            logger.warning(f"Could not extract server path from URL: {server_url}")
-            return None
+        logger.warning(f"Could not extract server path from URL: {server_url}")
+        return None
 
     except Exception as e:
         logger.error(f"Error parsing server URL {server_url}: {e}")
@@ -395,10 +392,10 @@ def _extract_server_path_from_url(
 def scan_server(
     server_url: str,
     analyzers: str = DEFAULT_ANALYZERS,
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
     output_json: bool = False,
     auto_disable: bool = False,
-    headers: Optional[str] = None
+    headers: str | None = None
 ) -> SecurityScanResult:
     """Scan an MCP server for security vulnerabilities.
 
@@ -421,7 +418,7 @@ def scan_server(
         logger.error(f"Scanner failed with exit code {e.returncode}")
         raw_output = {
             "error": str(e),
-            "stderr": e.stderr if hasattr(e, 'stderr') else "",
+            "stderr": e.stderr if hasattr(e, "stderr") else "",
             "analysis_results": {},
             "tool_results": [],
             "scan_failed": True
@@ -432,7 +429,7 @@ def scan_server(
         # Create error result
         result = SecurityScanResult(
             server_url=server_url,
-            scan_timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            scan_timestamp=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             is_safe=False,  # Treat scanner failures as unsafe
             critical_issues=0,
             high_severity=0,
@@ -451,9 +448,9 @@ def scan_server(
             print("="*60)
             print(f"Server URL: {result.server_url}")
             print(f"Scan Time: {result.scan_timestamp}")
-            print(f"\nError: Scanner failed to complete scan")
+            print("\nError: Scanner failed to complete scan")
             print(f"Details: {e}")
-            print(f"\nMarking server as UNSAFE due to scanner failure")
+            print("\nMarking server as UNSAFE due to scanner failure")
             print(f"\nDetailed output saved to: {result.output_file}")
             print("="*60 + "\n")
 
@@ -467,7 +464,7 @@ def scan_server(
 
     # Auto-disable server if unsafe
     if auto_disable and not is_safe:
-        logger.warning(f"Server marked as UNSAFE - attempting to disable")
+        logger.warning("Server marked as UNSAFE - attempting to disable")
         server_path = _extract_server_path_from_url(server_url)
         if server_path:
             if _disable_unsafe_server(server_path):
@@ -475,12 +472,12 @@ def scan_server(
             else:
                 logger.error(f"✗ Failed to disable server {server_path}")
         else:
-            logger.error(f"✗ Could not extract server path from URL - manual intervention required")
+            logger.error("✗ Could not extract server path from URL - manual intervention required")
 
     # Create result object
     result = SecurityScanResult(
         server_url=server_url,
-        scan_timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        scan_timestamp=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         is_safe=is_safe,
         critical_issues=critical,
         high_severity=high,
@@ -500,7 +497,7 @@ def scan_server(
         print("="*60)
         print(f"Server URL: {result.server_url}")
         print(f"Scan Time: {result.scan_timestamp}")
-        print(f"\nEXECUTIVE SUMMARY OF ISSUES:")
+        print("\nEXECUTIVE SUMMARY OF ISSUES:")
         print(f"  Critical Issues: {result.critical_issues}")
         print(f"  High Severity: {result.high_severity}")
         print(f"  Medium Severity: {result.medium_severity}")
@@ -513,7 +510,7 @@ def scan_server(
             if server_path:
                 print(f"\n⚠️  ACTION TAKEN: Server {server_path} has been DISABLED due to security issues")
             else:
-                print(f"\n⚠️  WARNING: Could not auto-disable server - manual intervention required")
+                print("\n⚠️  WARNING: Could not auto-disable server - manual intervention required")
 
         print(f"\nDetailed output saved to: {result.output_file}")
         print("="*60 + "\n")

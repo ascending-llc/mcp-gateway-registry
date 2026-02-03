@@ -6,23 +6,21 @@ RESTful API endpoints for managing ACL permissions using MongoDB.
 
 import asyncio
 import logging
-from fastapi import APIRouter, HTTPException, status as http_status, Depends, Query
+from typing import Any
+
 from beanie import PydanticObjectId
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import status as http_status
 
 from registry.auth.dependencies import CurrentUserWithACLMap
-from registry.services.access_control_service import acl_service
-from registry.core.acl_constants import PrincipalType, PermissionBits
+from registry.core.acl_constants import PermissionBits, PrincipalType
 from registry.schemas.permissions_schema import (
-    UpdateResourcePermissionsResponse,
+    PermissionPrincipalOut,
     UpdateResourcePermissionsRequest,
-    PermissionPrincipalOut
+    UpdateResourcePermissionsResponse,
 )
-from registry.services.permissions_utils import (
-    check_required_permission,
-    validate_resource_type
-)
-
-from typing import Dict, Any, List, Optional
+from registry.services.access_control_service import acl_service
+from registry.services.permissions_utils import check_required_permission, validate_resource_type
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -39,9 +37,9 @@ def get_user_context(user_context: CurrentUserWithACLMap):
 )
 async def search_principals(
     query: str,
-    limit: Optional[int] = None,
-    principal_types: Optional[List[str]] = Query(None),
-) -> List[PermissionPrincipalOut]:
+    limit: int | None = None,
+    principal_types: list[str] | None = Query(None),
+) -> list[PermissionPrincipalOut]:
     """
     Search for principals (users, groups, public) matching the query string.
     Returns a paginated response with metadata.
@@ -64,7 +62,7 @@ async def search_principals(
         )
 
 @router.put(
-    f"/permissions/{{resource_type}}/{{resource_id}}",
+    "/permissions/{resource_type}/{resource_id}",
     summary="Update ACL permissions for a specific resource",
     description="Update ACL permissions for a specific resource",
     response_model=UpdateResourcePermissionsResponse,
@@ -79,7 +77,7 @@ async def update_resource_permissions(
 
     acl_permission_map = user_context.get("acl_permission_map", {})
     check_required_permission(acl_permission_map, resource_type, resource_id, "SHARE")
-    
+
     try:
         deleted_count = 0
         updated_count = 0
@@ -141,8 +139,8 @@ async def update_resource_permissions(
             message=f"Updated {updated_count} and deleted {deleted_count} permissions",
             results={"resource_id": resource_id}
         )
-    
-    except Exception as e: 
+
+    except Exception as e:
         logger.error(f"Error updating permissions for resource {resource_id}: {e}")
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -153,7 +151,7 @@ async def update_resource_permissions(
         )
 
 @router.get(
-   f"/permissions/{{resource_type}}/{{resource_id}}",
+   "/permissions/{resource_type}/{resource_id}",
     summary="Get all permissions for a specific resource",
     description="Get ACL permissions for a specific resource.",
 )
@@ -161,7 +159,7 @@ async def get_resource_permissions(
     resource_type: str,
     resource_id: str,
     user_context: dict = Depends(get_user_context),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get ACL permissions for a specific resource.
     """

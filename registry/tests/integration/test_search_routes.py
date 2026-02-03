@@ -1,13 +1,14 @@
 """
 Integration tests for semantic search routes.
 """
-import pytest
-from fastapi.testclient import TestClient
-from unittest.mock import AsyncMock, patch, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
-from registry.main import app
-from registry.auth import dependencies as auth_dependencies
+import pytest
 from fastapi import Request
+from fastapi.testclient import TestClient
+
+from registry.auth import dependencies as auth_dependencies
+from registry.main import app
 
 
 @pytest.mark.integration
@@ -175,10 +176,10 @@ class TestServerSearchRoutes:
         mock_search_results = [
             {"server_id": "test-server-1", "relevance_score": 0.95}
         ]
-        
+
         with patch("registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock) as mock_search:
             mock_search.return_value = mock_search_results
-            
+
             response = test_client.post(
                 "/api/v1/search/servers",
                 json={
@@ -187,16 +188,16 @@ class TestServerSearchRoutes:
                     "search_type": "hybrid"
                 }
             )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         # Verify response structure
         assert "query" in data
         assert "total" in data
         assert "servers" in data
         assert data["query"] == "test query"
-        
+
         # Verify search was called with correct parameters
         mock_search.assert_called_once()
         call_kwargs = mock_search.call_args.kwargs
@@ -206,12 +207,12 @@ class TestServerSearchRoutes:
     def test_search_servers_with_near_text_search(self, test_client: TestClient):
         """Server search supports near_text search type."""
         from packages.vector.enum.enums import SearchType
-        
+
         mock_search_results = []
-        
+
         with patch("registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock) as mock_search:
             mock_search.return_value = mock_search_results
-            
+
             response = test_client.post(
                 "/api/v1/search/servers",
                 json={
@@ -220,9 +221,9 @@ class TestServerSearchRoutes:
                     "search_type": "near_text"
                 }
             )
-        
+
         assert response.status_code == 200
-        
+
         # Verify SearchType.NEAR_TEXT was used
         call_kwargs = mock_search.call_args.kwargs
         assert call_kwargs["search_type"] == SearchType.NEAR_TEXT
@@ -230,12 +231,12 @@ class TestServerSearchRoutes:
     def test_search_servers_with_bm25_search(self, test_client: TestClient):
         """Server search supports bm25 search type."""
         from packages.vector.enum.enums import SearchType
-        
+
         mock_search_results = []
-        
+
         with patch("registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock) as mock_search:
             mock_search.return_value = mock_search_results
-            
+
             response = test_client.post(
                 "/api/v1/search/servers",
                 json={
@@ -244,9 +245,9 @@ class TestServerSearchRoutes:
                     "search_type": "bm25"
                 }
             )
-        
+
         assert response.status_code == 200
-        
+
         # Verify SearchType.BM25 was used
         call_kwargs = mock_search.call_args.kwargs
         assert call_kwargs["search_type"] == SearchType.BM25
@@ -254,12 +255,12 @@ class TestServerSearchRoutes:
     def test_search_servers_with_similarity_store_search(self, test_client: TestClient):
         """Server search supports similarity_store search type."""
         from packages.vector.enum.enums import SearchType
-        
+
         mock_search_results = []
-        
+
         with patch("registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock) as mock_search:
             mock_search.return_value = mock_search_results
-            
+
             response = test_client.post(
                 "/api/v1/search/servers",
                 json={
@@ -268,9 +269,9 @@ class TestServerSearchRoutes:
                     "search_type": "SIMILARITY_STORE"  # Use uppercase to match enum value
                 }
             )
-        
+
         assert response.status_code == 200
-        
+
         # Verify SearchType.SIMILARITY_STORE was used
         call_kwargs = mock_search.call_args.kwargs
         assert call_kwargs["search_type"] == SearchType.SIMILARITY_STORE
@@ -278,12 +279,12 @@ class TestServerSearchRoutes:
     def test_search_servers_defaults_to_hybrid(self, test_client: TestClient):
         """Server search defaults to hybrid when search_type not specified."""
         from packages.vector.enum.enums import SearchType
-        
+
         mock_search_results = []
-        
+
         with patch("registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock) as mock_search:
             mock_search.return_value = mock_search_results
-            
+
             response = test_client.post(
                 "/api/v1/search/servers",
                 json={
@@ -291,9 +292,9 @@ class TestServerSearchRoutes:
                     "top_n": 5
                 }
             )
-        
+
         assert response.status_code == 200
-        
+
         # Verify default search type is HYBRID
         call_kwargs = mock_search.call_args.kwargs
         assert call_kwargs["search_type"] == SearchType.HYBRID
@@ -308,7 +309,7 @@ class TestServerSearchRoutes:
                 "search_type": "invalid_type"
             }
         )
-        
+
         # Pydantic validates enum values and returns 422 for invalid values
         assert response.status_code == 422
         assert "search_type" in response.json()["detail"][0]["loc"]
@@ -316,10 +317,10 @@ class TestServerSearchRoutes:
     def test_search_servers_respects_top_n(self, test_client: TestClient):
         """Server search respects the top_n parameter."""
         mock_search_results = []
-        
+
         with patch("registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock) as mock_search:
             mock_search.return_value = mock_search_results
-            
+
             response = test_client.post(
                 "/api/v1/search/servers",
                 json={
@@ -327,9 +328,9 @@ class TestServerSearchRoutes:
                     "top_n": 3
                 }
             )
-        
+
         assert response.status_code == 200
-        
+
         # Verify k parameter matches top_n
         call_kwargs = mock_search.call_args.kwargs
         assert call_kwargs["k"] == 3
@@ -337,10 +338,10 @@ class TestServerSearchRoutes:
     def test_search_servers_uses_reranking(self, test_client: TestClient):
         """Server search uses reranking with candidate_k."""
         mock_search_results = []
-        
+
         with patch("registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock) as mock_search:
             mock_search.return_value = mock_search_results
-            
+
             response = test_client.post(
                 "/api/v1/search/servers",
                 json={
@@ -348,9 +349,9 @@ class TestServerSearchRoutes:
                     "top_n": 5
                 }
             )
-        
+
         assert response.status_code == 200
-        
+
         # Verify candidate_k is 5x top_n (capped at 100)
         call_kwargs = mock_search.call_args.kwargs
         assert call_kwargs["candidate_k"] == 25  # 5 * 5
@@ -358,10 +359,10 @@ class TestServerSearchRoutes:
     def test_search_servers_caps_candidate_k_at_100(self, test_client: TestClient):
         """Server search caps candidate_k at 100."""
         mock_search_results = []
-        
+
         with patch("registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock) as mock_search:
             mock_search.return_value = mock_search_results
-            
+
             response = test_client.post(
                 "/api/v1/search/servers",
                 json={
@@ -369,9 +370,9 @@ class TestServerSearchRoutes:
                     "top_n": 50  # Would be 250 without cap
                 }
             )
-        
+
         assert response.status_code == 200
-        
+
         # Verify candidate_k is capped at 100
         call_kwargs = mock_search.call_args.kwargs
         assert call_kwargs["candidate_k"] == 100
@@ -385,7 +386,7 @@ class TestServerSearchRoutes:
                 "top_n": 10
             }
         )
-        
+
         # Query has min_length=1, so empty string returns validation error
         assert response.status_code == 422
         assert "query" in response.json()["detail"][0]["loc"]
@@ -395,10 +396,10 @@ class TestServerSearchRoutes:
         mock_search_results = [
             {"server_id": "test-id-1", "server_name": "Test Server", "relevance_score": 0.9}
         ]
-        
+
         with patch("registry.api.v1.search_routes.mcp_server_repo.asearch_with_rerank", new_callable=AsyncMock) as mock_search:
             mock_search.return_value = mock_search_results
-            
+
             response = test_client.post(
                 "/api/v1/search/servers",
                 json={
@@ -406,12 +407,12 @@ class TestServerSearchRoutes:
                     "top_n": 5
                 }
             )
-        
+
         assert response.status_code == 200
-        
+
         # Verify search was called
         mock_search.assert_called_once()
-        
+
         # Verify response structure
         data = response.json()
         assert "query" in data

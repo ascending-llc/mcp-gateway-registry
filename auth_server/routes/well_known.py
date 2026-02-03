@@ -8,6 +8,7 @@ Note: RFC 8705 Protected Resource endpoints are implemented in mcpgw.
 """
 
 import logging
+
 from fastapi import APIRouter, HTTPException
 
 # Import settings
@@ -34,21 +35,21 @@ def _get_auth_server_urls():
         HTTPException: If AUTH_SERVER_EXTERNAL_URL is not set
     """
     auth_server_url = settings.auth_server_external_url
-    
+
     if not auth_server_url:
         logger.error("AUTH_SERVER_EXTERNAL_URL is not configured in settings")
         raise HTTPException(
             status_code=500,
             detail="Server configuration error: AUTH_SERVER_EXTERNAL_URL not configured"
         )
-    
+
     # Base URL is auth_server_url minus the prefix (for RFC 8414 issuer)
     base_url = auth_server_url
     if settings.auth_server_api_prefix:
-        prefix = settings.auth_server_api_prefix.rstrip('/')
+        prefix = settings.auth_server_api_prefix.rstrip("/")
         if auth_server_url.endswith(prefix):
-            base_url = auth_server_url[:-len(prefix)].rstrip('/')
-    
+            base_url = auth_server_url[:-len(prefix)].rstrip("/")
+
     return base_url, auth_server_url
 
 
@@ -64,10 +65,10 @@ async def oauth_authorization_server_metadata():
     Operational endpoints use auth_server_url which includes the prefix.
     """
     base_url, auth_server_url = _get_auth_server_urls()
-    
+
     # Get current auth provider from settings
     auth_provider = settings.auth_provider
-    
+
     return {
         "issuer": base_url,
         "authorization_endpoint": f"{auth_server_url}/oauth2/login/{auth_provider}",
@@ -105,10 +106,10 @@ async def openid_configuration():
     use auth_server_url which includes the prefix.
     """
     base_url, auth_server_url = _get_auth_server_urls()
-    
+
     # Get current auth provider from settings
     auth_provider = settings.auth_provider
-    
+
     return {
         "issuer": base_url,
         "authorization_endpoint": f"{auth_server_url}/oauth2/login/{auth_provider}",
@@ -146,20 +147,20 @@ async def jwks_endpoint():
     try:
         # Get the configured authentication provider
         auth_provider = get_auth_provider()
-        
+
         # Get JWKS from the provider (Cognito, Keycloak, Entra ID, etc.)
         # Each provider implementation fetches JWKS from their respective endpoints:
         # - Cognito: https://cognito-idp.{region}.amazonaws.com/{pool_id}/.well-known/jwks.json
         # - Keycloak: {keycloak_url}/realms/{realm}/protocol/openid-connect/certs
         # - Entra ID: https://login.microsoftonline.com/{tenant_id}/discovery/v2.0/keys
         jwks = auth_provider.get_jwks()
-        
+
         logger.debug(f"Returning JWKS from {auth_provider.__class__.__name__} provider")
         return jwks
-        
+
     except Exception as e:
         logger.error(f"Failed to retrieve JWKS from provider: {e}")
-        
+
         # Fallback: Return empty key set for self-signed tokens
         # HS256 uses symmetric keys (SECRET_KEY), which should not be publicly exposed
         logger.warning("Falling back to empty JWKS (for self-signed HS256 tokens)")

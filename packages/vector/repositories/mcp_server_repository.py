@@ -6,12 +6,14 @@ that don't belong in the generic Repository class.
 """
 
 import logging
-from typing import Optional, Dict, Any, List
-from packages.models.enums import ServerEntityType
-from packages.models import ExtendedMCPServer
-from packages.vector.repository import Repository
-from packages.vector.client import DatabaseClient, initialize_database
+from typing import Any
+
 from langchain_core.documents import Document
+
+from packages.models import ExtendedMCPServer
+from packages.models.enums import ServerEntityType
+from packages.vector.client import DatabaseClient, initialize_database
+from packages.vector.repository import Repository
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +52,8 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
             if store:
                 logger.info(f"Collection '{self.collection}' created successfully")
                 return True
-            else:
-                logger.error(f"Failed to create collection '{self.collection}'")
-                return False
+            logger.error(f"Failed to create collection '{self.collection}'")
+            return False
         except Exception as e:
             logger.error(f"Error ensuring collection '{self.collection}': {e}", exc_info=True)
             raise
@@ -61,7 +62,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
             self,
             server: ExtendedMCPServer,
             is_delete: bool = True,
-    ) -> Optional[Dict[str, int]]:
+    ) -> dict[str, int] | None:
         """
         Full rebuild: delete old server and recreate from server object.
 
@@ -107,7 +108,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
             logger.error(f"Full sync failed for server {server.serverName}: {e}", exc_info=True)
             return None
 
-    async def get_by_server_id(self, server_id: str) -> Optional[ExtendedMCPServer]:
+    async def get_by_server_id(self, server_id: str) -> ExtendedMCPServer | None:
         """
         Get server by MongoDB server_id (stored in metadata).
 
@@ -127,7 +128,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
             logger.error(f"Get by server_id failed: {e}")
             return None
 
-    async def get_all_docs_by_server_id(self, server_id: str) -> Dict[str, List[Any]]:
+    async def get_all_docs_by_server_id(self, server_id: str) -> dict[str, list[Any]]:
         """
         Get all vector documents (server, tools, resources, prompts) by server_id.
         
@@ -139,10 +140,10 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
         """
         try:
             result = {
-                'server': [],
-                'tools': [],
-                'resources': [],
-                'prompts': []
+                "server": [],
+                "tools": [],
+                "resources": [],
+                "prompts": []
             }
 
             # Query each entity type separately for better logging and debugging
@@ -158,7 +159,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
                 )
 
                 # Map entity_type to result key (handle plural forms)
-                result_key = entity_type_value if entity_type_value == 'server' else f"{entity_type_value}s"
+                result_key = entity_type_value if entity_type_value == "server" else f"{entity_type_value}s"
                 result[result_key] = docs
 
                 logger.debug(f"Found {len(docs)} {entity_type_value} docs for server_id {server_id}")
@@ -172,7 +173,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
 
         except Exception as e:
             logger.error(f"Get all docs by server_id failed: {e}", exc_info=True)
-            return {'server': [], 'tools': [], 'resources': [], 'prompts': []}
+            return {"server": [], "tools": [], "resources": [], "prompts": []}
 
     async def smart_sync(
             self,
@@ -230,7 +231,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
                     logger.debug(f"No docs for {entity_type_value}, skipping")
                     continue
 
-                elif not existing_docs and new_docs_for_type:
+                if not existing_docs and new_docs_for_type:
                     # No existing, has new: add all
                     logger.info(f"Adding {len(new_docs_for_type)} new {entity_type_value} docs")
                     new_ids = self.adapter.add_documents(
@@ -267,7 +268,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
             logger.error(f"Smart sync failed for '{server_name}' (ID: {server_id}): {e}", exc_info=True)
             return False
 
-    def _group_docs_by_entity_type(self, docs: List[Any]) -> Dict[str, List[Any]]:
+    def _group_docs_by_entity_type(self, docs: list[Any]) -> dict[str, list[Any]]:
         """
         Group documents by entity_type.
         
@@ -278,14 +279,14 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
             Dict mapping entity_type to list of documents
         """
         grouped = {
-            'server': [],
-            'tool': [],
-            'resource': [],
-            'prompt': []
+            "server": [],
+            "tool": [],
+            "resource": [],
+            "prompt": []
         }
 
         for doc in docs:
-            entity_type = doc.metadata.get('entity_type')
+            entity_type = doc.metadata.get("entity_type")
             if entity_type in grouped:
                 grouped[entity_type].append(doc)
             else:
@@ -296,8 +297,8 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
     async def _sync_entity_type(
             self,
             entity_type: str,
-            existing_docs: List[Any],
-            new_docs: List[Any],
+            existing_docs: list[Any],
+            new_docs: list[Any],
     ) -> tuple[int, int, int]:
         """
         Sync a specific entity type by comparing existing and new docs.
@@ -335,8 +336,8 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
                     logger.debug(f"[{entity_type}] Content changed for {key}, will re-register")
                 else:
                     # Content unchanged, check metadata
-                    old_meta = {k: v for k, v in old_doc.metadata.items() if k in ['scope', 'enabled']}
-                    new_meta = {k: v for k, v in new_doc.metadata.items() if k in ['scope', 'enabled']}
+                    old_meta = {k: v for k, v in old_doc.metadata.items() if k in ["scope", "enabled"]}
+                    new_meta = {k: v for k, v in new_doc.metadata.items() if k in ["scope", "enabled"]}
 
                     if old_meta != new_meta:
                         to_update_metadata.append((old_doc.id, new_meta))
@@ -365,7 +366,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
 
         if to_update_metadata:
             for doc_id, metadata in to_update_metadata:
-                if hasattr(self.adapter, 'update_metadata'):
+                if hasattr(self.adapter, "update_metadata"):
                     self.adapter.update_metadata(
                         doc_id=doc_id,
                         metadata=metadata,
@@ -379,7 +380,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
 
         return added_count, deleted_count, updated_count
 
-    def build_doc_map(self, docs: List[Document]) -> Dict[str, Document]:
+    def build_doc_map(self, docs: list[Document]) -> dict[str, Document]:
         """
         Build a lookup map for documents using entity_type and entity name as key.
         
@@ -391,17 +392,17 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
         """
         doc_map = {}
         for doc in docs:
-            entity_type = doc.metadata.get('entity_type')
+            entity_type = doc.metadata.get("entity_type")
 
             # Determine unique key based on entity type
-            if entity_type == 'server':
-                key = ('server', doc.metadata.get('server_name'))
-            elif entity_type == 'tool':
-                key = ('tool', doc.metadata.get('tool_name'))
-            elif entity_type == 'resource':
-                key = ('resource', doc.metadata.get('resource_name'))
-            elif entity_type == 'prompt':
-                key = ('prompt', doc.metadata.get('prompt_name'))
+            if entity_type == "server":
+                key = ("server", doc.metadata.get("server_name"))
+            elif entity_type == "tool":
+                key = ("tool", doc.metadata.get("tool_name"))
+            elif entity_type == "resource":
+                key = ("resource", doc.metadata.get("resource_name"))
+            elif entity_type == "prompt":
+                key = ("prompt", doc.metadata.get("prompt_name"))
             else:
                 logger.warning(f"Unknown entity_type: {entity_type}")
                 continue
@@ -457,7 +458,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
                 success_count = 0
                 for doc in existing_docs:
                     total_count += 1
-                    if hasattr(self.adapter, 'update_metadata'):
+                    if hasattr(self.adapter, "update_metadata"):
                         result = self.adapter.update_metadata(
                             doc_id=doc.id,
                             metadata=new_metadata,
@@ -519,10 +520,9 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
                     logger.debug(f"No existing docs for '{server_name}', nothing to update")
                     return True
                 return await self._update_metadata_only(server, server_id)
-            else:
-                # Server enabled: perform smart sync (full content update)
-                logger.info(f"Server enabled, performing smart sync for '{server_name}' (ID: {server_id})")
-                return await self.smart_sync(server)
+            # Server enabled: perform smart sync (full content update)
+            logger.info(f"Server enabled, performing smart sync for '{server_name}' (ID: {server_id})")
+            return await self.smart_sync(server)
 
         except Exception as e:
             logger.error(f"Sync by enabled status failed for '{server_name}' (ID: {server_id}): {e}", exc_info=True)
@@ -531,7 +531,7 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
     async def delete_by_server_id(
             self,
             server_id: str,
-            server_name: Optional[str] = None
+            server_name: str | None = None
     ) -> bool:
         """
         Delete server from vector DB by MongoDB server ID.
@@ -575,9 +575,8 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
             if total_deleted > 0:
                 logger.info(f"Successfully removed server {log_name} from vector DB (deleted {total_deleted} records)")
                 return True
-            else:
-                logger.debug(f"Server {log_name} not found in vector DB")
-                return True
+            logger.debug(f"Server {log_name} not found in vector DB")
+            return True
 
         except Exception as e:
             logger.error(f"Failed to remove server {log_name} from vector DB: {e}", exc_info=True)

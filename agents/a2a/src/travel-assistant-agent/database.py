@@ -5,9 +5,6 @@ import os
 import sqlite3
 from typing import (
     Any,
-    Dict,
-    List,
-    Optional,
 )
 
 # Configure logging with basicConfig
@@ -109,7 +106,7 @@ class FlightDatabaseManager:
         departure_city: str,
         arrival_city: str,
         departure_date: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Search for available flights between cities on a specific date."""
         logger.info(f"Searching flights: {departure_city} -> {arrival_city}, date: {departure_date}")
         with self.get_connection() as conn:
@@ -151,7 +148,7 @@ class FlightDatabaseManager:
     def get_flight_details(
         self,
         flight_id: int,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Get detailed information about a specific flight."""
         logger.info(f"Getting flight details for flight_id: {flight_id}")
         with self.get_connection() as conn:
@@ -188,13 +185,13 @@ class FlightDatabaseManager:
     def get_recommendations(
         self,
         max_price: float,
-        preferred_airlines: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
+        preferred_airlines: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         """Get flight recommendations based on price and airline preferences."""
         logger.info(f"Getting recommendations: max_price={max_price}, airlines={preferred_airlines}")
         with self.get_connection() as conn:
             query = "SELECT * FROM flights WHERE price <= ? AND available_seats > 0"
-            params: List[Any] = [max_price]
+            params: list[Any] = [max_price]
 
             if preferred_airlines:
                 placeholders = ",".join(["?" for _ in preferred_airlines])
@@ -232,8 +229,8 @@ class FlightDatabaseManager:
         departure_city: str,
         arrival_city: str,
         departure_date: str,
-        return_date: Optional[str] = None,
-        budget: Optional[float] = None,
+        return_date: str | None = None,
+        budget: float | None = None,
     ) -> int:
         """Create a new trip plan."""
         logger.info(f"Creating trip plan: {departure_city} -> {arrival_city}, date: {departure_date}, budget: {budget}")

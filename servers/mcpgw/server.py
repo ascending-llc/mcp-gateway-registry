@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 import logging
+
+from auth.custom_jwt import jwtVerifier
+from auth.middleware import AuthMiddleware, HeaderSwapMiddleware
 from fastmcp import FastMCP
 from starlette.responses import JSONResponse
-from auth.custom_jwt import jwtVerifier
-from auth.middleware import HeaderSwapMiddleware, AuthMiddleware
-from config import parse_arguments, settings
 from tools import registry_api, search
+
+from config import parse_arguments, settings
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -42,7 +44,7 @@ ALWAYS proactively discover and use available tools when user requests could ben
 )
 
 # Add header swap middleware (must be BEFORE AuthMiddleware)
-mcp.add_middleware(HeaderSwapMiddleware(custom_header=settings.INTERNAL_AUTH_HEADER)) 
+mcp.add_middleware(HeaderSwapMiddleware(custom_header=settings.INTERNAL_AUTH_HEADER))
 
 # Add authentication middleware
 mcp.add_middleware(AuthMiddleware())
@@ -188,7 +190,7 @@ def main():
     logger.info("=" * 80)
     logger.info("Starting MCPGW - MCP Gateway Registry Interaction Server")
     logger.info("=" * 80)
-    logger.info(f"Configuration:")
+    logger.info("Configuration:")
     logger.info(f"  Port: {settings.MCP_SERVER_LISTEN_PORT}")
     logger.info(f"  Transport: {settings.MCP_TRANSPORT}")
     logger.info(f"  Registry URL: {settings.REGISTRY_URL}")

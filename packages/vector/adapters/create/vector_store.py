@@ -34,6 +34,6 @@ def create_weaviate_adapter(config: BackendConfig, embedding) -> VectorStoreAdap
     except ImportError as e:
         raise DependencyMissingError(
             "langchain_weaviate",
-            f"Required database package 'langchain_weaviate' is not installed. "
-            f"Please install it with: pip install langchain_weaviate"
+            "Required database package 'langchain_weaviate' is not installed. "
+            "Please install it with: pip install langchain_weaviate"
         ) from e

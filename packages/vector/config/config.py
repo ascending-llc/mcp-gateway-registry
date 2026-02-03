@@ -1,7 +1,9 @@
-from typing import Dict, Type, Optional
+
 from pydantic import BaseModel, Field
-from ..enum.enums import VectorStoreType, EmbeddingProvider
+
 from packages.core.config import settings
+
+from ..enum.enums import EmbeddingProvider, VectorStoreType
 
 
 class VectorStoreConfig(BaseModel):
@@ -25,14 +27,14 @@ class EmbeddingModelConfig(BaseModel):
 
 
 # Registry for configuration classes
-_VECTOR_STORE_REGISTRY: Dict[str, Type[VectorStoreConfig]] = {}
-_EMBEDDING_MODEL_REGISTRY: Dict[str, Type[EmbeddingModelConfig]] = {}
+_VECTOR_STORE_REGISTRY: dict[str, type[VectorStoreConfig]] = {}
+_EMBEDDING_MODEL_REGISTRY: dict[str, type[EmbeddingModelConfig]] = {}
 
 
 def register_vector_store_config(name: str):
     """Decorator to register vector store config class."""
 
-    def decorator(config_class: Type[VectorStoreConfig]):
+    def decorator(config_class: type[VectorStoreConfig]):
         _VECTOR_STORE_REGISTRY[name] = config_class
         return config_class
 
@@ -42,14 +44,14 @@ def register_vector_store_config(name: str):
 def register_embedding_model_config(name: str):
     """Decorator to register embedding model config class."""
 
-    def decorator(config_class: Type[EmbeddingModelConfig]):
+    def decorator(config_class: type[EmbeddingModelConfig]):
         _EMBEDDING_MODEL_REGISTRY[name] = config_class
         return config_class
 
     return decorator
 
 
-def get_vector_store_config_class(name: str) -> Type[VectorStoreConfig]:
+def get_vector_store_config_class(name: str) -> type[VectorStoreConfig]:
     """Get vector store config class by name."""
     if name not in _VECTOR_STORE_REGISTRY:
         available = list(_VECTOR_STORE_REGISTRY.keys())
@@ -57,7 +59,7 @@ def get_vector_store_config_class(name: str) -> Type[VectorStoreConfig]:
     return _VECTOR_STORE_REGISTRY[name]
 
 
-def get_embedding_model_config_class(name: str) -> Type[EmbeddingModelConfig]:
+def get_embedding_model_config_class(name: str) -> type[EmbeddingModelConfig]:
     """Get embedding model config class by name."""
     if name not in _EMBEDDING_MODEL_REGISTRY:
         available = list(_EMBEDDING_MODEL_REGISTRY.keys())
@@ -80,8 +82,8 @@ class WeaviateConfig(VectorStoreConfig):
     """Weaviate vector store configuration."""
     host: str = Field(description="Weaviate host")
     port: int = Field(description="Weaviate port")
-    api_key: Optional[str] = Field(default=None, description="API key")
-    collection_prefix: Optional[str] = Field(default=None, description="Collection prefix")
+    api_key: str | None = Field(default=None, description="API key")
+    collection_prefix: str | None = Field(default=None, description="Collection prefix")
 
     @classmethod
     def from_env(cls) -> "WeaviateConfig":
@@ -155,8 +157,8 @@ class BedrockEmbeddingConfig(EmbeddingModelConfig):
     """AWS Bedrock embedding model configuration."""
     region: str = Field(description="AWS region")
     model: str = Field(description="Bedrock model ID")
-    access_key_id: Optional[str] = Field(default=None, description="AWS access key ID")
-    secret_access_key: Optional[str] = Field(default=None, description="AWS secret access key")
+    access_key_id: str | None = Field(default=None, description="AWS access key ID")
+    secret_access_key: str | None = Field(default=None, description="AWS secret access key")
 
     @classmethod
     def from_env(cls) -> "BedrockEmbeddingConfig":

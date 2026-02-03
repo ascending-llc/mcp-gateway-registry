@@ -1,10 +1,11 @@
 import logging
 import os
 import re
-import yaml
 from pathlib import Path
-from typing import Any, Dict, Optional
 from threading import Lock
+from typing import Any, Optional
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +17,12 @@ class OAuth2ConfigLoader:
     cached for subsequent access. It supports bash-style default values in
     environment variables (e.g., ${VAR_NAME:-default_value}).
     """
-    
-    _instance: Optional['OAuth2ConfigLoader'] = None
+
+    _instance: Optional["OAuth2ConfigLoader"] = None
     _lock: Lock = Lock()
-    _config: Optional[Dict[str, Any]] = None
-    
-    def __new__(cls) -> 'OAuth2ConfigLoader':
+    _config: dict[str, Any] | None = None
+
+    def __new__(cls) -> "OAuth2ConfigLoader":
         """Create or return the singleton instance."""
         if cls._instance is None:
             with cls._lock:
@@ -29,7 +30,7 @@ class OAuth2ConfigLoader:
                 if cls._instance is None:
                     cls._instance = super(OAuth2ConfigLoader, cls).__new__(cls)
         return cls._instance
-    
+
     def __init__(self):
         """Initialize the configuration loader.
         
@@ -38,12 +39,12 @@ class OAuth2ConfigLoader:
         # Prevent re-initialization
         if self._config is not None:
             return
-            
+
         with self._lock:
             if self._config is None:
                 self._config = self._load_config()
-    
-    def _load_config(self) -> Dict[str, Any]:
+
+    def _load_config(self) -> dict[str, Any]:
         """Load OAuth2 providers configuration from oauth2_providers.yml.
         
         Returns:
@@ -53,20 +54,20 @@ class OAuth2ConfigLoader:
         try:
             oauth2_file = Path(__file__).parent.parent / "oauth2_providers.yml"
             logger.info(f"Loading OAuth2 configuration from: {oauth2_file}")
-            
-            with open(oauth2_file, 'r') as f:
+
+            with open(oauth2_file) as f:
                 config = yaml.safe_load(f)
-            
+
             # Substitute environment variables in configuration
             processed_config = self._substitute_env_vars(config)
-            
+
             # Log loaded providers
-            providers = list(processed_config.get('providers', {}).keys())
+            providers = list(processed_config.get("providers", {}).keys())
             logger.info(f"Successfully loaded OAuth2 configuration with providers: {providers}")
 
             return processed_config
         except FileNotFoundError:
-            logger.error(f"OAuth2 configuration file not found")
+            logger.error("OAuth2 configuration file not found")
             return {"providers": {}, "session": {}, "registry": {}}
         except yaml.YAMLError as e:
             logger.error(f"Failed to parse OAuth2 configuration YAML: {e}")
@@ -74,7 +75,7 @@ class OAuth2ConfigLoader:
         except Exception as e:
             logger.error(f"Failed to load OAuth2 configuration: {e}")
             return {"providers": {}, "session": {}, "registry": {}}
-    
+
     def _substitute_env_vars(self, config: Any) -> Any:
         """Recursively substitute environment variables in configuration.
         
@@ -88,17 +89,17 @@ class OAuth2ConfigLoader:
         """
         if isinstance(config, dict):
             return {k: self._substitute_env_vars(v) for k, v in config.items()}
-        elif isinstance(config, list):
+        if isinstance(config, list):
             return [self._substitute_env_vars(item) for item in config]
-        elif isinstance(config, str) and "${" in config:
+        if isinstance(config, str) and "${" in config:
             # Handle special case for auto-derived Cognito domain
             if "COGNITO_DOMAIN:-auto" in config:
-                cognito_domain = os.environ.get('COGNITO_DOMAIN')
+                cognito_domain = os.environ.get("COGNITO_DOMAIN")
                 if not cognito_domain:
-                    user_pool_id = os.environ.get('COGNITO_USER_POOL_ID', '')
+                    user_pool_id = os.environ.get("COGNITO_USER_POOL_ID", "")
                     cognito_domain = self._auto_derive_cognito_domain(user_pool_id)
-                config = config.replace('${COGNITO_DOMAIN:-auto}', cognito_domain)
-            
+                config = config.replace("${COGNITO_DOMAIN:-auto}", cognito_domain)
+
             # Support bash-style default values: ${VAR_NAME:-default_value}
             def replace_var(match):
                 var_expr = match.group(1)
@@ -106,18 +107,15 @@ class OAuth2ConfigLoader:
                 if ":-" in var_expr:
                     var_name, default_value = var_expr.split(":-", 1)
                     return os.environ.get(var_name.strip(), default_value.strip())
-                else:
-                    var_name = var_expr.strip()
-                    if var_name in os.environ:
-                        return os.environ[var_name]
-                    else:
-                        logger.warning(f"Environment variable not found: {var_name}")
-                        return match.group(0)  # Return original if not found
-            
-            return re.sub(r'\$\{([^}]+)\}', replace_var, config)
-        else:
-            return config
-    
+                var_name = var_expr.strip()
+                if var_name in os.environ:
+                    return os.environ[var_name]
+                logger.warning(f"Environment variable not found: {var_name}")
+                return match.group(0)  # Return original if not found
+
+            return re.sub(r"\$\{([^}]+)\}", replace_var, config)
+        return config
+
     def _auto_derive_cognito_domain(self, user_pool_id: str) -> str:
         """Auto-derive Cognito domain from User Pool ID.
         
@@ -131,14 +129,14 @@ class OAuth2ConfigLoader:
         """
         if not user_pool_id:
             return ""
-        
+
         # Remove underscore and convert to lowercase
-        domain = user_pool_id.replace('_', '').lower()
+        domain = user_pool_id.replace("_", "").lower()
         logger.info(f"Auto-derived Cognito domain '{domain}' from user pool ID '{user_pool_id}'")
         return domain
-    
+
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         """Get the loaded OAuth2 configuration.
         
         Returns:
@@ -150,8 +148,8 @@ class OAuth2ConfigLoader:
                 if self._config is None:
                     self._config = self._load_config()
         return self._config
-    
-    def reload(self) -> Dict[str, Any]:
+
+    def reload(self) -> dict[str, Any]:
         """Force reload the configuration from file.
         
         This method can be used to refresh the configuration without
@@ -164,8 +162,8 @@ class OAuth2ConfigLoader:
             logger.info("Reloading OAuth2 configuration...")
             self._config = self._load_config()
             return self._config
-    
-    def get_provider_config(self, provider_name: str) -> Optional[Dict[str, Any]]:
+
+    def get_provider_config(self, provider_name: str) -> dict[str, Any] | None:
         """Get configuration for a specific provider.
         
         Args:
@@ -174,8 +172,8 @@ class OAuth2ConfigLoader:
         Returns:
             Provider configuration dictionary or None if not found
         """
-        return self.config.get('providers', {}).get(provider_name)
-    
+        return self.config.get("providers", {}).get(provider_name)
+
     def get_enabled_providers(self) -> list:
         """Get list of all enabled provider names.
         
@@ -183,17 +181,17 @@ class OAuth2ConfigLoader:
             List of enabled provider names
         """
         enabled = []
-        for provider_name, config in self.config.get('providers', {}).items():
-            if config.get('enabled', False):
+        for provider_name, config in self.config.get("providers", {}).items():
+            if config.get("enabled", False):
                 enabled.append(provider_name)
         return enabled
 
 
 # Global singleton instance accessor
-_config_loader: Optional[OAuth2ConfigLoader] = None
+_config_loader: OAuth2ConfigLoader | None = None
 
 
-def get_oauth2_config(reload: bool = False) -> Dict[str, Any]:
+def get_oauth2_config(reload: bool = False) -> dict[str, Any]:
     """Get the OAuth2 configuration (singleton access).
     
     This is a convenience function that provides access to the singleton
@@ -210,17 +208,17 @@ def get_oauth2_config(reload: bool = False) -> Dict[str, Any]:
         >>> keycloak_config = config.get('providers', {}).get('keycloak')
     """
     global _config_loader
-    
+
     if _config_loader is None:
         _config_loader = OAuth2ConfigLoader()
-    
+
     if reload:
         return _config_loader.reload()
-    
+
     return _config_loader.config
 
 
-def get_provider_config(provider_name: str) -> Optional[Dict[str, Any]]:
+def get_provider_config(provider_name: str) -> dict[str, Any] | None:
     """Get configuration for a specific provider.
     
     Args:
@@ -235,10 +233,10 @@ def get_provider_config(provider_name: str) -> Optional[Dict[str, Any]]:
         ...     tenant_id = entra_config.get('tenant_id')
     """
     global _config_loader
-    
+
     if _config_loader is None:
         _config_loader = OAuth2ConfigLoader()
-    
+
     return _config_loader.get_provider_config(provider_name)
 
 
@@ -253,9 +251,9 @@ def get_enabled_providers() -> list:
         >>> print(f"Enabled providers: {enabled}")
     """
     global _config_loader
-    
+
     if _config_loader is None:
         _config_loader = OAuth2ConfigLoader()
-    
+
     return _config_loader.get_enabled_providers()
 

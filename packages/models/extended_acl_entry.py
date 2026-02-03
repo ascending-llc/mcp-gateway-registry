@@ -5,11 +5,12 @@ This module extends the auto-generated IAclEntry with a more flexible principalI
 The base model (_generated/aclEntry.py) should NOT be modified as it's auto-generated.
 """
 
-from typing import Optional, Union
+
 from beanie import PydanticObjectId
 from pydantic import Field
-from packages.models._generated.aclEntry import IAclEntry
 from pymongo import IndexModel
+
+from packages.models._generated.aclEntry import IAclEntry
 
 
 class ExtendedAclEntry(IAclEntry):
@@ -18,13 +19,13 @@ class ExtendedAclEntry(IAclEntry):
 	principalId is ObjectId, str, or None
 	roleId, inheritedFrom,grantedBy are ObjectIds and cannot be subject to string pattern constraints
 	"""
-	principalId: Optional[Union[PydanticObjectId, str]] = Field(default=None)
-	roleId: Optional[PydanticObjectId] = Field(default=None)  # references IAccessRole collection
-	inheritedFrom: Optional[PydanticObjectId] = Field(default=None)
-	grantedBy: Optional[PydanticObjectId] = Field(default=None)  # references IUser collection
+	principalId: PydanticObjectId | str | None = Field(default=None)
+	roleId: PydanticObjectId | None = Field(default=None)  # references IAccessRole collection
+	inheritedFrom: PydanticObjectId | None = Field(default=None)
+	grantedBy: PydanticObjectId | None = Field(default=None)  # references IUser collection
 
 	class Settings:
-		name = "aclentries" 
+		name = "aclentries"
 		keep_nulls = False
 		use_state_management = True
 

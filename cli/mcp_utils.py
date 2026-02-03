@@ -21,17 +21,16 @@ import json
 import logging
 import os
 import time
-from pathlib import Path
-from typing import Dict, Any, Optional, Union
-import urllib.request
-import urllib.parse
 import urllib.error
-
+import urllib.parse
+import urllib.request
+from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def _load_oauth_token_from_file(token_file_path: Union[str, Path]) -> Optional[str]:
+def _load_oauth_token_from_file(token_file_path: str | Path) -> str | None:
     """
     Load OAuth access token from JSON file.
 
@@ -46,19 +45,19 @@ def _load_oauth_token_from_file(token_file_path: Union[str, Path]) -> Optional[s
         if not token_path.exists():
             return None
 
-        with open(token_path, 'r') as f:
+        with open(token_path) as f:
             token_data = json.load(f)
 
         # Support both flat and nested token structures
         # Nested: {"tokens": {"access_token": "...", "expires_at": ...}}
         # Flat: {"access_token": "...", "expires_at": ...}
-        if 'tokens' in token_data:
-            tokens = token_data['tokens']
-            access_token = tokens.get('access_token')
-            expires_at = tokens.get('expires_at', 0)
+        if "tokens" in token_data:
+            tokens = token_data["tokens"]
+            access_token = tokens.get("access_token")
+            expires_at = tokens.get("expires_at", 0)
         else:
-            access_token = token_data.get('access_token')
-            expires_at = token_data.get('expires_at', 0)
+            access_token = token_data.get("access_token")
+            expires_at = token_data.get("expires_at", 0)
 
         # Check if token is expired
         if expires_at and time.time() >= expires_at:
@@ -73,9 +72,9 @@ def _load_oauth_token_from_file(token_file_path: Union[str, Path]) -> Optional[s
 
 
 def _get_auth_token(
-    explicit_token: Optional[str] = None,
+    explicit_token: str | None = None,
     env_var_name: str = "MCP_AUTH_TOKEN"
-) -> Optional[str]:
+) -> str | None:
     """
     Get authentication token from multiple sources in priority order.
 
@@ -116,8 +115,8 @@ class MCPClient:
     def __init__(
         self,
         gateway_url: str,
-        access_token: Optional[str] = None,
-        backend_token: Optional[str] = None,
+        access_token: str | None = None,
+        backend_token: str | None = None,
         timeout: int = 30
     ):
         """
@@ -129,7 +128,7 @@ class MCPClient:
             backend_token: Optional separate token for backend server (if different from gateway token)
             timeout: Request timeout in seconds
         """
-        self.gateway_url = gateway_url.rstrip('/')
+        self.gateway_url = gateway_url.rstrip("/")
         # Backend token for Authorization header (forwarded to backend servers)
         self.backend_token = access_token
         # Gateway token for X-Authorization header (gateway auth) - use provided token or ingress token
@@ -138,7 +137,7 @@ class MCPClient:
         # Keep access_token for backwards compatibility
         self.access_token = self.backend_token or self.gateway_token
         self.timeout = timeout
-        self.session_id: Optional[str] = None
+        self.session_id: str | None = None
         self._request_id = 0
 
     def _get_next_request_id(self) -> int:
@@ -146,28 +145,28 @@ class MCPClient:
         self._request_id += 1
         return self._request_id
 
-    def _build_headers(self) -> Dict[str, str]:
+    def _build_headers(self) -> dict[str, str]:
         """Build HTTP headers for requests."""
         headers = {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json, text/event-stream',
-            'User-Agent': 'mcp-utils-client/1.0.0'
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+            "User-Agent": "mcp-utils-client/1.0.0"
         }
 
         # X-Authorization: Gateway authentication (uses ingress token)
         if self.gateway_token:
-            headers['X-Authorization'] = f'Bearer {self.gateway_token}'
+            headers["X-Authorization"] = f"Bearer {self.gateway_token}"
 
         # Authorization: Backend server authentication (uses token from --token-file)
         if self.backend_token:
-            headers['Authorization'] = f'Bearer {self.backend_token}'
+            headers["Authorization"] = f"Bearer {self.backend_token}"
 
         if self.session_id:
-            headers['mcp-session-id'] = self.session_id
+            headers["mcp-session-id"] = self.session_id
 
         return headers
 
-    def _make_request(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _make_request(self, payload: dict[str, Any]) -> dict[str, Any]:
         """
         Make HTTP request to MCP gateway.
 
@@ -181,39 +180,38 @@ class MCPClient:
             Exception: If request fails or response is invalid
         """
         headers = self._build_headers()
-        data = json.dumps(payload).encode('utf-8')
+        data = json.dumps(payload).encode("utf-8")
 
         try:
             request = urllib.request.Request(
                 self.gateway_url,
                 data=data,
                 headers=headers,
-                method='POST'
+                method="POST"
             )
 
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                response_data = response.read().decode('utf-8')
-                content_type = response.headers.get('content-type', '')
+                response_data = response.read().decode("utf-8")
+                content_type = response.headers.get("content-type", "")
 
                 # Extract session ID from response headers if available
-                session_id = response.headers.get('mcp-session-id')
+                session_id = response.headers.get("mcp-session-id")
                 if session_id and not self.session_id:
                     self.session_id = session_id
                     logger.debug(f"Session ID established: {session_id}")
 
                 # Handle Server-Sent Events (SSE) response
-                if 'text/event-stream' in content_type:
+                if "text/event-stream" in content_type:
                     return self._parse_sse_response(response_data)
-                else:
-                    # Handle regular JSON response
-                    return json.loads(response_data)
+                # Handle regular JSON response
+                return json.loads(response_data)
 
         except urllib.error.HTTPError as e:
             error_msg = f"HTTP {e.code}: {e.reason}"
             try:
-                error_response = e.read().decode('utf-8')
+                error_response = e.read().decode("utf-8")
                 error_data = json.loads(error_response)
-                if 'error' in error_data:
+                if "error" in error_data:
                     error_msg = f"HTTP {e.code}: {error_data['error']}"
             except (json.JSONDecodeError, UnicodeDecodeError):
                 pass
@@ -225,7 +223,7 @@ class MCPClient:
         except json.JSONDecodeError as e:
             raise Exception(f"Invalid JSON response: {e}")
 
-    def _parse_sse_response(self, sse_data: str) -> Dict[str, Any]:
+    def _parse_sse_response(self, sse_data: str) -> dict[str, Any]:
         """
         Parse Server-Sent Events response format.
 
@@ -235,9 +233,9 @@ class MCPClient:
         Returns:
             Parsed JSON data from SSE stream
         """
-        lines = sse_data.strip().split('\n')
+        lines = sse_data.strip().split("\n")
         for line in lines:
-            if line.startswith('data: '):
+            if line.startswith("data: "):
                 data_json = line[6:]  # Remove 'data: ' prefix
                 try:
                     return json.loads(data_json)
@@ -245,7 +243,7 @@ class MCPClient:
                     continue
         raise Exception("No valid JSON found in SSE response")
 
-    def initialize(self) -> Dict[str, Any]:
+    def initialize(self) -> dict[str, Any]:
         """
         Initialize MCP session with the gateway.
 
@@ -285,7 +283,7 @@ class MCPClient:
             # This is expected for some MCP servers that don't require the notification
             logger.debug(f"Initialized notification not sent (this is normal): {e}")
 
-    def ping(self) -> Dict[str, Any]:
+    def ping(self) -> dict[str, Any]:
         """
         Test connectivity with ping.
 
@@ -299,7 +297,7 @@ class MCPClient:
         }
         return self._make_request(payload)
 
-    def list_tools(self) -> Dict[str, Any]:
+    def list_tools(self) -> dict[str, Any]:
         """
         List available tools.
 
@@ -316,8 +314,8 @@ class MCPClient:
     def call_tool(
         self,
         tool_name: str,
-        arguments: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Call a specific tool.
 
@@ -355,8 +353,8 @@ class MCPClient:
     def call_mcpgw_tool(
         self,
         tool_name: str,
-        params: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        params: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Call a tool using mcpgw-specific parameter format.
 
@@ -410,7 +408,7 @@ class MCPSession:
 
 def create_mcp_client(
     gateway_url: str,
-    access_token: Optional[str] = None,
+    access_token: str | None = None,
     timeout: int = 30
 ) -> MCPClient:
     """
@@ -429,7 +427,7 @@ def create_mcp_client(
 
 def create_mcp_session(
     gateway_url: str,
-    access_token: Optional[str] = None,
+    access_token: str | None = None,
     timeout: int = 30
 ) -> MCPSession:
     """

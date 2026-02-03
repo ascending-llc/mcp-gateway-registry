@@ -7,13 +7,12 @@ MCP client implementation using only standard Python libraries. This approach
 avoids dependency issues with the fastmcp library in some environments.
 """
 
+import argparse
 import base64
 import json
 import os
 import sys
-import argparse
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 # Import shared MCP utility
 from mcp_utils import create_mcp_session
@@ -33,7 +32,7 @@ def _check_token_expiration(
     """
     try:
         # Decode JWT payload (without verification, just to check expiry)
-        parts = access_token.split('.')
+        parts = access_token.split(".")
         if len(parts) != 3:
             print("Warning: Invalid JWT format, cannot check expiration")
             return
@@ -43,19 +42,19 @@ def _check_token_expiration(
         # Add padding if needed
         padding = len(payload) % 4
         if padding:
-            payload += '=' * (4 - padding)
+            payload += "=" * (4 - padding)
 
         decoded = base64.urlsafe_b64decode(payload)
         token_data = json.loads(decoded)
 
         # Check expiration
-        exp = token_data.get('exp')
+        exp = token_data.get("exp")
         if not exp:
             print("Warning: Token does not have expiration field")
             return
 
-        exp_dt = datetime.fromtimestamp(exp, tz=timezone.utc)
-        now = datetime.now(timezone.utc)
+        exp_dt = datetime.fromtimestamp(exp, tz=UTC)
+        now = datetime.now(UTC)
         time_until_expiry = exp_dt - now
 
         if time_until_expiry.total_seconds() < 0:
@@ -91,7 +90,7 @@ def _check_token_expiration(
         print(f"Warning: Could not check token expiration: {e}")
 
 
-def _load_token_from_file(file_path: str) -> Optional[str]:
+def _load_token_from_file(file_path: str) -> str | None:
     """Load access token from a file
 
     Supports two formats:
@@ -99,7 +98,7 @@ def _load_token_from_file(file_path: str) -> Optional[str]:
     2. JSON object with 'access_token' field (from agent token generation)
     """
     try:
-        with open(file_path, 'r') as f:
+        with open(file_path) as f:
             content = f.read().strip()
             if not content:
                 return None
@@ -107,8 +106,8 @@ def _load_token_from_file(file_path: str) -> Optional[str]:
             # Try to parse as JSON first (for agent token files)
             try:
                 token_data = json.loads(content)
-                if isinstance(token_data, dict) and 'access_token' in token_data:
-                    return token_data['access_token']
+                if isinstance(token_data, dict) and "access_token" in token_data:
+                    return token_data["access_token"]
             except json.JSONDecodeError:
                 # Not JSON, treat as plain token string
                 pass
@@ -122,12 +121,12 @@ def _load_token_from_file(file_path: str) -> Optional[str]:
     return None
 
 
-def _load_m2m_credentials() -> Optional[str]:
+def _load_m2m_credentials() -> str | None:
     """Load M2M credentials and get access token from Keycloak"""
-    client_id = os.getenv('CLIENT_ID')
-    client_secret = os.getenv('CLIENT_SECRET')
-    keycloak_url = os.getenv('KEYCLOAK_URL')
-    keycloak_realm = os.getenv('KEYCLOAK_REALM')
+    client_id = os.getenv("CLIENT_ID")
+    client_secret = os.getenv("CLIENT_SECRET")
+    keycloak_url = os.getenv("KEYCLOAK_URL")
+    keycloak_realm = os.getenv("KEYCLOAK_REALM")
 
     if not all([client_id, client_secret, keycloak_url, keycloak_realm]):
         return None
@@ -143,17 +142,17 @@ def _load_m2m_credentials() -> Optional[str]:
     token_url = f"{keycloak_url}/realms/{keycloak_realm}/protocol/openid-connect/token"
 
     data = {
-        'grant_type': 'client_credentials',
-        'client_id': client_id,
-        'client_secret': client_secret,
-        'scope': 'openid'
+        "grant_type": "client_credentials",
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "scope": "openid"
     }
 
     try:
         response = requests.post(token_url, data=data)
         response.raise_for_status()
         token_data = response.json()
-        return token_data.get('access_token')
+        return token_data.get("access_token")
     except Exception as e:
         print(f"Failed to get M2M token: {e}")
         return None
@@ -161,7 +160,7 @@ def _load_m2m_credentials() -> Optional[str]:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Simple MCP Client - Communicate with MCP Gateway using JSON-RPC',
+        description="Simple MCP Client - Communicate with MCP Gateway using JSON-RPC",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -189,14 +188,14 @@ Authentication (priority order):
   3. Environment variables: CLIENT_ID, CLIENT_SECRET, KEYCLOAK_URL, KEYCLOAK_REALM
   4. Ingress token: Automatically loaded from ~/.mcp/ingress_token if available
         """)
-    parser.add_argument('--url', default='http://localhost/mcpgw/mcp',
-                       help='Gateway URL (default: %(default)s)')
-    parser.add_argument('--token-file',
-                       help='Path to file containing access token (e.g., .cognito_access_token)')
-    parser.add_argument('command', choices=['ping', 'list', 'call', 'init'],
-                       help='Command to execute')
-    parser.add_argument('--tool', help='Tool name for call command')
-    parser.add_argument('--args', help='Tool arguments as JSON string')
+    parser.add_argument("--url", default="http://localhost/mcpgw/mcp",
+                       help="Gateway URL (default: %(default)s)")
+    parser.add_argument("--token-file",
+                       help="Path to file containing access token (e.g., .cognito_access_token)")
+    parser.add_argument("command", choices=["ping", "list", "call", "init"],
+                       help="Command to execute")
+    parser.add_argument("--tool", help="Tool name for call command")
+    parser.add_argument("--args", help="Tool arguments as JSON string")
 
     args = parser.parse_args()
 
@@ -209,7 +208,7 @@ Authentication (priority order):
 
     # Fall back to OAUTH_TOKEN environment variable if no token file or file loading failed
     if not access_token:
-        access_token = os.getenv('OAUTH_TOKEN')
+        access_token = os.getenv("OAUTH_TOKEN")
 
     # Fall back to M2M credentials if no OAUTH_TOKEN
     if not access_token:
@@ -226,7 +225,7 @@ Authentication (priority order):
             if client.access_token:
                 if args.token_file:
                     print(f"✓ Token file authentication successful ({args.token_file})")
-                elif os.getenv('OAUTH_TOKEN'):
+                elif os.getenv("OAUTH_TOKEN"):
                     print("✓ OAuth token authentication successful (OAUTH_TOKEN env var)")
                 elif access_token:
                     print("✓ M2M authentication successful")
@@ -235,13 +234,13 @@ Authentication (priority order):
             else:
                 print("⚠ No authentication available")
             # Execute command
-            if args.command == 'init':
+            if args.command == "init":
                 result = {"status": "initialized", "session_id": client.session_id}
-            elif args.command == 'ping':
+            elif args.command == "ping":
                 result = client.ping()
-            elif args.command == 'list':
+            elif args.command == "list":
                 result = client.list_tools()
-            elif args.command == 'call':
+            elif args.command == "call":
                 if not args.tool:
                     print("Error: --tool is required for call command")
                     sys.exit(1)
@@ -265,5 +264,5 @@ Authentication (priority order):
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

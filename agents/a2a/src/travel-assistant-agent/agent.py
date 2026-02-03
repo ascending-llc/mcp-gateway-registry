@@ -2,20 +2,15 @@
 
 import logging
 from contextlib import asynccontextmanager
-from typing import (
-    List,
-    Optional,
-)
 
 import uvicorn
-from fastapi import FastAPI
-from strands import Agent
-from strands.multiagent.a2a import A2AServer
-
 from dependencies import (
     get_db_manager,
     get_env,
 )
+from fastapi import FastAPI
+from strands import Agent
+from strands.multiagent.a2a import A2AServer
 from tools import (
     TRAVEL_ASSISTANT_TOOLS,
     check_prices,
@@ -107,7 +102,7 @@ def api_check_prices(
 @app.get("/api/recommendations")
 def api_recommendations(
     max_price: float,
-    preferred_airlines: Optional[str] = None,
+    preferred_airlines: str | None = None,
 ):
     """Get recommendations API endpoint."""
     logger.info(f"Getting recommendations: max_price={max_price}, preferred_airlines={preferred_airlines}")
@@ -122,8 +117,8 @@ def api_create_trip_plan(
     departure_city: str,
     arrival_city: str,
     departure_date: str,
-    return_date: Optional[str] = None,
-    budget: Optional[float] = None,
+    return_date: str | None = None,
+    budget: float | None = None,
 ):
     """Create trip plan API endpoint."""
     logger.info(f"Creating trip plan: {departure_city} to {arrival_city}, dates: {departure_date} - {return_date}")

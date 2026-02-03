@@ -21,12 +21,11 @@ import argparse
 import base64
 import json
 import logging
-import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Any
 from urllib.parse import quote
 
 import requests
@@ -37,7 +36,6 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from registry.constants import REGISTRY_CONSTANTS
-
 
 logging.basicConfig(
     level=logging.INFO,
@@ -73,7 +71,7 @@ def _check_token_expiration(
         access_token: JWT access token to check
     """
     try:
-        parts = access_token.split('.')
+        parts = access_token.split(".")
         if len(parts) != 3:
             logger.warning("Invalid JWT format, cannot check expiration")
             return
@@ -81,18 +79,18 @@ def _check_token_expiration(
         payload = parts[1]
         padding = len(payload) % 4
         if padding:
-            payload += '=' * (4 - padding)
+            payload += "=" * (4 - padding)
 
         decoded = base64.urlsafe_b64decode(payload)
         token_data = json.loads(decoded)
 
-        exp = token_data.get('exp')
+        exp = token_data.get("exp")
         if not exp:
             logger.warning("Token does not have expiration field")
             return
 
-        exp_dt = datetime.fromtimestamp(exp, tz=timezone.utc)
-        now = datetime.now(timezone.utc)
+        exp_dt = datetime.fromtimestamp(exp, tz=UTC)
+        now = datetime.now(UTC)
         time_until_expiry = exp_dt - now
 
         if time_until_expiry.total_seconds() < 0:
@@ -120,7 +118,7 @@ def _check_token_expiration(
 
 def _load_token_file(
     token_file_path: Path
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Load token data from JSON file.
 
@@ -131,11 +129,11 @@ def _load_token_file(
         Token data dictionary
     """
     try:
-        with open(token_file_path, 'r') as f:
+        with open(token_file_path) as f:
             token_data = json.load(f)
         logger.info(f"Loaded token file: {token_file_path}")
         return token_data
-    except (json.JSONDecodeError, IOError) as e:
+    except (OSError, json.JSONDecodeError) as e:
         logger.error(f"Failed to load token file: {e}")
         sys.exit(1)
 
@@ -145,8 +143,8 @@ def _make_api_request(
     access_token: str,
     base_url: str,
     method: str = "GET",
-    params: Optional[Dict[str, Any]] = None
-) -> Optional[Dict[str, Any]]:
+    params: dict[str, Any] | None = None
+) -> dict[str, Any] | None:
     """
     Make an API request to the A2A Agents API.
 
@@ -185,7 +183,7 @@ def _make_api_request(
 
     except requests.exceptions.RequestException as e:
         logger.debug(f"API request failed: {e}")
-        if hasattr(e, 'response') and e.response is not None:
+        if hasattr(e, "response") and e.response is not None:
             logger.debug(f"Response status: {e.response.status_code}")
             logger.debug(f"Response body: {e.response.text}")
         return None
@@ -315,7 +313,7 @@ def _test_list_agents_paginated(
         next_cursor = response.get("metadata", {}).get("nextCursor")
         result.message = f"Page 1: {len(agents)} agents"
         if next_cursor:
-            result.message += f", nextCursor available"
+            result.message += ", nextCursor available"
     else:
         result.error = "Failed to list agents"
 
@@ -341,7 +339,7 @@ def _test_get_agent(
     result = TestResult(f"get-agent ({agent_name})")
     start_time = time.time()
 
-    encoded_name = quote(agent_name, safe='')
+    encoded_name = quote(agent_name, safe="")
     endpoint = f"/{AGENTS_API_VERSION}/agents/{encoded_name}"
     response = _make_api_request(
         endpoint=endpoint,
@@ -385,7 +383,7 @@ def _test_get_agent_versions(
     result = TestResult(f"get-agent-versions ({agent_name})")
     start_time = time.time()
 
-    encoded_name = quote(agent_name, safe='')
+    encoded_name = quote(agent_name, safe="")
     endpoint = f"/{AGENTS_API_VERSION}/agents/{encoded_name}/versions"
     response = _make_api_request(
         endpoint=endpoint,
@@ -552,9 +550,9 @@ def _test_error_missing_agent(
 def _run_all_tests(
     access_token: str,
     base_url: str,
-    agent_name: Optional[str] = None,
+    agent_name: str | None = None,
     verbose: bool = False
-) -> List[TestResult]:
+) -> list[TestResult]:
     """
     Run all API tests.
 
@@ -608,7 +606,7 @@ def _run_all_tests(
 
 
 def _print_summary(
-    results: List[TestResult]
+    results: list[TestResult]
 ) -> None:
     """
     Print test summary report.
@@ -707,9 +705,9 @@ def _execute_test(
     test_name: str,
     access_token: str,
     base_url: str,
-    agent_name: Optional[str],
+    agent_name: str | None,
     verbose: bool
-) -> List[TestResult]:
+) -> list[TestResult]:
     """
     Execute a single test based on test name.
 

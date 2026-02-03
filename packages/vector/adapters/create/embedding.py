@@ -2,7 +2,7 @@ import importlib
 
 from ... import BackendConfig, DependencyMissingError
 from ...adapters.factory import register_embedding_creator
-from ...config import OpenAIEmbeddingConfig, BedrockEmbeddingConfig
+from ...config import BedrockEmbeddingConfig, OpenAIEmbeddingConfig
 from ...enum.enums import EmbeddingProvider
 
 
@@ -11,7 +11,7 @@ def create_openai_embedding(config: BackendConfig):
     """Create OpenAI embedding model."""
     try:
         module = importlib.import_module("langchain_openai")
-        embedding_class = getattr(module, "OpenAIEmbeddings")
+        embedding_class = module.OpenAIEmbeddings
 
         embed_config = config.embedding_model_config
         if not isinstance(embed_config, OpenAIEmbeddingConfig):
@@ -25,8 +25,8 @@ def create_openai_embedding(config: BackendConfig):
     except ImportError as e:
         raise DependencyMissingError(
             "langchain_openai",
-            f"Required embedding package 'langchain_openai' is not installed. "
-            f"Please install it with: pip install langchain_openai"
+            "Required embedding package 'langchain_openai' is not installed. "
+            "Please install it with: pip install langchain_openai"
         ) from e
 
 
@@ -35,7 +35,7 @@ def create_bedrock_embedding(config: BackendConfig):
     """Create AWS Bedrock embedding model."""
     try:
         module = importlib.import_module("langchain_aws")
-        embedding_class = getattr(module, "BedrockEmbeddings")
+        embedding_class = module.BedrockEmbeddings
 
         embed_config = config.embedding_model_config
         if not isinstance(embed_config, BedrockEmbeddingConfig):
@@ -49,12 +49,12 @@ def create_bedrock_embedding(config: BackendConfig):
         if embed_config.access_key_id and embed_config.secret_access_key:
             kwargs["aws_access_key_id"] = embed_config.access_key_id
             kwargs["aws_secret_access_key"] = embed_config.secret_access_key
-        
+
         return embedding_class(**kwargs)
 
     except ImportError as e:
         raise DependencyMissingError(
             "langchain_aws",
-            f"Required embedding package 'langchain_aws' is not installed. "
-            f"Please install it with: pip install langchain_aws"
+            "Required embedding package 'langchain_aws' is not installed. "
+            "Please install it with: pip install langchain_aws"
         ) from e

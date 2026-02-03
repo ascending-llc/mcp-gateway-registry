@@ -1,7 +1,6 @@
-from typing import List, Union
 
 
-def parse_scope(scope: Union[str, List[str], None], default: List[str] = None) -> List[str]:
+def parse_scope(scope: str | list[str] | None, default: list[str] = None) -> list[str]:
     """
     Parse OAuth scope field into a list of scopes.
     
@@ -19,15 +18,14 @@ def parse_scope(scope: Union[str, List[str], None], default: List[str] = None) -
         return scope
 
     if isinstance(scope, str):
-        if ',' in scope:
-            return [s.strip() for s in scope.split(',') if s.strip()]
-        else:
-            return [s.strip() for s in scope.split() if s.strip()]
+        if "," in scope:
+            return [s.strip() for s in scope.split(",") if s.strip()]
+        return [s.strip() for s in scope.split() if s.strip()]
 
     return []
 
 
-def scope_to_string(scope: Union[str, List[str], None]) -> str:
+def scope_to_string(scope: str | list[str] | None) -> str:
     """
     Convert scope to a space-separated string.
     

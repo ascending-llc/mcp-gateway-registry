@@ -6,10 +6,12 @@ MCP Gateway Registry API Tools
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Callable, Tuple
+from collections.abc import Callable
+from typing import Any
+
+from core.registry import call_registry_api
 from fastmcp import Context
 from pydantic import Field
-from core.registry import call_registry_api
 
 logger = logging.getLogger(__name__)
 
@@ -17,10 +19,10 @@ logger = logging.getLogger(__name__)
 async def execute_tool_impl(
     server_path: str,
     tool_name: str,
-    arguments: Dict[str, Any],
-    server_id: Optional[str] = None,
+    arguments: dict[str, Any],
+    server_id: str | None = None,
     ctx: Context = None
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Execute a specific tool (implementation layer).
     
@@ -39,9 +41,9 @@ async def execute_tool_impl(
         by the interface layer (execute_tool). This function just sends the
         request to the registry API.
     """
-    logger.info(f"🔧 Executing tool: {tool_name} on {server_path}" + 
+    logger.info(f"🔧 Executing tool: {tool_name} on {server_path}" +
                 (f" (server_id: {server_id})" if server_id else ""))
-    
+
     try:
         # Build request payload
         payload = {
@@ -51,7 +53,7 @@ async def execute_tool_impl(
         }
         if server_id:
             payload["server_id"] = server_id
-        
+
         # Use centralized registry API call with automatic auth header extraction
         result = await call_registry_api(
             method="POST",
@@ -59,19 +61,19 @@ async def execute_tool_impl(
             ctx=ctx,
             json=payload
         )
-        
+
         logger.info(f"✅ Tool execution successful: {tool_name}")
         return result
-            
+
     except Exception as e:
         logger.error(f"❌ Tool execution failed: {e}")
-        raise Exception(f"Tool execution failed: {str(e)}")
+        raise Exception(f"Tool execution failed: {e!s}")
 
 async def read_resource_impl(
     server_id: str,
     resource_uri: str,
     ctx: Context = None
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Read/access a resource from an MCP server.
     
@@ -90,14 +92,14 @@ async def read_resource_impl(
         )
     """
     logger.info(f"📄 Reading resource: {resource_uri} from server {server_id}")
-    
+
     try:
         # Build request payload
         payload = {
             "server_id": server_id,
             "resource_uri": resource_uri
         }
-        
+
         # Use centralized registry API call with automatic auth header extraction
         result = await call_registry_api(
             method="POST",
@@ -105,21 +107,21 @@ async def read_resource_impl(
             ctx=ctx,
             json=payload
         )
-        
+
         logger.info(f"✅ Resource read successful: {resource_uri}")
         return result
-            
+
     except Exception as e:
         logger.error(f"❌ Resource read failed: {e}")
-        raise Exception(f"Resource read failed: {str(e)}")
+        raise Exception(f"Resource read failed: {e!s}")
 
 
 async def execute_prompt_impl(
     server_id: str,
     prompt_name: str,
-    arguments: Optional[Dict[str, Any]] = None,
+    arguments: dict[str, Any] | None = None,
     ctx: Context = None
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Execute a prompt from an MCP server.
     
@@ -143,7 +145,7 @@ async def execute_prompt_impl(
         )
     """
     logger.info(f"💬 Executing prompt: {prompt_name} on server {server_id}")
-    
+
     try:
         # Build request payload
         payload = {
@@ -151,7 +153,7 @@ async def execute_prompt_impl(
             "prompt_name": prompt_name,
             "arguments": arguments or {}
         }
-        
+
         # Use centralized registry API call with automatic auth header extraction
         result = await call_registry_api(
             method="POST",
@@ -159,36 +161,36 @@ async def execute_prompt_impl(
             ctx=ctx,
             json=payload
         )
-        
+
         logger.info(f"✅ Prompt execution successful: {prompt_name}")
         return result
-            
+
     except Exception as e:
         logger.error(f"❌ Prompt execution failed: {e}")
-        raise Exception(f"Prompt execution failed: {str(e)}")
+        raise Exception(f"Prompt execution failed: {e!s}")
 
 
 # ============================================================================
 # Tool Factory Functions for Registration
 # ============================================================================
 
-def get_tools() -> List[Tuple[str, Callable]]:
+def get_tools() -> list[tuple[str, Callable]]:
     """
     Export tools for registration in server.py.
     
     Returns:
         List of (tool_name, tool_function) tuples ready for registration
     """
-    
+
     # Define tool wrapper function with proper signature and decorators
     async def execute_tool(
         server_path: str = Field(..., description="Server path from discovery (e.g., '/tavilysearch' for web search)"),
         tool_name: str = Field(..., description="Tool name from discovery - can be scoped name (e.g., 'tavily_search_mcp_tavily_search')"),
-        arguments: Dict[str, Any] = Field(..., description="Tool parameters from input_schema"),
+        arguments: dict[str, Any] = Field(..., description="Tool parameters from input_schema"),
         server_id: str = Field(..., description="Server ID from discovery"),
-        mcp_tool_name: Optional[str] = Field(None, description="Original MCP tool name (e.g., 'tavily_search') - extract from toolFunction.mcpToolName if available"),
-        ctx: Optional[Context] = None
-    ) -> Dict[str, Any]:
+        mcp_tool_name: str | None = Field(None, description="Original MCP tool name (e.g., 'tavily_search') - extract from toolFunction.mcpToolName if available"),
+        ctx: Context | None = None
+    ) -> dict[str, Any]:
         """
         🚀 AUTO-USE: Execute any discovered tool to get real-time data.
 
@@ -227,18 +229,18 @@ def get_tools() -> List[Tuple[str, Callable]]:
         """
         # Resolve tool name at interface layer: use mcpToolName if provided, otherwise use tool_name
         resolved_tool_name = mcp_tool_name or tool_name
-        
+
         # Log the resolution for debugging
         if mcp_tool_name and mcp_tool_name != tool_name:
             logger.debug(f"Resolved tool name: '{resolved_tool_name}' (from mcpToolName, scoped was '{tool_name}')")
-        
+
         return await execute_tool_impl(server_path, resolved_tool_name, arguments, server_id, ctx)
-    
+
     async def read_resource(
         server_id: str = Field(..., description="Server ID from discover_servers (e.g., '6972e222755441652c23090f')"),
         resource_uri: str = Field(..., description="Resource URI to read (e.g., 'tavily://search-results/AI', 'file:///path/to/data')"),
-        ctx: Optional[Context] = None
-    ) -> Dict[str, Any]:
+        ctx: Context | None = None
+    ) -> dict[str, Any]:
         """
         📄 Read/access resources from any MCP server.
 
@@ -274,13 +276,13 @@ def get_tools() -> List[Tuple[str, Callable]]:
         Returns: Resource contents (format varies: text, JSON, binary, etc.)
         """
         return await read_resource_impl(server_id, resource_uri, ctx)
-    
+
     async def execute_prompt(
         server_id: str = Field(..., description="Server ID from discover_servers"),
         prompt_name: str = Field(..., description="Name of the prompt to execute (e.g., 'research_assistant', 'fact_checker')"),
-        arguments: Optional[Dict[str, Any]] = Field(None, description="Prompt arguments as key-value pairs"),
-        ctx: Optional[Context] = None
-    ) -> Dict[str, Any]:
+        arguments: dict[str, Any] | None = Field(None, description="Prompt arguments as key-value pairs"),
+        ctx: Context | None = None
+    ) -> dict[str, Any]:
         """
         💬 Execute prompts from any MCP server.
 
@@ -320,7 +322,7 @@ def get_tools() -> List[Tuple[str, Callable]]:
         Returns: Prompt messages ready for LLM consumption (role, content pairs)
         """
         return await execute_prompt_impl(server_id, prompt_name, arguments, ctx)
-    
+
     # Return list of (name, function) tuples
     return [
         ("execute_tool", execute_tool),

@@ -1,5 +1,6 @@
+from typing import Any
+
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
 
 
 class ToolExecutionRequest(BaseModel):
@@ -7,7 +8,7 @@ class ToolExecutionRequest(BaseModel):
     server_id: str
     server_path: str
     tool_name: str
-    arguments: Dict[str, Any]
+    arguments: dict[str, Any]
 
 
 class ToolExecutionResponse(BaseModel):
@@ -16,9 +17,9 @@ class ToolExecutionResponse(BaseModel):
     server_path: str
     server_id: str
     tool_name: str
-    result: Optional[dict] = None
-    error: Optional[str] = None
-    execution_time_ms: Optional[int] = None
+    result: dict | None = None
+    error: str | None = None
+    execution_time_ms: int | None = None
 
 
 class ResourceReadRequest(BaseModel):
@@ -31,8 +32,8 @@ class ResourceContent(BaseModel):
     """Resource content response"""
     uri: str
     mimeType: str
-    text: Optional[str] = None
-    blob: Optional[str] = None  # Base64 encoded binary data
+    text: str | None = None
+    blob: str | None = None  # Base64 encoded binary data
 
 
 class ResourceReadResponse(BaseModel):
@@ -41,21 +42,21 @@ class ResourceReadResponse(BaseModel):
     server_id: str
     server_path: str
     resource_uri: str
-    contents: List[ResourceContent]
-    error: Optional[str] = None
+    contents: list[ResourceContent]
+    error: str | None = None
 
 
 class PromptExecutionRequest(BaseModel):
     """Request to execute/get an MCP prompt"""
     server_id: str
     prompt_name: str
-    arguments: Optional[Dict[str, Any]] = None
+    arguments: dict[str, Any] | None = None
 
 
 class PromptMessage(BaseModel):
     """Prompt message in MCP format"""
     role: str  # "system", "user", "assistant"
-    content: Dict[str, Any]  # {"type": "text", "text": "..."}
+    content: dict[str, Any]  # {"type": "text", "text": "..."}
 
 
 class PromptExecutionResponse(BaseModel):
@@ -64,6 +65,6 @@ class PromptExecutionResponse(BaseModel):
     server_id: str
     server_path: str
     prompt_name: str
-    description: Optional[str] = None
-    messages: List[PromptMessage]
-    error: Optional[str] = None
+    description: str | None = None
+    messages: list[PromptMessage]
+    error: str | None = None

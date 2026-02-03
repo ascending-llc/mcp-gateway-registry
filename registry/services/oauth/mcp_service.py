@@ -1,7 +1,7 @@
 import asyncio
-from typing import Optional
-from registry.services.oauth.oauth_service import get_oauth_service
+
 from registry.services.oauth.connection_service import get_connection_service
+from registry.services.oauth.oauth_service import get_oauth_service
 from registry.utils.log import logger
 
 
@@ -25,22 +25,22 @@ class MCPService:
             if self._initialized:
                 logger.debug("MCP service already initialized")
                 return
-            
+
             try:
                 logger.info("Initializing MCP service components...")
-                
+
                 # Initialize connection service
                 self.connection_service = await get_connection_service()
                 logger.debug("Connection service initialized")
-                
+
                 # Initialize OAuth service
                 self.oauth_service = await get_oauth_service()
                 logger.debug("OAuth service initialized")
-                
+
                 # Mark as initialized
                 self._initialized = True
                 logger.info("MCP service initialized successfully")
-                
+
             except Exception as e:
                 logger.error(f"Failed to initialize MCP service: {e}", exc_info=True)
                 # Reset state on failure
@@ -51,7 +51,7 @@ class MCPService:
 
 
 # Global MCP service instance
-_mcp_service_instance: Optional[MCPService] = None
+_mcp_service_instance: MCPService | None = None
 
 
 async def get_mcp_service() -> MCPService:

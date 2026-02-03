@@ -1,32 +1,28 @@
 """
 Unit tests for proxy_to_mcp_server function.
 """
-import pytest
 import json
-from unittest.mock import AsyncMock, Mock, patch, MagicMock
+from unittest.mock import AsyncMock, Mock, patch
+
 import httpx
-from fastapi import Request, HTTPException
+import pytest
+from fastapi import HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 
+from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 from registry.api.proxy_routes import (
-    proxy_to_mcp_server, 
+    MCPGW_PATH,
     _proxy_json_rpc_request,
-    _build_authenticated_headers,
-    _build_target_url,
     execute_tool,
-    MCPGW_PATH
+    proxy_to_mcp_server,
 )
 from registry.schemas.errors import (
+    AuthenticationError,
+    MissingUserIdError,
     OAuthReAuthRequiredError,
     OAuthTokenError,
-    MissingUserIdError,
-    AuthenticationError
 )
-from registry.schemas.proxy_tool_schema import (
-    ToolExecutionRequest,
-    ToolExecutionResponse
-)
-from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+from registry.schemas.proxy_tool_schema import ToolExecutionRequest, ToolExecutionResponse
 
 
 @pytest.mark.unit
@@ -92,16 +88,16 @@ class TestProxyToMCPServer:
     async def test_regular_json_response(self, mock_request, auth_context, mock_server):
         """Test proxying regular JSON response."""
         target_url = "http://backend:8080/mcp"
-        
+
         # Mock backend response
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.headers = {"content-type": "application/json"}
         mock_response.content = b'{"result": "success"}'
-        
+
         with patch("registry.api.proxy_routes.proxy_client") as mock_client, \
              patch("registry.api.proxy_routes._build_complete_headers_for_server") as mock_build_headers:
-            
+
             mock_client.request = AsyncMock(return_value=mock_response)
             # Mock returns complete headers with auth
             mock_build_headers.return_value = {
@@ -110,18 +106,18 @@ class TestProxyToMCPServer:
                 "Authorization": "Bearer test-api-key",
                 "User-Agent": "MCP-Gateway-Registry/1.0"
             }
-            
+
             response = await proxy_to_mcp_server(
                 request=mock_request,
                 target_url=target_url,
                 auth_context=auth_context,
                 server=mock_server
             )
-        
+
         assert isinstance(response, Response)
         assert response.status_code == 200
         assert response.body == b'{"result": "success"}'
-        
+
         # Verify context headers were added
         call_args = mock_client.request.call_args
         headers = call_args.kwargs["headers"]
@@ -130,13 +126,13 @@ class TestProxyToMCPServer:
         assert headers["X-Client-Id"] == "test-client"
         assert headers["X-Server-Name"] == "test-server"
         assert headers["X-Tool-Name"] == "test-tool"
-        
+
         # Verify host header was removed
         assert "host" not in headers
-        
+
         # Verify auth headers were added
         assert "Authorization" in headers
-        
+
         # Verify _build_complete_headers_for_server was called with user_id
         mock_build_headers.assert_called_once_with(mock_server, "user-123")
 
@@ -144,36 +140,36 @@ class TestProxyToMCPServer:
     async def test_mcpgw_preserves_authorization_header(self, mock_request, auth_context):
         """Test that MCPGW path preserves client's Authorization header."""
         target_url = "http://backend:8080/mcp"
-        
+
         # Add Authorization header to request
         mock_request.headers = {
             **mock_request.headers,
             "Authorization": "Bearer client-token-123"
         }
-        
+
         # Mock MCPGW server
         mock_server = Mock(spec=MCPServerDocument)
         mock_server.path = MCPGW_PATH
         mock_server.serverName = "mcpgw"
-        
+
         # Mock backend response
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.headers = {"content-type": "application/json"}
         mock_response.content = b'{"result": "success"}'
-        
+
         with patch("registry.api.proxy_routes.proxy_client") as mock_client:
             mock_client.request = AsyncMock(return_value=mock_response)
-            
+
             response = await proxy_to_mcp_server(
                 request=mock_request,
                 target_url=target_url,
                 auth_context=auth_context,
                 server=mock_server
             )
-        
+
         assert response.status_code == 200
-        
+
         # For MCPGW, Authorization header is removed (line 364 in proxy_routes.py)
         call_args = mock_client.request.call_args
         headers = call_args.kwargs["headers"]
@@ -184,44 +180,44 @@ class TestProxyToMCPServer:
     async def test_non_mcpgw_removes_authorization_header(self, mock_request, auth_context, mock_server):
         """Test that non-MCPGW paths remove gateway Authorization header."""
         target_url = "http://backend:8080/mcp"
-        
+
         # Add gateway Authorization header to request
         mock_request.headers = {
             **mock_request.headers,
             "Authorization": "Bearer gateway-jwt-token"
         }
-        
+
         # Mock backend response
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.headers = {"content-type": "application/json"}
         mock_response.content = b'{"result": "success"}'
-        
+
         with patch("registry.api.proxy_routes.proxy_client") as mock_client, \
              patch("registry.api.proxy_routes._build_complete_headers_for_server") as mock_build_headers:
-            
+
             mock_client.request = AsyncMock(return_value=mock_response)
             # Mock returns backend auth
             mock_build_headers.return_value = {
                 "Content-Type": "application/json",
                 "Authorization": "Bearer backend-api-key"
             }
-            
+
             response = await proxy_to_mcp_server(
                 request=mock_request,
                 target_url=target_url,
                 auth_context=auth_context,
                 server=mock_server
             )
-        
+
         assert response.status_code == 200
-        
+
         # Verify gateway Authorization was removed and replaced with backend auth
         call_args = mock_client.request.call_args
         headers = call_args.kwargs["headers"]
         assert headers["Authorization"] == "Bearer backend-api-key"
         assert headers["Authorization"] != "Bearer gateway-jwt-token"
-        
+
         # Verify _build_complete_headers_for_server was called
         mock_build_headers.assert_called_once_with(mock_server, "user-123")
 
@@ -229,23 +225,23 @@ class TestProxyToMCPServer:
     async def test_sse_streaming_response(self, mock_request, auth_context, mock_server):
         """Test SSE streaming when client accepts and backend returns SSE."""
         target_url = "http://backend:8080/mcp"
-        
+
         # Client accepts SSE
         mock_request.headers = {
             **mock_request.headers,
             "accept": "application/json, text/event-stream"
         }
-        
+
         # Mock SSE response
         async def async_iter_bytes():
-            yield b'event: message\n'
+            yield b"event: message\n"
             yield b'data: {"type": "progress"}\n\n'
-        
+
         # Create mock server for non-MCPGW path
         mock_server_for_sse = Mock(spec=MCPServerDocument)
         mock_server_for_sse.path = "/sse-server"
         mock_server_for_sse.serverName = "sse-server"
-        
+
         mock_backend_response = Mock()
         mock_backend_response.status_code = 200
         mock_backend_response.headers = {
@@ -253,23 +249,23 @@ class TestProxyToMCPServer:
             "mcp-session-id": "test-session-123"
         }
         mock_backend_response.aiter_bytes = async_iter_bytes
-        
+
         mock_stream_context = Mock()
         mock_stream_context.__aenter__ = AsyncMock(return_value=mock_backend_response)
         mock_stream_context.__aexit__ = AsyncMock(return_value=None)
-        
+
         with patch("registry.api.proxy_routes.proxy_client") as mock_client, \
              patch("registry.api.proxy_routes._build_complete_headers_for_server") as mock_build_headers:
             mock_client.stream = Mock(return_value=mock_stream_context)
             mock_build_headers.return_value = {"Authorization": "Bearer test"}
-            
+
             response = await proxy_to_mcp_server(
                 request=mock_request,
                 target_url=target_url,
                 auth_context=auth_context,
                 server=mock_server_for_sse
             )
-        
+
         assert isinstance(response, StreamingResponse)
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/event-stream"
@@ -281,35 +277,35 @@ class TestProxyToMCPServer:
     async def test_backend_returns_json_when_client_accepts_sse(self, mock_request, auth_context, mock_server):
         """Test when client accepts SSE but backend returns JSON."""
         target_url = "http://backend:8080/mcp"
-        
+
         # Client accepts SSE
         mock_request.headers = {
             **mock_request.headers,
             "accept": "application/json, text/event-stream"
         }
-        
+
         # Mock JSON response (not SSE)
         mock_backend_response = Mock()
         mock_backend_response.status_code = 200
         mock_backend_response.headers = {"content-type": "application/json"}
         mock_backend_response.aread = AsyncMock(return_value=b'{"result": "success"}')
-        
+
         mock_stream_context = Mock()
         mock_stream_context.__aenter__ = AsyncMock(return_value=mock_backend_response)
         mock_stream_context.__aexit__ = AsyncMock(return_value=None)
-        
+
         with patch("registry.api.proxy_routes.proxy_client") as mock_client, \
              patch("registry.api.proxy_routes._build_complete_headers_for_server") as mock_build_headers:
             mock_client.stream = Mock(return_value=mock_stream_context)
             mock_build_headers.return_value = {"Authorization": "Bearer test"}
-            
+
             response = await proxy_to_mcp_server(
                 request=mock_request,
                 target_url=target_url,
                 auth_context=auth_context,
                 server=mock_server
             )
-        
+
         assert isinstance(response, Response)
         assert response.status_code == 200
         assert response.body == b'{"result": "success"}'
@@ -320,27 +316,27 @@ class TestProxyToMCPServer:
     async def test_backend_error_response_logging(self, mock_request, auth_context, mock_server):
         """Test that backend error responses are logged."""
         target_url = "http://backend:8080/mcp"
-        
+
         # Mock error response
         mock_response = Mock()
         mock_response.status_code = 400
         mock_response.headers = {"content-type": "application/json"}
         mock_response.content = b'{"error": "Bad request"}'
-        
+
         with patch("registry.api.proxy_routes.proxy_client") as mock_client, \
              patch("registry.api.proxy_routes.logger") as mock_logger, \
              patch("registry.api.proxy_routes._build_complete_headers_for_server") as mock_build_headers:
-            
+
             mock_client.request = AsyncMock(return_value=mock_response)
             mock_build_headers.return_value = {"Authorization": "Bearer test"}
-            
+
             response = await proxy_to_mcp_server(
                 request=mock_request,
                 target_url=target_url,
                 auth_context=auth_context,
                 server=mock_server
             )
-        
+
         assert response.status_code == 400
         # Verify error was logged
         mock_logger.error.assert_called()
@@ -351,21 +347,21 @@ class TestProxyToMCPServer:
     async def test_timeout_handling(self, mock_request, auth_context, mock_server):
         """Test timeout error handling."""
         target_url = "http://backend:8080/mcp"
-        
+
         with patch("registry.api.proxy_routes.proxy_client") as mock_client, \
              patch("registry.api.proxy_routes._build_complete_headers_for_server") as mock_build_headers:
             mock_client.request = AsyncMock(
                 side_effect=httpx.TimeoutException("Request timed out")
             )
             mock_build_headers.return_value = {"Authorization": "Bearer test"}
-            
+
             response = await proxy_to_mcp_server(
                 request=mock_request,
                 target_url=target_url,
                 auth_context=auth_context,
                 server=mock_server
             )
-        
+
         assert response.status_code == 504
         assert b"Gateway timeout" in response.body
 
@@ -373,21 +369,21 @@ class TestProxyToMCPServer:
     async def test_generic_exception_handling(self, mock_request, auth_context, mock_server):
         """Test generic exception handling."""
         target_url = "http://backend:8080/mcp"
-        
+
         with patch("registry.api.proxy_routes.proxy_client") as mock_client, \
              patch("registry.api.proxy_routes._build_complete_headers_for_server") as mock_build_headers:
             mock_client.request = AsyncMock(
                 side_effect=Exception("Connection refused")
             )
             mock_build_headers.return_value = {"Authorization": "Bearer test"}
-            
+
             response = await proxy_to_mcp_server(
                 request=mock_request,
                 target_url=target_url,
                 auth_context=auth_context,
                 server=mock_server
             )
-        
+
         assert response.status_code == 502
         assert b"Bad gateway" in response.body
         assert b"Connection refused" in response.body
@@ -396,27 +392,27 @@ class TestProxyToMCPServer:
     async def test_context_headers_added(self, mock_request, auth_context, mock_server):
         """Test that all context headers are properly added."""
         target_url = "http://backend:8080/mcp"
-        
+
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.headers = {"content-type": "application/json"}
         mock_response.content = b'{"result": "success"}'
-        
+
         with patch("registry.api.proxy_routes.proxy_client") as mock_client, \
              patch("registry.api.proxy_routes._build_complete_headers_for_server") as mock_build_headers:
             mock_client.request = AsyncMock(return_value=mock_response)
             mock_build_headers.return_value = {"Authorization": "Bearer test"}
-            
+
             await proxy_to_mcp_server(
                 request=mock_request,
                 target_url=target_url,
                 auth_context=auth_context,
                 server=mock_server
             )
-        
+
         call_args = mock_client.request.call_args
         headers = call_args.kwargs["headers"]
-        
+
         # Verify all context headers (empty values are filtered out)
         assert headers["X-User-Id"] == "user-123"
         assert headers["X-Username"] == "test-user"
@@ -431,28 +427,28 @@ class TestProxyToMCPServer:
     async def test_binary_content_error_response(self, mock_request, auth_context, mock_server):
         """Test handling of binary error responses."""
         target_url = "http://backend:8080/mcp"
-        
+
         # Mock binary error response that cannot be decoded as UTF-8
         mock_response = Mock()
         mock_response.status_code = 500
         mock_response.headers = {"content-type": "application/octet-stream"}
         # Use actual non-UTF8 bytes that will fail decode
-        mock_response.content = b'\x80\x81\x82\x83'  # Invalid UTF-8 sequences
-        
+        mock_response.content = b"\x80\x81\x82\x83"  # Invalid UTF-8 sequences
+
         with patch("registry.api.proxy_routes.proxy_client") as mock_client, \
              patch("registry.api.proxy_routes.logger") as mock_logger, \
              patch("registry.api.proxy_routes._build_complete_headers_for_server") as mock_build_headers:
-            
+
             mock_client.request = AsyncMock(return_value=mock_response)
             mock_build_headers.return_value = {"Authorization": "Bearer test"}
-            
+
             response = await proxy_to_mcp_server(
                 request=mock_request,
                 target_url=target_url,
                 auth_context=auth_context,
                 server=mock_server
             )
-        
+
         assert response.status_code == 500
         # Verify binary content logging
         mock_logger.error.assert_called()
@@ -463,7 +459,7 @@ class TestProxyToMCPServer:
     async def test_oauth_reauth_required_exception(self, mock_request, auth_context, mock_server):
         """Test OAuthReAuthRequiredError is converted to HTTPException."""
         target_url = "http://backend:8080/mcp"
-        
+
         with patch("registry.api.proxy_routes._build_complete_headers_for_server") as mock_build_headers:
             # Simulate OAuth re-auth required
             mock_build_headers.side_effect = OAuthReAuthRequiredError(
@@ -471,7 +467,7 @@ class TestProxyToMCPServer:
                 auth_url="https://oauth.example.com/authorize",
                 server_name="test-server"
             )
-            
+
             with pytest.raises(HTTPException) as exc_info:
                 await proxy_to_mcp_server(
                     request=mock_request,
@@ -479,7 +475,7 @@ class TestProxyToMCPServer:
                     auth_context=auth_context,
                     server=mock_server
                 )
-            
+
             assert exc_info.value.status_code == 401
             assert "OAuth re-authentication required" in exc_info.value.detail
             assert exc_info.value.headers["X-OAuth-URL"] == "https://oauth.example.com/authorize"
@@ -488,14 +484,14 @@ class TestProxyToMCPServer:
     async def test_missing_user_id_exception(self, mock_request, auth_context, mock_server):
         """Test MissingUserIdError is converted to HTTPException."""
         target_url = "http://backend:8080/mcp"
-        
+
         with patch("registry.api.proxy_routes._build_complete_headers_for_server") as mock_build_headers:
             # Simulate missing user ID
             mock_build_headers.side_effect = MissingUserIdError(
                 "User ID required for OAuth",
                 server_name="test-server"
             )
-            
+
             with pytest.raises(HTTPException) as exc_info:
                 await proxy_to_mcp_server(
                     request=mock_request,
@@ -503,7 +499,7 @@ class TestProxyToMCPServer:
                     auth_context=auth_context,
                     server=mock_server
                 )
-            
+
             assert exc_info.value.status_code == 401
             assert "User authentication required" in exc_info.value.detail
 
@@ -511,14 +507,14 @@ class TestProxyToMCPServer:
     async def test_oauth_token_error_exception(self, mock_request, auth_context, mock_server):
         """Test OAuthTokenError is converted to HTTPException."""
         target_url = "http://backend:8080/mcp"
-        
+
         with patch("registry.api.proxy_routes._build_complete_headers_for_server") as mock_build_headers:
             # Simulate OAuth token error
             mock_build_headers.side_effect = OAuthTokenError(
                 "Token refresh failed",
                 server_name="test-server"
             )
-            
+
             with pytest.raises(HTTPException) as exc_info:
                 await proxy_to_mcp_server(
                     request=mock_request,
@@ -526,7 +522,7 @@ class TestProxyToMCPServer:
                     auth_context=auth_context,
                     server=mock_server
                 )
-            
+
             assert exc_info.value.status_code == 401
             assert "Authentication error" in exc_info.value.detail
 
@@ -534,13 +530,13 @@ class TestProxyToMCPServer:
     async def test_generic_authentication_error_exception(self, mock_request, auth_context, mock_server):
         """Test generic AuthenticationError is converted to HTTPException."""
         target_url = "http://backend:8080/mcp"
-        
+
         with patch("registry.api.proxy_routes._build_complete_headers_for_server") as mock_build_headers:
             # Simulate generic auth error
             mock_build_headers.side_effect = AuthenticationError(
                 "Generic authentication failure"
             )
-            
+
             with pytest.raises(HTTPException) as exc_info:
                 await proxy_to_mcp_server(
                     request=mock_request,
@@ -548,7 +544,7 @@ class TestProxyToMCPServer:
                     auth_context=auth_context,
                     server=mock_server
                 )
-            
+
             assert exc_info.value.status_code == 401
             assert "Authentication error" in exc_info.value.detail
 
@@ -579,27 +575,27 @@ class TestProxyJsonRpcRequest:
         target_url = "http://backend:8080/mcp"
         json_body = {"jsonrpc": "2.0", "method": "tools/call", "params": {}}
         headers = {"Content-Type": "application/json"}
-        
+
         # Mock backend 400 error response
         mock_response = Mock()
         mock_response.status_code = 400
         mock_response.headers = {"content-type": "application/json"}
         mock_response.content = b'{"error": {"code": -32602, "message": "Invalid params"}}'
-        
+
         with patch("registry.api.proxy_routes.proxy_client") as mock_client:
             mock_client.post = AsyncMock(return_value=mock_response)
-            
+
             response = await _proxy_json_rpc_request(
                 target_url=target_url,
                 json_body=json_body,
                 headers=headers,
                 accept_sse=False
             )
-        
+
         # Verify response preserves error status and body
         assert response.status_code == 400
         assert response.body == b'{"error": {"code": -32602, "message": "Invalid params"}}'
-        assert json.loads(response.body.decode('utf-8'))["error"]["code"] == -32602
+        assert json.loads(response.body.decode("utf-8"))["error"]["code"] == -32602
 
     @pytest.mark.asyncio
     async def test_backend_5xx_error_response_without_exception(self, mock_server):
@@ -609,23 +605,23 @@ class TestProxyJsonRpcRequest:
         target_url = "http://backend:8080/mcp"
         json_body = {"jsonrpc": "2.0", "method": "tools/call", "params": {}}
         headers = {"Content-Type": "application/json"}
-        
+
         # Mock backend 500 error response
         mock_response = Mock()
         mock_response.status_code = 500
         mock_response.headers = {"content-type": "application/json"}
         mock_response.content = b'{"error": "Internal server error"}'
-        
+
         with patch("registry.api.proxy_routes.proxy_client") as mock_client:
             mock_client.post = AsyncMock(return_value=mock_response)
-            
+
             response = await _proxy_json_rpc_request(
                 target_url=target_url,
                 json_body=json_body,
                 headers=headers,
                 accept_sse=False
             )
-        
+
         # Verify response preserves error status and body
         assert response.status_code == 500
         assert response.body == b'{"error": "Internal server error"}'
@@ -638,31 +634,31 @@ class TestProxyJsonRpcRequest:
         target_url = "http://backend:8080/mcp"
         json_body = {"jsonrpc": "2.0", "method": "tools/call", "params": {}}
         headers = {"Accept": "application/json, text/event-stream"}
-        
+
         # Mock backend 404 error response (non-SSE)
         mock_backend_response = Mock()
         mock_backend_response.status_code = 404
         mock_backend_response.headers = {"content-type": "application/json"}
         mock_backend_response.aread = AsyncMock(return_value=b'{"error": "Tool not found"}')
-        
+
         mock_stream_context = Mock()
         mock_stream_context.__aenter__ = AsyncMock(return_value=mock_backend_response)
         mock_stream_context.__aexit__ = AsyncMock(return_value=None)
-        
+
         with patch("registry.api.proxy_routes.proxy_client") as mock_client:
             mock_client.stream = Mock(return_value=mock_stream_context)
-            
+
             response = await _proxy_json_rpc_request(
                 target_url=target_url,
                 json_body=json_body,
                 headers=headers,
                 accept_sse=True
             )
-        
+
         # Verify error response is returned correctly
         assert response.status_code == 404
         assert response.body == b'{"error": "Tool not found"}'
-        
+
         # Verify stream was closed
         mock_stream_context.__aexit__.assert_called_once()
 
@@ -672,23 +668,23 @@ class TestProxyJsonRpcRequest:
         target_url = "http://backend:8080/mcp"
         json_body = {"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "test"}}
         headers = {"Content-Type": "application/json"}
-        
+
         # Mock successful response
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.headers = {"content-type": "application/json"}
         mock_response.content = b'{"jsonrpc": "2.0", "result": {"data": "success"}}'
-        
+
         with patch("registry.api.proxy_routes.proxy_client") as mock_client:
             mock_client.post = AsyncMock(return_value=mock_response)
-            
+
             response = await _proxy_json_rpc_request(
                 target_url=target_url,
                 json_body=json_body,
                 headers=headers,
                 accept_sse=False
             )
-        
+
         assert response.status_code == 200
         assert response.body == b'{"jsonrpc": "2.0", "result": {"data": "success"}}'
 
@@ -698,14 +694,14 @@ class TestProxyJsonRpcRequest:
         target_url = "http://backend:8080/mcp"
         json_body = {"jsonrpc": "2.0", "method": "tools/call", "params": {}}
         headers = {"Accept": "text/event-stream"}
-        
+
         # Mock SSE streaming response
         async def async_iter_bytes():
-            yield b'event: message\n'
+            yield b"event: message\n"
             yield b'data: {"progress": 50}\n\n'
-            yield b'event: complete\n'
+            yield b"event: complete\n"
             yield b'data: {"result": "done"}\n\n'
-        
+
         mock_backend_response = Mock()
         mock_backend_response.status_code = 200
         mock_backend_response.headers = {
@@ -713,21 +709,21 @@ class TestProxyJsonRpcRequest:
             "mcp-session-id": "session-123"
         }
         mock_backend_response.aiter_bytes = async_iter_bytes
-        
+
         mock_stream_context = Mock()
         mock_stream_context.__aenter__ = AsyncMock(return_value=mock_backend_response)
         mock_stream_context.__aexit__ = AsyncMock(return_value=None)
-        
+
         with patch("registry.api.proxy_routes.proxy_client") as mock_client:
             mock_client.stream = Mock(return_value=mock_stream_context)
-            
+
             response = await _proxy_json_rpc_request(
                 target_url=target_url,
                 json_body=json_body,
                 headers=headers,
                 accept_sse=True
             )
-        
+
         # Verify it returns StreamingResponse
         assert isinstance(response, StreamingResponse)
         assert response.status_code == 200
@@ -741,10 +737,10 @@ class TestProxyJsonRpcRequest:
         target_url = "http://backend:8080/mcp"
         json_body = {"jsonrpc": "2.0", "method": "tools/call", "params": {}}
         headers = {"Content-Type": "application/json"}
-        
+
         with patch("registry.api.proxy_routes.proxy_client") as mock_client:
             mock_client.post = AsyncMock(side_effect=httpx.TimeoutException("Timeout"))
-            
+
             with pytest.raises(HTTPException) as exc_info:
                 await _proxy_json_rpc_request(
                     target_url=target_url,
@@ -752,7 +748,7 @@ class TestProxyJsonRpcRequest:
                     headers=headers,
                     accept_sse=False
                 )
-            
+
             assert exc_info.value.status_code == 504
             assert "Gateway timeout" in exc_info.value.detail
 
@@ -762,10 +758,10 @@ class TestProxyJsonRpcRequest:
         target_url = "http://backend:8080/mcp"
         json_body = {"jsonrpc": "2.0", "method": "tools/call", "params": {}}
         headers = {"Content-Type": "application/json"}
-        
+
         with patch("registry.api.proxy_routes.proxy_client") as mock_client:
             mock_client.post = AsyncMock(side_effect=httpx.HTTPError("Connection failed"))
-            
+
             with pytest.raises(HTTPException) as exc_info:
                 await _proxy_json_rpc_request(
                     target_url=target_url,
@@ -773,7 +769,7 @@ class TestProxyJsonRpcRequest:
                     headers=headers,
                     accept_sse=False
                 )
-            
+
             assert exc_info.value.status_code == 502
             assert "Bad gateway" in exc_info.value.detail
 
@@ -850,18 +846,18 @@ class TestSessionManagement:
              patch("registry.api.proxy_routes.initialize_mcp_session") as mock_init, \
              patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
              patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock, return_value=mock_successful_response):
-            
+
             mock_auth.return_value = {"Authorization": "Bearer token"}
-            
+
             result = await execute_tool(tool_request, user_context)
-            
+
             # Should NOT initialize a new session
             mock_init.assert_not_called()
-            
+
             # Should reuse existing session
             assert isinstance(result, ToolExecutionResponse)
             assert result.success is True
-            
+
             # Verify session ID was added to headers
             mock_auth.assert_called()
             call_args = mock_auth.call_args_list[-1]
@@ -878,22 +874,22 @@ class TestSessionManagement:
              patch("registry.api.proxy_routes.initialize_mcp_session", new_callable=AsyncMock, return_value="new-session-id") as mock_init, \
              patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
              patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock, return_value=mock_successful_response):
-            
+
             mock_auth.return_value = {"Authorization": "Bearer token"}
-            
+
             result = await execute_tool(tool_request, user_context)
-            
+
             # Should initialize new session
             mock_init.assert_called_once()
             call_args = mock_init.call_args
             assert call_args[0][0] == "http://localhost:8000/mcp"  # target_url
             assert call_args[0][2] == "test-user-123:test-server-id"  # session_key
             assert call_args[0][3] == "streamable-http"  # transport_type
-            
+
             # Should succeed
             assert isinstance(result, ToolExecutionResponse)
             assert result.success is True
-            
+
             # Verify session ID was added to headers
             call_args = mock_auth.call_args_list[-1]
             additional_headers = call_args[1]["additional_headers"]
@@ -905,23 +901,23 @@ class TestSessionManagement:
     ):
         """Test stateless server (requiresInit=False) skips session management."""
         tool_request.server_id = "stateless-server-id"
-        
+
         with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", return_value=mock_stateless_server), \
              patch("registry.api.proxy_routes.get_session") as mock_get_session, \
              patch("registry.api.proxy_routes.initialize_mcp_session") as mock_init, \
              patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
              patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock, return_value=mock_successful_response):
-            
+
             mock_auth.return_value = {"Authorization": "Bearer token"}
-            
+
             result = await execute_tool(tool_request, user_context)
-            
+
             # Should NOT check for session
             mock_get_session.assert_not_called()
-            
+
             # Should NOT initialize session
             mock_init.assert_not_called()
-            
+
             # Should succeed
             assert isinstance(result, ToolExecutionResponse)
             assert result.success is True
@@ -936,11 +932,11 @@ class TestSessionManagement:
              patch("registry.api.proxy_routes.initialize_mcp_session", new_callable=AsyncMock, return_value=None), \
              patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
              patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock, return_value=mock_successful_response):
-            
+
             mock_auth.return_value = {"Authorization": "Bearer token"}
-            
+
             result = await execute_tool(tool_request, user_context)
-            
+
             # Should still attempt tool execution without session
             assert isinstance(result, ToolExecutionResponse)
             assert result.success is True
@@ -954,20 +950,20 @@ class TestSessionManagement:
         error_response.status_code = 400
         error_response.media_type = "application/json"
         error_response.body = json.dumps({"error": "Bad Request"}).encode()
-        
+
         with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", return_value=mock_server), \
              patch("registry.api.proxy_routes.get_session", return_value=("session-id", True)), \
              patch("registry.api.proxy_routes.clear_session") as mock_clear, \
              patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
              patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock, return_value=error_response):
-            
+
             mock_auth.return_value = {"Authorization": "Bearer token"}
-            
+
             result = await execute_tool(tool_request, user_context)
-            
+
             # Should clear session
             mock_clear.assert_called_once_with("test-user-123:test-server-id")
-            
+
             # Should return error response
             assert isinstance(result, ToolExecutionResponse)
             assert result.success is False
@@ -982,20 +978,20 @@ class TestSessionManagement:
         accepted_response.status_code = 202
         accepted_response.media_type = "application/json"
         accepted_response.body = json.dumps({"result": "accepted"}).encode()
-        
+
         with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", return_value=mock_server), \
              patch("registry.api.proxy_routes.get_session", return_value=("session-id", True)), \
              patch("registry.api.proxy_routes.clear_session") as mock_clear, \
              patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
              patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock, return_value=accepted_response):
-            
+
             mock_auth.return_value = {"Authorization": "Bearer token"}
-            
+
             result = await execute_tool(tool_request, user_context)
-            
+
             # Should NOT clear session
             mock_clear.assert_not_called()
-            
+
             # Should succeed
             assert isinstance(result, ToolExecutionResponse)
             assert result.success is True
@@ -1006,24 +1002,24 @@ class TestSessionManagement:
     ):
         """Test stateless server doesn't clear session on error (since it has none)."""
         tool_request.server_id = "stateless-server-id"
-        
+
         error_response = Mock()
         error_response.status_code = 500
         error_response.media_type = "application/json"
         error_response.body = json.dumps({"error": "Internal Error"}).encode()
-        
+
         with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", return_value=mock_stateless_server), \
              patch("registry.api.proxy_routes.clear_session") as mock_clear, \
              patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
              patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock, return_value=error_response):
-            
+
             mock_auth.return_value = {"Authorization": "Bearer token"}
-            
+
             result = await execute_tool(tool_request, user_context)
-            
+
             # Should NOT clear session (stateless server)
             mock_clear.assert_not_called()
-            
+
             # Should return error
             assert isinstance(result, ToolExecutionResponse)
             assert result.success is False
@@ -1038,15 +1034,15 @@ class TestSessionManagement:
              patch("registry.api.proxy_routes.clear_session") as mock_clear, \
              patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
              patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock) as mock_proxy:
-            
+
             mock_auth.return_value = {"Authorization": "Bearer token"}
             mock_proxy.side_effect = HTTPException(status_code=401, detail="Unauthorized")
-            
+
             result = await execute_tool(tool_request, user_context)
-            
+
             # Should clear session on 401 error
             mock_clear.assert_called_once_with("test-user-123:test-server-id")
-            
+
             # Should return error response
             assert isinstance(result, ToolExecutionResponse)
             assert result.success is False
@@ -1058,17 +1054,17 @@ class TestSessionManagement:
     ):
         """Test correct transport type is passed to session initialization."""
         mock_server.config["type"] = "sse"
-        
+
         with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", return_value=mock_server), \
              patch("registry.api.proxy_routes.get_session", return_value=None), \
              patch("registry.api.proxy_routes.initialize_mcp_session", new_callable=AsyncMock, return_value="session-id") as mock_init, \
              patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
              patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock, return_value=mock_successful_response):
-            
+
             mock_auth.return_value = {"Authorization": "Bearer token"}
-            
+
             await execute_tool(tool_request, user_context)
-            
+
             # Should use SSE transport type
             call_args = mock_init.call_args
             assert call_args[0][3] == "sse"
@@ -1083,11 +1079,11 @@ class TestSessionManagement:
              patch("registry.api.proxy_routes.initialize_mcp_session", new_callable=AsyncMock, return_value="session-id"), \
              patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
              patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock, return_value=mock_successful_response):
-            
+
             mock_get_session.return_value = None
             mock_auth.return_value = {"Authorization": "Bearer token"}
-            
+
             await execute_tool(tool_request, user_context)
-            
+
             # Verify session key format
             mock_get_session.assert_called_once_with("test-user-123:test-server-id")

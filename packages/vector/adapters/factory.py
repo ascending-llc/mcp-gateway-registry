@@ -1,17 +1,17 @@
 import importlib
 import logging
-from typing import Dict, Optional, Callable
+from collections.abc import Callable
 
 from ..config.config import BackendConfig
-from .adapter import VectorStoreAdapter
+from ..enum.enums import EmbeddingProvider, VectorStoreType
 from ..enum.exceptions import DependencyMissingError, UnsupportedBackendError
-from ..enum.enums import VectorStoreType, EmbeddingProvider
+from .adapter import VectorStoreAdapter
 
 logger = logging.getLogger(__name__)
 
 # Registry for vector store creators
-_VECTOR_STORE_CREATOR_REGISTRY: Dict[str, Callable] = {}
-_EMBEDDING_CREATOR_REGISTRY: Dict[str, Callable] = {}
+_VECTOR_STORE_CREATOR_REGISTRY: dict[str, Callable] = {}
+_EMBEDDING_CREATOR_REGISTRY: dict[str, Callable] = {}
 
 
 def register_vector_store_creator(name: str):
@@ -64,7 +64,7 @@ class VectorStoreFactory:
     """Factory class for creating vector store adapters using registry pattern."""
 
     @classmethod
-    def create_adapter(cls, config: Optional[BackendConfig] = None) -> VectorStoreAdapter:
+    def create_adapter(cls, config: BackendConfig | None = None) -> VectorStoreAdapter:
         """Create vector store adapter.
         
         Args:
@@ -148,8 +148,7 @@ class VectorStoreFactory:
                 packages_str,
                 f"Required packages not installed: {packages_str}. Install with: {install_cmd}"
             )
-        else:
-            raise DependencyMissingError("unknown", str(error))
+        raise DependencyMissingError("unknown", str(error))
 
     @classmethod
     def get_supported_vector_stores(cls) -> list:
@@ -163,7 +162,7 @@ class VectorStoreFactory:
 
 
 # Convenience functions
-def create_adapter(config: Optional[BackendConfig] = None) -> VectorStoreAdapter:
+def create_adapter(config: BackendConfig | None = None) -> VectorStoreAdapter:
     """Convenience function to create vector store adapter."""
     return VectorStoreFactory.create_adapter(config)
 

@@ -6,7 +6,7 @@ following the same pattern as the server transform service.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ..constants import REGISTRY_CONSTANTS
 from ..schemas.anthropic_schema import (
@@ -17,7 +17,6 @@ from ..schemas.anthropic_schema import (
     ServerResponse,
 )
 
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
@@ -27,8 +26,8 @@ logger = logging.getLogger(__name__)
 
 
 def _create_agent_transport_config(
-    agent_info: Dict[str, Any],
-) -> Dict[str, Any]:
+    agent_info: dict[str, Any],
+) -> dict[str, Any]:
     """
     Create transport configuration from internal agent info.
 
@@ -45,7 +44,7 @@ def _create_agent_transport_config(
     return {"type": "streamable-http", "url": agent_url}
 
 
-def _determine_agent_version(agent_info: Dict[str, Any]) -> str:
+def _determine_agent_version(agent_info: dict[str, Any]) -> str:
     """
     Determine agent version from metadata.
 
@@ -69,7 +68,7 @@ def _determine_agent_version(agent_info: Dict[str, Any]) -> str:
     return "1.0.0"
 
 
-def _create_agent_name(agent_info: Dict[str, Any]) -> str:
+def _create_agent_name(agent_info: dict[str, Any]) -> str:
     """
     Create reverse-DNS style agent name.
 
@@ -93,7 +92,7 @@ def _create_agent_name(agent_info: Dict[str, Any]) -> str:
 
 
 def transform_to_agent_detail(
-    agent_info: Dict[str, Any],
+    agent_info: dict[str, Any],
 ) -> ServerDetail:
     """
     Transform internal agent info to Anthropic ServerDetail format.
@@ -156,7 +155,7 @@ def transform_to_agent_detail(
 
 
 def transform_to_agent_response(
-    agent_info: Dict[str, Any],
+    agent_info: dict[str, Any],
     include_registry_meta: bool = True,
 ) -> ServerResponse:
     """
@@ -185,9 +184,9 @@ def transform_to_agent_response(
 
 
 def transform_to_agent_list(
-    agents_data: List[Dict[str, Any]],
-    cursor: Optional[str] = None,
-    limit: Optional[int] = None,
+    agents_data: list[dict[str, Any]],
+    cursor: str | None = None,
+    limit: int | None = None,
 ) -> ServerList:
     """
     Transform list of internal agents to Anthropic ServerList format.

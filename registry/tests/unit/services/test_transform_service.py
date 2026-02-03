@@ -2,9 +2,14 @@
 Unit tests for Anthropic API transformation service.
 """
 
-import pytest
-from typing import Any, Dict, List
 
+import pytest
+
+from registry.schemas.anthropic_schema import (
+    ServerDetail,
+    ServerList,
+    ServerResponse,
+)
 from registry.services.transform_service import (
     _create_server_name,
     _create_transport_config,
@@ -12,13 +17,6 @@ from registry.services.transform_service import (
     transform_to_server_detail,
     transform_to_server_list,
     transform_to_server_response,
-)
-from registry.schemas.anthropic_schema import (
-    Package,
-    PaginationMetadata,
-    ServerDetail,
-    ServerList,
-    ServerResponse,
 )
 
 

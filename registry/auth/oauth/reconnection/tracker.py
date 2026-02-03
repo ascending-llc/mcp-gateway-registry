@@ -1,5 +1,4 @@
 import time
-from typing import Dict, Set
 
 
 class OAuthReconnectionTracker:
@@ -7,11 +6,11 @@ class OAuthReconnectionTracker:
 
     def __init__(self):
         # user_id -> set of server names with failed reconnections
-        self._failed: Dict[str, Set[str]] = {}
+        self._failed: dict[str, set[str]] = {}
         # user_id -> set of server names currently reconnecting
-        self._active: Dict[str, Set[str]] = {}
+        self._active: dict[str, set[str]] = {}
         # user_id:server_name -> reconnection start timestamp
-        self._active_timestamps: Dict[str, float] = {}
+        self._active_timestamps: dict[str, float] = {}
         # reconnection timeout in seconds
         self._reconnection_timeout_seconds = 3 * 60  # 3 minutes
 

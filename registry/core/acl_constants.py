@@ -1,9 +1,10 @@
 #########################################################
-#  DUPLICATED JARVIS SCHEMA 					        # 
-#  DELETE AFTER IMPORT TOOLING REFACTOR                 # 
+#  DUPLICATED JARVIS SCHEMA 					        #
+#  DELETE AFTER IMPORT TOOLING REFACTOR                 #
 #########################################################
 
 from enum import Enum
+
 
 # PermissionBits for bitwise operations
 class PermissionBits:
@@ -21,17 +22,17 @@ class RoleBits:
 
 # Permissions enum (string values)
 class Permissions(str, Enum):
-	SHARED_GLOBAL = 'SHARED_GLOBAL'
-	USE = 'USE'
-	CREATE = 'CREATE'
-	UPDATE = 'UPDATE'
-	READ = 'READ'
-	READ_AUTHOR = 'READ_AUTHOR'
-	SHARE = 'SHARE'
-	OPT_OUT = 'OPT_OUT'  # Can disable if desired
-	VIEW_USERS = 'VIEW_USERS'
-	VIEW_GROUPS = 'VIEW_GROUPS'
-	VIEW_ROLES = 'VIEW_ROLES'
+	SHARED_GLOBAL = "SHARED_GLOBAL"
+	USE = "USE"
+	CREATE = "CREATE"
+	UPDATE = "UPDATE"
+	READ = "READ"
+	READ_AUTHOR = "READ_AUTHOR"
+	SHARE = "SHARE"
+	OPT_OUT = "OPT_OUT"  # Can disable if desired
+	VIEW_USERS = "VIEW_USERS"
+	VIEW_GROUPS = "VIEW_GROUPS"
+	VIEW_ROLES = "VIEW_ROLES"
 
 class PrincipalType(str, Enum):
 	USER = "user"

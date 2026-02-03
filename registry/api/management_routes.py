@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 
 from ..auth.dependencies import CurrentUser
 from ..schemas.management import (
@@ -27,7 +26,6 @@ from ..utils.keycloak_manager import (
     list_keycloak_groups,
     list_keycloak_users,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +158,7 @@ async def management_list_keycloak_groups(
             for group in raw_groups
         ]
         return GroupListResponse(groups=summaries, total=len(summaries))
-    except Exception as exc:  # noqa: BLE001 - surface upstream failure
+    except Exception as exc:
         logger.error("Failed to list Keycloak groups: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

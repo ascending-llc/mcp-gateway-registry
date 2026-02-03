@@ -1,8 +1,10 @@
+import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
-import logging
+
 from ..enum.enums import SearchType
 
 logger = logging.getLogger(__name__)
@@ -22,7 +24,7 @@ class VectorStoreAdapter(ABC):
     5. Provide unified interface for Repository
     """
 
-    def __init__(self, embedding, config: Dict[str, Any], embedding_config: Dict[str, Any] = None):
+    def __init__(self, embedding, config: dict[str, Any], embedding_config: dict[str, Any] = None):
         """
         Initialize adapter with embedding and config.
         
@@ -36,8 +38,8 @@ class VectorStoreAdapter(ABC):
         self.embedding_config = embedding_config or {}
 
         # Collection management
-        self._default_collection = config.get('collection_name', 'Default')
-        self._stores: Dict[str, VectorStore] = {}  # collection_name -> LangChain VectorStore
+        self._default_collection = config.get("collection_name", "Default")
+        self._stores: dict[str, VectorStore] = {}  # collection_name -> LangChain VectorStore
 
     def __enter__(self):
         """Enter context manager."""
@@ -62,18 +64,16 @@ class VectorStoreAdapter(ABC):
         Returns:
             LangChain VectorStore instance (WeaviateVectorStore, etc.)
         """
-        pass
 
     @abstractmethod
     def close(self):
         """Close all connections and clean up resources."""
-        pass
 
     # ========================================
     # Collection management
     # ========================================
 
-    def get_vector_store(self, collection_name: Optional[str] = None) -> VectorStore:
+    def get_vector_store(self, collection_name: str | None = None) -> VectorStore:
         """
         Get or create LangChain VectorStore for collection.
         
@@ -100,9 +100,9 @@ class VectorStoreAdapter(ABC):
             query: str,
             k: int = 10,
             filters: Any = None,
-            collection_name: Optional[str] = None,
+            collection_name: str | None = None,
             **kwargs
-    ) -> List[Document]:
+    ) -> list[Document]:
         """
         Proxy to VectorStore.similarity_search() with smart filter handling.
         
@@ -167,10 +167,9 @@ class VectorStoreAdapter(ABC):
         Returns:
             True if native format
         """
-        pass
 
     @abstractmethod
-    def _dict_to_native_filter(self, filters: Dict[str, Any]) -> Any:
+    def _dict_to_native_filter(self, filters: dict[str, Any]) -> Any:
         """
         Convert dict to native filter format.
         
@@ -185,14 +184,13 @@ class VectorStoreAdapter(ABC):
         Returns:
             Native filter object
         """
-        pass
 
     def add_documents(
             self,
-            documents: List[Document],
-            collection_name: Optional[str] = None,
+            documents: list[Document],
+            collection_name: str | None = None,
             **kwargs
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Proxy to VectorStore.add_documents()
         
@@ -209,10 +207,10 @@ class VectorStoreAdapter(ABC):
 
     def delete(
             self,
-            ids: List[str],
-            collection_name: Optional[str] = None,
+            ids: list[str],
+            collection_name: str | None = None,
             **kwargs
-    ) -> Optional[bool]:
+    ) -> bool | None:
         """
         Proxy to VectorStore.delete()
         
@@ -239,8 +237,8 @@ class VectorStoreAdapter(ABC):
     def get_by_id(
             self,
             doc_id: str,
-            collection_name: Optional[str] = None
-    ) -> Optional[Document]:
+            collection_name: str | None = None
+    ) -> Document | None:
         """
         Extended feature: Get document by ID
         
@@ -261,9 +259,9 @@ class VectorStoreAdapter(ABC):
 
     def get_by_ids(
             self,
-            ids: List[str],
-            collection_name: Optional[str] = None
-    ) -> List[Document]:
+            ids: list[str],
+            collection_name: str | None = None
+    ) -> list[Document]:
         """
         Extended feature: Get multiple documents by IDs
         
@@ -284,9 +282,9 @@ class VectorStoreAdapter(ABC):
             self,
             filters: Any,
             limit: int,
-            collection_name: Optional[str] = None,
+            collection_name: str | None = None,
             **kwargs
-    ) -> List[Document]:
+    ) -> list[Document]:
         """
         Extended feature: Filter documents by metadata only (no vector search)
         
@@ -308,8 +306,8 @@ class VectorStoreAdapter(ABC):
                     query: str,
                     k: int = 10,
                     filters: Any = None,
-                    collection_name: Optional[str] = None,
-                    **kwargs) -> List[Document]:
+                    collection_name: str | None = None,
+                    **kwargs) -> list[Document]:
         """
             Extended feature: BM25 search (Keyword search)
         """
@@ -321,8 +319,8 @@ class VectorStoreAdapter(ABC):
                       k: int = 10,
                       alpha: float = 0.5,
                       filters: Any = None,
-                      collection_name: Optional[str] = None,
-                      **kwargs) -> List[Document]:
+                      collection_name: str | None = None,
+                      **kwargs) -> list[Document]:
         """
         Extended feature: Hybrid search
         """
@@ -334,8 +332,8 @@ class VectorStoreAdapter(ABC):
                   k: int = 10,
                   alpha: float = 0.5,
                   filters: Any = None,
-                  collection_name: Optional[str] = None,
-                  **kwargs) -> List[Document]:
+                  collection_name: str | None = None,
+                  **kwargs) -> list[Document]:
         """
         Extended feature: Near text
         find objects with the nearest vector to an input text
@@ -348,8 +346,8 @@ class VectorStoreAdapter(ABC):
                search_type: SearchType = SearchType.NEAR_TEXT,
                k: int = 10,
                filters: Any = None,
-               collection_name: Optional[str] = None,
-               **kwargs) -> List[Document]:
+               collection_name: str | None = None,
+               **kwargs) -> list[Document]:
         """
         Extended feature: Search by search type
         """
@@ -359,14 +357,14 @@ class VectorStoreAdapter(ABC):
             self,
             query: str,
             k: int = 10,
-            candidate_k: Optional[int] = None,
+            candidate_k: int | None = None,
             search_type: SearchType = SearchType.HYBRID,
             filters: Any = None,
             reranker_type: str = "flashrank",
-            reranker_kwargs: Optional[Dict[str, Any]] = None,
-            collection_name: Optional[str] = None,
+            reranker_kwargs: dict[str, Any] | None = None,
+            collection_name: str | None = None,
             **kwargs
-    ) -> List[Document]:
+    ) -> list[Document]:
         """
         Extended feature: Search with reranking for improved relevance.
         
@@ -390,7 +388,7 @@ class VectorStoreAdapter(ABC):
             "Use search() + reranker to implement this functionality."
         )
 
-    def list_collections(self) -> List[str]:
+    def list_collections(self) -> list[str]:
         """
         Extended feature: List all collections
         
@@ -418,8 +416,8 @@ class VectorStoreAdapter(ABC):
     def update_metadata(
             self,
             doc_id: str,
-            metadata: Dict[str, Any],
-            collection_name: Optional[str] = None
+            metadata: dict[str, Any],
+            collection_name: str | None = None
     ) -> bool:
         """
         Update metadata fields only without re-vectorization.
@@ -443,7 +441,7 @@ class VectorStoreAdapter(ABC):
     def delete_by_filter(
             self,
             filters: Any,
-            collection_name: Optional[str] = None
+            collection_name: str | None = None
     ) -> int:
         """
         Extended feature: Delete documents by filter conditions
@@ -472,11 +470,11 @@ class VectorStoreAdapter(ABC):
         """Get default collection name."""
         return self._default_collection
 
-    def describe(self) -> Dict[str, Any]:
+    def describe(self) -> dict[str, Any]:
         """Get adapter description and status."""
         return {
-            'type': type(self).__name__,
-            'default_collection': self._default_collection,
-            'initialized_collections': list(self._stores.keys()),
-            'config': {k: v for k, v in self.config.items() if k not in ['api_key', 'password']}
+            "type": type(self).__name__,
+            "default_collection": self._default_collection,
+            "initialized_collections": list(self._stores.keys()),
+            "config": {k: v for k, v in self.config.items() if k not in ["api_key", "password"]}
         }

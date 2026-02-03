@@ -1,12 +1,13 @@
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
-from fastapi.testclient import TestClient
-from unittest.mock import Mock, patch, AsyncMock
-from registry.api.v1.mcp.connection_router import router
-from registry.services.oauth.mcp_service import MCPService
-from fastapi import Request
 from bson import ObjectId
+from fastapi import Request
+from fastapi.testclient import TestClient
+
+from registry.api.v1.mcp.connection_router import router
 from registry.schemas.enums import ConnectionState
-from registry.services.oauth.mcp_service import get_mcp_service
+from registry.services.oauth.mcp_service import MCPService, get_mcp_service
 
 # Valid MongoDB ObjectId for testing (24 hex characters)
 TEST_SERVER_ID = "507f1f77bcf86cd799439011"
@@ -85,11 +86,11 @@ def client():
     app.dependency_overrides[get_mcp_service] = lambda: mock_mcp_service
 
     # Mock server_service_v1
-    with patch('registry.api.v1.mcp.connection_router.server_service_v1', mock_server_service_v1):
+    with patch("registry.api.v1.mcp.connection_router.server_service_v1", mock_server_service_v1):
         # Mock connection status service functions
-        with patch('registry.api.v1.mcp.connection_router.get_servers_connection_status',
+        with patch("registry.api.v1.mcp.connection_router.get_servers_connection_status",
                    mock_get_servers_connection_status):
-            with patch('registry.api.v1.mcp.connection_router.get_single_server_connection_status',
+            with patch("registry.api.v1.mcp.connection_router.get_single_server_connection_status",
                        mock_get_single_server_connection_status):
                 yield TestClient(app)
 
@@ -107,7 +108,7 @@ class TestConnectionRouter:
 
         # Mock server_service_v1.get_server_by_id to return the mock server
         mock_server_service_v1.get_server_by_id.return_value = mock_server
-        
+
         # Mock connection service to successfully disconnect
         mock_mcp_service.connection_service.disconnect_user_connection.return_value = True
 
@@ -127,7 +128,7 @@ class TestConnectionRouter:
         """Test reinitialization with non-existent server"""
         # Mock server_service_v1.get_server_by_id to return None
         mock_server_service_v1.get_server_by_id.return_value = None
-        
+
         response = client.post(f"/mcp/{TEST_SERVER_ID}/reinitialize")
 
         # Endpoint raises HTTPException 404
@@ -144,7 +145,7 @@ class TestConnectionRouter:
 
         # Mock server_service_v1.get_server_by_id to return the mock server
         mock_server_service_v1.get_server_by_id.return_value = mock_server
-        
+
         # Mock connection service to fail disconnect
         mock_mcp_service.connection_service.disconnect_user_connection.return_value = False
 
@@ -171,7 +172,7 @@ class TestConnectionRouter:
 
         # Mock server_service_v1.get_server_by_id to return the mock server
         mock_server_service_v1.get_server_by_id.return_value = mock_server
-        
+
         # Mock connection service to successfully disconnect
         mock_mcp_service.connection_service.disconnect_user_connection.return_value = True
 
@@ -194,7 +195,7 @@ class TestConnectionRouter:
 
         # Mock server_service_v1.get_server_by_id to return the mock server
         mock_server_service_v1.get_server_by_id.return_value = mock_server
-        
+
         # Mock connection service to successfully disconnect
         mock_mcp_service.connection_service.disconnect_user_connection.return_value = True
 
@@ -275,7 +276,7 @@ class TestConnectionRouter:
 
         # Mock server_service_v1.get_server_by_id to return the mock server
         mock_server_service_v1.get_server_by_id.return_value = mock_server
-        
+
         # Mock get_single_server_connection_status to return status
         mock_get_single_server_connection_status.return_value = {
             "connection_state": ConnectionState.CONNECTED,
@@ -296,7 +297,7 @@ class TestConnectionRouter:
         """Test retrieval of single server connection status when server not found"""
         # Mock server_service_v1.get_server_by_id to return None
         mock_server_service_v1.get_server_by_id.return_value = None
-        
+
         response = client.get(f"/mcp/connection/status/{TEST_SERVER_ID}")
 
         assert response.status_code == 404
@@ -312,7 +313,7 @@ class TestConnectionRouter:
 
         # Mock server_service_v1.get_server_by_id to return the mock server
         mock_server_service_v1.get_server_by_id.return_value = mock_server
-        
+
         mock_get_single_server_connection_status.side_effect = Exception("Status error")
 
         response = client.get(f"/mcp/connection/status/{TEST_SERVER_ID}")

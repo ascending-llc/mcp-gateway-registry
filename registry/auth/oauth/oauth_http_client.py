@@ -1,8 +1,10 @@
 import base64
 import time
 import urllib.parse
+from typing import Any
+
 import httpx
-from typing import Dict, Optional, Any
+
 from registry.models.oauth_models import MCPOAuthFlowMetadata, OAuthTokens, TokenTransformConfig
 from registry.utils.log import logger
 
@@ -57,7 +59,7 @@ class OAuthHttpClient:
             self,
             flow_metadata: MCPOAuthFlowMetadata,
             authorization_code: str
-    ) -> Optional[OAuthTokens]:
+    ) -> OAuthTokens | None:
         """Exchange authorization code for tokens"""
         try:
             if not flow_metadata.metadata or not flow_metadata.client_info:
@@ -146,9 +148,9 @@ class OAuthHttpClient:
 
     async def refresh_tokens(
             self,
-            oauth_config: Dict[str, Any],
+            oauth_config: dict[str, Any],
             refresh_token: str
-    ) -> Optional[OAuthTokens]:
+    ) -> OAuthTokens | None:
         """Refresh tokens using OAuth config from MongoDB"""
         try:
             token_url = oauth_config.get("token_url")
@@ -229,9 +231,9 @@ class OAuthHttpClient:
 
     def _transform_tokens(
             self,
-            token_data: Dict[str, Any],
-            token_transform: Optional[TokenTransformConfig]
-    ) -> Dict[str, Any]:
+            token_data: dict[str, Any],
+            token_transform: TokenTransformConfig | None
+    ) -> dict[str, Any]:
         """Transform token format"""
         if not token_transform:
             return token_data

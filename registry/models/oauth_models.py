@@ -1,19 +1,21 @@
-from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, List, Union
-from pydantic import BaseModel, Field, field_validator
 import time
+from dataclasses import dataclass, field
+from typing import Any
+
+from pydantic import BaseModel, Field, field_validator
 
 from registry.schemas.enums import OAuthFlowStatus
+
 
 class OAuthTokens(BaseModel):
     """OAuth tokens"""
     access_token: str = Field(..., description="Access token")
     token_type: str = Field("Bearer", description="Token type")
-    expires_in: Optional[int] = Field(None, description="Expiration time (seconds)")
-    refresh_token: Optional[str] = Field(None, description="Refresh token")
-    scope: Optional[str] = Field(None, description="Authorization scope")
-    obtained_at: Optional[int] = Field(None, description="Obtained timestamp")
-    expires_at: Optional[int] = Field(None, description="Expiration timestamp")
+    expires_in: int | None = Field(None, description="Expiration time (seconds)")
+    refresh_token: str | None = Field(None, description="Refresh token")
+    scope: str | None = Field(None, description="Authorization scope")
+    obtained_at: int | None = Field(None, description="Obtained timestamp")
+    expires_at: int | None = Field(None, description="Expiration timestamp")
 
     @field_validator("expires_at")
     def set_expires_at(cls, v, values):
@@ -27,64 +29,64 @@ class OAuthTokens(BaseModel):
 class OAuthClientInformation(BaseModel):
     """OAuth client information"""
     client_id: str = Field(..., description="Client ID")
-    client_secret: Optional[str] = Field(None, description="Client secret")
-    redirect_uris: Optional[List[str]] = Field(None, description="Redirect URI list")
-    scope: Optional[str] = Field(None, description="Authorization scope")
-    grant_types: Optional[List[str]] = Field(None, description="Grant type list")
-    additional_params: Optional[Dict[str, Any]] = Field(
+    client_secret: str | None = Field(None, description="Client secret")
+    redirect_uris: list[str] | None = Field(None, description="Redirect URI list")
+    scope: str | None = Field(None, description="Authorization scope")
+    grant_types: list[str] | None = Field(None, description="Grant type list")
+    additional_params: dict[str, Any] | None = Field(
         None, description="Additional OAuth parameters")
 
 
 class OAuthMetadata(BaseModel):
     """OAuth metadata"""
-    issuer: Optional[str] = Field(None, description="Issuer")
+    issuer: str | None = Field(None, description="Issuer")
     authorization_endpoint: str = Field(..., description="Authorization endpoint")
     token_endpoint: str = Field(..., description="Token endpoint")
-    registration_endpoint: Optional[str] = Field(None, description="Registration endpoint")
-    scopes_supported: Optional[List[str]] = Field(None, description="Supported scopes")
-    response_types_supported: Optional[List[str]] = Field(
+    registration_endpoint: str | None = Field(None, description="Registration endpoint")
+    scopes_supported: list[str] | None = Field(None, description="Supported scopes")
+    response_types_supported: list[str] | None = Field(
         None, description="Supported response types"
     )
-    grant_types_supported: Optional[List[str]] = Field(
+    grant_types_supported: list[str] | None = Field(
         None, description="Supported grant types"
     )
-    token_endpoint_auth_methods_supported: Optional[List[str]] = Field(
+    token_endpoint_auth_methods_supported: list[str] | None = Field(
         None, description="Supported token endpoint authentication methods"
     )
-    code_challenge_methods_supported: Optional[List[str]] = Field(
+    code_challenge_methods_supported: list[str] | None = Field(
         None, description="Supported code challenge methods"
     )
 
 
 class OAuthProtectedResourceMetadata(BaseModel):
     """OAuth protected resource metadata"""
-    resource: Optional[str] = Field(None, description="Resource identifier")
-    authorization_servers: Optional[List[str]] = Field(
+    resource: str | None = Field(None, description="Resource identifier")
+    authorization_servers: list[str] | None = Field(
         None, description="Authorization server list"
     )
-    scopes_supported: Optional[List[str]] = Field(None, description="Supported scopes")
+    scopes_supported: list[str] | None = Field(None, description="Supported scopes")
 
 
 class TokenTransformConfig(BaseModel):
     """Token transformation configuration"""
-    provider: Optional[str] = Field(None, description="Provider name")
-    access_token_path: Optional[str] = Field(
+    provider: str | None = Field(None, description="Provider name")
+    access_token_path: str | None = Field(
         None, description="Access token path in response"
     )
-    refresh_token_path: Optional[str] = Field(
+    refresh_token_path: str | None = Field(
         None, description="Refresh token path in response"
     )
-    expires_in_path: Optional[str] = Field(
+    expires_in_path: str | None = Field(
         None, description="Expiration time path in response"
     )
-    token_type_path: Optional[str] = Field(
+    token_type_path: str | None = Field(
         None, description="Token type path in response"
     )
-    scope_path: Optional[str] = Field(None, description="Scope path in response")
-    field_mappings: Optional[Dict[str, str]] = Field(
+    scope_path: str | None = Field(None, description="Scope path in response")
+    field_mappings: dict[str, str] | None = Field(
         None, description="Field mapping configuration"
     )
-    value_transforms: Optional[Dict[str, Any]] = Field(
+    value_transforms: dict[str, Any] | None = Field(
         None, description="Value transformation configuration"
     )
 
@@ -99,10 +101,10 @@ class MCPOAuthFlowMetadata(BaseModel):
     code_verifier: str = Field(..., description="PKCE code_verifier")
     client_info: OAuthClientInformation = Field(..., description="Client information")
     metadata: OAuthMetadata = Field(..., description="OAuth metadata")
-    resource_metadata: Optional[OAuthProtectedResourceMetadata] = Field(
+    resource_metadata: OAuthProtectedResourceMetadata | None = Field(
         None, description="Resource metadata"
     )
-    token_transform: Optional[TokenTransformConfig] = Field(
+    token_transform: TokenTransformConfig | None = Field(
         None, description="Token transformation configuration"
     )
 
@@ -118,7 +120,7 @@ class OAuthFlow:
     state: str
     status: OAuthFlowStatus = OAuthFlowStatus.PENDING
     created_at: float = field(default_factory=time.time)  # Use dataclasses.field instead of Pydantic Field
-    completed_at: Optional[float] = None
-    tokens: Optional[OAuthTokens] = None
-    error: Optional[str] = None
-    metadata: Optional[MCPOAuthFlowMetadata] = None
+    completed_at: float | None = None
+    tokens: OAuthTokens | None = None
+    error: str | None = None
+    metadata: MCPOAuthFlowMetadata | None = None

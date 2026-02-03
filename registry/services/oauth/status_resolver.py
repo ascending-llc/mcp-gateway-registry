@@ -1,7 +1,8 @@
-from typing import Dict, Any, Optional
-from registry.utils.log import logger
+from typing import Any
+
 from registry.schemas.enums import ConnectionState
 from registry.services.oauth.base import Connection, ConnectionStateContext
+from registry.utils.log import logger
 
 
 class ConnectionStatusResolver:
@@ -25,7 +26,7 @@ class ConnectionStatusResolver:
     async def resolve_status(
             self,
             context: ConnectionStateContext
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Resolve server connection status - Main entry point
 
@@ -86,7 +87,7 @@ class ConnectionStatusResolver:
 
     def _get_base_connection_state(
             self,
-            connection: Optional[Connection],
+            connection: Connection | None,
             is_stale_or_missing: bool
     ) -> str:
         """
@@ -146,7 +147,7 @@ class ConnectionStatusResolver:
                 if oauth_state == "failed":
                     logger.debug(f"OAuth flow failed for: {server_id}")
                     return ConnectionState.ERROR.value
-                elif oauth_state == "active": # ps: Once OAuth begins, it is considered ConnectionState.CONNECTING!
+                if oauth_state == "active": # ps: Once OAuth begins, it is considered ConnectionState.CONNECTING!
                     logger.debug(f"OAuth flow active for: {server_id}")
                     return ConnectionState.CONNECTING.value
 
@@ -159,7 +160,7 @@ class ConnectionStatusResolver:
         return base_state
 
 
-_status_resolver_instance: Optional[ConnectionStatusResolver] = None
+_status_resolver_instance: ConnectionStatusResolver | None = None
 
 
 def get_status_resolver(

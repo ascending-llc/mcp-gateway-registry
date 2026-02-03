@@ -1,11 +1,13 @@
-from typing import Optional, Dict, Any
+import logging
+from typing import Any
+
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from pydantic import Field, SkipValidation
+
 from ..adapters.adapter import VectorStoreAdapter
 from ..enum.enums import SearchType
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +20,9 @@ class AdapterRetriever(BaseRetriever):
     """
 
     adapter: SkipValidation[VectorStoreAdapter]
-    collection_name: Optional[str] = None
+    collection_name: str | None = None
     search_type: SearchType = SearchType.NEAR_TEXT
-    search_kwargs: Dict[str, Any] = Field(default_factory=dict)
+    search_kwargs: dict[str, Any] = Field(default_factory=dict)
 
     class Config:
         arbitrary_types_allowed = True  # Allow VectorStoreAdapter type
@@ -37,31 +39,30 @@ class AdapterRetriever(BaseRetriever):
                     collection_name=self.collection_name,
                     **self.search_kwargs
                 )
-            elif self.search_type == SearchType.BM25:
+            if self.search_type == SearchType.BM25:
                 return self.adapter.bm25_search(
                     query=query,
                     collection_name=self.collection_name,
                     **self.search_kwargs
                 )
-            elif self.search_type == SearchType.HYBRID:
+            if self.search_type == SearchType.HYBRID:
                 return self.adapter.hybrid_search(
                     query=query,
                     collection_name=self.collection_name,
                     **self.search_kwargs
                 )
-            elif self.search_type == SearchType.SIMILARITY_STORE:
+            if self.search_type == SearchType.SIMILARITY_STORE:
                 return self.adapter.similarity_search(
                     query=query,
                     collection_name=self.collection_name,
                     **self.search_kwargs
                 )
-            else:
-                return self.adapter.search(
-                    query=query,
-                    search_type=self.search_type,
-                    collection_name=self.collection_name,
-                    **self.search_kwargs
-                )
+            return self.adapter.search(
+                query=query,
+                search_type=self.search_type,
+                collection_name=self.collection_name,
+                **self.search_kwargs
+            )
         except Exception as e:
             logger.error(f"Retrieval failed: {e}")
             run_manager.on_retriever_error(e)

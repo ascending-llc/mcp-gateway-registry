@@ -1,16 +1,17 @@
 """Test data factories for packages tests."""
 
+from datetime import UTC, datetime
+
 import factory
-from faker import Faker
 from beanie import PydanticObjectId
-from datetime import datetime, UTC
+from faker import Faker
 
 fake = Faker()
 
 
 class MCPServerFactory(factory.DictFactory):
     """Factory for creating MCP server test data."""
-    
+
     serverName = factory.LazyFunction(lambda: fake.slug())
     config = factory.Dict({
         "title": factory.LazyFunction(lambda: fake.company()),
@@ -32,7 +33,7 @@ class MCPServerFactory(factory.DictFactory):
 
 class OAuthServerFactory(factory.DictFactory):
     """Factory for creating OAuth-enabled MCP server test data."""
-    
+
     serverName = factory.LazyFunction(lambda: f"oauth-{fake.slug()}")
     config = factory.Dict({
         "title": factory.LazyFunction(lambda: f"OAuth {fake.company()}"),
@@ -60,7 +61,7 @@ class OAuthServerFactory(factory.DictFactory):
 
 class TokenFactory(factory.DictFactory):
     """Factory for creating token test data."""
-    
+
     type = factory.LazyFunction(lambda: fake.random_element(elements=["oauth_access", "oauth_refresh", "api_key"]))
     identifier = factory.LazyFunction(lambda: fake.slug())
     user_id = factory.LazyFunction(lambda: str(PydanticObjectId()))

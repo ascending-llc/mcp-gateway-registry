@@ -2,25 +2,22 @@
 Unit tests for Anthropic MCP Registry API endpoints for A2A agents.
 """
 
-import pytest
 from typing import (
-    Annotated,
     Any,
-    Dict,
-    List,
 )
 from unittest.mock import (
-    Mock,
     patch,
 )
+
+import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
+from registry.auth.dependencies import create_session_cookie
+from registry.constants import REGISTRY_CONSTANTS
+from registry.core.config import settings
 from registry.main import app
 from registry.services.agent_service import agent_service
-from registry.constants import REGISTRY_CONSTANTS
-from registry.auth.dependencies import create_session_cookie
-from registry.core.config import settings
 
 
 @pytest.fixture
@@ -67,7 +64,7 @@ def mock_nginx_proxied_auth_user():
 
 
 @pytest.fixture
-def sample_agent_card() -> Dict[str, Any]:
+def sample_agent_card() -> dict[str, Any]:
     """Create a sample agent card for testing."""
     return {
         "protocol_version": "1.0",
@@ -113,8 +110,8 @@ def authenticated_client(admin_session_cookie):
 
 @pytest.fixture
 def agents_list(
-    sample_agent_card: Dict[str, Any],
-) -> List[Dict[str, Any]]:
+    sample_agent_card: dict[str, Any],
+) -> list[dict[str, Any]]:
     """Create a list of agents for pagination testing."""
     agent1 = sample_agent_card.copy()
     agent1["path"] = "/agents/agent-alpha"
@@ -132,7 +129,7 @@ def agents_list(
 
 
 @pytest.fixture
-def user_context() -> Dict[str, Any]:
+def user_context() -> dict[str, Any]:
     """Create authenticated user context."""
     return {
         "username": "testuser",
@@ -737,11 +734,12 @@ class TestErrorHandling:
 
     def test_error_missing_auth(
         self,
-        agents_list: List[Dict[str, Any]],
+        agents_list: list[dict[str, Any]],
     ) -> None:
         """Test missing auth returns 401 or similar error."""
-        from registry.auth.dependencies import nginx_proxied_auth
         from fastapi import HTTPException
+
+        from registry.auth.dependencies import nginx_proxied_auth
 
         def _mock_no_auth(session=None):
             raise HTTPException(
@@ -765,7 +763,7 @@ class TestErrorHandling:
     def test_error_disabled_agent(
         self,
         mock_nginx_proxied_auth_admin: Any,
-        sample_agent_card: Dict[str, Any],
+        sample_agent_card: dict[str, Any],
         authenticated_client,
     ) -> None:
         """Test disabled agent returns 404."""

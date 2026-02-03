@@ -1,15 +1,14 @@
 import argparse
 import logging
 import os
-
 from pathlib import Path
-from typing import Optional
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logging.basicConfig(
     level=os.environ.get("LOGLEVEL", "INFO"),
-    format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
+    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -65,13 +64,13 @@ class Settings(BaseSettings):
         default="http://localhost:8888",
         description="URL of the authentication server"
     )
-    
+
     INTERNAL_AUTH_HEADER: str = Field(
         default="X-Jarvis-Auth",
         description="Header name for internal JWT authentication (RFC 8707 compliant)"
     )
     # JWT authentication configuration
-    SECRET_KEY: Optional[str] = Field(
+    SECRET_KEY: str | None = Field(
         default=None,
         description="Secret key for JWT token validation (HS256)"
     )

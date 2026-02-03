@@ -167,38 +167,21 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any
 
 from registry_client import (
-    RegistryClient,
-    InternalServiceRegistration,
-    ServerListResponse,
-    ToggleResponse,
-    GroupListResponse,
-    AgentRegistration,
     AgentProvider,
-    AgentVisibility,
-    Skill,
-    AgentListResponse,
-    AgentDetail,
-    AgentToggleResponse,
-    AgentDiscoveryResponse,
-    AgentSemanticDiscoveryResponse,
-    RatingResponse,
-    RatingInfoResponse,
-    AgentSecurityScanResponse,
+    AgentRegistration,
     AgentRescanResponse,
+    AgentSecurityScanResponse,
+    AgentVisibility,
     AnthropicServerList,
     AnthropicServerResponse,
-    M2MAccountRequest,
-    HumanUserRequest,
-    KeycloakUserSummary,
-    UserListResponse,
-    UserDeleteResponse,
-    M2MAccountResponse,
-    GroupCreateRequest,
-    KeycloakGroupSummary,
-    GroupDeleteResponse,
+    InternalServiceRegistration,
+    RatingInfoResponse,
+    RatingResponse,
+    RegistryClient,
+    Skill,
 )
 
 # Configure logging
@@ -210,7 +193,7 @@ logger = logging.getLogger(__name__)
 
 
 def _get_registry_url(
-    cli_value: Optional[str] = None
+    cli_value: str | None = None
 ) -> str:
     """
     Get registry URL from command-line argument or environment variable.
@@ -266,8 +249,8 @@ def _get_token_script() -> str:
 
 
 def _get_jwt_token(
-    aws_region: Optional[str] = None,
-    keycloak_url: Optional[str] = None
+    aws_region: str | None = None,
+    keycloak_url: str | None = None
 ) -> str:
     """
     Retrieve JWT token using get-m2m-token.sh script.
@@ -322,7 +305,7 @@ def _get_jwt_token(
         raise RuntimeError(f"Token retrieval error: {e}") from e
 
 
-def _load_json_config(config_path: str) -> Dict[str, Any]:
+def _load_json_config(config_path: str) -> dict[str, Any]:
     """
     Load JSON configuration file.
 
@@ -341,7 +324,7 @@ def _load_json_config(config_path: str) -> Dict[str, Any]:
     if not config_file.exists():
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
-    with open(config_file, 'r') as f:
+    with open(config_file) as f:
         config = json.load(f)
 
     logger.debug(f"Loaded configuration from {config_path}")
@@ -374,7 +357,7 @@ def _create_client(
         missing_params.append("REGISTRY_URL")
 
     # Check if token file is provided
-    if hasattr(args, 'token_file') and args.token_file:
+    if hasattr(args, "token_file") and args.token_file:
         token_path = Path(args.token_file)
         if not token_path.exists():
             raise FileNotFoundError(f"Token file not found: {args.token_file}")
@@ -383,10 +366,10 @@ def _create_client(
 
         # Try to parse as JSON first (token files from generate-agent-token.sh)
         try:
-            with open(token_path, 'r') as f:
+            with open(token_path) as f:
                 token_data = json.load(f)
             # Extract access_token from JSON structure
-            token = token_data.get('access_token')
+            token = token_data.get("access_token")
             if not token:
                 raise RuntimeError(f"No 'access_token' field found in token file: {args.token_file}")
         except json.JSONDecodeError:
@@ -513,7 +496,7 @@ def cmd_list(args: argparse.Namespace) -> int:
             return 0
 
         # Print raw JSON if requested
-        if hasattr(args, 'json') and args.json:
+        if hasattr(args, "json") and args.json:
             import json
             print(json.dumps(response.model_dump(), indent=2, default=str))
             return 0
@@ -748,9 +731,9 @@ def cmd_list_groups(args: argparse.Namespace) -> int:
 
         for group in response.groups:
             print(f"Group: {group.get('name', 'Unknown')}")
-            if 'description' in group:
+            if "description" in group:
                 print(f"  Description: {group['description']}")
-            if 'servers' in group:
+            if "servers" in group:
                 print(f"  Servers: {', '.join(group['servers']) if group['servers'] else 'None'}")
             print()
 
@@ -847,12 +830,12 @@ def cmd_security_scan(args: argparse.Namespace) -> int:
             if response.analysis_results:
                 for analyzer_name, analyzer_data in response.analysis_results.items():
                     logger.info(f"\n  Analyzer: {analyzer_name}")
-                    if isinstance(analyzer_data, dict) and 'findings' in analyzer_data:
-                        findings = analyzer_data['findings']
+                    if isinstance(analyzer_data, dict) and "findings" in analyzer_data:
+                        findings = analyzer_data["findings"]
                         logger.info(f"    Findings: {len(findings)}")
                         for finding in findings[:5]:  # Show first 5
-                            severity = finding.get('severity', 'UNKNOWN')
-                            tool_name = finding.get('tool_name', 'unknown')
+                            severity = finding.get("severity", "UNKNOWN")
+                            tool_name = finding.get("tool_name", "unknown")
                             logger.info(f"      - {tool_name}: {severity}")
                         if len(findings) > 5:
                             logger.info(f"      ... and {len(findings) - 5} more")
@@ -860,7 +843,7 @@ def cmd_security_scan(args: argparse.Namespace) -> int:
             # Display tool results summary
             if response.tool_results:
                 logger.info(f"\n  Total tools scanned: {len(response.tool_results)}")
-                safe_count = sum(1 for tool in response.tool_results if tool.get('is_safe', False))
+                safe_count = sum(1 for tool in response.tool_results if tool.get("is_safe", False))
                 unsafe_count = len(response.tool_results) - safe_count
                 logger.info(f"  Safe tools: {safe_count}")
                 if unsafe_count > 0:
@@ -898,7 +881,7 @@ def cmd_rescan(args: argparse.Namespace) -> int:
             logger.info(f"  Status: {safety_status}")
             logger.info(f"  Scan timestamp: {response.scan_timestamp}")
             logger.info(f"  Analyzers used: {', '.join(response.analyzers_used)}")
-            logger.info(f"\n  Severity counts:")
+            logger.info("\n  Severity counts:")
             logger.info(f"    Critical: {response.critical_issues}")
             logger.info(f"    High: {response.high_severity}")
             logger.info(f"    Medium: {response.medium_severity}")
@@ -937,76 +920,76 @@ def cmd_agent_register(args: argparse.Namespace) -> int:
             logger.error(f"Config file not found: {config_path}")
             return 1
 
-        with open(config_path, 'r') as f:
+        with open(config_path) as f:
             config = json.load(f)
 
         # Convert skills list of dicts to Skill objects
         # Handle both 'input_schema' and 'parameters' field names
         # Also handle 'id' vs 'name' field for skill identifier
         skills = []
-        for skill_data in config.get('skills', []):
+        for skill_data in config.get("skills", []):
             # Get skill identifier - prefer 'id', fall back to 'name'
-            skill_id = skill_data.get('id') or skill_data.get('name', '')
-            skill_name = skill_data.get('name', skill_id)
+            skill_id = skill_data.get("id") or skill_data.get("name", "")
+            skill_name = skill_data.get("name", skill_id)
 
             # Normalize field names
             skill_dict = {
-                'id': skill_id,  # Always include id field
-                'name': skill_name,
-                'description': skill_data.get('description', ''),
-                'tags': skill_data.get('tags', [])  # Include tags field
+                "id": skill_id,  # Always include id field
+                "name": skill_name,
+                "description": skill_data.get("description", ""),
+                "tags": skill_data.get("tags", [])  # Include tags field
             }
             # Use 'input_schema' if present, otherwise use 'parameters'
-            if 'input_schema' in skill_data:
-                skill_dict['input_schema'] = skill_data['input_schema']
-            elif 'parameters' in skill_data:
-                skill_dict['input_schema'] = skill_data['parameters']
+            if "input_schema" in skill_data:
+                skill_dict["input_schema"] = skill_data["input_schema"]
+            elif "parameters" in skill_data:
+                skill_dict["input_schema"] = skill_data["parameters"]
 
             skills.append(Skill(**skill_dict))
-        config['skills'] = skills
+        config["skills"] = skills
 
         # Provider is now a dict object per A2A spec {organization, url}
         # No conversion needed - pass it through as-is
 
         # Convert visibility string to enum if present
-        if 'visibility' in config:
+        if "visibility" in config:
             try:
-                config['visibility'] = AgentVisibility(config['visibility'].lower())
+                config["visibility"] = AgentVisibility(config["visibility"].lower())
             except ValueError:
                 logger.warning(f"Unknown visibility '{config['visibility']}', using 'public'")
-                config['visibility'] = AgentVisibility.PUBLIC
+                config["visibility"] = AgentVisibility.PUBLIC
 
         # Handle security_schemes conversion
         # Normalize common security type variations to A2A spec values
-        if 'security_schemes' in config:
+        if "security_schemes" in config:
             transformed_schemes = {}
-            for scheme_name, scheme_data in config['security_schemes'].items():
-                scheme_type = scheme_data.get('type', '').lower()
+            for scheme_name, scheme_data in config["security_schemes"].items():
+                scheme_type = scheme_data.get("type", "").lower()
                 # Normalize to A2A spec values: apiKey, http, oauth2, openIdConnect
                 # Keep 'http' as is (for bearer auth), not 'bearer'
                 type_map = {
-                    'http': 'http',  # HTTP auth (including bearer)
-                    'bearer': 'http',  # Bearer is a type of HTTP auth
-                    'apikey': 'apiKey',
-                    'api_key': 'apiKey',
-                    'oauth2': 'oauth2',
-                    'openidconnect': 'openIdConnect',
-                    'openid': 'openIdConnect'
+                    "http": "http",  # HTTP auth (including bearer)
+                    "bearer": "http",  # Bearer is a type of HTTP auth
+                    "apikey": "apiKey",
+                    "api_key": "apiKey",
+                    "oauth2": "oauth2",
+                    "openidconnect": "openIdConnect",
+                    "openid": "openIdConnect"
                 }
-                mapped_type = type_map.get(scheme_type, 'http')
+                mapped_type = type_map.get(scheme_type, "http")
 
                 # Preserve all fields from the original scheme data
                 transformed_scheme = dict(scheme_data)
-                transformed_scheme['type'] = mapped_type
+                transformed_scheme["type"] = mapped_type
 
                 transformed_schemes[scheme_name] = transformed_scheme
-            config['security_schemes'] = transformed_schemes
+            config["security_schemes"] = transformed_schemes
 
         # Remove fields that aren't in AgentRegistration model
         valid_fields = {
-            'protocol_version', 'name', 'description', 'path', 'url', 'version',
-            'capabilities', 'default_input_modes', 'default_output_modes',
-            'provider', 'security_schemes', 'skills', 'tags', 'visibility', 'license'
+            "protocol_version", "name", "description", "path", "url", "version",
+            "capabilities", "default_input_modes", "default_output_modes",
+            "provider", "security_schemes", "skills", "tags", "visibility", "license"
         }
         config = {k: v for k, v in config.items() if k in valid_fields}
 
@@ -1029,7 +1012,7 @@ def cmd_agent_register(args: argparse.Namespace) -> int:
 
     except Exception as e:
         logger.error(f"Agent registration failed: {e}")
-        logger.debug(f"Full error details:", exc_info=True)
+        logger.debug("Full error details:", exc_info=True)
         return 1
 
 
@@ -1046,9 +1029,9 @@ def cmd_agent_list(args: argparse.Namespace) -> int:
     try:
         client = _create_client(args)
         response = client.list_agents(
-            query=args.query if hasattr(args, 'query') else None,
-            enabled_only=args.enabled_only if hasattr(args, 'enabled_only') else False,
-            visibility=args.visibility if hasattr(args, 'visibility') else None
+            query=args.query if hasattr(args, "query") else None,
+            enabled_only=args.enabled_only if hasattr(args, "enabled_only") else False,
+            visibility=args.visibility if hasattr(args, "visibility") else None
         )
 
         # Debug mode: print full JSON response
@@ -1130,71 +1113,71 @@ def cmd_agent_update(args: argparse.Namespace) -> int:
             logger.error(f"Config file not found: {config_path}")
             return 1
 
-        with open(config_path, 'r') as f:
+        with open(config_path) as f:
             config = json.load(f)
 
         # Convert skills list of dicts to Skill objects
         # Handle both 'input_schema' and 'parameters' field names
         skills = []
-        for skill_data in config.get('skills', []):
+        for skill_data in config.get("skills", []):
             skill_dict = {
-                'name': skill_data.get('name', skill_data.get('id', '')),
-                'description': skill_data.get('description', '')
+                "name": skill_data.get("name", skill_data.get("id", "")),
+                "description": skill_data.get("description", "")
             }
-            if 'input_schema' in skill_data:
-                skill_dict['input_schema'] = skill_data['input_schema']
-            elif 'parameters' in skill_data:
-                skill_dict['input_schema'] = skill_data['parameters']
+            if "input_schema" in skill_data:
+                skill_dict["input_schema"] = skill_data["input_schema"]
+            elif "parameters" in skill_data:
+                skill_dict["input_schema"] = skill_data["parameters"]
             skills.append(Skill(**skill_dict))
-        config['skills'] = skills
+        config["skills"] = skills
 
         # Convert provider string to enum with validation
-        if 'provider' in config:
-            provider_value = config['provider'].lower()
+        if "provider" in config:
+            provider_value = config["provider"].lower()
             provider_map = {
-                'anthropic': AgentProvider.ANTHROPIC,
-                'custom': AgentProvider.CUSTOM,
-                'other': AgentProvider.OTHER,
-                'example corp': AgentProvider.CUSTOM,
-                'example': AgentProvider.CUSTOM
+                "anthropic": AgentProvider.ANTHROPIC,
+                "custom": AgentProvider.CUSTOM,
+                "other": AgentProvider.OTHER,
+                "example corp": AgentProvider.CUSTOM,
+                "example": AgentProvider.CUSTOM
             }
             if provider_value in provider_map:
-                config['provider'] = provider_map[provider_value]
+                config["provider"] = provider_map[provider_value]
             else:
                 logger.warning(f"Unknown provider '{config['provider']}', using 'custom'")
-                config['provider'] = AgentProvider.CUSTOM
+                config["provider"] = AgentProvider.CUSTOM
 
         # Convert visibility string to enum if present
-        if 'visibility' in config:
+        if "visibility" in config:
             try:
-                config['visibility'] = AgentVisibility(config['visibility'].lower())
+                config["visibility"] = AgentVisibility(config["visibility"].lower())
             except ValueError:
                 logger.warning(f"Unknown visibility '{config['visibility']}', using 'public'")
-                config['visibility'] = AgentVisibility.PUBLIC
+                config["visibility"] = AgentVisibility.PUBLIC
 
         # Handle security_schemes conversion
-        if 'security_schemes' in config:
+        if "security_schemes" in config:
             transformed_schemes = {}
-            for scheme_name, scheme_data in config['security_schemes'].items():
-                scheme_type = scheme_data.get('type', '').lower()
+            for scheme_name, scheme_data in config["security_schemes"].items():
+                scheme_type = scheme_data.get("type", "").lower()
                 type_map = {
-                    'http': 'bearer',
-                    'bearer': 'bearer',
-                    'apikey': 'api_key',
-                    'api_key': 'api_key',
-                    'oauth2': 'oauth2'
+                    "http": "bearer",
+                    "bearer": "bearer",
+                    "apikey": "api_key",
+                    "api_key": "api_key",
+                    "oauth2": "oauth2"
                 }
-                mapped_type = type_map.get(scheme_type, 'bearer')
+                mapped_type = type_map.get(scheme_type, "bearer")
                 transformed_schemes[scheme_name] = {
-                    'type': mapped_type,
-                    'description': scheme_data.get('description', '')
+                    "type": mapped_type,
+                    "description": scheme_data.get("description", "")
                 }
-            config['security_schemes'] = transformed_schemes
+            config["security_schemes"] = transformed_schemes
 
         # Remove fields that aren't in AgentRegistration model
         valid_fields = {
-            'name', 'description', 'path', 'url', 'version', 'provider',
-            'security_schemes', 'skills', 'tags', 'visibility', 'license'
+            "name", "description", "path", "url", "version", "provider",
+            "security_schemes", "skills", "tags", "visibility", "license"
         }
         config = {k: v for k, v in config.items() if k in valid_fields}
 
@@ -1207,7 +1190,7 @@ def cmd_agent_update(args: argparse.Namespace) -> int:
 
     except Exception as e:
         logger.error(f"Agent update failed: {e}")
-        logger.debug(f"Full error details:", exc_info=True)
+        logger.debug("Full error details:", exc_info=True)
         return 1
 
 
@@ -1272,8 +1255,8 @@ def cmd_agent_discover(args: argparse.Namespace) -> int:
         Exit code (0 for success, 1 for failure)
     """
     try:
-        skills = [s.strip() for s in args.skills.split(',')]
-        tags = [t.strip() for t in args.tags.split(',')] if args.tags else None
+        skills = [s.strip() for s in args.skills.split(",")]
+        tags = [t.strip() for t in args.tags.split(",")] if args.tags else None
 
         client = _create_client(args)
         response = client.discover_agents_by_skills(
@@ -1433,7 +1416,7 @@ def cmd_agent_rescan(args: argparse.Namespace) -> int:
         client = _create_client(args)
         response: AgentRescanResponse = client.rescan_agent(path=args.path)
 
-        if hasattr(args, 'json') and args.json:
+        if hasattr(args, "json") and args.json:
             # Output raw JSON
             print(json.dumps(response.model_dump(), indent=2, default=str))
         else:
@@ -1443,7 +1426,7 @@ def cmd_agent_rescan(args: argparse.Namespace) -> int:
             logger.info(f"  Status: {safety_status}")
             logger.info(f"  Scan timestamp: {response.scan_timestamp}")
             logger.info(f"  Analyzers used: {', '.join(response.analyzers_used)}")
-            logger.info(f"\n  Severity counts:")
+            logger.info("\n  Severity counts:")
             logger.info(f"    Critical: {response.critical_issues}")
             logger.info(f"    High: {response.high_severity}")
             logger.info(f"    Medium: {response.medium_severity}")
@@ -1582,7 +1565,7 @@ def cmd_anthropic_get_server(args: argparse.Namespace) -> int:
         print(f"Website: {server.websiteUrl or 'N/A'}")
 
         if server.repository:
-            print(f"\nRepository:")
+            print("\nRepository:")
             print(f"  URL: {server.repository.url}")
             print(f"  Source: {server.repository.source}")
             if server.repository.id:
@@ -1599,11 +1582,11 @@ def cmd_anthropic_get_server(args: argparse.Namespace) -> int:
                     print(f"     Runtime: {package.runtimeHint}")
 
         if server.meta:
-            print(f"\nMetadata:")
+            print("\nMetadata:")
             print(json.dumps(server.meta, indent=2))
 
         if result.meta:
-            print(f"\nRegistry Metadata:")
+            print("\nRegistry Metadata:")
             print(json.dumps(result.meta, indent=2))
 
         return 0
@@ -1629,8 +1612,8 @@ def cmd_user_list(args: argparse.Namespace) -> int:
     try:
         client = _create_client(args)
         response = client.list_users(
-            search=args.search if hasattr(args, 'search') and args.search else None,
-            limit=args.limit if hasattr(args, 'limit') else 500
+            search=args.search if hasattr(args, "search") and args.search else None,
+            limit=args.limit if hasattr(args, "limit") else 500
         )
 
         if not response.users:
@@ -1673,10 +1656,10 @@ def cmd_user_create_m2m(args: argparse.Namespace) -> int:
         result = client.create_m2m_account(
             name=args.name,
             groups=groups,
-            description=args.description if hasattr(args, 'description') and args.description else None
+            description=args.description if hasattr(args, "description") and args.description else None
         )
 
-        logger.info(f"M2M account created successfully\n")
+        logger.info("M2M account created successfully\n")
         print(f"Client ID: {result.client_id}")
         print(f"Groups: {', '.join(result.groups)}")
         print()
@@ -1708,10 +1691,10 @@ def cmd_user_create_human(args: argparse.Namespace) -> int:
             first_name=args.first_name,
             last_name=args.last_name,
             groups=groups,
-            password=args.password if hasattr(args, 'password') and args.password else None
+            password=args.password if hasattr(args, "password") and args.password else None
         )
 
-        logger.info(f"User created successfully\n")
+        logger.info("User created successfully\n")
         print(f"Username: {result.username}")
         print(f"User ID: {result.id}")
         print(f"Email: {result.email or 'N/A'}")
@@ -2166,7 +2149,7 @@ Examples:
     agent_toggle_parser.add_argument(
         "--enabled",
         required=True,
-        type=lambda x: x.lower() == 'true',
+        type=lambda x: x.lower() == "true",
         help="True to enable, false to disable"
     )
 

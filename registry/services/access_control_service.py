@@ -1,15 +1,18 @@
-from datetime import datetime, timezone
-from registry.schemas.permissions_schema import PermissionPrincipalOut
-from typing import Optional, Union, List, Dict, Any
+from datetime import UTC, datetime
+from typing import Any
+
+from beanie import PydanticObjectId
+
 from packages.models._generated import (
 	IAccessRole,
 )
 from packages.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
-from beanie import PydanticObjectId
-from registry.core.acl_constants import ResourceType, PermissionBits, PrincipalType
-from registry.utils.log import logger
-from registry.services.user_service import user_service
+from registry.core.acl_constants import PermissionBits, PrincipalType, ResourceType
+from registry.schemas.permissions_schema import PermissionPrincipalOut
 from registry.services.group_service import group_service
+from registry.services.user_service import user_service
+from registry.utils.log import logger
+
 
 class ACLService:
 	def _principal_result_obj(self, principal_type: str, obj: Any) -> PermissionPrincipalOut:
@@ -18,20 +21,20 @@ class ACLService:
 		"""
 		return PermissionPrincipalOut(
 			principal_type=principal_type,
-			principal_id=str(getattr(obj, "id")),
+			principal_id=str(obj.id),
 			name=getattr(obj, "name", None),
 			email=getattr(obj, "email", None),
-			accessRoleId=str(getattr(obj, "accessRoleId", "")) if hasattr(obj, "accessRoleId") and getattr(obj, "accessRoleId") is not None else ""
+			accessRoleId=str(getattr(obj, "accessRoleId", "")) if hasattr(obj, "accessRoleId") and obj.accessRoleId is not None else ""
 		)
-	
+
 	async def grant_permission(
 		self,
 		principal_type: str,
-		principal_id: Optional[Union[PydanticObjectId, str]],
+		principal_id: PydanticObjectId | str | None,
 		resource_type: str,
 		resource_id: PydanticObjectId,
-		role_id: Optional[PydanticObjectId] = None,
-		perm_bits: Optional[int] = None,
+		role_id: PydanticObjectId | None = None,
+		perm_bits: int | None = None,
 	) -> IAclEntry:
 		"""
 		Grant ACL permission to a principal (user or group) for a specific resource.
@@ -55,7 +58,7 @@ class ACLService:
 
 		if not role_id and not perm_bits:
 			raise ValueError("Permission bits must be set via perm_bits or role_id")
-		
+
 		if role_id:
 			access_role = await IAccessRole.find_one({"_id": role_id})
 			if not access_role:
@@ -63,14 +66,14 @@ class ACLService:
 			perm_bits = access_role.permBits
 
 		# Check if an ACL entry already exists for this principal/resource
-		try: 
+		try:
 			acl_entry = await IAclEntry.find_one({
 				"principalType": principal_type,
 				"principalId": principal_id,
 				"resourceType": resource_type,
 				"resourceId": resource_id
 			})
-			now = datetime.now(timezone.utc)
+			now = datetime.now(UTC)
 			if acl_entry:
 				acl_entry.permBits = perm_bits
 				acl_entry.roleId = role_id
@@ -78,20 +81,19 @@ class ACLService:
 				acl_entry.updatedAt = now
 				await acl_entry.save()
 				return acl_entry
-			else:
-				new_entry = IAclEntry(
-					principalType=principal_type,
-					principalId=principal_id,
-					resourceType=resource_type,
-					resourceId=resource_id,
-					permBits=perm_bits,
-					grantedAt=now,
-					createdAt=now,
-					updatedAt=now
-				)
-				await new_entry.insert()
-				return new_entry
-		except Exception as e: 
+			new_entry = IAclEntry(
+				principalType=principal_type,
+				principalId=principal_id,
+				resourceType=resource_type,
+				resourceId=resource_id,
+				permBits=perm_bits,
+				grantedAt=now,
+				createdAt=now,
+				updatedAt=now
+			)
+			await new_entry.insert()
+			return new_entry
+		except Exception as e:
 			logger.error(f"Error upserting ACL entry: {e}")
 			raise ValueError(f"Error upserting ACL permissions: {e}")
 
@@ -99,7 +101,7 @@ class ACLService:
 		self,
 		resource_type: str,
 		resource_id: PydanticObjectId,
-		perm_bits_to_delete: Optional[int] = None
+		perm_bits_to_delete: int | None = None
 	) -> int:
 		"""
 		Bulk delete ACL entries for a given resource, optionally deleting all entries with permBits less than or equal to the specified value.
@@ -115,18 +117,18 @@ class ACLService:
 		Raises:
 			None (returns 0 on error).
 		"""
-		try: 
+		try:
 			query = {
 				"resourceType": resource_type,
 				"resourceId": resource_id
 			}
 
-			if perm_bits_to_delete: 
+			if perm_bits_to_delete:
 				query["permBits"] = {"$lte": perm_bits_to_delete}
 
 			result = await IAclEntry.find(query).delete()
 			return result.deleted_count
-		except Exception as e: 
+		except Exception as e:
 			logger.error(f"Error deleting ACL entries for resource {resource_type} with ID {resource_id}: {e}")
 			return 0
 
@@ -186,16 +188,16 @@ class ACLService:
 					"SHARE": entry.permBits >= PermissionBits.SHARE,
 				}
 			return result
-		except Exception as e: 
+		except Exception as e:
 			logger.error(f"Error fetching ACL permissions map for user id: {principal_id}: {e}")
 			return {}
-	
+
 	async def delete_permission(
 		self,
 		resource_type: str,
 		resource_id: PydanticObjectId,
 		principal_type: str,
-		principal_id: Optional[Union[PydanticObjectId, str]]
+		principal_id: PydanticObjectId | str | None
 	) -> int:
 		"""
 		Remove a single ACL entry for a given resource, principal type, and principal ID.
@@ -229,8 +231,8 @@ class ACLService:
 		self,
 		query: str,
 		limit: int = 30,
-		principal_types: Optional[List[str]] = None,
-	) -> List[PermissionPrincipalOut]:
+		principal_types: list[str] | None = None,
+	) -> list[PermissionPrincipalOut]:
 		"""
 		Search for principals (users, groups, agents) matching the query string.
 		"""
@@ -264,7 +266,7 @@ class ACLService:
 		self,
 		resource_type: str,
 		resource_id: PydanticObjectId,
-	) -> Dict[str, Any]:
+	) -> dict[str, Any]:
 		"""
 		Get all ACL permissions for a specific resource.
 		"""

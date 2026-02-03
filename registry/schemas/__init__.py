@@ -1,23 +1,23 @@
 """Models for the registry service."""
 
-from .anthropic_schema import (
-    Repository,
-    StdioTransport,
-    StreamableHttpTransport,
-    SseTransport,
-    Package,
-    ServerDetail,
-    ServerResponse,
-    ServerList,
-    PaginationMetadata,
-    ErrorResponse,
-)
 from .agent_models import (
-    SecurityScheme,
-    Skill,
     AgentCard,
     AgentInfo,
     AgentRegistrationRequest,
+    SecurityScheme,
+    Skill,
+)
+from .anthropic_schema import (
+    ErrorResponse,
+    Package,
+    PaginationMetadata,
+    Repository,
+    ServerDetail,
+    ServerList,
+    ServerResponse,
+    SseTransport,
+    StdioTransport,
+    StreamableHttpTransport,
 )
 from .errors import (
     APIErrorDetail,

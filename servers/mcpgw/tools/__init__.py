@@ -2,10 +2,9 @@
 mcpgw tools package
 Exports all tool modules for server.py
 """
-from . import search
-from . import registry_api
+from . import registry_api, search
 
 __all__ = [
-    'search',
-    'registry_api'
+    "registry_api",
+    "search"
 ]

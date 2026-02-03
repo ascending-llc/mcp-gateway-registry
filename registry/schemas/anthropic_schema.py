@@ -5,10 +5,9 @@ Based on: https://raw.githubusercontent.com/modelcontextprotocol/registry/refs/h
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
-
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,17 +24,17 @@ class Repository(BaseModel):
     source: str = Field(
         ..., description="Repository hosting service identifier (e.g., 'github')"
     )
-    id: Optional[str] = Field(None, description="Repository ID from hosting service")
-    subfolder: Optional[str] = Field(None, description="Path within monorepo")
+    id: str | None = Field(None, description="Repository ID from hosting service")
+    subfolder: str | None = Field(None, description="Path within monorepo")
 
 
 class StdioTransport(BaseModel):
     """Standard I/O transport configuration."""
 
     type: str = Field(default="stdio")
-    command: Optional[str] = Field(None, description="Command to execute")
-    args: Optional[List[str]] = Field(None, description="Command arguments")
-    env: Optional[Dict[str, str]] = Field(None, description="Environment variables")
+    command: str | None = Field(None, description="Command to execute")
+    args: list[str] | None = Field(None, description="Command arguments")
+    env: dict[str, str] | None = Field(None, description="Environment variables")
 
 
 class StreamableHttpTransport(BaseModel):
@@ -43,7 +42,7 @@ class StreamableHttpTransport(BaseModel):
 
     type: str = Field(default="streamable-http")
     url: str = Field(..., description="HTTP endpoint URL")
-    headers: Optional[Dict[str, str]] = Field(None, description="HTTP headers")
+    headers: dict[str, str] | None = Field(None, description="HTTP headers")
 
 
 class SseTransport(BaseModel):
@@ -59,11 +58,11 @@ class Package(BaseModel):
     registryType: str = Field(..., description="Registry type (npm, pypi, oci, etc.)")
     identifier: str = Field(..., description="Package identifier or URL")
     version: str = Field(..., description="Specific package version")
-    registryBaseUrl: Optional[str] = Field(
+    registryBaseUrl: str | None = Field(
         None, description="Base URL of package registry"
     )
-    transport: Dict[str, Any] = Field(..., description="Transport configuration")
-    runtimeHint: Optional[str] = Field(
+    transport: dict[str, Any] = Field(..., description="Transport configuration")
+    runtimeHint: str | None = Field(
         None, description="Runtime hint (npx, uvx, docker, etc.)"
     )
 
@@ -76,11 +75,11 @@ class ServerDetail(BaseModel):
     name: str = Field(..., description="Server name in reverse-DNS format")
     description: str = Field(..., description="Server description")
     version: str = Field(..., description="Server version")
-    title: Optional[str] = Field(None, description="Human-readable server name")
-    repository: Optional[Repository] = Field(None, description="Repository information")
-    websiteUrl: Optional[str] = Field(None, description="Server website URL")
-    packages: Optional[List[Package]] = Field(None, description="Package distributions")
-    meta: Optional[Dict[str, Any]] = Field(
+    title: str | None = Field(None, description="Human-readable server name")
+    repository: Repository | None = Field(None, description="Repository information")
+    websiteUrl: str | None = Field(None, description="Server website URL")
+    packages: list[Package] | None = Field(None, description="Package distributions")
+    meta: dict[str, Any] | None = Field(
         None, alias="_meta", serialization_alias="_meta", description="Extensible metadata"
     )
 
@@ -91,7 +90,7 @@ class ServerResponse(BaseModel):
     model_config = {"populate_by_name": True}
 
     server: ServerDetail = Field(..., description="Server details")
-    meta: Optional[Dict[str, Any]] = Field(
+    meta: dict[str, Any] | None = Field(
         None, alias="_meta", serialization_alias="_meta", description="Registry-managed metadata"
     )
 
@@ -99,15 +98,15 @@ class ServerResponse(BaseModel):
 class PaginationMetadata(BaseModel):
     """Pagination information for server lists."""
 
-    nextCursor: Optional[str] = Field(None, description="Cursor for next page")
-    count: Optional[int] = Field(None, description="Number of items in current page")
+    nextCursor: str | None = Field(None, description="Cursor for next page")
+    count: int | None = Field(None, description="Number of items in current page")
 
 
 class ServerList(BaseModel):
     """Response for server list queries."""
 
-    servers: List[ServerResponse] = Field(..., description="List of servers")
-    metadata: Optional[PaginationMetadata] = Field(None, description="Pagination info")
+    servers: list[ServerResponse] = Field(..., description="List of servers")
+    metadata: PaginationMetadata | None = Field(None, description="Pagination info")
 
 
 class ErrorResponse(BaseModel):

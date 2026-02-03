@@ -9,7 +9,7 @@ Based on: docs/design/a2a-protocol-integration.md
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from pydantic import (
     BaseModel,
@@ -18,7 +18,6 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-
 
 # Configure logging with basicConfig
 logging.basicConfig(
@@ -86,8 +85,8 @@ def _validate_protocol_version(
 
 
 def _validate_skill_ids_unique(
-    skills: List["Skill"],
-) -> List["Skill"]:
+    skills: list["Skill"],
+) -> list["Skill"]:
     """
     Validate that skill IDs are unique within the agent.
 
@@ -149,9 +148,9 @@ def _validate_url_format(
 
 
 def _validate_security_references(
-    security: Optional[List[Dict[str, List[str]]]],
-    security_schemes: Dict[str, "SecurityScheme"],
-) -> Optional[List[Dict[str, List[str]]]]:
+    security: list[dict[str, list[str]]] | None,
+    security_schemes: dict[str, "SecurityScheme"],
+) -> list[dict[str, list[str]]] | None:
     """
     Validate that security references exist in security_schemes.
 
@@ -192,29 +191,29 @@ class SecurityScheme(BaseModel):
         ...,
         description="Security type: apiKey, http, oauth2, openIdConnect",
     )
-    scheme: Optional[str] = Field(
+    scheme: str | None = Field(
         None,
         description="HTTP auth scheme: basic, bearer, digest",
     )
-    in_: Optional[str] = Field(
+    in_: str | None = Field(
         None,
         alias="in",
         description="API key location: header, query, cookie",
     )
-    name: Optional[str] = Field(
+    name: str | None = Field(
         None,
         description="Name of header/query/cookie for API key",
     )
-    bearer_format: Optional[str] = Field(
+    bearer_format: str | None = Field(
         None,
         alias="bearerFormat",
         description="Bearer token format hint (e.g., JWT)",
     )
-    flows: Optional[Dict[str, Any]] = Field(
+    flows: dict[str, Any] | None = Field(
         None,
         description="OAuth2 flows configuration",
     )
-    openid_connect_url: Optional[str] = Field(
+    openid_connect_url: str | None = Field(
         None,
         alias="openIdConnectUrl",
         description="OpenID Connect discovery URL",
@@ -241,8 +240,8 @@ class SecurityScheme(BaseModel):
     @classmethod
     def _validate_api_key_location(
         cls,
-        v: Optional[str],
-    ) -> Optional[str]:
+        v: str | None,
+    ) -> str | None:
         """Validate API key location."""
         if v is not None:
             valid_locations = ["header", "query", "cookie"]
@@ -296,25 +295,25 @@ class Skill(BaseModel):
         ...,
         description="Detailed skill description",
     )
-    tags: List[str] = Field(
+    tags: list[str] = Field(
         ...,
         description="Skill categorization tags - keywords describing capability",
     )
-    examples: Optional[List[str]] = Field(
+    examples: list[str] | None = Field(
         None,
         description="Usage scenarios and examples",
     )
-    input_modes: Optional[List[str]] = Field(
+    input_modes: list[str] | None = Field(
         None,
         alias="inputModes",
         description="Skill-specific input MIME types",
     )
-    output_modes: Optional[List[str]] = Field(
+    output_modes: list[str] | None = Field(
         None,
         alias="outputModes",
         description="Skill-specific output MIME types",
     )
-    security: Optional[List[Dict[str, List[str]]]] = Field(
+    security: list[dict[str, list[str]]] | None = Field(
         None,
         description="Skill-level security requirements",
     )
@@ -384,70 +383,70 @@ class AgentCard(BaseModel):
         ...,
         description="Agent version",
     )
-    capabilities: Dict[str, Any] = Field(
+    capabilities: dict[str, Any] = Field(
         default_factory=dict,
         description="Feature declarations (e.g., {'streaming': true})",
     )
-    default_input_modes: List[str] = Field(
+    default_input_modes: list[str] = Field(
         default_factory=lambda: ["text/plain"],
         alias="defaultInputModes",
         description="Supported input MIME types",
     )
-    default_output_modes: List[str] = Field(
+    default_output_modes: list[str] = Field(
         default_factory=lambda: ["text/plain"],
         alias="defaultOutputModes",
         description="Supported output MIME types",
     )
-    skills: List[Skill] = Field(
+    skills: list[Skill] = Field(
         default_factory=list,
         description="Agent capabilities (skills)",
     )
 
     # Optional A2A fields
-    preferred_transport: Optional[str] = Field(
+    preferred_transport: str | None = Field(
         "JSONRPC",
         alias="preferredTransport",
         description="Preferred transport protocol: JSONRPC, GRPC, HTTP+JSON",
     )
-    provider: Optional[AgentProvider] = Field(
+    provider: AgentProvider | None = Field(
         None,
         description="Agent provider information per A2A spec",
     )
-    icon_url: Optional[str] = Field(
+    icon_url: str | None = Field(
         None,
         alias="iconUrl",
         description="Agent icon URL",
     )
-    documentation_url: Optional[str] = Field(
+    documentation_url: str | None = Field(
         None,
         alias="documentationUrl",
         description="Documentation URL",
     )
-    security_schemes: Dict[str, SecurityScheme] = Field(
+    security_schemes: dict[str, SecurityScheme] = Field(
         default_factory=dict,
         alias="securitySchemes",
         description="Supported authentication methods",
     )
-    security: Optional[List[Dict[str, List[str]]]] = Field(
+    security: list[dict[str, list[str]]] | None = Field(
         None,
         description="Security requirements array",
     )
-    supports_authenticated_extended_card: Optional[bool] = Field(
+    supports_authenticated_extended_card: bool | None = Field(
         None,
         alias="supportsAuthenticatedExtendedCard",
         description="Supports extended card with auth",
     )
-    metadata: Dict[str, Any] = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="Additional metadata",
     )
 
     # MCP Gateway Registry extensions (optional - not part of A2A spec)
-    path: Optional[str] = Field(
+    path: str | None = Field(
         None,
         description="Registry path (e.g., /agents/my-agent). Optional - auto-generated if not provided.",
     )
-    tags: List[str] = Field(
+    tags: list[str] = Field(
         default_factory=list,
         description="Categorization tags",
     )
@@ -463,7 +462,7 @@ class AgentCard(BaseModel):
         alias="numStars",
         description="Average community rating (0.0-5.0)",
     )
-    rating_details: List[Dict[str, Any]] = Field(
+    rating_details: list[dict[str, Any]] = Field(
         default_factory=list,
         alias="ratingDetails",
         description="Individual user ratings with username and rating value",
@@ -474,17 +473,17 @@ class AgentCard(BaseModel):
     )
 
     # Registry metadata
-    registered_at: Optional[datetime] = Field(
+    registered_at: datetime | None = Field(
         None,
         alias="registeredAt",
         description="Registration timestamp",
     )
-    updated_at: Optional[datetime] = Field(
+    updated_at: datetime | None = Field(
         None,
         alias="updatedAt",
         description="Last update timestamp",
     )
-    registered_by: Optional[str] = Field(
+    registered_by: str | None = Field(
         None,
         alias="registeredBy",
         description="Username who registered agent",
@@ -495,14 +494,14 @@ class AgentCard(BaseModel):
         "public",
         description="public, private, or group-restricted",
     )
-    allowed_groups: List[str] = Field(
+    allowed_groups: list[str] = Field(
         default_factory=list,
         alias="allowedGroups",
         description="Groups with access",
     )
 
     # Validation and trust
-    signature: Optional[str] = Field(
+    signature: str | None = Field(
         None,
         description="JWS signature for card integrity",
     )
@@ -537,8 +536,8 @@ class AgentCard(BaseModel):
     @classmethod
     def _validate_path_field(
         cls,
-        v: Optional[str],
-    ) -> Optional[str]:
+        v: str | None,
+    ) -> str | None:
         """Validate path format if provided."""
         if v is None:
             return None
@@ -577,7 +576,7 @@ class AgentCard(BaseModel):
     def _convert_tags_field(
         cls,
         v: Any,
-    ) -> List[str]:
+    ) -> list[str]:
         """Convert tags from string or list format to list of strings.
 
         Supports both:
@@ -594,8 +593,8 @@ class AgentCard(BaseModel):
     @classmethod
     def _validate_skills_field(
         cls,
-        v: List[Skill],
-    ) -> List[Skill]:
+        v: list[Skill],
+    ) -> list[Skill]:
         """Validate skills have unique IDs."""
         return _validate_skill_ids_unique(v)
 
@@ -646,11 +645,11 @@ class AgentInfo(BaseModel):
         ...,
         description="Agent endpoint URL",
     )
-    tags: List[str] = Field(
+    tags: list[str] = Field(
         default_factory=list,
         description="Categorization tags",
     )
-    skills: List[str] = Field(
+    skills: list[str] = Field(
         default_factory=list,
         description="Skill names only",
     )
@@ -672,7 +671,7 @@ class AgentInfo(BaseModel):
         alias="isEnabled",
         description="Whether agent is enabled",
     )
-    provider: Optional[str] = Field(
+    provider: str | None = Field(
         None,
         description="Agent provider/author",
     )
@@ -713,7 +712,7 @@ class AgentRegistrationRequest(BaseModel):
         min_length=1,
         description="Agent endpoint URL",
     )
-    path: Optional[str] = Field(
+    path: str | None = Field(
         None,
         description="Registry path (optional - auto-generated if not provided)",
     )
@@ -722,20 +721,20 @@ class AgentRegistrationRequest(BaseModel):
         alias="protocolVersion",
         description="A2A protocol version",
     )
-    version: Optional[str] = Field(
+    version: str | None = Field(
         None,
         description="Agent version",
     )
-    provider: Optional[Dict[str, str]] = Field(
+    provider: dict[str, str] | None = Field(
         None,
         description="Agent provider information {organization, url}",
     )
-    security_schemes: Optional[Dict[str, Dict[str, Any]]] = Field(
+    security_schemes: dict[str, dict[str, Any]] | None = Field(
         None,
         alias="securitySchemes",
         description="Security schemes configuration",
     )
-    skills: Optional[List[Dict[str, Any]]] = Field(
+    skills: list[dict[str, Any]] | None = Field(
         None,
         description="Agent skills",
     )
@@ -743,7 +742,7 @@ class AgentRegistrationRequest(BaseModel):
         False,
         description="Supports streaming responses",
     )
-    tags: Union[str, List[str]] = Field(
+    tags: str | list[str] = Field(
         default="",
         description="Comma-separated tags or list of tags",
     )
@@ -762,7 +761,7 @@ class AgentRegistrationRequest(BaseModel):
     @classmethod
     def _normalize_tags(
         cls,
-        v: Union[str, List[str], None],
+        v: str | list[str] | None,
     ) -> str:
         """Normalize tags to comma-separated string."""
         if v is None:
@@ -775,8 +774,8 @@ class AgentRegistrationRequest(BaseModel):
     @classmethod
     def _validate_path_request(
         cls,
-        v: Optional[str],
-    ) -> Optional[str]:
+        v: str | None,
+    ) -> str | None:
         """Validate path format if provided."""
         if v is None:
             return None

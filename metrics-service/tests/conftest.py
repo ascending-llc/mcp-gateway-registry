@@ -1,20 +1,23 @@
 """Test configuration and fixtures."""
-import pytest
 import asyncio
-import tempfile
 import os
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
 
 # Import the app modules
 import sys
+import tempfile
+from pathlib import Path
+from unittest.mock import MagicMock
+
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.config import Settings
-from app.storage.database import init_database, MetricsStorage
-from app.core.models import MetricType, Metric, MetricRequest
-from app.utils.helpers import hash_api_key
 from datetime import datetime
+
+from app.config import Settings
+from app.core.models import Metric, MetricRequest, MetricType
+from app.storage.database import MetricsStorage, init_database
+from app.utils.helpers import hash_api_key
 
 
 @pytest.fixture(scope="session")
@@ -28,15 +31,15 @@ def event_loop():
 @pytest.fixture
 def temp_db():
     """Create a temporary database for testing."""
-    with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
         db_path = tmp.name
-    
+
     # Override the settings to use temp database
     original_db_path = Settings.SQLITE_DB_PATH
     Settings.SQLITE_DB_PATH = db_path
-    
+
     yield db_path
-    
+
     # Cleanup
     Settings.SQLITE_DB_PATH = original_db_path
     try:
@@ -113,10 +116,10 @@ def test_api_key():
 async def storage_with_api_key(initialized_db, test_api_key):
     """Storage instance with a test API key inserted."""
     storage = MetricsStorage()
-    
+
     # Insert test API key
     await storage.create_api_key(test_api_key["hash"], test_api_key["service"])
-    
+
     return storage, test_api_key
 
 

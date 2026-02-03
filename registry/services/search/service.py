@@ -11,11 +11,11 @@ import logging
 from typing import TYPE_CHECKING
 
 from registry.core.config import settings
+
 from .base import VectorSearchService
 
 if TYPE_CHECKING:
-    from .embedded_service import EmbeddedFaissService
-    from .external_service import ExternalVectorSearchService
+    pass
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
@@ -35,10 +35,9 @@ def create_vector_search_service() -> VectorSearchService:
         logger.info("Initializing Weaviate-based vector search service for MCP tools")
         from .external_service import ExternalVectorSearchService
         return ExternalVectorSearchService()
-    else:
-        logger.info("Initializing EMBEDDED FAISS vector search service")
-        from .embedded_service import EmbeddedFaissService
-        return EmbeddedFaissService(settings)
+    logger.info("Initializing EMBEDDED FAISS vector search service")
+    from .embedded_service import EmbeddedFaissService
+    return EmbeddedFaissService(settings)
 
 
 # Global service instance - created based on configuration
@@ -47,4 +46,4 @@ faiss_service = create_vector_search_service()
 vector_service = faiss_service
 
 # Backward compatibility: expose the service with its original name
-__all__ = ['faiss_service', 'create_vector_search_service']
+__all__ = ["create_vector_search_service", "faiss_service"]

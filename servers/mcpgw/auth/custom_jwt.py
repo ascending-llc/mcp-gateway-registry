@@ -1,8 +1,9 @@
 import logging
-import jwt
-from typing import Optional
 from datetime import datetime
-from fastmcp.server.auth import TokenVerifier, AccessToken
+
+import jwt
+from fastmcp.server.auth import AccessToken, TokenVerifier
+
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -22,10 +23,10 @@ class CustomJWTVerifier(TokenVerifier):
             secret_key: str,
             issuer: str,
             audience: str,
-            base_url: Optional[str] = None,
-            required_scopes: Optional[list[str]] = None,
-            algorithms: Optional[list] = None,
-            expected_kid: Optional[str] = None
+            base_url: str | None = None,
+            required_scopes: list[str] | None = None,
+            algorithms: list | None = None,
+            expected_kid: str | None = None
     ):
         """
         Initialize JWT verifier.
@@ -84,7 +85,7 @@ class CustomJWTVerifier(TokenVerifier):
             # For self-signed tokens (kid='mcp-self-signed'), skip audience validation
             # because the audience is now the resource URL (RFC 8707 Resource Indicators)
             is_self_signed = (token_kid == self.expected_kid)
-            
+
             decode_options = {
                 "verify_signature": True,
                 "verify_exp": True,
@@ -92,19 +93,19 @@ class CustomJWTVerifier(TokenVerifier):
                 "verify_aud": not is_self_signed,  # Skip aud check for self-signed tokens
                 "require": ["exp", "iss", "aud", "sub"]
             }
-            
+
             decode_kwargs = {
                 "algorithms": self.algorithms,
                 "issuer": self.issuer,
                 "options": decode_options
             }
-            
+
             # Only validate audience for provider tokens (not self-signed)
             if not is_self_signed:
                 decode_kwargs["audience"] = self.audience
             else:
                 logger.debug("Skipping audience validation for self-signed token (RFC 8707 Resource Indicators)")
-            
+
             claims = jwt.decode(
                 token,
                 self.secret_key,

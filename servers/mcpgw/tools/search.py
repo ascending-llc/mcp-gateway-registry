@@ -1,8 +1,11 @@
 import logging
-from typing import Dict, Any, Optional, List, Callable, Tuple
+from collections.abc import Callable
+from typing import Any
+
+from core.registry import call_registry_api
 from fastmcp import Context
 from pydantic import Field
-from core.registry import call_registry_api
+
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -12,7 +15,7 @@ async def discover_tools_impl(
     query: str,
     top_n: int = 5,
     ctx: Context = None
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     🔍 Discover available tools to accomplish any user request.
     
@@ -58,7 +61,7 @@ async def discover_tools_impl(
 
     except Exception as e:
         logger.error(f"Tool discovery failed: {e}")
-        raise Exception(f"Tool discovery failed: {str(e)}")
+        raise Exception(f"Tool discovery failed: {e!s}")
 
 
 async def discover_servers_impl(
@@ -66,7 +69,7 @@ async def discover_servers_impl(
     top_n: int = 1,
     search_type: str = "hybrid",
     ctx: Context = None
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     🔍 Discover available MCP servers and their capabilities.
     
@@ -92,7 +95,7 @@ async def discover_servers_impl(
         - tags: Server tags for categorization
         - numTools: Number of tools available
     """
-    
+
 
     logger.info(f"🔍 Discovering servers for query: '{query}' (search_type={search_type})")
 
@@ -118,7 +121,7 @@ async def discover_servers_impl(
 
     except Exception as e:
         logger.error(f"Server discovery failed: {e}")
-        raise Exception(f"Server discovery failed: {str(e)}")
+        raise Exception(f"Server discovery failed: {e!s}")
 
 
 
@@ -126,7 +129,7 @@ async def discover_servers_impl(
 # Tool Factory Functions for Registration
 # ============================================================================
 
-def get_tools() -> List[Tuple[str, Callable]]:
+def get_tools() -> list[tuple[str, Callable]]:
     """
     Export tools for registration in server.py.
     
@@ -138,8 +141,8 @@ def get_tools() -> List[Tuple[str, Callable]]:
     async def discover_tools(
         query: str = Field(..., description="Natural language description of what you want to accomplish (e.g., 'find latest news', 'search GitHub repositories', 'get weather data', 'analyze code')"),
         top_n: int = Field(5, description="Maximum number of tools to return (default: 5)"),
-        ctx: Optional[Context] = None
-    ) -> List[Dict[str, Any]]:
+        ctx: Context | None = None
+    ) -> list[dict[str, Any]]:
         """
         🔍 AUTO-USE: Discover tools to accomplish any task using semantic search.
 
@@ -187,8 +190,8 @@ def get_tools() -> List[Tuple[str, Callable]]:
         query: str = Field("", description="Natural language query or keywords to find servers (e.g., 'web search', 'github integration', 'productivity tools', 'email and calendar') - leave empty to see all servers"),
         top_n: int = Field(1, description="Maximum number of servers to return (default: 1, optimized for token efficiency)"),
         search_type: str = Field("hybrid", description="Search strategy: 'hybrid' (semantic+keyword, best overall), 'near_text' (pure semantic/vector), 'bm25' (pure keyword), or 'similarity_store' (alternative)"),
-        ctx: Optional[Context] = None
-    ) -> List[Dict[str, Any]]:
+        ctx: Context | None = None
+    ) -> list[dict[str, Any]]:
         """
         🔍 Discover available MCP servers using semantic search with multiple search strategies.
 

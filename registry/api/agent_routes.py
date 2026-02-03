@@ -8,30 +8,30 @@ Based on: docs/design/a2a-protocol-integration.md
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import Annotated, Dict, List, Optional, Any
+from datetime import UTC, datetime
 
+import httpx
 from fastapi import (
     APIRouter,
-    Depends,
     HTTPException,
-    status,
     Query,
+    status,
 )
 from fastapi.responses import JSONResponse
-import httpx
-from ..services.agent_service import agent_service
+from pydantic import BaseModel
+
+from registry.services.agent_scanner import agent_scanner_service
+from registry.services.search.service import faiss_service
+
+from ..auth.dependencies import CurrentUser
+from ..core.config import settings
 from ..schemas.agent_models import (
     AgentCard,
     AgentInfo,
     AgentProvider,
     AgentRegistrationRequest,
 )
-from ..auth.dependencies import CurrentUser
-from ..core.config import settings
-from pydantic import BaseModel
-from registry.services.search.service import faiss_service
-from registry.services.agent_scanner import agent_scanner_service
+from ..services.agent_service import agent_service
 
 # Configure logging with basicConfig
 logging.basicConfig(
@@ -134,8 +134,8 @@ class RatingRequest(BaseModel):
 
 
 def _normalize_path(
-        path: Optional[str],
-        agent_name: Optional[str] = None,
+        path: str | None,
+        agent_name: str | None = None,
 ) -> str:
     """
     Normalize agent path format.
@@ -203,9 +203,9 @@ def _check_agent_permission(
 
 
 def _filter_agents_by_access(
-        agents: List[AgentCard],
+        agents: list[AgentCard],
         user_context: CurrentUser,
-) -> List[AgentCard]:
+) -> list[AgentCard]:
     """
     Filter agents based on user access permissions.
 
@@ -222,7 +222,7 @@ def _filter_agents_by_access(
     is_admin = user_context.get("is_admin", False)
 
     # Get accessible agents from user context (UI-Scopes)
-    accessible_agent_list = user_context.get('accessible_agents', [])
+    accessible_agent_list = user_context.get("accessible_agents", [])
     logger.debug(f"User {username} accessible agents from UI-Scopes: {accessible_agent_list}")
 
     for agent in agents:
@@ -231,7 +231,7 @@ def _filter_agents_by_access(
             continue
 
         # Check if user has agent-level restrictions from UI-Scopes
-        if 'all' not in accessible_agent_list and agent.path not in accessible_agent_list:
+        if "all" not in accessible_agent_list and agent.path not in accessible_agent_list:
             logger.debug(f"Agent {agent.path} filtered out: not in accessible agents {accessible_agent_list}")
             continue
 
@@ -350,7 +350,7 @@ async def register_agent(
         logger.error(f"Invalid agent card data: {e}")
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid agent card: {str(e)}",
+            detail=f"Invalid agent card: {e!s}",
         )
 
     success = agent_service.register_agent(agent_card)
@@ -405,9 +405,9 @@ async def register_agent(
 
 @router.get("/agents")
 async def list_agents(
-        query: Optional[str] = Query(None, description="Search query string"),
+        query: str | None = Query(None, description="Search query string"),
         enabled_only: bool = Query(False, description="Show only enabled agents"),
-        visibility: Optional[str] = Query(None, description="Filter by visibility"),
+        visibility: str | None = Query(None, description="Filter by visibility"),
         user_context: CurrentUser = None,
 ):
     """
@@ -525,13 +525,13 @@ async def check_agent_health(
     detail = None
     status_code = None
     response_time_ms = None
-    start_time = datetime.now(timezone.utc)
+    start_time = datetime.now(UTC)
 
     try:
         async with httpx.AsyncClient(timeout=timeout_seconds) as client:
             response = await client.get(ping_url)
         status_code = response.status_code
-        response_time_ms = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
+        response_time_ms = int((datetime.now(UTC) - start_time).total_seconds() * 1000)
         if response.status_code == 200:
             status_label = "healthy"
         else:
@@ -547,7 +547,7 @@ async def check_agent_health(
         status_label = "unhealthy"
         detail = f"Unexpected health check error: {exc}"
 
-    last_checked_iso = datetime.now(timezone.utc).isoformat()
+    last_checked_iso = datetime.now(UTC).isoformat()
 
     logger.info(
         f"Agent health check for {path} ({ping_url}) completed with status {status_label}"
@@ -831,7 +831,7 @@ async def update_agent(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid agent card: {str(e)}",
+            detail=f"Invalid agent card: {e!s}",
         )
 
     success = agent_service.update_agent(path, updated_agent)
@@ -921,8 +921,8 @@ async def delete_agent(
 
 @router.post("/agents/discover")
 async def discover_agents_by_skills(
-        skills: List[str],
-        tags: Optional[List[str]] = None,
+        skills: list[str],
+        tags: list[str] | None = None,
         max_results: int = Query(10, ge=1, le=100),
         user_context: CurrentUser = None,
 ):

@@ -1,9 +1,10 @@
 import json
 import time
-from typing import Optional, List
+
 from redis import Redis
+
 from registry.constants import REGISTRY_CONSTANTS
-from registry.models.oauth_models import OAuthFlow, MCPOAuthFlowMetadata, OAuthTokens
+from registry.models.oauth_models import MCPOAuthFlowMetadata, OAuthFlow, OAuthTokens
 from registry.schemas.enums import OAuthFlowStatus
 from registry.utils.log import logger
 
@@ -69,7 +70,7 @@ class RedisFlowStorage:
             logger.error(f"Failed to save flow to Redis: {e}", exc_info=True)
             return False
 
-    def get_flow(self, flow_id: str) -> Optional[OAuthFlow]:
+    def get_flow(self, flow_id: str) -> OAuthFlow | None:
         """
         Get OAuth flow from Redis
         """
@@ -124,7 +125,7 @@ class RedisFlowStorage:
             logger.error(f"Failed to delete flow from Redis: {e}")
             return False
 
-    def find_flows(self, user_id: str, server_id: str) -> List[OAuthFlow]:
+    def find_flows(self, user_id: str, server_id: str) -> list[OAuthFlow]:
         """
         Find flows by user_id and server_id
         """

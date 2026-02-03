@@ -7,17 +7,15 @@ Usage: python simple_agents_test.py --endpoint local|live [--debug]
 import argparse
 import json
 import logging
-import requests
 import sys
 import time
 import uuid
 from typing import (
     Any,
-    Dict,
-    Optional,
 )
 
 import boto3
+import requests
 
 # Configure logging with basicConfig
 logging.basicConfig(
@@ -46,7 +44,7 @@ class AgentTester:
 
     def __init__(
         self,
-        endpoints: Dict[str, str],
+        endpoints: dict[str, str],
         is_live: bool = False,
     ) -> None:
         self.endpoints = endpoints
@@ -59,7 +57,7 @@ class AgentTester:
         self,
         agent_type: str,
         message: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Send message to agent using A2A protocol (local) or boto3 (live)."""
         endpoint = self.endpoints[agent_type]
         if not endpoint:
@@ -72,34 +70,33 @@ class AgentTester:
         if self.is_live:
             # Use boto3 for AgentCore Runtime
             return self._invoke_agentcore_runtime(endpoint, message, request_id, message_id, timestamp)
-        else:
-            # Use HTTP for local A2A
-            payload = {
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "method": "message/send",
-                "params": {
-                    "message": {
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": message}],
-                        "messageId": message_id,
-                    }
-                },
-            }
+        # Use HTTP for local A2A
+        payload = {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": "message/send",
+            "params": {
+                "message": {
+                    "role": "user",
+                    "parts": [{"kind": "text", "text": message}],
+                    "messageId": message_id,
+                }
+            },
+        }
 
-            logger.debug(f"[REQUEST] Agent: {agent_type}, Endpoint: {endpoint}")
-            logger.debug(f"[REQUEST] ID: {request_id}, Message ID: {message_id}")
-            logger.debug(f"[REQUEST] Payload:\n{json.dumps(payload, indent=2)}")
+        logger.debug(f"[REQUEST] Agent: {agent_type}, Endpoint: {endpoint}")
+        logger.debug(f"[REQUEST] ID: {request_id}, Message ID: {message_id}")
+        logger.debug(f"[REQUEST] Payload:\n{json.dumps(payload, indent=2)}")
 
-            start_time = time.time()
-            response = requests.post(endpoint, json=payload, headers={"Content-Type": "application/json"})
-            response_time = time.time() - start_time
+        start_time = time.time()
+        response = requests.post(endpoint, json=payload, headers={"Content-Type": "application/json"})
+        response_time = time.time() - start_time
 
-            response_json = response.json()
-            logger.debug(f"[RESPONSE] Time: {response_time:.3f}s, Status: {response.status_code}")
-            logger.debug(f"[RESPONSE] Body:\n{json.dumps(response_json, indent=2, default=str)}")
+        response_json = response.json()
+        logger.debug(f"[RESPONSE] Time: {response_time:.3f}s, Status: {response.status_code}")
+        logger.debug(f"[RESPONSE] Body:\n{json.dumps(response_json, indent=2, default=str)}")
 
-            return response_json
+        return response_json
 
 
     def _invoke_agentcore_runtime(
@@ -109,7 +106,7 @@ class AgentTester:
         request_id: str,
         message_id: str,
         timestamp: float,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Invoke AgentCore Runtime using boto3."""
         # A2A protocol requires JSON-RPC format
         payload = {
@@ -190,7 +187,7 @@ class AgentTester:
         endpoint: str,
         method: str = "POST",
         **params,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Call direct API endpoint (only works for local)."""
         if self.is_live:
             raise NotImplementedError("Direct API endpoints not available for live AgentCore Runtime")

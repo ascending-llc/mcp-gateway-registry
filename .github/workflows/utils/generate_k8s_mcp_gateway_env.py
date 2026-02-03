@@ -1,7 +1,8 @@
+import json
+import os
+
 import boto3
 import yaml
-import os
-import json
 
 # Constants
 SECRET_NAME = os.environ.get("SECRET_NAME")

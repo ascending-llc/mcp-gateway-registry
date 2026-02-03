@@ -4,25 +4,25 @@ Generate OAuth2 access tokens for MCP agents using Keycloak
 Python version of generate-agent-token.sh with batch processing capabilities
 """
 
+import argparse
+import glob
+import json
+import logging
 import os
 import sys
-import json
+from datetime import UTC, datetime
+from typing import Any
+
 import requests
-import argparse
-import logging
-from typing import Dict, Any, Optional, List
-from datetime import datetime, timezone
-import glob
-from pathlib import Path
 
 
 class Colors:
     """ANSI color codes for console output"""
-    RED = '\033[0;31m'
-    GREEN = '\033[0;32m'
-    YELLOW = '\033[1;33m'
-    BLUE = '\033[0;34m'
-    NC = '\033[0m'  # No Color
+    RED = "\033[0;31m"
+    GREEN = "\033[0;32m"
+    YELLOW = "\033[1;33m"
+    BLUE = "\033[0;34m"
+    NC = "\033[0m"  # No Color
 
 
 class TokenGenerator:
@@ -37,7 +37,7 @@ class TokenGenerator:
         level = logging.DEBUG if self.verbose else logging.INFO
         logging.basicConfig(
             level=level,
-            format='%(asctime)s - %(levelname)s - %(message)s'
+            format="%(asctime)s - %(levelname)s - %(message)s"
         )
         self.logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class TokenGenerator:
         """Print warning message"""
         print(f"{Colors.YELLOW}[WARNING]{Colors.NC} {message}")
 
-    def load_agent_config(self, agent_name: str, oauth_tokens_dir: str) -> Optional[Dict[str, Any]]:
+    def load_agent_config(self, agent_name: str, oauth_tokens_dir: str) -> dict[str, Any] | None:
         """Load agent configuration from JSON file"""
         config_file = os.path.join(oauth_tokens_dir, f"{agent_name}.json")
 
@@ -69,7 +69,7 @@ class TokenGenerator:
         self.log(f"Loading config from: {config_file}")
 
         try:
-            with open(config_file, 'r') as f:
+            with open(config_file) as f:
                 config = json.load(f)
             return config
         except json.JSONDecodeError as e:
@@ -80,7 +80,7 @@ class TokenGenerator:
             return None
 
     def get_token_from_keycloak(self, client_id: str, client_secret: str,
-                               keycloak_url: str, realm: str) -> Optional[Dict[str, Any]]:
+                               keycloak_url: str, realm: str) -> dict[str, Any] | None:
         """Request access token from Keycloak"""
         token_url = f"{keycloak_url}/realms/{realm}/protocol/openid-connect/token"
 
@@ -89,14 +89,14 @@ class TokenGenerator:
         self.log(f"Realm: {realm}")
 
         data = {
-            'grant_type': 'client_credentials',
-            'client_id': client_id,
-            'client_secret': client_secret,
-            'scope': 'openid email profile'
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "scope": "openid email profile"
         }
 
         headers = {
-            'Content-Type': 'application/x-www-form-urlencoded'
+            "Content-Type": "application/x-www-form-urlencoded"
         }
 
         try:
@@ -106,12 +106,12 @@ class TokenGenerator:
             token_data = response.json()
 
             # Check for error in response
-            if 'error_description' in token_data:
+            if "error_description" in token_data:
                 self.error(f"Token request failed: {token_data['error_description']}")
                 return None
 
             # Validate access token exists
-            if 'access_token' not in token_data:
+            if "access_token" not in token_data:
                 self.error("No access token in response")
                 self.log(f"Response: {token_data}")
                 return None
@@ -125,27 +125,27 @@ class TokenGenerator:
             self.error(f"Invalid JSON response: {e}")
             return None
 
-    def save_token_files(self, agent_name: str, token_data: Dict[str, Any],
+    def save_token_files(self, agent_name: str, token_data: dict[str, Any],
                         client_id: str, client_secret: str, keycloak_url: str,
                         realm: str, oauth_tokens_dir: str) -> bool:
         """Save token to both .env and .json files"""
-        access_token = token_data['access_token']
-        expires_in = token_data.get('expires_in')
+        access_token = token_data["access_token"]
+        expires_in = token_data.get("expires_in")
 
         # Create output directory
         os.makedirs(oauth_tokens_dir, exist_ok=True)
 
         # Generate timestamps
-        generated_at = datetime.now(timezone.utc).isoformat()
+        generated_at = datetime.now(UTC).isoformat()
         expires_at = None
         if expires_in:
-            expiry_timestamp = datetime.now(timezone.utc).timestamp() + expires_in
-            expires_at = datetime.fromtimestamp(expiry_timestamp, timezone.utc).isoformat()
+            expiry_timestamp = datetime.now(UTC).timestamp() + expires_in
+            expires_at = datetime.fromtimestamp(expiry_timestamp, UTC).isoformat()
 
         # Save .env file
         env_file = os.path.join(oauth_tokens_dir, f"{agent_name}.env")
         try:
-            with open(env_file, 'w') as f:
+            with open(env_file, "w") as f:
                 f.write(f"# Generated access token for {agent_name}\n")
                 f.write(f"# Generated at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write(f'export ACCESS_TOKEN="{access_token}"\n')
@@ -181,7 +181,7 @@ class TokenGenerator:
         }
 
         try:
-            with open(json_file, 'w') as f:
+            with open(json_file, "w") as f:
                 json.dump(token_json, f, indent=2)
         except Exception as e:
             self.error(f"Failed to save JSON file: {e}")
@@ -213,7 +213,7 @@ class TokenGenerator:
         if expires_in:
             print(f"Expires in: {expires_in} seconds")
             if expires_at:
-                expiry_time = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                expiry_time = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
                 print(f"Expires at: {expiry_time.strftime('%Y-%m-%d %H:%M:%S UTC')}")
         print()
 
@@ -224,7 +224,7 @@ class TokenGenerator:
                                 realm: str = "mcp-gateway", oauth_tokens_dir: str = None) -> bool:
         """Generate token for a single agent"""
         if oauth_tokens_dir is None:
-            oauth_tokens_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.oauth-tokens')
+            oauth_tokens_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".oauth-tokens")
 
         # Load config from JSON if parameters not provided
         config = None
@@ -235,15 +235,15 @@ class TokenGenerator:
 
         # Use provided parameters or fall back to config
         if not client_id:
-            client_id = config.get('client_id')
+            client_id = config.get("client_id")
         if not client_secret:
-            client_secret = config.get('client_secret')
+            client_secret = config.get("client_secret")
         if not keycloak_url:
-            keycloak_url = config.get('keycloak_url') or config.get('gateway_url', '').split('/realms/')[0]
+            keycloak_url = config.get("keycloak_url") or config.get("gateway_url", "").split("/realms/")[0]
 
         # Also try to get realm from config
         if config and realm == "mcp-gateway":
-            config_realm = config.get('keycloak_realm') or config.get('realm')
+            config_realm = config.get("keycloak_realm") or config.get("realm")
             if config_realm:
                 realm = config_realm
 
@@ -271,7 +271,7 @@ class TokenGenerator:
         return self.save_token_files(agent_name, token_data, client_id, client_secret,
                                    keycloak_url, realm, oauth_tokens_dir)
 
-    def find_agent_configs(self, oauth_tokens_dir: str) -> List[str]:
+    def find_agent_configs(self, oauth_tokens_dir: str) -> list[str]:
         """Find all agent-{}.json files, excluding agent-{}-token.json files"""
         if not os.path.exists(oauth_tokens_dir):
             self.warning(f"OAuth tokens directory not found: {oauth_tokens_dir}")
@@ -285,7 +285,7 @@ class TokenGenerator:
         agent_configs = []
         for file_path in all_files:
             filename = os.path.basename(file_path)
-            if not filename.endswith('-token.json'):
+            if not filename.endswith("-token.json"):
                 # Use the full filename without extension as agent name
                 agent_name = filename[:-5]  # Remove '.json' (5 chars)
                 agent_configs.append(agent_name)
@@ -296,7 +296,7 @@ class TokenGenerator:
                                      keycloak_url: str = None, realm: str = "mcp-gateway") -> bool:
         """Generate tokens for all agents found in .oauth-tokens directory"""
         if oauth_tokens_dir is None:
-            oauth_tokens_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.oauth-tokens')
+            oauth_tokens_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".oauth-tokens")
 
         self.log(f"Searching for agent configs in: {oauth_tokens_dir}")
 
@@ -314,7 +314,7 @@ class TokenGenerator:
         for agent_name in agent_configs:
             print(f"\n{'='*60}")
             print(f"Processing agent: {agent_name}")
-            print('='*60)
+            print("="*60)
 
             try:
                 if self.generate_token_for_agent(agent_name, keycloak_url=keycloak_url,
@@ -327,7 +327,7 @@ class TokenGenerator:
 
         print(f"\n{'='*60}")
         print(f"Token generation complete: {success_count}/{total_count} successful")
-        print('='*60)
+        print("="*60)
 
         return success_count == total_count
 
@@ -335,7 +335,7 @@ class TokenGenerator:
 def main():
     """Main function"""
     parser = argparse.ArgumentParser(
-        description='Generate OAuth2 access tokens for MCP agents using Keycloak',
+        description="Generate OAuth2 access tokens for MCP agents using Keycloak",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -353,22 +353,22 @@ Examples:
         """
     )
 
-    parser.add_argument('--agent-name', type=str,
-                       help='Specific agent name to generate token for')
-    parser.add_argument('--all-agents', action='store_true',
-                       help='Generate tokens for all agents found in .oauth-tokens directory')
-    parser.add_argument('--client-id', type=str,
-                       help='OAuth2 client ID (overrides config file)')
-    parser.add_argument('--client-secret', type=str,
-                       help='OAuth2 client secret (overrides config file)')
-    parser.add_argument('--keycloak-url', type=str,
-                       help='Keycloak server URL (overrides config file)')
-    parser.add_argument('--realm', type=str, default='mcp-gateway',
-                       help='Keycloak realm (default: mcp-gateway)')
-    parser.add_argument('--oauth-dir', type=str,
-                       help='OAuth tokens directory (default: ../../.oauth-tokens)')
-    parser.add_argument('--verbose', '-v', action='store_true',
-                       help='Verbose output')
+    parser.add_argument("--agent-name", type=str,
+                       help="Specific agent name to generate token for")
+    parser.add_argument("--all-agents", action="store_true",
+                       help="Generate tokens for all agents found in .oauth-tokens directory")
+    parser.add_argument("--client-id", type=str,
+                       help="OAuth2 client ID (overrides config file)")
+    parser.add_argument("--client-secret", type=str,
+                       help="OAuth2 client secret (overrides config file)")
+    parser.add_argument("--keycloak-url", type=str,
+                       help="Keycloak server URL (overrides config file)")
+    parser.add_argument("--realm", type=str, default="mcp-gateway",
+                       help="Keycloak realm (default: mcp-gateway)")
+    parser.add_argument("--oauth-dir", type=str,
+                       help="OAuth tokens directory (default: ../../.oauth-tokens)")
+    parser.add_argument("--verbose", "-v", action="store_true",
+                       help="Verbose output")
 
     args = parser.parse_args()
 
@@ -385,7 +385,7 @@ Examples:
     # Determine oauth tokens directory
     oauth_tokens_dir = args.oauth_dir
     if oauth_tokens_dir is None:
-        oauth_tokens_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.oauth-tokens')
+        oauth_tokens_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".oauth-tokens")
 
     try:
         if args.all_agents:
@@ -416,5 +416,5 @@ Examples:
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

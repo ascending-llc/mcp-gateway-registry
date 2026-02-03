@@ -1,21 +1,21 @@
 import asyncio
-import time
-import secrets
 import os
-from typing import Dict, Optional, Any, List
+import secrets
+import time
+from typing import Any
 
 from packages.database.redis_client import get_redis_client
-from registry.auth.oauth.redis_flow_storage import RedisFlowStorage
 from registry.auth.oauth.oauth_utils import parse_scope, scope_to_string
+from registry.auth.oauth.redis_flow_storage import RedisFlowStorage
 from registry.models.oauth_models import (
-    OAuthFlow,
     MCPOAuthFlowMetadata,
-    OAuthTokens,
     OAuthClientInformation,
-    OAuthMetadata
+    OAuthFlow,
+    OAuthMetadata,
+    OAuthTokens,
 )
-from registry.utils.log import logger
 from registry.schemas.enums import OAuthFlowStatus
+from registry.utils.log import logger
 
 
 class FlowStateManager:
@@ -36,8 +36,8 @@ class FlowStateManager:
         self._lock = asyncio.Lock()
         self._flow_ttl = self.DEFAULT_FLOW_TTL
         self._use_redis = False
-        self._memory_flows: Dict[str, OAuthFlow] = {}
-        self._redis_storage: Optional[RedisFlowStorage] = None
+        self._memory_flows: dict[str, OAuthFlow] = {}
+        self._redis_storage: RedisFlowStorage | None = None
 
         # Try to initialize Redis storage
         try:
@@ -67,7 +67,7 @@ class FlowStateManager:
         """
         return f"{user_id}:{server_id}"
 
-    def encode_state(self, flow_id: str, security_token: Optional[str] = None) -> str:
+    def encode_state(self, flow_id: str, security_token: str | None = None) -> str:
         """
         Encode state parameter with CSRF protection
         """
@@ -102,7 +102,7 @@ class FlowStateManager:
             user_id: str,
             authorization_url: str,
             code_verifier: str,
-            oauth_config: Dict[str, Any],
+            oauth_config: dict[str, Any],
             flow_id: str
     ) -> MCPOAuthFlowMetadata:
         """Create OAuth flow metadata"""
@@ -152,7 +152,7 @@ class FlowStateManager:
                 if success:
                     logger.info(f"Created OAuth flow in Redis: flow_id={flow_id}")
                 else:
-                    logger.warning(f"Failed to save to Redis, using memory fallback")
+                    logger.warning("Failed to save to Redis, using memory fallback")
                     self._memory_flows[flow_id] = flow
             except Exception as e:
                 logger.error(f"Failed to save flow to Redis, using memory: {e}")
@@ -164,7 +164,7 @@ class FlowStateManager:
 
         return flow
 
-    def get_flow(self, flow_id: str) -> Optional[OAuthFlow]:
+    def get_flow(self, flow_id: str) -> OAuthFlow | None:
         """
         Retrieve OAuth flow by ID
         
@@ -214,11 +214,10 @@ class FlowStateManager:
                     logger.info(f"Deleted flow from Redis: {flow_id}")
             except Exception as e:
                 logger.warning(f"Error deleting flow from Redis: {e}")
-        else:
-            # Use memory storage
-            if flow_id in self._memory_flows:
-                del self._memory_flows[flow_id]
-                logger.debug(f"Deleted flow from memory: {flow_id}")
+        # Use memory storage
+        elif flow_id in self._memory_flows:
+            del self._memory_flows[flow_id]
+            logger.debug(f"Deleted flow from memory: {flow_id}")
 
     def complete_flow(self, flow_id: str, tokens: OAuthTokens) -> None:
         """
@@ -308,7 +307,7 @@ class FlowStateManager:
             logger.debug(f"Cancelled flow in memory: {flow_to_cancel.flow_id}")
             return True
 
-    def get_user_flows(self, user_id: str, server_id: str) -> List[OAuthFlow]:
+    def get_user_flows(self, user_id: str, server_id: str) -> list[OAuthFlow]:
         """
         Get all OAuth flows for specific user and server
         
@@ -332,7 +331,7 @@ class FlowStateManager:
             logger.debug(f"Found {len(user_flows)} flows in memory for {user_id}/{server_id}")
             return user_flows
 
-    def _create_client_info(self, oauth_config: Dict[str, Any], server_name: str) -> OAuthClientInformation:
+    def _create_client_info(self, oauth_config: dict[str, Any], server_name: str) -> OAuthClientInformation:
         """
         Build OAuth client information from server configuration
         """
@@ -353,7 +352,7 @@ class FlowStateManager:
             additional_params=oauth_config.get("additional_params")
         )
 
-    def _create_oauth_metadata(self, oauth_config: Dict[str, Any]) -> OAuthMetadata:
+    def _create_oauth_metadata(self, oauth_config: dict[str, Any]) -> OAuthMetadata:
         """
         Build OAuth metadata from server configuration
         """
@@ -408,7 +407,7 @@ class FlowStateManager:
             return cleaned_count
 
 
-_flow_state_manager_instance: Optional[FlowStateManager] = None
+_flow_state_manager_instance: FlowStateManager | None = None
 
 
 def get_flow_state_manager() -> FlowStateManager:

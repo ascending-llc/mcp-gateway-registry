@@ -1,15 +1,17 @@
-from typing import Dict, Any
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
+
 from registry.auth.dependencies import CurrentUser
-from registry.services.oauth.mcp_service import MCPService, get_mcp_service
 from registry.schemas.enums import ConnectionState
-from registry.utils.log import logger
-from registry.services.server_service import server_service_v1
 from registry.services.oauth.connection_status_service import (
     get_servers_connection_status,
-    get_single_server_connection_status
+    get_single_server_connection_status,
 )
+from registry.services.oauth.mcp_service import MCPService, get_mcp_service
+from registry.services.server_service import server_service_v1
+from registry.utils.log import logger
 
 router = APIRouter(prefix="/mcp", tags=["connection"])
 
@@ -31,7 +33,7 @@ async def reinitialize_server(
     Notes: POST /:serverName/reinitialize (TypeScript reference)
     """
     try:
-        user_id = current_user.get('user_id')
+        user_id = current_user.get("user_id")
         logger.info(f"[Reinitialize] User {user_id} reinitializing server: {server_id}")
 
         # Step 1: Disconnect existing connection
@@ -76,7 +78,7 @@ async def reinitialize_server(
         logger.error(f"[Reinitialize] Unexpected error for {server_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {str(e)}")
+            detail=f"Internal server error: {e!s}")
 
 
 @DeprecationWarning
@@ -84,7 +86,7 @@ async def reinitialize_server(
 async def get_all_connection_status(
         current_user: CurrentUser,
         mcp_service: MCPService = Depends(get_mcp_service)
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get connection status for all MCP servers
     
@@ -93,7 +95,7 @@ async def get_all_connection_status(
     Notes: GET /connection/status (TypeScript reference)
     """
     try:
-        user_id = current_user.get('user_id')
+        user_id = current_user.get("user_id")
         logger.debug(f"Fetching connection status for all servers (user: {user_id})")
 
         # Get all active servers
@@ -121,7 +123,7 @@ async def get_server_connection_status(
         server_id: str,
         current_user: CurrentUser,
         mcp_service: MCPService = Depends(get_mcp_service)
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get connection status for a specific MCP server by server ID
 
@@ -129,7 +131,7 @@ async def get_server_connection_status(
     Uses the same logic as /connection/status to ensure consistency.
     """
     try:
-        user_id = current_user.get('user_id')
+        user_id = current_user.get("user_id")
         logger.debug(f"Fetching status for {server_id} (user: {user_id})")
 
         server = await server_service_v1.get_server_by_id(server_id)
@@ -162,7 +164,7 @@ async def check_auth_values(
         server_name: str,
         current_user: CurrentUser,
         mcp_service: MCPService = Depends(get_mcp_service)
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Check which authentication values are set for an MCP server
     
@@ -174,7 +176,7 @@ async def check_auth_values(
     Security: Only returns boolean flags, never actual credential values
     """
     try:
-        user_id = current_user.get('user_id')
+        user_id = current_user.get("user_id")
         logger.debug(f"Checking auth values for {server_name} (user: {user_id})")
 
         # Check if OAuth tokens exist

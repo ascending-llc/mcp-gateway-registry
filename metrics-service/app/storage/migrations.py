@@ -1,28 +1,27 @@
 """Database schema migration system for metrics service."""
-import asyncio
 import logging
-import json
+from collections.abc import Callable
 from datetime import datetime
-from typing import List, Dict, Any, Callable, Optional
-from pathlib import Path
-from ..config import settings
-from .database import MetricsStorage
+from typing import Any
+
 import aiosqlite
+
+from ..config import settings
 
 logger = logging.getLogger(__name__)
 
 
 class Migration:
     """Represents a single database migration."""
-    
+
     def __init__(
-        self, 
-        version: int, 
-        name: str, 
-        up_sql: str, 
+        self,
+        version: int,
+        name: str,
+        up_sql: str,
         down_sql: str = None,
-        python_up: Optional[Callable] = None,
-        python_down: Optional[Callable] = None
+        python_up: Callable | None = None,
+        python_down: Callable | None = None
     ):
         self.version = version
         self.name = name
@@ -30,22 +29,22 @@ class Migration:
         self.down_sql = down_sql
         self.python_up = python_up
         self.python_down = python_down
-    
+
     def __str__(self):
         return f"Migration {self.version:04d}: {self.name}"
 
 
 class MigrationManager:
     """Manages database schema migrations."""
-    
+
     def __init__(self, db_path: str = None):
         self.db_path = db_path or settings.SQLITE_DB_PATH
-        self.migrations: List[Migration] = []
+        self.migrations: list[Migration] = []
         self._register_migrations()
-    
+
     def _register_migrations(self):
         """Register all available migrations in order."""
-        
+
         # Migration 0001: Initial schema (this is what we already have)
         self.migrations.append(Migration(
             version=1,
@@ -160,7 +159,7 @@ class MigrationManager:
                 SELECT 'Initial schema rollback not supported' as error;
             """
         ))
-        
+
         # Migration 0002: Add metrics aggregation tables
         self.migrations.append(Migration(
             version=2,
@@ -221,7 +220,7 @@ class MigrationManager:
                 DROP TABLE IF EXISTS metrics_hourly;
             """
         ))
-        
+
         # Migration 0003: Add retention policies table
         self.migrations.append(Migration(
             version=3,
@@ -253,7 +252,7 @@ class MigrationManager:
                 DROP TABLE IF EXISTS retention_policies;
             """
         ))
-        
+
         # Migration 0004: Add API key usage tracking
         self.migrations.append(Migration(
             version=4,
@@ -297,7 +296,7 @@ class MigrationManager:
                 -- For now, just mark as rolled back
             """
         ))
-        
+
         # Migration 5: Fix missing tables and timestamp columns
         self.migrations.append(Migration(
             version=5,
@@ -360,7 +359,7 @@ class MigrationManager:
                 DROP INDEX IF EXISTS idx_retention_policies_table;
             """
         ))
-    
+
     async def get_current_version(self) -> int:
         """Get the current schema version from the database."""
         try:
@@ -371,22 +370,22 @@ class MigrationManager:
                     WHERE type='table' AND name='schema_migrations'
                 """)
                 table_exists = await cursor.fetchone()
-                
+
                 if not table_exists:
                     return 0  # No migrations have been applied
-                
+
                 # Get the highest version number
                 cursor = await db.execute("""
                     SELECT MAX(version) FROM schema_migrations
                 """)
                 result = await cursor.fetchone()
                 return result[0] if result[0] else 0
-                
+
         except Exception as e:
             logger.error(f"Failed to get current schema version: {e}")
             return 0
-    
-    async def get_applied_migrations(self) -> List[Dict[str, Any]]:
+
+    async def get_applied_migrations(self) -> list[dict[str, Any]]:
         """Get list of applied migrations."""
         try:
             async with aiosqlite.connect(self.db_path) as db:
@@ -399,7 +398,7 @@ class MigrationManager:
                 return [
                     {
                         "version": row[0],
-                        "name": row[1], 
+                        "name": row[1],
                         "applied_at": row[2]
                     }
                     for row in rows
@@ -407,159 +406,159 @@ class MigrationManager:
         except Exception as e:
             logger.error(f"Failed to get applied migrations: {e}")
             return []
-    
+
     async def apply_migration(self, migration: Migration) -> bool:
         """Apply a single migration."""
         logger.info(f"Applying {migration}")
-        
+
         try:
             async with aiosqlite.connect(self.db_path) as db:
                 await db.execute("BEGIN TRANSACTION")
-                
+
                 try:
                     # Execute the SQL migration
                     if migration.up_sql:
                         await db.executescript(migration.up_sql)
-                    
+
                     # Execute Python migration if provided
                     if migration.python_up:
                         await migration.python_up(db)
-                    
+
                     # Record the migration as applied
                     await db.execute("""
                         INSERT INTO schema_migrations (version, name, applied_at)
                         VALUES (?, ?, ?)
                     """, (migration.version, migration.name, datetime.now().isoformat()))
-                    
+
                     await db.commit()
                     logger.info(f"Successfully applied {migration}")
                     return True
-                    
+
                 except Exception as e:
                     await db.rollback()
                     logger.error(f"Failed to apply {migration}: {e}")
                     return False
-                    
+
         except Exception as e:
             logger.error(f"Database connection error during migration: {e}")
             return False
-    
+
     async def rollback_migration(self, migration: Migration) -> bool:
         """Rollback a single migration."""
         logger.info(f"Rolling back {migration}")
-        
+
         try:
             async with aiosqlite.connect(self.db_path) as db:
                 await db.execute("BEGIN TRANSACTION")
-                
+
                 try:
                     # Execute Python rollback if provided
                     if migration.python_down:
                         await migration.python_down(db)
-                    
+
                     # Execute the SQL rollback
                     if migration.down_sql:
                         await db.executescript(migration.down_sql)
-                    
+
                     # Remove the migration record
                     await db.execute("""
                         DELETE FROM schema_migrations WHERE version = ?
                     """, (migration.version,))
-                    
+
                     await db.commit()
                     logger.info(f"Successfully rolled back {migration}")
                     return True
-                    
+
                 except Exception as e:
                     await db.rollback()
                     logger.error(f"Failed to rollback {migration}: {e}")
                     return False
-                    
+
         except Exception as e:
             logger.error(f"Database connection error during rollback: {e}")
             return False
-    
-    async def migrate_up(self, target_version: Optional[int] = None) -> bool:
+
+    async def migrate_up(self, target_version: int | None = None) -> bool:
         """Apply all pending migrations up to target version."""
         current_version = await self.get_current_version()
         target_version = target_version or max(m.version for m in self.migrations)
-        
+
         logger.info(f"Current schema version: {current_version}")
         logger.info(f"Target schema version: {target_version}")
-        
+
         if current_version >= target_version:
             logger.info("Database schema is up to date")
             return True
-        
+
         # Find migrations to apply
         pending_migrations = [
-            m for m in self.migrations 
+            m for m in self.migrations
             if current_version < m.version <= target_version
         ]
-        
+
         if not pending_migrations:
             logger.info("No migrations to apply")
             return True
-        
+
         logger.info(f"Applying {len(pending_migrations)} migrations...")
-        
+
         for migration in sorted(pending_migrations, key=lambda x: x.version):
             success = await self.apply_migration(migration)
             if not success:
                 logger.error(f"Migration failed at {migration}, aborting")
                 return False
-        
+
         logger.info("All migrations applied successfully")
         return True
-    
+
     async def migrate_down(self, target_version: int) -> bool:
         """Rollback migrations down to target version."""
         current_version = await self.get_current_version()
-        
+
         logger.info(f"Current schema version: {current_version}")
         logger.info(f"Target schema version: {target_version}")
-        
+
         if current_version <= target_version:
             logger.info("No rollback needed")
             return True
-        
+
         # Find migrations to rollback
         rollback_migrations = [
-            m for m in self.migrations 
+            m for m in self.migrations
             if target_version < m.version <= current_version
         ]
-        
+
         if not rollback_migrations:
             logger.info("No migrations to rollback")
             return True
-        
+
         logger.info(f"Rolling back {len(rollback_migrations)} migrations...")
-        
+
         # Rollback in reverse order
         for migration in sorted(rollback_migrations, key=lambda x: x.version, reverse=True):
             success = await self.rollback_migration(migration)
             if not success:
                 logger.error(f"Rollback failed at {migration}, aborting")
                 return False
-        
+
         logger.info("All rollbacks completed successfully")
         return True
-    
-    def list_migrations(self) -> List[Migration]:
+
+    def list_migrations(self) -> list[Migration]:
         """List all available migrations."""
         return sorted(self.migrations, key=lambda x: x.version)
-    
-    async def get_migration_status(self) -> Dict[str, Any]:
+
+    async def get_migration_status(self) -> dict[str, Any]:
         """Get comprehensive migration status."""
         current_version = await self.get_current_version()
         applied_migrations = await self.get_applied_migrations()
         all_migrations = self.list_migrations()
-        
+
         pending_migrations = [
-            m for m in all_migrations 
+            m for m in all_migrations
             if m.version > current_version
         ]
-        
+
         return {
             "current_version": current_version,
             "latest_version": max(m.version for m in all_migrations),

@@ -2,13 +2,14 @@
 Centralized Redis connection management for the registry.
 Follows the same pattern as MongoDB connection in packages/database.
 """
-from typing import Optional
+
 from redis import Redis
+
 from registry.constants import REGISTRY_CONSTANTS
 from registry.utils.log import logger
 
 # Global Redis client instance
-_redis_client: Optional[Redis] = None
+_redis_client: Redis | None = None
 
 
 async def init_redis() -> None:
@@ -17,13 +18,13 @@ async def init_redis() -> None:
     Similar to init_mongodb() pattern.
     """
     global _redis_client
-    
+
     if _redis_client is not None:
         logger.warning("Redis client already initialized")
         return
-    
+
     redis_url = REGISTRY_CONSTANTS.REDIS_URI
-    
+
     try:
         # Create Redis client with connection pooling
         _redis_client = Redis.from_url(
@@ -35,11 +36,11 @@ async def init_redis() -> None:
             health_check_interval=30,
             max_connections=50
         )
-        
+
         # Test connection
         _redis_client.ping()
         logger.info(f"✅ Successfully connected to Redis: {redis_url}")
-        
+
     except Exception as e:
         logger.error(f"❌ Failed to connect to Redis at {redis_url}: {e}")
         _redis_client = None
@@ -52,11 +53,11 @@ async def close_redis() -> None:
     Similar to close_mongodb() pattern.
     """
     global _redis_client
-    
+
     if _redis_client is None:
         logger.warning("Redis client not initialized, nothing to close")
         return
-    
+
     try:
         _redis_client.close()
         logger.info("✅ Redis connection closed")
@@ -65,7 +66,7 @@ async def close_redis() -> None:
         logger.error(f"❌ Error closing Redis connection: {e}")
 
 
-def get_redis_client() -> Optional[Redis]:
+def get_redis_client() -> Redis | None:
     """
     Get the global Redis client instance.
     

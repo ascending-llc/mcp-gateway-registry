@@ -1,16 +1,18 @@
 import time
-from typing import Dict, Any, Optional
+from typing import Any
 from urllib.parse import quote
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
-from fastapi.responses import RedirectResponse, JSONResponse
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse, RedirectResponse
+
 from registry.auth.dependencies import CurrentUser
-from registry.services.oauth.mcp_service import get_mcp_service, MCPService
-from registry.schemas.enums import ConnectionState, OAuthFlowStatus
-from registry.utils.log import logger
 from registry.auth.oauth.reconnection import get_reconnection_manager
 from registry.constants import REGISTRY_CONSTANTS
+from registry.schemas.enums import ConnectionState, OAuthFlowStatus
+from registry.services.oauth.mcp_service import MCPService, get_mcp_service
 from registry.services.oauth.token_service import token_service
 from registry.services.server_service import server_service_v1
+from registry.utils.log import logger
 
 router = APIRouter(prefix="/mcp", tags=["oauth"])
 
@@ -28,7 +30,7 @@ async def initiate_oauth_flow(
     TypeScript implementation: Directly call MCPOAuthHandler.initiateOAuthFlow()
     """
     try:
-        user_id = user_context.get('user_id')
+        user_id = user_context.get("user_id")
         logger.info(f"Oauth initiate for user id : {user_id}")
         server = await server_service_v1.get_server_by_id(server_id)
         if not server:
@@ -55,18 +57,18 @@ async def initiate_oauth_flow(
         # Re-raise HTTP exceptions with their original status code
         raise
     except Exception as e:
-        logger.error(f"Failed to initialize OAuth flow: {str(e)}", exc_info=True)
+        logger.error(f"Failed to initialize OAuth flow: {e!s}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"Failed to initialize OAuth flow: {str(e)}")
+                            detail=f"Failed to initialize OAuth flow: {e!s}")
 
 
 @router.get("/{server_name}/oauth/callback")
 async def oauth_callback(
         server_name: str,
         request: Request,
-        code: Optional[str] = Query(None, description="OAuth authorization code"),
-        state: Optional[str] = Query(None, description="State parameter (format: flow_id##security_token)"),
-        error: Optional[str] = Query(None, description="OAuth error message"),
+        code: str | None = Query(None, description="OAuth authorization code"),
+        state: str | None = Query(None, description="State parameter (format: flow_id##security_token)"),
+        error: str | None = Query(None, description="OAuth error message"),
         mcp_service: MCPService = Depends(get_mcp_service)
 ) -> RedirectResponse:
     """
@@ -172,7 +174,7 @@ async def oauth_callback(
         return _redirect_to_page(request, server_name, flag="success")
 
     except Exception as e:
-        logger.error(f"[MCP OAuth] OAuth callback error: {str(e)}", exc_info=True)
+        logger.error(f"[MCP OAuth] OAuth callback error: {e!s}", exc_info=True)
         return _redirect_to_page(request, server_name, error_msg="callback_failed")
 
 
@@ -181,7 +183,7 @@ async def get_oauth_tokens(
         flow_id: str,
         current_user: CurrentUser,
         mcp_service: MCPService = Depends(get_mcp_service)
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get OAuth tokens
     
@@ -211,22 +213,22 @@ async def get_oauth_tokens(
 
         # 3. Return tokens
         return {
-            "tokens": tokens.dict() if hasattr(tokens, 'dict') else tokens
+            "tokens": tokens.dict() if hasattr(tokens, "dict") else tokens
         }
     except HTTPException:
         # Re-raise HTTP exceptions with their original status code
         raise
     except Exception as e:
-        logger.error(f"Failed to get OAuth tokens: {str(e)}", exc_info=True)
+        logger.error(f"Failed to get OAuth tokens: {e!s}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"Failed to get tokens: {str(e)}")
+                            detail=f"Failed to get tokens: {e!s}")
 
 
 @router.get("/oauth/status/{flow_id}")
 async def get_oauth_status(
         flow_id: str,
         mcp_service: MCPService = Depends(get_mcp_service)
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Check OAuth flow status
     
@@ -241,10 +243,10 @@ async def get_oauth_status(
         return flow_status
 
     except Exception as e:
-        logger.error(f"Failed to check OAuth flow status: {str(e)}", exc_info=True)
+        logger.error(f"Failed to check OAuth flow status: {e!s}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to check flow status: {str(e)}"
+            detail=f"Failed to check flow status: {e!s}"
         )
 
 
@@ -253,7 +255,7 @@ async def cancel_oauth_flow(
         server_id: str,
         current_user: CurrentUser,
         mcp_service: MCPService = Depends(get_mcp_service)
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Cancel OAuth flow
     
@@ -306,10 +308,10 @@ async def cancel_oauth_flow(
         # Re-raise HTTP exceptions with their original status code
         raise
     except Exception as e:
-        logger.error(f"Failed to cancel OAuth flow: {str(e)}", exc_info=True)
+        logger.error(f"Failed to cancel OAuth flow: {e!s}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to cancel flow: {str(e)}"
+            detail=f"Failed to cancel flow: {e!s}"
         )
 
 
@@ -318,7 +320,7 @@ async def refresh_oauth_tokens(
         server_id: str,
         current_user: CurrentUser,
         mcp_service: MCPService = Depends(get_mcp_service)
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Refresh OAuth tokens
     
@@ -400,9 +402,9 @@ async def refresh_oauth_tokens(
         # Re-raise HTTP exceptions with their original status code
         raise
     except Exception as e:
-        logger.error(f"Failed to refresh OAuth tokens: {str(e)}", exc_info=True)
+        logger.error(f"Failed to refresh OAuth tokens: {e!s}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"Failed to refresh tokens: {str(e)}")
+                            detail=f"Failed to refresh tokens: {e!s}")
 
 
 @router.delete("/oauth/token/{server_id}")
@@ -410,7 +412,7 @@ async def delete_oauth_tokens(
         server_id: str,
         current_user: CurrentUser,
         mcp_service: MCPService = Depends(get_mcp_service)
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Delete the OAuth token for this user
 
@@ -435,9 +437,9 @@ async def delete_oauth_tokens(
             "user_id": user_id,
         }
     except HTTPException as e:
-        logger.error(f"Failed to delete OAuth tokens: {str(e)}", exc_info=True)
+        logger.error(f"Failed to delete OAuth tokens: {e!s}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail=f"Failed to delete tokens: {str(e)}")
+                            detail=f"Failed to delete tokens: {e!s}")
 
 
 # ==================== Helper Functions ====================

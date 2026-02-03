@@ -1,9 +1,9 @@
 """Pytest configuration and fixtures for packages tests."""
 
-import pytest
-from datetime import datetime, UTC
-from beanie import PydanticObjectId
+from datetime import UTC, datetime
 
+import pytest
+from beanie import PydanticObjectId
 
 # Import factories for use in tests
 pytest_plugins = ["packages.tests.fixtures.factories"]

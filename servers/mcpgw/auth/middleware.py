@@ -1,8 +1,9 @@
 import logging
-from typing import Optional, List
-from fastmcp.server.middleware import Middleware, MiddlewareContext
-from fastmcp.server.dependencies import get_http_request, get_http_headers
+
 from fastapi import HTTPException
+from fastmcp.server.dependencies import get_http_request
+from fastmcp.server.middleware import Middleware, MiddlewareContext
+
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ class HeaderSwapMiddleware(Middleware):
         mcp.add_middleware(AuthMiddleware())
     """
 
-    def __init__(self, custom_header: Optional[str] = None):
+    def __init__(self, custom_header: str | None = None):
         """
         Initialize the header swap middleware.
         
@@ -38,26 +39,26 @@ class HeaderSwapMiddleware(Middleware):
         try:
             request = get_http_request()
             headers = dict(request.headers)
-            
+
             auth_header = "authorization"
-            
+
             # Check if custom header exists
             if self.custom_header in headers:
                 # Preserve original Authorization header if it exists
                 if auth_header in headers:
                     headers["x-original-authorization"] = headers[auth_header]
                     logger.debug("Preserved original Authorization -> X-Original-Authorization")
-                
+
                 # Move custom header to Authorization
                 headers[auth_header] = headers[self.custom_header]
                 logger.debug(f"Swapped {self.custom_header} -> Authorization")
-                
+
                 # Update request headers
                 request._headers = headers
-            
+
         except Exception as e:
             logger.warning(f"Failed to swap auth headers: {e}")
-        
+
         return await call_next(context)
 
 
@@ -69,7 +70,7 @@ class AuthMiddleware(Middleware):
     Use HeaderSwapMiddleware before this if using custom auth headers.
     """
 
-    def __init__(self, allowed_methods_without_auth: Optional[List[str]] = None):
+    def __init__(self, allowed_methods_without_auth: list[str] | None = None):
         """
         Initialize the authentication middleware.
         
@@ -92,12 +93,12 @@ class AuthMiddleware(Middleware):
         """
         method = context.method
         logger.debug(f"MCP request: {method}")
-        
+
         if method not in self.allowed_methods_without_auth:
             # Extract full user context from request
             user_context = await self._extract_user_context()
             await self._store_auth_context(context, user_context)
-        
+
         try:
             result = await call_next(context)
             return result
@@ -116,7 +117,7 @@ class AuthMiddleware(Middleware):
             ValueError: If user_id is missing and cannot be resolved from database
         """
         user_context = {}
-        
+
         # Extract user claims from FastMCP request.user.access_token.claims
         try:
             request = get_http_request()
@@ -124,17 +125,17 @@ class AuthMiddleware(Middleware):
                 # Extract claims from access_token
                 if hasattr(request.user, "access_token") and hasattr(request.user.access_token, "claims"):
                     # Get all claims from the access token
-                    user_context = dict(request.user.access_token.claims)                    
+                    user_context = dict(request.user.access_token.claims)
                     logger.debug(f"Extracted user context from access token claims: "
                                f"sub={user_context.get('sub')}, "
                                f"user_id={user_context.get('user_id')}, "
                                f"scopes={len(user_context.get('scopes', []))}, "
                                f"groups={len(user_context.get('groups', []))}")
 
-                    if not user_context.get('user_id'):
-                        x_user_id = request.headers.get('x-user-id')
+                    if not user_context.get("user_id"):
+                        x_user_id = request.headers.get("x-user-id")
                         if x_user_id:
-                            user_context['user_id'] = x_user_id
+                            user_context["user_id"] = x_user_id
                             logger.debug(f"Extracted user_id from x-user-id header: {x_user_id}")
                         else:
                             logger.error("user_id missing in JWT claims and x-user-id header")
@@ -154,9 +155,9 @@ class AuthMiddleware(Middleware):
             logger.error(f"Failed to extract user context: {type(e).__name__}: {e}")
             raise HTTPException(
                 status_code=401,
-                detail=f"Authentication failed: {str(e)}"
+                detail=f"Authentication failed: {e!s}"
             )
-        
+
         return user_context
 
     async def _store_auth_context(
@@ -173,12 +174,12 @@ class AuthMiddleware(Middleware):
         """
         try:
             ctx = context.fastmcp_context
-            if not hasattr(ctx, 'user_auth'):
+            if not hasattr(ctx, "user_auth"):
                 ctx.user_auth = {}
-            
+
             # Store full user context
             ctx.user_auth.update(user_context)
-            
+
             logger.debug(f"Stored user context: username={user_context.get('username')}, "
                         f"scopes={len(user_context.get('scopes', []))}, "
                         f"groups={len(user_context.get('groups', []))}")

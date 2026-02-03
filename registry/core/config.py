@@ -1,12 +1,8 @@
-import os
 import secrets
 from pathlib import Path
-from typing import Optional
 
 from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
-
-from registry.constants import REGISTRY_CONSTANTS
 
 
 class Settings(BaseSettings):
@@ -25,7 +21,7 @@ class Settings(BaseSettings):
     session_cookie_name: str = "jarvis_registry_session"
     session_max_age_seconds: int = 60 * 60 * 8  # 8 hours
     session_cookie_secure: bool = False  # Set to True in production with HTTPS
-    session_cookie_domain: Optional[str] = None  # e.g., ".example.com" for cross-subdomain sharing
+    session_cookie_domain: str | None = None  # e.g., ".example.com" for cross-subdomain sharing
     auth_server_url: str = "http://localhost:8888"
     auth_server_external_url: str = "http://localhost:8888"  # External URL for OAuth redirects
     auth_server_api_prefix: str = ""  # API prefix for auth server routes (e.g., "/auth")
@@ -74,7 +70,7 @@ class Settings(BaseSettings):
     agent_security_scan_timeout: int = 60  # 1 minute
     agent_security_add_pending_tag: bool = True
     a2a_scanner_llm_api_key: str = ""  # Optional Azure OpenAI API key for LLM-based analysis
-    
+
     # Container paths - adjust for local development
     container_app_dir: Path = Path("/app")
     container_registry_dir: Path = Path("/app/registry")
@@ -101,7 +97,7 @@ class Settings(BaseSettings):
 
         # Automatically append API prefix to auth server URLs if configured
         if self.auth_server_api_prefix:
-            prefix = self.auth_server_api_prefix.rstrip('/')
+            prefix = self.auth_server_api_prefix.rstrip("/")
             if not self.auth_server_url.endswith(prefix):
                 self.auth_server_url = f"{self.auth_server_url.rstrip('/')}{prefix}"
             if not self.auth_server_external_url.endswith(prefix):

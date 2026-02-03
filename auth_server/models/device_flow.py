@@ -2,14 +2,14 @@
 Pydantic models for OAuth 2.0 Device Flow.
 """
 
-from typing import Optional
+
 from pydantic import BaseModel
 
 
 class DeviceCodeRequest(BaseModel):
     """Request model for device code generation"""
     client_id: str
-    scope: Optional[str] = None
+    scope: str | None = None
 
 
 class DeviceCodeResponse(BaseModel):
@@ -40,4 +40,4 @@ class DeviceTokenResponse(BaseModel):
     token_type: str
     expires_in: int
     scope: str
-    refresh_token: Optional[str] = None
+    refresh_token: str | None = None

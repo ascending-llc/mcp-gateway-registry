@@ -2,7 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,7 +20,7 @@ class AuthProvider(ABC):
             self,
             token: str,
             **kwargs: Any
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Validate an access token and return user info.
         
         Args:
@@ -41,10 +41,9 @@ class AuthProvider(ABC):
         Raises:
             ValueError: If token validation fails
         """
-        pass
 
     @abstractmethod
-    def get_jwks(self) -> Dict[str, Any]:
+    def get_jwks(self) -> dict[str, Any]:
         """Get JSON Web Key Set for token validation.
         
         Returns:
@@ -53,14 +52,13 @@ class AuthProvider(ABC):
         Raises:
             ValueError: If JWKS cannot be retrieved
         """
-        pass
 
     @abstractmethod
     def exchange_code_for_token(
             self,
             code: str,
             redirect_uri: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Exchange authorization code for access token.
         
         Args:
@@ -78,14 +76,13 @@ class AuthProvider(ABC):
         Raises:
             ValueError: If code exchange fails
         """
-        pass
 
     @abstractmethod
     def get_user_info(
             self,
             access_token: str,
-            id_token: Optional[str] = None
-    ) -> Dict[str, Any]:
+            id_token: str | None = None
+    ) -> dict[str, Any]:
         """Get user information from access token.
         
         Args:
@@ -102,14 +99,13 @@ class AuthProvider(ABC):
         Raises:
             ValueError: If user info cannot be retrieved
         """
-        pass
 
     @abstractmethod
     def get_auth_url(
             self,
             redirect_uri: str,
             state: str,
-            scope: Optional[str] = None
+            scope: str | None = None
     ) -> str:
         """Get authorization URL for OAuth2 flow.
         
@@ -121,7 +117,6 @@ class AuthProvider(ABC):
         Returns:
             Full authorization URL
         """
-        pass
 
     @abstractmethod
     def get_logout_url(
@@ -136,13 +131,12 @@ class AuthProvider(ABC):
         Returns:
             Full logout URL
         """
-        pass
 
     @abstractmethod
     def refresh_token(
             self,
             refresh_token: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Refresh an access token using a refresh token.
         
         Args:
@@ -154,13 +148,12 @@ class AuthProvider(ABC):
         Raises:
             ValueError: If token refresh fails
         """
-        pass
 
     @abstractmethod
     def validate_m2m_token(
             self,
             token: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Validate a machine-to-machine token.
         
         Args:
@@ -172,15 +165,14 @@ class AuthProvider(ABC):
         Raises:
             ValueError: If token validation fails
         """
-        pass
 
     @abstractmethod
     def get_m2m_token(
             self,
-            client_id: Optional[str] = None,
-            client_secret: Optional[str] = None,
-            scope: Optional[str] = None
-    ) -> Dict[str, Any]:
+            client_id: str | None = None,
+            client_secret: str | None = None,
+            scope: str | None = None
+    ) -> dict[str, Any]:
         """Get a machine-to-machine token using client credentials.
         
         Args:
@@ -194,4 +186,3 @@ class AuthProvider(ABC):
         Raises:
             ValueError: If token generation fails
         """
-        pass

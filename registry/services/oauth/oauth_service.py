@@ -1,15 +1,18 @@
-from typing import Dict, Optional, Any, Tuple
+from typing import Any
 
 from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
-from registry.auth.oauth import OAuthHttpClient, get_flow_state_manager, FlowStateManager, parse_scope
+from registry.auth.oauth import (
+    FlowStateManager,
+    OAuthHttpClient,
+    get_flow_state_manager,
+    parse_scope,
+)
 from registry.models.oauth_models import OAuthTokens
 from registry.schemas.enums import OAuthFlowStatus
-from registry.utils.utils import generate_code_verifier, generate_code_challenge
-from registry.services.server_service import server_service_v1 as server_service
 from registry.services.oauth.token_service import token_service
-
-from registry.utils.log import logger
 from registry.utils.crypto_utils import decrypt_auth_fields
+from registry.utils.log import logger
+from registry.utils.utils import generate_code_challenge, generate_code_verifier
 
 
 class MCPOAuthService:
@@ -20,7 +23,7 @@ class MCPOAuthService:
     
     """
 
-    def __init__(self, flow_manager: Optional[FlowStateManager] = None):
+    def __init__(self, flow_manager: FlowStateManager | None = None):
         self.flow_manager = flow_manager or get_flow_state_manager()
         self.http_client = OAuthHttpClient()
 
@@ -28,7 +31,7 @@ class MCPOAuthService:
             self,
             user_id: str,
             server: MCPServerDocument
-    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    ) -> tuple[str | None, str | None, str | None]:
         """
         Initialize OAuth flow
         
@@ -98,7 +101,7 @@ class MCPOAuthService:
             flow_id: str,
             authorization_code: str,
             state: str
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """
         Complete OAuth flow
         
@@ -181,7 +184,7 @@ class MCPOAuthService:
             self,
             user_id: str,
             server: MCPServerDocument
-    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    ) -> tuple[str | None, str | None, str | None]:
         """
         Get valid access token with automatic refresh and re-authentication flow
         
@@ -243,7 +246,7 @@ class MCPOAuthService:
             logger.error(f"Error getting valid access token: {e}", exc_info=True)
             return None, None, str(e)
 
-    async def get_tokens(self, user_id: str, server_name: str) -> Optional[OAuthTokens]:
+    async def get_tokens(self, user_id: str, server_name: str) -> OAuthTokens | None:
         """
         Get user's OAuth tokens from database
         
@@ -261,14 +264,14 @@ class MCPOAuthService:
             logger.debug(f"No tokens found in database for {user_id}/{server_name}")
         return tokens
 
-    async def get_tokens_by_flow_id(self, flow_id: str) -> Optional[OAuthTokens]:
+    async def get_tokens_by_flow_id(self, flow_id: str) -> OAuthTokens | None:
         """Get OAuth tokens by flow ID"""
         flow = self.flow_manager.get_flow(flow_id)
         if not flow or flow.status != OAuthFlowStatus.COMPLETED:
             return None
         return flow.tokens
 
-    async def get_flow_status(self, flow_id: str) -> Dict[str, Any]:
+    async def get_flow_status(self, flow_id: str) -> dict[str, Any]:
         """Get flow status"""
         flow = self.flow_manager.get_flow(flow_id)
         if not flow:
@@ -288,7 +291,7 @@ class MCPOAuthService:
             "completed_at": flow.completed_at
         }
 
-    async def cancel_oauth_flow(self, user_id: str, server_id: str) -> Tuple[bool, Optional[str]]:
+    async def cancel_oauth_flow(self, user_id: str, server_id: str) -> tuple[bool, str | None]:
         """Cancel OAuth flow"""
         try:
             success = self.flow_manager.cancel_user_flow(user_id, server_id)
@@ -308,8 +311,8 @@ class MCPOAuthService:
             server_id: str,
             server_name: str,
             refresh_token_value: str,
-            oauth_config: Dict[str, Any]
-    ) -> Tuple[bool, Optional[str]]:
+            oauth_config: dict[str, Any]
+    ) -> tuple[bool, str | None]:
         """
         Refresh OAuth token using provided refresh_token value
         
@@ -375,7 +378,7 @@ class MCPOAuthService:
             self,
             user_id: str,
             mcp_server: MCPServerDocument
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """
         Validate and refresh OAuth tokens (with token retrieval and validation)
         
@@ -430,7 +433,7 @@ class MCPOAuthService:
             self,
             user_id: str,
             server: MCPServerDocument
-    ) -> Tuple[bool, Dict[str, Any]]:
+    ) -> tuple[bool, dict[str, Any]]:
         """
         Handle OAuth authentication for server reinitialization
         
@@ -505,7 +508,7 @@ class MCPOAuthService:
             self,
             user_id: str,
             server: MCPServerDocument
-    ) -> Tuple[bool, Dict[str, Any]]:
+    ) -> tuple[bool, dict[str, Any]]:
         """
         Helper method: Refresh tokens and return success response
         
@@ -551,10 +554,9 @@ class MCPOAuthService:
             if success:
                 logger.info(f"[Reinitialize] Token refreshed successfully for {server_name}({server_id})")
                 return True, self._build_success_response(server)
-            else:
-                # Refresh failed - need re-authorization
-                logger.warning(f"[Reinitialize] Token refresh failed for {server_name}: {error}")
-                return await self._build_oauth_required_response(user_id, server)
+            # Refresh failed - need re-authorization
+            logger.warning(f"[Reinitialize] Token refresh failed for {server_name}: {error}")
+            return await self._build_oauth_required_response(user_id, server)
 
         except Exception as e:
             logger.error(f"[Reinitialize] Error in _refresh_and_connect: {e}", exc_info=True)
@@ -564,7 +566,7 @@ class MCPOAuthService:
             self,
             user_id: str,
             server: MCPServerDocument
-    ) -> Tuple[bool, Dict[str, Any]]:
+    ) -> tuple[bool, dict[str, Any]]:
         """
         Helper method: Build response indicating OAuth is required
         
@@ -586,7 +588,7 @@ class MCPOAuthService:
             "requires_oauth": server.config.get("requiresOAuth", False),
         }
 
-    def _build_success_response(self, server: MCPServerDocument) -> Dict[str, Any]:
+    def _build_success_response(self, server: MCPServerDocument) -> dict[str, Any]:
         """
         Build success response for reinitialization
         
@@ -605,7 +607,7 @@ class MCPOAuthService:
         }
 
 
-_oauth_service_instance: Optional[MCPOAuthService] = None
+_oauth_service_instance: MCPOAuthService | None = None
 
 
 async def get_oauth_service() -> MCPOAuthService:

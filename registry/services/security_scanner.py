@@ -12,13 +12,11 @@ import logging
 import os
 import re
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 from ..core.config import settings
-from ..schemas.security import SecurityScanResult, SecurityScanConfig
-
+from ..schemas.security import SecurityScanConfig, SecurityScanResult
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +25,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 OUTPUT_DIR = PROJECT_ROOT / "security_scans"
 
 
-def _extract_bearer_token_from_headers(headers: str) -> Optional[str]:
+def _extract_bearer_token_from_headers(headers: str) -> str | None:
     """
     Extract bearer token from headers JSON string.
 
@@ -49,11 +47,10 @@ def _extract_bearer_token_from_headers(headers: str) -> Optional[str]:
             bearer_token = auth_header.replace("Bearer ", "")
             logger.info("Using bearer token authentication")
             return bearer_token
-        else:
-            logger.warning(
-                "Headers provided but no Bearer token found in X-Authorization header"
-            )
-            return None
+        logger.warning(
+            "Headers provided but no Bearer token found in X-Authorization header"
+        )
+        return None
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse headers JSON: {e}")
         raise ValueError(f"Invalid headers JSON: {headers}") from e
@@ -162,10 +159,10 @@ class SecurityScannerService:
     async def scan_server(
         self,
         server_url: str,
-        analyzers: Optional[str] = None,
-        api_key: Optional[str] = None,
-        headers: Optional[str] = None,
-        timeout: Optional[int] = None,
+        analyzers: str | None = None,
+        api_key: str | None = None,
+        headers: str | None = None,
+        timeout: int | None = None,
     ) -> SecurityScanResult:
         """
         Scan an MCP server for security vulnerabilities.
@@ -226,7 +223,7 @@ class SecurityScannerService:
             # Create result object
             result = SecurityScanResult(
                 server_url=server_url,
-                scan_timestamp=datetime.now(timezone.utc)
+                scan_timestamp=datetime.now(UTC)
                 .isoformat()
                 .replace("+00:00", "Z"),
                 is_safe=is_safe,
@@ -269,7 +266,7 @@ class SecurityScannerService:
             # Return error result
             return SecurityScanResult(
                 server_url=server_url,
-                scan_timestamp=datetime.now(timezone.utc)
+                scan_timestamp=datetime.now(UTC)
                 .isoformat()
                 .replace("+00:00", "Z"),
                 is_safe=False,  # Treat scanner failures as unsafe
@@ -300,7 +297,7 @@ class SecurityScannerService:
             # Return error result
             return SecurityScanResult(
                 server_url=server_url,
-                scan_timestamp=datetime.now(timezone.utc)
+                scan_timestamp=datetime.now(UTC)
                 .isoformat()
                 .replace("+00:00", "Z"),
                 is_safe=False,  # Treat scanner failures as unsafe
@@ -319,9 +316,9 @@ class SecurityScannerService:
         self,
         server_url: str,
         analyzers: str,
-        api_key: Optional[str] = None,
-        headers: Optional[str] = None,
-        timeout: Optional[int] = None,
+        api_key: str | None = None,
+        headers: str | None = None,
+        timeout: int | None = None,
     ) -> dict:
         """
         Run mcp-scanner command and return raw output.
@@ -483,7 +480,7 @@ class SecurityScannerService:
         )
 
         # Create date-based subdirectory for archival
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         date_folder = timestamp.strftime("%Y-%m-%d")
         archive_dir = output_dir / date_folder
         archive_dir.mkdir(exist_ok=True)
@@ -534,7 +531,7 @@ class SecurityScannerService:
         server_name = safe_url.replace("localhost_", "")
         return f"{server_name}.json"
 
-    def get_scan_result(self, server_path: str) -> Optional[dict]:
+    def get_scan_result(self, server_path: str) -> dict | None:
         """
         Get the latest scan result for a server.
 
@@ -575,7 +572,7 @@ class SecurityScannerService:
             return None
 
         try:
-            with open(scan_file, "r") as f:
+            with open(scan_file) as f:
                 scan_data = json.load(f)
             logger.info(f"Loaded security scan results for {server_path} from {scan_file}")
             return scan_data
@@ -584,7 +581,7 @@ class SecurityScannerService:
                 f"Failed to parse security scan results for {server_path}: {e}"
             )
             return None
-        except Exception as e:
+        except Exception:
             logger.exception(
                 f"Unexpected error loading security scan results for {server_path}"
             )

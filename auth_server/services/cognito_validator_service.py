@@ -3,12 +3,12 @@ Service module for Cognito token validation.
 """
 import json
 import logging
-import requests
+
 import boto3
 import jwt
-from jwt.api_jwk import PyJWK
+import requests
 from botocore.exceptions import ClientError
-from typing import Dict
+from jwt.api_jwk import PyJWK
 
 from ..core.config import settings
 from ..utils.security_mask import hash_username
@@ -27,10 +27,10 @@ class SimplifiedCognitoValidator:
 
     def _get_cognito_client(self, region: str):
         if region not in self._cognito_clients:
-            self._cognito_clients[region] = boto3.client('cognito-idp', region_name=region)
+            self._cognito_clients[region] = boto3.client("cognito-idp", region_name=region)
         return self._cognito_clients[region]
 
-    def _get_jwks(self, user_pool_id: str, region: str) -> Dict:
+    def _get_jwks(self, user_pool_id: str, region: str) -> dict:
         cache_key = f"{region}:{user_pool_id}"
         if cache_key not in self._jwks_cache:
             try:
@@ -50,19 +50,19 @@ class SimplifiedCognitoValidator:
                            access_token: str,
                            user_pool_id: str,
                            client_id: str,
-                           region: str = None) -> Dict:
+                           region: str = None) -> dict:
         if not region:
             region = self.default_region
         try:
             unverified_header = jwt.get_unverified_header(access_token)
-            kid = unverified_header.get('kid')
+            kid = unverified_header.get("kid")
             if not kid:
                 raise ValueError("Token missing 'kid' in header")
 
             jwks = self._get_jwks(user_pool_id, region)
             signing_key = None
-            for key in jwks.get('keys', []):
-                if key.get('kid') == kid:
+            for key in jwks.get("keys", []):
+                if key.get("kid") == kid:
                     try:
                         from jwt.algorithms import RSAAlgorithm
                         signing_key = RSAAlgorithm.from_jwk(key)
@@ -70,7 +70,7 @@ class SimplifiedCognitoValidator:
                         try:
                             from jwt.algorithms import get_default_algorithms
                             algorithms = get_default_algorithms()
-                            signing_key = algorithms['RS256'].from_jwk(key)
+                            signing_key = algorithms["RS256"].from_jwk(key)
                         except (ImportError, AttributeError):
                             signing_key = PyJWK.from_jwk(json.dumps(key)).key
                     break
@@ -82,7 +82,7 @@ class SimplifiedCognitoValidator:
             claims = jwt.decode(
                 access_token,
                 signing_key,
-                algorithms=['RS256'],
+                algorithms=["RS256"],
                 issuer=issuer,
                 options={
                     "verify_aud": False,
@@ -91,15 +91,15 @@ class SimplifiedCognitoValidator:
                 }
             )
 
-            token_use = claims.get('token_use')
-            if token_use not in ['access', 'id']:
+            token_use = claims.get("token_use")
+            if token_use not in ["access", "id"]:
                 raise ValueError(f"Invalid token_use: {token_use}")
 
-            token_client_id = claims.get('client_id')
+            token_client_id = claims.get("client_id")
             if token_client_id and token_client_id != client_id:
                 logger.warning(f"Token issued for different client: {token_client_id} vs expected {client_id}")
 
-            logger.info(f"Successfully validated JWT token for client/user")
+            logger.info("Successfully validated JWT token for client/user")
             return claims
         except jwt.ExpiredSignatureError:
             error_msg = "Token has expired"
@@ -114,49 +114,48 @@ class SimplifiedCognitoValidator:
             logger.error(error_msg)
             raise ValueError(f"Token validation failed: {e}")
 
-    def validate_with_boto3(self, access_token: str, region: str = None) -> Dict:
+    def validate_with_boto3(self, access_token: str, region: str = None) -> dict:
         if not region:
             region = self.default_region
         try:
             cognito_client = self._get_cognito_client(region)
             response = cognito_client.get_user(AccessToken=access_token)
             user_attributes = {}
-            for attr in response.get('UserAttributes', []):
-                user_attributes[attr['Name']] = attr['Value']
+            for attr in response.get("UserAttributes", []):
+                user_attributes[attr["Name"]] = attr["Value"]
 
             result = {
-                'username': response.get('Username'),
-                'user_attributes': user_attributes,
-                'user_status': response.get('UserStatus'),
-                'token_use': 'access',
-                'auth_method': 'boto3'
+                "username": response.get("Username"),
+                "user_attributes": user_attributes,
+                "user_status": response.get("UserStatus"),
+                "token_use": "access",
+                "auth_method": "boto3"
             }
             logger.info(f"Successfully validated token via boto3 for user {hash_username(result['username'])}")
             return result
         except ClientError as e:
-            error_code = e.response['Error']['Code']
-            error_message = e.response['Error']['Message']
-            if error_code == 'NotAuthorizedException':
+            error_code = e.response["Error"]["Code"]
+            error_message = e.response["Error"]["Message"]
+            if error_code == "NotAuthorizedException":
                 error_msg = "Invalid or expired access token"
                 logger.warning(f"Cognito error {error_code}: {error_message}")
                 raise ValueError(error_msg)
-            elif error_code == 'UserNotFoundException':
+            if error_code == "UserNotFoundException":
                 error_msg = "User not found"
                 logger.warning(f"Cognito error {error_code}: {error_message}")
                 raise ValueError(error_msg)
-            else:
-                logger.error(f"Cognito error {error_code}: {error_message}")
-                raise ValueError(f"Token validation failed: {error_message}")
+            logger.error(f"Cognito error {error_code}: {error_message}")
+            raise ValueError(f"Token validation failed: {error_message}")
         except Exception as e:
             logger.error(f"Boto3 validation error: {e}")
             raise ValueError(f"Token validation failed: {e}")
 
-    def validate_self_signed_token(self, access_token: str) -> Dict:
+    def validate_self_signed_token(self, access_token: str) -> dict:
         try:
             claims = jwt.decode(
                 access_token,
                 settings.secret_key,
-                algorithms=['HS256'],
+                algorithms=["HS256"],
                 issuer=settings.jwt_issuer,
                 audience=settings.jwt_audience,
                 options={
@@ -168,25 +167,25 @@ class SimplifiedCognitoValidator:
                 leeway=30
             )
 
-            token_use = claims.get('token_use')
-            if token_use != 'access':
+            token_use = claims.get("token_use")
+            if token_use != "access":
                 raise ValueError(f"Invalid token_use: {token_use}")
 
-            scope_string = claims.get('scope', '')
+            scope_string = claims.get("scope", "")
             scopes = scope_string.split() if scope_string else []
 
             logger.info(f"Successfully validated self-signed token for user: {claims.get('sub')}")
 
             return {
-                'valid': True,
-                'method': 'self_signed',
-                'data': claims,
-                'client_id': claims.get('client_id', 'user-generated'),
-                'username': claims.get('sub', ''),
-                'expires_at': claims.get('exp'),
-                'scopes': scopes,
-                'groups': [],
-                'token_type': 'user_generated'
+                "valid": True,
+                "method": "self_signed",
+                "data": claims,
+                "client_id": claims.get("client_id", "user-generated"),
+                "username": claims.get("sub", ""),
+                "expires_at": claims.get("exp"),
+                "scopes": scopes,
+                "groups": [],
+                "token_type": "user_generated"
             }
         except jwt.ExpiredSignatureError:
             error_msg = "Self-signed token has expired"
@@ -201,12 +200,12 @@ class SimplifiedCognitoValidator:
             logger.error(error_msg)
             raise ValueError(f"Self-signed token validation failed: {e}")
 
-    def validate_token(self, access_token: str, user_pool_id: str, client_id: str, region: str = None) -> Dict:
+    def validate_token(self, access_token: str, user_pool_id: str, client_id: str, region: str = None) -> dict:
         if not region:
             region = self.default_region
         try:
             unverified_claims = jwt.decode(access_token, options={"verify_signature": False})
-            if unverified_claims.get('iss') == settings.jwt_issuer:
+            if unverified_claims.get("iss") == settings.jwt_issuer:
                 logger.debug("Token appears to be self-signed, validating...")
                 return self.validate_self_signed_token(access_token)
         except Exception:
@@ -215,32 +214,32 @@ class SimplifiedCognitoValidator:
         try:
             jwt_claims = self.validate_jwt_token(access_token, user_pool_id, client_id, region)
             scopes = []
-            if 'scope' in jwt_claims:
-                scopes = jwt_claims['scope'].split() if jwt_claims['scope'] else []
+            if "scope" in jwt_claims:
+                scopes = jwt_claims["scope"].split() if jwt_claims["scope"] else []
 
             return {
-                'valid': True,
-                'method': 'jwt',
-                'data': jwt_claims,
-                'client_id': jwt_claims.get('client_id') or '',
-                'username': jwt_claims.get('cognito:username') or jwt_claims.get('username') or '',
-                'expires_at': jwt_claims.get('exp'),
-                'scopes': scopes,
-                'groups': jwt_claims.get('cognito:groups', [])
+                "valid": True,
+                "method": "jwt",
+                "data": jwt_claims,
+                "client_id": jwt_claims.get("client_id") or "",
+                "username": jwt_claims.get("cognito:username") or jwt_claims.get("username") or "",
+                "expires_at": jwt_claims.get("exp"),
+                "scopes": scopes,
+                "groups": jwt_claims.get("cognito:groups", [])
             }
         except ValueError as jwt_error:
             logger.debug(f"JWT validation failed: {jwt_error}, trying boto3")
             try:
                 boto3_data = self.validate_with_boto3(access_token, region)
                 return {
-                    'valid': True,
-                    'method': 'boto3',
-                    'data': boto3_data,
-                    'client_id': '',
-                    'username': boto3_data.get('username') or '',
-                    'user_attributes': boto3_data.get('user_attributes', {}),
-                    'scopes': [],
-                    'groups': []
+                    "valid": True,
+                    "method": "boto3",
+                    "data": boto3_data,
+                    "client_id": "",
+                    "username": boto3_data.get("username") or "",
+                    "user_attributes": boto3_data.get("user_attributes", {}),
+                    "scopes": [],
+                    "groups": []
                 }
             except ValueError as boto3_error:
                 logger.debug(f"Boto3 validation failed: {boto3_error}")

@@ -1,18 +1,19 @@
-from typing import Dict, Any, List, Optional
-from registry.utils.log import logger
-from registry.services.oauth.mcp_service import MCPService, get_mcp_service
-from registry.services.server_service import server_service_v1
-from registry.services.oauth.status_resolver import get_status_resolver, ConnectionStateContext
-from registry.schemas.enums import ConnectionState
+from typing import Any
+
 from registry.auth.oauth.flow_state_manager import get_flow_state_manager
 from registry.auth.oauth.reconnection import get_reconnection_manager
+from registry.schemas.enums import ConnectionState
+from registry.services.oauth.mcp_service import MCPService, get_mcp_service
+from registry.services.oauth.status_resolver import ConnectionStateContext, get_status_resolver
+from registry.services.server_service import server_service_v1
+from registry.utils.log import logger
 
 
 async def get_servers_connection_status(
         user_id: str,
-        servers: List[Any],
-        mcp_service: Optional[MCPService] = None
-) -> Dict[str, Dict[str, Any]]:
+        servers: list[Any],
+        mcp_service: MCPService | None = None
+) -> dict[str, dict[str, Any]]:
     """
     Get connection status for multiple servers.
 
@@ -71,7 +72,7 @@ async def get_servers_connection_status(
             connection_status[server_id] = {
                 "connection_state": ConnectionState.ERROR.value,
                 "requires_oauth": requires_oauth,
-                "error": f"Failed to retrieve connection status: {str(e)}"
+                "error": f"Failed to retrieve connection status: {e!s}"
             }
 
     return connection_status
@@ -80,8 +81,8 @@ async def get_servers_connection_status(
 async def get_single_server_connection_status(
         user_id: str,
         server_id: str,
-        mcp_service: Optional[MCPService] = None
-) -> Dict[str, Any]:
+        mcp_service: MCPService | None = None
+) -> dict[str, Any]:
     """
     Get connection status for a single server.
     """

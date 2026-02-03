@@ -1,4 +1,5 @@
 import logging
+
 from langchain_classic.retrievers.document_compressors.base import BaseDocumentCompressor
 
 logger = logging.getLogger(__name__)
@@ -22,14 +23,13 @@ def create_reranker(
         ValueError: If reranker_type is not supported
     """
     reranker_type = reranker_type.lower()
-    
+
     if reranker_type == "flashrank":
         return _create_flashrank_reranker(**kwargs)
-    else:
-        raise ValueError(
-            f"Unsupported reranker type: {reranker_type}. "
-            f"Supported types: flashrank"
-        )
+    raise ValueError(
+        f"Unsupported reranker type: {reranker_type}. "
+        f"Supported types: flashrank"
+    )
 
 
 def _create_flashrank_reranker(**kwargs) -> BaseDocumentCompressor:
@@ -52,15 +52,15 @@ def _create_flashrank_reranker(**kwargs) -> BaseDocumentCompressor:
             "FlashRank is required for reranking. "
             "Install with: pip install flashrank"
         ) from e
-    
+
     # Extract model name (default to MiniLM model)
     model = kwargs.get("model", "ms-marco-MiniLM-L-12-v2")
-    
+
     # Create reranker
     reranker = FlashrankRerank(
         model=model,
         top_n=kwargs.get("top_n", 10)
     )
-    
+
     logger.info(f"Created FlashRank reranker with model: {model}")
     return reranker

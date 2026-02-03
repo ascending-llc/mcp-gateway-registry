@@ -1,9 +1,11 @@
-from typing import Dict, Any, Optional, List
-from packages.vector.enum.enums import SearchType, RerankerProvider
+from typing import Any
+
 from packages.models.extended_mcp_server import ExtendedMCPServer
-from .base import VectorSearchService
-from registry.utils.log import logger
+from packages.vector.enum.enums import RerankerProvider, SearchType
 from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from registry.utils.log import logger
+
+from .base import VectorSearchService
 
 
 class ExternalVectorSearchService(VectorSearchService):
@@ -55,7 +57,7 @@ class ExternalVectorSearchService(VectorSearchService):
             collection_name = ExtendedMCPServer.COLLECTION_NAME
             adapter = self.client.adapter
 
-            if hasattr(adapter, 'collection_exists'):
+            if hasattr(adapter, "collection_exists"):
                 exists = adapter.collection_exists(collection_name)
                 if exists:
                     logger.info(f"Collection '{collection_name}' verified")
@@ -71,8 +73,8 @@ class ExternalVectorSearchService(VectorSearchService):
 
     def get_retriever(
             self,
-            search_type: Optional[SearchType] = None,
-            enable_rerank: Optional[bool] = None,
+            search_type: SearchType | None = None,
+            enable_rerank: bool | None = None,
             top_k: int = 10
     ):
         """
@@ -108,19 +110,18 @@ class ExternalVectorSearchService(VectorSearchService):
                     "model": self.reranker_model
                 }
             )
-        else:
-            # Return base retriever without rerank
-            return self.mcp_server_repo.get_retriever(
-                search_type=use_search_type,
-                k=top_k
-            )
+        # Return base retriever without rerank
+        return self.mcp_server_repo.get_retriever(
+            search_type=use_search_type,
+            k=top_k
+        )
 
     async def add_or_update_service(
             self,
             service_path: str,
-            server_info: Dict[str, Any],
+            server_info: dict[str, Any],
             is_enabled: bool = False
-    ) -> Optional[Dict[str, int]]:
+    ) -> dict[str, int] | None:
         """
         Add or update server in vector database.
 
@@ -129,8 +130,8 @@ class ExternalVectorSearchService(VectorSearchService):
         """
         try:
             # Ensure path is in server_info
-            if 'path' not in server_info:
-                server_info['path'] = service_path
+            if "path" not in server_info:
+                server_info["path"] = service_path
 
             # Create server instance from server_info
             server = ExtendedMCPServer.from_server_info(
@@ -150,7 +151,7 @@ class ExternalVectorSearchService(VectorSearchService):
             logger.error(f"Failed to add/update service: {e}", exc_info=True)
             return {"indexed_tools": 0, "failed_tools": 1}
 
-    async def remove_service(self, service_path: str) -> Optional[Dict[str, int]]:
+    async def remove_service(self, service_path: str) -> dict[str, int] | None:
         """
         Remove server from vector database.
 
@@ -163,12 +164,12 @@ class ExternalVectorSearchService(VectorSearchService):
 
     async def search(
             self,
-            query: Optional[str] = None,
-            tags: Optional[List[str]] = None,
+            query: str | None = None,
+            tags: list[str] | None = None,
             top_k: int = 10,
-            filters: Optional[Dict[str, Any]] = None,
-            search_type: Optional[SearchType] = None
-    ) -> List[Dict[str, Any]]:
+            filters: dict[str, Any] | None = None,
+            search_type: SearchType | None = None
+    ) -> list[dict[str, Any]]:
         """
         Search tools with optional reranking.
 
@@ -246,7 +247,7 @@ class ExternalVectorSearchService(VectorSearchService):
             logger.error(f"Search failed: {e}", exc_info=True)
             return []
 
-    def _servers_to_results(self, servers: List[ExtendedMCPServer]) -> List[Dict[str, Any]]:
+    def _servers_to_results(self, servers: list[ExtendedMCPServer]) -> list[dict[str, Any]]:
         """
         Convert ExtendedMCPServer instances to result dictionaries.
 
@@ -262,18 +263,18 @@ class ExternalVectorSearchService(VectorSearchService):
 
         for server in servers:
             logger.info(f"Processing server: {server.serverName}")
-            
+
             # Get config details
             config = server.config or {}
-            
+
             result = {
                 "server_name": server.serverName,
                 "server_path": server.path,
                 "path": server.path,
-                "description": config.get('description', ''),
-                "title": config.get('title', server.serverName),
+                "description": config.get("description", ""),
+                "title": config.get("title", server.serverName),
                 "tags": server.tags or [],
-                "is_enabled": server.status == 'active',
+                "is_enabled": server.status == "active",
                 "status": server.status,
                 "scope": server.scope,
                 "numTools": server.numTools,
@@ -281,21 +282,21 @@ class ExternalVectorSearchService(VectorSearchService):
             }
 
             # Add relevance score if available
-            if hasattr(server, 'relevance_score'):
-                result['relevance_score'] = round(server.relevance_score, 4)
-            
+            if hasattr(server, "relevance_score"):
+                result["relevance_score"] = round(server.relevance_score, 4)
+
             # Add score field if available
-            if hasattr(server, 'score') and server.score is not None:
-                result['score'] = server.score
-                
+            if hasattr(server, "score") and server.score is not None:
+                result["score"] = server.score
+
             results.append(result)
         return results
 
     def _agent_to_server_info(
             self,
-            agent_card_dict: Dict[str, Any],
+            agent_card_dict: dict[str, Any],
             entity_path: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Convert AgentCard dictionary to server_info format for McpTool.
         
@@ -326,10 +327,10 @@ class ExternalVectorSearchService(VectorSearchService):
     async def add_or_update_entity(
             self,
             entity_path: str,
-            entity_info: Dict[str, Any],
+            entity_info: dict[str, Any],
             entity_type: str,
             is_enabled: bool = False,
-    ) -> Optional[Dict[str, int]]:
+    ) -> dict[str, int] | None:
         """
         Add or update an entity (agent or server) in the search index.
         
@@ -345,43 +346,42 @@ class ExternalVectorSearchService(VectorSearchService):
             Result dictionary or None if unavailable
         """
 
-        
+
         if entity_type == "a2a_agent":
             # Convert AgentCard to server_info format
             server_info = self._agent_to_server_info(entity_info, entity_path)
             server_info["is_enabled"] = is_enabled
             # Ensure path is in server_info
-            if 'path' not in server_info:
-                server_info['path'] = entity_path
-            
+            if "path" not in server_info:
+                server_info["path"] = entity_path
+
             # Start background sync
             # asyncio.create_task(mcp_server_repo.sync_full(
             #     server_info=server_info,
             #     is_enabled=is_enabled
             # ))
             return {"indexed_tools": 1, "failed_tools": 0}
-            
-        elif entity_type == "mcp_server":
+
+        if entity_type == "mcp_server":
             # Ensure entity_type and path are set
             if "entity_type" not in entity_info:
                 entity_info["entity_type"] = "mcp_server"
-            if 'path' not in entity_info:
-                entity_info['path'] = entity_path
-            
+            if "path" not in entity_info:
+                entity_info["path"] = entity_path
+
             # Start background sync
             # asyncio.create_task(mcp_server_repo.sync_full(
             #     server_info=entity_info,
             #     is_enabled=is_enabled
             # ))
             return {"indexed_tools": 1, "failed_tools": 0}
-        else:
-            logger.warning(f"Unknown entity_type '{entity_type}', skipping indexing")
-            return None
+        logger.warning(f"Unknown entity_type '{entity_type}', skipping indexing")
+        return None
 
     async def remove_entity(
             self,
             entity_path: str,
-    ) -> Optional[Dict[str, int]]:
+    ) -> dict[str, int] | None:
         """
         Remove an entity (agent or server) from the search index.
         
@@ -413,10 +413,10 @@ class ExternalVectorSearchService(VectorSearchService):
     async def search_mixed(
             self,
             query: str,
-            entity_types: Optional[List[str]] = None,
+            entity_types: list[str] | None = None,
             max_results: int = 20,
-            search_type: Optional[SearchType] = None
-    ) -> Dict[str, List[Dict[str, Any]]]:
+            search_type: SearchType | None = None
+    ) -> dict[str, list[dict[str, Any]]]:
         """
         Search across multiple entity types with rerank support.
 
@@ -488,23 +488,23 @@ class ExternalVectorSearchService(VectorSearchService):
             # Filter and categorize results
             for server in servers:
                 config = server.config or {}
-                description = config.get('description', '')
-                
-                relevance_score = round(server.relevance_score, 4) if hasattr(server, 'relevance_score') else 0.0
-                
+                description = config.get("description", "")
+
+                relevance_score = round(server.relevance_score, 4) if hasattr(server, "relevance_score") else 0.0
+
                 # Build result dict
                 result = {
                     "server_path": server.path,
                     "server_name": server.serverName,
                     "path": server.path,
                     "description": description,
-                    "match_context": description[:200] if description else '',
+                    "match_context": description[:200] if description else "",
                     "relevance_score": relevance_score,
                     "tags": server.tags or [],
-                    "is_enabled": server.status == 'active',
+                    "is_enabled": server.status == "active",
                     "scope": server.scope,
                 }
-                
+
                 # Add to servers results
                 if "mcp_server" in entity_filter:
                     results["servers"].append(result)

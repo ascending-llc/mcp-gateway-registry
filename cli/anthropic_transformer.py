@@ -9,11 +9,7 @@ import json
 import logging
 from typing import (
     Any,
-    Dict,
-    List,
-    Optional,
 )
-
 
 # Configure logging with basicConfig
 logging.basicConfig(
@@ -55,8 +51,8 @@ def _extract_package_info(
 
 
 def _substitute_env_vars_in_headers(
-    headers: List[Dict[str, str]]
-) -> List[Dict[str, str]]:
+    headers: list[dict[str, str]]
+) -> list[dict[str, str]]:
     """Substitute environment variables in header values.
 
     Replaces ${VAR_NAME} or $VAR_NAME with actual environment variable values.
@@ -83,14 +79,13 @@ def _substitute_env_vars_in_headers(
                 if env_value:
                     logger.info(f"Substituted {var_name} in header {header_name}")
                     return env_value
-                else:
-                    logger.warning(f"Environment variable {var_name} not found, keeping placeholder")
-                    return match.group(0)  # Keep original placeholder
+                logger.warning(f"Environment variable {var_name} not found, keeping placeholder")
+                return match.group(0)  # Keep original placeholder
 
             # Replace ${VAR} pattern first
-            substituted_value = re.sub(r'\$\{([^}]+)\}', replace_env_var, header_value)
+            substituted_value = re.sub(r"\$\{([^}]+)\}", replace_env_var, header_value)
             # Then replace $VAR pattern (only for uppercase variables)
-            substituted_value = re.sub(r'\$([A-Z_][A-Z0-9_]*)', replace_env_var, substituted_value)
+            substituted_value = re.sub(r"\$([A-Z_][A-Z0-9_]*)", replace_env_var, substituted_value)
 
             substituted_header[header_name] = substituted_value
 
@@ -100,8 +95,8 @@ def _substitute_env_vars_in_headers(
 
 
 def _extract_remote_info(
-    remotes: List[Dict[str, Any]]
-) -> tuple[Optional[str], str, str, List[Dict[str, str]]]:
+    remotes: list[dict[str, Any]]
+) -> tuple[str | None, str, str, list[dict[str, str]]]:
     """Extract remote URL, transport type, auth type, and headers from remotes field.
 
     Args:
@@ -132,7 +127,7 @@ def _extract_remote_info(
                 # Check for auth-related headers
                 if header_name.lower() in ["authorization", "x-api-key", "api-key"]:
                     # Extract variable name from the placeholder (e.g., {smithery_api_key})
-                    match = re.search(r'\{([^}]+)\}', header_value)
+                    match = re.search(r"\{([^}]+)\}", header_value)
                     if match:
                         var_name = match.group(1)
                         # Convert to uppercase with underscores (e.g., smithery_api_key -> SMITHERY_API_KEY)
@@ -161,7 +156,7 @@ def _extract_remote_info(
 
 def _generate_tags(
     name: str
-) -> List[str]:
+) -> list[str]:
     """Generate tags from server name.
 
     Args:
@@ -176,9 +171,9 @@ def _generate_tags(
 
 
 def transform_anthropic_to_gateway(
-    anthropic_response: Dict[str, Any],
+    anthropic_response: dict[str, Any],
     base_port: int = DEFAULT_BASE_PORT
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Transform Anthropic ServerResponse to Gateway Registry Config format.
 
     Args:

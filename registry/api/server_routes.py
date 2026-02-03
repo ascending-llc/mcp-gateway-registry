@@ -1,12 +1,12 @@
 import logging
-import httpx
 import os
-from fastapi import (APIRouter, Request, HTTPException, status)
-from fastapi.responses import HTMLResponse
+
+import httpx
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
-from ..core.config import settings
 from ..auth.dependencies import CurrentUser
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -124,19 +124,18 @@ async def generate_user_token(
                 }
 
                 return formatted_response
-            else:
-                error_detail = "Unknown error"
-                try:
-                    error_response = response.json()
-                    error_detail = error_response.get("detail", "Unknown error")
-                except:
-                    error_detail = response.text
+            error_detail = "Unknown error"
+            try:
+                error_response = response.json()
+                error_detail = error_response.get("detail", "Unknown error")
+            except:
+                error_detail = response.text
 
-                logger.warning(f"Auth server returned error {response.status_code}: {error_detail}")
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"Token generation failed: {error_detail}",
-                )
+            logger.warning(f"Auth server returned error {response.status_code}: {error_detail}")
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"Token generation failed: {error_detail}",
+            )
 
     except HTTPException:
         raise

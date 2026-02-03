@@ -2,8 +2,11 @@
 Permission utility functions for ACL checks.
 """
 
-from fastapi import HTTPException, status as http_status
+from fastapi import HTTPException
+from fastapi import status as http_status
+
 from registry.core.acl_constants import ResourceType
+
 
 def check_required_permission(acl_permission_map: dict, resource_type: str, resource_id: str, required_permission: str) -> None:
     """
@@ -28,7 +31,7 @@ def check_required_permission(acl_permission_map: dict, resource_type: str, reso
             }
         )
 
-def validate_resource_type(resource_type: str) -> None: 
+def validate_resource_type(resource_type: str) -> None:
     if resource_type not in [rt.value for rt in ResourceType]:
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
@@ -37,4 +40,3 @@ def validate_resource_type(resource_type: str) -> None:
                 "message": f"Resource type '{resource_type}' is not valid."
             }
         )
-            

@@ -2,18 +2,18 @@
 Unit tests for Anthropic MCP Registry API endpoints.
 """
 
+from unittest.mock import patch
+
 import pytest
-from typing import Any, Dict
-from unittest.mock import Mock, patch
-from fastapi import status, Request
+from fastapi import status
 from fastapi.testclient import TestClient
 
+from registry.auth.dependencies import create_session_cookie
+from registry.constants import REGISTRY_CONSTANTS
+from registry.core.config import settings
+from registry.health.service import health_service
 from registry.main import app
 from registry.services.server_service import server_service_v1
-from registry.health.service import health_service
-from registry.constants import REGISTRY_CONSTANTS
-from registry.auth.dependencies import create_session_cookie
-from registry.core.config import settings
 
 # Alias for tests
 server_service = server_service_v1
@@ -170,12 +170,13 @@ class TestV0ListServers:
         self, mock_enhanced_auth_user, sample_servers_data
     ):
         """Test that regular users see only authorized servers."""
-        from registry.auth.dependencies import create_session_cookie
         from fastapi.testclient import TestClient
+
+        from registry.auth.dependencies import create_session_cookie
 
         # Create user context for a regular (non-admin) user
         user_context = mock_enhanced_auth_user()
-        
+
         # Create session cookie for this user
         user_session_cookie = create_session_cookie(
             user_context["username"],
@@ -183,7 +184,7 @@ class TestV0ListServers:
             provider=user_context["provider"],
             groups=user_context["groups"]
         )
-        
+
         # User should only see servers they have permission for
         filtered_servers = {"/mcpgw": sample_servers_data["/mcpgw"]}
 
@@ -371,8 +372,9 @@ class TestV0ListServerVersions:
         self, mock_enhanced_auth_user, sample_servers_data
     ):
         """Test that users cannot access servers they don't have permission for."""
-        from registry.auth.dependencies import create_session_cookie
         from fastapi.testclient import TestClient
+
+        from registry.auth.dependencies import create_session_cookie
 
         user_context = mock_enhanced_auth_user()
         user_session_cookie = create_session_cookie(

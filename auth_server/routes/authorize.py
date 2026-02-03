@@ -7,6 +7,7 @@ instead of the full issuer path (e.g., https://example.com/auth).
 """
 
 import logging
+
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
@@ -37,14 +38,14 @@ async def authorize_redirect(request: Request):
     """
     # Get the current auth provider from settings
     auth_provider = settings.auth_provider
-    
+
     # Construct the actual authorization endpoint with prefix
-    api_prefix = settings.auth_server_api_prefix.rstrip('/') if settings.auth_server_api_prefix else ""
+    api_prefix = settings.auth_server_api_prefix.rstrip("/") if settings.auth_server_api_prefix else ""
     actual_auth_endpoint = f"{api_prefix}/oauth2/login/{auth_provider}"
-    
+
     # Preserve all query parameters
     query_params = str(request.url.query) if request.url.query else ""
     redirect_url = f"{actual_auth_endpoint}?{query_params}" if query_params else actual_auth_endpoint
-    
+
     logger.info(f"Redirecting /authorize to {redirect_url} for provider: {auth_provider}")
     return RedirectResponse(url=redirect_url, status_code=307)  # 307 preserves GET method and query parameters

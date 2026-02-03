@@ -1,12 +1,14 @@
 import asyncio
 import time
-from typing import Dict, Any, Optional, List, Set
-from registry.utils.log import logger
+from typing import Any, Optional
+
+from registry.auth.oauth.flow_state_manager import get_flow_state_manager
 from registry.models.oauth_models import OAuthTokens
-from .tracker import OAuthReconnectionTracker
 from registry.schemas.enums import ConnectionState
 from registry.services.server_service import server_service_v1
-from registry.auth.oauth.flow_state_manager import get_flow_state_manager
+from registry.utils.log import logger
+
+from .tracker import OAuthReconnectionTracker
 
 
 class OAuthReconnectionManager:
@@ -23,8 +25,8 @@ class OAuthReconnectionManager:
             self,
             mcp_service: Any,  # MCPService instance
             oauth_service: Any,  # OAuthService instance
-            tracker: Optional[OAuthReconnectionTracker] = None,
-            connection_timeout_ms: Optional[int] = None
+            tracker: OAuthReconnectionTracker | None = None,
+            connection_timeout_ms: int | None = None
     ):
         """
         Initialize reconnection manager
@@ -52,7 +54,7 @@ class OAuthReconnectionManager:
         self.tracker.cleanup_if_timed_out(user_id, server_id)
         return self.tracker.is_still_reconnecting(user_id, server_id)
 
-    async def reconnect_servers(self, user_id: str) -> Dict[str, bool]:
+    async def reconnect_servers(self, user_id: str) -> dict[str, bool]:
         """
         Reconnect all OAuth servers for user
         
@@ -139,10 +141,9 @@ class OAuthReconnectionManager:
                 logger.info(f"{log_prefix} Successfully reconnected")
                 self.clear_reconnection(user_id, server_id)
                 return True
-            else:
-                logger.warn(f"{log_prefix} Failed to reconnect")
-                self._cleanup_on_failed_reconnect(user_id, server_id)
-                return False
+            logger.warn(f"{log_prefix} Failed to reconnect")
+            self._cleanup_on_failed_reconnect(user_id, server_id)
+            return False
 
         except Exception as error:
             logger.warn(f"{log_prefix} Failed to reconnect: {error}")
@@ -203,7 +204,7 @@ class OAuthReconnectionManager:
     async def get_reconnection_status(
             self,
             user_id: str
-    ) -> Dict[str, Dict[str, Any]]:
+    ) -> dict[str, dict[str, Any]]:
         """
         Get reconnection status for user
         
@@ -232,7 +233,7 @@ class OAuthReconnectionManager:
             self,
             user_id: str,
             server_id: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Get OAuth flow state override
 
@@ -344,7 +345,7 @@ class OAuthReconnectionManager:
 
     # Private methods
 
-    async def _get_servers_to_reconnect(self, user_id: str) -> Set[str]:
+    async def _get_servers_to_reconnect(self, user_id: str) -> set[str]:
         """Get servers that need reconnection"""
         servers_to_reconnect = set()
 
@@ -372,7 +373,7 @@ class OAuthReconnectionManager:
         except Exception as e:
             logger.error(f"Failed to disconnect user connection: {e}")
 
-    async def _get_oauth_servers(self) -> List[str]:
+    async def _get_oauth_servers(self) -> list[str]:
         """Get all OAuth servers"""
         try:
             servers, _ = await server_service_v1.list_servers(
@@ -417,7 +418,7 @@ class OAuthReconnectionManager:
             self,
             user_id: str,
             server_id: str
-    ) -> Optional[OAuthTokens]:
+    ) -> OAuthTokens | None:
         """Get user tokens"""
         server = await server_service_v1.get_server_by_id(server_id)
         if not server:

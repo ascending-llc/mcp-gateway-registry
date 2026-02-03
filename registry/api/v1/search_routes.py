@@ -1,13 +1,15 @@
 import logging
-from typing import List, Literal, Optional
-from registry.auth.dependencies import CurrentUser
-from fastapi import HTTPException, status
+from typing import Literal
+
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, Request
+
 from packages.models.enums import ServerEntityType
-from registry.services.search.service import faiss_service
 from packages.vector.enum.enums import SearchType
 from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from registry.auth.dependencies import CurrentUser
+from registry.services.search.service import faiss_service
+
 from ...services.agent_service import agent_service
 
 logger = logging.getLogger(__name__)
@@ -21,48 +23,48 @@ EntityType = Literal["mcp_server", "tool", "a2a_agent"]
 
 class MatchingToolResult(BaseModel):
     tool_name: str
-    description: Optional[str] = None
+    description: str | None = None
     relevance_score: float = Field(0.0, ge=0.0, le=1.0)
-    match_context: Optional[str] = None
+    match_context: str | None = None
 
 
 class ServerSearchResult(BaseModel):
     path: str
     server_name: str
-    description: Optional[str] = None
-    tags: List[str] = Field(default_factory=list)
+    description: str | None = None
+    tags: list[str] = Field(default_factory=list)
     num_tools: int = 0
     is_enabled: bool = False
     relevance_score: float = Field(..., ge=0.0, le=1.0)
-    match_context: Optional[str] = None
-    matching_tools: List[MatchingToolResult] = Field(default_factory=list)
+    match_context: str | None = None
+    matching_tools: list[MatchingToolResult] = Field(default_factory=list)
 
 
 class ToolSearchResult(BaseModel):
     server_path: str
     server_name: str
     tool_name: str
-    description: Optional[str] = None
+    description: str | None = None
     relevance_score: float = Field(..., ge=0.0, le=1.0)
-    match_context: Optional[str] = None
+    match_context: str | None = None
 
 
 class AgentSearchResult(BaseModel):
     path: str
     agent_name: str
-    description: Optional[str] = None
-    tags: List[str] = Field(default_factory=list)
-    skills: List[str] = Field(default_factory=list)
-    trust_level: Optional[str] = None
-    visibility: Optional[str] = None
+    description: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list)
+    trust_level: str | None = None
+    visibility: str | None = None
     is_enabled: bool = False
     relevance_score: float = Field(..., ge=0.0, le=1.0)
-    match_context: Optional[str] = None
+    match_context: str | None = None
 
 
 class SemanticSearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=512, description="Natural language query")
-    entity_types: Optional[List[EntityType]] = Field(
+    entity_types: list[EntityType] | None = Field(
         default=None, description="Optional entity filters"
     )
     max_results: int = Field(
@@ -72,9 +74,9 @@ class SemanticSearchRequest(BaseModel):
 
 class SemanticSearchResponse(BaseModel):
     query: str
-    servers: List[ServerSearchResult] = Field(default_factory=list)
-    tools: List[ToolSearchResult] = Field(default_factory=list)
-    agents: List[AgentSearchResult] = Field(default_factory=list)
+    servers: list[ServerSearchResult] = Field(default_factory=list)
+    tools: list[ToolSearchResult] = Field(default_factory=list)
+    agents: list[AgentSearchResult] = Field(default_factory=list)
     total_servers: int = 0
     total_tools: int = 0
     total_agents: int = 0
@@ -146,7 +148,7 @@ async def semantic_search(
             detail="Semantic search is temporarily unavailable. Please try again later.",
         ) from exc
 
-    filtered_servers: List[ServerSearchResult] = []
+    filtered_servers: list[ServerSearchResult] = []
     for server in raw_results.get("servers", []):
         matching_tools = [
             MatchingToolResult(
@@ -172,7 +174,7 @@ async def semantic_search(
             )
         )
 
-    filtered_tools: List[ToolSearchResult] = []
+    filtered_tools: list[ToolSearchResult] = []
     for tool in raw_results.get("tools", []):
         server_path = tool.get("server_path", "")
         server_name = tool.get("server_name", "")
@@ -187,7 +189,7 @@ async def semantic_search(
             )
         )
 
-    filtered_agents: List[AgentSearchResult] = []
+    filtered_agents: list[AgentSearchResult] = []
     for agent in raw_results.get("agents", []):
         agent_path = agent.get("path", "")
         if not agent_path:
@@ -248,8 +250,8 @@ class ToolDiscoveryMatch(BaseModel):
     tool_name: str
     server_id: str
     server_path: str
-    description: Optional[str] = None
-    input_schema: Optional[dict] = None
+    description: str | None = None
+    input_schema: dict | None = None
     discovery_score: float = Field(..., ge=0.0, le=1.0)
     transport_type: str = "streamable-http"
 
@@ -258,14 +260,14 @@ class ToolDiscoveryResponse(BaseModel):
     """Response from tool discovery"""
     query: str
     total_matches: int
-    matches: List[ToolDiscoveryMatch]
+    matches: list[ToolDiscoveryMatch]
 
 
 class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=512, description="Natural language query")
     top_n: int = Field(1, description="Number of results to return")
     search_type: SearchType = Field(default=SearchType.HYBRID, description="Type of search to perform")
-    type_list: Optional[List[ServerEntityType]] = Field(
+    type_list: list[ServerEntityType] | None = Field(
         default_factory=lambda: list(ServerEntityType),
         description="Type of document to return (default: all types)"
     )

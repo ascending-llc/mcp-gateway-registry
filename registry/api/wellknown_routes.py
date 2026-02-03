@@ -1,10 +1,10 @@
 import logging
-from typing import Optional
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from ..core.config import settings
+
 # from ..services.server_service import server_service
 
 logger = logging.getLogger(__name__)
@@ -27,37 +27,37 @@ def _get_required_env_vars() -> tuple[str, str, str]:
     """
     auth_server_url = settings.auth_server_external_url
     registry_url = settings.registry_client_url
-    
+
     if not auth_server_url:
         logger.error("auth_server_external_url setting is not configured")
         raise HTTPException(
             status_code=500,
             detail="Server configuration error: auth_server_external_url not configured"
         )
-    
+
     if not registry_url:
         logger.error("registry_client_url setting is not configured")
         raise HTTPException(
             status_code=500,
             detail="Server configuration error: registry_client_url not configured"
         )
-    
+
     # Strip the API prefix from auth server URL to get base URL
     # This is required for RFC 8705 compliance - the authorization server URL
     # in Protected Resource Metadata must match the issuer in the auth server's metadata
     base_url = auth_server_url
     if settings.auth_server_api_prefix:
-        prefix = settings.auth_server_api_prefix.rstrip('/')
+        prefix = settings.auth_server_api_prefix.rstrip("/")
         if auth_server_url.endswith(prefix):
-            base_url = auth_server_url[:-len(prefix)].rstrip('/')
-    
+            base_url = auth_server_url[:-len(prefix)].rstrip("/")
+
     return base_url, auth_server_url, registry_url
 
 
 # @router.get("/mcp-servers")
 async def get_wellknown_mcp_servers(
     request: Request,
-    user_context: Optional[dict] = None
+    user_context: dict | None = None
 ) -> JSONResponse:
     """
     Main endpoint handler for /.well-known/mcp-servers
@@ -88,7 +88,7 @@ async def get_wellknown_mcp_servers(
             "description": "Centralized MCP server registry for enterprise tools",
             "version": "1.0.0",
             "contact": {
-                "url": str(request.base_url).rstrip('/'),
+                "url": str(request.base_url).rstrip("/"),
                 "support": "mcp-support@company.com"
             }
         }
@@ -137,10 +137,10 @@ def _format_server_discovery(server_info: dict, request: Request) -> dict:
 def _get_server_url(server_path: str, request: Request) -> str:
     """Generate full URL for MCP server based on request host"""
     # Get host from request headers
-    registry_url = settings.registry_client_url.rstrip('/')
+    registry_url = settings.registry_client_url.rstrip("/")
 
     # Clean up server path (remove leading and trailing slashes)
-    clean_path = server_path.strip('/')
+    clean_path = server_path.strip("/")
 
     # Return formatted URL
     return f"{registry_url}/{clean_path}/mcp"
@@ -168,20 +168,19 @@ def _get_authentication_info(server_info: dict) -> dict:
             "provider": auth_provider,
             "scopes": ["mcp:read", f"{auth_provider}:read"]
         }
-    elif auth_type == "api-key":
+    if auth_type == "api-key":
         return {
             "type": "api-key",
             "required": True,
             "header": "X-API-Key"
         }
-    else:
-        # Default to OAuth2 for unknown types
-        return {
-            "type": "oauth2",
-            "required": True,
-            "authorization_url": "/auth/oauth/authorize",
-            "scopes": ["mcp:read", f"{server_name.lower()}:read"]
-        }
+    # Default to OAuth2 for unknown types
+    return {
+        "type": "oauth2",
+        "required": True,
+        "authorization_url": "/auth/oauth/authorize",
+        "scopes": ["mcp:read", f"{server_name.lower()}:read"]
+    }
 
 
 def _get_tools_preview(server_info: dict, max_tools: int = 5) -> list:
@@ -219,7 +218,7 @@ async def oauth_protected_resource_metadata() -> JSONResponse:
     requirements for accessing the registry's proxied MCP servers.
     """
     base_url, auth_server_url, registry_url = _get_required_env_vars()
-    
+
     data = {
         "resource": registry_url,
         "authorization_servers": [base_url],
@@ -231,7 +230,7 @@ async def oauth_protected_resource_metadata() -> JSONResponse:
         "bearer_methods_supported": ["header"],
         "resource_signing_alg_values_supported": ["HS256", "RS256"]
     }
-    
+
     return JSONResponse(content=data)
 
 
@@ -245,7 +244,7 @@ async def mcp_oauth_metadata() -> JSONResponse:
     specification for protected resource discovery.
     """
     base_url, auth_server_url, registry_url = _get_required_env_vars()
-    
+
     data = {
         "resource": f"{registry_url}/proxy",
         "authorization_server": base_url,
@@ -262,7 +261,7 @@ async def mcp_oauth_metadata() -> JSONResponse:
         ],
         "mcp_version": "2024-11-05"
     }
-    
+
     return JSONResponse(content=data)
 
 
@@ -275,11 +274,11 @@ async def oauth_protected_resource_metadata_for_server(server_path: str, request
     For example: /.well-known/oauth-protected-resource/proxy/mcpgw
     """
     base_url, auth_server_url, registry_url = _get_required_env_vars()
-    
+
     # Clean server path (remove leading/trailing slashes)
-    clean_path = server_path.strip('/')
+    clean_path = server_path.strip("/")
     resource_url = f"{registry_url}/{clean_path}"
-    
+
     data = {
         "resource": resource_url,
         "authorization_servers": [base_url],
@@ -291,7 +290,7 @@ async def oauth_protected_resource_metadata_for_server(server_path: str, request
         "bearer_methods_supported": ["header"],
         "resource_signing_alg_values_supported": ["HS256", "RS256"]
     }
-    
+
     return JSONResponse(content=data)
 
 
@@ -304,12 +303,12 @@ async def mcp_oauth_metadata_for_server(server_path: str, request: Request) -> J
     individual proxied servers. For example: /.well-known/oauth-protected-resource/mcp/proxy/mcpgw
     """
     base_url, auth_server_url, registry_url = _get_required_env_vars()
-    
+
     # Clean server path (remove leading/trailing slashes)
-    clean_path = server_path.strip('/')
-    
+    clean_path = server_path.strip("/")
+
     resource_url = f"{registry_url}/{clean_path}"
-    
+
     data = {
         "resource": resource_url,
         "authorization_server": base_url,
@@ -326,5 +325,5 @@ async def mcp_oauth_metadata_for_server(server_path: str, request: Request) -> J
         ],
         "mcp_version": "2024-11-05"
     }
-    
+
     return JSONResponse(content=data)

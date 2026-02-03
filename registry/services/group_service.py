@@ -1,9 +1,10 @@
-from typing import List
-from packages.models._generated import IGroup  
+
+from packages.models._generated import IGroup
 from registry.utils.log import logger
 
+
 class GroupService:
-	async def search_groups(self, query: str) -> List[IGroup]:
+	async def search_groups(self, query: str) -> list[IGroup]:
 		"""
 		Search groups by name or email (case-insensitive substring match).
 		Returns a list of IGroup instances representing matching groups (e.g., with id, name, email fields).

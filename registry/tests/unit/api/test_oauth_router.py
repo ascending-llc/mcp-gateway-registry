@@ -1,10 +1,12 @@
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
+from bson import ObjectId
+from fastapi import Request
 from fastapi.testclient import TestClient
-from unittest.mock import Mock, patch, AsyncMock
+
 from registry.api.v1.mcp.oauth_router import router
 from registry.services.oauth.mcp_service import MCPService
-from fastapi import Request
-from bson import ObjectId
 
 # Valid MongoDB ObjectId for testing (24 hex characters)
 TEST_SERVER_ID = "507f1f77bcf86cd799439011"
@@ -97,7 +99,7 @@ def client():
         }
     }
 
-    with patch('registry.api.v1.mcp.oauth_router.server_service_v1') as mock_server_service:
+    with patch("registry.api.v1.mcp.oauth_router.server_service_v1") as mock_server_service:
         mock_server_service.get_server_by_id = AsyncMock(return_value=mock_server)
         yield TestClient(app)
 
@@ -252,7 +254,6 @@ class TestOAuthRouter:
 
     def test_oauth_callback_success(self, client):
         """Test successful OAuth callback"""
-        from registry.services.oauth.token_service import token_service
 
         # Mock the flow_manager methods - note: decode_state is NOT async in the actual code
         mock_mcp_service.oauth_service.flow_manager.decode_state = lambda state: ("test_user-flow123", "security_token")
@@ -273,7 +274,7 @@ class TestOAuthRouter:
         mock_mcp_service.connection_service.create_user_connection = AsyncMock(return_value=None)
 
         # Make the request with code and state, disable redirect following
-        response = client.get(f"/mcp/test_server/oauth/callback?code=auth_code&state=test_user-flow123##security_token", follow_redirects=False)
+        response = client.get("/mcp/test_server/oauth/callback?code=auth_code&state=test_user-flow123##security_token", follow_redirects=False)
 
         # Should redirect to success page
         assert response.status_code == 307
@@ -282,7 +283,7 @@ class TestOAuthRouter:
 
     def test_oauth_callback_missing_code(self, client):
         """Test OAuth callback with missing code parameter"""
-        response = client.get(f"/mcp/test_server/oauth/callback?state=some_state", follow_redirects=False)
+        response = client.get("/mcp/test_server/oauth/callback?state=some_state", follow_redirects=False)
 
         assert response.status_code == 307
         assert "oauth-callback?type=error" in response.headers["location"]
@@ -291,7 +292,7 @@ class TestOAuthRouter:
 
     def test_oauth_callback_missing_state(self, client):
         """Test OAuth callback with missing state parameter"""
-        response = client.get(f"/mcp/test_server/oauth/callback?code=auth_code", follow_redirects=False)
+        response = client.get("/mcp/test_server/oauth/callback?code=auth_code", follow_redirects=False)
 
         assert response.status_code == 307
         assert "oauth-callback?type=error" in response.headers["location"]
@@ -300,7 +301,7 @@ class TestOAuthRouter:
 
     def test_oauth_callback_provider_error(self, client):
         """Test OAuth callback with error from provider"""
-        response = client.get(f"/mcp/test_server/oauth/callback?error=access_denied", follow_redirects=False)
+        response = client.get("/mcp/test_server/oauth/callback?error=access_denied", follow_redirects=False)
 
         assert response.status_code == 307
         assert "oauth-callback?type=error" in response.headers["location"]
@@ -313,7 +314,7 @@ class TestOAuthRouter:
         mock_mcp_service.oauth_service.flow_manager.decode_state = Mock(
             side_effect=ValueError("Invalid state format")
         )
-        response = client.get(f"/mcp/test_server/oauth/callback?code=auth_code&state=invalid_state", follow_redirects=False)
+        response = client.get("/mcp/test_server/oauth/callback?code=auth_code&state=invalid_state", follow_redirects=False)
 
         assert response.status_code == 307
         assert "oauth-callback?type=error" in response.headers["location"]
@@ -332,7 +333,7 @@ class TestOAuthRouter:
         mock_flow.status = OAuthFlowStatus.COMPLETED
         mock_mcp_service.oauth_service.flow_manager.get_flow = lambda flow_id: mock_flow
 
-        response = client.get(f"/mcp/test_server/oauth/callback?code=auth_code&state=test_user-flow123##security_token", follow_redirects=False)
+        response = client.get("/mcp/test_server/oauth/callback?code=auth_code&state=test_user-flow123##security_token", follow_redirects=False)
 
         # Should still redirect to success page but not exchange tokens again
         assert response.status_code == 307
@@ -341,11 +342,10 @@ class TestOAuthRouter:
 
     def test_delete_oauth_tokens_success(self, client):
         """Test successful deletion of OAuth tokens"""
-        from registry.services.oauth.token_service import token_service
 
         mock_mcp_service.connection_service.disconnect_user_connection = AsyncMock(return_value=True)
 
-        with patch('registry.api.v1.mcp.oauth_router.token_service') as mock_token_service:
+        with patch("registry.api.v1.mcp.oauth_router.token_service") as mock_token_service:
             mock_token_service.delete_oauth_tokens = AsyncMock(return_value=True)
 
             response = client.delete(f"/mcp/oauth/token/{TEST_SERVER_ID}")
@@ -359,11 +359,10 @@ class TestOAuthRouter:
 
     def test_delete_oauth_tokens_failure(self, client):
         """Test failed deletion of OAuth tokens"""
-        from registry.services.oauth.token_service import token_service
 
         mock_mcp_service.connection_service.disconnect_user_connection = AsyncMock(return_value=False)
 
-        with patch('registry.api.v1.mcp.oauth_router.token_service') as mock_token_service:
+        with patch("registry.api.v1.mcp.oauth_router.token_service") as mock_token_service:
             mock_token_service.delete_oauth_tokens = AsyncMock(return_value=False)
 
             response = client.delete(f"/mcp/oauth/token/{TEST_SERVER_ID}")

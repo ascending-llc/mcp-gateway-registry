@@ -42,37 +42,35 @@ Example with environment variables (create a .env file):
     python agent_interactive.py --interactive
 """
 
-import asyncio
 import argparse
+import asyncio
+import json
+import logging
+import os
 import re
 import sys
-import os
-import logging
-import yaml
-import json
-from typing import Dict, List, Any, Optional
-from urllib.parse import urlparse, urljoin
-from langchain_mcp_adapters.client import MultiServerMCPClient
-from langgraph.prebuilt import create_react_agent
-from langchain_anthropic import ChatAnthropic
-from langchain_aws import ChatBedrock
-from langchain_core.tools import tool
+from typing import Any
+from urllib.parse import urljoin, urlparse
+
 import mcp
-from mcp import ClientSession
-from mcp.client.sse import sse_client
-from mcp.client.streamable_http import streamablehttp_client
-import httpx
-import re
+import yaml
 
 # Import dotenv for loading basic environment variables
 from dotenv import load_dotenv
+from langchain_anthropic import ChatAnthropic
+from langchain_aws import ChatBedrock
+from langchain_core.tools import tool
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langgraph.prebuilt import create_react_agent
+from mcp.client.sse import sse_client
+from mcp.client.streamable_http import streamablehttp_client
 
 # Add the auth_server directory to the path to import cognito_utils
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'auth_server'))
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "auth_server"))
 from cognito_utils import generate_token
 
 # Global config for servers that should not have /mcp suffix added
-SERVERS_NO_MCP_SUFFIX = ['/atlassian']
+SERVERS_NO_MCP_SUFFIX = ["/atlassian"]
 
 # Configure logging with basicConfig
 logging.basicConfig(
@@ -89,7 +87,7 @@ DEFAULT_MCP_TOOL_NAME = "intelligent_tool_finder"
 ALLOWED_MCP_TOOLS = ["intelligent_tool_finder"]
 
 
-def load_server_config(config_file: str = "server_config.yml") -> Dict[str, Any]:
+def load_server_config(config_file: str = "server_config.yml") -> dict[str, Any]:
     """
     Load server configuration from YAML file.
     
@@ -108,8 +106,8 @@ def load_server_config(config_file: str = "server_config.yml") -> Dict[str, Any]
             if not os.path.exists(config_path):
                 logger.warning(f"Server config file not found: {config_file}. Using default configuration.")
                 return {"servers": {}}
-        
-        with open(config_path, 'r') as f:
+
+        with open(config_path) as f:
             config = yaml.safe_load(f)
             logger.info(f"Loaded server config from: {config_path}")
             return config or {"servers": {}}
@@ -134,9 +132,9 @@ def resolve_env_vars(value: str, server_name: str = None) -> str:
         ValueError: If a required environment variable is not found
     """
     import re
-    
+
     missing_vars = []
-    
+
     def replace_env_var(match):
         var_name = match.group(1)
         env_value = os.environ.get(var_name)
@@ -144,11 +142,11 @@ def resolve_env_vars(value: str, server_name: str = None) -> str:
             missing_vars.append(var_name)
             return match.group(0)  # Return original if not found
         return env_value
-    
+
     # Find all ${VAR_NAME} patterns and replace them
-    pattern = r'\$\{([^}]+)\}'
+    pattern = r"\$\{([^}]+)\}"
     resolved_value = re.sub(pattern, replace_env_var, value)
-    
+
     # If any environment variables were missing, raise an error
     if missing_vars:
         server_context = f" for server '{server_name}'" if server_name else ""
@@ -157,11 +155,11 @@ def resolve_env_vars(value: str, server_name: str = None) -> str:
             f"Missing required environment variable(s): '{missing_list}'{server_context}. "
             f"Please set these environment variables and try again."
         )
-    
+
     return resolved_value
 
 
-def get_server_headers(server_name: str, config: Dict[str, Any]) -> Dict[str, str]:
+def get_server_headers(server_name: str, config: dict[str, Any]) -> dict[str, str]:
     """
     Get server-specific headers from configuration with environment variable resolution.
     
@@ -178,11 +176,11 @@ def get_server_headers(server_name: str, config: Dict[str, Any]) -> Dict[str, st
     servers = config.get("servers", {})
     server_config = servers.get(server_name, {})
     raw_headers = server_config.get("headers", {})
-    
+
     if not raw_headers:
         logger.debug(f"No custom headers configured for server '{server_name}'")
         return {}
-    
+
     # Resolve environment variables in header values
     resolved_headers = {}
     try:
@@ -191,10 +189,10 @@ def get_server_headers(server_name: str, config: Dict[str, Any]) -> Dict[str, st
             if resolved_value != header_value:
                 logger.debug(f"Resolved header {header_name} for server {server_name}")
             resolved_headers[header_name] = resolved_value
-        
+
         logger.info(f"Applied {len(resolved_headers)} custom headers for server '{server_name}'")
         return resolved_headers
-        
+
     except ValueError as e:
         # Re-raise with additional context about which server failed
         logger.error(f"Failed to configure headers for server '{server_name}': {e}")
@@ -205,7 +203,7 @@ def enable_verbose_logging():
     """Enable verbose debug logging for HTTP libraries and main logger."""
     # Set main logger to DEBUG level
     logger.setLevel(logging.DEBUG)
-    
+
     # Enable debug logging for httpx to see request/response details
     httpx_logger = logging.getLogger("httpx")
     httpx_logger.setLevel(logging.DEBUG)
@@ -220,7 +218,7 @@ def enable_verbose_logging():
     mcp_logger = logging.getLogger("mcp")
     mcp_logger.setLevel(logging.DEBUG)
     mcp_logger.propagate = True
-    
+
     logger.info("Verbose logging enabled for httpx, httpcore, mcp libraries, and main logger")
 
 def get_auth_mode_from_args() -> bool:
@@ -231,12 +229,12 @@ def get_auth_mode_from_args() -> bool:
         bool: True if using session cookie authentication, False for M2M authentication
     """
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument('--use-session-cookie', action='store_true',
-                        help='Use session cookie authentication instead of M2M')
+    parser.add_argument("--use-session-cookie", action="store_true",
+                        help="Use session cookie authentication instead of M2M")
     args, _ = parser.parse_known_args()
     return args.use_session_cookie
 
-def load_agent_credentials(agent_name: str) -> Optional[Dict[str, Any]]:
+def load_agent_credentials(agent_name: str) -> dict[str, Any] | None:
     """
     Load agent credentials from .oauth-tokens directory.
     Tries {agent-name}.json and {agent-name}-token.json files.
@@ -247,7 +245,7 @@ def load_agent_credentials(agent_name: str) -> Optional[Dict[str, Any]]:
     Returns:
         Dict containing agent credentials or None if not found
     """
-    oauth_tokens_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.oauth-tokens')
+    oauth_tokens_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".oauth-tokens")
 
     # Try both possible filenames
     token_files = [
@@ -259,16 +257,16 @@ def load_agent_credentials(agent_name: str) -> Optional[Dict[str, Any]]:
         if os.path.exists(token_file):
             try:
                 logger.info(f"Loading agent credentials from: {token_file}")
-                with open(token_file, 'r') as f:
+                with open(token_file) as f:
                     data = json.load(f)
 
                 # Validate that we have an access token
-                if 'access_token' not in data:
+                if "access_token" not in data:
                     logger.warning(f"No access_token found in {token_file}")
                     continue
 
                 return data
-            except (json.JSONDecodeError, IOError) as e:
+            except (OSError, json.JSONDecodeError) as e:
                 logger.warning(f"Failed to load {token_file}: {e}")
                 continue
 
@@ -289,77 +287,77 @@ def parse_arguments() -> argparse.Namespace:
 
     # Get environment variables for fallback values
     env_config = {
-        'client_id': os.getenv('COGNITO_CLIENT_ID'),
-        'client_secret': os.getenv('COGNITO_CLIENT_SECRET'),
-        'region': os.getenv('AWS_REGION'),
-        'user_pool_id': os.getenv('COGNITO_USER_POOL_ID'),
-        'domain': os.getenv('COGNITO_DOMAIN'),
-        'anthropic_api_key': os.getenv('ANTHROPIC_API_KEY')
+        "client_id": os.getenv("COGNITO_CLIENT_ID"),
+        "client_secret": os.getenv("COGNITO_CLIENT_SECRET"),
+        "region": os.getenv("AWS_REGION"),
+        "user_pool_id": os.getenv("COGNITO_USER_POOL_ID"),
+        "domain": os.getenv("COGNITO_DOMAIN"),
+        "anthropic_api_key": os.getenv("ANTHROPIC_API_KEY")
     }
 
-    parser = argparse.ArgumentParser(description='Interactive LangGraph MCP Client with Flexible Authentication')
-    
+    parser = argparse.ArgumentParser(description="Interactive LangGraph MCP Client with Flexible Authentication")
+
     # Server connection arguments
-    parser.add_argument('--mcp-registry-url', type=str, default='https://mcpgateway.ddns.net/mcpgw/mcp',
-                        help='Hostname of the MCP Registry')
-    
+    parser.add_argument("--mcp-registry-url", type=str, default="https://mcpgateway.ddns.net/mcpgw/mcp",
+                        help="Hostname of the MCP Registry")
+
     # Model and provider arguments
-    parser.add_argument('--provider', type=str, choices=['anthropic', 'bedrock'], default='bedrock',
-                        help='Model provider to use (default: bedrock)')
-    parser.add_argument('--model', type=str, default='us.anthropic.claude-3-7-sonnet-20250219-v1:0',
-                        help='Model ID to use (Bedrock format for bedrock provider, Anthropic format for anthropic provider)')
-    
+    parser.add_argument("--provider", type=str, choices=["anthropic", "bedrock"], default="bedrock",
+                        help="Model provider to use (default: bedrock)")
+    parser.add_argument("--model", type=str, default="us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+                        help="Model ID to use (Bedrock format for bedrock provider, Anthropic format for anthropic provider)")
+
     # Prompt arguments (changed from --message)
-    parser.add_argument('--prompt', type=str, default=None,
-                        help='Initial prompt to send to the agent')
-    
+    parser.add_argument("--prompt", type=str, default=None,
+                        help="Initial prompt to send to the agent")
+
     # Interactive mode argument
-    parser.add_argument('--interactive', '-i', action='store_true',
-                        help='Enable interactive mode for multi-turn conversations')
-    
+    parser.add_argument("--interactive", "-i", action="store_true",
+                        help="Enable interactive mode for multi-turn conversations")
+
     # MCP tool filtering arguments
-    parser.add_argument('--mcp-tool-name', type=str, default=DEFAULT_MCP_TOOL_NAME,
-                        help=f'Name of the MCP tool to filter and use (default: {DEFAULT_MCP_TOOL_NAME})')
-    
+    parser.add_argument("--mcp-tool-name", type=str, default=DEFAULT_MCP_TOOL_NAME,
+                        help=f"Name of the MCP tool to filter and use (default: {DEFAULT_MCP_TOOL_NAME})")
+
     # Verbose logging argument
-    parser.add_argument('--verbose', '-v', action='store_true',
-                        help='Enable verbose HTTP debugging output')
-    
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="Enable verbose HTTP debugging output")
+
     # Authentication method arguments
-    parser.add_argument('--use-session-cookie', action='store_true',
-                        help='Use session cookie authentication instead of M2M')
-    parser.add_argument('--session-cookie-file', type=str, default='~/.mcp/session_cookie',
-                        help='Path to session cookie file (default: ~/.mcp/session_cookie)')
-    parser.add_argument('--jwt-token', type=str,
-                        help='Use a pre-generated JWT token instead of generating M2M token')
+    parser.add_argument("--use-session-cookie", action="store_true",
+                        help="Use session cookie authentication instead of M2M")
+    parser.add_argument("--session-cookie-file", type=str, default="~/.mcp/session_cookie",
+                        help="Path to session cookie file (default: ~/.mcp/session_cookie)")
+    parser.add_argument("--jwt-token", type=str,
+                        help="Use a pre-generated JWT token instead of generating M2M token")
 
     # Agent-based authentication arguments
-    parser.add_argument('--agent-name', type=str,
-                        help='Agent name to load credentials from .oauth-tokens/{agent-name}.json or {agent-name}-token.json')
-    parser.add_argument('--access-token', type=str,
-                        help='Direct access token override (takes precedence over agent credentials)')
-    
-    
+    parser.add_argument("--agent-name", type=str,
+                        help="Agent name to load credentials from .oauth-tokens/{agent-name}.json or {agent-name}-token.json")
+    parser.add_argument("--access-token", type=str,
+                        help="Direct access token override (takes precedence over agent credentials)")
+
+
     # Cognito authentication arguments - now optional if available in environment
-    parser.add_argument('--client-id', type=str, default=env_config['client_id'],
-                        help='Cognito App Client ID (can be set via COGNITO_CLIENT_ID env var)')
-    parser.add_argument('--client-secret', type=str, default=env_config['client_secret'],
-                        help='Cognito App Client Secret (can be set via COGNITO_CLIENT_SECRET env var)')
-    parser.add_argument('--user-pool-id', type=str, default=env_config['user_pool_id'],
-                        help='Cognito User Pool ID (can be set via COGNITO_USER_POOL_ID env var)')
-    parser.add_argument('--region', type=str, default=env_config['region'],
-                        help='AWS region for Cognito (can be set via AWS_REGION env var)')
-    parser.add_argument('--domain', type=str, default=env_config['domain'],
-                        help='Cognito custom domain (can be set via COGNITO_DOMAIN env var)')
-    parser.add_argument('--scopes', type=str, nargs='*', default=None,
-                        help='Optional scopes for the token request')
-    
+    parser.add_argument("--client-id", type=str, default=env_config["client_id"],
+                        help="Cognito App Client ID (can be set via COGNITO_CLIENT_ID env var)")
+    parser.add_argument("--client-secret", type=str, default=env_config["client_secret"],
+                        help="Cognito App Client Secret (can be set via COGNITO_CLIENT_SECRET env var)")
+    parser.add_argument("--user-pool-id", type=str, default=env_config["user_pool_id"],
+                        help="Cognito User Pool ID (can be set via COGNITO_USER_POOL_ID env var)")
+    parser.add_argument("--region", type=str, default=env_config["region"],
+                        help="AWS region for Cognito (can be set via AWS_REGION env var)")
+    parser.add_argument("--domain", type=str, default=env_config["domain"],
+                        help="Cognito custom domain (can be set via COGNITO_DOMAIN env var)")
+    parser.add_argument("--scopes", type=str, nargs="*", default=None,
+                        help="Optional scopes for the token request")
+
     args = parser.parse_args()
-    
+
     # Enable verbose logging if requested
     if args.verbose:
         enable_verbose_logging()
-    
+
     # Validate authentication parameters based on method
     if args.use_session_cookie:
         # For session cookie auth, we just need the cookie file
@@ -376,22 +374,22 @@ def parse_arguments() -> argparse.Namespace:
             # No default fallback - require environment variable or command line arg
             pass
         if not args.region:
-            args.region = 'us-east-1'  # Default region
+            args.region = "us-east-1"  # Default region
     else:
         # For M2M auth, validate Cognito parameters
         missing_params = []
         if not args.client_id:
-            missing_params.append('--client-id (or COGNITO_CLIENT_ID env var)')
+            missing_params.append("--client-id (or COGNITO_CLIENT_ID env var)")
         if not args.client_secret:
-            missing_params.append('--client-secret (or COGNITO_CLIENT_SECRET env var)')
+            missing_params.append("--client-secret (or COGNITO_CLIENT_SECRET env var)")
         if not args.user_pool_id:
-            missing_params.append('--user-pool-id (or COGNITO_USER_POOL_ID env var)')
+            missing_params.append("--user-pool-id (or COGNITO_USER_POOL_ID env var)")
         if not args.region:
-            missing_params.append('--region (or AWS_REGION env var)')
-        
+            missing_params.append("--region (or AWS_REGION env var)")
+
         if missing_params:
             parser.error(f"Missing required parameters for M2M authentication: {', '.join(missing_params)}")
-    
+
     return args
 
 @tool
@@ -416,24 +414,24 @@ def calculator(expression: str) -> str:
     # Security check: only allow basic arithmetic operations and numbers
     # Remove all whitespace
     expression = expression.replace(" ", "")
-    
+
     # Check if the expression contains only allowed characters
-    if not re.match(r'^[0-9+\-*/().^ ]+$', expression):
+    if not re.match(r"^[0-9+\-*/().^ ]+$", expression):
         return "Error: Only basic arithmetic operations (+, -, *, /, ^, (), .) are allowed."
-    
+
     try:
         # Replace ^ with ** for exponentiation
-        expression = expression.replace('^', '**')
-        
+        expression = expression.replace("^", "**")
+
         # Evaluate the expression
         result = eval(expression)
         return str(result)
     except Exception as e:
-        return f"Error evaluating expression: {str(e)}"
+        return f"Error evaluating expression: {e!s}"
 
 @tool
-async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: str, arguments: Dict[str, Any],
-                         supported_transports: List[str] = None, auth_provider: str = None) -> str:
+async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: str, arguments: dict[str, Any],
+                         supported_transports: list[str] = None, auth_provider: str = None) -> str:
     """
     Invoke a tool on an MCP server using the MCP Registry URL and server name with authentication.
     
@@ -456,54 +454,54 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
     """
     # Construct the MCP server URL from the registry URL and server name using standard URL parsing
     parsed_url = urlparse(mcp_registry_url)
-    
+
     # Extract the scheme, netloc and path from the parsed URL
     scheme = parsed_url.scheme
     netloc = parsed_url.netloc
     path = parsed_url.path
-    
+
     # Use only the base URL (scheme + netloc) without any path
     base_url = f"{scheme}://{netloc}"
-    
+
     # Create the server URL by joining the base URL with the server name
     # Remove leading slash from server_name if present to avoid double slashes
-    if server_name.startswith('/'):
+    if server_name.startswith("/"):
         server_name = server_name[1:]
-    server_url = urljoin(base_url + '/', server_name)
+    server_url = urljoin(base_url + "/", server_name)
     logger.info(f"invoke_mcp_tool, Initial Server URL: {server_url}")
-    
+
     # Get authentication parameters from global agent_settings object
     # These will be populated by the main function when it generates the token
     auth_token = agent_settings.auth_token
     user_pool_id = agent_settings.user_pool_id
     client_id = agent_settings.client_id
-    region = agent_settings.region or 'us-east-1'
+    region = agent_settings.region or "us-east-1"
     session_cookie = agent_settings.session_cookie
-    
+
     # Determine auth method based on what's available
     if session_cookie:
-        auth_method = 'session_cookie'
+        auth_method = "session_cookie"
     else:
-        auth_method = 'm2m'
-    
+        auth_method = "m2m"
+
     # Use ingress headers if available, otherwise fall back to the original auth
     if agent_settings.ingress_token:
         headers = {
-            'X-Authorization': f'Bearer {agent_settings.ingress_token}',
-            'X-User-Pool-Id': agent_settings.ingress_user_pool_id or '',
-            'X-Client-Id': agent_settings.ingress_client_id or '',
-            'X-Region': agent_settings.ingress_region or 'us-east-1'
+            "X-Authorization": f"Bearer {agent_settings.ingress_token}",
+            "X-User-Pool-Id": agent_settings.ingress_user_pool_id or "",
+            "X-Client-Id": agent_settings.ingress_client_id or "",
+            "X-Region": agent_settings.ingress_region or "us-east-1"
         }
     else:
         # Fallback to original headers
         headers = {
-            'X-User-Pool-Id': user_pool_id or '',
-            'X-Client-Id': client_id or '',
-            'X-Region': region or 'us-east-1'
+            "X-User-Pool-Id": user_pool_id or "",
+            "X-Client-Id": client_id or "",
+            "X-Region": region or "us-east-1"
         }
-    
+
     # TRACE: Print all parameters received by invoke_mcp_tool
-    logger.debug(f"invoke_mcp_tool TRACE - Parameters received:")
+    logger.debug("invoke_mcp_tool TRACE - Parameters received:")
     logger.debug(f"  mcp_registry_url: {mcp_registry_url}")
     logger.debug(f"  server_name: {server_name}")
     logger.debug(f"  tool_name: {tool_name}")
@@ -516,70 +514,70 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
     logger.debug(f"  session_cookie: {session_cookie}")
     logger.debug(f"  supported_transports: {supported_transports}")
     logger.debug(f"invoke_mcp_tool TRACE - Headers built: {headers}")
-    
+
     # Get server-specific headers from configuration
-    server_name_clean = server_name.strip('/')
+    server_name_clean = server_name.strip("/")
     server_headers = get_server_headers(server_name_clean, server_config)
-    
+
     # Apply server-specific headers
     for header_name, header_value in server_headers.items():
         headers[header_name] = header_value
-        
+
     # Check for egress authentication if auth_provider is specified
     if auth_provider:
         # Try to load egress token from {auth_provider}-{server_name}-egress.json
-        oauth_tokens_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.oauth-tokens')
+        oauth_tokens_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".oauth-tokens")
         # Convert server_name to lowercase and remove leading slash if present
-        server_name_clean = server_name.strip('/').lower()
+        server_name_clean = server_name.strip("/").lower()
         egress_file = os.path.join(oauth_tokens_dir, f"{auth_provider.lower()}-{server_name_clean}-egress.json")
-        
+
         # Also try without server name if the first file doesn't exist
         egress_file_alt = os.path.join(oauth_tokens_dir, f"{auth_provider.lower()}-egress.json")
-        
+
         egress_data = None
         if os.path.exists(egress_file):
             logger.info(f"Found egress token file: {egress_file}")
-            with open(egress_file, 'r') as f:
+            with open(egress_file) as f:
                 egress_data = json.load(f)
         elif os.path.exists(egress_file_alt):
             logger.info(f"Found alternative egress token file: {egress_file_alt}")
-            with open(egress_file_alt, 'r') as f:
+            with open(egress_file_alt) as f:
                 egress_data = json.load(f)
-        
+
         if egress_data:
             # Add egress authorization header
-            egress_token = egress_data.get('access_token')
+            egress_token = egress_data.get("access_token")
             if egress_token:
-                headers['Authorization'] = f'Bearer {egress_token}'
+                headers["Authorization"] = f"Bearer {egress_token}"
                 logger.info(f"Added egress Authorization header for {auth_provider}")
-            
+
             # Add provider-specific headers
-            if auth_provider.lower() == 'atlassian':
-                cloud_id = egress_data.get('cloud_id')
+            if auth_provider.lower() == "atlassian":
+                cloud_id = egress_data.get("cloud_id")
                 if cloud_id:
-                    headers['X-Atlassian-Cloud-Id'] = cloud_id
+                    headers["X-Atlassian-Cloud-Id"] = cloud_id
                     logger.info(f"Added X-Atlassian-Cloud-Id header: {cloud_id}")
         else:
             logger.warning(f"No egress token file found for auth_provider: {auth_provider}")
-    
+
     if auth_method == "session_cookie" and session_cookie:
-        headers['Cookie'] = f'jarvis_registry_session={session_cookie}'
+        headers["Cookie"] = f"jarvis_registry_session={session_cookie}"
     else:
-        headers['X-Authorization'] = f'Bearer {auth_token}'
+        headers["X-Authorization"] = f"Bearer {auth_token}"
         # If no auth header from config and no egress token, use the general auth_token
-        if 'Authorization' not in headers:
-            headers['Authorization'] = f'Bearer {auth_token}'
-    
+        if "Authorization" not in headers:
+            headers["Authorization"] = f"Bearer {auth_token}"
+
     # Create redacted headers for logging (redact all sensitive values)
     redacted_headers = {}
     for header_name, header_value in headers.items():
-        if header_name in ['Authorization', 'X-Authorization', 'Cookie', 'X-User-Pool-Id', 'X-Client-Id', 'X-Atlassian-Cloud-Id']:
+        if header_name in ["Authorization", "X-Authorization", "Cookie", "X-User-Pool-Id", "X-Client-Id", "X-Atlassian-Cloud-Id"]:
             # Redact sensitive headers
-            if header_name == 'Cookie':
+            if header_name == "Cookie":
                 redacted_headers[header_name] = f'jarvis_registry_session={redact_sensitive_value(session_cookie if session_cookie else "")}'
-            elif header_name in ['Authorization', 'X-Authorization'] and header_value.startswith('Bearer '):
+            elif header_name in ["Authorization", "X-Authorization"] and header_value.startswith("Bearer "):
                 token_part = header_value[7:]  # Remove 'Bearer ' prefix
-                redacted_headers[header_name] = f'Bearer {redact_sensitive_value(token_part)}'
+                redacted_headers[header_name] = f"Bearer {redact_sensitive_value(token_part)}"
             else:
                 redacted_headers[header_name] = redact_sensitive_value(header_value)
         else:
@@ -589,48 +587,48 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
     try:
         # Determine transport based on supported_transports
         # Default to streamable_http, only use SSE if explicitly supported and no streamable_http
-        use_sse = (supported_transports and 
-                   "sse" in supported_transports and 
+        use_sse = (supported_transports and
+                   "sse" in supported_transports and
                    "streamable_http" not in supported_transports)
         transport_name = "SSE" if use_sse else "streamable_http"
-        
+
         # For transport through the gateway, we need to append the transport endpoint
         # The nginx gateway expects the full path including the transport endpoint
         if use_sse:
-            if not server_url.endswith('/'):
-                server_url += '/'
-            server_url += 'sse'
+            if not server_url.endswith("/"):
+                server_url += "/"
+            server_url += "sse"
             logger.info(f"invoke_mcp_tool, Using SSE transport with gateway URL: {server_url}")
         else:
-            if not server_url.endswith('/'):
-                server_url += '/'
-            
+            if not server_url.endswith("/"):
+                server_url += "/"
+
             # Check if this server should skip the /mcp suffix
-            server_path = '/' + server_name.strip('/')
+            server_path = "/" + server_name.strip("/")
             if server_path not in SERVERS_NO_MCP_SUFFIX:
-                server_url += 'mcp'
+                server_url += "mcp"
                 logger.info(f"invoke_mcp_tool, Using streamable_http transport with gateway URL: {server_url}")
             else:
                 logger.info(f"invoke_mcp_tool, Using streamable_http transport without /mcp suffix for {server_name}: {server_url}")
-        
+
         # Connect to MCP server and execute tool call
         logger.info(f"invoke_mcp_tool, Connecting to MCP server using {transport_name}: {server_url}, headers: {redacted_headers}")
-        
+
         if use_sse:
             # Create an MCP SSE client
             async with sse_client(server_url, headers=headers) as (read, write):
                 async with mcp.ClientSession(read, write, sampling_callback=None) as session:
                     # Initialize the connection
                     await session.initialize()
-                    
+
                     # Call the specified tool with the provided arguments
                     result = await session.call_tool(tool_name, arguments=arguments)
-                    
+
                     # Format the result as a string
                     response = ""
                     for r in result.content:
                         response += r.text + "\n"
-                    
+
                     return response.strip()
         else:
             # Create an MCP streamable-http client
@@ -638,20 +636,21 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
                 async with mcp.ClientSession(read, write, sampling_callback=None) as session:
                     # Initialize the connection
                     await session.initialize()
-                    
+
                     # Call the specified tool with the provided arguments
                     result = await session.call_tool(tool_name, arguments=arguments)
-                    
+
                     # Format the result as a string
                     response = ""
                     for r in result.content:
                         response += r.text + "\n"
-                    
+
                     return response.strip()
     except Exception as e:
-        return f"Error invoking MCP tool: {str(e)}"
+        return f"Error invoking MCP tool: {e!s}"
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
+
 current_utc_time = str(datetime.now(UTC))
 
 # Global agent settings to store authentication details
@@ -692,7 +691,7 @@ def load_system_prompt():
         # Get the directory where this Python file is located
         current_dir = os.path.dirname(__file__)
         system_prompt_path = os.path.join(current_dir, "system_prompt.txt")
-        with open(system_prompt_path, "r") as f:
+        with open(system_prompt_path) as f:
             return f.read()
     except Exception as e:
         print(f"Error loading system prompt: {e}")
@@ -705,7 +704,7 @@ def load_system_prompt():
         </instructions>
         """
 
-def print_agent_response(response_dict: Dict[str, Any], verbose: bool = False) -> None:
+def print_agent_response(response_dict: dict[str, Any], verbose: bool = False) -> None:
     """
     Parse and print the agent's response in a user-friendly way
     
@@ -725,19 +724,19 @@ def print_agent_response(response_dict: Dict[str, Any], verbose: bool = False) -
             "UNKNOWN": "\033[1;37m", # White
             "RESET": "\033[0m"       # Reset to default
         }
-        if 'messages' not in response_dict:
+        if "messages" not in response_dict:
             logger.warning("No messages found in response")
             return
-        
-        messages = response_dict['messages']
+
+        messages = response_dict["messages"]
         blue = "\033[1;34m"  # Blue
         reset = COLORS["RESET"]
         logger.info(f"\n{blue}=== Found {len(messages)} messages ==={reset}\n")
-        
+
         for i, message in enumerate(messages, 1):
             # Determine message type based on class name or type
             message_type = type(message).__name__
-            
+
             if "SystemMessage" in message_type:
                 msg_type = "SYSTEM"
             elif "HumanMessage" in message_type:
@@ -759,60 +758,60 @@ def print_agent_response(response_dict: Dict[str, Any], verbose: bool = False) -
                     msg_type = "TOOL"
                 else:
                     msg_type = "UNKNOWN"
-            
+
             # Get message content
-            content = message.content if hasattr(message, 'content') else str(message)
-            
+            content = message.content if hasattr(message, "content") else str(message)
+
             # Check for tool calls
             tool_calls = []
-            if hasattr(message, 'tool_calls') and message.tool_calls:
+            if hasattr(message, "tool_calls") and message.tool_calls:
                 for tool_call in message.tool_calls:
-                    tool_name = tool_call.get('name', 'unknown')
-                    tool_args = tool_call.get('args', {})
+                    tool_name = tool_call.get("name", "unknown")
+                    tool_args = tool_call.get("args", {})
                     tool_calls.append(f"Tool: {tool_name}, Args: {tool_args}")
-            
+
             # Get the color for this message type
             color = COLORS.get(msg_type, COLORS["UNKNOWN"])
             reset = COLORS["RESET"]
-            
+
             # Log message with enhanced formatting and color coding - entire message in color
             logger.info(f"\n{color}{'=' * 20} MESSAGE #{i} - TYPE: {msg_type} {'=' * 20}")
             logger.info(f"{'-' * 80}")
             logger.info(f"CONTENT: {content}")
-            
+
             # Log any tool calls
             if tool_calls:
-                logger.info(f"\nTOOL CALLS:")
+                logger.info("\nTOOL CALLS:")
                 for tc in tool_calls:
                     logger.info(f"  {tc}")
             logger.info(f"{'=' * 20} END OF {msg_type} MESSAGE #{i} {'=' * 20}{reset}")
             logger.info("")
-    
+
     # Always show the final AI response (both in verbose and non-verbose mode)
     # This section runs regardless of verbose flag
     if not verbose:
         logger.info("=== Attempting to print final response (non-verbose mode) ===")
-    
+
     if response_dict and "messages" in response_dict and response_dict["messages"]:
         # Debug: Log that we're looking for the final AI message
         if not verbose:
             logger.info(f"Found {len(response_dict['messages'])} messages in response")
-        
+
         # Get the last AI message from the response
         for message in reversed(response_dict["messages"]):
             message_type = type(message).__name__
-            
+
             # Debug logging in non-verbose mode to understand what's happening
             if not verbose:
                 logger.debug(f"Checking message type: {message_type}")
-            
+
             # Check if this is an AI message
             if "AIMessage" in message_type or "ai" in str(type(message)).lower():
                 # Extract and print the content
                 content = None
-                
+
                 # Try different ways to extract content
-                if hasattr(message, 'content'):
+                if hasattr(message, "content"):
                     content = message.content
                 elif isinstance(message, dict) and "content" in message:
                     content = message["content"]
@@ -822,18 +821,17 @@ def print_agent_response(response_dict: Dict[str, Any], verbose: bool = False) -
                         content = str(message)
                     except:
                         content = None
-                
+
                 # Print the content if we found any
                 if content:
                     # Force print the final response regardless of any conditions
                     print("\n" + str(content), flush=True)
-                    
+
                     if not verbose:
                         logger.info(f"Final AI Response printed (length: {len(str(content))} chars)")
-                else:
-                    if not verbose:
-                        logger.warning(f"AI message found but no content extracted. Message type: {message_type}, Message attrs: {dir(message) if hasattr(message, '__dict__') else 'N/A'}")
-                
+                elif not verbose:
+                    logger.warning(f"AI message found but no content extracted. Message type: {message_type}, Message attrs: {dir(message) if hasattr(message, '__dict__') else 'N/A'}")
+
                 # We found an AI message, stop looking
                 break
         else:
@@ -841,17 +839,17 @@ def print_agent_response(response_dict: Dict[str, Any], verbose: bool = False) -
             if not verbose:
                 logger.warning("No AI message found in response, attempting to print last message")
                 logger.debug(f"Messages in response: {[type(m).__name__ for m in response_dict['messages']]}")
-            
+
             # As a fallback, print the last message if it has content
             if response_dict["messages"]:
                 last_message = response_dict["messages"][-1]
                 content = None
-                
-                if hasattr(last_message, 'content'):
+
+                if hasattr(last_message, "content"):
                     content = last_message.content
                 elif isinstance(last_message, dict) and "content" in last_message:
                     content = last_message["content"]
-                
+
                 if content:
                     print("\n[Response]\n" + str(content), flush=True)
                     logger.info(f"Printed last message as fallback (type: {type(last_message).__name__})")
@@ -859,7 +857,7 @@ def print_agent_response(response_dict: Dict[str, Any], verbose: bool = False) -
 
 class InteractiveAgent:
     """Interactive agent that maintains conversation history"""
-    
+
     def __init__(self, agent, system_prompt: str, verbose: bool = False):
         """
         Initialize the interactive agent
@@ -873,8 +871,8 @@ class InteractiveAgent:
         self.system_prompt = system_prompt
         self.verbose = verbose
         self.conversation_history = []
-        
-    async def process_message(self, user_input: str) -> Dict[str, Any]:
+
+    async def process_message(self, user_input: str) -> dict[str, Any]:
         """
         Process a user message and return the agent's response
         
@@ -886,34 +884,34 @@ class InteractiveAgent:
         """
         # Build messages list with conversation history
         messages = [{"role": "system", "content": self.system_prompt}]
-        
+
         # Add conversation history
         for msg in self.conversation_history:
             messages.append(msg)
-        
+
         # Add new user message
         messages.append({"role": "user", "content": user_input})
-        
+
         if self.verbose:
             logger.info(f"\nSending {len(messages)} messages to agent (including system prompt)")
-        
+
         # Invoke the agent
         response = await self.agent.ainvoke({"messages": messages})
-        
+
         # Store the user message and AI response in history
         self.conversation_history.append({"role": "user", "content": user_input})
-        
+
         # Extract the AI's response from the messages
         if response and "messages" in response and response["messages"]:
             for message in reversed(response["messages"]):
                 message_type = type(message).__name__
                 if "AIMessage" in message_type:
-                    ai_content = message.content if hasattr(message, 'content') else str(message)
+                    ai_content = message.content if hasattr(message, "content") else str(message)
                     self.conversation_history.append({"role": "assistant", "content": ai_content})
                     break
-        
+
         return response
-    
+
     async def run_interactive_session(self):
         """Run an interactive conversation session"""
         print("\n" + "="*60)
@@ -923,25 +921,25 @@ class InteractiveAgent:
         print("Type 'clear' or 'reset' to clear conversation history")
         print("Type 'history' to view conversation history")
         print("="*60 + "\n")
-        
+
         while True:
             try:
                 # Get user input
                 user_input = input("\n You: ").strip()
-                
+
                 # Check for exit commands
-                if user_input.lower() in ['exit', 'quit', 'bye']:
+                if user_input.lower() in ["exit", "quit", "bye"]:
                     print("\n Goodbye! Thanks for chatting.")
                     break
-                
+
                 # Check for clear/reset commands
-                if user_input.lower() in ['clear', 'reset']:
+                if user_input.lower() in ["clear", "reset"]:
                     self.conversation_history = []
                     print("\n Conversation history cleared.")
                     continue
-                
+
                 # Check for history command
-                if user_input.lower() == 'history':
+                if user_input.lower() == "history":
                     if not self.conversation_history:
                         print("\n No conversation history yet.")
                     else:
@@ -951,24 +949,24 @@ class InteractiveAgent:
                             role = "You" if msg["role"] == "user" else "Agent"
                             print(f"{i+1}. {role}: {msg['content'][:100]}...")
                     continue
-                
+
                 # Skip empty input
                 if not user_input:
                     continue
-                
+
                 # Process the message
                 print("\n樂 Thinking...")
                 response = await self.process_message(user_input)
-                
+
                 # Print the response
                 print("\n烙 Agent:", end="")
                 print_agent_response(response, self.verbose)
-                
+
             except KeyboardInterrupt:
                 print("\n\n⚠️  Interrupted. Type 'exit' to quit or continue chatting.")
                 continue
             except Exception as e:
-                print(f"\n❌ Error: {str(e)}")
+                print(f"\n❌ Error: {e!s}")
                 if self.verbose:
                     import traceback
                     print(traceback.format_exc())
@@ -986,7 +984,7 @@ async def main():
     # Parse command line arguments
     args = parse_arguments()
     logger.info(f"Parsed command line arguments successfully, args={args}")
-    
+
     # Determine authentication method and load credentials
     access_token = None
     agent_credentials = None
@@ -999,35 +997,35 @@ async def main():
     elif args.agent_name:
         agent_credentials = load_agent_credentials(args.agent_name)
         if agent_credentials:
-            access_token = agent_credentials['access_token']
+            access_token = agent_credentials["access_token"]
             logger.info(f"Loaded credentials for agent: {args.agent_name}")
         else:
             logger.error(f"Failed to load credentials for agent: {args.agent_name}")
             raise FileNotFoundError(f"No valid credentials found for agent: {args.agent_name}")
     # Fallback to ingress.json for backward compatibility
     else:
-        oauth_tokens_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.oauth-tokens')
-        ingress_file = os.path.join(oauth_tokens_dir, 'ingress.json')
+        oauth_tokens_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".oauth-tokens")
+        ingress_file = os.path.join(oauth_tokens_dir, "ingress.json")
 
         if os.path.exists(ingress_file):
             try:
-                with open(ingress_file, 'r') as f:
+                with open(ingress_file) as f:
                     ingress_data = json.load(f)
 
                 # Validate required fields
-                required_fields = ['access_token', 'user_pool_id', 'client_id', 'region']
+                required_fields = ["access_token", "user_pool_id", "client_id", "region"]
                 missing_fields = [field for field in required_fields if not ingress_data.get(field)]
 
                 if missing_fields:
                     logger.warning(f"Missing required fields in ingress.json: {missing_fields}")
                 else:
                     # Set ingress authentication in agent_settings
-                    agent_settings.ingress_token = ingress_data['access_token']
-                    agent_settings.ingress_user_pool_id = ingress_data['user_pool_id']
-                    agent_settings.ingress_client_id = ingress_data['client_id']
-                    agent_settings.ingress_region = ingress_data['region']
+                    agent_settings.ingress_token = ingress_data["access_token"]
+                    agent_settings.ingress_user_pool_id = ingress_data["user_pool_id"]
+                    agent_settings.ingress_client_id = ingress_data["client_id"]
+                    agent_settings.ingress_region = ingress_data["region"]
 
-                    access_token = ingress_data['access_token']
+                    access_token = ingress_data["access_token"]
                     logger.info("Successfully loaded ingress authentication from .oauth-tokens/ingress.json")
                     logger.info(f"Ingress User Pool ID: {agent_settings.ingress_user_pool_id}")
                     logger.info(f"Ingress Client ID: {redact_sensitive_value(agent_settings.ingress_client_id)}")
@@ -1042,11 +1040,11 @@ async def main():
     # we'll need to generate one using Cognito
     if not access_token and not args.use_session_cookie and not args.jwt_token:
         logger.info("No access token available, will generate using Cognito M2M authentication")
-    
+
     # Load server configuration
     global server_config
     server_config = load_server_config()
-    
+
     # Display configuration
     server_url = args.mcp_registry_url
     logger.info(f"Connecting to MCP server: {server_url}")
@@ -1055,22 +1053,22 @@ async def main():
     if args.prompt:
         logger.info(f"Initial prompt: {args.prompt}")
     if args.jwt_token:
-        auth_display = 'Pre-generated JWT Token'
+        auth_display = "Pre-generated JWT Token"
     elif args.use_session_cookie:
-        auth_display = 'Session Cookie'
+        auth_display = "Session Cookie"
     else:
-        auth_display = 'M2M Token'
+        auth_display = "M2M Token"
     logger.info(f"Authentication method: {auth_display}")
-    
+
     # Initialize authentication variables (access_token may already be set from above)
     session_cookie = None
     auth_method = "session_cookie" if args.use_session_cookie else "m2m"
-    
+
     if args.jwt_token:
         # Use pre-generated JWT token
         access_token = args.jwt_token
         logger.info("Using pre-generated JWT token")
-        
+
         # Set global auth variables for invoke_mcp_tool (JWT token mode)
         agent_settings.auth_token = access_token
         agent_settings.user_pool_id = args.user_pool_id
@@ -1080,95 +1078,94 @@ async def main():
         # Load session cookie from file
         try:
             cookie_path = os.path.expanduser(args.session_cookie_file)
-            with open(cookie_path, 'r') as f:
+            with open(cookie_path) as f:
                 session_cookie = f.read().strip()
             logger.info(f"Successfully loaded session cookie from {cookie_path}")
         except Exception as e:
             logger.error(f"Failed to load session cookie: {e}")
             return
-            
+
         # Set global auth variables for invoke_mcp_tool (session cookie mode)
         agent_settings.auth_token = None
         agent_settings.user_pool_id = args.user_pool_id
         agent_settings.client_id = args.client_id
         agent_settings.region = args.region
         agent_settings.session_cookie = session_cookie
+    # Check if we already have an access token from agent credentials or ingress
+    elif access_token:
+        logger.info("Using previously loaded access token")
+
+        # Set global auth variables for invoke_mcp_tool
+        agent_settings.auth_token = access_token
+
+        # Use credentials from agent file if available, otherwise fall back to ingress or args
+        if agent_credentials:
+            agent_settings.user_pool_id = agent_credentials.get("user_pool_id") or agent_credentials.get("keycloak_realm")
+            agent_settings.client_id = agent_credentials.get("client_id")
+            agent_settings.region = agent_credentials.get("region") or agent_credentials.get("aws_region")
+        elif hasattr(agent_settings, "ingress_user_pool_id") and agent_settings.ingress_user_pool_id:
+            agent_settings.user_pool_id = agent_settings.ingress_user_pool_id
+            agent_settings.client_id = agent_settings.ingress_client_id
+            agent_settings.region = agent_settings.ingress_region
+        else:
+            agent_settings.user_pool_id = args.user_pool_id
+            agent_settings.client_id = args.client_id
+            agent_settings.region = args.region
     else:
-        # Check if we already have an access token from agent credentials or ingress
-        if access_token:
-            logger.info("Using previously loaded access token")
+        # Generate Cognito M2M authentication token
+        logger.info(f"Cognito User Pool ID: {redact_sensitive_value(args.user_pool_id)}")
+        logger.info(f"Cognito User Pool ID: {args.user_pool_id}")
+        logger.info(f"Cognito Client ID: {redact_sensitive_value(args.client_id)}")
+        logger.info(f"AWS Region: {args.region}")
+
+        try:
+            logger.info("Generating Cognito M2M authentication token...")
+            token_data = generate_token(
+                client_id=args.client_id,
+                client_secret=args.client_secret,
+                user_pool_id=args.user_pool_id,
+                region=args.region,
+                scopes=args.scopes,
+                domain=args.domain
+            )
+            access_token = token_data.get("access_token")
+            if not access_token:
+                raise ValueError("No access token received from Cognito")
+            logger.info("Successfully generated authentication token")
 
             # Set global auth variables for invoke_mcp_tool
             agent_settings.auth_token = access_token
+            agent_settings.user_pool_id = args.user_pool_id
+            agent_settings.client_id = args.client_id
+            agent_settings.region = args.region
+        except Exception as e:
+            logger.error(f"Failed to generate authentication token: {e}")
+            return
 
-            # Use credentials from agent file if available, otherwise fall back to ingress or args
-            if agent_credentials:
-                agent_settings.user_pool_id = agent_credentials.get('user_pool_id') or agent_credentials.get('keycloak_realm')
-                agent_settings.client_id = agent_credentials.get('client_id')
-                agent_settings.region = agent_credentials.get('region') or agent_credentials.get('aws_region')
-            elif hasattr(agent_settings, 'ingress_user_pool_id') and agent_settings.ingress_user_pool_id:
-                agent_settings.user_pool_id = agent_settings.ingress_user_pool_id
-                agent_settings.client_id = agent_settings.ingress_client_id
-                agent_settings.region = agent_settings.ingress_region
-            else:
-                agent_settings.user_pool_id = args.user_pool_id
-                agent_settings.client_id = args.client_id
-                agent_settings.region = args.region
-        else:
-            # Generate Cognito M2M authentication token
-            logger.info(f"Cognito User Pool ID: {redact_sensitive_value(args.user_pool_id)}")
-            logger.info(f"Cognito User Pool ID: {args.user_pool_id}")
-            logger.info(f"Cognito Client ID: {redact_sensitive_value(args.client_id)}")
-            logger.info(f"AWS Region: {args.region}")
-
-            try:
-                logger.info("Generating Cognito M2M authentication token...")
-                token_data = generate_token(
-                    client_id=args.client_id,
-                    client_secret=args.client_secret,
-                    user_pool_id=args.user_pool_id,
-                    region=args.region,
-                    scopes=args.scopes,
-                    domain=args.domain
-                )
-                access_token = token_data.get('access_token')
-                if not access_token:
-                    raise ValueError("No access token received from Cognito")
-                logger.info("Successfully generated authentication token")
-
-                # Set global auth variables for invoke_mcp_tool
-                agent_settings.auth_token = access_token
-                agent_settings.user_pool_id = args.user_pool_id
-                agent_settings.client_id = args.client_id
-                agent_settings.region = args.region
-            except Exception as e:
-                logger.error(f"Failed to generate authentication token: {e}")
-                return
-    
     # Validate provider-specific requirements
     anthropic_api_key = None
     aws_region = None
 
-    if args.provider == 'anthropic':
+    if args.provider == "anthropic":
         # Get Anthropic API key from environment variables
-        anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
+        anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
         if not anthropic_api_key:
             logger.error("ANTHROPIC_API_KEY not found in environment variables")
             return
-    elif args.provider == 'bedrock':
+    elif args.provider == "bedrock":
         # For Bedrock, we'll rely on AWS credentials from environment or IAM role
         # Check if basic AWS environment is available
-        aws_region = os.getenv('AWS_DEFAULT_REGION', os.getenv('AWS_REGION', 'us-east-1'))
+        aws_region = os.getenv("AWS_DEFAULT_REGION", os.getenv("AWS_REGION", "us-east-1"))
         logger.info(f"Using Bedrock provider with AWS region: {aws_region}")
     else:
         logger.error(f"Unsupported provider: {args.provider}")
         return
-    
+
     # Note: No need to explicitly load server-specific tokens anymore
     # The system now dynamically discovers them from server_config.yml
 
     # Initialize the model based on provider
-    if args.provider == 'anthropic':
+    if args.provider == "anthropic":
         model = ChatAnthropic(
             model=args.model,
             api_key=anthropic_api_key,
@@ -1176,7 +1173,7 @@ async def main():
             max_tokens=8192,
         )
         logger.info(f"Initialized Anthropic model: {args.model}")
-    elif args.provider == 'bedrock':
+    elif args.provider == "bedrock":
         model = ChatBedrock(
             model_id=args.model,
             region_name=aws_region,
@@ -1187,34 +1184,34 @@ async def main():
     else:
         logger.error(f"Unsupported provider: {args.provider}")
         return
-    
+
     try:
         # Prepare headers for MCP client authentication based on method
         if args.use_session_cookie:
             auth_headers = {
-                'Cookie': f'jarvis_registry_session={session_cookie}',
-                'X-User-Pool-Id': agent_settings.user_pool_id or '',
-                'X-Client-Id': agent_settings.client_id or '',
-                'X-Region': agent_settings.region or 'us-east-1'
+                "Cookie": f"jarvis_registry_session={session_cookie}",
+                "X-User-Pool-Id": agent_settings.user_pool_id or "",
+                "X-Client-Id": agent_settings.client_id or "",
+                "X-Region": agent_settings.region or "us-east-1"
             }
         else:
             # For both M2M and pre-generated JWT tokens
             auth_headers = {
-                'X-Authorization': f'Bearer {access_token}',
-                'X-User-Pool-Id': agent_settings.user_pool_id or '',
-                'X-Client-Id': agent_settings.client_id or '',
-                'X-Region': agent_settings.region or 'us-east-1'
+                "X-Authorization": f"Bearer {access_token}",
+                "X-User-Pool-Id": agent_settings.user_pool_id or "",
+                "X-Client-Id": agent_settings.client_id or "",
+                "X-Region": agent_settings.region or "us-east-1"
             }
-        
+
         # Log redacted headers
         redacted_headers = {}
         for k, v in auth_headers.items():
-            if k in ['X-Authorization', 'Cookie', 'X-User-Pool-Id', 'X-Client-Id']:
-                redacted_headers[k] = redact_sensitive_value(v) if v else ''
+            if k in ["X-Authorization", "Cookie", "X-User-Pool-Id", "X-Client-Id"]:
+                redacted_headers[k] = redact_sensitive_value(v) if v else ""
             else:
                 redacted_headers[k] = v
         logger.info(f"Using authentication headers: {redacted_headers}")
-        
+
         # Initialize MCP client with the server configuration and authentication headers
         client = MultiServerMCPClient(
             {
@@ -1230,33 +1227,33 @@ async def main():
         # Get available tools from MCP and display them
         mcp_tools = await client.get_tools()
         logger.info(f"Available MCP tools: {[tool.name for tool in mcp_tools]}")
-        
+
         # Filter MCP tools to only include allowed tools
         filtered_tools = [tool for tool in mcp_tools if tool.name in ALLOWED_MCP_TOOLS]
         logger.info(f"Filtered MCP tools (allowed: {ALLOWED_MCP_TOOLS}): {[tool.name for tool in filtered_tools]}")
-        
+
         # Add only the calculator, invoke_mcp_tool, and the allowed MCP tools to the tools array
         all_tools = [calculator, invoke_mcp_tool] + filtered_tools
         logger.info(f"All available tools: {[tool.name if hasattr(tool, 'name') else tool.__name__ for tool in all_tools]}")
-        
+
         # Create the agent with the model and all tools
         agent = create_react_agent(
             model,
             all_tools
         )
-        
+
         # Load and format the system prompt with the current time and MCP registry URL
         system_prompt_template = load_system_prompt()
-        
+
         # Prepare authentication parameters for system prompt
         if args.use_session_cookie:
             system_prompt = system_prompt_template.format(
                 current_utc_time=current_utc_time,
                 mcp_registry_url=args.mcp_registry_url,
-                auth_token='',  # Not used for session cookie auth
-                user_pool_id=agent_settings.user_pool_id or '',
-                client_id=agent_settings.client_id or '',
-                region=agent_settings.region or 'us-east-1',
+                auth_token="",  # Not used for session cookie auth
+                user_pool_id=agent_settings.user_pool_id or "",
+                client_id=agent_settings.client_id or "",
+                region=agent_settings.region or "us-east-1",
                 auth_method=auth_method,
                 session_cookie=session_cookie
             )
@@ -1266,21 +1263,21 @@ async def main():
                 current_utc_time=current_utc_time,
                 mcp_registry_url=args.mcp_registry_url,
                 auth_token=access_token,
-                user_pool_id=agent_settings.user_pool_id or '',
-                client_id=agent_settings.client_id or '',
-                region=agent_settings.region or 'us-east-1',
+                user_pool_id=agent_settings.user_pool_id or "",
+                client_id=agent_settings.client_id or "",
+                region=agent_settings.region or "us-east-1",
                 auth_method=auth_method,
-                session_cookie=''  # Not used for JWT auth
+                session_cookie=""  # Not used for JWT auth
             )
-        
+
         # Create the interactive agent
         interactive_agent = InteractiveAgent(agent, system_prompt, args.verbose)
-        
+
         # If an initial prompt is provided, process it first
         if args.prompt:
             logger.info("\nProcessing initial prompt...\n" + "-"*40)
             response = await interactive_agent.process_message(args.prompt)
-            
+
             if not args.interactive:
                 # Single-turn mode - just show the response and exit
                 logger.info("\nResponse:" + "\n" + "-"*40)
@@ -1288,11 +1285,10 @@ async def main():
                 logger.debug(f"Response has {len(response.get('messages', []))} messages")
                 print_agent_response(response, args.verbose)
                 return
-            else:
-                # Interactive mode - show the response and continue
-                print("\n烙 Agent:", end="")
-                print_agent_response(response, args.verbose)
-        
+            # Interactive mode - show the response and continue
+            print("\n烙 Agent:", end="")
+            print_agent_response(response, args.verbose)
+
         # If interactive mode is enabled, start the interactive session
         if args.interactive:
             await interactive_agent.run_interactive_session()
@@ -1301,11 +1297,11 @@ async def main():
             print("\n⚠️  No prompt provided. Use --prompt to send a message or --interactive for chat mode.")
             print("\nExamples:")
             print('  python agent_interactive.py --prompt "What time is it?"')
-            print('  python agent_interactive.py --interactive')
+            print("  python agent_interactive.py --interactive")
             print('  python agent_interactive.py --prompt "Hello" --interactive')
-                
+
     except Exception as e:
-        print(f"Error: {str(e)}")
+        print(f"Error: {e!s}")
         import traceback
         print(traceback.format_exc())
 

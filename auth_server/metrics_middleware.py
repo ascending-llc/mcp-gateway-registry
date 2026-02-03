@@ -8,21 +8,21 @@ This middleware automatically tracks detailed authentication metrics including:
 - Error analysis with specific reasons
 """
 
-import time
-import logging
 import asyncio
 import hashlib
-import uuid
-from typing import Callable, Dict, Any, Optional
-from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
+import json
+import logging
 import os
-import sys
+import time
+import uuid
+from collections.abc import Callable
+from datetime import datetime
+from typing import Any
 
 # Import metrics client - use HTTP API instead of local import
 import httpx
-import json
-from datetime import datetime
+from fastapi import Request, Response
+from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -47,20 +47,20 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
         self.client = httpx.AsyncClient(timeout=5.0)
 
         # Track request contexts for detailed metrics
-        self.request_contexts: Dict[str, Dict[str, Any]] = {}
+        self.request_contexts: dict[str, dict[str, Any]] = {}
 
         # Track session timings for protocol flow analysis
-        self.session_timings: Dict[str, Dict[str, float]] = {}
+        self.session_timings: dict[str, dict[str, float]] = {}
 
         # Track session client info for consistent metrics across requests
-        self.session_client_info: Dict[str, Dict[str, str]] = {}
+        self.session_client_info: dict[str, dict[str, str]] = {}
 
         # Scalability configuration
         self.max_sessions = 1000  # Limit concurrent sessions
         self.session_ttl = 3600   # 1 hour TTL
         self.cleanup_interval = 300  # Cleanup every 5 minutes
         self.last_cleanup = time.time()
-    
+
     def hash_username(self, username: str) -> str:
         """Hash username for privacy in metrics."""
         if not username:
@@ -107,17 +107,17 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
         """Extract server name from the original URL."""
         if not original_url:
             return "unknown"
-        
+
         try:
             from urllib.parse import urlparse
             parsed_url = urlparse(original_url)
-            path = parsed_url.path.strip('/')
-            path_parts = path.split('/') if path else []
+            path = parsed_url.path.strip("/")
+            path_parts = path.split("/") if path else []
             return path_parts[0] if path_parts else "unknown"
         except Exception:
             return "unknown"
 
-    async def extract_tool_and_method_info(self, request: Request) -> Dict[str, Any]:
+    async def extract_tool_and_method_info(self, request: Request) -> dict[str, Any]:
         """Extract detailed tool and method information from headers (X-Body) instead of consuming body."""
         tool_info = {
             "method": "unknown",
@@ -135,34 +135,34 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
                 request_payload = json.loads(x_body)
 
                 if isinstance(request_payload, dict):
-                    tool_info["method"] = request_payload.get('method', 'unknown')
-                    tool_info["request_id"] = request_payload.get('id')
-                    tool_info["jsonrpc"] = request_payload.get('jsonrpc')
+                    tool_info["method"] = request_payload.get("method", "unknown")
+                    tool_info["request_id"] = request_payload.get("id")
+                    tool_info["jsonrpc"] = request_payload.get("jsonrpc")
 
                     # Extract parameters
-                    params = request_payload.get('params', {})
+                    params = request_payload.get("params", {})
                     tool_info["params"] = params
 
                     # For tools/call, extract the actual tool name from params
-                    if tool_info["method"] == 'tools/call' and isinstance(params, dict):
-                        tool_info["tool_name"] = params.get('name', '')
+                    if tool_info["method"] == "tools/call" and isinstance(params, dict):
+                        tool_info["tool_name"] = params.get("name", "")
 
                     # For initialize, extract client info and capabilities
-                    elif tool_info["method"] == 'initialize' and isinstance(params, dict):
-                        tool_info["protocol_version"] = params.get('protocolVersion')
-                        tool_info["client_info"] = params.get('clientInfo', {})
+                    elif tool_info["method"] == "initialize" and isinstance(params, dict):
+                        tool_info["protocol_version"] = params.get("protocolVersion")
+                        tool_info["client_info"] = params.get("clientInfo", {})
 
         except Exception as e:
             logger.debug(f"Could not extract tool information from X-Body header: {e}")
 
         return tool_info
-    
+
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """
         Process request and collect comprehensive metrics.
         """
         # Skip metrics collection for non-validation endpoints
-        if not request.url.path.startswith('/validate'):
+        if not request.url.path.startswith("/validate"):
             return await call_next(request)
 
         # Start timing and generate request ID
@@ -183,18 +183,18 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
 
         # Extract detailed tool/method information
         tool_info = await self.extract_tool_and_method_info(request)
-        
+
         # Process the request
         response = None
         success = False
         error_code = None
-        
+
         try:
             response = await call_next(request)
-            
+
             # Determine success based on response status
             success = response.status_code == 200
-            
+
             if success:
                 # Extract user info from response headers if available
                 username = response.headers.get("X-Username", "")
@@ -220,7 +220,7 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
             else:
                 error_code = str(response.status_code)
                 session_key = f"{server_name}:anonymous"
-            
+
         except Exception as e:
             # Handle exceptions during request processing
             success = False
@@ -228,11 +228,11 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
             logger.error(f"Error in auth request: {e}")
             # Re-raise the exception to maintain normal error handling
             raise
-        
+
         finally:
             # Calculate duration
             duration_ms = (time.perf_counter() - start_time) * 1000
-            
+
             # Emit comprehensive metrics asynchronously (fire and forget)
             # 1. Main auth metric
             asyncio.create_task(
@@ -273,9 +273,9 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
                         request_id=request_id
                     )
                 )
-        
+
         return response
-    
+
     async def _emit_auth_metric(
         self,
         success: bool,
@@ -292,7 +292,7 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
         try:
             if not self.api_key:
                 return
-                
+
             payload = {
                 "service": self.service_name,
                 "version": "1.0.0",
@@ -313,7 +313,7 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
                     }
                 }]
             }
-            
+
             await self.client.post(
                 f"{self.metrics_url}/metrics",
                 json=payload,
@@ -324,7 +324,7 @@ class AuthMetricsMiddleware(BaseHTTPMiddleware):
 
     async def _emit_tool_execution_metric(
         self,
-        tool_info: Dict[str, Any],
+        tool_info: dict[str, Any],
         server_name: str,
         success: bool,
         duration_ms: float,

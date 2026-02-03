@@ -2,21 +2,22 @@
 Unit tests for rate_agent endpoint in agent_routes.py
 """
 
-import pytest
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import patch
+
+import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
-from registry.main import app
-from registry.services.agent_service import agent_service
-from registry.schemas.agent_models import AgentCard
 from registry.auth.dependencies import create_session_cookie
 from registry.core.config import settings
+from registry.main import app
+from registry.schemas.agent_models import AgentCard
+from registry.services.agent_service import agent_service
 
 
 @pytest.fixture
-def mock_user_context() -> Dict[str, Any]:
+def mock_user_context() -> dict[str, Any]:
     """Mock authenticated user context."""
     return {
         "username": "testuser",
@@ -28,7 +29,7 @@ def mock_user_context() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def mock_admin_context() -> Dict[str, Any]:
+def mock_admin_context() -> dict[str, Any]:
     """Mock admin user context."""
     return {
         "username": "admin",
@@ -93,7 +94,7 @@ class TestRateAgent:
 
     def test_rate_agent_success(
         self,
-        mock_user_context: Dict[str, Any],
+        mock_user_context: dict[str, Any],
         sample_agent_card: AgentCard,
         authenticated_client,
     ) -> None:
@@ -127,7 +128,7 @@ class TestRateAgent:
 
     def test_rate_agent_not_found(
         self,
-        mock_user_context: Dict[str, Any],
+        mock_user_context: dict[str, Any],
         authenticated_client,
     ) -> None:
         """Test rating a non-existent agent returns 404."""
@@ -159,8 +160,9 @@ class TestRateAgent:
         authenticated_client,
     ) -> None:
         """Test rating an agent without access returns 403."""
-        from registry.auth.dependencies import get_current_user_by_mid
         from fastapi import Request
+
+        from registry.auth.dependencies import get_current_user_by_mid
 
         # User with restricted access - accessible_agents doesn't include /test-agent
         restricted_context = {
@@ -196,7 +198,7 @@ class TestRateAgent:
 
     def test_rate_agent_invalid_rating_type(
         self,
-        mock_user_context: Dict[str, Any],
+        mock_user_context: dict[str, Any],
         sample_agent_card: AgentCard,
         authenticated_client,
     ) -> None:
@@ -224,7 +226,7 @@ class TestRateAgent:
 
     def test_rate_agent_missing_rating(
         self,
-        mock_user_context: Dict[str, Any],
+        mock_user_context: dict[str, Any],
         sample_agent_card: AgentCard,
         authenticated_client,
     ) -> None:
@@ -252,7 +254,7 @@ class TestRateAgent:
 
     def test_rate_agent_update_rating_fails(
         self,
-        mock_user_context: Dict[str, Any],
+        mock_user_context: dict[str, Any],
         sample_agent_card: AgentCard,
         authenticated_client,
     ) -> None:
@@ -286,7 +288,7 @@ class TestRateAgent:
 
     def test_rate_agent_with_different_ratings(
         self,
-        mock_user_context: Dict[str, Any],
+        mock_user_context: dict[str, Any],
         sample_agent_card: AgentCard,
         authenticated_client,
     ) -> None:
@@ -320,7 +322,7 @@ class TestRateAgent:
 
     def test_rate_agent_path_normalization(
         self,
-        mock_user_context: Dict[str, Any],
+        mock_user_context: dict[str, Any],
         sample_agent_card: AgentCard,
         authenticated_client,
     ) -> None:
@@ -363,7 +365,7 @@ class TestRateAgent:
 
     def test_rate_agent_private_agent_by_owner(
         self,
-        mock_user_context: Dict[str, Any],
+        mock_user_context: dict[str, Any],
         authenticated_client,
     ) -> None:
         """Test that agent owner can rate their private agent."""

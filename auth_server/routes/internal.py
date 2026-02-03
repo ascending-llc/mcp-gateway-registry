@@ -3,18 +3,17 @@
 Endpoints are mounted under the API prefix by the main app, for example
 `/api_prefix/internal/tokens` and `/api_prefix/internal/reload-scopes`.
 """
+import base64
+import logging
 import time
 import uuid
-import logging
-import base64
-from typing import Optional, List
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Request, Header
-from fastapi.responses import JSONResponse
 import jwt
+from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
 
-from ..core.config import settings, load_scopes_config
+from ..core.config import load_scopes_config, settings
 from ..models import GenerateTokenRequest, GenerateTokenResponse
 from ..utils.security_mask import hash_username
 
@@ -27,7 +26,7 @@ user_token_generation_counts = {}
 MAX_TOKENS_PER_USER_PER_HOUR = settings.max_tokens_per_user_per_hour
 
 
-def validate_scope_subset(user_scopes: List[str], requested_scopes: List[str]) -> bool:
+def validate_scope_subset(user_scopes: list[str], requested_scopes: list[str]) -> bool:
     if not requested_scopes:
         return True
     return set(requested_scopes).issubset(set(user_scopes))
@@ -38,7 +37,7 @@ def check_rate_limit(username: str) -> bool:
     current_hour = current_time // 3600
     # Cleanup old keys
     for key in list(user_token_generation_counts.keys()):
-        stored_hour = int(key.split(':')[1])
+        stored_hour = int(key.split(":")[1])
         if current_hour - stored_hour > 1:
             del user_token_generation_counts[key]
 
@@ -57,17 +56,17 @@ def _create_self_signed_jwt(access_payload: dict) -> str:
         "typ": "JWT",
         "alg": "HS256",
     }
-    return jwt.encode(access_payload, settings.secret_key, algorithm='HS256', headers=headers)
+    return jwt.encode(access_payload, settings.secret_key, algorithm="HS256", headers=headers)
 
 
 @router.post("/internal/tokens", response_model=GenerateTokenResponse)
 async def generate_user_token(request: GenerateTokenRequest):
     try:
         user_context = request.user_context
-        username = user_context.get('username')
-        user_scopes = user_context.get('scopes', [])
-        user_groups = user_context.get('groups', [])
-        user_id = user_context.get('user_id')
+        username = user_context.get("username")
+        user_scopes = user_context.get("scopes", [])
+        user_groups = user_context.get("groups", [])
+        user_id = user_context.get("user_id")
 
         if not username:
             raise HTTPException(status_code=400, detail="Username is required in user context")
@@ -124,7 +123,7 @@ async def generate_user_token(request: GenerateTokenRequest):
 
 
 @router.post("/internal/reload-scopes")
-async def reload_scopes(request: Request, authorization: Optional[str] = Header(None)):
+async def reload_scopes(request: Request, authorization: str | None = Header(None)):
     if not authorization or not authorization.startswith("Basic "):
         raise HTTPException(status_code=401, detail="Authentication required", headers={"WWW-Authenticate": "Basic"})
 
@@ -147,7 +146,7 @@ async def reload_scopes(request: Request, authorization: Optional[str] = Header(
         # we don't need to update any module-level variable.
         # The next access to settings.scopes_config will automatically load the updated file.
         logger.info(f"Successfully validated and reloaded scopes configuration by admin '{username}'")
-        return JSONResponse(status_code=200, content={"message": "Scopes configuration reloaded successfully", "timestamp": datetime.utcnow().isoformat(), "group_mappings_count": len(new_config.get('group_mappings', {}))})
+        return JSONResponse(status_code=200, content={"message": "Scopes configuration reloaded successfully", "timestamp": datetime.utcnow().isoformat(), "group_mappings_count": len(new_config.get("group_mappings", {}))})
     except Exception as e:
         logger.error(f"Failed to reload scopes configuration: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to reload scopes: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to reload scopes: {e!s}")

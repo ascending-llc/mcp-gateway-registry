@@ -14,7 +14,7 @@ from pathlib import Path
 def update_pyproject_version(pyproject_path: Path, new_version: str) -> None:
     """Update version in a pyproject.toml file."""
     content = pyproject_path.read_text()
-    
+
     # Update version line (handle spaces around =)
     updated = re.sub(
         r'^version\s*=\s*"[^"]+"',
@@ -22,7 +22,7 @@ def update_pyproject_version(pyproject_path: Path, new_version: str) -> None:
         content,
         flags=re.MULTILINE
     )
-    
+
     if updated != content:
         pyproject_path.write_text(updated)
         print(f"✓ Updated {pyproject_path.relative_to(Path.cwd())}: {new_version}")
@@ -48,17 +48,17 @@ def main():
         print("❌ Error: Version number required")
         print("Usage: uv run poe version-sync 0.2.0")
         sys.exit(1)
-    
+
     new_version = sys.argv[1]
     print(f"\n🔄 Syncing version: {new_version}\n")
-    
+
     # Update all pyproject.toml files
     pyproject_files = find_pyproject_files()
-    
+
     for pyproject_path in pyproject_files:
         if pyproject_path.exists():
             update_pyproject_version(pyproject_path, new_version)
-    
+
     print(f"\n✅ All versions synced to {new_version}\n")
 
 

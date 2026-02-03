@@ -2,9 +2,10 @@
 Pytest configuration and shared fixtures for auth_server tests.
 """
 import os
-import pytest
-from typing import Generator
+from collections.abc import Generator
 from unittest.mock import Mock, patch
+
+import pytest
 from fastapi.testclient import TestClient
 
 # Set environment variables BEFORE importing the app
@@ -26,8 +27,8 @@ def auth_server_app():
 def test_client(auth_server_app) -> Generator[TestClient, None, None]:
     """Create a test client for the auth server with mocked MongoDB."""
     # Mock MongoDB initialization to prevent actual connection attempts
-    with patch('auth_server.server.init_mongodb'), \
-         patch('packages.database.mongodb.MongoDB.connect_db'):
+    with patch("auth_server.server.init_mongodb"), \
+         patch("packages.database.mongodb.MongoDB.connect_db"):
         with TestClient(auth_server_app) as client:
             yield client
 
@@ -47,8 +48,8 @@ def mock_auth_provider():
             }
         ]
     }
-    
-    with patch('auth_server.providers.factory.get_auth_provider', return_value=mock_provider):
+
+    with patch("auth_server.providers.factory.get_auth_provider", return_value=mock_provider):
         yield mock_provider
 
 
@@ -56,19 +57,19 @@ def mock_auth_provider():
 def clear_device_storage():
     """Clear device flow, client registration, and authorization code storage before and after each test."""
     from auth_server.core.state import (
+        authorization_codes_storage,
         device_codes_storage,
-        user_codes_storage,
         registered_clients,
-        authorization_codes_storage
+        user_codes_storage,
     )
-    
+
     device_codes_storage.clear()
     user_codes_storage.clear()
     registered_clients.clear()
     authorization_codes_storage.clear()
-    
+
     yield
-    
+
     device_codes_storage.clear()
     user_codes_storage.clear()
     registered_clients.clear()

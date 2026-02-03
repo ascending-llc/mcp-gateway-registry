@@ -1,6 +1,5 @@
 import hashlib
 import secrets
-from datetime import datetime
 
 
 def generate_api_key() -> str:

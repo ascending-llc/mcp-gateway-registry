@@ -12,20 +12,20 @@ TypeScript equivalent:
 """
 
 import os
-import jwt
-from datetime import datetime, timezone, timedelta
-from registry.utils.log import logger
-from typing import Optional, List
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.backends import default_backend
+from datetime import UTC, datetime, timedelta
 
+import jwt
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+from registry.utils.log import logger
 
 # Algorithm constants
 ALGORITHM = "AES-CBC"
 IV_LENGTH = 16  # 128 bits
 
 # Get encryption key from environment
-_ENCRYPTION_KEY: Optional[bytes] = None
+_ENCRYPTION_KEY: bytes | None = None
 
 
 def _get_encryption_key() -> bytes:
@@ -39,26 +39,26 @@ def _get_encryption_key() -> bytes:
         ValueError: If CREDS_KEY is not set or invalid
     """
     global _ENCRYPTION_KEY
-    
+
     if _ENCRYPTION_KEY is None:
         creds_key = os.environ.get("CREDS_KEY")
         if not creds_key:
             raise ValueError(
                 "CREDS_KEY environment variable must be set for encryption/decryption"
             )
-        
+
         # Decode from hex (matching TypeScript: Buffer.from(process.env.CREDS_KEY, 'hex'))
         try:
             key_bytes = bytes.fromhex(creds_key)
         except ValueError as e:
             raise ValueError(f"CREDS_KEY must be a valid hex string: {e}")
-        
+
         _ENCRYPTION_KEY = key_bytes
-    
+
     return _ENCRYPTION_KEY
 
 
-def generate_service_jwt(user_id: str, username: Optional[str] = None, scopes: Optional[List[str]] = None) -> str:
+def generate_service_jwt(user_id: str, username: str | None = None, scopes: list[str] | None = None) -> str:
     """
     Generate internal service JWT for MCP server authentication.
     Used to authenticate registry -> MCP server requests with user context.
@@ -72,9 +72,9 @@ def generate_service_jwt(user_id: str, username: Optional[str] = None, scopes: O
         JWT token string (without Bearer prefix)
     """
     from registry.core.config import settings
-    
-    now = datetime.now(timezone.utc)
-    
+
+    now = datetime.now(UTC)
+
     # Build JWT payload with user context
     payload = {
         "user_id": user_id,
@@ -86,18 +86,18 @@ def generate_service_jwt(user_id: str, username: Optional[str] = None, scopes: O
         "client_id": settings.registry_app_name,
         "token_type": "service",
     }
-    
+
     # Add optional fields
     if scopes:
         payload["scopes"] = scopes
-    
+
     # Sign with registry secret
     token = jwt.encode(
         payload,
         settings.secret_key,
         algorithm="HS256"
     )
-    
+
     return token
 
 
@@ -123,22 +123,22 @@ def encrypt_value(plaintext: str) -> str:
     """
     if not plaintext:
         return plaintext
-    
+
     try:
         # Get encryption key
         key = _get_encryption_key()
-        
+
         # Generate random IV
         gen_iv = os.urandom(IV_LENGTH)
-        
+
         # Encode plaintext
         plaintext_bytes = plaintext.encode("utf-8")
-        
+
         # Pad to 16-byte boundary (AES block size)
         block_size = 16
         padding_length = block_size - (len(plaintext_bytes) % block_size)
         padded_data = plaintext_bytes + bytes([padding_length] * padding_length)
-        
+
         # Create cipher
         cipher = Cipher(
             algorithms.AES(key),
@@ -146,13 +146,13 @@ def encrypt_value(plaintext: str) -> str:
             backend=default_backend()
         )
         encryptor = cipher.encryptor()
-        
+
         # Encrypt
         ciphertext = encryptor.update(padded_data) + encryptor.finalize()
-        
+
         # Return as hex(iv):hex(ciphertext)
         return gen_iv.hex() + ":" + ciphertext.hex()
-        
+
     except Exception as e:
         logger.error(f"Encryption failed: {e}", exc_info=True)
         raise Exception(f"Failed to encrypt value: {e}")
@@ -182,28 +182,28 @@ def decrypt_value(encrypted_value: str) -> str:
     """
     if not encrypted_value:
         return encrypted_value
-    
+
     # Check if value is encrypted (contains colon separator)
     parts = encrypted_value.split(":")
     if len(parts) == 1:
         # Not encrypted, return as-is (matching TS: if (parts.length === 1) return parts[0])
         return parts[0]
-    
+
     try:
         # Get encryption key
         key = _get_encryption_key()
-        
+
         # Split IV and ciphertext (matching TS logic)
         gen_iv = bytes.fromhex(parts[0])
         encrypted = ":".join(parts[1:])
-        
+
         # Convert ciphertext from hex
         ciphertext = bytes.fromhex(encrypted)
-        
+
         # Validate IV length
         if len(gen_iv) != IV_LENGTH:
             raise ValueError(f"Invalid IV length: expected {IV_LENGTH}, got {len(gen_iv)}")
-        
+
         # Create cipher
         cipher = Cipher(
             algorithms.AES(key),
@@ -211,17 +211,17 @@ def decrypt_value(encrypted_value: str) -> str:
             backend=default_backend()
         )
         decryptor = cipher.decryptor()
-        
+
         # Decrypt
         padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
-        
+
         # Remove padding (standard PKCS#7 unpadding)
         padding_length = padded_plaintext[-1]
         plaintext_bytes = padded_plaintext[:-padding_length]
-        
+
         # Convert to string
         return plaintext_bytes.decode("utf-8")
-        
+
     except Exception as e:
         logger.error(f"Decryption failed: {e}", exc_info=True)
         raise Exception(f"Failed to decrypt value: {e}")
@@ -247,9 +247,9 @@ def encrypt_auth_fields(config: dict) -> dict:
     """
     if not config:
         return config
-    
+
     config = config.copy()
-    
+
     # Check if CREDS_KEY is available
     if not os.environ.get("CREDS_KEY"):
         logger.warning(
@@ -258,13 +258,13 @@ def encrypt_auth_fields(config: dict) -> dict:
             "Set CREDS_KEY to enable encryption of credentials."
         )
         return config
-    
+
     try:
         # Handle authentication field
         if "authentication" in config and isinstance(config["authentication"], dict):
             auth = config["authentication"].copy()
             auth_type = auth.get("type", "").lower()
-            
+
             if auth_type == "oauth" and "client_secret" in auth:
                 # Encrypt OAuth client_secret
                 client_secret = auth["client_secret"]
@@ -277,11 +277,11 @@ def encrypt_auth_fields(config: dict) -> dict:
                     except Exception as encrypt_error:
                         logger.error(f"Failed to encrypt client_secret: {encrypt_error}")
                         # Keep plaintext value
-        
+
         # Handle apiKey field
         if "apiKey" in config and isinstance(config["apiKey"], dict):
             api_key = config["apiKey"].copy()
-            
+
             if "key" in api_key:
                 key_value = api_key["key"]
                 if key_value and ":" not in str(key_value):
@@ -293,12 +293,12 @@ def encrypt_auth_fields(config: dict) -> dict:
                     except Exception as encrypt_error:
                         logger.error(f"Failed to encrypt apiKey.key: {encrypt_error}")
                         # Keep plaintext value
-    
+
     except Exception as e:
         logger.error(f"Failed to encrypt auth fields: {e}", exc_info=True)
         # Return original config if encryption fails
         return config
-    
+
     return config
 
 
@@ -322,9 +322,9 @@ def decrypt_auth_fields(config: dict) -> dict:
     """
     if not config:
         return config
-    
+
     config = config.copy()
-    
+
     # Check if CREDS_KEY is available
     if not os.environ.get("CREDS_KEY"):
         logger.warning(
@@ -333,13 +333,13 @@ def decrypt_auth_fields(config: dict) -> dict:
             "Set CREDS_KEY to decrypt sensitive credentials."
         )
         return config
-    
+
     try:
         # Handle authentication field
         if "authentication" in config and isinstance(config["authentication"], dict):
             auth = config["authentication"].copy()
             auth_type = auth.get("type", "").lower()
-            
+
             if auth_type == "oauth" and "client_secret" in auth:
                 # Decrypt OAuth client_secret
                 client_secret = auth["client_secret"]
@@ -351,11 +351,11 @@ def decrypt_auth_fields(config: dict) -> dict:
                     except Exception as decrypt_error:
                         logger.warning(f"Failed to decrypt client_secret: {decrypt_error}")
                         # Keep encrypted value
-        
+
         # Handle apiKey field
         if "apiKey" in config and isinstance(config["apiKey"], dict):
             api_key = config["apiKey"].copy()
-            
+
             if "key" in api_key:
                 key_value = api_key["key"]
                 if key_value:
@@ -366,10 +366,10 @@ def decrypt_auth_fields(config: dict) -> dict:
                     except Exception as decrypt_error:
                         logger.warning(f"Failed to decrypt apiKey.key: {decrypt_error}")
                         # Keep encrypted value
-    
+
     except Exception as e:
         logger.error(f"Failed to decrypt auth fields: {e}", exc_info=True)
         # Return original config if decryption fails
         return config
-    
+
     return config

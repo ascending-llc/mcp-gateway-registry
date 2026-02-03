@@ -6,10 +6,9 @@ Provides common functionality for all federation clients.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
-
 
 logging.basicConfig(
     level=logging.INFO,
@@ -51,7 +50,7 @@ class BaseFederationClient(ABC):
         self,
         server_name: str,
         **kwargs
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Fetch a single server from the federated registry.
 
@@ -62,14 +61,13 @@ class BaseFederationClient(ABC):
         Returns:
             Server data dictionary or None if fetch fails
         """
-        pass
 
     @abstractmethod
     def fetch_all_servers(
         self,
-        server_names: List[str],
+        server_names: list[str],
         **kwargs
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Fetch multiple servers from the federated registry.
 
@@ -80,16 +78,15 @@ class BaseFederationClient(ABC):
         Returns:
             List of server data dictionaries
         """
-        pass
 
     def _make_request(
         self,
         url: str,
         method: str = "GET",
-        headers: Optional[Dict[str, str]] = None,
-        params: Optional[Dict[str, Any]] = None,
-        data: Optional[Dict[str, Any]] = None
-    ) -> Optional[Dict[str, Any]]:
+        headers: dict[str, str] | None = None,
+        params: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None
+    ) -> dict[str, Any] | None:
         """
         Make HTTP request with retry logic.
 

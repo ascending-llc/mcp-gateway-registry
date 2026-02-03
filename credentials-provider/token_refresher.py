@@ -19,15 +19,14 @@ import argparse
 import json
 import logging
 import os
-import psutil
 import signal
 import subprocess
 import sys
 import tempfile
 import time
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+
+import psutil
 
 # Configure logging with basicConfig
 logging.basicConfig(
@@ -46,11 +45,11 @@ def _load_env_file() -> None:
 
     if env_file.exists():
         try:
-            with open(env_file, 'r') as f:
+            with open(env_file) as f:
                 for line in f:
                     line = line.strip()
-                    if line and not line.startswith('#') and '=' in line:
-                        key, value = line.split('=', 1)
+                    if line and not line.startswith("#") and "=" in line:
+                        key, value = line.split("=", 1)
                         # Remove quotes if present
                         value = value.strip('"').strip("'")
                         os.environ[key] = value
@@ -77,7 +76,7 @@ CREDENTIALS_PROVIDER_DIR = SCRIPT_DIR
 # Files to ignore during token refresh (derived files that get regenerated)
 IGNORED_FILES = {
     "mcp.json",
-    "vscode_mcp.json", 
+    "vscode_mcp.json",
     "*readable*",  # Any file with "readable" in the name
 }
 
@@ -95,15 +94,15 @@ def _should_ignore_file(filename: str) -> bool:
     # Check exact matches
     if filename in {"mcp.json", "vscode_mcp.json"}:
         return True
-    
+
     # Check for "readable" in filename
     if "readable" in filename.lower():
         return True
-    
+
     return False
 
 
-def _parse_token_file(filepath: Path) -> Optional[Dict]:
+def _parse_token_file(filepath: Path) -> dict | None:
     """
     Parse a token JSON file and extract relevant information.
     
@@ -114,21 +113,21 @@ def _parse_token_file(filepath: Path) -> Optional[Dict]:
         Token data dict or None if file cannot be parsed
     """
     try:
-        with open(filepath, 'r') as f:
+        with open(filepath) as f:
             data = json.load(f)
-            
+
         # Validate required fields
-        if 'expires_at' not in data:
+        if "expires_at" not in data:
             logger.debug(f"No expires_at field in {filepath.name}")
             return None
-            
+
         return data
-    except (json.JSONDecodeError, IOError) as e:
+    except (OSError, json.JSONDecodeError) as e:
         logger.warning(f"Failed to parse {filepath.name}: {e}")
         return None
 
 
-def _get_all_tokens() -> List[Tuple[Path, Dict]]:
+def _get_all_tokens() -> list[tuple[Path, dict]]:
     """
     Get all valid token files regardless of expiration status.
     
@@ -138,28 +137,28 @@ def _get_all_tokens() -> List[Tuple[Path, Dict]]:
     if not OAUTH_TOKENS_DIR.exists():
         logger.error("OAuth tokens directory not found")
         return []
-    
+
     all_tokens = []
-    
+
     for filepath in OAUTH_TOKENS_DIR.glob("*.json"):
         # Skip ignored files
         if _should_ignore_file(filepath.name):
             logger.debug(f"Ignoring file: {filepath.name}")
             continue
-        
+
         # Parse token file
         token_data = _parse_token_file(filepath)
         if not token_data:
             continue
-        
+
         logger.info(f"Found token file: {filepath.name}")
         logger.debug(f"Reading token from: {filepath.absolute()}")
         all_tokens.append((filepath, token_data))
-    
+
     return all_tokens
 
 
-def _get_expiring_tokens(buffer_seconds: int = DEFAULT_EXPIRY_BUFFER) -> List[Tuple[Path, Dict]]:
+def _get_expiring_tokens(buffer_seconds: int = DEFAULT_EXPIRY_BUFFER) -> list[tuple[Path, dict]]:
     """
     Find all tokens that are expired or will expire within the buffer period.
     
@@ -172,39 +171,39 @@ def _get_expiring_tokens(buffer_seconds: int = DEFAULT_EXPIRY_BUFFER) -> List[Tu
     if not OAUTH_TOKENS_DIR.exists():
         logger.error(f"OAuth tokens directory not found: {OAUTH_TOKENS_DIR}")
         return []
-    
+
     current_time = time.time()
     expiring_tokens = []
-    
+
     for filepath in OAUTH_TOKENS_DIR.glob("*.json"):
         # Skip ignored files
         if _should_ignore_file(filepath.name):
             logger.debug(f"Ignoring file: {filepath.name}")
             continue
-        
+
         # Parse token file
         token_data = _parse_token_file(filepath)
         if not token_data:
             continue
-        
+
         logger.debug(f"Reading token from: {filepath.absolute()}")
-        
+
         # Check expiration
-        expires_at = token_data.get('expires_at', 0)
+        expires_at = token_data.get("expires_at", 0)
 
         # Convert ISO timestamp to Unix timestamp if needed
         if isinstance(expires_at, str):
             try:
                 from datetime import datetime
                 # Parse ISO timestamp and convert to Unix timestamp
-                expires_at_dt = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                expires_at_dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
                 expires_at = expires_at_dt.timestamp()
             except (ValueError, AttributeError) as e:
                 logger.warning(f"Could not parse expires_at timestamp '{expires_at}' in {filepath.name}: {e}")
                 continue
 
         time_until_expiry = expires_at - current_time
-        
+
         if time_until_expiry <= buffer_seconds:
             hours_until_expiry = time_until_expiry / 3600
             if time_until_expiry <= 0:
@@ -213,11 +212,11 @@ def _get_expiring_tokens(buffer_seconds: int = DEFAULT_EXPIRY_BUFFER) -> List[Tu
                 logger.info(f"Token expiring soon: {filepath.name} (expires in {hours_until_expiry:.1f} hours)")
             logger.debug(f"Will refresh token at: {filepath.absolute()}")
             expiring_tokens.append((filepath, token_data))
-    
+
     return expiring_tokens
 
 
-def _determine_refresh_method(token_data: Dict, filename: str) -> Optional[str]:
+def _determine_refresh_method(token_data: dict, filename: str) -> str | None:
     """
     Determine which refresh method to use based on token data.
     
@@ -228,29 +227,29 @@ def _determine_refresh_method(token_data: Dict, filename: str) -> Optional[str]:
     Returns:
         Refresh method ('agentcore' or 'oauth') or None if cannot determine
     """
-    provider = token_data.get('provider', '').lower()
-    
+    provider = token_data.get("provider", "").lower()
+
     # Check for AgentCore/Bedrock tokens
-    if 'bedrock' in provider or 'agentcore' in provider:
-        return 'agentcore'
-    
+    if "bedrock" in provider or "agentcore" in provider:
+        return "agentcore"
+
     # Check for OAuth providers (including Keycloak and Cognito M2M)
-    oauth_providers = ['atlassian', 'google', 'github', 'microsoft', 'oauth', 'keycloak', 'cognito']
+    oauth_providers = ["atlassian", "google", "github", "microsoft", "oauth", "keycloak", "cognito"]
     if any(p in provider for p in oauth_providers):
-        return 'oauth'
-    
+        return "oauth"
+
     # Try to infer from filename
-    if 'bedrock' in filename.lower() or 'agentcore' in filename.lower():
-        return 'agentcore'
-    
-    if 'egress' in filename.lower() or 'ingress' in filename.lower():
-        return 'oauth'
-    
+    if "bedrock" in filename.lower() or "agentcore" in filename.lower():
+        return "agentcore"
+
+    if "egress" in filename.lower() or "ingress" in filename.lower():
+        return "oauth"
+
     logger.warning(f"Cannot determine refresh method for {filename} with provider '{provider}'")
     return None
 
 
-def _refresh_agentcore_token(token_data: Dict, filename: str) -> bool:
+def _refresh_agentcore_token(token_data: dict, filename: str) -> bool:
     """
     Refresh a Bedrock AgentCore token using generate_access_token.py.
     
@@ -262,30 +261,30 @@ def _refresh_agentcore_token(token_data: Dict, filename: str) -> bool:
         True if refresh successful, False otherwise
     """
     script_path = CREDENTIALS_PROVIDER_DIR / "agentcore-auth" / "generate_access_token.py"
-    
+
     if not script_path.exists():
         logger.error(f"AgentCore refresh script not found: {script_path}")
         return False
-    
+
     try:
         # Extract server name from filename if possible
         # Format: bedrock-agentcore-{server_name}-egress.json
         server_name = None
         if filename.startswith("bedrock-agentcore-") and filename.endswith("-egress.json"):
             server_name = filename.replace("bedrock-agentcore-", "").replace("-egress.json", "")
-        
+
         logger.info(f"Refreshing AgentCore token for: {server_name or 'default'}")
-        
+
         # Run the refresh script using uv run
         cmd = ["uv", "run", "python", str(script_path)]
         if server_name:
             # The script might accept server-specific parameters
             # Check the script for available options
             pass
-        
+
         logger.debug(f"Running AgentCore refresh command: {' '.join(cmd)}")
         logger.debug(f"Working directory: {PROJECT_ROOT.absolute()}")
-        
+
         result = subprocess.run(
             cmd,
             cwd=PROJECT_ROOT,
@@ -293,14 +292,13 @@ def _refresh_agentcore_token(token_data: Dict, filename: str) -> bool:
             text=True,
             timeout=30
         )
-        
+
         if result.returncode == 0:
             logger.info(f"Successfully refreshed AgentCore token: {filename}")
             return True
-        else:
-            logger.error(f"Failed to refresh AgentCore token: {result.stderr}")
-            return False
-            
+        logger.error(f"Failed to refresh AgentCore token: {result.stderr}")
+        return False
+
     except subprocess.TimeoutExpired:
         logger.error(f"Timeout refreshing AgentCore token: {filename}")
         return False
@@ -309,7 +307,7 @@ def _refresh_agentcore_token(token_data: Dict, filename: str) -> bool:
         return False
 
 
-def _refresh_oauth_token(token_data: Dict, filename: str) -> bool:
+def _refresh_oauth_token(token_data: dict, filename: str) -> bool:
     """
     Refresh a generic OAuth token using egress_oauth.py or ingress_oauth.py.
     
@@ -321,43 +319,43 @@ def _refresh_oauth_token(token_data: Dict, filename: str) -> bool:
         True if refresh successful, False otherwise
     """
     # Determine which OAuth script to use
-    provider = token_data.get('provider', 'atlassian')
+    provider = token_data.get("provider", "atlassian")
 
-    if 'ingress' in filename.lower() or provider == 'keycloak':
+    if "ingress" in filename.lower() or provider == "keycloak":
         script_name = "ingress_oauth.py"
         # Ingress supports both Cognito and Keycloak M2M, doesn't use --provider argument
         use_provider_arg = False
     else:
         script_name = "egress_oauth.py"  # Default to egress
         use_provider_arg = True
-    
+
     script_path = CREDENTIALS_PROVIDER_DIR / "oauth" / script_name
-    
+
     if not script_path.exists():
         logger.error(f"OAuth refresh script not found: {script_path}")
         return False
-    
+
     try:
         logger.info(f"Refreshing OAuth token for provider: {provider}")
-        
+
         # Build command based on script type
         cmd = ["uv", "run", "python", str(script_path)]
-        
+
         # Only add --provider for egress OAuth (not ingress)
         # Ingress OAuth auto-detects Cognito vs Keycloak based on AUTH_PROVIDER env var
         if use_provider_arg:
             cmd.extend(["--provider", provider])
-        
+
         logger.debug(f"Running OAuth refresh command: {' '.join(cmd)}")
         logger.debug(f"Working directory: {PROJECT_ROOT.absolute()}")
-        
+
         # For Keycloak and Cognito M2M tokens, we don't typically have refresh tokens
         # The client_credentials flow will generate a new token
-        if provider in ['keycloak_m2m', 'cognito_m2m']:
+        if provider in ["keycloak_m2m", "cognito_m2m"]:
             logger.info(f"M2M token detected ({provider}), using client_credentials flow")
-        elif 'refresh_token' in token_data:
+        elif "refresh_token" in token_data:
             logger.info("Refresh token available, script will handle refresh flow")
-        
+
         result = subprocess.run(
             cmd,
             cwd=PROJECT_ROOT,
@@ -365,14 +363,13 @@ def _refresh_oauth_token(token_data: Dict, filename: str) -> bool:
             text=True,
             timeout=60  # OAuth flow might take longer
         )
-        
+
         if result.returncode == 0:
             logger.info(f"Successfully refreshed OAuth token: {filename}")
             return True
-        else:
-            logger.error(f"Failed to refresh OAuth token: {result.stderr}")
-            return False
-            
+        logger.error(f"Failed to refresh OAuth token: {result.stderr}")
+        return False
+
     except subprocess.TimeoutExpired:
         logger.error(f"Timeout refreshing OAuth token: {filename}")
         return False
@@ -381,7 +378,7 @@ def _refresh_oauth_token(token_data: Dict, filename: str) -> bool:
         return False
 
 
-def _refresh_token(filepath: Path, token_data: Dict) -> bool:
+def _refresh_token(filepath: Path, token_data: dict) -> bool:
     """
     Refresh a single token based on its type.
     
@@ -394,21 +391,20 @@ def _refresh_token(filepath: Path, token_data: Dict) -> bool:
     """
     filename = filepath.name
     refresh_method = _determine_refresh_method(token_data, filename)
-    
+
     if not refresh_method:
         logger.error(f"Cannot determine how to refresh {filename}")
         return False
-    
-    if refresh_method == 'agentcore':
+
+    if refresh_method == "agentcore":
         return _refresh_agentcore_token(token_data, filename)
-    elif refresh_method == 'oauth':
+    if refresh_method == "oauth":
         return _refresh_oauth_token(token_data, filename)
-    else:
-        logger.error(f"Unknown refresh method: {refresh_method}")
-        return False
+    logger.error(f"Unknown refresh method: {refresh_method}")
+    return False
 
 
-def _scan_noauth_services() -> List[Dict]:
+def _scan_noauth_services() -> list[dict]:
     """
     Scan registry servers and find services with auth_type: none.
     
@@ -417,22 +413,22 @@ def _scan_noauth_services() -> List[Dict]:
     """
     registry_dir = PROJECT_ROOT / "registry" / "servers"
     noauth_services = []
-    
+
     if not registry_dir.exists():
         logger.warning(f"Registry servers directory not found: {registry_dir}")
         return []
-    
+
     logger.debug(f"Scanning for no-auth services in: {registry_dir}")
-    
+
     for json_file in registry_dir.glob("*.json"):
         # Skip server_state.json
         if json_file.name == "server_state.json":
             continue
-            
+
         try:
-            with open(json_file, 'r') as f:
+            with open(json_file) as f:
                 server_config = json.load(f)
-                
+
             auth_type = server_config.get("auth_type")
             if auth_type == "none":
                 # Extract relevant service information
@@ -446,10 +442,10 @@ def _scan_noauth_services() -> List[Dict]:
                 }
                 noauth_services.append(service)
                 logger.debug(f"Found no-auth service: {service['server_name']} ({service['path']})")
-        except (json.JSONDecodeError, IOError) as e:
+        except (OSError, json.JSONDecodeError) as e:
             logger.warning(f"Failed to parse {json_file.name}: {e}")
             continue
-    
+
     return noauth_services
 
 
@@ -461,44 +457,43 @@ def _regenerate_mcp_configs() -> bool:
         True if regeneration successful, False otherwise
     """
     logger.info("Regenerating MCP configuration files...")
-    
+
     try:
         # Check for required files
         ingress_file = OAUTH_TOKENS_DIR / "ingress.json"
         has_ingress = ingress_file.exists()
-        
+
         # Find all egress token files
         egress_files = []
         for file_path in OAUTH_TOKENS_DIR.glob("*-egress.json"):
             if file_path.is_file():
                 egress_files.append(file_path)
                 logger.debug(f"Found egress token file: {file_path.name}")
-        
+
         # Scan for no-auth services
         noauth_services = _scan_noauth_services()
         logger.info(f"Found {len(noauth_services)} no-auth services to include")
-        
+
         if not has_ingress and not egress_files and not noauth_services:
             logger.warning("No token files or no-auth services found, skipping MCP configuration generation")
             return True
-        
+
         # Generate both configurations
         vscode_success = _generate_vscode_config(has_ingress, ingress_file, egress_files, noauth_services)
         roocode_success = _generate_roocode_config(has_ingress, ingress_file, egress_files, noauth_services)
-        
+
         if vscode_success and roocode_success:
             logger.info("MCP configuration files regenerated successfully")
             return True
-        else:
-            logger.error("Failed to regenerate some MCP configuration files")
-            return False
-            
+        logger.error("Failed to regenerate some MCP configuration files")
+        return False
+
     except Exception as e:
         logger.error(f"Error regenerating MCP configs: {e}")
         return False
 
 
-def _get_ingress_headers(ingress_file: Path) -> Dict[str, str]:
+def _get_ingress_headers(ingress_file: Path) -> dict[str, str]:
     """
     Extract ingress authentication headers from token file.
 
@@ -511,17 +506,17 @@ def _get_ingress_headers(ingress_file: Path) -> Dict[str, str]:
     headers = {}
 
     # Check AUTH_PROVIDER from environment
-    auth_provider = os.environ.get('AUTH_PROVIDER', '')
+    auth_provider = os.environ.get("AUTH_PROVIDER", "")
 
-    if auth_provider == 'keycloak':
+    if auth_provider == "keycloak":
         # When using Keycloak, get token from agent token file
         agent_token_file = OAUTH_TOKENS_DIR / "agent-ai-coding-assistant-m2m-token.json"
         if agent_token_file.exists():
             try:
-                with open(agent_token_file, 'r') as f:
+                with open(agent_token_file) as f:
                     agent_data = json.load(f)
 
-                if agent_data and agent_data.get('access_token'):
+                if agent_data and agent_data.get("access_token"):
                     logger.debug("Using Keycloak agent token for ingress authentication")
                     headers = {
                         "X-Authorization": f"Bearer {agent_data.get('access_token', '')}"
@@ -529,13 +524,13 @@ def _get_ingress_headers(ingress_file: Path) -> Dict[str, str]:
 
                     # Add Keycloak-specific headers
                     headers.update({
-                        "X-Client-Id": agent_data.get('client_id', ''),
-                        "X-Keycloak-Realm": agent_data.get('keycloak_realm', ''),
-                        "X-Keycloak-URL": agent_data.get('keycloak_url', '')
+                        "X-Client-Id": agent_data.get("client_id", ""),
+                        "X-Keycloak-Realm": agent_data.get("keycloak_realm", ""),
+                        "X-Keycloak-URL": agent_data.get("keycloak_url", "")
                     })
                     logger.debug(f"Using Keycloak agent headers: client_id={agent_data.get('client_id', '')}")
                     return headers
-            except (json.JSONDecodeError, IOError) as e:
+            except (OSError, json.JSONDecodeError) as e:
                 logger.warning(f"Failed to read Keycloak agent token file: {e}")
 
         # Fall back to ingress file if agent token not available
@@ -544,34 +539,34 @@ def _get_ingress_headers(ingress_file: Path) -> Dict[str, str]:
     # Default behavior: use ingress file
     if ingress_file.exists():
         try:
-            with open(ingress_file, 'r') as f:
+            with open(ingress_file) as f:
                 ingress_data = json.load(f)
 
                 # Always include the access token
                 headers["X-Authorization"] = f"Bearer {ingress_data.get('access_token', '')}"
 
                 # Add provider-specific headers
-                provider = ingress_data.get('provider', 'cognito_m2m')
+                provider = ingress_data.get("provider", "cognito_m2m")
                 logger.debug(f"Detected ingress provider: {provider}")
 
-                if provider == 'keycloak_m2m':
+                if provider == "keycloak_m2m":
                     # Keycloak-specific headers
                     headers.update({
-                        "X-Client-Id": ingress_data.get('client_id', ''),
-                        "X-Keycloak-Realm": ingress_data.get('realm', ''),
-                        "X-Keycloak-URL": ingress_data.get('keycloak_url', '')
+                        "X-Client-Id": ingress_data.get("client_id", ""),
+                        "X-Keycloak-Realm": ingress_data.get("realm", ""),
+                        "X-Keycloak-URL": ingress_data.get("keycloak_url", "")
                     })
                     logger.debug(f"Using Keycloak headers: realm={ingress_data.get('realm', '')}")
                 else:  # cognito_m2m (default)
                     # Cognito-specific headers
                     headers.update({
-                        "X-User-Pool-Id": ingress_data.get('user_pool_id', ''),
-                        "X-Client-Id": ingress_data.get('client_id', ''),
-                        "X-Region": ingress_data.get('region', 'us-east-1')
+                        "X-User-Pool-Id": ingress_data.get("user_pool_id", ""),
+                        "X-Client-Id": ingress_data.get("client_id", ""),
+                        "X-Region": ingress_data.get("region", "us-east-1")
                     })
                     logger.debug(f"Using Cognito headers: pool_id={ingress_data.get('user_pool_id', '')}")
 
-        except (json.JSONDecodeError, IOError) as e:
+        except (OSError, json.JSONDecodeError) as e:
             logger.warning(f"Failed to read ingress file: {e}")
 
     return headers
@@ -579,10 +574,10 @@ def _get_ingress_headers(ingress_file: Path) -> Dict[str, str]:
 
 def _create_egress_server_config(
     egress_file: Path,
-    ingress_headers: Dict[str, str],
+    ingress_headers: dict[str, str],
     registry_url: str,
     config_type: str = "vscode"
-) -> Tuple[str, Dict]:
+) -> tuple[str, dict]:
     """
     Create server configuration from egress token file.
     
@@ -596,39 +591,39 @@ def _create_egress_server_config(
         Tuple of (server_key, server_config)
     """
     try:
-        with open(egress_file, 'r') as f:
+        with open(egress_file) as f:
             egress_data = json.load(f)
-    except (json.JSONDecodeError, IOError) as e:
+    except (OSError, json.JSONDecodeError) as e:
         logger.warning(f"Failed to read egress file {egress_file.name}: {e}")
         return None, None
-    
-    provider = egress_data.get('provider', '')
-    token = egress_data.get('access_token', '')
-    cloud_id = egress_data.get('cloud_id', '')
-    
+
+    provider = egress_data.get("provider", "")
+    token = egress_data.get("access_token", "")
+    cloud_id = egress_data.get("cloud_id", "")
+
     # Determine server key and URL
-    if provider == 'atlassian':
-        server_key = 'atlassian'
+    if provider == "atlassian":
+        server_key = "atlassian"
         headers = {"Authorization": f"Bearer {token}"}
         if cloud_id:
             headers["X-Atlassian-Cloud-Id"] = cloud_id
         if ingress_headers:
             headers.update(ingress_headers)
         url = f"{registry_url}/atlassian/mcp"
-        
-    elif provider == 'bedrock-agentcore':
+
+    elif provider == "bedrock-agentcore":
         # Extract server name from filename
         filename = egress_file.name
         if filename.startswith("bedrock-agentcore-") and filename.endswith("-egress.json"):
             server_key = filename.replace("bedrock-agentcore-", "").replace("-egress.json", "")
         else:
             server_key = "sre-gateway"
-        
+
         headers = {"Authorization": f"Bearer {token}"}
         if ingress_headers:
             headers.update(ingress_headers)
         url = f"{registry_url}/{server_key}/mcp"
-        
+
     else:
         # Generic provider
         server_key = provider
@@ -636,7 +631,7 @@ def _create_egress_server_config(
         if ingress_headers:
             headers.update(ingress_headers)
         url = f"{registry_url}/{provider}/mcp"
-    
+
     # Create config based on type
     if config_type == "vscode":
         server_config = {
@@ -651,16 +646,16 @@ def _create_egress_server_config(
             "disabled": False,
             "alwaysAllow": []
         }
-    
+
     return server_key, server_config
 
 
 def _create_noauth_server_config(
-    service: Dict,
-    ingress_headers: Dict[str, str],
+    service: dict,
+    ingress_headers: dict[str, str],
     registry_url: str,
     config_type: str = "vscode"
-) -> Tuple[str, Dict]:
+) -> tuple[str, dict]:
     """
     Create server configuration for no-auth service.
     
@@ -677,11 +672,11 @@ def _create_noauth_server_config(
     server_key = service["path"].strip("/")
     if not server_key:
         return None, None
-    
+
     # Construct service URL
     path = service["path"].rstrip("/")
     service_url = f"{registry_url}{path}/mcp"
-    
+
     # Create config based on type
     if config_type == "vscode":
         server_config = {
@@ -693,7 +688,7 @@ def _create_noauth_server_config(
         # Determine transport type
         supported_transports = service.get("supported_transports", ["streamable-http"])
         transport_type = supported_transports[0] if supported_transports else "streamable-http"
-        
+
         server_config = {
             "type": transport_type,
             "url": service_url,
@@ -702,15 +697,15 @@ def _create_noauth_server_config(
         }
         if ingress_headers:
             server_config["headers"] = ingress_headers
-    
+
     return server_key, server_config
 
 
 def _generate_vscode_config(
     has_ingress: bool,
     ingress_file: Path,
-    egress_files: List[Path],
-    noauth_services: List[Dict] = None
+    egress_files: list[Path],
+    noauth_services: list[dict] = None
 ) -> bool:
     """
     Generate VS Code MCP configuration file.
@@ -725,20 +720,20 @@ def _generate_vscode_config(
         True if generation successful, False otherwise
     """
     config_file = OAUTH_TOKENS_DIR / "vscode_mcp.json"
-    
+
     try:
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_file:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as temp_file:
             temp_path = temp_file.name
-            
+
             # Default registry URL
-            registry_url = os.getenv('REGISTRY_URL', 'https://mcpgateway.ddns.net')
-            
+            registry_url = os.getenv("REGISTRY_URL", "https://mcpgateway.ddns.net")
+
             # Initialize configuration
             config = {"mcp": {"servers": {}}}
-            
+
             # Get ingress headers
             ingress_headers = _get_ingress_headers(ingress_file) if has_ingress else {}
-            
+
             # Process egress files
             for egress_file in egress_files:
                 server_key, server_config = _create_egress_server_config(
@@ -747,35 +742,35 @@ def _generate_vscode_config(
                 if server_key and server_config:
                     config["mcp"]["servers"][server_key] = server_config
                     logger.debug(f"Added egress service {server_key} to VS Code config")
-            
+
             # Process no-auth services
             if noauth_services:
                 for service in noauth_services:
                     server_key, server_config = _create_noauth_server_config(
                         service, ingress_headers, registry_url, "vscode"
                     )
-                    
+
                     # Skip if already added or invalid
                     if not server_key or server_key in config["mcp"]["servers"]:
                         continue
-                    
+
                     config["mcp"]["servers"][server_key] = server_config
                     logger.debug(f"Added no-auth service {server_key} to VS Code config")
-            
+
             # Write JSON to temp file
             json.dump(config, temp_file, indent=2)
-        
+
         # Move temp file to final location and set permissions
         os.rename(temp_path, config_file)
         os.chmod(config_file, 0o600)
-        
+
         logger.info(f"Generated VS Code MCP config: {config_file}")
         logger.debug(f"VS Code config written to: {config_file.absolute()}")
         return True
-        
+
     except Exception as e:
         logger.error(f"Error generating VS Code MCP config: {e}")
-        if 'temp_path' in locals():
+        if "temp_path" in locals():
             try:
                 os.unlink(temp_path)
             except:
@@ -786,8 +781,8 @@ def _generate_vscode_config(
 def _generate_roocode_config(
     has_ingress: bool,
     ingress_file: Path,
-    egress_files: List[Path],
-    noauth_services: List[Dict] = None
+    egress_files: list[Path],
+    noauth_services: list[dict] = None
 ) -> bool:
     """
     Generate Roocode MCP configuration file.
@@ -802,20 +797,20 @@ def _generate_roocode_config(
         True if generation successful, False otherwise
     """
     config_file = OAUTH_TOKENS_DIR / "mcp.json"
-    
+
     try:
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_file:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as temp_file:
             temp_path = temp_file.name
-            
+
             # Default registry URL
-            registry_url = os.getenv('REGISTRY_URL', 'https://mcpgateway.ddns.net')
-            
+            registry_url = os.getenv("REGISTRY_URL", "https://mcpgateway.ddns.net")
+
             # Initialize configuration
             config = {"mcpServers": {}}
-            
+
             # Get ingress headers
             ingress_headers = _get_ingress_headers(ingress_file) if has_ingress else {}
-            
+
             # Process egress files
             for egress_file in egress_files:
                 server_key, server_config = _create_egress_server_config(
@@ -824,35 +819,35 @@ def _generate_roocode_config(
                 if server_key and server_config:
                     config["mcpServers"][server_key] = server_config
                     logger.debug(f"Added egress service {server_key} to Roocode config")
-            
+
             # Process no-auth services
             if noauth_services:
                 for service in noauth_services:
                     server_key, server_config = _create_noauth_server_config(
                         service, ingress_headers, registry_url, "roocode"
                     )
-                    
+
                     # Skip if already added or invalid
                     if not server_key or server_key in config["mcpServers"]:
                         continue
-                    
+
                     config["mcpServers"][server_key] = server_config
                     logger.debug(f"Added no-auth service {server_key} to Roocode config")
-            
+
             # Write JSON to temp file
             json.dump(config, temp_file, indent=2)
-        
+
         # Move temp file to final location and set permissions
         os.rename(temp_path, config_file)
         os.chmod(config_file, 0o600)
-        
+
         logger.info(f"Generated Roocode MCP config: {config_file}")
         logger.debug(f"Roocode config written to: {config_file.absolute()}")
         return True
-        
+
     except Exception as e:
         logger.error(f"Error generating Roocode MCP config: {e}")
-        if 'temp_path' in locals():
+        if "temp_path" in locals():
             try:
                 os.unlink(temp_path)
             except:
@@ -873,35 +868,35 @@ def _run_refresh_cycle(
     """
     logger.info("Starting token refresh cycle...")
     logger.debug(f"Token directory: {OAUTH_TOKENS_DIR.absolute()}")
-    
+
     # Find expiring tokens
     if force_refresh:
         expiring_tokens = _get_all_tokens()
         logger.info("Force refresh enabled - will refresh all tokens")
     else:
         expiring_tokens = _get_expiring_tokens(buffer_seconds)
-    
+
     if not expiring_tokens:
         logger.info("No tokens need refreshing")
         return
-    
+
     logger.info(f"Found {len(expiring_tokens)} token(s) needing refresh")
-    
+
     # Refresh each expiring token
     success_count = 0
     for filepath, token_data in expiring_tokens:
         logger.info(f"Attempting to refresh: {filepath.name}")
         logger.debug(f"Processing token file: {filepath.absolute()}")
-        
+
         if _refresh_token(filepath, token_data):
             success_count += 1
             logger.info(f"Token successfully updated at: {filepath.absolute()}")
         else:
             logger.error(f"Failed to refresh: {filepath.name}")
             logger.error(f"Failed token location: {filepath.absolute()}")
-    
+
     logger.info(f"Refresh cycle complete: {success_count}/{len(expiring_tokens)} tokens refreshed successfully")
-    
+
     # Regenerate MCP configuration files if any tokens were refreshed
     if success_count > 0:
         logger.info("Regenerating MCP configuration files after token refresh...")
@@ -926,7 +921,7 @@ def _write_pidfile() -> None:
     Write the current process PID to the PID file.
     """
     pidfile = _get_pidfile_path()
-    with open(pidfile, 'w') as f:
+    with open(pidfile, "w") as f:
         f.write(str(os.getpid()))
     logger.debug(f"PID file written: {pidfile}")
 
@@ -952,26 +947,26 @@ def _kill_existing_instance() -> bool:
         True if an existing instance was killed, False if none was found
     """
     pidfile = _get_pidfile_path()
-    
+
     if not pidfile.exists():
         logger.debug("No PID file found, no existing instance to kill")
         return False
-    
+
     try:
-        with open(pidfile, 'r') as f:
+        with open(pidfile) as f:
             old_pid = int(f.read().strip())
-        
+
         # Check if process exists and is a token refresher
         if psutil.pid_exists(old_pid):
             try:
                 process = psutil.Process(old_pid)
-                cmdline = ' '.join(process.cmdline())
-                
+                cmdline = " ".join(process.cmdline())
+
                 # Check if it's actually our token refresher process
-                if 'token_refresher.py' in cmdline:
+                if "token_refresher.py" in cmdline:
                     logger.info(f"Found existing token refresher instance (PID: {old_pid})")
                     logger.info(f"Killing existing instance: {cmdline}")
-                    
+
                     # Try graceful shutdown first
                     process.terminate()
                     try:
@@ -983,20 +978,19 @@ def _kill_existing_instance() -> bool:
                         process.kill()
                         process.wait()
                         logger.info(f"Force killed existing instance (PID: {old_pid})")
-                    
+
                     return True
-                else:
-                    logger.debug(f"PID {old_pid} exists but is not a token refresher process")
-                    
+                logger.debug(f"PID {old_pid} exists but is not a token refresher process")
+
             except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
                 logger.debug(f"Could not access process {old_pid}: {e}")
         else:
             logger.debug(f"PID {old_pid} no longer exists")
-        
+
         # Clean up stale PID file
         _remove_pidfile()
         return False
-        
+
     except (ValueError, FileNotFoundError) as e:
         logger.debug(f"Invalid or missing PID file: {e}")
         _remove_pidfile()
@@ -1014,7 +1008,7 @@ def _setup_signal_handlers() -> None:
         logger.info(f"Received signal {signum}, shutting down gracefully...")
         _remove_pidfile()
         sys.exit(0)
-    
+
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
@@ -1045,45 +1039,45 @@ Examples:
     nohup uv run python credentials-provider/token_refresher.py > token_refresher.log 2>&1 &
 """
     )
-    
+
     parser.add_argument(
         "--interval",
         type=int,
         default=DEFAULT_CHECK_INTERVAL,
         help=f"Check interval in seconds (default: {DEFAULT_CHECK_INTERVAL})"
     )
-    
+
     parser.add_argument(
         "--buffer",
         type=int,
         default=DEFAULT_EXPIRY_BUFFER,
         help=f"Refresh tokens this many seconds before expiry (default: {DEFAULT_EXPIRY_BUFFER})"
     )
-    
+
     parser.add_argument(
         "--once",
         action="store_true",
         help="Run once and exit (for testing)"
     )
-    
+
     parser.add_argument(
         "--force",
         action="store_true",
         help="Force refresh all tokens regardless of expiration status"
     )
-    
+
     parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable debug logging"
     )
-    
+
     parser.add_argument(
         "--no-kill",
         action="store_true",
         help="Do not kill existing instance (will exit if one is running)"
     )
-    
+
     args = parser.parse_args()
 
     # Load environment variables from .env file
@@ -1092,14 +1086,14 @@ Examples:
     # Set debug logging if requested
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
-    
+
     # Handle existing instances
     if not args.once:  # Only check for existing instances in continuous mode
         if args.no_kill:
             pidfile = _get_pidfile_path()
             if pidfile.exists():
                 try:
-                    with open(pidfile, 'r') as f:
+                    with open(pidfile) as f:
                         existing_pid = int(f.read().strip())
                     if psutil.pid_exists(existing_pid):
                         logger.error(f"Another token refresher instance is already running (PID: {existing_pid})")
@@ -1113,19 +1107,19 @@ Examples:
             if killed:
                 logger.info("Existing instance terminated, starting new instance")
                 time.sleep(1)  # Brief pause to ensure cleanup
-    
+
     logger.info("=" * 60)
     logger.info("OAuth Token Refresher Service Starting")
     logger.info(f"Check interval: {args.interval} seconds")
     logger.info(f"Expiry buffer: {args.buffer} seconds ({args.buffer / 3600:.1f} hours)")
     logger.info("OAuth tokens directory is configured")
     logger.info("=" * 60)
-    
+
     # Set up signal handlers and PID file for continuous mode
     if not args.once:
         _setup_signal_handlers()
         _write_pidfile()
-    
+
     try:
         # Run once or continuously
         if args.once:
@@ -1149,7 +1143,7 @@ Examples:
         # Clean up PID file
         if not args.once:
             _remove_pidfile()
-    
+
     logger.info("Token Refresher Service stopped")
 
 

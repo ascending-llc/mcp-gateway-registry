@@ -2,10 +2,11 @@
 Abstract base classes for connection management.
 Defines interfaces for connection lifecycle and state management.
 """
-from abc import ABC, abstractmethod
-from typing import Dict, Optional, Any
-from dataclasses import dataclass, field
 import time
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import Any
+
 from registry.schemas.enums import ConnectionState
 
 
@@ -16,12 +17,11 @@ class Connection(ABC):
     connection_state: ConnectionState
     last_activity: float = field(default_factory=time.time)
     error_count: int = 0
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
 
     @abstractmethod
-    def is_stale(self, max_idle_time: Optional[float] = None) -> bool:
+    def is_stale(self, max_idle_time: float | None = None) -> bool:
         """Return True if the connection is stale based on idle time and optional max_idle_time."""
-        pass
 
     def update_activity(self) -> None:
         """Update last activity time"""
@@ -44,7 +44,7 @@ class ConnectionManager(ABC):
             self,
             user_id: str,
             server_id: str
-    ) -> Optional[Connection]:
+    ) -> Connection | None:
         pass
 
     @abstractmethod
@@ -53,10 +53,9 @@ class ConnectionManager(ABC):
             user_id: str,
             server_id: str,
             state: ConnectionState,
-            details: Optional[Dict[str, Any]] = None
+            details: dict[str, Any] | None = None
     ) -> None:
         """update user connection state"""
-        pass
 
     @abstractmethod
     async def create_user_connection(
@@ -64,10 +63,9 @@ class ConnectionManager(ABC):
             user_id: str,
             server_id: str,
             initial_state: ConnectionState = ConnectionState.CONNECTING,
-            details: Optional[Dict[str, Any]] = None
+            details: dict[str, Any] | None = None
     ) -> Connection:
         """Create new user-level connection"""
-        pass
 
     @abstractmethod
     async def disconnect_user_connection(
@@ -76,12 +74,10 @@ class ConnectionManager(ABC):
             server_id: str
     ) -> bool:
         """Disconnect user connection"""
-        pass
 
     @abstractmethod
-    def get_user_connections(self, user_id: str) -> Dict[str, Connection]:
+    def get_user_connections(self, user_id: str) -> dict[str, Connection]:
         """Get all connections for the user"""
-        pass
 
 
 @dataclass
@@ -90,7 +86,7 @@ class ConnectionStateContext:
     user_id: str
     server_name: str
     server_id: str
-    server_config: Dict[str, Any]
-    connection: Optional[Connection] = None
+    server_config: dict[str, Any]
+    connection: Connection | None = None
     is_oauth_server: bool = False
-    idle_timeout: Optional[float] = None  # idle_timeout value provided from server_config
+    idle_timeout: float | None = None  # idle_timeout value provided from server_config

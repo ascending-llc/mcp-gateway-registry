@@ -1,7 +1,8 @@
-from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Dict, Any, Optional, List
 from enum import Enum
+from typing import Any
+
+from pydantic import BaseModel, Field
 
 
 class MetricType(str, Enum):
@@ -16,25 +17,25 @@ class MetricType(str, Enum):
 
 class Metric(BaseModel):
     type: MetricType
-    timestamp: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    timestamp: datetime | None = Field(default_factory=datetime.utcnow)
     value: float
-    duration_ms: Optional[float] = None
-    dimensions: Dict[str, Any] = Field(default_factory=dict)
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    duration_ms: float | None = None
+    dimensions: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class MetricRequest(BaseModel):
     service: str = Field(..., max_length=50)
-    version: Optional[str] = Field(None, max_length=20)
-    instance_id: Optional[str] = Field(None, max_length=50)
-    metrics: List[Metric]
+    version: str | None = Field(None, max_length=20)
+    instance_id: str | None = Field(None, max_length=50)
+    metrics: list[Metric]
 
 
 class MetricResponse(BaseModel):
     status: str
     accepted: int
     rejected: int
-    errors: List[str] = []
+    errors: list[str] = []
     request_id: str
 
 

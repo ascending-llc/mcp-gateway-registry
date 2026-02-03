@@ -25,10 +25,10 @@ class TestRootLevelRoutes:
         For mcp-remote compatibility, this must work without any path prefix.
         """
         response = test_client.get("/.well-known/oauth-authorization-server")
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         # Verify essential fields
         assert "issuer" in data
         assert "authorization_endpoint" in data
@@ -57,10 +57,10 @@ class TestRootLevelRoutes:
         {issuer}/.well-known/openid-configuration
         """
         response = test_client.get("/.well-known/openid-configuration")
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         # Verify OIDC-specific fields
         assert "issuer" in data
         assert "authorization_endpoint" in data
@@ -75,10 +75,10 @@ class TestRootLevelRoutes:
         RFC 7517 (JSON Web Key): JWKS endpoint must be publicly accessible.
         """
         response = test_client.get("/.well-known/jwks.json")
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         # Verify JWKS structure
         assert "keys" in data
         assert isinstance(data["keys"], list)
@@ -96,11 +96,11 @@ class TestRootLevelRoutes:
         """
         # Test without query parameters
         response = test_client.get("/authorize", follow_redirects=False)
-        
+
         # Should redirect (307) to the actual auth endpoint
         assert response.status_code == 307
         assert "location" in response.headers
-        
+
         # Verify redirect target includes the provider
         location = response.headers["location"]
         assert "/oauth2/login/" in location
@@ -122,12 +122,12 @@ class TestRootLevelRoutes:
             "code_challenge": "test-challenge",
             "code_challenge_method": "S256"
         }
-        
+
         response = test_client.get("/authorize", params=query_params, follow_redirects=False)
-        
+
         assert response.status_code == 307
         location = response.headers["location"]
-        
+
         # Verify all query parameters are preserved
         assert "client_id=test-client-123" in location
         assert "redirect_uri=http" in location
@@ -150,7 +150,7 @@ class TestRootLevelRoutes:
         # Discovery endpoints should ONLY be at root level, NOT under /auth prefix
         response = test_client.get("/auth/.well-known/oauth-authorization-server")
         assert response.status_code == 404, "RFC 8414: Discovery must be at root origin only"
-        
+
         response = test_client.get("/auth/.well-known/openid-configuration")
         assert response.status_code == 404, "OIDC Discovery must be at root origin only"
 
@@ -162,10 +162,10 @@ class TestRootLevelRoutes:
         accessing endpoints at root level.
         """
         response = test_client.get("/.well-known/oauth-authorization-server")
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         # Issuer should not have /auth prefix (it's the root issuer)
         # But this depends on AUTH_SERVER_EXTERNAL_URL configuration
         # Just verify the structure is valid
@@ -188,7 +188,7 @@ class TestRootLevelRoutes:
         )
         # Should be 404 (not found at root) or redirect if configured
         assert response.status_code in [404, 307, 308]
-        
+
         # Should work with prefix
         response = test_client.post(
             "/auth/oauth2/register",
@@ -208,7 +208,7 @@ class TestRootLevelRoutes:
             follow_redirects=False
         )
         assert response.status_code in [404, 307, 308]
-        
+
         # Should work with prefix
         response = test_client.post(
             "/auth/oauth2/device/code",
@@ -233,13 +233,13 @@ class TestRootLevelRoutes:
             "/.well-known/openid-configuration",         # OIDC Discovery
             "/.well-known/jwks.json",                    # JWK Set
         ]
-        
+
         for endpoint in endpoints:
             response = test_client.get(endpoint)
             assert response.status_code == 200, f"Failed: {endpoint}"
             data = response.json()
             assert data is not None, f"Empty response: {endpoint}"
-        
+
         # /authorize should redirect (307)
         response = test_client.get("/authorize", follow_redirects=False)
         assert response.status_code == 307, "/authorize should redirect"
@@ -261,7 +261,7 @@ class TestPrefixLogic:
         # Health is at root level
         response = test_client.get("/health")
         assert response.status_code == 200
-        
+
         # Should NOT be at /auth/health
         response = test_client.get("/auth/health")
         assert response.status_code == 404
@@ -275,7 +275,7 @@ class TestPrefixLogic:
         """
         response = test_client.get("/auth/config")
         assert response.status_code in [200, 401], "Config should work at /auth/config"
-        
+
         # Should NOT be at root /config
         response = test_client.get("/config")
         assert response.status_code == 404, "Config should NOT be at root /config"
@@ -292,7 +292,7 @@ class TestPrefixLogic:
         data = response.json()
         assert "providers" in data, "Response should have 'providers' key"
         assert isinstance(data["providers"], list), "Providers should be a list"
-        
+
         # Should NOT be at root /oauth2/providers
         response = test_client.get("/oauth2/providers")
         assert response.status_code == 404, "Providers should NOT be at root /oauth2/providers"
@@ -315,7 +315,7 @@ class TestPrefixLogic:
         )
         # Should not be 404 (endpoint exists with prefix)
         assert response.status_code != 404, "Token endpoint should exist at /auth/oauth2/token"
-        
+
         # Should NOT be at root /oauth2/token
         response = test_client.post(
             "/oauth2/token",

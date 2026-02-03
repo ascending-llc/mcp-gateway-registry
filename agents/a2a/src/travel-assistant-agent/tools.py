@@ -2,16 +2,9 @@
 
 import json
 import logging
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional,
-)
-
-from strands import tool
 
 from dependencies import get_db_manager
+from strands import tool
 
 # Configure logging with basicConfig
 logging.basicConfig(
@@ -46,7 +39,7 @@ def search_flights(
 
     except Exception as e:
         logger.error(f"Database error in search_flights: {e}")
-        return json.dumps({"error": f"Database error: {str(e)}"})
+        return json.dumps({"error": f"Database error: {e!s}"})
 
 
 @tool
@@ -68,13 +61,13 @@ def check_prices(
 
     except Exception as e:
         logger.error(f"Database error in check_prices: {e}")
-        return json.dumps({"error": f"Database error: {str(e)}"})
+        return json.dumps({"error": f"Database error: {e!s}"})
 
 
 @tool
 def get_recommendations(
     max_price: float,
-    preferred_airlines: Optional[List[str]] = None,
+    preferred_airlines: list[str] | None = None,
 ) -> str:
     """Get flight recommendations based on customer preferences."""
     logger.info(f"Tool called: get_recommendations(max_price={max_price}, preferred_airlines={preferred_airlines})")
@@ -92,7 +85,7 @@ def get_recommendations(
 
     except Exception as e:
         logger.error(f"Database error in get_recommendations: {e}")
-        return json.dumps({"error": f"Database error: {str(e)}"})
+        return json.dumps({"error": f"Database error: {e!s}"})
 
 
 @tool
@@ -100,8 +93,8 @@ def create_trip_plan(
     departure_city: str,
     arrival_city: str,
     departure_date: str,
-    return_date: Optional[str] = None,
-    budget: Optional[float] = None,
+    return_date: str | None = None,
+    budget: float | None = None,
 ) -> str:
     """Create and save a trip planning record."""
     logger.info(
@@ -139,7 +132,7 @@ def create_trip_plan(
 
     except Exception as e:
         logger.error(f"Database error in create_trip_plan: {e}")
-        return json.dumps({"error": f"Database error: {str(e)}"})
+        return json.dumps({"error": f"Database error: {e!s}"})
 
 
 # TODO: Create tool that's able to dynamically search agents from MCP Registry

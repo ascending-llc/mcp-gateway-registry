@@ -7,42 +7,42 @@ This main.py file serves as the application coordinator, importing and registeri
 domain routers while handling core app configuration.
 """
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-
-from packages.database import init_mongodb, close_mongodb
-from packages.database.redis_client import init_redis, close_redis
-from registry.auth.middleware import UnifiedAuthMiddleware
-from registry.core.config import settings
-from pathlib import Path
 from fastapi.staticfiles import StaticFiles
-# Import domain routers
-from registry.api.v1.meta_routes import router as meta_router
-from registry.api.server_routes import router as servers_router
-from registry.api.v1.server.server_routes import router as servers_router_v1
-from registry.api.v1.search_routes import router as search_router
-from registry.api.wellknown_routes import router as wellknown_router
+
+from packages.database import close_mongodb, init_mongodb
+from packages.database.redis_client import close_redis, init_redis
 from registry.api.agent_routes import router as agent_router
 from registry.api.management_routes import router as management_router
-from registry.health.routes import router as health_router
-from registry.api.v1.mcp.oauth_router import router as oauth_router
+from registry.api.proxy_routes import router as proxy_router
+from registry.api.proxy_routes import shutdown_proxy_client
 from registry.api.redirect_routes import router as auth_provider_router
-from registry.api.v1.mcp.connection_router import router as connection_router
+from registry.api.server_routes import router as servers_router
 from registry.api.v1.acl_routes import router as acl_router
-from registry.version import __version__
-from registry.api.proxy_routes import router as proxy_router, shutdown_proxy_client
+from registry.api.v1.mcp.connection_router import router as connection_router
+from registry.api.v1.mcp.oauth_router import router as oauth_router
+
+# Import domain routers
+from registry.api.v1.meta_routes import router as meta_router
+from registry.api.v1.search_routes import router as search_router
+from registry.api.v1.server.server_routes import router as servers_router_v1
+from registry.api.wellknown_routes import router as wellknown_router
 from registry.auth.dependencies import CurrentUserWithACLMap
-from packages.models._generated import IUser
+from registry.auth.middleware import UnifiedAuthMiddleware
+from registry.core.config import settings
+from registry.health.routes import router as health_router
+from registry.health.service import health_service
 
 # Import services for initialization
 from registry.services.agent_service import agent_service
-from registry.health.service import health_service
 from registry.services.federation_service import get_federation_service
 from registry.services.search.service import vector_service
-
 from registry.utils.log import logger
+from registry.version import __version__
 
 
 @asynccontextmanager
@@ -55,17 +55,17 @@ async def lifespan(app: FastAPI):
         logger.info("🗄️  Initializing MongoDB connection...")
         await init_mongodb()
         logger.info("✅ MongoDB connection established")
-        
+
         # Initialize Redis connection
         logger.info("🔴 Initializing Redis connection...")
         await init_redis()
         logger.info("✅ Redis connection established")
-        
+
         logger.info("🔍 Initializing vector search service...")
         await vector_service.initialize()
 
         # Only update index if service initialized successfully
-        if hasattr(vector_service, '_initialized') and vector_service._initialized:
+        if hasattr(vector_service, "_initialized") and vector_service._initialized:
             logger.info("📊 Updating vector search index with all registered services...")
             logger.info("📋 Loading agent cards and state...")
             agent_service.load_agents_and_state()
@@ -122,7 +122,7 @@ async def lifespan(app: FastAPI):
     logger.info("🔄 Shutting down MCP Gateway Registry...")
     try:
         # Shutdown services gracefully
-        
+
         # Close Redis connection
         logger.info("🔴 Closing Redis connection...")
         await close_redis()
@@ -192,7 +192,7 @@ app.add_middleware(
     UnifiedAuthMiddleware
 )
 
-if hasattr(settings, 'static_dir') and Path(settings.static_dir).exists():
+if hasattr(settings, "static_dir") and Path(settings.static_dir).exists():
     app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
     logger.info(f"Static files mounted from {settings.static_dir}")
 else:
@@ -293,8 +293,9 @@ async def get_version():
 app.include_router(proxy_router, prefix="/proxy", tags=["MCP Proxy"])
 
 if __name__ == "__main__":
-    import uvicorn
     import os
+
+    import uvicorn
 
     log_level = os.getenv("LOG_LEVEL", "INFO").lower()
 

@@ -1,9 +1,12 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-from registry.api.v1.server.server_routes import create_server
-from registry.schemas.server_api_schemas import ServerCreateRequest
 from beanie import PydanticObjectId
+
+from registry.api.v1.server.server_routes import create_server
 from registry.core.acl_constants import PrincipalType, ResourceType
+from registry.schemas.server_api_schemas import ServerCreateRequest
+
 
 @pytest.mark.asyncio
 async def test_create_server_route_creates_acl_entry():

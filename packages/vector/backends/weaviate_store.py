@@ -1,10 +1,12 @@
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Any
+
+import weaviate.classes.config as wvc
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
-import weaviate.classes.config as wvc
+
 from ..adapters.adapter import VectorStoreAdapter
-from ..enum.enums import SearchType, EmbeddingProvider
+from ..enum.enums import EmbeddingProvider, SearchType
 from ..retrievers.reranker import create_reranker
 
 logger = logging.getLogger(__name__)
@@ -18,7 +20,7 @@ class WeaviateStore(VectorStoreAdapter):
     Extends with Weaviate-specific features.
     """
 
-    def __init__(self, embedding, config: Dict[str, Any], embedding_config: Dict[str, Any] = None):
+    def __init__(self, embedding, config: dict[str, Any], embedding_config: dict[str, Any] = None):
         """Initialize Weaviate adapter."""
         super().__init__(embedding, config, embedding_config)
         self._client = None
@@ -30,10 +32,10 @@ class WeaviateStore(VectorStoreAdapter):
             from weaviate.auth import AuthApiKey
 
             self._client = weaviate.connect_to_local(
-                host=self.config.get('host', 'localhost'),
-                port=self.config.get('port', 8080),
-                grpc_port=self.config.get('grpc_port', 50051),
-                auth_credentials=AuthApiKey(self.config.get('api_key')) if self.config.get('api_key') else None
+                host=self.config.get("host", "localhost"),
+                port=self.config.get("port", 8080),
+                grpc_port=self.config.get("grpc_port", 50051),
+                auth_credentials=AuthApiKey(self.config.get("api_key")) if self.config.get("api_key") else None
             )
         return self._client
 
@@ -58,7 +60,7 @@ class WeaviateStore(VectorStoreAdapter):
         return WeaviateVectorStore(
             client=self._get_client(),
             index_name=collection_name,
-            text_key='content',
+            text_key="content",
             embedding=self.embedding,
             relevance_score_fn=self.cosine_relevance_score_fn,
         )
@@ -68,11 +70,11 @@ class WeaviateStore(VectorStoreAdapter):
             Get Vectorizer
         Note: https://docs.weaviate.io/weaviate/configuration/modules#vectorizer-modules
         """
-        embedding_provider = self.config.get('embedding_provider', 'aws_bedrock')
+        embedding_provider = self.config.get("embedding_provider", "aws_bedrock")
         if embedding_provider == EmbeddingProvider.AWS_BEDROCK:
             vectorizer_config = wvc.Configure.Vectorizer.text2vec_aws(
-                region=self.embedding_config.get('region', 'us-east-1'),
-                model=self.embedding_config.get('model', 'amazon.titan-embed-text-v2:0')
+                region=self.embedding_config.get("region", "us-east-1"),
+                model=self.embedding_config.get("model", "amazon.titan-embed-text-v2:0")
             )
         else:
             vectorizer_config = wvc.Configure.Vectorizer.none()
@@ -125,12 +127,12 @@ class WeaviateStore(VectorStoreAdapter):
     def _is_native_filter(self, filters: Any) -> bool:
         """Check if filters is Weaviate Filter object."""
         try:
-            return hasattr(filters, '__class__') and 'Filter' in filters.__class__.__name__
+            return hasattr(filters, "__class__") and "Filter" in filters.__class__.__name__
         except Exception as e:
             logger.error(f"_is_native_filter: {e}")
             return False
 
-    def _dict_to_native_filter(self, filters: Dict[str, Any]):
+    def _dict_to_native_filter(self, filters: dict[str, Any]):
         """
         Convert dict to Weaviate Filter object.
         
@@ -166,43 +168,40 @@ class WeaviateStore(VectorStoreAdapter):
                     filter_obj = f if filter_obj is None else (filter_obj & f)
                 return filter_obj
             # Handle list values: automatically convert to $in operator
-            elif isinstance(value, list):
+            if isinstance(value, list):
                 if len(value) == 0:
                     logger.warning(f"Empty list for key '{key}', skipping filter")
                     raise ValueError("Empty list for key '{key}', skipping filter")
-                elif len(value) == 1:
+                if len(value) == 1:
                     return Filter.by_property(key).equal(value[0])
-                else:
-                    return Filter.by_property(key).contains_any(value)
+                return Filter.by_property(key).contains_any(value)
             # Handle simple equality: {"key": "value"}
-            else:
-                return Filter.by_property(key).equal(value)
+            return Filter.by_property(key).equal(value)
 
-        def parse_filters(f: Dict[str, Any]):
+        def parse_filters(f: dict[str, Any]):
             if "$and" in f:
                 conditions = [parse_filters(c) if isinstance(c, dict) else c for c in f["$and"]]
                 result = conditions[0]
                 for c in conditions[1:]:
                     result = result & c
                 return result
-            elif "$or" in f:
+            if "$or" in f:
                 conditions = [parse_filters(c) if isinstance(c, dict) else c for c in f["$or"]]
                 result = conditions[0]
                 for c in conditions[1:]:
                     result = result | c
                 return result
-            else:
-                filter_objs = []
-                for key, value in f.items():
-                    if key not in ["$and", "$or", "$not"]:
-                        filter_objs.append(convert_condition(key, value))
+            filter_objs = []
+            for key, value in f.items():
+                if key not in ["$and", "$or", "$not"]:
+                    filter_objs.append(convert_condition(key, value))
 
-                if not filter_objs:
-                    return None
-                result = filter_objs[0]
-                for f in filter_objs[1:]:
-                    result = result & f
-                return result
+            if not filter_objs:
+                return None
+            result = filter_objs[0]
+            for f in filter_objs[1:]:
+                result = result & f
+            return result
 
         return parse_filters(filters)
 
@@ -225,7 +224,7 @@ class WeaviateStore(VectorStoreAdapter):
     # Extended features implementation
     # ========================================
 
-    def get_collection(self, collection_name: Optional[str] = None):
+    def get_collection(self, collection_name: str | None = None):
         """
         Get Weaviate collection by name.
         
@@ -246,7 +245,7 @@ class WeaviateStore(VectorStoreAdapter):
                     "collection_name is required but was not provided. "
                     "This usually means the adapter was not properly initialized with a collection name."
                 )
-        
+
         client = self._get_client()
         if self.collection_exists(collection_name):
             return client.collections.get(collection_name)
@@ -255,8 +254,8 @@ class WeaviateStore(VectorStoreAdapter):
     def get_by_id(
             self,
             doc_id: str,
-            collection_name: Optional[str] = None
-    ) -> Optional[Document]:
+            collection_name: str | None = None
+    ) -> Document | None:
         """
         Get document by ID using Weaviate client.
         
@@ -272,7 +271,7 @@ class WeaviateStore(VectorStoreAdapter):
             obj = collection.query.fetch_object_by_id(doc_id)
             if obj:
                 return Document(
-                    page_content=obj.properties.get('content', ''),
+                    page_content=obj.properties.get("content", ""),
                     metadata=obj.properties,
                     id=str(obj.uuid)
                 )
@@ -283,9 +282,9 @@ class WeaviateStore(VectorStoreAdapter):
 
     def get_by_ids(
             self,
-            ids: List[str],
-            collection_name: Optional[str] = None
-    ) -> List[Document]:
+            ids: list[str],
+            collection_name: str | None = None
+    ) -> list[Document]:
         """
         Get multiple documents by IDs using Weaviate client.
         
@@ -307,7 +306,7 @@ class WeaviateStore(VectorStoreAdapter):
 
         return documents
 
-    def list_collections(self) -> List[str]:
+    def list_collections(self) -> list[str]:
         """List all Weaviate collections."""
         try:
             client = self._get_client()
@@ -318,7 +317,7 @@ class WeaviateStore(VectorStoreAdapter):
             logger.error(f"Failed to list collections: {e}")
             return list(self._stores.keys())
 
-    def collection_exists(self, collection_name: Optional[str] = None) -> bool:
+    def collection_exists(self, collection_name: str | None = None) -> bool:
         """
         Check if collection exists in Weaviate.
         
@@ -338,7 +337,7 @@ class WeaviateStore(VectorStoreAdapter):
                     "collection_name is required but was not provided. "
                     "This usually means the adapter was not properly initialized with a collection name."
                 )
-        
+
         try:
             client = self._get_client()
             return client.collections.exists(collection_name)
@@ -350,9 +349,9 @@ class WeaviateStore(VectorStoreAdapter):
             self,
             filters: Any,
             limit: int = 100,
-            collection_name: Optional[str] = None,
+            collection_name: str | None = None,
             **kwargs
-    ) -> List[Document]:
+    ) -> list[Document]:
         """Implement Weaviate metadata filtering (filters already normalized)."""
         collection = self.get_collection(collection_name)
         normalized_filters = self.normalize_filters(filters)
@@ -371,9 +370,9 @@ class WeaviateStore(VectorStoreAdapter):
                     query: str,
                     k: int = 10,
                     filters: Any = None,
-                    collection_name: Optional[str] = None,
+                    collection_name: str | None = None,
                     **kwargs
-                    ) -> List[Document]:
+                    ) -> list[Document]:
         collection = self.get_collection(collection_name)
         normalized_filters = self.normalize_filters(filters)
         try:
@@ -394,9 +393,9 @@ class WeaviateStore(VectorStoreAdapter):
                       k: int = 10,
                       alpha: float = 0.5,
                       filters: Any = None,
-                      collection_name: Optional[str] = None,
+                      collection_name: str | None = None,
                       **kwargs
-                      ) -> List[Document]:
+                      ) -> list[Document]:
         """
         Hybrid search combining BM25 and vector search.
         
@@ -439,8 +438,8 @@ class WeaviateStore(VectorStoreAdapter):
                     query: str,
                     k: int = 10,
                     filters: Any = None,
-                    collection_name: Optional[str] = None,
-                    **kwargs) -> List[Document]:
+                    collection_name: str | None = None,
+                    **kwargs) -> list[Document]:
         """
         Vector similarity search using external embeddings.
         """
@@ -449,7 +448,7 @@ class WeaviateStore(VectorStoreAdapter):
         try:
             # Generate query vector using external embedding
             query_vector = self.embedding.embed_query(query)
-            
+
             # Perform vector similarity search
             response = collection.query.near_vector(
                 near_vector=query_vector,
@@ -468,8 +467,8 @@ class WeaviateStore(VectorStoreAdapter):
                   k: int = 10,
                   alpha: float = 0.5,
                   filters: Any = None,
-                  collection_name: Optional[str] = None,
-                  **kwargs) -> List[Document]:
+                  collection_name: str | None = None,
+                  **kwargs) -> list[Document]:
         """
            Note:  A vectorizer needs to be configured before this function can be used.
         """
@@ -493,8 +492,8 @@ class WeaviateStore(VectorStoreAdapter):
                search_type: SearchType = SearchType.NEAR_TEXT,
                k: int = 10,
                filters: Any = None,
-               collection_name: Optional[str] = None,
-               **kwargs) -> List[Document]:
+               collection_name: str | None = None,
+               **kwargs) -> list[Document]:
         if search_type == SearchType.BM25:
             return self.bm25_search(
                 query=query,
@@ -503,7 +502,7 @@ class WeaviateStore(VectorStoreAdapter):
                 collection_name=collection_name,
                 **kwargs
             )
-        elif search_type == SearchType.HYBRID:
+        if search_type == SearchType.HYBRID:
             return self.hybrid_search(
                 query=query,
                 k=k,
@@ -511,7 +510,7 @@ class WeaviateStore(VectorStoreAdapter):
                 collection_name=collection_name,
                 **kwargs
             )
-        elif search_type == SearchType.NEAR_TEXT:
+        if search_type == SearchType.NEAR_TEXT:
             return self.near_text(
                 query=query,
                 k=k,
@@ -519,7 +518,7 @@ class WeaviateStore(VectorStoreAdapter):
                 collection_name=collection_name,
                 **kwargs
             )
-        elif search_type == SearchType.NEAR_VECTOR:
+        if search_type == SearchType.NEAR_VECTOR:
             return self.near_vector(
                 query=query,
                 k=k,
@@ -527,22 +526,21 @@ class WeaviateStore(VectorStoreAdapter):
                 collection_name=collection_name,
                 **kwargs
             )
-        else:
-            logger.error(f"Unknown search type: {search_type}")
-            raise ValueError(f"Unknown search type: {search_type}")
+        logger.error(f"Unknown search type: {search_type}")
+        raise ValueError(f"Unknown search type: {search_type}")
 
     def search_with_rerank(
             self,
             query: str,
             k: int = 10,
-            candidate_k: Optional[int] = None,
+            candidate_k: int | None = None,
             search_type: SearchType = SearchType.HYBRID,
             filters: Any = None,
             reranker_type: str = "flashrank",
-            reranker_kwargs: Optional[Dict[str, Any]] = None,
-            collection_name: Optional[str] = None,
+            reranker_kwargs: dict[str, Any] | None = None,
+            collection_name: str | None = None,
             **kwargs
-    ) -> List[Document]:
+    ) -> list[Document]:
         """
         Search with reranking for improved relevance.
         
@@ -585,7 +583,7 @@ class WeaviateStore(VectorStoreAdapter):
             # Step 2: Rerank candidates
             logger.debug(f"Reranking {len(candidates)} candidates to get top {k}")
             reranker_kwargs = reranker_kwargs or {}
-            reranker_kwargs['top_n'] = k
+            reranker_kwargs["top_n"] = k
 
             reranker = create_reranker(
                 reranker_type=reranker_type,
@@ -616,8 +614,8 @@ class WeaviateStore(VectorStoreAdapter):
 
     def batch_update_properties(
             self,
-            doc_ids: List[str],
-            update_data: Dict[str, Any],
+            doc_ids: list[str],
+            update_data: dict[str, Any],
             collection_name: str
     ) -> int:
         """
@@ -638,7 +636,7 @@ class WeaviateStore(VectorStoreAdapter):
 
         try:
             # Filter out vector fields to avoid re-vectorization
-            safe_update_data = {k: v for k, v in update_data.items() if k != 'content'}
+            safe_update_data = {k: v for k, v in update_data.items() if k != "content"}
 
             if not safe_update_data:
                 logger.warning("No safe fields to update (content field excluded)")
@@ -665,7 +663,7 @@ class WeaviateStore(VectorStoreAdapter):
                             failed_count += 1
 
                 # Check for batch errors
-                if hasattr(batch, 'failed_objects') and batch.failed_objects:
+                if hasattr(batch, "failed_objects") and batch.failed_objects:
                     failed_count += len(batch.failed_objects)
 
             logger.info(f"Batch updated {updated_count}/{len(doc_ids)} documents "
@@ -679,7 +677,7 @@ class WeaviateStore(VectorStoreAdapter):
     def delete_by_filter(
             self,
             filters: Any,
-            collection_name: Optional[str] = None
+            collection_name: str | None = None
     ) -> int:
         """
         Delete documents by filter conditions.
@@ -721,7 +719,7 @@ class WeaviateStore(VectorStoreAdapter):
         docs = []
         for obj in response.objects:
             doc = Document(
-                page_content=obj.properties.get('content', ''),
+                page_content=obj.properties.get("content", ""),
                 metadata=obj.properties,
                 id=str(obj.uuid)
             )
@@ -731,8 +729,8 @@ class WeaviateStore(VectorStoreAdapter):
     def update_metadata(
             self,
             doc_id: str,
-            metadata: Dict[str, Any],
-            collection_name: Optional[str] = None
+            metadata: dict[str, Any],
+            collection_name: str | None = None
     ) -> bool:
         """
         Update metadata properties without re-vectorization (Weaviate-specific).
@@ -752,7 +750,7 @@ class WeaviateStore(VectorStoreAdapter):
 
         try:
             # Filter out non-property fields
-            properties = {k: v for k, v in metadata.items() if k != 'collection'}
+            properties = {k: v for k, v in metadata.items() if k != "collection"}
 
             # Update properties using Weaviate's update API
             collection.data.update(

@@ -5,7 +5,8 @@ This module provides standardized error response models that can be reused
 across all API endpoints to ensure consistent error handling.
 """
 
-from typing import Dict, Any
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -58,27 +59,27 @@ class APIErrorResponse(BaseModel):
 # Common error codes constants for consistency
 class ErrorCode:
     """Common error codes used across the application."""
-    
+
     # Authentication & Authorization (4xx)
     AUTHENTICATION_REQUIRED = "authentication_required"
     INVALID_CREDENTIALS = "invalid_credentials"
     INSUFFICIENT_PERMISSIONS = "insufficient_permissions"
     TOKEN_EXPIRED = "token_expired"
     TOKEN_INVALID = "token_invalid"
-    
+
     # Request Validation (4xx)
     INVALID_REQUEST = "invalid_request"
     INVALID_PARAMETER = "invalid_parameter"
     MISSING_PARAMETER = "missing_parameter"
     DUPLICATE_ENTRY = "duplicate_entry"
     RESOURCE_NOT_FOUND = "resource_not_found"
-    
+
     # Server Errors (5xx)
     SERVICE_UNAVAILABLE = "service_unavailable"
     INTERNAL_ERROR = "internal_error"
     DATABASE_ERROR = "database_error"
     EXTERNAL_SERVICE_ERROR = "external_service_error"
-    
+
     # MCP Specific
     HEALTH_CHECK_FAILED = "health_check_failed"
     TOOL_RETRIEVAL_FAILED = "tool_retrieval_failed"
@@ -86,7 +87,7 @@ class ErrorCode:
     OAUTH_ERROR = "oauth_error"
 
 
-def create_error_detail(error_code: str, message: str) -> Dict[str, Any]:
+def create_error_detail(error_code: str, message: str) -> dict[str, Any]:
     """
     Helper function to create a structured error detail dictionary.
     
@@ -128,7 +129,6 @@ def create_error_detail(error_code: str, message: str) -> Dict[str, Any]:
 
 class AuthenticationError(Exception):
     """Base exception for authentication errors."""
-    pass
 
 
 class OAuthReAuthRequiredError(AuthenticationError):
@@ -143,7 +143,7 @@ class OAuthReAuthRequiredError(AuthenticationError):
         auth_url: The OAuth authorization URL for re-authentication
         server_name: Name of the server requiring re-auth
     """
-    
+
     def __init__(self, message: str, auth_url: str = None, server_name: str = None):
         super().__init__(message)
         self.auth_url = auth_url
@@ -163,7 +163,7 @@ class OAuthTokenError(AuthenticationError):
         server_name: Name of the server with token error
         original_error: Original exception if available
     """
-    
+
     def __init__(self, message: str, server_name: str = None, original_error: Exception = None):
         super().__init__(message)
         self.server_name = server_name
@@ -181,7 +181,7 @@ class MissingUserIdError(AuthenticationError):
     Attributes:
         server_name: Name of the server requiring user_id
     """
-    
+
     def __init__(self, message: str, server_name: str = None):
         super().__init__(message)
         self.server_name = server_name
@@ -198,7 +198,7 @@ class ApiKeyError(AuthenticationError):
     Attributes:
         server_name: Name of the server with API key error
     """
-    
+
     def __init__(self, message: str, server_name: str = None):
         super().__init__(message)
         self.server_name = server_name

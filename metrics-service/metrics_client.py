@@ -5,22 +5,22 @@ This module provides an HTTP client that other services can use to emit metrics
 to the centralized metrics collection service.
 """
 
-import httpx
 import asyncio
 import logging
 import os
 from datetime import datetime
-from typing import Dict, Any, Optional, List
-import json
+from typing import Any
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
 
 class MetricsClient:
     """HTTP client for sending metrics to collection service."""
-    
+
     def __init__(
-        self, 
+        self,
         metrics_url: str = None,
         api_key: str = None,
         service_name: str = "unknown",
@@ -40,32 +40,32 @@ class MetricsClient:
         self.max_retries = max_retries
         self.enabled = enabled and bool(self.api_key)
         self._client = None
-        
+
         if not self.enabled:
             logger.warning(f"Metrics client disabled for {service_name} - no API key provided")
-    
+
     async def _get_client(self):
         """Get or create HTTP client."""
         if self._client is None:
             self._client = httpx.AsyncClient(timeout=self.timeout)
         return self._client
-    
+
     async def _emit_metric(
         self,
         metric_type: str,
         value: float = 1.0,
-        duration_ms: Optional[float] = None,
-        dimensions: Optional[Dict[str, Any]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        timestamp: Optional[datetime] = None
+        duration_ms: float | None = None,
+        dimensions: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+        timestamp: datetime | None = None
     ) -> bool:
         """Internal method to emit a single metric."""
         if not self.enabled:
             return False
-            
+
         try:
             client = await self._get_client()
-            
+
             payload = {
                 "service": self.service_name,
                 "version": self.service_version,
@@ -79,9 +79,9 @@ class MetricsClient:
                     "metadata": metadata or {}
                 }]
             }
-            
+
             headers = {"X-API-Key": self.api_key}
-            
+
             for attempt in range(self.max_retries + 1):
                 try:
                     response = await client.post(
@@ -89,14 +89,13 @@ class MetricsClient:
                         json=payload,
                         headers=headers
                     )
-                    
+
                     if response.status_code == 200:
                         logger.debug(f"Metric {metric_type} sent successfully")
                         return True
-                    else:
-                        logger.warning(f"Metrics API error: {response.status_code} - {response.text}")
-                        return False
-                        
+                    logger.warning(f"Metrics API error: {response.status_code} - {response.text}")
+                    return False
+
                 except (httpx.ConnectError, httpx.TimeoutException) as e:
                     if attempt < self.max_retries:
                         wait_time = 2 ** attempt  # Exponential backoff
@@ -105,27 +104,27 @@ class MetricsClient:
                     else:
                         logger.error(f"Failed to emit metric after {self.max_retries + 1} attempts: {e}")
                         return False
-            
+
         except Exception as e:
             # Never fail the main operation due to metrics
             logger.error(f"Failed to emit metric {metric_type}: {e}")
             return False
-    
+
     def emit_metric_sync(self, *args, **kwargs):
         """Synchronous wrapper that creates a task for async emission."""
         if not self.enabled:
             return
         asyncio.create_task(self._emit_metric(*args, **kwargs))
-    
+
     # Auth Server Metrics
     async def emit_auth_metric(
         self,
         success: bool,
         method: str,
         duration_ms: float,
-        server_name: Optional[str] = None,
-        user_hash: Optional[str] = None,
-        error_code: Optional[str] = None
+        server_name: str | None = None,
+        user_hash: str | None = None,
+        error_code: str | None = None
     ) -> bool:
         """Emit authentication metric."""
         return await self._emit_metric(
@@ -142,11 +141,11 @@ class MetricsClient:
                 "error_code": error_code
             }
         )
-    
+
     def emit_auth_metric_sync(self, *args, **kwargs):
         """Synchronous wrapper for auth metrics."""
         asyncio.create_task(self.emit_auth_metric(*args, **kwargs))
-    
+
     # Registry Service Metrics
     async def emit_registry_metric(
         self,
@@ -154,9 +153,9 @@ class MetricsClient:
         resource_type: str,  # server, config, etc.
         success: bool,
         duration_ms: float,
-        resource_id: Optional[str] = None,
-        user_id: Optional[str] = None,
-        error_code: Optional[str] = None
+        resource_id: str | None = None,
+        user_id: str | None = None,
+        error_code: str | None = None
     ) -> bool:
         """Emit registry operation metric."""
         return await self._emit_metric(
@@ -174,21 +173,21 @@ class MetricsClient:
                 "error_code": error_code
             }
         )
-    
+
     def emit_registry_metric_sync(self, *args, **kwargs):
         """Synchronous wrapper for registry metrics."""
         asyncio.create_task(self.emit_registry_metric(*args, **kwargs))
-    
+
     # Tool Discovery Metrics
     async def emit_discovery_metric(
         self,
         query: str,
         results_count: int,
         duration_ms: float,
-        top_k_services: Optional[int] = None,
-        top_n_tools: Optional[int] = None,
-        embedding_time_ms: Optional[float] = None,
-        faiss_search_time_ms: Optional[float] = None
+        top_k_services: int | None = None,
+        top_n_tools: int | None = None,
+        embedding_time_ms: float | None = None,
+        faiss_search_time_ms: float | None = None
     ) -> bool:
         """Emit tool discovery metric."""
         return await self._emit_metric(
@@ -206,11 +205,11 @@ class MetricsClient:
                 "faiss_search_time_ms": faiss_search_time_ms
             }
         )
-    
+
     def emit_discovery_metric_sync(self, *args, **kwargs):
         """Synchronous wrapper for discovery metrics."""
         asyncio.create_task(self.emit_discovery_metric(*args, **kwargs))
-    
+
     # Tool Execution Metrics
     async def emit_tool_execution_metric(
         self,
@@ -219,9 +218,9 @@ class MetricsClient:
         server_name: str,
         success: bool,
         duration_ms: float,
-        input_size_bytes: Optional[int] = None,
-        output_size_bytes: Optional[int] = None,
-        error_code: Optional[str] = None
+        input_size_bytes: int | None = None,
+        output_size_bytes: int | None = None,
+        error_code: str | None = None
     ) -> bool:
         """Emit tool execution metric."""
         return await self._emit_metric(
@@ -240,11 +239,11 @@ class MetricsClient:
                 "output_size_bytes": output_size_bytes
             }
         )
-    
+
     def emit_tool_execution_metric_sync(self, *args, **kwargs):
         """Synchronous wrapper for tool execution metrics."""
         asyncio.create_task(self.emit_tool_execution_metric(*args, **kwargs))
-    
+
     # Health Check Metrics
     async def emit_health_metric(
         self,
@@ -264,25 +263,25 @@ class MetricsClient:
                 "healthy": healthy
             }
         )
-    
+
     def emit_health_metric_sync(self, *args, **kwargs):
         """Synchronous wrapper for health metrics."""
         asyncio.create_task(self.emit_health_metric(*args, **kwargs))
-    
+
     # Custom Metrics
     async def emit_custom_metric(
         self,
         metric_name: str,
         value: float,
-        duration_ms: Optional[float] = None,
-        dimensions: Optional[Dict[str, Any]] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        duration_ms: float | None = None,
+        dimensions: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None
     ) -> bool:
         """Emit custom metric with arbitrary data."""
         custom_dimensions = {"metric_name": metric_name}
         if dimensions:
             custom_dimensions.update(dimensions)
-            
+
         return await self._emit_metric(
             metric_type="custom",
             value=value,
@@ -290,20 +289,20 @@ class MetricsClient:
             dimensions=custom_dimensions,
             metadata=metadata
         )
-    
+
     def emit_custom_metric_sync(self, *args, **kwargs):
         """Synchronous wrapper for custom metrics."""
         asyncio.create_task(self.emit_custom_metric(*args, **kwargs))
-    
+
     # Batch Metrics
-    async def emit_metrics_batch(self, metrics: List[Dict[str, Any]]) -> bool:
+    async def emit_metrics_batch(self, metrics: list[dict[str, Any]]) -> bool:
         """Emit multiple metrics in a single request."""
         if not self.enabled or not metrics:
             return False
-            
+
         try:
             client = await self._get_client()
-            
+
             # Format metrics for API
             formatted_metrics = []
             for metric in metrics:
@@ -316,42 +315,41 @@ class MetricsClient:
                     "metadata": metric.get("metadata", {})
                 }
                 formatted_metrics.append(formatted_metric)
-            
+
             payload = {
                 "service": self.service_name,
                 "version": self.service_version,
                 "instance_id": self.instance_id,
                 "metrics": formatted_metrics
             }
-            
+
             headers = {"X-API-Key": self.api_key}
-            
+
             response = await client.post(
                 self.metrics_endpoint,
                 json=payload,
                 headers=headers
             )
-            
+
             if response.status_code == 200:
                 logger.debug(f"Batch of {len(metrics)} metrics sent successfully")
                 return True
-            else:
-                logger.warning(f"Metrics API error: {response.status_code} - {response.text}")
-                return False
-                
+            logger.warning(f"Metrics API error: {response.status_code} - {response.text}")
+            return False
+
         except Exception as e:
             logger.error(f"Failed to emit metrics batch: {e}")
             return False
-    
+
     async def close(self):
         """Close HTTP client."""
         if self._client:
             await self._client.aclose()
-    
+
     async def __aenter__(self):
         """Async context manager entry."""
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
         await self.close()
@@ -360,7 +358,7 @@ class MetricsClient:
 # Global client instances for each service (to be configured per service)
 def create_metrics_client(
     service_name: str,
-    service_version: str = "1.0.0", 
+    service_version: str = "1.0.0",
     **kwargs
 ) -> MetricsClient:
     """Factory function to create a configured metrics client."""
