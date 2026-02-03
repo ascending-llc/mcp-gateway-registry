@@ -9,12 +9,10 @@ dependencies = [
     "pydantic>=2.11.3",
     "pydantic-settings>=2.0.0",
     "python-dotenv>=1.0.0",
-    
     # Database
     "beanie>=2.0.0",
     "pymongo>4.0.0",
     "redis>=7.1.0",
-    
     # Vector search and AI
     "langchain>=1.1.3",
     "langchain-aws>=0.2.23",
@@ -24,7 +22,6 @@ dependencies = [
     "weaviate-client>=4.18.1",
     "flashrank>=0.2.10",
     "async-lru>=2.0.5",
-    
     # gRPC and protocols
     "protobuf>=5.29.5",
     "grpcio>=1.76.0",
