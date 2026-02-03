@@ -25,10 +25,10 @@ Environment Variables:
 Usage:
     # Interactive mode with initial prompt
     python agent_interactive.py --prompt "Hello" --interactive
-    
+
     # Interactive mode without initial prompt
     python agent_interactive.py --interactive
-    
+
     # Single-turn mode (like original agent.py)
     python agent_interactive.py --prompt "What time is it?"
 
@@ -38,7 +38,7 @@ Example with environment variables (create a .env file):
     COGNITO_USER_POOL_ID=your_user_pool_id
     AWS_REGION=us-east-1
     ANTHROPIC_API_KEY=your_api_key
-    
+
     python agent_interactive.py --interactive
 """
 
@@ -90,10 +90,10 @@ ALLOWED_MCP_TOOLS = ["intelligent_tool_finder"]
 def load_server_config(config_file: str = "server_config.yml") -> dict[str, Any]:
     """
     Load server configuration from YAML file.
-    
+
     Args:
         config_file: Path to the configuration file
-        
+
     Returns:
         Dict containing server configurations
     """
@@ -120,14 +120,14 @@ def resolve_env_vars(value: str, server_name: str = None) -> str:
     """
     Resolve environment variable references in a string.
     Supports ${VAR_NAME} syntax.
-    
+
     Args:
         value: String that may contain environment variable references
         server_name: Name of the server (for error context)
-        
+
     Returns:
         String with environment variables resolved
-        
+
     Raises:
         ValueError: If a required environment variable is not found
     """
@@ -162,14 +162,14 @@ def resolve_env_vars(value: str, server_name: str = None) -> str:
 def get_server_headers(server_name: str, config: dict[str, Any]) -> dict[str, str]:
     """
     Get server-specific headers from configuration with environment variable resolution.
-    
+
     Args:
         server_name: Name of the server (e.g., 'sre-gateway', 'atlassian')
         config: Loaded server configuration
-        
+
     Returns:
         Dictionary of headers for the server
-        
+
     Raises:
         ValueError: If required environment variables for the server are missing
     """
@@ -396,16 +396,16 @@ def parse_arguments() -> argparse.Namespace:
 def calculator(expression: str) -> str:
     """
     Evaluate a mathematical expression and return the result.
-    
+
     This tool can perform basic arithmetic operations like addition, subtraction,
     multiplication, division, and exponentiation.
-    
+
     Args:
         expression (str): The mathematical expression to evaluate (e.g., "2 + 2", "5 * 10", "(3 + 4) / 2")
-    
+
     Returns:
         str: The result of the evaluation as a string
-    
+
     Example:
         calculator("2 + 2") -> "4"
         calculator("5 * 10") -> "50"
@@ -434,10 +434,10 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
                          supported_transports: list[str] = None, auth_provider: str = None) -> str:
     """
     Invoke a tool on an MCP server using the MCP Registry URL and server name with authentication.
-    
+
     This tool creates an MCP client and calls the specified tool with the provided arguments.
     Authentication details are automatically retrieved from the system configuration.
-    
+
     Args:
         mcp_registry_url (str): The URL of the MCP Registry
         server_name (str): The name of the MCP server to connect to
@@ -445,10 +445,10 @@ async def invoke_mcp_tool(mcp_registry_url: str, server_name: str, tool_name: st
         arguments (Dict[str, Any]): Dictionary containing the arguments for the tool
         supported_transports (List[str]): Transport protocols supported by the server (["streamable_http"] or ["sse"])
         auth_provider (str): The authentication provider for the server (e.g., "atlassian", "bedrock-agentcore")
-    
+
     Returns:
         str: The result of the tool invocation as a string
-    
+
     Example:
         invoke_mcp_tool("registry url", "currenttime", "current_time_by_timezone", {"tz_name": "America/New_York"}, ["streamable_http"])
     """
@@ -682,7 +682,7 @@ def redact_sensitive_value(value: str, show_chars: int = 4) -> str:
 def load_system_prompt():
     """
     Load the system prompt template from the system_prompt.txt file.
-    
+
     Returns:
         str: The system prompt template
     """
@@ -707,7 +707,7 @@ def load_system_prompt():
 def print_agent_response(response_dict: dict[str, Any], verbose: bool = False) -> None:
     """
     Parse and print the agent's response in a user-friendly way
-    
+
     Args:
         response_dict: Dictionary containing the agent response with 'messages' key
         verbose: Whether to show detailed debug information
@@ -861,7 +861,7 @@ class InteractiveAgent:
     def __init__(self, agent, system_prompt: str, verbose: bool = False):
         """
         Initialize the interactive agent
-        
+
         Args:
             agent: The LangGraph agent instance
             system_prompt: The formatted system prompt
@@ -875,10 +875,10 @@ class InteractiveAgent:
     async def process_message(self, user_input: str) -> dict[str, Any]:
         """
         Process a user message and return the agent's response
-        
+
         Args:
             user_input: The user's input message
-            
+
         Returns:
             Dict containing the agent's response
         """

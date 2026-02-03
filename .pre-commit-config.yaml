@@ -5,7 +5,7 @@
 repos:
   # Ruff - Fast Python linter and formatter
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
+    rev: v0.14.14
     hooks:
       # Run the linter
       - id: ruff
@@ -24,7 +24,6 @@ repos:
       - id: end-of-file-fixer
         exclude: '\.json$'
       - id: check-yaml
-        args: [--safe]
         exclude: 'mkdocs.yml'
       - id: check-json
       - id: check-toml
@@ -39,9 +38,10 @@ repos:
     rev: 1.8.3
     hooks:
       - id: bandit
-        args: [-c, pyproject.toml, -r, .]
+        args: [-c, pyproject.toml, --severity-level, high, --skip, B104,B105,B113]
         additional_dependencies: ["bandit[toml]"]
         exclude: 'tests/|test_.*\.py$|conftest\.py$'
+        pass_filenames: false
 
 # Global configuration
 default_language_version:

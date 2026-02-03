@@ -90,7 +90,7 @@ services:
       - .env
     profiles:
       - full
-  
+
   # Metrics Collection Service
   metrics-service:
     build:

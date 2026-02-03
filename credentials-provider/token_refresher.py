@@ -84,10 +84,10 @@ IGNORED_FILES = {
 def _should_ignore_file(filename: str) -> bool:
     """
     Check if a token file should be ignored.
-    
+
     Args:
         filename: Name of the token file
-        
+
     Returns:
         True if file should be ignored, False otherwise
     """
@@ -105,10 +105,10 @@ def _should_ignore_file(filename: str) -> bool:
 def _parse_token_file(filepath: Path) -> dict | None:
     """
     Parse a token JSON file and extract relevant information.
-    
+
     Args:
         filepath: Path to the token file
-        
+
     Returns:
         Token data dict or None if file cannot be parsed
     """
@@ -130,7 +130,7 @@ def _parse_token_file(filepath: Path) -> dict | None:
 def _get_all_tokens() -> list[tuple[Path, dict]]:
     """
     Get all valid token files regardless of expiration status.
-    
+
     Returns:
         List of (filepath, token_data) tuples for all valid tokens
     """
@@ -161,10 +161,10 @@ def _get_all_tokens() -> list[tuple[Path, dict]]:
 def _get_expiring_tokens(buffer_seconds: int = DEFAULT_EXPIRY_BUFFER) -> list[tuple[Path, dict]]:
     """
     Find all tokens that are expired or will expire within the buffer period.
-    
+
     Args:
         buffer_seconds: Number of seconds before expiry to trigger refresh
-        
+
     Returns:
         List of (filepath, token_data) tuples for expiring tokens
     """
@@ -219,11 +219,11 @@ def _get_expiring_tokens(buffer_seconds: int = DEFAULT_EXPIRY_BUFFER) -> list[tu
 def _determine_refresh_method(token_data: dict, filename: str) -> str | None:
     """
     Determine which refresh method to use based on token data.
-    
+
     Args:
         token_data: Parsed token data
         filename: Token filename
-        
+
     Returns:
         Refresh method ('agentcore' or 'oauth') or None if cannot determine
     """
@@ -252,11 +252,11 @@ def _determine_refresh_method(token_data: dict, filename: str) -> str | None:
 def _refresh_agentcore_token(token_data: dict, filename: str) -> bool:
     """
     Refresh a Bedrock AgentCore token using generate_access_token.py.
-    
+
     Args:
         token_data: Current token data
         filename: Token filename
-        
+
     Returns:
         True if refresh successful, False otherwise
     """
@@ -310,11 +310,11 @@ def _refresh_agentcore_token(token_data: dict, filename: str) -> bool:
 def _refresh_oauth_token(token_data: dict, filename: str) -> bool:
     """
     Refresh a generic OAuth token using egress_oauth.py or ingress_oauth.py.
-    
+
     Args:
         token_data: Current token data
         filename: Token filename
-        
+
     Returns:
         True if refresh successful, False otherwise
     """
@@ -381,11 +381,11 @@ def _refresh_oauth_token(token_data: dict, filename: str) -> bool:
 def _refresh_token(filepath: Path, token_data: dict) -> bool:
     """
     Refresh a single token based on its type.
-    
+
     Args:
         filepath: Path to the token file
         token_data: Parsed token data
-        
+
     Returns:
         True if refresh successful, False otherwise
     """
@@ -407,7 +407,7 @@ def _refresh_token(filepath: Path, token_data: dict) -> bool:
 def _scan_noauth_services() -> list[dict]:
     """
     Scan registry servers and find services with auth_type: none.
-    
+
     Returns:
         List of no-auth service configurations
     """
@@ -452,7 +452,7 @@ def _scan_noauth_services() -> list[dict]:
 def _regenerate_mcp_configs() -> bool:
     """
     Regenerate MCP configuration files (mcp.json and vscode_mcp.json) after token refresh.
-    
+
     Returns:
         True if regeneration successful, False otherwise
     """
@@ -580,13 +580,13 @@ def _create_egress_server_config(
 ) -> tuple[str, dict]:
     """
     Create server configuration from egress token file.
-    
+
     Args:
         egress_file: Path to egress token file
         ingress_headers: Ingress authentication headers
         registry_url: Base registry URL
         config_type: Either "vscode" or "roocode"
-        
+
     Returns:
         Tuple of (server_key, server_config)
     """
@@ -658,13 +658,13 @@ def _create_noauth_server_config(
 ) -> tuple[str, dict]:
     """
     Create server configuration for no-auth service.
-    
+
     Args:
         service: No-auth service information
         ingress_headers: Ingress authentication headers
         registry_url: Base registry URL
         config_type: Either "vscode" or "roocode"
-        
+
     Returns:
         Tuple of (server_key, server_config)
     """
@@ -709,13 +709,13 @@ def _generate_vscode_config(
 ) -> bool:
     """
     Generate VS Code MCP configuration file.
-    
+
     Args:
         has_ingress: Whether ingress token is available
         ingress_file: Path to ingress token file
         egress_files: List of egress token file paths
         noauth_services: List of no-auth service configurations
-        
+
     Returns:
         True if generation successful, False otherwise
     """
@@ -786,13 +786,13 @@ def _generate_roocode_config(
 ) -> bool:
     """
     Generate Roocode MCP configuration file.
-    
+
     Args:
         has_ingress: Whether ingress token is available
         ingress_file: Path to ingress token file
         egress_files: List of egress token file paths
         noauth_services: List of no-auth service configurations
-        
+
     Returns:
         True if generation successful, False otherwise
     """
@@ -861,7 +861,7 @@ def _run_refresh_cycle(
 ) -> None:
     """
     Run a single refresh cycle, checking and refreshing expiring tokens.
-    
+
     Args:
         buffer_seconds: Number of seconds before expiry to trigger refresh
         force_refresh: If True, refresh all tokens regardless of expiration
@@ -909,7 +909,7 @@ def _run_refresh_cycle(
 def _get_pidfile_path() -> Path:
     """
     Get the path to the PID file for the token refresher service.
-    
+
     Returns:
         Path to the PID file
     """
@@ -942,7 +942,7 @@ def _remove_pidfile() -> None:
 def _kill_existing_instance() -> bool:
     """
     Kill any existing token refresher instance if running.
-    
+
     Returns:
         True if an existing instance was killed, False if none was found
     """
@@ -1022,19 +1022,19 @@ def main():
 Examples:
     # Run with default settings (check every 5 minutes, refresh 1 hour before expiry)
     uv run python credentials-provider/token_refresher.py
-    
+
     # Check every 10 minutes
     uv run python credentials-provider/token_refresher.py --interval 600
-    
+
     # Refresh tokens 2 hours before expiry
     uv run python credentials-provider/token_refresher.py --buffer 7200
-    
+
     # Run once and exit (for testing)
     uv run python credentials-provider/token_refresher.py --once
-    
+
     # Force refresh all tokens once and exit
     uv run python credentials-provider/token_refresher.py --once --force
-    
+
     # Run in background with logging
     nohup uv run python credentials-provider/token_refresher.py > token_refresher.log 2>&1 &
 """

@@ -328,7 +328,7 @@ services:
 
       # Health endpoints (required for /health/ready)
       KC_HEALTH_ENABLED: 'true'
-      
+
     ports:
       - "18080:8080"
     depends_on:

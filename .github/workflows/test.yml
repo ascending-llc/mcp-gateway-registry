@@ -138,7 +138,7 @@ jobs:
         path: |
           bandit-report*.json
 
-  
+
   summary:
     name: "📋 Test Summary"
     runs-on: ubuntu-latest
@@ -154,9 +154,9 @@ jobs:
         echo "| Auth Server Tests | Included in Registry Tests |" >> $GITHUB_STEP_SUMMARY
         echo "| Code Quality | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        
+
         if [[ "${{ needs.test.result }}" == "success" && "${{ needs.lint.result }}" == "success" ]]; then
           echo "✅ All tests passed! 🎉" >> $GITHUB_STEP_SUMMARY
         else
           echo "❌ Some tests failed. Please check the logs." >> $GITHUB_STEP_SUMMARY
-        fi 
+        fi

@@ -28,7 +28,7 @@ Example with environment variables (create a .env file):
     COGNITO_CLIENT_SECRET=your_client_secret
     COGNITO_USER_POOL_ID=your_user_pool_id
     AWS_REGION=us-east-1
-    
+
     python client.py --generate-token --scopes "read write"
 """
 
@@ -78,7 +78,7 @@ logger = logging.getLogger(__name__)
 def load_env_config() -> dict[str, str | None]:
     """
     Load configuration from .env file if available.
-    
+
     Returns:
         Dict[str, Optional[str]]: Dictionary containing environment variables
     """
@@ -120,7 +120,7 @@ def parse_arguments():
     """
     Parse command line arguments for the Auth Server REST Client.
     Command line arguments take precedence over environment variables.
-    
+
     Returns:
         argparse.Namespace: The parsed command line arguments
     """

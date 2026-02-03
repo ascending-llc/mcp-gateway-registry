@@ -9,7 +9,7 @@ dependencies = [
     "mcp>=1.9.3",
     "fastmcp>=2.13.1",
     "fastapi>=0.115.12",
-    
+
     # Core dependencies
     "pydantic>=2.11.3",
     "pydantic-settings>=2.0.0",
@@ -17,7 +17,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "websockets>=15.0.1",
     "pyyaml>=6.0.2",
-    
+
     # Auth
     "pyjwt>=2.10.0",
 ]

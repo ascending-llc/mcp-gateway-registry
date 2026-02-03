@@ -52,14 +52,14 @@ class MigrationManager:
             up_sql="""
                 -- Migration 0001: Initial schema
                 -- This represents the current schema in database.py
-                
+
                 -- Schema version tracking table
                 CREATE TABLE IF NOT EXISTS schema_migrations (
                     version INTEGER PRIMARY KEY,
                     name TEXT NOT NULL,
                     applied_at TEXT NOT NULL
                 );
-                
+
                 -- API Keys table (already exists, but ensure consistency)
                 CREATE TABLE IF NOT EXISTS api_keys (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -139,18 +139,18 @@ class MigrationManager:
                 CREATE INDEX IF NOT EXISTS idx_metrics_timestamp ON metrics(timestamp);
                 CREATE INDEX IF NOT EXISTS idx_metrics_service_type ON metrics(service, metric_type);
                 CREATE INDEX IF NOT EXISTS idx_metrics_type_timestamp ON metrics(metric_type, timestamp);
-                
+
                 CREATE INDEX IF NOT EXISTS idx_auth_timestamp ON auth_metrics(timestamp);
                 CREATE INDEX IF NOT EXISTS idx_auth_success ON auth_metrics(success, timestamp);
                 CREATE INDEX IF NOT EXISTS idx_auth_user ON auth_metrics(user_hash, timestamp);
-                
+
                 CREATE INDEX IF NOT EXISTS idx_discovery_timestamp ON discovery_metrics(timestamp);
                 CREATE INDEX IF NOT EXISTS idx_discovery_results ON discovery_metrics(results_count, timestamp);
-                
+
                 CREATE INDEX IF NOT EXISTS idx_tool_timestamp ON tool_metrics(timestamp);
                 CREATE INDEX IF NOT EXISTS idx_tool_name ON tool_metrics(tool_name, timestamp);
                 CREATE INDEX IF NOT EXISTS idx_tool_success ON tool_metrics(success, timestamp);
-                
+
                 CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
                 CREATE INDEX IF NOT EXISTS idx_api_keys_service ON api_keys(service_name);
             """,
@@ -166,7 +166,7 @@ class MigrationManager:
             name="add_aggregation_tables",
             up_sql="""
                 -- Migration 0002: Add aggregation tables for better performance
-                
+
                 -- Hourly aggregated metrics
                 CREATE TABLE IF NOT EXISTS metrics_hourly (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -184,8 +184,8 @@ class MigrationManager:
                     updated_at TEXT DEFAULT (datetime('now')),
                     UNIQUE(service, metric_type, hour_timestamp)
                 );
-                
-                -- Daily aggregated metrics  
+
+                -- Daily aggregated metrics
                 CREATE TABLE IF NOT EXISTS metrics_daily (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     service TEXT NOT NULL,
@@ -202,11 +202,11 @@ class MigrationManager:
                     updated_at TEXT DEFAULT (datetime('now')),
                     UNIQUE(service, metric_type, date)
                 );
-                
+
                 -- Indexes for aggregation tables
                 CREATE INDEX IF NOT EXISTS idx_hourly_service_type_hour ON metrics_hourly(service, metric_type, hour_timestamp);
                 CREATE INDEX IF NOT EXISTS idx_hourly_hour ON metrics_hourly(hour_timestamp);
-                
+
                 CREATE INDEX IF NOT EXISTS idx_daily_service_type_date ON metrics_daily(service, metric_type, date);
                 CREATE INDEX IF NOT EXISTS idx_daily_date ON metrics_daily(date);
             """,
@@ -227,7 +227,7 @@ class MigrationManager:
             name="add_retention_policies",
             up_sql="""
                 -- Migration 0003: Add retention policies management
-                
+
                 CREATE TABLE IF NOT EXISTS retention_policies (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     table_name TEXT NOT NULL,
@@ -237,11 +237,11 @@ class MigrationManager:
                     updated_at TEXT DEFAULT (datetime('now')),
                     UNIQUE(table_name)
                 );
-                
+
                 -- Insert default retention policies
-                INSERT OR IGNORE INTO retention_policies (table_name, retention_days) VALUES 
+                INSERT OR IGNORE INTO retention_policies (table_name, retention_days) VALUES
                     ('metrics', 90),           -- Keep raw metrics for 90 days
-                    ('auth_metrics', 90),      -- Keep auth metrics for 90 days  
+                    ('auth_metrics', 90),      -- Keep auth metrics for 90 days
                     ('discovery_metrics', 90), -- Keep discovery metrics for 90 days
                     ('tool_metrics', 90),      -- Keep tool metrics for 90 days
                     ('metrics_hourly', 365),   -- Keep hourly aggregates for 1 year
@@ -259,13 +259,13 @@ class MigrationManager:
             name="add_api_key_usage_tracking",
             up_sql="""
                 -- Migration 0004: Enhanced API key usage tracking
-                
+
                 -- Add columns to api_keys table
                 ALTER TABLE api_keys ADD COLUMN usage_count INTEGER DEFAULT 0;
                 ALTER TABLE api_keys ADD COLUMN daily_usage_limit INTEGER DEFAULT NULL;
                 ALTER TABLE api_keys ADD COLUMN monthly_usage_limit INTEGER DEFAULT NULL;
                 ALTER TABLE api_keys ADD COLUMN description TEXT DEFAULT NULL;
-                
+
                 -- API key usage log table
                 CREATE TABLE IF NOT EXISTS api_key_usage_log (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -279,7 +279,7 @@ class MigrationManager:
                     status_code INTEGER DEFAULT 200,
                     FOREIGN KEY (key_hash) REFERENCES api_keys(key_hash)
                 );
-                
+
                 -- Indexes for usage tracking
                 CREATE INDEX IF NOT EXISTS idx_usage_key_timestamp ON api_key_usage_log(key_hash, timestamp);
                 CREATE INDEX IF NOT EXISTS idx_usage_timestamp ON api_key_usage_log(timestamp);
@@ -291,7 +291,7 @@ class MigrationManager:
                 DROP INDEX IF EXISTS idx_usage_timestamp;
                 DROP INDEX IF EXISTS idx_usage_key_timestamp;
                 DROP TABLE IF EXISTS api_key_usage_log;
-                
+
                 -- Note: Cannot easily remove columns from SQLite, would need table recreation
                 -- For now, just mark as rolled back
             """
@@ -315,7 +315,7 @@ class MigrationManager:
                     created_at TEXT DEFAULT (datetime('now')),
                     UNIQUE(hour_timestamp, service, metric_type)
                 );
-                
+
                 CREATE TABLE IF NOT EXISTS metrics_daily (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     date TEXT NOT NULL,
@@ -328,7 +328,7 @@ class MigrationManager:
                     created_at TEXT DEFAULT (datetime('now')),
                     UNIQUE(date, service, metric_type)
                 );
-                
+
                 -- Create retention policies table
                 CREATE TABLE IF NOT EXISTS retention_policies (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -340,7 +340,7 @@ class MigrationManager:
                     created_at TEXT DEFAULT (datetime('now')),
                     updated_at TEXT DEFAULT (datetime('now'))
                 );
-                
+
                 -- Add missing indexes
                 CREATE INDEX IF NOT EXISTS idx_metrics_hourly_timestamp ON metrics_hourly(hour_timestamp);
                 CREATE INDEX IF NOT EXISTS idx_metrics_hourly_service ON metrics_hourly(service, metric_type);
@@ -366,7 +366,7 @@ class MigrationManager:
             async with aiosqlite.connect(self.db_path) as db:
                 # First check if migrations table exists
                 cursor = await db.execute("""
-                    SELECT name FROM sqlite_master 
+                    SELECT name FROM sqlite_master
                     WHERE type='table' AND name='schema_migrations'
                 """)
                 table_exists = await cursor.fetchone()
@@ -390,8 +390,8 @@ class MigrationManager:
         try:
             async with aiosqlite.connect(self.db_path) as db:
                 cursor = await db.execute("""
-                    SELECT version, name, applied_at 
-                    FROM schema_migrations 
+                    SELECT version, name, applied_at
+                    FROM schema_migrations
                     ORDER BY version
                 """)
                 rows = await cursor.fetchall()

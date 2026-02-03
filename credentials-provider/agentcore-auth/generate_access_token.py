@@ -167,7 +167,7 @@ def _save_egress_token(
         provider: Auth provider name (default: bedrock-agentcore)
         server_name: Server name from config (for filename)
         oauth_tokens_dir: Path to .oauth-tokens directory
-        
+
     Returns:
         Path to the saved token file
     """

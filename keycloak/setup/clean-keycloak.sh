@@ -43,7 +43,7 @@ get_admin_token() {
         -d "password=${KEYCLOAK_ADMIN_PASSWORD}" \
         -d "grant_type=password" \
         -d "client_id=admin-cli")
-    
+
     echo "$response" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4
 }
 
@@ -59,38 +59,38 @@ check_keycloak_accessible() {
 # Function to delete realm via API
 delete_realm_via_api() {
     echo -e "${BLUE}Attempting to delete realm via Keycloak Admin API...${NC}"
-    
+
     if ! check_keycloak_accessible; then
         echo -e "${YELLOW}Keycloak is not accessible. Skipping API cleanup.${NC}"
         return 1
     fi
-    
+
     # Check if admin password is set
     if [ -z "$KEYCLOAK_ADMIN_PASSWORD" ]; then
         echo -e "${YELLOW}KEYCLOAK_ADMIN_PASSWORD not set. Skipping API cleanup.${NC}"
         return 1
     fi
-    
+
     # Get admin token
     echo "Getting admin token..."
     TOKEN=$(get_admin_token)
-    
+
     if [ -z "$TOKEN" ]; then
         echo -e "${YELLOW}Failed to get admin token. Skipping API cleanup.${NC}"
         return 1
     fi
-    
+
     # Check if realm exists
     local response=$(curl -s -o /dev/null -w "%{http_code}" \
         -H "Authorization: Bearer ${TOKEN}" \
         "${KEYCLOAK_URL}/admin/realms/${REALM}")
-    
+
     if [ "$response" = "200" ]; then
         echo "Deleting ${REALM} realm..."
         local delete_response=$(curl -s -o /dev/null -w "%{http_code}" \
             -X DELETE "${KEYCLOAK_URL}/admin/realms/${REALM}" \
             -H "Authorization: Bearer ${TOKEN}")
-        
+
         if [ "$delete_response" = "204" ]; then
             echo -e "${GREEN}Realm '${REALM}' deleted successfully via API!${NC}"
             return 0
@@ -107,36 +107,36 @@ delete_realm_via_api() {
 # Function to stop and remove containers
 stop_containers() {
     echo -e "${BLUE}Stopping Keycloak containers...${NC}"
-    
+
     cd "$PROJECT_ROOT"
-    
+
     # Stop Keycloak and database containers specifically
     if docker-compose ps | grep -q keycloak; then
         echo "Stopping keycloak container..."
         docker-compose stop keycloak || echo "Keycloak container was not running"
     fi
-    
+
     if docker-compose ps | grep -q keycloak-db; then
         echo "Stopping keycloak-db container..."
         docker-compose stop keycloak-db || echo "Keycloak-db container was not running"
     fi
-    
+
     # Remove the containers (but keep volumes for now)
     echo "Removing keycloak containers..."
     docker-compose rm -f keycloak keycloak-db 2>/dev/null || echo "Containers already removed"
-    
+
     echo -e "${GREEN}Containers stopped and removed${NC}"
 }
 
 # Function to remove database volume
 remove_database_volume() {
     echo -e "${BLUE}Removing Keycloak database volume...${NC}"
-    
+
     cd "$PROJECT_ROOT"
-    
+
     # Get the volume name (it will be prefixed with the project name)
     local volume_name=$(docker volume ls | grep keycloak_db_data | awk '{print $2}')
-    
+
     if [ ! -z "$volume_name" ]; then
         echo "Removing volume: $volume_name"
         docker volume rm "$volume_name" 2>/dev/null || {
@@ -152,12 +152,12 @@ remove_database_volume() {
 # Function to clean environment variables from .env
 clean_env_secrets() {
     echo -e "${BLUE}Cleaning Keycloak secrets from .env file...${NC}"
-    
+
     if [ -f "$ENV_FILE" ]; then
         # Reset client secrets to placeholder values
         sed -i 's/^KEYCLOAK_CLIENT_SECRET=.*/KEYCLOAK_CLIENT_SECRET=your-keycloak-client-secret/' "$ENV_FILE" 2>/dev/null || true
         sed -i 's/^KEYCLOAK_M2M_CLIENT_SECRET=.*/KEYCLOAK_M2M_CLIENT_SECRET=your-keycloak-m2m-secret/' "$ENV_FILE" 2>/dev/null || true
-        
+
         echo -e "${GREEN}Client secrets reset to placeholder values in .env${NC}"
     else
         echo -e "${YELLOW}.env file not found, skipping secret cleanup${NC}"
@@ -169,33 +169,33 @@ main() {
     echo -e "${RED}WARNING: This will completely remove all Keycloak configuration and data!${NC}"
     echo "This includes:"
     echo "  - All realms, clients, and users"
-    echo "  - All groups and group assignments"  
+    echo "  - All groups and group assignments"
     echo "  - All client secrets and configuration"
     echo "  - Database volume with all persistent data"
     echo ""
-    
+
     read -p "Are you sure you want to proceed? (y/N): " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         echo "Cleanup cancelled"
         exit 0
     fi
-    
+
     echo ""
     echo -e "${BLUE}Starting Keycloak cleanup...${NC}"
-    
+
     # Step 1: Try to delete realm via API (graceful cleanup)
     delete_realm_via_api || echo -e "${YELLOW}API cleanup failed or skipped${NC}"
-    
+
     # Step 2: Stop and remove containers
     stop_containers
-    
+
     # Step 3: Remove database volume (nuclear option)
     remove_database_volume
-    
+
     # Step 4: Clean environment secrets
     clean_env_secrets
-    
+
     echo ""
     echo -e "${GREEN}Keycloak cleanup completed!${NC}"
     echo ""

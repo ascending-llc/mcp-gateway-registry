@@ -6,7 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     # Shared packages
     "packages",
-    
+
     # Web framework
     "fastapi>=0.115.12",
     "uvicorn[standard]>=0.34.2",
@@ -15,11 +15,11 @@ dependencies = [
     "itsdangerous>=2.2.0",
     "jinja2>=3.1.6",
     "websockets>=15.0.1",
-    
+
     # Auth
     "pyjwt>=2.10.1",
-    
-    # MCP and Agents  
+
+    # MCP and Agents
     "mcp>=1.9.3",
     "fastmcp>=2.13.1",
     "langchain-mcp-adapters>=0.0.11",
@@ -27,7 +27,7 @@ dependencies = [
     "langchain-anthropic>=0.3.17",
     "strands-agents>=0.1.6",
     "strands-agents-tools>=0.1.4",
-    
+
     # Utilities
     "pytz>=2025.2",
     "typing-extensions>=4.8.0",
@@ -41,7 +41,7 @@ dependencies = [
     "requests>=2.31.0",
     "cachetools>=6.2.4",
     "litellm>=1.50.0",
-    
+
     # AWS (if needed for registry specifically)
     "awscli>=1.36.0",
     "boto3>=1.35.0",

@@ -17,11 +17,11 @@ class RateLimiter:
     async def check_rate_limit(self, key_hash: str, rate_limit: int) -> tuple[bool, int]:
         """
         Check if request is allowed under rate limit.
-        
+
         Args:
             key_hash: The hashed API key
             rate_limit: Requests per minute limit
-            
+
         Returns:
             Tuple of (is_allowed, remaining_tokens)
         """

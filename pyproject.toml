@@ -29,7 +29,7 @@ packages = []
 members = [
     "packages",
     "registry",
-    "auth_server", 
+    "auth_server",
     "servers/mcpgw",
 ]
 
@@ -41,7 +41,7 @@ dev = [
 ]
 
 [tool.poe.tasks]
-# Version management  
+# Version management
 version = { shell = "echo '\n📦 Workspace versions:\n' && echo '  Root       →' $(grep -m1 '^version = ' pyproject.toml | cut -d'\"' -f2) && echo '  packages   →' $(grep -m1 '^version = ' packages/pyproject.toml | cut -d'\"' -f2) && echo '  registry   →' $(grep -m1 '^version = ' registry/pyproject.toml | cut -d'\"' -f2) && echo '  auth_server →' $(grep -m1 '^version = ' auth_server/pyproject.toml | cut -d'\"' -f2) && echo '  mcpgw      →' $(grep -m1 '^version = ' servers/mcpgw/pyproject.toml | cut -d'\"' -f2) && echo ''", help = "Show versions across all projects" }
 version-sync = { script = "scripts.sync_version:main", help = "Sync version across all projects (usage: poe version-sync 0.2.0)" }
 
@@ -103,7 +103,7 @@ exclude = [
 # Enable pycodestyle (E, W), Pyflakes (F), isort (I), and additional rules
 select = [
     "E",     # pycodestyle errors
-    "W",     # pycodestyle warnings  
+    "W",     # pycodestyle warnings
     "F",     # Pyflakes
     "I",     # isort
     "N",     # pep8-naming

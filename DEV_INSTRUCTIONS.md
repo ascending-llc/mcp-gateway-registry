@@ -36,6 +36,34 @@ Before making any code changes, ask your AI coding assistant to read:
 ### 2. Review the CLAUDE.md File
 This project uses [CLAUDE.md](CLAUDE.md) for coding standards. The file is already included in the repository root - make sure to review it before contributing.
 
+### 3. Set Up Pre-commit Hooks (Required)
+This project uses Ruff for code linting and formatting. Install pre-commit hooks to automatically check your code before commits:
+
+```bash
+# Install pre-commit hooks (required for all developers)
+uv run pre-commit install
+
+# Test that hooks are working correctly
+uv run pre-commit run --all-files
+```
+
+**What this does:**
+- Automatically lints and formats your code before each commit
+- Prevents commits with linting errors
+- Ensures consistent code style across the project
+
+**Manual linting commands (optional):**
+```bash
+# Check all files for linting issues
+uv run poe lint-all
+
+# Auto-fix linting issues where possible
+uv run poe lint-fix
+
+# Format code
+uv run poe format
+```
+
 ## Testing Your Changes
 
 Before submitting a pull request, you must run and pass the test suite:
@@ -126,7 +154,8 @@ Before submitting a pull request:
 - [ ] Completed one of the setup guides (macOS or EC2)
 - [ ] Read docs/llms.txt
 - [ ] Read CLAUDE.md (coding standards)
-- [ ] Code follows project conventions (use ruff, mypy, pytest)
+- [ ] Installed pre-commit hooks: `uv run pre-commit install`
+- [ ] Code follows project conventions (Ruff linting passes)
 - [ ] Generated fresh credentials: `./credentials-provider/generate_creds.sh`
 - [ ] Local tests pass: `./tests/run_all_tests.sh --skip-production`
 - [ ] PR merge tests pass: `./tests/run_all_tests.sh` (all tests must pass)

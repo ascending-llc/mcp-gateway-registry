@@ -25,7 +25,7 @@ on:
         required: true
 
 permissions:
-  id-token: write 
+  id-token: write
   contents: read
 
 jobs:
@@ -71,7 +71,7 @@ jobs:
         run: |
           COMMIT_TAG="${{ steps.login-ecr.outputs.registry }}/jarvis/mcpgateway:${{ github.sha }}"
           LATEST_TAG="${{ steps.login-ecr.outputs.registry }}/jarvis/mcpgateway:latest"
-          
+
           if [ -n "${{ inputs.version_tag }}" ]; then
             VERSION_TAG="${{ steps.login-ecr.outputs.registry }}/jarvis/mcpgateway:${{ inputs.version_tag }}"
             echo "tags=${VERSION_TAG},$COMMIT_TAG" >> $GITHUB_OUTPUT
@@ -129,7 +129,7 @@ jobs:
         run: |
           COMMIT_TAG="${{ steps.login-ecr.outputs.registry }}/jarvis/registry:${{ github.sha }}"
           LATEST_TAG="${{ steps.login-ecr.outputs.registry }}/jarvis/registry:latest"
-          
+
           if [ -n "${{ inputs.version_tag }}" ]; then
             VERSION_TAG="${{ steps.login-ecr.outputs.registry }}/jarvis/registry:${{ inputs.version_tag }}"
             echo "tags=${VERSION_TAG},$COMMIT_TAG" >> $GITHUB_OUTPUT
@@ -180,7 +180,7 @@ jobs:
         run: |
           COMMIT_TAG="${{ steps.login-ecr.outputs.registry }}/jarvis/registry-frontend:${{ github.sha }}"
           LATEST_TAG="${{ steps.login-ecr.outputs.registry }}/jarvis/registry-frontend:latest"
-          
+
           if [ -n "${{ inputs.version_tag }}" ]; then
             VERSION_TAG="${{ steps.login-ecr.outputs.registry }}/jarvis/registry-frontend:${{ inputs.version_tag }}"
             echo "tags=${VERSION_TAG},$COMMIT_TAG" >> $GITHUB_OUTPUT
@@ -227,7 +227,7 @@ jobs:
         run: |
           COMMIT_TAG="${{ steps.login-ecr.outputs.registry }}/jarvis/auth-server:${{ github.sha }}"
           LATEST_TAG="${{ steps.login-ecr.outputs.registry }}/jarvis/auth-server:latest"
-          
+
           if [ -n "${{ inputs.version_tag }}" ]; then
             VERSION_TAG="${{ steps.login-ecr.outputs.registry }}/jarvis/auth-server:${{ inputs.version_tag }}"
             echo "tags=${VERSION_TAG},$COMMIT_TAG" >> $GITHUB_OUTPUT

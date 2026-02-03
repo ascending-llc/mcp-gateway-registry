@@ -18,12 +18,12 @@ This script provides:
 Usage:
     # Interactive mode (recommended for first-time users)
     python generic_oauth_flow.py
-    
+
     # Command line mode
     python generic_oauth_flow.py --provider atlassian --client-id YOUR_CLIENT_ID --client-secret YOUR_CLIENT_SECRET
     python generic_oauth_flow.py --provider google --client-id YOUR_CLIENT_ID --client-secret YOUR_CLIENT_SECRET
     python generic_oauth_flow.py --config-file oauth_config.json
-    
+
     # Force interactive mode even with partial args
     python generic_oauth_flow.py --interactive
 
@@ -750,7 +750,7 @@ class CallbackHandler(http.server.BaseHTTPRequestHandler):
         let timer = 5;
         const timerElement = document.getElementById('timer');
         const countdownElement = document.getElementById('countdown');
-        
+
         const interval = setInterval(() => {{
             timer--;
             timerElement.textContent = timer;
@@ -760,7 +760,7 @@ class CallbackHandler(http.server.BaseHTTPRequestHandler):
                 window.close();
             }}
         }}, 1000);
-        
+
         // Also try to close on click
         document.addEventListener('click', () => window.close());
     </script>
@@ -1037,10 +1037,10 @@ def interactive_configuration() -> dict[str, Any]:
 
 def run_m2m_flow(config: OAuthConfig) -> bool:
     """Run the M2M (client credentials) OAuth 2.0 flow.
-    
+
     Args:
         config: OAuth configuration
-        
+
     Returns:
         bool: True if successful, False otherwise
     """
@@ -1113,7 +1113,7 @@ def run_m2m_flow(config: OAuthConfig) -> bool:
 
 def run_oauth_flow(config: OAuthConfig, force_new: bool = False) -> bool:
     """Run the OAuth 2.0 authorization flow.
-    
+
     Args:
         config: OAuth configuration
         force_new: If True, delete existing tokens and force new authorization

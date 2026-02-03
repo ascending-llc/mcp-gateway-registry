@@ -108,4 +108,4 @@ session:
 registry:
   callback_url: "${REGISTRY_URL}/auth/callback"
   success_redirect: "${REGISTRY_URL}/"
-  error_redirect: "${REGISTRY_URL}/login" 
+  error_redirect: "${REGISTRY_URL}/login"

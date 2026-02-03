@@ -140,7 +140,7 @@ class RetentionManager:
 
                 for policy in self.policies.values():
                     await db.execute("""
-                        INSERT OR REPLACE INTO retention_policies 
+                        INSERT OR REPLACE INTO retention_policies
                         (table_name, retention_days, is_active, updated_at)
                         VALUES (?, ?, ?, datetime('now'))
                     """, (
@@ -176,10 +176,10 @@ class RetentionManager:
                     # Get oldest and newest timestamps that would be deleted
                     cutoff_date = f"datetime('now', '-{policy.retention_days} days')"
                     cursor = await db.execute(f"""
-                        SELECT 
+                        SELECT
                             MIN({policy.timestamp_column}) as oldest,
                             MAX({policy.timestamp_column}) as newest
-                        FROM {policy.table_name} 
+                        FROM {policy.table_name}
                         WHERE {policy.timestamp_column} < {cutoff_date}
                     """)
 
@@ -349,7 +349,7 @@ class RetentionManager:
             async with aiosqlite.connect(self.storage.db_path) as db:
                 # Get all table names
                 cursor = await db.execute("""
-                    SELECT name FROM sqlite_master 
+                    SELECT name FROM sqlite_master
                     WHERE type='table' AND name NOT LIKE 'sqlite_%'
                 """)
                 tables = await cursor.fetchall()
@@ -362,10 +362,10 @@ class RetentionManager:
 
                         # Get approximate size
                         cursor = await db.execute(f"""
-                            SELECT 
+                            SELECT
                                 COUNT(*) as records,
                                 COALESCE(
-                                    (SELECT MIN(created_at) FROM {table_name} WHERE created_at IS NOT NULL), 
+                                    (SELECT MIN(created_at) FROM {table_name} WHERE created_at IS NOT NULL),
                                     (SELECT MIN(timestamp) FROM {table_name} WHERE timestamp IS NOT NULL)
                                 ) as oldest_record,
                                 COALESCE(

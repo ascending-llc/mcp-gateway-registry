@@ -18,7 +18,7 @@ runs:
         # Get the latest release tag from jarvis-api repo (private repo)
         # Using PAT for cross-repo access to private repository
         SCHEMA_VERSION=$(gh api repos/ascending-llc/jarvis-api/releases/latest --jq '.tag_name' || echo "")
-        
+
         if [ -z "$SCHEMA_VERSION" ]; then
           echo "⚠️  Error: Failed to fetch latest release from jarvis-api"
           echo "This could mean:"
@@ -26,7 +26,7 @@ runs:
           echo "  2. The PAT doesn't have access to ascending-llc/jarvis-api"
           exit 1
         fi
-        
+
         echo "schema_version=${SCHEMA_VERSION}" >> $GITHUB_OUTPUT
         echo "✅ Using SCHEMA_VERSION: ${SCHEMA_VERSION}"
       env:

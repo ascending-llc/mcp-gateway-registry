@@ -12,4 +12,3 @@ scrape_configs:
       - targets: ['metrics-service:9465']
     scrape_interval: 10s
     metrics_path: /metrics
-    
