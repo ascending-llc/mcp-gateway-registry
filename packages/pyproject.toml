@@ -25,7 +25,6 @@ dependencies = [
     # gRPC and protocols
     "protobuf>=5.29.5",
     "grpcio>=1.76.0",
-    "contextvars>=2.4",
 ]
 
 [project.optional-dependencies]

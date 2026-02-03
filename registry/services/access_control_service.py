@@ -99,7 +99,7 @@ class ACLService:
 		self,
 		resource_type: str,
 		resource_id: PydanticObjectId,
-		perm_bits_to_delete: Optional[int] = None,
+		perm_bits_to_delete: Optional[int] = None
 	) -> int:
 		"""
 		Bulk delete ACL entries for a given resource, optionally deleting all entries with permBits less than or equal to the specified value.
@@ -192,7 +192,7 @@ class ACLService:
 		resource_type: str,
 		resource_id: PydanticObjectId,
 		principal_type: str,
-		principal_id: Optional[Union[PydanticObjectId, str]],
+		principal_id: Optional[Union[PydanticObjectId, str]]
 	) -> int:
 		"""
 		Remove a single ACL entry for a given resource, principal type, and principal ID.

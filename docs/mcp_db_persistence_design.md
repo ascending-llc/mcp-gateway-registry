@@ -1050,18 +1050,35 @@ MongoDB integration provides a scalable, multi-tenant storage backend for MCP se
 **Why:** Multi-step write operations (e.g., creating a server + granting ACL permissions) must be atomic.
 If the ACL grant fails after the server is created, both operations must be rolled back.
 
-**How:** A FastAPI dependency (`get_tx_session`) provides a transactional `AsyncClientSession`.
+**How:** A decorator-based approach using `@use_transaction` with ContextVar for session management.
 
 **Prerequisite:** MongoDB must run as a **replica set** (single-node is fine for local development).
 The `docker-compose.yml` already configures a single-node replica set (`rs0`).
 
-**Session lifecycle:**
-1. `get_tx_session` calls `client.start_session()`
-2. Opens a transaction via `session.start_transaction()`
-3. Yields the session to the endpoint
-4. On success: transaction commits (context manager exit)
-5. On exception: transaction aborts (context manager exit)
-6. Session is always closed in `finally`
+#### Implementation Pattern
+
+**Decorator (`@use_transaction`):**
+- Applied to route handlers that need transactional behavior
+- Manages transaction lifecycle automatically (start, commit, rollback)
+- Stores session in a ContextVar for async-safe access
+- Prevents nested transactions (raises RuntimeError if detected)
+- Handles replica set errors (OperationFailure code 263) with actionable messages
+
+**Session Access (`get_current_session()`):**
+- Service methods retrieve the active session from ContextVar
+- Returns `None` if no transaction is active (services handle gracefully)
+- No need to pass session parameters through the call chain
+
+**Transaction lifecycle:**
+1. Route handler decorated with `@use_transaction`
+2. Decorator calls `client.start_session()` and starts transaction
+3. Session stored in ContextVar (async-safe, request-isolated)
+4. Service methods call `get_current_session()` to access session
+5. On success: transaction commits automatically (context manager exit)
+6. On exception: transaction aborts automatically (context manager exit)
+7. Session is always closed in `finally` block
+8. ContextVar is reset to ensure no session leakage
+
 
 ### Data Models
 
