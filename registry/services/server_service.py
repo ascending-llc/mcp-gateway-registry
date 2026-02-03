@@ -1068,9 +1068,13 @@ class ServerServiceV1:
 
                 # Try streamable-http transport first (most common)
                 if transport_type in [mcp_config.TRANSPORT_HTTP, "http"]:
-                    endpoint = f"{base_url}{mcp_config.ENDPOINT_MCP}" if not base_url.endswith(
-                        mcp_config.ENDPOINT_MCP) else base_url
-
+                    logger.info(f"Performing health check for server {server.serverName} at {base_url} using transport {transport_type}")
+                    # Only append /mcp if URL doesn't already contain it
+                    if base_url.endswith(mcp_config.ENDPOINT_MCP) or mcp_config.ENDPOINT_MCP in base_url:
+                        endpoint = base_url
+                    else:
+                        endpoint = f"{base_url}{mcp_config.ENDPOINT_MCP}"
+                    logger.info(f"Health check endpoint: {endpoint}")
                     try:
                         # Try a simple GET request first
                         response = await client.get(endpoint, follow_redirects=True)
@@ -1093,8 +1097,11 @@ class ServerServiceV1:
 
                 # Try SSE transport if configured
                 elif transport_type == mcp_config.TRANSPORT_SSE:
-                    endpoint = f"{base_url}{mcp_config.ENDPOINT_SSE}" if not base_url.endswith(
-                        mcp_config.ENDPOINT_SSE) else base_url
+                    # Only append /sse if URL doesn't already contain it
+                    if base_url.endswith(mcp_config.ENDPOINT_SSE) or mcp_config.ENDPOINT_SSE in base_url:
+                        endpoint = base_url
+                    else:
+                        endpoint = f"{base_url}{mcp_config.ENDPOINT_SSE}"
 
                     try:
                         response = await client.get(endpoint, follow_redirects=True)
