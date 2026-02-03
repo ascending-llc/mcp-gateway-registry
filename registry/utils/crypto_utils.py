@@ -18,7 +18,6 @@ from registry.utils.log import logger
 from typing import Optional, List
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
-from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, Tuple
 from registry.core.config import settings
 # Token expiration defaults
