@@ -34,11 +34,10 @@ async def get_tx_session() -> AsyncIterator[AsyncClientSession]:
         OperationFailure: If the replica set is not configured (error code 263).
     """
     client: AsyncMongoClient = MongoDB.get_client()
-    session: AsyncClientSession = client.start_session()
     try:
-        async with await session.start_transaction():
-            yield session
-            # If we reach here without exception, the context manager commits.
+        async with client.start_session() as session:
+            async with await session.start_transaction():
+                yield session
     except OperationFailure as exc:
         # Provide an actionable message when replica set is missing
         if exc.code == 263 or "transaction" in str(exc).lower():
@@ -54,8 +53,5 @@ async def get_tx_session() -> AsyncIterator[AsyncClientSession]:
         logger.error("MongoDB connection failure during transaction: %s", exc)
         raise
     except Exception:
-        # Any other exception: transaction is automatically aborted
-        # by exiting the start_transaction context manager.
+        logger.error("Transaction failed due to an unexpected error.", exc_info=True)
         raise
-    finally:
-        await session.end_session()
