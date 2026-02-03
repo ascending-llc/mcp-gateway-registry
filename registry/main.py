@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
 from packages.database import init_mongodb, close_mongodb
+from packages.database.redis_client import init_redis, close_redis
 from registry.auth.middleware import UnifiedAuthMiddleware
 from registry.core.config import settings
 from pathlib import Path
@@ -60,6 +61,12 @@ async def lifespan(app: FastAPI):
         logger.info("🗄️  Initializing MongoDB connection...")
         await init_mongodb()
         logger.info("✅ MongoDB connection established")
+        
+        # Initialize Redis connection
+        logger.info("🔴 Initializing Redis connection...")
+        await init_redis()
+        logger.info("✅ Redis connection established")
+        
         logger.info("🔍 Initializing vector search service...")
         await vector_service.initialize()
 
@@ -121,6 +128,10 @@ async def lifespan(app: FastAPI):
     logger.info("🔄 Shutting down MCP Gateway Registry...")
     try:
         # Shutdown services gracefully
+        
+        # Close Redis connection
+        logger.info("🔴 Closing Redis connection...")
+        await close_redis()
         await health_service.shutdown()
         await shutdown_proxy_client()
 

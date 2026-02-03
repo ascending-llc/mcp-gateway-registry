@@ -169,6 +169,7 @@ import sys
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
+from registry.core.config import settings
 from registry_client import (
     RegistryClient,
     InternalServiceRegistration,
@@ -203,9 +204,10 @@ from registry_client import (
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+    level=settings.log_level,
+    format=settings.log_format
 )
+
 logger = logging.getLogger(__name__)
 
 

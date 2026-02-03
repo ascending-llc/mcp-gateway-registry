@@ -6,18 +6,18 @@ and transforms them to the gateway's internal format.
 """
 
 import logging
-import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
 from .base_client import BaseFederationClient
+from ...core.config import settings
 from ...schemas.federation_schema import AnthropicServerConfig
 
 
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+    level=settings.log_level,
+    format=settings.log_format
 )
 
 logger = logging.getLogger(__name__)

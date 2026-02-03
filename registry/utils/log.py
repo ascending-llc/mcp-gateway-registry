@@ -15,8 +15,7 @@ def setup_logging():
     log_file = log_dir / "registry.log"
 
     # Get log level from settings
-    log_level_str = settings.LOG_LEVEL.upper()
-    log_level = getattr(logging, log_level_str, logging.INFO)
+    log_level = settings.log_level
 
     # Create formatters
     file_formatter = logging.Formatter(

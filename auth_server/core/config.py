@@ -5,6 +5,8 @@ Centralized configuration management using Pydantic Settings.
 All environment variables are loaded here and accessed through the global `settings` instance.
 """
 
+import logging
+import os
 import secrets
 import yaml
 from pathlib import Path
@@ -94,7 +96,15 @@ class AuthSettings(BaseSettings):
     entra_client_id: Optional[str] = None
     entra_client_secret: Optional[str] = None
     entra_token_kind: str = "id"  # "id" or "access"
-        
+    
+    # ==================== Logging Settings ====================
+    log_level: int = logging.INFO  # Default to INFO (20), can be overridden by LOG_LEVEL env var
+    log_format: str = "%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s"
+    
+    # ==================== Metrics Settings ====================
+    metrics_service_url: str = "http://localhost:8890"
+    metrics_api_key: str = ""
+    
     # ==================== OAuth Device Flow Settings ====================
     device_code_expiry_seconds: int = 600  # 10 minutes
     device_code_poll_interval: int = 5  # Poll every 5 seconds

@@ -22,6 +22,8 @@ class TestMainApplication:
              patch('registry.main.agent_service') as mock_agent_service, \
              patch('registry.main.init_mongodb') as mock_init_mongodb, \
              patch('registry.main.close_mongodb') as mock_close_mongodb, \
+             patch('registry.main.init_redis') as mock_init_redis, \
+             patch('registry.main.close_redis') as mock_close_redis, \
              patch('registry.main.get_federation_service') as mock_get_federation, \
              patch('registry.main.shutdown_proxy_client') as mock_shutdown_proxy:
             
@@ -39,6 +41,10 @@ class TestMainApplication:
             mock_init_mongodb.return_value = AsyncMock()
             mock_close_mongodb.return_value = AsyncMock()
             
+            # Mock Redis connection
+            mock_init_redis.return_value = AsyncMock()
+            mock_close_redis.return_value = AsyncMock()
+            
             # Mock federation service
             mock_federation = Mock()
             mock_federation.config.is_any_federation_enabled.return_value = False
@@ -53,6 +59,8 @@ class TestMainApplication:
                 'agent_service': mock_agent_service,
                 'init_mongodb': mock_init_mongodb,
                 'close_mongodb': mock_close_mongodb,
+                'init_redis': mock_init_redis,
+                'close_redis': mock_close_redis,
                 'get_federation_service': mock_get_federation,
                 'shutdown_proxy_client': mock_shutdown_proxy
             }

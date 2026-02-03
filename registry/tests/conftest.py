@@ -237,10 +237,6 @@ def mock_telemetry_metrics(monkeypatch):
 
     # Mock the domain functions where they're imported
     monkeypatch.setattr(
-        "registry.api.proxy_routes.record_server_request",
-        Mock()
-    )
-    monkeypatch.setattr(
         "registry.core.telemetry_decorators._record_registry_operation",
         Mock()
     )

@@ -1,3 +1,4 @@
+import logging
 import os
 import secrets
 from pathlib import Path
@@ -6,34 +7,7 @@ from typing import Optional
 from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
-from redis import Redis
 from registry.constants import REGISTRY_CONSTANTS
-
-def init_redis_connection() -> Redis:
-    """
-    Initialize Redis connection
-    """
-    redis_url = REGISTRY_CONSTANTS.REDIS_URI
-    from registry.utils.log import logger
-    try:
-        # Create Redis client with connection pooling
-        redis_conn = Redis.from_url(
-            redis_url,
-            decode_responses=True,
-            socket_connect_timeout=5,
-            socket_timeout=5,
-            retry_on_timeout=True,
-            health_check_interval=30,
-            max_connections=50
-        )
-        # Test connection
-        redis_conn.ping()
-        logger.info(f"Successfully connected to Redis: {redis_url}")
-        return redis_conn
-
-    except Exception as e:
-        logger.error(f"Failed to connect to Redis at {redis_url}: {e}")
-        raise RuntimeError(f"Redis connection failed: {e}")
 
 
 class Settings(BaseSettings):
@@ -112,7 +86,8 @@ class Settings(BaseSettings):
     JWT_AUDIENCE: str = "jarvis-services"
     JWT_SELF_SIGNED_KID: str = "self-signed-key-v1"
     API_VERSION: str = "v1"
-    LOG_LEVEL: str = "INFO"
+    log_level: int = logging.INFO  # Default to INFO (20), can be overridden by LOG_LEVEL env var
+    log_format: str = "%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s"
 
     # Local development mode detection
     @property
@@ -122,6 +97,7 @@ class Settings(BaseSettings):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        
         # Generate secret key if not provided
         if not self.secret_key:
             self.secret_key = secrets.token_hex(32)
