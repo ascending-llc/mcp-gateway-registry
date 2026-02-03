@@ -71,9 +71,9 @@ async def initiate_oauth_flow(
 async def oauth_callback(
         server_path: str,
         request: Request,
-        code: Optional[str] = Query(None, description="OAuth authorization code"),
-        state: Optional[str] = Query(None, description="State parameter (format: flow_id##security_token)"),
-        error: Optional[str] = Query(None, description="OAuth error message"),
+        code: str | None = Query(None, description="OAuth authorization code"),
+        state: str | None = Query(None, description="State parameter (format: flow_id##security_token)"),
+        error: str | None = Query(None, description="OAuth error message"),
         mcp_service: MCPService = Depends(get_mcp_service)
 ) -> RedirectResponse:
     """
@@ -117,7 +117,7 @@ async def oauth_callback(
         flow = mcp_service.oauth_service.flow_manager.get_flow(flow_id)
         if flow and flow.status == OAuthFlowStatus.COMPLETED:
             logger.warning(f"[MCP OAuth] Flow already completed, preventing duplicate token exchange: {flow_id}")
-            return _redirect_to_page(request, server_name, flag="success")
+            return _redirect_to_page(request, server_path, flag="success")
 
         # 4. Complete OAuth flow (validate state + exchange tokens)
         logger.debug(f"[MCP OAuth] Completing OAuth flow for {server_path}")

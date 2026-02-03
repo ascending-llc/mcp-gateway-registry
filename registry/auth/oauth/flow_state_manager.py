@@ -103,7 +103,7 @@ class FlowStateManager:
             user_id: str,
             authorization_url: str,
             code_verifier: str,
-            oauth_config: Dict[str, Any],
+            oauth_config: dict[str, Any],
             flow_id: str
     ) -> MCPOAuthFlowMetadata:
         """Create OAuth flow metadata"""
@@ -339,7 +339,7 @@ class FlowStateManager:
             logger.debug(f"Found {len(user_flows)} flows in memory for {user_id}/{server_id}")
             return user_flows
 
-    def _create_client_info(self, oauth_config: Dict[str, Any], server_path: str) -> OAuthClientInformation:
+    def _create_client_info(self, oauth_config: dict[str, Any], server_path: str) -> OAuthClientInformation:
         """
         Build OAuth client information from server configuration
         """

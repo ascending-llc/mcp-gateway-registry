@@ -190,12 +190,12 @@ async def initialize_mcp_session(
 @dataclass
 class MCPServerData:
     """MCP server data container for tools, resources, prompts, and capabilities."""
-    tools: Optional[List[Dict[str, Any]]]
-    resources: Optional[List[Dict[str, Any]]]
-    prompts: Optional[List[Dict[str, Any]]]
-    capabilities: Optional[Dict[str, Any]]
-    error_message: Optional[str] = None
-    requires_init: Optional[bool] = False
+    tools: list[dict[str, Any]] | None
+    resources: list[dict[str, Any]] | None
+    prompts: list[dict[str, Any]] | None
+    capabilities: dict[str, Any] | None
+    error_message: str | None = None
+    requires_init: bool | None = False
 
 
 def _convert_pydantic_to_dict(obj: Any) -> dict:

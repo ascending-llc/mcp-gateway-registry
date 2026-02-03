@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 from packages.models.enums import ServerEntityType
 from packages.vector.enum.enums import SearchType
 from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from registry.auth.dependencies import CurrentUser
+from registry.services.search.service import faiss_service
 from registry.services.server_service import server_service_v1
 
 from ...services.agent_service import agent_service

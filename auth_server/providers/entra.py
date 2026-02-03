@@ -7,6 +7,8 @@ from urllib.parse import urlencode
 import jwt
 import requests
 
+from auth_server.providers.base import AuthProvider
+
 from ..core.config import settings
 from ..utils.config_loader import get_provider_config
 
