@@ -60,9 +60,9 @@ async def initiate_oauth_flow(
                             detail=f"Failed to initialize OAuth flow: {str(e)}")
 
 
-@router.get("/{server_name}/oauth/callback")
+@router.get("/{server_path}/oauth/callback")
 async def oauth_callback(
-        server_name: str,
+        server_path: str,
         request: Request,
         code: Optional[str] = Query(None, description="OAuth authorization code"),
         state: Optional[str] = Query(None, description="State parameter (format: flow_id##security_token)"),
@@ -85,35 +85,35 @@ async def oauth_callback(
         # 1. Check for errors returned by OAuth provider
         if error:
             logger.error(f"[MCP OAuth] OAuth error received from provider: {error}")
-            return _redirect_to_page(request, server_name, error_msg=error)
+            return _redirect_to_page(request, server_path, error_msg=error)
 
         # 2. Validate required parameters
         if not code or not isinstance(code, str):
             logger.error("[MCP OAuth] Missing or invalid authorization code")
-            return _redirect_to_page(request, server_name, error_msg="missing_code")
+            return _redirect_to_page(request, server_path, error_msg="missing_code")
 
         if not state or not isinstance(state, str):
             logger.error("[MCP OAuth] Missing or invalid state parameter")
-            return _redirect_to_page(request, server_name, error_msg="missing_state")
+            return _redirect_to_page(request, server_path, error_msg="missing_state")
 
         # 3. Decode flow_id from state (state format: flow_id##security_token)
         try:
             flow_id, security_token = mcp_service.oauth_service.flow_manager.decode_state(state)
-            logger.info(f"[MCP OAuth] Callback received: server={server_name}, "
+            logger.info(f"[MCP OAuth] Callback received: server={server_path}, "
                         f"flow_id={flow_id}, code={'present' if code else 'missing'}, "
                         f"security_token_length={len(security_token)}")
         except ValueError as e:
             logger.error(f"[MCP OAuth] Failed to decode state: {e}")
-            return _redirect_to_page(request, server_name, error_msg="invalid_state_format")
+            return _redirect_to_page(request, server_path, error_msg="invalid_state_format")
 
         # Check if flow is already completed
         flow = mcp_service.oauth_service.flow_manager.get_flow(flow_id)
         if flow and flow.status == OAuthFlowStatus.COMPLETED:
             logger.warning(f"[MCP OAuth] Flow already completed, preventing duplicate token exchange: {flow_id}")
-            return _redirect_to_page(request, server_name, flag="success")
+            return _redirect_to_page(request, server_path, flag="success")
 
         # 4. Complete OAuth flow (validate state + exchange tokens)
-        logger.debug(f"[MCP OAuth] Completing OAuth flow for {server_name}")
+        logger.debug(f"[MCP OAuth] Completing OAuth flow for {server_path}")
         success, error_msg = await mcp_service.oauth_service.complete_oauth_flow(
             flow_id=flow_id,
             authorization_code=code,
@@ -122,9 +122,9 @@ async def oauth_callback(
 
         if not success:
             logger.error(f"[MCP OAuth] Failed to complete OAuth flow: {error_msg}")
-            return _redirect_to_page(request, server_name, error_msg=error_msg or "unknown_error")
+            return _redirect_to_page(request, server_path, error_msg=error_msg or "unknown_error")
 
-        logger.info(f"[MCP OAuth] OAuth flow completed successfully for {server_name}")
+        logger.info(f"[MCP OAuth] OAuth flow completed successfully for {server_path}")
 
         # 5. Create user connection and setup server
         try:
@@ -133,7 +133,7 @@ async def oauth_callback(
             if flow and flow.user_id:
                 user_id = flow.user_id
                 server_id = flow.server_id  # Extract server_id from flow
-                logger.debug(f"[MCP OAuth] Attempting to reconnect {server_name}"
+                logger.debug(f"[MCP OAuth] Attempting to reconnect {server_path}"
                              f" (server_id: {server_id}) with new OAuth tokens")
 
                 # Create user connection with CONNECTED state
@@ -147,7 +147,7 @@ async def oauth_callback(
                         "created_at": time.time()
                     }
                 )
-                logger.info(f"[MCP OAuth] Successfully reconnected {server_name}"
+                logger.info(f"[MCP OAuth] Successfully reconnected {server_path}"
                             f" (server_id: {server_id}) for user {user_id}")
 
                 # Clear any reconnection attempts
@@ -158,22 +158,22 @@ async def oauth_callback(
                     )
                     reconnection_manager.clear_reconnection(user_id, server_id)  # Use server_id instead of server_name
                     logger.debug(f"[MCP OAuth] Cleared reconnection attempts"
-                                 f" for {server_name} (server_id: {server_id})")
+                                 f" for {server_path} (server_id: {server_id})")
                 except Exception as e:
                     logger.error(f"[MCP OAuth] Could not clear reconnection (manager not initialized): {e}")
 
-                logger.debug(f"[MCP OAuth] User connection created for {server_name}")
+                logger.debug(f"[MCP OAuth] User connection created for {server_path}")
 
         except Exception as error:
-            logger.error(f"[MCP OAuth] Failed to reconnect {server_name} after OAuth, "
+            logger.error(f"[MCP OAuth] Failed to reconnect {server_path} after OAuth, "
                          f"but tokens are saved: {error}")
 
         # 6. Redirect to success page
-        return _redirect_to_page(request, server_name, flag="success")
+        return _redirect_to_page(request, server_path, flag="success")
 
     except Exception as e:
         logger.error(f"[MCP OAuth] OAuth callback error: {str(e)}", exc_info=True)
-        return _redirect_to_page(request, server_name, error_msg="callback_failed")
+        return _redirect_to_page(request, server_path, error_msg="callback_failed")
 
 
 @router.get("/oauth/tokens/{flow_id}")
@@ -443,19 +443,19 @@ async def delete_oauth_tokens(
 # ==================== Helper Functions ====================
 
 def _redirect_to_page(request: Request,
-                      server_name: str,
+                      server_path: str,
                       flag: str = "error",
                       error_msg: str = None) -> RedirectResponse:
     """
     Generate a response that redirects to frontend OAuth callback page.
-        /oauth-callback?type=success&serverName=value
-        /oauth-callback?type=error&serverName=value&error=value
+        /oauth-callback?type=success&serverPath=value
+        /oauth-callback?type=error&serverPath=value&error=value
     """
     host = REGISTRY_CONSTANTS.REGISTRY_CLIENT_URL
-    encoded_server = quote(str(server_name))
+    encoded_path = quote(str(server_path))
 
     # Build full URL with host if request is provided
-    redirect_url = f"{host}/oauth-callback?type={flag}&serverName={encoded_server}"
+    redirect_url = f"{host}/oauth-callback?type={flag}&serverPath={encoded_path}"
 
     if error_msg and flag == "error":
         encoded_error = quote(str(error_msg))

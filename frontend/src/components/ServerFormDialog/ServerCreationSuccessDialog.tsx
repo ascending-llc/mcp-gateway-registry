@@ -6,13 +6,15 @@ import { getBasePath } from '../../config';
 
 interface ServerCreationSuccessDialogProps {
   isOpen: boolean;
-  serverData: { serverName: string };
+  serverData: { serverName: string; path: string };
   onClose: () => void;
 }
 
 const ServerCreationSuccessDialog: React.FC<ServerCreationSuccessDialogProps> = ({ isOpen, serverData, onClose }) => {
   const [copied, setCopied] = useState(false);
-  const redirectUri = `${window.location.protocol}//${window.location.host}${getBasePath()}/api/mcp/v1/${serverData.serverName}/oauth-callback`;
+  // Construct redirect URI using server path (ensure path starts with /)
+  const serverPath = serverData.path?.startsWith('/') ? serverData.path : `/${serverData.path}`;
+  const redirectUri = `${window.location.protocol}//${window.location.host}${getBasePath()}/api/v1/mcp${serverPath}/oauth/callback`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(redirectUri);

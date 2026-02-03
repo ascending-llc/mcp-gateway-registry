@@ -44,7 +44,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
   const [formData, setFormData] = useState<ServerConfig>(INIT_DATA);
   const [originalData, setOriginalData] = useState<ServerConfig | null>(null);
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
-  const [serverData, setServerData] = useState<{ serverName: string }>({ serverName: '' });
+  const [serverData, setServerData] = useState<{ serverName: string; path: string }>({ serverName: '', path: '' });
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
 
   const isEditMode = !!id;
