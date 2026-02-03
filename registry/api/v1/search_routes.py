@@ -298,10 +298,25 @@ async def search_servers(
     logger.info(f"🔍 Server search from user '{user_context.get('username', 'unknown')}': "
                 f"query='{query}', top_n={top_n}, search_type={search.search_type}")
 
+    # if it includes the server, add tool,resource and prompt.
+    new_entity_type = search.type_list.copy()
+    if ServerEntityType.SERVER in search.type_list:
+        new_entity_type.extend([ServerEntityType.PROMPT,
+                                ServerEntityType.RESOURCE,
+                                ServerEntityType.TOOL])
+
+    entity_type = list(set([
+        entity_type.value if isinstance(entity_type, ServerEntityType) else entity_type
+        for entity_type in new_entity_type
+    ]))
+
+    logger.info(f"entity_type: {entity_type}")
+
     filters = {
         "enabled": not search.include_disabled,
-        "entity_type": [dt.value for dt in search.type_list]
+        "entity_type": entity_type
     }
+
     search_results = await mcp_server_repo.asearch_with_rerank(
         query=query,
         k=top_n,
