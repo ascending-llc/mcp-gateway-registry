@@ -5,26 +5,18 @@ Dynamic MCP server proxy routes.
 import logging
 import httpx
 import json
-from typing import Dict, Any, Optional, Union, Tuple
-from datetime import datetime, timedelta
+from typing import Dict, Any, Optional, Union
 from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
-
-from mcp import ClientSession
-from mcp.client.streamable_http import streamable_http_client
 
 from packages.models.extended_mcp_server import MCPServerDocument
 from registry.auth.dependencies import CurrentUser
 from registry.services.server_service import server_service_v1
 from registry.services.server_service import _build_complete_headers_for_server
-from registry.services.user_service import user_service
-from registry.core.config import settings
 from registry.core.mcp_client import (
     get_session,
-    store_session,
     clear_session,
-    initialize_mcp_session,
-    SESSION_TTL_MINUTES
+    initialize_mcp_session
 )
 from registry.schemas.errors import (
     OAuthReAuthRequiredError,
