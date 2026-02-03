@@ -111,7 +111,7 @@ class Settings(BaseSettings):
             raise ValueError("REGISTRY_URL must be set")
         return v.rstrip("/")
     
-    @field_validator("LOG_LEVEL", mode='before')
+    @field_validator("log_level", mode='before')
     @classmethod
     def convert_log_level(cls, v):
         """Convert string log level names to integers (e.g., 'DEBUG' -> 10)."""
@@ -147,7 +147,7 @@ class Settings(BaseSettings):
         logger.info(f"  MCP Transport: {self.MCP_TRANSPORT}")
         logger.info(f"  Listen Port: {self.MCP_SERVER_LISTEN_PORT}")
         logger.info(f"  Auth Server URL: {self.AUTH_SERVER_URL}")
-        logger.info(f"  Log Level: {self.LOG_LEVEL}")
+        logger.info(f"  Log Level: {self.log_level}")
 
 
 def parse_arguments() -> argparse.Namespace:
