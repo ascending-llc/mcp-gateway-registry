@@ -7,7 +7,7 @@ class ToolExecutionRequest(BaseModel):
     server_id: str
     server_path: str
     tool_name: str
-    arguments: dict
+    arguments: Dict[str, Any]
 
 
 class ToolExecutionResponse(BaseModel):

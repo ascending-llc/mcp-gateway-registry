@@ -4,7 +4,7 @@ import secrets
 import os
 from typing import Dict, Optional, Any, List
 
-from registry.core.config import init_redis_connection
+from packages.database.redis_client import get_redis_client
 from registry.auth.oauth.redis_flow_storage import RedisFlowStorage
 from registry.auth.oauth.oauth_utils import parse_scope, scope_to_string
 from registry.models.oauth_models import (
@@ -41,13 +41,16 @@ class FlowStateManager:
 
         # Try to initialize Redis storage
         try:
-            redis_conn = init_redis_connection()
-            redis_conn.ping()
+            redis_conn = get_redis_client()
+            if redis_conn:
+                redis_conn.ping()
 
-            self._redis_storage = RedisFlowStorage(redis_conn)
-            self._use_redis = True
+                self._redis_storage = RedisFlowStorage(redis_conn)
+                self._use_redis = True
 
-            logger.info("FlowStateManager initialized with Redis storage")
+                logger.info("FlowStateManager initialized with Redis storage")
+            else:
+                raise RuntimeError("Redis client not initialized")
 
         except Exception as e:
             if fallback_to_memory:

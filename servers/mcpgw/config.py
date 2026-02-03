@@ -20,7 +20,7 @@ class Constants:
     DESCRIPTION: str = "MCP Gateway Registry Interaction Server (mcpgw)"
     DEFAULT_MCP_TRANSPORT: str = "streamable-http"
     DEFAULT_MCP_SERVER_LISTEN_PORT: str = "8003"
-    REQUEST_TIMEOUT: float = 15.0
+    REQUEST_TIMEOUT: float = 30.0
 
 
 class Settings(BaseSettings):
