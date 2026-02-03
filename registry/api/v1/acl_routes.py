@@ -119,7 +119,6 @@ async def update_resource_permissions(
             logger.info(f"Deleted public ACL entry for resource {resource_id}")
 
         if data.removed:
-            # Execute sequentially within the transaction (sessions are not concurrent-safe)
             for principal in data.removed:
                 result = await acl_service.delete_permission(
                     resource_type=resource_type,
@@ -131,7 +130,6 @@ async def update_resource_permissions(
                 deleted_count += result
 
         if data.updated:
-            # Execute sequentially within the transaction (sessions are not concurrent-safe)
             for principal in data.updated:
                 await acl_service.grant_permission(
                     principal_type=principal.principal_type,

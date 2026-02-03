@@ -54,10 +54,8 @@ class TestGetTxSession:
         mock_client.start_session.assert_called_once()
 
         # Finish the generator (simulates successful endpoint completion)
-        try:
+        with pytest.raises(StopAsyncIteration):
             await gen.__anext__()
-        except StopAsyncIteration:
-            pass
 
         mock_session.end_session.assert_called_once()
 
@@ -110,7 +108,7 @@ class TestGetTxSession:
         """Test that ConnectionFailure is properly propagated and session closed."""
         mock_client = MagicMock()
         mock_session = _make_mock_session()
-        mock_client.start_session.return_value=mock_session
+        mock_client.start_session.return_value = mock_session
         MongoDB.client = mock_client
 
         gen = get_tx_session()
