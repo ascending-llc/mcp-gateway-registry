@@ -200,7 +200,7 @@ else:
 
 # Register API routers with /api prefix
 app.include_router(meta_router, prefix="/api/auth", tags=["Authentication metadata"])
-app.include_router(token_router, prefix="/api", tags=["Server Management"])
+app.include_router(token_router, prefix=f"/api/{settings.API_VERSION}", tags=["Server Management"])
 app.include_router(servers_router_v1, prefix=f"/api/{settings.API_VERSION}", tags=["Server Management V1"])
 app.include_router(agent_router, prefix="/api", tags=["Agent Management"])
 app.include_router(management_router, prefix="/api")
