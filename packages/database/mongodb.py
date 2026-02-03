@@ -61,6 +61,7 @@ class MongoDB:
             # Create PyMongo async client with connection pool settings
             cls.client = AsyncMongoClient(
                 mongodb_url,
+                directConnection=True,
                 maxPoolSize=50,  # Maximum number of connections in the pool
                 minPoolSize=10,  # Minimum number of connections in the pool
                 maxIdleTimeMS=30000,  # Close connections after 30 seconds of inactivity

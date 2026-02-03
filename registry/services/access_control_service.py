@@ -6,6 +6,7 @@ from packages.models._generated import (
 )
 from packages.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
 from beanie import PydanticObjectId
+from pymongo.asynchronous.client_session import AsyncClientSession
 from registry.core.acl_constants import ResourceType, PermissionBits, PrincipalType
 from registry.utils.log import logger
 from registry.services.user_service import user_service
@@ -32,6 +33,7 @@ class ACLService:
 		resource_id: PydanticObjectId,
 		role_id: Optional[PydanticObjectId] = None,
 		perm_bits: Optional[int] = None,
+		session: Optional[AsyncClientSession] = None,
 	) -> IAclEntry:
 		"""
 		Grant ACL permission to a principal (user or group) for a specific resource.
@@ -65,18 +67,20 @@ class ACLService:
 		# Check if an ACL entry already exists for this principal/resource
 		try: 
 			acl_entry = await IAclEntry.find_one({
-				"principalType": principal_type,
-				"principalId": principal_id,
-				"resourceType": resource_type,
-				"resourceId": resource_id
-			})
+					"principalType": principal_type,
+					"principalId": principal_id,
+					"resourceType": resource_type,
+					"resourceId": resource_id
+				},
+				session=session,
+			)
 			now = datetime.now(timezone.utc)
 			if acl_entry:
 				acl_entry.permBits = perm_bits
 				acl_entry.roleId = role_id
 				acl_entry.grantedAt = now
 				acl_entry.updatedAt = now
-				await acl_entry.save()
+				await acl_entry.save(session=session)
 				return acl_entry
 			else:
 				new_entry = IAclEntry(
@@ -89,7 +93,7 @@ class ACLService:
 					createdAt=now,
 					updatedAt=now
 				)
-				await new_entry.insert()
+				await new_entry.insert(session=session)
 				return new_entry
 		except Exception as e: 
 			logger.error(f"Error upserting ACL entry: {e}")
@@ -99,7 +103,8 @@ class ACLService:
 		self,
 		resource_type: str,
 		resource_id: PydanticObjectId,
-		perm_bits_to_delete: Optional[int] = None
+		perm_bits_to_delete: Optional[int] = None,
+		session: Optional[AsyncClientSession] = None,
 	) -> int:
 		"""
 		Bulk delete ACL entries for a given resource, optionally deleting all entries with permBits less than or equal to the specified value.
@@ -124,7 +129,7 @@ class ACLService:
 			if perm_bits_to_delete: 
 				query["permBits"] = {"$lte": perm_bits_to_delete}
 
-			result = await IAclEntry.find(query).delete()
+			result = await IAclEntry.find(query).delete(session=session)
 			return result.deleted_count
 		except Exception as e: 
 			logger.error(f"Error deleting ACL entries for resource {resource_type} with ID {resource_id}: {e}")
@@ -195,7 +200,8 @@ class ACLService:
 		resource_type: str,
 		resource_id: PydanticObjectId,
 		principal_type: str,
-		principal_id: Optional[Union[PydanticObjectId, str]]
+		principal_id: Optional[Union[PydanticObjectId, str]],
+		session: Optional[AsyncClientSession] = None,
 	) -> int:
 		"""
 		Remove a single ACL entry for a given resource, principal type, and principal ID.
@@ -219,7 +225,7 @@ class ACLService:
 				"principalType": principal_type,
 				"principalId": principal_id
 			}
-			result = await IAclEntry.find(query).delete()
+			result = await IAclEntry.find(query).delete(session=session)
 			return result.deleted_count
 		except Exception as e:
 			logger.error(f"Error revoking ACL entry for resource {resource_type} with ID {resource_id}: {e}")
