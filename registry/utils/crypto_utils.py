@@ -87,7 +87,6 @@ def generate_service_jwt(user_id: str, username: Optional[str] = None, scopes: O
         "user_id": user_id,
         "sub": username or user_id,
         "iss": settings.JWT_ISSUER,
-        "aud": settings.JWT_AUDIENCE,
         "iat": now,
         "exp": now + timedelta(minutes=5),  # Short-lived for service-to-service
         "jti": f"registry-{now.timestamp()}",

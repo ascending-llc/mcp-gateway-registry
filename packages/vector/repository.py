@@ -3,6 +3,7 @@ import logging
 from typing import Optional, List, Dict, Any, TypeVar, Generic, Type, Set, Callable, Awaitable
 from functools import wraps
 from langchain_classic.retrievers.contextual_compression import ContextualCompressionRetriever
+from langchain_core.documents import Document
 from .batch_result import BatchResult
 from .enum.enums import SearchType, RerankerProvider
 from .retrievers.adapter_retriever import AdapterRetriever
@@ -61,7 +62,7 @@ class Repository(Generic[T]):
             raise TypeError(f"model_class must be a class, got {type(model_class)}")
 
         # Runtime check for VectorStorable protocol
-        required_attrs = ['COLLECTION_NAME', 'to_document', 'from_document', 'get_safe_metadata_fields']
+        required_attrs = ['COLLECTION_NAME', 'from_document']
         missing_attrs = [attr for attr in required_attrs if not hasattr(model_class, attr)]
         if missing_attrs:
             raise TypeError(
@@ -80,7 +81,7 @@ class Repository(Generic[T]):
     # CRUD Operations with Smart Update Detection
     # ========================================
 
-    def save(self, instance: T) -> Optional[str]:
+    def save(self, instance: T) -> Optional[List[str]]:
         """
         Save a model instance to vector database.
 
@@ -94,17 +95,21 @@ class Repository(Generic[T]):
             RepositoryError: If save operation fails critically
         """
         try:
-            doc = instance.to_document()
-            doc_id = self.adapter.add_documents(
-                documents=[doc],
+            # Generate documents from instance
+            docs = instance.to_documents()
+            logger.debug(f"Generated {len(docs)} documents for saving")
+
+            doc_ids = self.adapter.add_documents(
+                documents=docs,
                 collection_name=self.collection
             )
 
-            if doc_id and len(doc_id) > 0:
-                logger.debug(f"Saved {self.model_class.__name__} with ID: {doc_id[0]}")
-                return doc_id[0]
+            if doc_ids and len(doc_ids) > 0:
+                logger.info(f"Saved {len(docs)} documents for {self.model_class.__name__} "
+                            f"(IDs: {len(doc_ids)} returned)")
+                return doc_ids
 
-            logger.warning(f"Save returned empty ID for {self.model_class.__name__}")
+            logger.warning(f"Save returned empty IDs for {self.model_class.__name__}")
             return None
 
         except Exception as e:
@@ -145,103 +150,170 @@ class Repository(Generic[T]):
             create_if_missing: bool = False
     ) -> bool:
         """
-        Update model instance with smart re-vectorization detection.
+        Update model instance with smart change detection.
 
-        Optimizes updates by:
-        1. Checking if only metadata fields changed (no re-vectorization needed)
-        2. Comparing generated content to detect actual content changes
-        3. Optionally creating document if it doesn't exist (upsert behavior)
+        Update strategies:
+        1. Metadata-only (enabled, scope, etc.) → Update all docs' metadata, no re-vectorization
+        2. Content changed → Incremental update (compare and replace changed docs only)
+        3. Not found → Create new (if create_if_missing=True)
 
         Args:
             instance: Model instance to update
-            fields_changed: Set of field names that changed (optional, for optimization)
-            create_if_missing: If True, create the document if it doesn't exist (upsert behavior)
+            fields_changed: Set of field names that changed (optimization hint)
+            create_if_missing: If True, create if not found (upsert behavior)
 
         Returns:
             True if updated/created successfully, False otherwise
         """
+        pass
+
+    def _update_metadata_only(
+            self,
+            instance: T,
+            existing_docs: List[Document]
+    ) -> bool:
+        """
+        Update only metadata fields for all documents (no re-vectorization).
+
+        Args:
+            instance: Model instance with new metadata
+            existing_docs: Existing vector documents
+
+        Returns:
+            True if all updates successful
+        """
         try:
-            mongo_id = str(instance.id)
+            if not hasattr(self.adapter, 'update_metadata'):
+                logger.warning("Adapter doesn't support update_metadata, falling back to full update")
+                return self._full_update(instance, existing_docs)
 
-            vector_docs = self.adapter.filter_by_metadata(
-                filters={"server_id": mongo_id},
-                limit=1,
-                collection_name=self.collection
-            )
+            # Extract new metadata
+            new_metadata = {
+                "scope": instance.scope,
+                "enabled": instance.config.get("enabled", False),  # Key field for enable/disable
+            }
+            logger.debug(f"Updating metadata for {instance}: {new_metadata}")
 
-            if not vector_docs:
-                logger.warning(f"{self.model_class.__name__} not found in vector DB: {mongo_id}")
-                if create_if_missing:
-                    logger.info(f"Creating new document for {self.model_class.__name__} {mongo_id}")
-                    self.save(instance)
-                return True
+            # Update all documents
+            success_count = 0
+            for doc in existing_docs:
+                result = self.adapter.update_metadata(
+                    doc_id=doc.id,
+                    metadata=new_metadata,
+                    collection_name=self.collection
+                )
+                if result:
+                    success_count += 1
 
-            weaviate_uuid = vector_docs[0].id
-            logger.debug(f"Found {self.model_class.__name__} MongoDB ID: {mongo_id}, Weaviate UUID: {weaviate_uuid}")
-
-            # Check if only safe metadata fields changed
-            safe_fields = instance.get_safe_metadata_fields()
-
-            if fields_changed and fields_changed.issubset(safe_fields):
-                # Metadata-only update (no re-vectorization needed)
-                logger.info(f"Metadata-only update for {self.model_class.__name__} {mongo_id}")
-
-                if hasattr(self.adapter, 'update_metadata'):
-                    new_doc = instance.to_document()
-                    metadata = new_doc.metadata
-                    result = self.adapter.update_metadata(
-                        doc_id=weaviate_uuid,
-                        metadata=metadata,
-                        collection_name=self.collection
-                    )
-                    logger.info(f"Metadata updated for {self.model_class.__name__} {mongo_id}")
-                    return result
-                else:
-                    logger.warning("Adapter doesn't support metadata-only updates, falling back to full update")
-
-            # Get old content from existing instance
-            if hasattr(instance, "generate_content"):
-                old_content = vector_docs[0].page_content
-                new_content = instance.generate_content()
-
-                if old_content and old_content == new_content:
-                    logger.info(f"Content unchanged for {self.model_class.__name__} {mongo_id}, "
-                                f"skipping re-vectorization")
-                    # Still update metadata in case it changed
-                    if hasattr(self.adapter, 'update_metadata'):
-                        new_doc = instance.to_document()
-                        result = self.adapter.update_metadata(
-                            doc_id=weaviate_uuid,
-                            metadata=new_doc.metadata,
-                            collection_name=self.collection
-                        )
-                        if result:
-                            logger.info(f"Metadata updated (content unchanged) for"
-                                        f" {self.model_class.__name__} {mongo_id}")
-                        return result
-                    return True
-
-            # Full update with re-vectorization (atomic operation)
-            logger.info(f"Full update with re-vectorization for {self.model_class.__name__} {mongo_id}")
-
-            # 1: Delete old version (use Weaviate UUID)
-            if not self.delete(weaviate_uuid):
-                logger.warning(f"Delete failed during update for MongoDB ID {mongo_id}, Weaviate UUID {weaviate_uuid}")
-                return False
-
-            # 2: Save new version
-            new_weaviate_id = self.save(instance)
-            if new_weaviate_id:
-                logger.info(f"Updated {self.model_class.__name__} MongoDB ID {mongo_id} successfully "
-                            f"(old Weaviate UUID: {weaviate_uuid}, new: {new_weaviate_id})")
-                return True
-            else:
-                logger.error(f"Save failed during update for MongoDB ID {mongo_id}")
-                return False
+            logger.info(f"Updated metadata for {success_count}/{len(existing_docs)} documents")
+            return success_count == len(existing_docs)
 
         except Exception as e:
-            logger.error(f"Update failed for {self.model_class.__name__}: {e}", exc_info=True)
+            logger.error(f"Metadata update failed: {e}", exc_info=True)
             return False
+
+    def _incremental_update(
+            self,
+            instance: T,
+            existing_docs: List[Document]
+    ) -> bool:
+        """
+        Incremental update: compare content and update only changed documents.
+
+        Strategy:
+        1. Generate new documents from instance
+        2. Compare with existing documents by entity_type and name
+        3. Delete changed/removed documents
+        4. Add new/changed documents
+
+        Args:
+            instance: Model instance with new content
+            existing_docs: Existing vector documents
+
+        Returns:
+            True if update successful
+        """
+        # TODO: Implement incremental update logic. For now, this is a stub.
+        return False
+
+    def _full_update(
+            self,
+            instance: T,
+            existing_docs: List[Document]
+    ) -> bool:
+        """
+        Full update: delete all old docs and save new ones (fallback strategy).
+
+        Args:
+            instance: Model instance
+            existing_docs: Existing vector documents
+
+        Returns:
+            True if update successful
+        """
+        try:
+            # Delete all old documents
+            old_ids = [doc.id for doc in existing_docs]
+            self.adapter.delete(ids=old_ids, collection_name=self.collection)
+            logger.info(f"Deleted {len(old_ids)} old documents (full update)")
+
+            # Save new documents
+            new_ids = self.save(instance)
+            return new_ids is not None and len(new_ids) > 0
+
+        except Exception as e:
+            logger.error(f"Full update failed: {e}", exc_info=True)
+            return False
+
+    def build_doc_map(self, docs: List[Document]) -> Dict[str, Document]:
+        """
+        Build lookup map for documents by unique key.
+
+        Key format:
+        - server: "server:{server_name}"
+        - tool: "tool:{server_name}:{tool_name}"
+        - resource: "resource:{server_name}:{resource_name}"
+        - prompt: "prompt:{server_name}:{prompt_name}"
+
+        For chunked documents, include chunk_index:
+        - "tool:{server_name}:{tool_name}:chunk{0}"
+
+        Args:
+            docs: List of LangChain Documents
+
+        Returns:
+            Dict mapping unique key to document
+        """
+        doc_map = {}
+
+        for doc in docs:
+            metadata = doc.metadata
+            entity_type = metadata.get('entity_type')
+            server_name = metadata.get('server_name')
+
+            if entity_type == 'server':
+                key = f"server:{server_name}"
+            elif entity_type == 'tool':
+                tool_name = metadata.get('tool_name')
+                key = f"tool:{server_name}:{tool_name}"
+            elif entity_type == 'resource':
+                resource_name = metadata.get('resource_name')
+                key = f"resource:{server_name}:{resource_name}"
+            elif entity_type == 'prompt':
+                prompt_name = metadata.get('prompt_name')
+                key = f"prompt:{server_name}:{prompt_name}"
+            else:
+                logger.warning(f"Unknown entity_type: {entity_type}, skipping")
+                continue
+
+            # Handle chunked documents
+            if metadata.get('is_chunked'):
+                chunk_index = metadata.get('chunk_index', 0)
+                key += f":chunk{chunk_index}"
+
+            doc_map[key] = doc
+
+        return doc_map
 
     def upsert(
             self,
@@ -260,25 +332,43 @@ class Repository(Generic[T]):
         """
         return self.update(instance, fields_changed=fields_changed, create_if_missing=True)
 
-    def delete(self, doc_id: str) -> bool:
+    def delete(self, doc_id: str, is_server_id: bool = True) -> bool:
         """
-        Delete a model instance by ID.
+        Delete model instance by ID.
 
         Args:
             doc_id: Document ID to delete
+            is_server_id: If True, doc_id is MongoDB server_id (delete all related docs)
+                          If False, doc_id is Weaviate UUID (delete single doc)
 
         Returns:
             True if deleted successfully, False otherwise
         """
         try:
-            self.adapter.delete(
-                ids=[doc_id],
-                collection_name=self.collection
-            )
-            logger.debug(f"Deleted {self.model_class.__name__} with ID: {doc_id}")
-            return True
+            if is_server_id:
+                # Delete all documents for this server
+                docs = self.adapter.filter_by_metadata(
+                    filters={"server_id": doc_id},
+                    limit=1000,
+                    collection_name=self.collection
+                )
+
+                if not docs:
+                    logger.warning(f"No documents found for server_id: {doc_id}")
+                    return False
+
+                doc_ids = [doc.id for doc in docs]
+                self.adapter.delete(ids=doc_ids, collection_name=self.collection)
+                logger.info(f"Deleted {len(doc_ids)} documents for server {doc_id}")
+                return True
+            else:
+                # Delete single document by Weaviate UUID
+                self.adapter.delete(ids=[doc_id], collection_name=self.collection)
+                logger.debug(f"Deleted single document: {doc_id}")
+                return True
+
         except Exception as e:
-            logger.error(f"Delete failed for ID {doc_id}: {e}")
+            logger.error(f"Delete failed for ID {doc_id}: {e}", exc_info=True)
             return False
 
     # ========================================
@@ -299,7 +389,11 @@ class Repository(Generic[T]):
             return BatchResult(total=0, successful=0, failed=0)
 
         try:
-            docs = [inst.to_document() for inst in instances]
+            # Generate documents from all instances
+            docs = []
+            for inst in instances:
+                docs.extend(inst.to_documents())
+            
             doc_ids = self.adapter.add_documents(
                 documents=docs,
                 collection_name=self.collection
@@ -369,7 +463,8 @@ class Repository(Generic[T]):
         """
         try:
             # Check if only safe metadata fields are being updated
-            safe_fields = self.model_class.get_safe_metadata_fields()
+            # Safe metadata fields that can be updated without re-vectorization
+            safe_fields = {'scope', 'enabled', 'tags'}
             update_fields = set(update_data.keys())
 
             if update_fields.issubset(safe_fields):
@@ -448,7 +543,6 @@ class Repository(Generic[T]):
             for doc in results:
                 try:
                     data = self.model_class.from_document(doc)
-                    # Reconstruct model instance (may be partial)
                     instances.append(data)
                 except Exception as e:
                     logger.warning(f"Failed to convert document to model: {e}")

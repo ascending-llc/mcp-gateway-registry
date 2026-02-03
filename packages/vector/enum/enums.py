@@ -28,8 +28,8 @@ class SearchType(Enum):
     NEAR_TEXT = "near_text"  # Semantic search using text
     BM25 = "bm25"  # Keyword search (BM25F)
     HYBRID = "hybrid"  # Hybrid search (BM25 + semantic)
-    SIMILARITY_STORE = "SIMILARITY_STORE" # similarity_search store
-#  NEAR_VECTOR = "near_vector"  # Semantic search using vector
+    SIMILARITY_STORE = "SIMILARITY_STORE"  # similarity_search store
+    NEAR_VECTOR = "near_vector"  # Semantic search using vector (external embeddings)
 #  NEAR_IMAGE = "near_image"  # Image similarity search
 #  FETCH_OBJECTS = "fetch_objects"  # Simple object fetch with filters
 

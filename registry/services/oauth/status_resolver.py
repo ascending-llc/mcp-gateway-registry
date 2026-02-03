@@ -146,9 +146,9 @@ class ConnectionStatusResolver:
                 if oauth_state == "failed":
                     logger.debug(f"OAuth flow failed for: {server_id}")
                     return ConnectionState.ERROR.value
-                # elif oauth_state == "active":
-                #     logger.debug(f"OAuth flow active for: {server_id}")
-                #     return ConnectionState.CONNECTING.value
+                elif oauth_state == "active": # ps: Once OAuth begins, it is considered ConnectionState.CONNECTING!
+                    logger.debug(f"OAuth flow active for: {server_id}")
+                    return ConnectionState.CONNECTING.value
 
         except Exception as e:
             logger.error(

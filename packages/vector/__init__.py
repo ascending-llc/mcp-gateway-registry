@@ -4,7 +4,7 @@ from .enum.enums import VectorStoreType, SearchType, RerankerProvider
 from .enum.exceptions import DependencyMissingError, UnsupportedBackendError
 from .adapters.create import vector_store, embedding
 from .repository import Repository
-from .protocols import VectorStorable, ContentGenerator
+from .protocols import VectorStorable
 from .exceptions import RepositoryError, AdapterError, ConfigurationError, ValidationError
 from .repositories.mcp_server_repository import MCPServerRepository, create_mcp_server_repository
 
@@ -25,7 +25,6 @@ __all__ = [
     'embedding',
     'Repository',
     'VectorStorable',
-    'ContentGenerator',
     'MCPServerRepository',
     'create_mcp_server_repository',
 ]

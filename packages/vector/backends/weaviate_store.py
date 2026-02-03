@@ -142,6 +142,7 @@ class WeaviateStore(VectorStoreAdapter):
         from weaviate.classes.query import Filter
 
         def convert_condition(key: str, value: Any):
+            # Handle explicit operator dict: {"$in": [...], "$gt": 100}
             if isinstance(value, dict):
                 filter_obj = None
                 for op, val in value.items():
@@ -164,6 +165,16 @@ class WeaviateStore(VectorStoreAdapter):
                         continue
                     filter_obj = f if filter_obj is None else (filter_obj & f)
                 return filter_obj
+            # Handle list values: automatically convert to $in operator
+            elif isinstance(value, list):
+                if len(value) == 0:
+                    logger.warning(f"Empty list for key '{key}', skipping filter")
+                    raise ValueError("Empty list for key '{key}', skipping filter")
+                elif len(value) == 1:
+                    return Filter.by_property(key).equal(value[0])
+                else:
+                    return Filter.by_property(key).contains_any(value)
+            # Handle simple equality: {"key": "value"}
             else:
                 return Filter.by_property(key).equal(value)
 
@@ -287,13 +298,13 @@ class WeaviateStore(VectorStoreAdapter):
         """
         if not ids:
             return []
-        
+
         documents = []
         for doc_id in ids:
             doc = self.get_by_id(doc_id, collection_name)
             if doc:
                 documents.append(doc)
-        
+
         return documents
 
     def list_collections(self) -> List[str]:
@@ -410,18 +421,47 @@ class WeaviateStore(VectorStoreAdapter):
             return docs
         except Exception as e:
             logger.error(f"Hybrid search failed: {e}")
-            logger.info("Falling back to semantic search only...")
+            logger.info("Falling back to vector search with external embeddings...")
             # Fallback to near_vector search if hybrid fails
+            # This uses external embeddings and doesn't require Weaviate's built-in vectorizer
             try:
-                return self.near_text(
+                return self.near_vector(
                     query=query,
                     k=k,
                     filters=filters,
                     collection_name=collection_name
                 )
             except Exception as fallback_error:
-                logger.error(f"Fallback search also failed: {fallback_error}")
+                logger.error(f"Fallback vector search also failed: {fallback_error}")
                 return []
+
+    def near_vector(self,
+                    query: str,
+                    k: int = 10,
+                    filters: Any = None,
+                    collection_name: Optional[str] = None,
+                    **kwargs) -> List[Document]:
+        """
+        Vector similarity search using external embeddings.
+        """
+        collection = self.get_collection(collection_name)
+        normalized_filters = self.normalize_filters(filters)
+        try:
+            # Generate query vector using external embedding
+            query_vector = self.embedding.embed_query(query)
+            
+            # Perform vector similarity search
+            response = collection.query.near_vector(
+                near_vector=query_vector,
+                limit=k,
+                filters=normalized_filters,
+                **kwargs
+            )
+            docs = self.get_document_response(response)
+            return docs
+        except Exception as e:
+            logger.error(f"Near vector search failed: {e}")
+            return []
 
     def near_text(self,
                   query: str,
@@ -479,6 +519,14 @@ class WeaviateStore(VectorStoreAdapter):
                 collection_name=collection_name,
                 **kwargs
             )
+        elif search_type == SearchType.NEAR_VECTOR:
+            return self.near_vector(
+                query=query,
+                k=k,
+                filters=filters,
+                collection_name=collection_name,
+                **kwargs
+            )
         else:
             logger.error(f"Unknown search type: {search_type}")
             raise ValueError(f"Unknown search type: {search_type}")
@@ -514,10 +562,11 @@ class WeaviateStore(VectorStoreAdapter):
             List of reranked Documents
         """
         try:
+            filters = self.normalize_filters(filters)
             # Default candidate_k to 3x final k
             if candidate_k is None:
                 candidate_k = min(k * 3, 100)
-            
+
             # Step 1: Get candidate documents
             logger.debug(f"Fetching {candidate_k} candidates for reranking")
             candidates = self.search(
@@ -528,30 +577,30 @@ class WeaviateStore(VectorStoreAdapter):
                 collection_name=collection_name,
                 **kwargs
             )
-            
+
             if not candidates:
                 logger.warning("No candidates found for reranking")
                 return []
-            
+
             # Step 2: Rerank candidates
             logger.debug(f"Reranking {len(candidates)} candidates to get top {k}")
             reranker_kwargs = reranker_kwargs or {}
             reranker_kwargs['top_n'] = k
-            
+
             reranker = create_reranker(
                 reranker_type=reranker_type,
                 **reranker_kwargs
             )
-            
+
             # Rerank and return top k
             reranked = reranker.compress_documents(
                 documents=candidates,
                 query=query
             )
-            
+
             logger.info(f"Reranking complete: {len(candidates)} -> {len(reranked)} results")
             return reranked
-            
+
         except Exception as e:
             logger.error(f"Reranking failed: {e}", exc_info=True)
             logger.warning("Falling back to regular search without reranking")
