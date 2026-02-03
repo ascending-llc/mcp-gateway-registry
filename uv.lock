@@ -1738,6 +1738,7 @@ source = { editable = "." }
 
 [package.dev-dependencies]
 dev = [
+    { name = "bandit" },
     { name = "poethepoet" },
     { name = "pre-commit" },
     { name = "ruff" },
@@ -1747,6 +1748,7 @@ dev = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "bandit", specifier = ">=1.8.3" },
     { name = "poethepoet", specifier = ">=0.40.0" },
     { name = "pre-commit", specifier = ">=4.0.0" },
     { name = "ruff", specifier = ">=0.14.0" },
