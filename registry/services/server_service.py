@@ -1064,17 +1064,10 @@ class ServerServiceV1:
 
             async with httpx.AsyncClient(timeout=mcp_config.HEALTH_CHECK_TIMEOUT) as client:
                 # Try to access the MCP endpoint
-                base_url = url.rstrip('/')
+                endpoint = url.rstrip('/')
 
                 # Try streamable-http transport first (most common)
                 if transport_type in [mcp_config.TRANSPORT_HTTP, "http"]:
-                    logger.info(f"Performing health check for server {server.serverName} at {base_url} using transport {transport_type}")
-                    # Only append /mcp if URL doesn't already contain it
-                    if base_url.endswith(mcp_config.ENDPOINT_MCP) or mcp_config.ENDPOINT_MCP in base_url:
-                        endpoint = base_url
-                    else:
-                        endpoint = f"{base_url}{mcp_config.ENDPOINT_MCP}"
-                    logger.info(f"Health check endpoint: {endpoint}")
                     try:
                         # Try a simple GET request first
                         response = await client.get(endpoint, follow_redirects=True)
@@ -1097,12 +1090,6 @@ class ServerServiceV1:
 
                 # Try SSE transport if configured
                 elif transport_type == mcp_config.TRANSPORT_SSE:
-                    # Only append /sse if URL doesn't already contain it
-                    if base_url.endswith(mcp_config.ENDPOINT_SSE) or mcp_config.ENDPOINT_SSE in base_url:
-                        endpoint = base_url
-                    else:
-                        endpoint = f"{base_url}{mcp_config.ENDPOINT_SSE}"
-
                     try:
                         response = await client.get(endpoint, follow_redirects=True)
                         end_time = _get_current_utc_time()
