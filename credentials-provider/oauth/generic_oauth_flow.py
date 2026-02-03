@@ -59,11 +59,14 @@ from typing import Any, Dict, List, Optional, Union
 import requests
 import yaml
 
+from registry.core.config import settings
+
 # Configure logging first
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+    level=settings.log_level,
+    format=settings.log_format
 )
+
 logger = logging.getLogger("generic-oauth")
 
 # Try to load .env file if python-dotenv is available

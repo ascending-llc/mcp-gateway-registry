@@ -7,10 +7,11 @@ from typing import Any, Dict, Optional
 from urllib.parse import urlencode
 from .base import AuthProvider
 from ..utils.config_loader import get_provider_config
+from ..core.config import settings
 
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+    level=settings.log_level,
+    format=settings.log_format
 )
 
 logger = logging.getLogger(__name__)
