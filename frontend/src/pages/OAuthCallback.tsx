@@ -29,7 +29,7 @@ const OAuthCallback: React.FC = () => {
 
   // Get URL parameters with memoization
   const type = useMemo(() => searchParams.get('type') || 'success', [searchParams]);
-  const serverName = useMemo(() => searchParams.get('serverName') || 'Connectors', [searchParams]);
+  const serverPath = useMemo(() => searchParams.get('serverPath') || 'Connectors', [searchParams]);
   const error = useMemo(() => searchParams.get('error') || 'Unknown error occurred', [searchParams]);
 
   const goToDashboard = useCallback(() => {
@@ -121,7 +121,7 @@ const OAuthCallback: React.FC = () => {
         <p className='text-base text-gray-600 dark:text-gray-300 mb-6 leading-relaxed'>
           You've been authenticated for{' '}
           <span className='inline-block font-semibold text-green-600 dark:text-primary-400 bg-green-50 dark:bg-primary-900/20 px-3 py-1 rounded-md mx-1'>
-            {serverName}
+            {serverPath}
           </span>
         </p>
 

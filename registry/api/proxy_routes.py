@@ -13,8 +13,11 @@ from packages.models.extended_mcp_server import MCPServerDocument
 from registry.auth.dependencies import CurrentUser
 from registry.services.server_service import server_service_v1
 from registry.services.server_service import _build_complete_headers_for_server
-from registry.services.user_service import user_service
-from registry.core.config import settings
+from registry.core.mcp_client import (
+    get_session,
+    clear_session,
+    initialize_mcp_session
+)
 from registry.schemas.errors import (
     OAuthReAuthRequiredError,
     OAuthTokenError,
@@ -218,10 +221,12 @@ async def _proxy_json_rpc_request(
                 except Exception:
                     logger.error(f"Backend error response ({response.status_code}): [binary content]")
             
+            # Forward all headers including mcp-session-id
+            response_headers = dict(response.headers)
             return Response(
                 content=response.content,
                 status_code=response.status_code,
-                headers=dict(response.headers),
+                headers=response_headers,
                 media_type=response.headers.get("content-type")
             )
         
@@ -249,25 +254,25 @@ async def _proxy_json_rpc_request(
                 except Exception:
                     logger.error(f"Backend error response ({backend_response.status_code}): [binary content]")
             
+            # Forward all headers including mcp-session-id
+            response_headers = dict(backend_response.headers)
             return Response(
                 content=content_bytes,
                 status_code=backend_response.status_code,
-                headers=dict(backend_response.headers),
+                headers=response_headers,
                 media_type=backend_content_type or "application/json"
             )
         
         # Backend returned SSE - stream it without buffering
         logger.info(f"Streaming SSE response from backend")
         
-        response_headers = {
+        # Start with all backend headers, then override with SSE-specific ones
+        response_headers = dict(backend_response.headers)
+        response_headers.update({
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
             "Connection": "keep-alive"
-        }
-        
-        # Forward MCP session header if present
-        if "mcp-session-id" in backend_response.headers:
-            response_headers["Mcp-Session-Id"] = backend_response.headers["mcp-session-id"]
+        })
         
         # Stream content from backend to client - cleanup when done
         async def stream_sse():
@@ -377,10 +382,12 @@ async def proxy_to_mcp_server(
                 except Exception:
                     logger.error(f"Backend error response ({response.status_code}): [binary content, {len(response.content)} bytes]")
             
+            # Forward all headers including mcp-session-id
+            response_headers = dict(response.headers)
             return Response(
                 content=response.content,
                 status_code=response.status_code,
-                headers=dict(response.headers),
+                headers=response_headers,
                 media_type=response.headers.get("content-type")
             )
         
@@ -414,26 +421,26 @@ async def proxy_to_mcp_server(
                 except Exception:
                     logger.error(f"Backend error response ({backend_response.status_code}): [binary content, {len(content_bytes)} bytes]")
             
+            # Forward all headers including mcp-session-id
+            response_headers = dict(backend_response.headers)
             return Response(
                 content=content_bytes,
                 status_code=backend_response.status_code,
-                headers=dict(backend_response.headers),
+                headers=response_headers,
                 media_type=backend_content_type or "application/octet-stream"
             )
         
         # Backend is returning true SSE - keep stream open and forward it
         logger.info(f"Streaming SSE from backend")
         
-        response_headers = {
+        # Start with all backend headers, then override with SSE-specific ones
+        response_headers = dict(backend_response.headers)
+        response_headers.update({
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
             "Content-Type": "text/event-stream"
-        }
-        
-        # Forward MCP session header if present
-        if "mcp-session-id" in backend_response.headers:
-            response_headers["Mcp-Session-Id"] = backend_response.headers["mcp-session-id"]
+        })
         
         # Stream content from backend to client - cleanup when done
         async def stream_sse():
@@ -572,15 +579,54 @@ async def execute_tool(
             "arguments": arguments
         }
     }
+    logger.info(f"📤 MCP JSON-RPC request body: {json.dumps(mcp_request_body, indent=2)}")
     
-    # Build authenticated headers using shared helper
+    # Prepare base headers for downstream MCP server
+    additional_headers = {
+        "X-Tool-Name": tool_name,
+        "Accept": "application/json, text/event-stream"  # MCP servers require both
+    }
+    
+    # Check if server requires initialization (default True for safety/compatibility)
+    requires_init = server.config.get("requiresInit", True)
+    
+    # Session management logic - only if server requires initialization
+    stored_session_id = None
+    if requires_init:
+        # Key format: "user_id:server_id" to track per-user, per-server sessions
+        session_key = f"{user_id}:{body.server_id}"
+        session_info = get_session(session_key)
+        
+        if session_info:
+            # Existing session found - check if it's initialized
+            stored_session_id, session_initialized = session_info
+            
+            if session_initialized:
+                additional_headers["mcp-Session-Id"] = stored_session_id
+                logger.info(f"🔗 Reusing initialized session for {server.serverName}: {stored_session_id}")
+        
+        if not stored_session_id:
+            init_headers = await _build_authenticated_headers(
+                server=server,
+                auth_context=user_context,
+                additional_headers=additional_headers,
+            )
+            # Get transport type from server config (default to streamable-http)
+            transport_type = server.config.get("type", "streamable-http")
+            session_id = await initialize_mcp_session(target_url, init_headers, session_key, transport_type)
+            
+            if session_id:
+                additional_headers["mcp-Session-Id"] = session_id
+            else:
+                logger.warning(f"⚠️ Failed to initialize session, will attempt tool call without session")
+    else:
+        logger.debug(f"⚡ Stateless server (requiresInit=False), skipping session management")
+    
+    # Build final authenticated headers with session ID (if applicable)
     headers = await _build_authenticated_headers(
         server=server,
         auth_context=user_context,
-        additional_headers={
-            "X-Tool-Name": tool_name,
-            "Accept": "application/json, text/event-stream"  # MCP servers require both
-        }
+        additional_headers=additional_headers
     )
     
     # Client can accept both JSON and SSE (as indicated in Accept header)
@@ -594,16 +640,32 @@ async def execute_tool(
             headers=headers,
             accept_sse=accept_sse
         )
-        
+                
         # If response is SSE, return it directly
         if response.media_type == "text/event-stream":
             logger.info(f"✅ Returning SSE response for tool: {tool_name}")
             return response
+        
+        # Parse response body
         try:
             result_text = response.body.decode('utf-8') if isinstance(response.body, bytes) else str(response.body)
             result = json.loads(result_text)
         except Exception:
             result = {"raw": response.body.decode('utf-8') if isinstance(response.body, bytes) else str(response.body)}
+        
+        # Check for non-200 status code or MCP error in result
+        if response.status_code != 200 and response.status_code != 202:
+            logger.error(f"❌ Non-200 status code: {response.status_code}, clearing session")
+            if requires_init:
+                clear_session(session_key)
+            return ToolExecutionResponse(
+                success=False,
+                server_id=body.server_id,
+                server_path=server.path,
+                tool_name=tool_name,
+                result=result,
+                error=f"Server error (status {response.status_code})",
+            )
         
         logger.info(f"✅ Tool execution successful: {tool_name}")
         
@@ -618,6 +680,10 @@ async def execute_tool(
     except HTTPException as e:
         # HTTP exceptions from proxy helper - convert to structured response
         logger.error(f"❌ Tool execution failed: {e.detail}")
+        
+        # Clear session on auth errors (might be stale session)
+        if e.status_code == 401:
+            clear_session(session_key)
         
         return ToolExecutionResponse(
             success=False,
@@ -697,6 +763,31 @@ async def read_resource(
                 "text": '{"results": [{"title": "AI News", "snippet": "Latest AI developments..."}]}'
             }
         ]
+    )
+
+
+@router.delete("/sessions/{server_id}")
+async def clear_session_endpoint(
+    server_id: str,
+    user_context: CurrentUser
+) -> JSONResponse:
+    """
+    Clear/disconnect MCP session for a server (useful for debugging stale sessions).
+    
+    DELETE /api/v1/proxy/sessions/{server_id}
+    """
+    user_id = user_context.get("user_id", "unknown")
+    session_key = f"{user_id}:{server_id}"
+    
+    clear_session(session_key)
+    
+    return JSONResponse(
+        status_code=200,
+        content={
+            "success": True,
+            "message": f"Session cleared for server {server_id}",
+            "session_key": session_key
+        }
     )
 
 

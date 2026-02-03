@@ -90,6 +90,7 @@ def client():
     mock_server = Mock()
     mock_server.id = ObjectId(TEST_SERVER_ID)
     mock_server.serverName = "test_server"
+    mock_server.path = "/test_server"  # Path stored in DB includes leading slash
     mock_server.config = {
         "oauth": {
             "provider": "github",
@@ -273,12 +274,15 @@ class TestOAuthRouter:
         mock_mcp_service.connection_service.create_user_connection = AsyncMock(return_value=None)
 
         # Make the request with code and state, disable redirect following
+        # Note: The router path is /{server_path}/oauth/callback where server_path is a path segment
+        # So the URL /mcp/test_server/oauth/callback has server_path="test_server"
         response = client.get(f"/mcp/test_server/oauth/callback?code=auth_code&state=test_user-flow123##security_token", follow_redirects=False)
 
         # Should redirect to success page
         assert response.status_code == 307
         assert "oauth-callback?type=success" in response.headers["location"]
-        assert "serverName=test_server" in response.headers["location"]
+        # The serverPath query parameter should contain the server_path from the URL
+        assert "serverPath=test_server" in response.headers["location"]
 
     def test_oauth_callback_missing_code(self, client):
         """Test OAuth callback with missing code parameter"""
@@ -286,7 +290,7 @@ class TestOAuthRouter:
 
         assert response.status_code == 307
         assert "oauth-callback?type=error" in response.headers["location"]
-        assert "serverName=test_server" in response.headers["location"]
+        assert "serverPath=test_server" in response.headers["location"]
         assert "error=missing_code" in response.headers["location"]
 
     def test_oauth_callback_missing_state(self, client):
@@ -295,7 +299,7 @@ class TestOAuthRouter:
 
         assert response.status_code == 307
         assert "oauth-callback?type=error" in response.headers["location"]
-        assert "serverName=test_server" in response.headers["location"]
+        assert "serverPath=test_server" in response.headers["location"]
         assert "error=missing_state" in response.headers["location"]
 
     def test_oauth_callback_provider_error(self, client):
@@ -304,7 +308,7 @@ class TestOAuthRouter:
 
         assert response.status_code == 307
         assert "oauth-callback?type=error" in response.headers["location"]
-        assert "serverName=test_server" in response.headers["location"]
+        assert "serverPath=test_server" in response.headers["location"]
         assert "error=access_denied" in response.headers["location"]
 
     def test_oauth_callback_invalid_state_format(self, client):
@@ -317,7 +321,7 @@ class TestOAuthRouter:
 
         assert response.status_code == 307
         assert "oauth-callback?type=error" in response.headers["location"]
-        assert "serverName=test_server" in response.headers["location"]
+        assert "serverPath=test_server" in response.headers["location"]
         assert "error=invalid_state_format" in response.headers["location"]
 
     def test_oauth_callback_already_completed(self, client):
@@ -337,7 +341,7 @@ class TestOAuthRouter:
         # Should still redirect to success page but not exchange tokens again
         assert response.status_code == 307
         assert "oauth-callback?type=success" in response.headers["location"]
-        assert "serverName=test_server" in response.headers["location"]
+        assert "serverPath=test_server" in response.headers["location"]
 
     def test_delete_oauth_tokens_success(self, client):
         """Test successful deletion of OAuth tokens"""

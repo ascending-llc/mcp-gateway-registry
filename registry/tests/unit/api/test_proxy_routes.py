@@ -13,6 +13,7 @@ from registry.api.proxy_routes import (
     _proxy_json_rpc_request,
     _build_authenticated_headers,
     _build_target_url,
+    execute_tool,
     MCPGW_PATH
 )
 from registry.schemas.errors import (
@@ -775,3 +776,318 @@ class TestProxyJsonRpcRequest:
             
             assert exc_info.value.status_code == 502
             assert "Bad gateway" in exc_info.value.detail
+
+
+@pytest.mark.unit
+class TestSessionManagement:
+    """Unit tests for session management in execute_tool."""
+
+    @pytest.fixture
+    def mock_server(self):
+        """Create a mock MCP server with requiresInit=True."""
+        server = Mock(spec=MCPServerDocument)
+        server.id = "test-server-id"
+        server.serverName = "Test Server"
+        server.path = "/test"
+        server.config = {
+            "url": "http://localhost:8000/mcp",
+            "requiresInit": True,
+            "type": "streamable-http"
+        }
+        return server
+
+    @pytest.fixture
+    def mock_stateless_server(self):
+        """Create a mock MCP server with requiresInit=False."""
+        server = Mock(spec=MCPServerDocument)
+        server.id = "stateless-server-id"
+        server.serverName = "Stateless Server"
+        server.path = "/stateless"
+        server.config = {
+            "url": "http://localhost:8000/mcp",
+            "requiresInit": False,
+            "type": "streamable-http"
+        }
+        return server
+
+    @pytest.fixture
+    def tool_request(self):
+        """Create a mock tool execution request."""
+        return ToolExecutionRequest(
+            server_id="test-server-id",
+            server_path="/test",
+            tool_name="test_tool",
+            arguments={"query": "test"}
+        )
+
+    @pytest.fixture
+    def user_context(self):
+        """Create a mock user context."""
+        return {
+            "user_id": "test-user-123",
+            "username": "testuser",
+            "client_id": "test-client",
+            "scopes": ["read", "write"]
+        }
+
+    @pytest.fixture
+    def mock_successful_response(self):
+        """Create a mock successful HTTP response."""
+        response = Mock()
+        response.status_code = 200
+        response.media_type = "application/json"
+        response.body = json.dumps({"result": "success"}).encode()
+        response.headers = {"content-type": "application/json"}
+        return response
+
+    @pytest.mark.asyncio
+    async def test_execute_tool_with_existing_initialized_session(
+        self, tool_request, user_context, mock_server, mock_successful_response
+    ):
+        """Test tool execution reuses existing initialized session."""
+        with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", return_value=mock_server), \
+             patch("registry.api.proxy_routes.get_session", return_value=("existing-session-id", True)), \
+             patch("registry.api.proxy_routes.initialize_mcp_session") as mock_init, \
+             patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
+             patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock, return_value=mock_successful_response):
+            
+            mock_auth.return_value = {"Authorization": "Bearer token"}
+            
+            result = await execute_tool(tool_request, user_context)
+            
+            # Should NOT initialize a new session
+            mock_init.assert_not_called()
+            
+            # Should reuse existing session
+            assert isinstance(result, ToolExecutionResponse)
+            assert result.success is True
+            
+            # Verify session ID was added to headers
+            mock_auth.assert_called()
+            call_args = mock_auth.call_args_list[-1]
+            additional_headers = call_args[1]["additional_headers"]
+            assert additional_headers["mcp-Session-Id"] == "existing-session-id"
+
+    @pytest.mark.asyncio
+    async def test_execute_tool_initializes_new_session(
+        self, tool_request, user_context, mock_server, mock_successful_response
+    ):
+        """Test tool execution initializes new session when none exists."""
+        with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", return_value=mock_server), \
+             patch("registry.api.proxy_routes.get_session", return_value=None), \
+             patch("registry.api.proxy_routes.initialize_mcp_session", new_callable=AsyncMock, return_value="new-session-id") as mock_init, \
+             patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
+             patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock, return_value=mock_successful_response):
+            
+            mock_auth.return_value = {"Authorization": "Bearer token"}
+            
+            result = await execute_tool(tool_request, user_context)
+            
+            # Should initialize new session
+            mock_init.assert_called_once()
+            call_args = mock_init.call_args
+            assert call_args[0][0] == "http://localhost:8000/mcp"  # target_url
+            assert call_args[0][2] == "test-user-123:test-server-id"  # session_key
+            assert call_args[0][3] == "streamable-http"  # transport_type
+            
+            # Should succeed
+            assert isinstance(result, ToolExecutionResponse)
+            assert result.success is True
+            
+            # Verify session ID was added to headers
+            call_args = mock_auth.call_args_list[-1]
+            additional_headers = call_args[1]["additional_headers"]
+            assert additional_headers["mcp-Session-Id"] == "new-session-id"
+
+    @pytest.mark.asyncio
+    async def test_execute_tool_stateless_server_skips_session(
+        self, tool_request, user_context, mock_stateless_server, mock_successful_response
+    ):
+        """Test stateless server (requiresInit=False) skips session management."""
+        tool_request.server_id = "stateless-server-id"
+        
+        with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", return_value=mock_stateless_server), \
+             patch("registry.api.proxy_routes.get_session") as mock_get_session, \
+             patch("registry.api.proxy_routes.initialize_mcp_session") as mock_init, \
+             patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
+             patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock, return_value=mock_successful_response):
+            
+            mock_auth.return_value = {"Authorization": "Bearer token"}
+            
+            result = await execute_tool(tool_request, user_context)
+            
+            # Should NOT check for session
+            mock_get_session.assert_not_called()
+            
+            # Should NOT initialize session
+            mock_init.assert_not_called()
+            
+            # Should succeed
+            assert isinstance(result, ToolExecutionResponse)
+            assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_execute_tool_handles_initialization_failure(
+        self, tool_request, user_context, mock_server, mock_successful_response
+    ):
+        """Test tool execution continues when session initialization fails."""
+        with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", return_value=mock_server), \
+             patch("registry.api.proxy_routes.get_session", return_value=None), \
+             patch("registry.api.proxy_routes.initialize_mcp_session", new_callable=AsyncMock, return_value=None), \
+             patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
+             patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock, return_value=mock_successful_response):
+            
+            mock_auth.return_value = {"Authorization": "Bearer token"}
+            
+            result = await execute_tool(tool_request, user_context)
+            
+            # Should still attempt tool execution without session
+            assert isinstance(result, ToolExecutionResponse)
+            assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_execute_tool_clears_session_on_non_200_response(
+        self, tool_request, user_context, mock_server
+    ):
+        """Test session is cleared when server returns non-200 status."""
+        error_response = Mock()
+        error_response.status_code = 400
+        error_response.media_type = "application/json"
+        error_response.body = json.dumps({"error": "Bad Request"}).encode()
+        
+        with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", return_value=mock_server), \
+             patch("registry.api.proxy_routes.get_session", return_value=("session-id", True)), \
+             patch("registry.api.proxy_routes.clear_session") as mock_clear, \
+             patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
+             patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock, return_value=error_response):
+            
+            mock_auth.return_value = {"Authorization": "Bearer token"}
+            
+            result = await execute_tool(tool_request, user_context)
+            
+            # Should clear session
+            mock_clear.assert_called_once_with("test-user-123:test-server-id")
+            
+            # Should return error response
+            assert isinstance(result, ToolExecutionResponse)
+            assert result.success is False
+            assert "Server error (status 400)" in result.error
+
+    @pytest.mark.asyncio
+    async def test_execute_tool_accepts_202_status(
+        self, tool_request, user_context, mock_server
+    ):
+        """Test 202 Accepted status is treated as success."""
+        accepted_response = Mock()
+        accepted_response.status_code = 202
+        accepted_response.media_type = "application/json"
+        accepted_response.body = json.dumps({"result": "accepted"}).encode()
+        
+        with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", return_value=mock_server), \
+             patch("registry.api.proxy_routes.get_session", return_value=("session-id", True)), \
+             patch("registry.api.proxy_routes.clear_session") as mock_clear, \
+             patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
+             patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock, return_value=accepted_response):
+            
+            mock_auth.return_value = {"Authorization": "Bearer token"}
+            
+            result = await execute_tool(tool_request, user_context)
+            
+            # Should NOT clear session
+            mock_clear.assert_not_called()
+            
+            # Should succeed
+            assert isinstance(result, ToolExecutionResponse)
+            assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_execute_tool_stateless_server_does_not_clear_session_on_error(
+        self, tool_request, user_context, mock_stateless_server
+    ):
+        """Test stateless server doesn't clear session on error (since it has none)."""
+        tool_request.server_id = "stateless-server-id"
+        
+        error_response = Mock()
+        error_response.status_code = 500
+        error_response.media_type = "application/json"
+        error_response.body = json.dumps({"error": "Internal Error"}).encode()
+        
+        with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", return_value=mock_stateless_server), \
+             patch("registry.api.proxy_routes.clear_session") as mock_clear, \
+             patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
+             patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock, return_value=error_response):
+            
+            mock_auth.return_value = {"Authorization": "Bearer token"}
+            
+            result = await execute_tool(tool_request, user_context)
+            
+            # Should NOT clear session (stateless server)
+            mock_clear.assert_not_called()
+            
+            # Should return error
+            assert isinstance(result, ToolExecutionResponse)
+            assert result.success is False
+
+    @pytest.mark.asyncio
+    async def test_execute_tool_clears_session_on_401_auth_error(
+        self, tool_request, user_context, mock_server
+    ):
+        """Test session is cleared on 401 authentication errors."""
+        with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", return_value=mock_server), \
+             patch("registry.api.proxy_routes.get_session", return_value=("session-id", True)), \
+             patch("registry.api.proxy_routes.clear_session") as mock_clear, \
+             patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
+             patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock) as mock_proxy:
+            
+            mock_auth.return_value = {"Authorization": "Bearer token"}
+            mock_proxy.side_effect = HTTPException(status_code=401, detail="Unauthorized")
+            
+            result = await execute_tool(tool_request, user_context)
+            
+            # Should clear session on 401 error
+            mock_clear.assert_called_once_with("test-user-123:test-server-id")
+            
+            # Should return error response
+            assert isinstance(result, ToolExecutionResponse)
+            assert result.success is False
+            assert "Unauthorized" in result.error
+
+    @pytest.mark.asyncio
+    async def test_execute_tool_uses_correct_transport_type(
+        self, tool_request, user_context, mock_server, mock_successful_response
+    ):
+        """Test correct transport type is passed to session initialization."""
+        mock_server.config["type"] = "sse"
+        
+        with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", return_value=mock_server), \
+             patch("registry.api.proxy_routes.get_session", return_value=None), \
+             patch("registry.api.proxy_routes.initialize_mcp_session", new_callable=AsyncMock, return_value="session-id") as mock_init, \
+             patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
+             patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock, return_value=mock_successful_response):
+            
+            mock_auth.return_value = {"Authorization": "Bearer token"}
+            
+            await execute_tool(tool_request, user_context)
+            
+            # Should use SSE transport type
+            call_args = mock_init.call_args
+            assert call_args[0][3] == "sse"
+
+    @pytest.mark.asyncio
+    async def test_execute_tool_session_key_format(
+        self, tool_request, user_context, mock_server, mock_successful_response
+    ):
+        """Test session key uses correct format: user_id:server_id."""
+        with patch("registry.api.proxy_routes.server_service_v1.get_server_by_id", return_value=mock_server), \
+             patch("registry.api.proxy_routes.get_session") as mock_get_session, \
+             patch("registry.api.proxy_routes.initialize_mcp_session", new_callable=AsyncMock, return_value="session-id"), \
+             patch("registry.api.proxy_routes._build_authenticated_headers", new_callable=AsyncMock) as mock_auth, \
+             patch("registry.api.proxy_routes._proxy_json_rpc_request", new_callable=AsyncMock, return_value=mock_successful_response):
+            
+            mock_get_session.return_value = None
+            mock_auth.return_value = {"Authorization": "Bearer token"}
+            
+            await execute_tool(tool_request, user_context)
+            
+            # Verify session key format
+            mock_get_session.assert_called_once_with("test-user-123:test-server-id")

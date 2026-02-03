@@ -35,6 +35,7 @@ class TestMCPOAuthService:
         server = Mock(spec=MCPServerDocument)
         server.id = ObjectId("507f1f77bcf86cd799439011")
         server.serverName = "test_server"
+        server.path = "/test_server"
         server.config = {
             "oauth": {
                 "authorization_url": "https://example.com/auth",
@@ -229,7 +230,13 @@ class TestMCPOAuthService:
 
         # Mock flow manager methods
         oauth_service.flow_manager.generate_flow_id = Mock(return_value="test_flow_id")
-        oauth_service.flow_manager.create_flow_metadata = Mock(return_value=Mock())
+        
+        # Create a proper metadata mock with required attributes
+        mock_metadata = Mock()
+        mock_metadata.client_info = Mock()
+        mock_metadata.client_info.client_id = "test_client_id"
+        mock_metadata.state = "test_flow_id##security_token"
+        oauth_service.flow_manager.create_flow_metadata = Mock(return_value=mock_metadata)
         oauth_service.flow_manager.create_flow = Mock(return_value=Mock())
 
         # Mock HTTP client
