@@ -6,7 +6,6 @@ Refactored with centralized configuration and strategy pattern.
 """
 
 import asyncio
-import base64
 import logging
 from typing import List, Dict, Optional, Any
 import re
@@ -33,6 +32,7 @@ class MCPServerData:
     prompts: Optional[List[Dict[str, Any]]]
     capabilities: Optional[Dict[str, Any]]
     error_message: Optional[str] = None
+    requires_init: Optional[bool] = False
 
 
 def _convert_pydantic_to_dict(obj: Any) -> dict:
@@ -215,6 +215,18 @@ async def get_tools_from_server_with_transport(base_url: str, transport: str = "
         return None
 
 
+async def _is_requires_init(get_session_id):
+    try:
+        session_id = get_session_id() if callable(get_session_id) else None
+        requires_init = session_id is not None
+        logger.info(
+            f"streamable-http: session_id={'present' if session_id else 'absent'}, requiresInit={requires_init}")
+    except Exception as e:
+        logger.warning(f"Failed to get session_id: {e}, assuming stateless")
+        requires_init = False
+    return requires_init
+
+
 async def _get_from_streamable_http(
     base_url: str, 
     headers: Dict[str, str] = None,
@@ -312,12 +324,14 @@ async def _get_from_streamable_http(
                         except Exception as e:
                             logger.warning(f"Failed to retrieve prompts from {mcp_url}: {e}")
                             prompt_list = []
-                    
+
+                    requires_init = await _is_requires_init(get_session_id)
                     return MCPServerData(
                         tools=tool_list,
                         resources=resource_list,
                         prompts=prompt_list,
-                        capabilities=capabilities
+                        capabilities=capabilities,
+                        requires_init=requires_init
                     )
                 
     except asyncio.TimeoutError:
@@ -379,6 +393,9 @@ async def _get_from_sse(
     mcp_server_url = strategy.modify_url(mcp_server_url)
     
     logger.info(f"Connecting to SSE server: {mcp_server_url}")
+
+    requires_init = False
+    logger.info(f"SSE transport: always stateful (requiresInit=True)")
 
     # Import httpx for custom client and monkey patching
     import httpx
@@ -455,7 +472,8 @@ async def _get_from_sse(
                             tools=tool_list,
                             resources=resource_list,
                             prompts=prompt_list,
-                            capabilities=capabilities
+                            capabilities=capabilities,
+                            requires_init=requires_init
                         )
         finally:
             httpx.AsyncClient.request = original_request
