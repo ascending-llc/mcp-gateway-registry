@@ -95,6 +95,7 @@ class FlowStateManager:
     def create_flow_metadata(
             self,
             server_name: str,
+            server_path: str,
             server_id: str,
             user_id: str,
             authorization_url: str,
@@ -107,14 +108,17 @@ class FlowStateManager:
         security_token = secrets.token_urlsafe(32)
         state = self.encode_state(flow_id, security_token)
 
+        server_path = server_path.strip()
+
         return MCPOAuthFlowMetadata(
             server_id=server_id.strip(),
             server_name=server_name.strip(),
+            server_path=server_path,
             user_id=user_id.strip(),
             authorization_url=authorization_url,
             state=state,
             code_verifier=code_verifier,
-            client_info=self._create_client_info(oauth_config, server_name),
+            client_info=self._create_client_info(oauth_config, server_path),
             metadata=self._create_oauth_metadata(oauth_config)
         )
 
@@ -329,14 +333,16 @@ class FlowStateManager:
             logger.debug(f"Found {len(user_flows)} flows in memory for {user_id}/{server_id}")
             return user_flows
 
-    def _create_client_info(self, oauth_config: Dict[str, Any], server_name: str) -> OAuthClientInformation:
+    def _create_client_info(self, oauth_config: Dict[str, Any], server_path: str) -> OAuthClientInformation:
         """
         Build OAuth client information from server configuration
         """
         redirect_uri = oauth_config.get("redirect_uri")
         if not redirect_uri:
             base_url = os.environ.get("REGISTRY_URL", "http://127.0.0.1:3080")
-            redirect_uri = f"{base_url}/api/v1/mcp/{server_name}/oauth/callback"
+            # Ensure server_path starts with / for proper URL construction
+            normalized_path = server_path if server_path.startswith('/') else f'/{server_path}'
+            redirect_uri = f"{base_url}/api/v1/mcp{normalized_path}/oauth/callback"
 
         redirect_uris = [redirect_uri] if redirect_uri else []
 

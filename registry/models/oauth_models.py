@@ -92,6 +92,7 @@ class TokenTransformConfig(BaseModel):
 class MCPOAuthFlowMetadata(BaseModel):
     """MCP OAuth flow metadata"""
     server_name: str = Field(..., description="Server name")
+    server_path: str = Field(..., description="Server path")
     server_id: str = Field(..., description="Server id")
     user_id: str = Field(..., description="User ID")
     authorization_url: str = Field(..., description="Authorization URL")
