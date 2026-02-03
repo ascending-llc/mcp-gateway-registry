@@ -1,11 +1,11 @@
 import importlib
 
-from ... import BackendConfig, DependencyMissingError
 from ...adapters.adapter import VectorStoreAdapter
 from ...adapters.factory import register_vector_store_creator
 from ...backends.weaviate_store import WeaviateStore
-from ...config import WeaviateConfig
+from ...config import BackendConfig, WeaviateConfig
 from ...enum.enums import VectorStoreType
+from ...enum.exceptions import DependencyMissingError
 
 
 @register_vector_store_creator(VectorStoreType.WEAVIATE.value)

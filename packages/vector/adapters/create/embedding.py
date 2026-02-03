@@ -1,9 +1,9 @@
 import importlib
 
-from ... import BackendConfig, DependencyMissingError
 from ...adapters.factory import register_embedding_creator
-from ...config import BedrockEmbeddingConfig, OpenAIEmbeddingConfig
+from ...config import BackendConfig, BedrockEmbeddingConfig, OpenAIEmbeddingConfig
 from ...enum.enums import EmbeddingProvider
+from ...enum.exceptions import DependencyMissingError
 
 
 @register_embedding_creator(EmbeddingProvider.OPENAI.value)
