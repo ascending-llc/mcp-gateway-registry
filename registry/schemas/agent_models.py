@@ -9,8 +9,7 @@ Based on: docs/design/a2a-protocol-integration.md
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
-from ..core.config import settings
+from typing import Any
 
 from pydantic import (
     BaseModel,
@@ -19,6 +18,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from ..core.config import settings
 
 # Configure logging with basicConfig
 logging.basicConfig(

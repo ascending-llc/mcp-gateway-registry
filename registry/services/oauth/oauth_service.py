@@ -9,7 +9,6 @@ from registry.auth.oauth import (
 )
 from registry.models.oauth_models import OAuthTokens
 from registry.schemas.enums import OAuthFlowStatus
-from registry.utils.utils import generate_code_verifier, generate_code_challenge
 from registry.services.oauth.token_service import token_service
 from registry.utils.crypto_utils import decrypt_auth_fields
 from registry.utils.log import logger

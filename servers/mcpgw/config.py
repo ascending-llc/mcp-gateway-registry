@@ -1,9 +1,8 @@
 import argparse
 import logging
-
 from pathlib import Path
-from typing import Optional
-from pydantic import Field, field_validator, model_validator
+
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -101,7 +100,7 @@ class Settings(BaseSettings):
             raise ValueError("REGISTRY_URL must be set")
         return v.rstrip("/")
     
-    @field_validator("LOG_LEVEL", mode='before')
+    @field_validator("LOG_LEVEL", mode="before")
     @classmethod
     def convert_log_level(cls, v):
         """Convert string log level names to integers (e.g., 'DEBUG' -> 10)."""

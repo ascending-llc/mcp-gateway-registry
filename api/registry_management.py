@@ -169,7 +169,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from registry.core.config import settings
 from registry_client import (
     AgentProvider,
     AgentRegistration,
@@ -184,6 +183,8 @@ from registry_client import (
     RegistryClient,
     Skill,
 )
+
+from registry.core.config import settings
 
 # Configure logging
 logging.basicConfig(

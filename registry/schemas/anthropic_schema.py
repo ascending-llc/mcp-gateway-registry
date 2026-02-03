@@ -8,6 +8,7 @@ import logging
 from typing import Any
 
 from pydantic import BaseModel, Field
+
 from ..core.config import settings
 
 logging.basicConfig(

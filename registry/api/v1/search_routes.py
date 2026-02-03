@@ -9,6 +9,7 @@ from packages.models.enums import ServerEntityType
 from packages.vector.enum.enums import SearchType
 from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
 from registry.services.server_service import server_service_v1
+
 from ...services.agent_service import agent_service
 
 logger = logging.getLogger(__name__)
@@ -297,7 +298,7 @@ async def search_servers(search: SearchRequest, user_context: CurrentUser):
         results = await mcp_server_repo.asearch_with_rerank(query=query,
                                                             search_type=search.search_type,
                                                             filters=filters, k=top_n)
-        server_ids = [str(result.get('server_id')) for result in results]
+        server_ids = [str(result.get("server_id")) for result in results]
         async with asyncio.TaskGroup() as tg:
             tasks = [tg.create_task(server_service_v1.get_server_by_id(sid)) for sid in server_ids]
         search_results = [t.result() for t in tasks]

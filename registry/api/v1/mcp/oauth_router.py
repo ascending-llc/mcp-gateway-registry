@@ -178,7 +178,7 @@ async def oauth_callback(
         return _redirect_to_page(request, server_path, flag="success")
 
     except Exception as e:
-        logger.error(f"[MCP OAuth] OAuth callback error: {str(e)}", exc_info=True)
+        logger.error(f"[MCP OAuth] OAuth callback error: {e!s}", exc_info=True)
         return _redirect_to_page(request, server_path, error_msg="callback_failed")
 
 

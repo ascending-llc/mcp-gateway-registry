@@ -7,8 +7,8 @@ from urllib.parse import urlencode
 import jwt
 import requests
 
-from ..utils.config_loader import get_provider_config
 from ..core.config import settings
+from ..utils.config_loader import get_provider_config
 
 logging.basicConfig(
     level=settings.log_level,

@@ -278,7 +278,7 @@ class TestOAuthRouter:
         # Make the request with code and state, disable redirect following
         # Note: The router path is /{server_path}/oauth/callback where server_path is a path segment
         # So the URL /mcp/test_server/oauth/callback has server_path="test_server"
-        response = client.get(f"/mcp/test_server/oauth/callback?code=auth_code&state=test_user-flow123##security_token", follow_redirects=False)
+        response = client.get("/mcp/test_server/oauth/callback?code=auth_code&state=test_user-flow123##security_token", follow_redirects=False)
 
         # Should redirect to success page
         assert response.status_code == 307

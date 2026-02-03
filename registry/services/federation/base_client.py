@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import httpx
+
 from ...core.config import settings
 
 logging.basicConfig(

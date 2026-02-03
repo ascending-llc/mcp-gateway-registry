@@ -6,11 +6,10 @@ and transforms them to the gateway's internal format.
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any
 from urllib.parse import quote
 
-from .base_client import BaseFederationClient
 from ...core.config import settings
 from ...schemas.federation_schema import AnthropicServerConfig
 from .base_client import BaseFederationClient

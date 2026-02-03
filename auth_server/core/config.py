@@ -6,7 +6,6 @@ All environment variables are loaded here and accessed through the global `setti
 """
 
 import logging
-import os
 import secrets
 from pathlib import Path
 

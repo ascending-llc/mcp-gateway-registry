@@ -347,7 +347,7 @@ class FlowStateManager:
         if not redirect_uri:
             base_url = os.environ.get("REGISTRY_URL", "http://127.0.0.1:3080")
             # Ensure server_path starts with / for proper URL construction
-            normalized_path = server_path if server_path.startswith('/') else f'/{server_path}'
+            normalized_path = server_path if server_path.startswith("/") else f"/{server_path}"
             redirect_uri = f"{base_url}/api/v1/mcp{normalized_path}/oauth/callback"
 
         redirect_uris = [redirect_uri] if redirect_uri else []

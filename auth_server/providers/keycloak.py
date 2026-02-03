@@ -9,8 +9,8 @@ from urllib.parse import urlencode
 import jwt
 import requests
 
-from .base import AuthProvider
 from ..core.config import settings
+from .base import AuthProvider
 
 logging.basicConfig(
     level=settings.log_level,

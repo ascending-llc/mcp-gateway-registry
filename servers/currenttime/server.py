@@ -9,7 +9,7 @@ from typing import Annotated
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
-from typing import Annotated
+
 from registry.core.config import settings
 
 # Configure logging
