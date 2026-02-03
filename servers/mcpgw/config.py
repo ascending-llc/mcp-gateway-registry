@@ -1,6 +1,5 @@
 import argparse
 import logging
-import os
 
 from pathlib import Path
 from typing import Optional
@@ -84,9 +83,13 @@ class Settings(BaseSettings):
     )
 
     # Logging configuration
-    LOG_LEVEL: int = Field(
+    log_level: int = Field(
         default=logging.INFO,
         description="Logging level (integer constant from logging module)"
+    )
+    log_format: str = Field(
+        default="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+        description="Logging format string"
     )
 
     API_VERSION: str = "v1"
@@ -178,9 +181,9 @@ def parse_arguments() -> argparse.Namespace:
 settings = Settings()
 
 logging.basicConfig(
-    level=settings.LOG_LEVEL,
-    format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
+    level=settings.log_level,
+    format=settings.log_format
 )
-logger.setLevel(settings.LOG_LEVEL)
+logger.setLevel(settings.log_level)
 
 settings.log_config()

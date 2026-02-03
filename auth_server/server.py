@@ -6,7 +6,6 @@ Configuration is passed via headers instead of environment variables.
 import argparse
 import logging
 from contextlib import asynccontextmanager
-import os
 from fastapi import FastAPI
 import jwt
 import time
@@ -46,7 +45,7 @@ validator = SimplifiedCognitoValidator()
 # Configure logging
 logging.basicConfig(
     level=settings.log_level,
-    format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
+    format=settings.log_format
 )
 
 logger = logging.getLogger(__name__)

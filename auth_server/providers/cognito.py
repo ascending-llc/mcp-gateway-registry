@@ -15,7 +15,7 @@ from ..core.config import settings
 
 logging.basicConfig(
     level=settings.log_level,
-    format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
+    format=settings.log_format
 )
 
 logger = logging.getLogger(__name__)

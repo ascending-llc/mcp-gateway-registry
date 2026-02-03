@@ -17,6 +17,7 @@ class Settings:
     
     # Logging settings
     log_level: int = logging.INFO
+    log_format: str = "%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s"
     
     def __init__(self):
         # Handle LOG_LEVEL environment variable (supports both int and string formats)

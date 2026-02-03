@@ -9,8 +9,8 @@ Based on: docs/design/a2a-protocol-integration.md
 
 import logging
 from datetime import datetime
-import os
 from typing import Any, Dict, List, Optional, Union
+from ..core.config import settings
 
 from pydantic import (
     BaseModel,
@@ -23,8 +23,8 @@ from pydantic import (
 
 # Configure logging with basicConfig
 logging.basicConfig(
-    level=settings.LOG_LEVEL,
-    format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
+    level=settings.log_level,
+    format=settings.log_format
 )
 
 logger = logging.getLogger(__name__)

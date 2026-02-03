@@ -113,7 +113,8 @@ class Settings(BaseSettings):
     JWT_AUDIENCE: str = "jarvis-services"
     JWT_SELF_SIGNED_KID: str = "self-signed-key-v1"
     API_VERSION: str = "v1"
-    LOG_LEVEL: int = logging.INFO  # Default to INFO (20), can be overridden by LOG_LEVEL env var
+    log_level: int = logging.INFO  # Default to INFO (20), can be overridden by LOG_LEVEL env var
+    log_format: str = "%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s"
 
     # Local development mode detection
     @property

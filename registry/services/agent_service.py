@@ -10,7 +10,6 @@ Based on: registry/services/server_service.py
 import json
 import logging
 from datetime import datetime, timezone
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -20,8 +19,8 @@ from ..schemas.agent_models import AgentCard, AgentInfo
 
 # Configure logging with basicConfig
 logging.basicConfig(
-    level=settings.LOG_LEVEL,
-    format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
+    level=settings.log_level,
+    format=settings.log_format
 )
 
 logger = logging.getLogger(__name__)
