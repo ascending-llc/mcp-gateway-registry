@@ -10,9 +10,10 @@ ENV PYTHONUNBUFFERED=1 \
 # Copy workspace root pyproject.toml to enable workspace resolution
 COPY pyproject.toml /app/
 
-# Copy packages and auth_server application code
+COPY pyproject.toml /app/pyproject.toml
 COPY packages/ /app/packages/
 COPY auth_server/ /app/auth_server/
+COPY packages/ /app/packages/
 
 # Install Python dependencies
 # Step 1: Install uv package manager
