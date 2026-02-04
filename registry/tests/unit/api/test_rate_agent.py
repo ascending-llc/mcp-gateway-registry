@@ -41,9 +41,20 @@ def mock_admin_context() -> Dict[str, Any]:
 
 @pytest.fixture
 def admin_session_cookie():
-    """Create a valid admin session cookie."""
-    return create_session_cookie(
-        settings.admin_user,
+    """Create a valid admin session cookie (JWT access token)."""
+    from registry.utils.crypto_utils import generate_access_token
+    from registry.auth.dependencies import map_cognito_groups_to_scopes
+    
+    groups = ['registry-admins']
+    scopes = map_cognito_groups_to_scopes(groups) or ['registry-admins']
+    
+    return generate_access_token(
+        user_id="test-admin-id",
+        username=settings.admin_user,
+        email="admin@test.local",
+        groups=groups,
+        scopes=scopes,
+        role="admin",
         auth_method="traditional",
         provider="local"
     )
@@ -51,12 +62,22 @@ def admin_session_cookie():
 
 @pytest.fixture
 def user_session_cookie():
-    """Create a valid user session cookie."""
-    return create_session_cookie(
-        "testuser",
+    """Create a valid user session cookie (JWT access token)."""
+    from registry.utils.crypto_utils import generate_access_token
+    from registry.auth.dependencies import map_cognito_groups_to_scopes
+    
+    groups = ["users"]
+    scopes = map_cognito_groups_to_scopes(groups) or []
+    
+    return generate_access_token(
+        user_id="test-user-id",
+        username="testuser",
+        email="testuser@test.local",
+        groups=groups,
+        scopes=scopes,
+        role="user",
         auth_method="oauth2",
-        provider="cognito",
-        groups=["users"]
+        provider="cognito"
     )
 
 

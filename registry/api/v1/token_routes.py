@@ -2,11 +2,10 @@ import logging
 import httpx
 import os
 from fastapi import (APIRouter, Request, HTTPException, status)
-from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from ..core.config import settings
-from ..auth.dependencies import CurrentUser
+from auth_server.core.config import settings
+from registry.auth.dependencies import CurrentUser
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +25,12 @@ async def generate_user_token(
     Request body should contain:
     {
         "requested_scopes": ["scope1", "scope2"],  // Optional, defaults to user's current scopes
-        "expires_in_hours": 8,                     // Optional, defaults to 8 hours
+        "expires_in_hours": 8,                     // Optional, must be one of: 1, 8, 24
         "description": "Token for automation"      // Optional description
     }
 
     Returns:
-        Generated JWT token with expiration info
+        Generated JWT token with expiration info (no refresh token)
 
     Raises:
         HTTPException: If request fails or user lacks permissions
@@ -52,15 +51,12 @@ async def generate_user_token(
         expires_in_hours = body.get("expires_in_hours", 8)
         description = body.get("description", "")
 
-        # Validate expires_in_hours
-        if (
-            not isinstance(expires_in_hours, int)
-            or expires_in_hours <= 0
-            or expires_in_hours > 24
-        ):
+        # Validate expires_in_hours - only allow 1, 8, or 24 hours
+        allowed_hours = [1, 8, 24]
+        if expires_in_hours not in allowed_hours:
             raise HTTPException(
                 status_code=400,
-                detail="expires_in_hours must be an integer between 1 and 24",
+                detail=f"expires_in_hours must be one of: {allowed_hours} (1hr, 8hr, or 24hr)",
             )
 
         # Validate requested_scopes
@@ -99,26 +95,19 @@ async def generate_user_token(
             if response.status_code == 200:
                 token_data = response.json()
                 logger.info(
-                    f"Successfully generated token for user '{user_context['username']}'"
+                    f"Successfully generated token for user '{user_context['username']}' with expiry {expires_in_hours}h"
                 )
 
-                # Format response to match expected structure (including refresh token)
+                # Format response - remove tokens wrapper and refresh_token
                 formatted_response = {
                     "success": True,
-                    "tokens": {
+                    "token_data": {
                         "access_token": token_data.get("access_token"),
-                        "refresh_token": token_data.get("refresh_token"),
+                        # Note: refresh_token is intentionally excluded for API tokens
                         "expires_in": token_data.get("expires_in"),
-                        "refresh_expires_in": token_data.get("refresh_expires_in"),
                         "token_type": token_data.get("token_type", "Bearer"),
                         "scope": token_data.get("scope", ""),
                     },
-                    "keycloak_url": getattr(settings, "keycloak_url", None)
-                    or "http://keycloak:8080",
-                    "realm": getattr(settings, "keycloak_realm", None) or "mcp-gateway",
-                    "client_id": "user-generated",
-                    # Legacy fields for backward compatibility
-                    "token_data": token_data,
                     "user_scopes": user_context["scopes"],
                     "requested_scopes": requested_scopes or user_context["scopes"],
                 }
@@ -173,7 +162,7 @@ async def get_admin_tokens(
         )
 
     try:
-        from ..utils.keycloak_manager import KEYCLOAK_ADMIN_URL, KEYCLOAK_REALM
+        from registry.utils.keycloak_manager import KEYCLOAK_ADMIN_URL, KEYCLOAK_REALM
 
         # Get M2M client credentials from environment
         m2m_client_id = os.getenv("KEYCLOAK_M2M_CLIENT_ID", "mcp-gateway-m2m")

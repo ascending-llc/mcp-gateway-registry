@@ -18,6 +18,11 @@ from registry.utils.log import logger
 from typing import Optional, List
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
+from typing import Dict, Any, Optional, Tuple
+from registry.core.config import settings
+# Token expiration defaults
+ACCESS_TOKEN_EXPIRES_HOURS = 24  # 1 day
+REFRESH_TOKEN_EXPIRES_DAYS = 7  # 7 days
 
 
 # Algorithm constants
@@ -30,7 +35,7 @@ _ENCRYPTION_KEY: Optional[bytes] = None
 
 def _get_encryption_key() -> bytes:
     """
-    Get the encryption key from environment variable.
+    Get the encryption key from settings configuration.
     
     Returns:
         bytes: encryption key from CREDS_KEY (hex decoded)
@@ -41,10 +46,11 @@ def _get_encryption_key() -> bytes:
     global _ENCRYPTION_KEY
     
     if _ENCRYPTION_KEY is None:
-        creds_key = os.environ.get("CREDS_KEY")
+        creds_key = settings.CREDS_KEY
         if not creds_key:
             raise ValueError(
-                "CREDS_KEY environment variable must be set for encryption/decryption"
+                "CREDS_KEY configuration must be set for encryption/decryption. "
+                "Set the CREDS_KEY environment variable."
             )
         
         # Decode from hex (matching TypeScript: Buffer.from(process.env.CREDS_KEY, 'hex'))
@@ -251,11 +257,11 @@ def encrypt_auth_fields(config: dict) -> dict:
     config = config.copy()
     
     # Check if CREDS_KEY is available
-    if not os.environ.get("CREDS_KEY"):
+    if not settings.CREDS_KEY:
         logger.warning(
-            "CREDS_KEY environment variable is not set. "
+            "CREDS_KEY configuration is not set. "
             "Sensitive authentication fields will be stored as PLAINTEXT. "
-            "Set CREDS_KEY to enable encryption of credentials."
+            "Set CREDS_KEY environment variable to enable encryption of credentials."
         )
         return config
     
@@ -326,11 +332,11 @@ def decrypt_auth_fields(config: dict) -> dict:
     config = config.copy()
     
     # Check if CREDS_KEY is available
-    if not os.environ.get("CREDS_KEY"):
+    if not settings.CREDS_KEY:
         logger.warning(
-            "CREDS_KEY environment variable is not set. "
+            "CREDS_KEY configuration is not set. "
             "Encrypted authentication fields will be returned as-is (still encrypted). "
-            "Set CREDS_KEY to decrypt sensitive credentials."
+            "Set CREDS_KEY environment variable to decrypt sensitive credentials."
         )
         return config
     
@@ -373,3 +379,309 @@ def decrypt_auth_fields(config: dict) -> dict:
         return config
     
     return config
+
+def generate_access_token(
+        user_id: str,
+        username: str,
+        email: str,
+        groups: list,
+        scopes: list,
+        role: str,
+        auth_method: str,
+        provider: str,
+        idp_id: Optional[str] = None,
+        expires_hours: int = ACCESS_TOKEN_EXPIRES_HOURS
+) -> str:
+    """
+    Generate a JWT access token for authenticated user.
+
+    Args:
+        user_id: User's database ID
+        username: Username
+        email: User's email
+        groups: List of user groups
+        scopes: List of permission scopes
+        role: User role
+        auth_method: Authentication method (oauth2, traditional, etc.)
+        provider: Auth provider (entra, keycloak, local, etc.)
+        idp_id: Identity provider user ID (optional)
+        expires_hours: Token expiration in hours (default: 24)
+
+    Returns:
+        JWT token string
+    """
+    now = datetime.utcnow()
+    exp = now + timedelta(hours=expires_hours)
+
+    # Build JWT payload
+    payload = {
+        # Standard JWT claims
+        "sub": username,
+        "iss": settings.JWT_ISSUER,
+        "aud": settings.JWT_AUDIENCE,
+        "iat": int(now.timestamp()),
+        "exp": int(exp.timestamp()),
+
+        # Custom claims
+        "user_id": user_id,
+        "email": email,
+        "groups": groups,
+        "scope": " ".join(scopes) if isinstance(scopes, list) else scopes,
+        "role": role,
+        "auth_method": auth_method,
+        "provider": provider,
+        "token_type": "access_token",
+    }
+
+    # Add optional claims
+    if idp_id:
+        payload["idp_id"] = idp_id
+
+    # JWT header
+    headers = {
+        "kid": settings.JWT_SELF_SIGNED_KID,
+        "typ": "JWT",
+        "alg": "HS256"
+    }
+
+    # Generate JWT
+    token = jwt.encode(
+        payload,
+        settings.secret_key,
+        algorithm="HS256",
+        headers=headers
+    )
+
+    logger.debug(f"Generated access token for user {username}, expires in {expires_hours}h")
+    return token
+
+
+def generate_refresh_token(
+        user_id: str,
+        username: str,
+        auth_method: str,
+        provider: str,
+        groups: list,
+        scopes: list,
+        role: str,
+        email: str,
+        expires_days: int = REFRESH_TOKEN_EXPIRES_DAYS
+) -> str:
+    """
+    Generate a JWT refresh token.
+
+    Refresh tokens now include groups and scopes to enable token refresh without re-authentication.
+    This is especially important for OAuth2 users who cannot re-authenticate automatically.
+
+    Args:
+        user_id: User's database ID
+        username: Username
+        auth_method: Authentication method
+        provider: Auth provider
+        groups: List of user groups
+        scopes: List of permission scopes
+        role: User role
+        email: User's email
+        expires_days: Token expiration in days (default: 7)
+
+    Returns:
+        JWT token string
+    """
+    now = datetime.utcnow()
+    exp = now + timedelta(days=expires_days)
+
+    payload = {
+        # Standard JWT claims
+        "sub": username,
+        "iss": settings.JWT_ISSUER,
+        "aud": settings.JWT_AUDIENCE,
+        "iat": int(now.timestamp()),
+        "exp": int(exp.timestamp()),
+
+        # Custom claims - include groups/scopes for token refresh
+        "user_id": user_id,
+        "auth_method": auth_method,
+        "provider": provider,
+        "groups": groups,
+        "scope": " ".join(scopes) if isinstance(scopes, list) else scopes,
+        "role": role,
+        "email": email,
+        "token_type": "refresh_token",
+    }
+
+    headers = {
+        "kid": settings.JWT_SELF_SIGNED_KID,
+        "typ": "JWT",
+        "alg": "HS256"
+    }
+
+    token = jwt.encode(
+        payload,
+        settings.secret_key,
+        algorithm="HS256",
+        headers=headers
+    )
+
+    logger.debug(f"Generated refresh token for user {username}, expires in {expires_days} days")
+    return token
+
+
+def verify_access_token(token: str) -> Optional[Dict[str, Any]]:
+    """
+    Verify and decode an access token.
+
+    Args:
+        token: JWT token string
+
+    Returns:
+        Decoded token claims if valid, None otherwise
+    """
+    try:
+        # Verify kid in header
+        unverified_header = jwt.get_unverified_header(token)
+        kid = unverified_header.get('kid')
+
+        if kid != settings.JWT_SELF_SIGNED_KID:
+            logger.debug(f"Invalid kid in token: {kid}")
+            return None
+
+        # Decode and verify token
+        claims = jwt.decode(
+            token,
+            settings.secret_key,
+            algorithms=['HS256'],
+            issuer=settings.JWT_ISSUER,
+            audience=settings.JWT_AUDIENCE,
+            options={
+                "verify_exp": True,
+                "verify_iat": True,
+                "verify_iss": True,
+                "verify_aud": True
+            },
+            leeway=30  # 30 second leeway for clock skew
+        )
+
+        # Verify token type
+        if claims.get("token_type") != "access_token":
+            logger.warning(f"Wrong token type: {claims.get('token_type')}")
+            return None
+
+        logger.debug(f"Access token verified for user: {claims.get('sub')}")
+        return claims
+
+    except jwt.ExpiredSignatureError:
+        logger.debug("Access token expired")
+        return None
+    except jwt.InvalidTokenError as e:
+        logger.debug(f"Invalid access token: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Error verifying access token: {e}")
+        return None
+
+
+def verify_refresh_token(token: str) -> Optional[Dict[str, Any]]:
+    """
+    Verify and decode a refresh token.
+
+    Args:
+        token: JWT token string
+
+    Returns:
+        Decoded token claims if valid, None otherwise
+    """
+    try:
+        # Verify kid in header
+        unverified_header = jwt.get_unverified_header(token)
+        kid = unverified_header.get('kid')
+
+        if kid != settings.JWT_SELF_SIGNED_KID:
+            logger.debug(f"Invalid kid in refresh token: {kid}")
+            return None
+
+        # Decode and verify token
+        claims = jwt.decode(
+            token,
+            settings.secret_key,
+            algorithms=['HS256'],
+            issuer=settings.JWT_ISSUER,
+            audience=settings.JWT_AUDIENCE,
+            options={
+                "verify_exp": True,
+                "verify_iat": True,
+                "verify_iss": True,
+                "verify_aud": True
+            }
+        )
+
+        # Verify token type
+        if claims.get("token_type") != "refresh_token":
+            logger.warning(f"Wrong token type in refresh: {claims.get('token_type')}")
+            return None
+
+        logger.debug(f"Refresh token verified for user: {claims.get('sub')}")
+        return claims
+
+    except jwt.ExpiredSignatureError:
+        logger.debug("Refresh token expired")
+        return None
+    except jwt.InvalidTokenError as e:
+        logger.debug(f"Invalid refresh token: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Error verifying refresh token: {e}")
+        return None
+
+
+def generate_token_pair(
+        user_id: str,
+        username: str,
+        email: str,
+        groups: list,
+        scopes: list,
+        role: str,
+        auth_method: str,
+        provider: str,
+        idp_id: Optional[str] = None
+) -> Tuple[str, str]:
+    """
+    Generate both access and refresh tokens.
+
+    Args:
+        user_id: User's database ID
+        username: Username
+        email: User's email
+        groups: List of user groups
+        scopes: List of permission scopes
+        role: User role
+        auth_method: Authentication method
+        provider: Auth provider
+        idp_id: Identity provider user ID (optional)
+
+    Returns:
+        Tuple of (access_token, refresh_token)
+    """
+    access_token = generate_access_token(
+        user_id=user_id,
+        username=username,
+        email=email,
+        groups=groups,
+        scopes=scopes,
+        role=role,
+        auth_method=auth_method,
+        provider=provider,
+        idp_id=idp_id
+    )
+
+    refresh_token = generate_refresh_token(
+        user_id=user_id,
+        username=username,
+        auth_method=auth_method,
+        provider=provider,
+        groups=groups,
+        scopes=scopes,
+        role=role,
+        email=email
+    )
+
+    return access_token, refresh_token

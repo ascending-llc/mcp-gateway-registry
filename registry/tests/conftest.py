@@ -120,15 +120,54 @@ def server_with_tools() -> Dict[str, Any]:
     return create_server_with_tools(num_tools=5)
 
 
+def create_test_jwt_token(username: str, groups: list, role: str = "user", 
+                          auth_method: str = "oauth2", provider: str = "keycloak",
+                          user_id: str = None) -> str:
+    """
+    Helper function to create JWT access tokens for testing.
+    
+    Args:
+        username: Username
+        groups: List of user groups
+        role: User role (default: "user")
+        auth_method: Auth method (default: "oauth2")
+        provider: Auth provider (default: "keycloak")
+        user_id: User ID (default: auto-generated from username)
+    
+    Returns:
+        JWT access token string
+    """
+    from registry.utils.crypto_utils import generate_access_token
+    from registry.auth.dependencies import map_cognito_groups_to_scopes
+    
+    if user_id is None:
+        user_id = f"test-{username}-id"
+    
+    scopes = map_cognito_groups_to_scopes(groups) or groups
+    
+    return generate_access_token(
+        user_id=user_id,
+        username=username,
+        email=f"{username}@test.local",
+        groups=groups,
+        scopes=scopes,
+        role=role,
+        auth_method=auth_method,
+        provider=provider
+    )
+
+
 @pytest.fixture
 def admin_session_cookie():
-    """Create a valid admin session cookie for testing."""
-    from registry.auth.dependencies import create_session_cookie
+    """Create a valid admin session cookie (JWT access token) for testing."""
     from registry.core.config import settings
-    return create_session_cookie(
-        settings.admin_user,
+    return create_test_jwt_token(
+        username=settings.admin_user,
+        groups=['registry-admins'],
+        role="admin",
         auth_method="traditional",
-        provider="local"
+        provider="local",
+        user_id="test-admin-id"
     )
 
 
@@ -137,6 +176,26 @@ def test_client(admin_session_cookie) -> TestClient:
     """Create a test client for the FastAPI application with admin authentication."""
     from registry.core.config import settings
     return TestClient(app, cookies={settings.session_cookie_name: admin_session_cookie})
+
+
+@pytest.fixture
+def user_session_cookie():
+    """Create a valid user session cookie (JWT access token) for testing."""
+    return create_test_jwt_token(
+        username="testuser",
+        groups=["mcp-registry-user"],
+        role="user",
+        auth_method="oauth2",
+        provider="keycloak",
+        user_id="test-user-id"
+    )
+
+
+@pytest.fixture
+def user_test_client(user_session_cookie) -> TestClient:
+    """Create a test client with regular user authentication."""
+    from registry.core.config import settings
+    return TestClient(app, cookies={settings.session_cookie_name: user_session_cookie})
 
 
 @pytest.fixture
