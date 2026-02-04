@@ -314,7 +314,7 @@ async def search_servers(
         logger.info(f"Found {len(search_results)} servers with full details")
     else:
         filters = {
-            "enabled": search.include_disabled,
+            "enabled": not search.include_disabled,
             "entity_type": [dt.value for dt in search.type_list]
         }
         search_results = await mcp_server_repo.asearch_with_rerank(
