@@ -10,11 +10,7 @@ from .entra import EntraIdProvider
 from ..utils.config_loader import get_provider_config
 from ..core.config import settings
 
-logging.basicConfig(
-    level=settings.log_level,
-    format=settings.log_format
-)
-
+# Get logger - logging is configured centrally in server.py via settings.configure_logging()
 logger = logging.getLogger(__name__)
 
 

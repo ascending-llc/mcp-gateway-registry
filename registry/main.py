@@ -48,6 +48,9 @@ from registry.utils.log import logger
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown lifecycle management."""
+    # Configure logging first before any other operations
+    settings.configure_logging()
+    
     logger.info("🚀 Starting MCP Gateway Registry...")
 
     try:
@@ -294,14 +297,15 @@ app.include_router(proxy_router, prefix="/proxy", tags=["MCP Proxy"])
 
 if __name__ == "__main__":
     import uvicorn
-    import os
-
-    log_level = os.getenv("LOG_LEVEL", "INFO").lower()
+    
+    # Configure logging before starting server
+    settings.configure_logging()
 
     uvicorn.run(
         "registry.main:app",
         host="0.0.0.0",
         port=7860,
         reload=True,
-        log_level=log_level
+        log_level=settings.log_level.lower(),
+        log_config=None  # Disable uvicorn's default logging config to use ours
     )

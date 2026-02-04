@@ -43,10 +43,7 @@ from .services.cognito_validator_service import SimplifiedCognitoValidator
 validator = SimplifiedCognitoValidator()
 
 # Configure logging
-logging.basicConfig(
-    level=settings.log_level,
-    format=settings.log_format
-)
+settings.configure_logging()
 
 logger = logging.getLogger(__name__)
 
