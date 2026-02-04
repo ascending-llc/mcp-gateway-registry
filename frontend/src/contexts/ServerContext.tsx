@@ -116,7 +116,7 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
       total: servers.length,
       enabled: servers.filter(s => s.enabled).length,
       disabled: servers.filter(s => !s.enabled).length,
-      withIssues: servers.filter(s => s.status === 'inactive').length,
+      withIssues: servers.filter(s => s.status === 'inactive' || s.status === 'error').length,
     }),
     [servers],
   );
