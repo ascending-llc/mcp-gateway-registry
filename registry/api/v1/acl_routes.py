@@ -12,12 +12,12 @@ from beanie import PydanticObjectId
 from registry.auth.dependencies import CurrentUserWithACLMap
 from registry.services.access_control_service import acl_service
 from registry.core.acl_constants import PrincipalType, PermissionBits
-from registry.schemas.permissions_schema import (
+from registry.schemas.acl_schema import (
     UpdateResourcePermissionsResponse,
     UpdateResourcePermissionsRequest,
     PermissionPrincipalOut
 )
-from registry.services.permissions_utils import (
+from registry.services.acl_utils import (
     check_required_permission,
     validate_resource_type
 )

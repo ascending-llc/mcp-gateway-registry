@@ -21,7 +21,7 @@ from registry.services.oauth.connection_status_service import (
     get_single_server_connection_status
 )
 from registry.services.access_control_service import acl_service
-from registry.services.permissions_utils import (
+from registry.services.acl_utils import (
     check_required_permission,
 )
 from registry.core.acl_constants import PrincipalType, ResourceType, RoleBits

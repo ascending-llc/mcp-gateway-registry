@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from registry.schemas.permissions_schema import PermissionPrincipalOut
+from registry.schemas.acl_schema import PermissionPrincipalOut
 from typing import Optional, Union, List, Dict, Any
 from packages.models._generated import (
 	IAccessRole,
