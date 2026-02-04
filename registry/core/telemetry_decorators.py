@@ -100,6 +100,179 @@ def track_registry_operation(
     return decorator
 
 
+def track_tool_execution(func: F) -> F:
+    """
+    Decorator to automatically track tool execution metrics.
+
+    Extracts tool_name from request body before execution,
+    and server_path from result after execution.
+
+    Example:
+        @router.post("/tools/call")
+        @track_tool_execution
+        async def execute_tool(body: ToolExecutionRequest, user_context: CurrentUser):
+            ...
+    """
+
+    @wraps(func)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        start_time = time.perf_counter()
+        success = False
+        tool_name = "unknown"
+        server_name = "unknown"
+
+        try:
+            # Extract tool name from request body
+            body = kwargs.get("body")
+            if body and hasattr(body, "tool_name"):
+                tool_name = body.tool_name
+
+            # Execute business logic
+            result = await func(*args, **kwargs)
+            success = True
+
+            # Extract server name from result if available
+            if hasattr(result, "server_path"):
+                server_name = result.server_path.strip("/")
+            elif hasattr(result, "media_type") and result.media_type == "text/event-stream":
+                # SSE response - try to get server_path from body
+                if body and hasattr(body, "server_id"):
+                    server_name = f"server:{body.server_id}"
+
+            return result
+
+        except Exception:
+            success = False
+            raise
+
+        finally:
+            duration = time.perf_counter() - start_time
+            try:
+                _record_tool_execution(
+                    tool_name=tool_name,
+                    server_name=server_name,
+                    success=success,
+                    duration_seconds=duration,
+                    method="POST",
+                )
+            except Exception as e:
+                logger.warning(f"Failed to record tool execution metric: {e}")
+
+    return wrapper  # type: ignore
+
+
+def track_resource_access(func: F) -> F:
+    """
+    Decorator to automatically track resource access metrics.
+
+    Extracts resource_uri from request body before execution,
+    and server_path from result after execution.
+
+    Example:
+        @router.post("/resources/read")
+        @track_resource_access
+        async def read_resource(body: ResourceReadRequest, user_context: CurrentUser):
+            ...
+    """
+
+    @wraps(func)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        start_time = time.perf_counter()
+        success = False
+        resource_uri = "unknown"
+        server_name = "unknown"
+
+        try:
+            # Extract resource URI from request body
+            body = kwargs.get("body")
+            if body and hasattr(body, "resource_uri"):
+                resource_uri = body.resource_uri
+
+            # Execute business logic
+            result = await func(*args, **kwargs)
+            success = True
+
+            # Extract server name from result if available
+            if hasattr(result, "server_path"):
+                server_name = result.server_path.strip("/")
+
+            return result
+
+        except Exception:
+            success = False
+            raise
+
+        finally:
+            duration = time.perf_counter() - start_time
+            try:
+                _record_resource_access(
+                    resource_uri=resource_uri,
+                    server_name=server_name,
+                    success=success,
+                    duration_seconds=duration,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to record resource access metric: {e}")
+
+    return wrapper  # type: ignore
+
+
+def track_prompt_execution(func: F) -> F:
+    """
+    Decorator to automatically track prompt execution metrics.
+
+    Extracts prompt_name from request body before execution,
+    and server_path from result after execution.
+
+    Example:
+        @router.post("/prompts/execute")
+        @track_prompt_execution
+        async def execute_prompt(body: PromptExecutionRequest, user_context: CurrentUser):
+            ...
+    """
+
+    @wraps(func)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        start_time = time.perf_counter()
+        success = False
+        prompt_name = "unknown"
+        server_name = "unknown"
+
+        try:
+            # Extract prompt name from request body
+            body = kwargs.get("body")
+            if body and hasattr(body, "prompt_name"):
+                prompt_name = body.prompt_name
+
+            # Execute business logic
+            result = await func(*args, **kwargs)
+            success = True
+
+            # Extract server name from result if available
+            if hasattr(result, "server_path"):
+                server_name = result.server_path.strip("/")
+
+            return result
+
+        except Exception:
+            success = False
+            raise
+
+        finally:
+            duration = time.perf_counter() - start_time
+            try:
+                _record_prompt_execution(
+                    prompt_name=prompt_name,
+                    server_name=server_name,
+                    success=success,
+                    duration_seconds=duration,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to record prompt execution metric: {e}")
+
+    return wrapper  # type: ignore
+
+
 class AuthMetricsContext:
     """
     Context manager for tracking authentication with dynamic mechanism detection.

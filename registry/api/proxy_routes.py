@@ -10,9 +10,9 @@ from fastapi import APIRouter, Request, Response, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 
 from registry.core.telemetry_decorators import (
-    ToolExecutionMetricsContext,
-    ResourceAccessMetricsContext,
-    PromptExecutionMetricsContext
+    track_tool_execution,
+    track_resource_access,
+    track_prompt_execution,
 )
 from registry.utils.otel_metrics import record_server_request
 from packages.models.extended_mcp_server import MCPServerDocument
@@ -535,13 +535,14 @@ async def extract_server_path_from_request(request_path: str) -> Optional[str]:
         }
     }
 )
+@track_tool_execution
 async def execute_tool(
     body: ToolExecutionRequest,
     user_context: CurrentUser
 ) -> Union[Response, ToolExecutionResponse]:
     """
     Execute a tool on an MCP server.
-    
+
     Request body:
     {
         "server_id": "12345",
@@ -551,7 +552,7 @@ async def execute_tool(
             "query": "Donald Trump news"
         }
     }
-    
+
     Returns:
         - SSE stream (text/event-stream) if backend returns SSE format
         - JSON (ToolExecutionResponse) otherwise
@@ -562,159 +563,149 @@ async def execute_tool(
     username = user_context.get("username", "unknown")
     user_id = user_context.get("user_id", "unknown")
 
-    # Use metrics context manager for telemetry
-    async with ToolExecutionMetricsContext(
-        tool_name=tool_name,
-        method="POST"
-    ) as metrics_ctx:
+    server = await server_service_v1.get_server_by_id(body.server_id)
+    logger.info(
+        f"Tool execution from user '{username}:{user_id}': {tool_name} on {body.server_id}"
+    )
 
-        server = await server_service_v1.get_server_by_id(body.server_id)
-        logger.info(
-            f"🔧 Tool execution from user '{username}:{user_id}': {tool_name} on {body.server_id}"
+    if not server:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Server not found: {body.server_id}"
         )
 
-        if not server:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Server not found: {body.server_id}"
+    server_name = getattr(server, "serverName", None) or server.path.strip("/")
+
+    # Track server request count
+    record_server_request(server_name)
+
+    # Build target URL using shared helper
+    target_url = _build_target_url(server)
+
+    # Build MCP JSON-RPC request
+    mcp_request_body = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": tool_name,
+            "arguments": arguments
+        }
+    }
+    logger.info(f"MCP JSON-RPC request body: {json.dumps(mcp_request_body, indent=2)}")
+
+    # Prepare base headers for downstream MCP server
+    additional_headers = {
+        "X-Tool-Name": tool_name,
+        "Accept": "application/json, text/event-stream"  # MCP servers require both
+    }
+
+    # Check if server requires initialization (default True for safety/compatibility)
+    requires_init = server.config.get("requiresInit", True)
+
+    # Session management logic - only if server requires initialization
+    session_key = None
+    stored_session_id = None
+    if requires_init:
+        # Key format: "user_id:server_id" to track per-user, per-server sessions
+        session_key = f"{user_id}:{body.server_id}"
+        session_info = get_session(session_key)
+
+        if session_info:
+            # Existing session found - check if it's initialized
+            stored_session_id, session_initialized = session_info
+
+            if session_initialized:
+                additional_headers["mcp-Session-Id"] = stored_session_id
+                logger.info(f"Reusing initialized session for {server.serverName}: {stored_session_id}")
+
+        if not stored_session_id:
+            init_headers = await _build_authenticated_headers(
+                server=server,
+                auth_context=user_context,
+                additional_headers=additional_headers,
             )
+            # Get transport type from server config (default to streamable-http)
+            transport_type = server.config.get("type", "streamable-http")
+            session_id = await initialize_mcp_session(target_url, init_headers, session_key, transport_type)
 
-        # Update metrics context with resolved server name
-        server_name = getattr(server, "serverName", None) or server.path.strip("/")
-        metrics_ctx.set_server_name(server_name)
+            if session_id:
+                additional_headers["mcp-Session-Id"] = session_id
+            else:
+                logger.warning(f"Failed to initialize session, will attempt tool call without session")
+    else:
+        logger.debug(f"Stateless server (requiresInit=False), skipping session management")
 
-        # Track server request count
-        record_server_request(server_name)
+    # Build final authenticated headers with session ID (if applicable)
+    headers = await _build_authenticated_headers(
+        server=server,
+        auth_context=user_context,
+        additional_headers=additional_headers
+    )
 
-        # Build target URL using shared helper
-        target_url = _build_target_url(server)
+    # Client can accept both JSON and SSE (as indicated in Accept header)
+    accept_sse = True
 
-        # Build MCP JSON-RPC request
-        mcp_request_body = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {
-                "name": tool_name,
-                "arguments": arguments
-            }
-        }
-        logger.info(f"📤 MCP JSON-RPC request body: {json.dumps(mcp_request_body, indent=2)}")
-
-        # Prepare base headers for downstream MCP server
-        additional_headers = {
-            "X-Tool-Name": tool_name,
-            "Accept": "application/json, text/event-stream"  # MCP servers require both
-        }
-
-        # Check if server requires initialization (default True for safety/compatibility)
-        requires_init = server.config.get("requiresInit", True)
-
-        # Session management logic - only if server requires initialization
-        session_key = None
-        stored_session_id = None
-        if requires_init:
-            # Key format: "user_id:server_id" to track per-user, per-server sessions
-            session_key = f"{user_id}:{body.server_id}"
-            session_info = get_session(session_key)
-
-            if session_info:
-                # Existing session found - check if it's initialized
-                stored_session_id, session_initialized = session_info
-
-                if session_initialized:
-                    additional_headers["mcp-Session-Id"] = stored_session_id
-                    logger.info(f"🔗 Reusing initialized session for {server.serverName}: {stored_session_id}")
-
-            if not stored_session_id:
-                init_headers = await _build_authenticated_headers(
-                    server=server,
-                    auth_context=user_context,
-                    additional_headers=additional_headers,
-                )
-                # Get transport type from server config (default to streamable-http)
-                transport_type = server.config.get("type", "streamable-http")
-                session_id = await initialize_mcp_session(target_url, init_headers, session_key, transport_type)
-
-                if session_id:
-                    additional_headers["mcp-Session-Id"] = session_id
-                else:
-                    logger.warning(f"⚠️ Failed to initialize session, will attempt tool call without session")
-        else:
-            logger.debug(f"⚡ Stateless server (requiresInit=False), skipping session management")
-
-        # Build final authenticated headers with session ID (if applicable)
-        headers = await _build_authenticated_headers(
-            server=server,
-            auth_context=user_context,
-            additional_headers=additional_headers
+    try:
+        # Use shared proxy logic
+        response = await _proxy_json_rpc_request(
+            target_url=target_url,
+            json_body=mcp_request_body,
+            headers=headers,
+            accept_sse=accept_sse
         )
 
-        # Client can accept both JSON and SSE (as indicated in Accept header)
-        accept_sse = True
+        # If response is SSE, return it directly
+        if response.media_type == "text/event-stream":
+            logger.info(f"Returning SSE response for tool: {tool_name}")
+            return response
 
+        # Parse response body
         try:
-            # Use shared proxy logic
-            response = await _proxy_json_rpc_request(
-                target_url=target_url,
-                json_body=mcp_request_body,
-                headers=headers,
-                accept_sse=accept_sse
-            )
+            result_text = response.body.decode('utf-8') if isinstance(response.body, bytes) else str(response.body)
+            result = json.loads(result_text)
+        except Exception:
+            result = {"raw": response.body.decode('utf-8') if isinstance(response.body, bytes) else str(response.body)}
 
-            # If response is SSE, return it directly
-            if response.media_type == "text/event-stream":
-                logger.info(f"✅ Returning SSE response for tool: {tool_name}")
-                metrics_ctx.set_success(True)
-                return response
-
-            # Parse response body
-            try:
-                result_text = response.body.decode('utf-8') if isinstance(response.body, bytes) else str(response.body)
-                result = json.loads(result_text)
-            except Exception:
-                result = {"raw": response.body.decode('utf-8') if isinstance(response.body, bytes) else str(response.body)}
-
-            # Check for non-200 status code or MCP error in result
-            if response.status_code != 200 and response.status_code != 202:
-                logger.error(f"❌ Non-200 status code: {response.status_code}, clearing session")
-                if requires_init and session_key:
-                    clear_session(session_key)
-                return ToolExecutionResponse(
-                    success=False,
-                    server_id=body.server_id,
-                    server_path=server.path,
-                    tool_name=tool_name,
-                    result=result,
-                    error=f"Server error (status {response.status_code})",
-                )
-
-            logger.info(f"✅ Tool execution successful: {tool_name}")
-
-            metrics_ctx.set_success(True)
-            return ToolExecutionResponse(
-                success=True,
-                server_id=body.server_id,
-                server_path=server.path,
-                tool_name=tool_name,
-                result=result,
-            )
-
-        except HTTPException as e:
-            # HTTP exceptions from proxy helper - convert to structured response
-            logger.error(f"❌ Tool execution failed: {e.detail}")
-
-            # Clear session on auth errors (might be stale session)
-            if e.status_code == 401 and requires_init and session_key:
+        # Check for non-200 status code or MCP error in result
+        if response.status_code != 200 and response.status_code != 202:
+            logger.error(f"Non-200 status code: {response.status_code}, clearing session")
+            if requires_init and session_key:
                 clear_session(session_key)
-
             return ToolExecutionResponse(
                 success=False,
                 server_id=body.server_id,
                 server_path=server.path,
                 tool_name=tool_name,
-                error=f"Error: {e.detail}",
+                result=result,
+                error=f"Server error (status {response.status_code})",
             )
+
+        logger.info(f"Tool execution successful: {tool_name}")
+
+        return ToolExecutionResponse(
+            success=True,
+            server_id=body.server_id,
+            server_path=server.path,
+            tool_name=tool_name,
+            result=result,
+        )
+
+    except HTTPException as e:
+        # HTTP exceptions from proxy helper - convert to structured response
+        logger.error(f"Tool execution failed: {e.detail}")
+
+        # Clear session on auth errors (might be stale session)
+        if e.status_code == 401 and requires_init and session_key:
+            clear_session(session_key)
+
+        return ToolExecutionResponse(
+            success=False,
+            server_id=body.server_id,
+            server_path=server.path,
+            tool_name=tool_name,
+            error=f"Error: {e.detail}",
+        )
 
 
 @router.post(
@@ -738,66 +729,61 @@ async def execute_tool(
         }
     }
 )
+@track_resource_access
 async def read_resource(
     body: ResourceReadRequest,
     user_context: CurrentUser
 ) -> Union[Response, ResourceReadResponse]:
     """
     Read/access an MCP resource.
-    
+
     Request body:
     {
         "server_id": "12345",
         "resource_uri": "tavily://search-results/AI"
     }
-    
+
     Returns:
         Resource contents (text, JSON, binary, etc.)
     """
     resource_uri = body.resource_uri
     username = user_context.get("username", "unknown")
 
-    # Use metrics context manager for telemetry
-    async with ResourceAccessMetricsContext(resource_uri=resource_uri) as metrics_ctx:
+    server = await server_service_v1.get_server_by_id(body.server_id)
+    logger.info(
+        f"Resource read from user '{username}': {resource_uri} on {body.server_id}"
+    )
 
-        server = await server_service_v1.get_server_by_id(body.server_id)
-        logger.info(
-            f"📄 Resource read from user '{username}': {resource_uri} on {body.server_id}"
+    if not server:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Server not found: {body.server_id}"
         )
 
-        if not server:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Server not found: {body.server_id}"
-            )
+    server_name = getattr(server, "serverName", None) or server.path.strip("/")
 
-        # Update metrics context with resolved server name
-        server_name = getattr(server, "serverName", None) or server.path.strip("/")
-        metrics_ctx.set_server_name(server_name)
+    # Track server request count
+    record_server_request(server_name)
 
-        # Track server request count
-        record_server_request(server_name)
+    # Build target URL using shared helper (for future implementation)
+    _target_url = _build_target_url(server)
 
-        # Build target URL using shared helper (for future implementation)
-        _target_url = _build_target_url(server)
+    # MOCK: Return hardcoded response for POC
+    logger.info(f"(MOCK) Returning cached search results for: {resource_uri}")
 
-        # MOCK: Return hardcoded response for POC
-        logger.info(f"✅ (MOCK) Returning cached search results for: {resource_uri}")
-
-        metrics_ctx.set_success(True)
-        return ResourceReadResponse(
-            success=True,
-            server_id=body.server_id,
-            server_path=server.path,
-            resource_uri=resource_uri,
-            contents=[
-                {
-                    "uri": resource_uri,
-                    "mimeType": "application/json",
-                    "text": '{"results": [{"title": "AI News", "snippet": "Latest AI developments..."}]}'
-                }
-            ]
-        )
+    return ResourceReadResponse(
+        success=True,
+        server_id=body.server_id,
+        server_path=server.path,
+        resource_uri=resource_uri,
+        contents=[
+            {
+                "uri": resource_uri,
+                "mimeType": "application/json",
+                "text": '{"results": [{"title": "AI News", "snippet": "Latest AI developments..."}]}'
+            }
+        ]
+    )
 
 
 @router.delete("/sessions/{server_id}")
@@ -846,13 +832,14 @@ async def clear_session_endpoint(
         }
     }
 )
+@track_prompt_execution
 async def execute_prompt(
     body: PromptExecutionRequest,
     user_context: CurrentUser
 ) -> Union[Response, PromptExecutionResponse]:
     """
     Execute an MCP prompt (get prompt template with arguments filled in).
-    
+
     Request body:
     {
         "server_id": "12345",
@@ -862,7 +849,7 @@ async def execute_prompt(
             "depth": "comprehensive"
         }
     }
-    
+
     Returns:
         Prompt messages ready for LLM consumption
     """
@@ -870,60 +857,54 @@ async def execute_prompt(
     arguments = body.arguments or {}
     username = user_context.get("username", "unknown")
 
-    # Use metrics context manager for telemetry
-    async with PromptExecutionMetricsContext(prompt_name=prompt_name) as metrics_ctx:
+    server = await server_service_v1.get_server_by_id(body.server_id)
+    logger.info(
+        f"Prompt execution from user '{username}': {prompt_name} on {body.server_id}"
+    )
 
-        server = await server_service_v1.get_server_by_id(body.server_id)
-        logger.info(
-            f"💬 Prompt execution from user '{username}': {prompt_name} on {body.server_id}"
+    if not server:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Server not found: {body.server_id}"
         )
 
-        if not server:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Server not found: {body.server_id}"
-            )
+    server_name = getattr(server, "serverName", None) or server.path.strip("/")
 
-        # Update metrics context with resolved server name
-        server_name = getattr(server, "serverName", None) or server.path.strip("/")
-        metrics_ctx.set_server_name(server_name)
+    # Track server request count
+    record_server_request(server_name)
 
-        # Track server request count
-        record_server_request(server_name)
+    # Build target URL using shared helper (for future implementation)
+    _target_url = _build_target_url(server)
 
-        # Build target URL using shared helper (for future implementation)
-        _target_url = _build_target_url(server)
+    # MOCK: Return hardcoded prompt response for POC
+    topic = arguments.get("topic", "general topic")
+    depth = arguments.get("depth", "basic")
 
-        # MOCK: Return hardcoded prompt response for POC
-        topic = arguments.get("topic", "general topic")
-        depth = arguments.get("depth", "basic")
+    logger.info(f"(MOCK) Returning prompt messages for: {prompt_name} (topic={topic}, depth={depth})")
 
-        logger.info(f"✅ (MOCK) Returning prompt messages for: {prompt_name} (topic={topic}, depth={depth})")
-
-        metrics_ctx.set_success(True)
-        return PromptExecutionResponse(
-            success=True,
-            server_id=body.server_id,
-            server_path=server.path,
-            prompt_name=prompt_name,
-            description=f"AI research assistant for {topic}",
-            messages=[
-                {
-                    "role": "system",
-                    "content": {
-                        "type": "text",
-                        "text": f"You are a research assistant specializing in {topic}. Provide {depth} analysis."
-                    }
-                },
-                {
-                    "role": "user",
-                    "content": {
-                        "type": "text",
-                        "text": f"Research and analyze: {topic}"
-                    }
+    return PromptExecutionResponse(
+        success=True,
+        server_id=body.server_id,
+        server_path=server.path,
+        prompt_name=prompt_name,
+        description=f"AI research assistant for {topic}",
+        messages=[
+            {
+                "role": "system",
+                "content": {
+                    "type": "text",
+                    "text": f"You are a research assistant specializing in {topic}. Provide {depth} analysis."
                 }
-            ]
-        )
+            },
+            {
+                "role": "user",
+                "content": {
+                    "type": "text",
+                    "text": f"Research and analyze: {topic}"
+                }
+            }
+        ]
+    )
 
 
 # ========== Catch-All Dynamic Proxy Route ==========
