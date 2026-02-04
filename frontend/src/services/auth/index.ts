@@ -8,7 +8,10 @@ const getAuthMe: () => Promise<TOKEN_TYPE.GET_AUTH_ME_RESPONSE> = async () => aw
 const getToken: (data: TOKEN_TYPE.GET_TOKEN_REQUEST) => Promise<TOKEN_TYPE.GET_TOKEN_RESPONSE> = async data =>
   await Request.post(API.getToken, data, { skipTokenBarrier: true });
 
+const logout: () => Promise<void> = async () => await Request.post(API.logout);
+
 export default {
   getAuthMe,
   getToken,
+  logout,
 };

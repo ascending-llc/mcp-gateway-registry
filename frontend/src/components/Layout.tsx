@@ -1,9 +1,8 @@
 import { Menu, Transition } from '@headlessui/react';
 import {
-  ArrowRightOnRectangleIcon,
+  ArrowRightStartOnRectangleIcon,
   Bars3Icon,
   ChevronDownIcon,
-  Cog6ToothIcon,
   KeyIcon,
   MoonIcon,
   SunIcon,
@@ -145,7 +144,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                             active ? 'bg-gray-100 dark:bg-gray-800' : ''
                           } flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-100`}
                         >
-                          <ArrowRightOnRectangleIcon className='mr-3 h-4 w-4' />
+                          <ArrowRightStartOnRectangleIcon className='mr-3 h-4 w-4' />
                           Sign out
                         </button>
                       )}
