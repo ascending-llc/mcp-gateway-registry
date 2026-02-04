@@ -1,7 +1,6 @@
 import axios, { type AxiosError, type AxiosRequestConfig } from 'axios';
 
 import { getBasePath } from '@/config';
-import UTILS from '@/utils';
 import type { GET_TOKEN_RESPONSE } from './auth/type';
 
 const cancelSources: Record<string, () => void> = {};
@@ -29,10 +28,6 @@ service.interceptors.request.use(
 
     config.headers = config.headers || {};
     config.headers['Content-Type'] = 'application/json; charset=utf-8';
-    if (!config.headers.Authorization) {
-      const token = UTILS.getSessionConfig('accessToken');
-      if (token) config.headers.Authorization = `Bearer ${token}`;
-    }
 
     return config;
   },
