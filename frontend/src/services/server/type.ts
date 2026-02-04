@@ -1,4 +1,4 @@
-import type { ApiKeyHeaderFormat, ApiKeySource, ServerType } from '@/components/ServerFormDialog/types';
+import type { ApiKeyHeaderFormat, ApiKeySource, ServerType } from '@/pages/ServerRegistryOrEdit/types';
 import type { SERVER_CONNECTION } from '@/services/mcp/type';
 
 export type GET_VERSION_RESPONSE = {

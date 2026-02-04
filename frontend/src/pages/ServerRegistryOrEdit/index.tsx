@@ -1,22 +1,14 @@
-import { Dialog } from '@headlessui/react';
-import { TrashIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { TrashIcon } from '@heroicons/react/24/outline';
 import type React from 'react';
 import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
-import type { ServerInfo } from '@/contexts/ServerContext';
+import { useGlobal } from '@/contexts/GlobalContext';
+import { useServer } from '@/contexts/ServerContext';
 import SERVICES from '@/services';
 import MainConfigForm from './MainConfigForm';
 import ServerCreationSuccessDialog from './ServerCreationSuccessDialog';
 import type { AuthenticationConfig as AuthConfigType, ServerConfig } from './types';
-
-interface ServerFormDialogProps {
-  isOpen: boolean;
-  id?: string | null;
-  showToast: (message: string, type: 'success' | 'error') => void;
-  refreshData: (notLoading?: boolean) => void;
-  onServerUpdate: (id: string, updates: Partial<ServerInfo>) => void;
-  onClose: () => void;
-}
 
 const DEFAULT_AUTH_CONFIG: AuthConfigType = { type: 'auto', source: 'admin', authorization_type: 'bearer' };
 
@@ -31,14 +23,13 @@ const INIT_DATA: ServerConfig = {
   tags: [],
 };
 
-const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
-  isOpen,
-  id,
-  showToast,
-  refreshData,
-  onServerUpdate,
-  onClose,
-}) => {
+const ServerRegistryOrEdit: React.FC = () => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const id = searchParams.get('id');
+  const { showToast } = useGlobal();
+  const { refreshServerData, handleServerUpdate } = useServer();
+
   const [loading, setLoading] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [formData, setFormData] = useState<ServerConfig>(INIT_DATA);
@@ -50,15 +41,12 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
   const isEditMode = !!id;
 
   useEffect(() => {
-    if (id && isOpen) {
-      getDetail();
-    } else {
-      setLoadingDetail(false);
-      setFormData(INIT_DATA);
-      setOriginalData(null);
-      setErrors({});
-    }
-  }, [id, isOpen]);
+    if (id) getDetail();
+  }, [id]);
+
+  const goBack = () => {
+    navigate(-1);
+  };
 
   const getDetail = async () => {
     if (!id) return;
@@ -245,8 +233,8 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
     try {
       await SERVICES.SERVER.deleteServer(id);
       showToast('Server deleted successfully', 'success');
-      onClose();
-      refreshData(true);
+      navigate('/', { replace: true });
+      refreshServerData(true);
     } catch (error: any) {
       showToast(error?.detail || error, 'error');
     }
@@ -261,8 +249,8 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
       if (isEditMode) {
         const result = await SERVICES.SERVER.updateServer(id, data);
         showToast('Server updated successfully', 'success');
-        onClose();
-        onServerUpdate(id, {
+        goBack();
+        handleServerUpdate(id, {
           name: data.serverName,
           description: data.description,
           path: data.path,
@@ -273,11 +261,11 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
       } else {
         const result = await SERVICES.SERVER.createServer(data);
         setServerData(result);
-        refreshData(true);
+        refreshServerData(true);
         if (data?.oauth) {
           setShowSuccessDialog(true);
         } else {
-          onClose();
+          goBack();
         }
       }
     } catch (error: any) {
@@ -287,82 +275,69 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <Dialog as='div' className='relative z-50' open={isOpen} onClose={onClose}>
-      <div className='fixed inset-0 bg-black/30' aria-hidden='true' />
-
-      <div className='fixed inset-0 flex items-center justify-center p-4'>
-        <Dialog.Panel className='w-full max-w-2xl bg-white dark:bg-gray-800 rounded-xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col'>
-          {/* Header */}
-          <div className='px-6 py-4 flex items-center justify-between border-b border-gray-100 dark:border-gray-700'>
-            <Dialog.Title className='text-lg font-bold text-gray-900 dark:text-white'>
-              {isEditMode ? 'Edit MCP Server' : 'Add MCP Server'}
-            </Dialog.Title>
-            <button
-              onClick={onClose}
-              className='text-gray-400 hover:text-gray-500 dark:text-gray-400 dark:hover:text-gray-300'
-            >
-              <XMarkIcon className='h-6 w-6' />
-            </button>
+    <div className='flex justify-center h-full'>
+      <div className='flex flex-col w-3/4 h-full bg-white dark:bg-gray-800 rounded-lg'>
+        {/* Header */}
+        <div className='px-6 py-4 flex items-center justify-between border-b border-gray-100 dark:border-gray-700'>
+          <div className='text-lg font-bold text-gray-900 dark:text-white'>
+            {isEditMode ? 'Edit MCP Server' : 'Register MCP Server'}
           </div>
+        </div>
 
-          {/* Content */}
-          <div className='px-6 py-4 overflow-y-auto custom-scrollbar flex-1'>
-            {loadingDetail ? (
-              <div className='flex items-center justify-center h-full min-h-[200px]'>
-                <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600'></div>
-              </div>
-            ) : (
-              <MainConfigForm formData={formData} updateField={updateField} errors={errors} isEditMode={isEditMode} />
+        {/* Content */}
+        <div className='px-6 py-4 overflow-y-auto custom-scrollbar flex-1'>
+          {loadingDetail ? (
+            <div className='flex items-center justify-center h-full min-h-[200px]'>
+              <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600'></div>
+            </div>
+          ) : (
+            <MainConfigForm formData={formData} updateField={updateField} errors={errors} isEditMode={isEditMode} />
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className='px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-gray-800/50'>
+          <div>
+            {isEditMode && (
+              <button
+                onClick={handleDelete}
+                disabled={loading}
+                className='inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-red-500 dark:text-red-400 bg-white dark:bg-gray-800 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed'
+              >
+                <TrashIcon className='h-4 w-4' />
+              </button>
             )}
           </div>
-
-          {/* Footer */}
-          <div className='px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-gray-800/50'>
-            <div>
-              {isEditMode && (
-                <button
-                  onClick={handleDelete}
-                  disabled={loading}
-                  className='inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-red-500 dark:text-red-400 bg-white dark:bg-gray-800 hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed'
-                >
-                  <TrashIcon className='h-4 w-4' />
-                </button>
-              )}
-            </div>
-            <div className='flex space-x-3'>
-              <button
-                onClick={onClose}
-                disabled={loading}
-                className='px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed'
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={loading}
-                className='inline-flex items-center gap-2 px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-700 hover:bg-purple-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed'
-              >
-                {loading && <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white'></div>}
-                {isEditMode ? 'Update' : 'Create'}
-              </button>
-            </div>
+          <div className='flex space-x-3'>
+            <button
+              onClick={goBack}
+              disabled={loading}
+              className='px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed'
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={loading}
+              className='inline-flex items-center gap-2 px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-700 hover:bg-purple-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed'
+            >
+              {loading && <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white'></div>}
+              {isEditMode ? 'Update' : 'Create'}
+            </button>
           </div>
-        </Dialog.Panel>
+        </div>
       </div>
-
       <ServerCreationSuccessDialog
         isOpen={showSuccessDialog}
         serverData={serverData}
         onClose={() => {
           setShowSuccessDialog(false);
-          onClose();
+          goBack();
         }}
       />
-    </Dialog>
+    </div>
   );
 };
 
-export default ServerFormDialog;
+export default ServerRegistryOrEdit;

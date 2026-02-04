@@ -12,18 +12,16 @@ import { Link, useLocation } from 'react-router-dom';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useServer } from '@/contexts/ServerContext';
-import SERVICES from '@/services';
 
-const Content: React.FC<any> = ({ setTokenData, setSidebarOpen, setShowTokenModal }) => {
+const Content: React.FC<any> = ({ setSidebarOpen }) => {
   const location = useLocation();
   const { user } = useAuth();
   const { stats, agentStats, viewMode, activeFilter, setActiveFilter } = useServer();
 
-  const [error, setError] = useState<string>('');
-  const [loading, setLoading] = useState(false);
   const [showScopes, setShowScopes] = useState(false);
 
   const isTokenPage = location.pathname === '/generate-token';
+  const isServerRegistryOrEditPage = location.pathname === '/server-registry' || location.pathname === '/server-edit';
 
   /** List of filters available for token generation */
   const filters = [
@@ -32,22 +30,6 @@ const Content: React.FC<any> = ({ setTokenData, setSidebarOpen, setShowTokenModa
     { key: 'disabled', label: 'Disabled', count: 'disabled' },
     { key: 'unhealthy', label: 'With Issues', count: 'withIssues' },
   ];
-
-  const fetchAdminTokens = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const result = await SERVICES.AUTH.getToken({ expires_in_hours: 8, description: 'Generated via sidebar' });
-      if (result.success) {
-        setTokenData(result);
-        setShowTokenModal(true);
-      }
-    } catch (err: any) {
-      setError(err?.detail || 'Failed to generate token');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   /** Scope descriptions mapping */
   const getScopeDescription = (scope: string) => {
@@ -67,7 +49,22 @@ const Content: React.FC<any> = ({ setTokenData, setSidebarOpen, setShowTokenModa
   return (
     <div className='flex h-full flex-col'>
       {/* Conditional Content */}
-      {isTokenPage ? (
+      {isServerRegistryOrEditPage ? (
+        <div className='flex-1 p-4 md:p-6'>
+          {/* Navigation Links */}
+          <div className='space-y-2 mb-6'>
+            <Link
+              to='/'
+              className='flex items-center space-x-3 px-3 py-2 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+              onClick={() => window.innerWidth < 768 && setSidebarOpen(false)} // Only close on mobile
+              tabIndex={0}
+            >
+              <ArrowLeftIcon className='h-4 w-4' />
+              <span>Back to Dashboard</span>
+            </Link>
+          </div>
+        </div>
+      ) : isTokenPage ? (
         /* Token Page - Show navigation and user info */
         <div className='flex-1 p-4 md:p-6'>
           {/* Navigation Links */}
@@ -161,30 +158,6 @@ const Content: React.FC<any> = ({ setTokenData, setSidebarOpen, setShowTokenModa
                     {user.auth_method === 'oauth2' && user.provider && <span className='ml-1'>({user.provider})</span>}
                   </div>
 
-                  {/* Admin JWT Token Button */}
-                  {user.is_admin && (
-                    <div className='mb-2'>
-                      <button
-                        onClick={fetchAdminTokens}
-                        disabled={loading}
-                        className='w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800 disabled:opacity-50 disabled:cursor-not-allowed'
-                      >
-                        {loading ? (
-                          <>
-                            <div className='animate-spin rounded-full h-3 w-3 border-b-2 border-purple-700 dark:border-purple-300'></div>
-                            <span>Loading...</span>
-                          </>
-                        ) : (
-                          <>
-                            <KeyIcon className='h-3 w-3' />
-                            <span>Get JWT Token</span>
-                          </>
-                        )}
-                      </button>
-                      {error && <p className='mt-1 text-xs text-red-600 dark:text-red-400'>{error}</p>}
-                    </div>
-                  )}
-
                   {/* Scopes toggle */}
                   {!user.is_admin && user.scopes && user.scopes.length > 0 && (
                     <div>
@@ -224,10 +197,7 @@ const Content: React.FC<any> = ({ setTokenData, setSidebarOpen, setShowTokenModa
               {filters.map((filter: any) => {
                 // Calculate count based on view mode
                 let count = 0;
-                if (viewMode === 'all') {
-                  count =
-                    stats[filter.count as keyof typeof stats] + agentStats[filter.count as keyof typeof agentStats];
-                } else if (viewMode === 'servers') {
+                if (viewMode === 'servers') {
                   count = stats[filter.count as keyof typeof stats];
                 } else {
                   count = agentStats[filter.count as keyof typeof agentStats];
