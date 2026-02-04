@@ -26,21 +26,32 @@ interface ToastItemProps {
 }
 
 const ToastItem: React.FC<ToastItemProps> = ({ message, type, onClose }) => {
+  const [isExiting, setIsExiting] = useState(false);
+
   useEffect(() => {
     const timer = setTimeout(() => {
-      onClose();
+      handleClose();
     }, 4000);
 
     return () => clearTimeout(timer);
   }, [onClose]);
 
+  const handleClose = () => {
+    setIsExiting(true);
+    setTimeout(() => {
+      onClose();
+    }, 300); // Match animation duration
+  };
+
   return (
     <div
-      className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${
+      className={`flex animate-slide-up items-center gap-3 px-4 py-3 rounded-lg shadow-lg border transition-all duration-300 ${
+        isExiting ? 'translate-x-[120%] opacity-0' : 'translate-x-0 opacity-100'
+      } ${
         type === 'success'
           ? 'bg-green-50 dark:bg-green-900/90 border-green-200 dark:border-green-700'
           : 'bg-red-50 dark:bg-red-900/90 border-red-200 dark:border-red-700'
-      } animate-in slide-in-from-top-2 duration-300`}
+      }`}
     >
       {type === 'success' ? (
         <CheckCircleIcon className='h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0' />
@@ -57,7 +68,7 @@ const ToastItem: React.FC<ToastItemProps> = ({ message, type, onClose }) => {
         {message}
       </p>
       <button
-        onClick={onClose}
+        onClick={handleClose}
         className={`p-1 rounded-md transition-colors ${
           type === 'success'
             ? 'hover:bg-green-100 dark:hover:bg-green-800'
@@ -82,7 +93,10 @@ export const ToastProvider: React.FC<ToastProviderProps> = ({ children }) => {
 
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
     const id = Date.now();
-    setToasts(prev => [...prev, { message: String(message), type, id }]);
+    setToasts(prev => {
+      const newToasts = [...prev, { message: String(message), type, id }];
+      return newToasts.slice(-5);
+    });
     setNextId(prev => prev + 1);
   }, []);
 
