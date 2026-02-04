@@ -2279,7 +2279,6 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
-    { name = "beanie" },
     { name = "factory-boy" },
     { name = "faker" },
     { name = "poethepoet" },
@@ -2300,7 +2299,6 @@ embedded-search = [
 requires-dist = [
     { name = "async-lru", specifier = ">=2.0.5" },
     { name = "beanie", specifier = ">=2.0.0" },
-    { name = "beanie", marker = "extra == 'dev'", specifier = ">=2.0.0" },
     { name = "factory-boy", marker = "extra == 'dev'", specifier = ">=3.3.0" },
     { name = "faiss-cpu", marker = "extra == 'embedded-search'", specifier = ">=1.7.4" },
     { name = "faker", marker = "extra == 'dev'", specifier = ">=24.0.0" },

@@ -52,7 +52,6 @@ dev = [
     "factory-boy>=3.3.0",
     "faker>=24.0.0",
     "poethepoet>=0.24.0",
-    "beanie>=2.0.0",
 ]
 
 [project.scripts]
