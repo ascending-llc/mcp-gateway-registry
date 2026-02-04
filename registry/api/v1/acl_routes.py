@@ -4,11 +4,11 @@ ACL Management API Routes V1
 RESTful API endpoints for managing ACL permissions using MongoDB.
 """
 
-import asyncio
 import logging
 from fastapi import APIRouter, HTTPException, status as http_status, Depends, Query
 from beanie import PydanticObjectId
 
+from packages.database.decorators import use_transaction
 from registry.auth.dependencies import CurrentUserWithACLMap
 from registry.services.access_control_service import acl_service
 from registry.core.acl_constants import PrincipalType, PermissionBits
@@ -69,6 +69,7 @@ async def search_principals(
     description="Update ACL permissions for a specific resource",
     response_model=UpdateResourcePermissionsResponse,
 )
+@use_transaction
 async def update_resource_permissions(
     resource_id: str,
     resource_type: str,
@@ -114,27 +115,25 @@ async def update_resource_permissions(
             logger.info(f"Deleted public ACL entry for resource {resource_id}")
 
         if data.removed:
-            delete_results = await asyncio.gather(*[
-                acl_service.delete_permission(
+            for principal in data.removed:
+                result = await acl_service.delete_permission(
                     resource_type=resource_type,
                     resource_id=PydanticObjectId(resource_id),
                     principal_type=principal.principal_type,
-                    principal_id=PydanticObjectId(principal.principal_id)
-                ) for principal in data.removed
-            ])
-            deleted_count += sum(delete_results)
+                    principal_id=PydanticObjectId(principal.principal_id),
+                )
+                deleted_count += result
 
         if data.updated:
-            update_results = await asyncio.gather(*[
-                acl_service.grant_permission(
+            for principal in data.updated:
+                await acl_service.grant_permission(
                     principal_type=principal.principal_type,
                     principal_id=PydanticObjectId(principal.principal_id),
                     resource_type=resource_type,
                     resource_id=PydanticObjectId(resource_id),
                     perm_bits=principal.perm_bits,
-                ) for principal in data.updated
-            ])
-            updated_count += len(update_results)
+                )
+                updated_count += 1
 
         logger.info(f"Updated permissions for resource {resource_id}: {updated_count} updated, {deleted_count} deleted")
         return UpdateResourcePermissionsResponse(

@@ -6,6 +6,7 @@ from packages.models._generated import (
 )
 from packages.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
 from beanie import PydanticObjectId
+from packages.database.decorators import get_current_session
 from registry.core.acl_constants import ResourceType, PermissionBits, PrincipalType
 from registry.utils.log import logger
 from registry.services.user_service import user_service
@@ -63,37 +64,36 @@ class ACLService:
 			perm_bits = access_role.permBits
 
 		# Check if an ACL entry already exists for this principal/resource
-		try: 
-			acl_entry = await IAclEntry.find_one({
+		session = get_current_session()
+		acl_entry = await IAclEntry.find_one({
 				"principalType": principal_type,
 				"principalId": principal_id,
 				"resourceType": resource_type,
 				"resourceId": resource_id
-			})
-			now = datetime.now(timezone.utc)
-			if acl_entry:
-				acl_entry.permBits = perm_bits
-				acl_entry.roleId = role_id
-				acl_entry.grantedAt = now
-				acl_entry.updatedAt = now
-				await acl_entry.save()
-				return acl_entry
-			else:
-				new_entry = IAclEntry(
-					principalType=principal_type,
-					principalId=principal_id,
-					resourceType=resource_type,
-					resourceId=resource_id,
-					permBits=perm_bits,
-					grantedAt=now,
-					createdAt=now,
-					updatedAt=now
-				)
-				await new_entry.insert()
-				return new_entry
-		except Exception as e: 
-			logger.error(f"Error upserting ACL entry: {e}")
-			raise ValueError(f"Error upserting ACL permissions: {e}")
+			},
+			session=session,
+		)
+		now = datetime.now(timezone.utc)
+		if acl_entry:
+			acl_entry.permBits = perm_bits
+			acl_entry.roleId = role_id
+			acl_entry.grantedAt = now
+			acl_entry.updatedAt = now
+			await acl_entry.save(session=session)
+			return acl_entry
+		else:
+			new_entry = IAclEntry(
+				principalType=principal_type,
+				principalId=principal_id,
+				resourceType=resource_type,
+				resourceId=resource_id,
+				permBits=perm_bits,
+				grantedAt=now,
+				createdAt=now,
+				updatedAt=now
+			)
+			await new_entry.insert(session=session)
+			return new_entry
 
 	async def delete_acl_entries_for_resource(
 		self,
@@ -115,20 +115,17 @@ class ACLService:
 		Raises:
 			None (returns 0 on error).
 		"""
-		try: 
-			query = {
-				"resourceType": resource_type,
-				"resourceId": resource_id
-			}
+		session = get_current_session()
+		query = {
+			"resourceType": resource_type,
+			"resourceId": resource_id
+		}
 
-			if perm_bits_to_delete: 
-				query["permBits"] = {"$lte": perm_bits_to_delete}
+		if perm_bits_to_delete: 
+			query["permBits"] = {"$lte": perm_bits_to_delete}
 
-			result = await IAclEntry.find(query).delete()
-			return result.deleted_count
-		except Exception as e: 
-			logger.error(f"Error deleting ACL entries for resource {resource_type} with ID {resource_id}: {e}")
-			return 0
+		result = await IAclEntry.find(query).delete(session=session)
+		return result.deleted_count
 
 	async def get_permissions_map_for_user_id(
 		self,
@@ -212,18 +209,15 @@ class ACLService:
 		Raises:
 			None (returns 0 on error).
 		"""
-		try:
-			query = {
-				"resourceType": resource_type,
-				"resourceId": resource_id,
-				"principalType": principal_type,
-				"principalId": principal_id
-			}
-			result = await IAclEntry.find(query).delete()
-			return result.deleted_count
-		except Exception as e:
-			logger.error(f"Error revoking ACL entry for resource {resource_type} with ID {resource_id}: {e}")
-			return 0
+		session = get_current_session()
+		query = {
+			"resourceType": resource_type,
+			"resourceId": resource_id,
+			"principalType": principal_type,
+			"principalId": principal_id
+		}
+		result = await IAclEntry.find(query).delete(session=session)
+		return result.deleted_count
 
 	async def search_principals(
 		self,
@@ -268,18 +262,14 @@ class ACLService:
 		"""
 		Get all ACL permissions for a specific resource.
 		"""
-		try:
-			acl_entries = await IAclEntry.find({
-				"resourceType": resource_type,
-				"resourceId": resource_id
-			}).to_list()
+		acl_entries = await IAclEntry.find({
+			"resourceType": resource_type,
+			"resourceId": resource_id
+		}).to_list()
 
-			return {
-				"permissions": acl_entries
-			}
-		except Exception as e:
-			logger.error(f"Error fetching resource permissions for {resource_type} {resource_id}: {e}")
-			raise
+		return {
+			"permissions": acl_entries
+		}
 
 
 

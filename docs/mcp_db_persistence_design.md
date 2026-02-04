@@ -1032,18 +1032,53 @@ Response 200:
 
 MongoDB integration provides a scalable, multi-tenant storage backend for MCP server configurations and OAuth tokens, replacing the file-based JSON storage. This design enables sharing the database with other applications (e.g., jarvis-api) using a unified schema.
 
-### Database Selection: Motor + Beanie ODM(TBD)
+### Database Selection: PyMongo Async + Beanie ODM
 
 **Selected Stack:**
-- **Motor**: Async MongoDB driver for Python (required for FastAPI async endpoints)
+- **PyMongo (async)**: Native async MongoDB driver (`AsyncMongoClient`) - migrated from Motor which is deprecated
 - **Beanie**: Async ODM built on Pydantic models (native FastAPI integration)
 
 **Rationale:**
+- PyMongo 4.x provides native async support via `AsyncMongoClient`, replacing Motor
 - Beanie provides type-safe models with automatic validation via Pydantic
 - Seamless integration with FastAPI's dependency injection and request/response models
 - Built-in support for async operations (critical for high-concurrency scenarios)
 - Automatic index management and migration support
-- Simpler than PyMongo for common CRUD operations while maintaining access to Motor when needed
+
+### Transaction Support
+
+**Why:** Multi-step write operations (e.g., creating a server + granting ACL permissions) must be atomic.
+If the ACL grant fails after the server is created, both operations must be rolled back.
+
+**How:** A decorator-based approach using `@use_transaction` with ContextVar for session management.
+
+**Prerequisite:** MongoDB must run as a **replica set** (single-node is fine for local development).
+The `docker-compose.yml` already configures a single-node replica set (`rs0`).
+
+#### Implementation Pattern
+
+**Decorator (`@use_transaction`):**
+- Applied to route handlers that need transactional behavior
+- Manages transaction lifecycle automatically (start, commit, rollback)
+- Stores session in a ContextVar for async-safe access
+- Prevents nested transactions (raises RuntimeError if detected)
+- Handles replica set errors (OperationFailure code 263) with actionable messages
+
+**Session Access (`get_current_session()`):**
+- Service methods retrieve the active session from ContextVar
+- Returns `None` if no transaction is active (services handle gracefully)
+- No need to pass session parameters through the call chain
+
+**Transaction lifecycle:**
+1. Route handler decorated with `@use_transaction`
+2. Decorator calls `client.start_session()` and starts transaction
+3. Session stored in ContextVar (async-safe, request-isolated)
+4. Service methods call `get_current_session()` to access session
+5. On success: transaction commits automatically (context manager exit)
+6. On exception: transaction aborts automatically (context manager exit)
+7. Session is always closed in `finally` block
+8. ContextVar is reset to ensure no session leakage
+
 
 ### Data Models
 

@@ -11,7 +11,9 @@ from typing import Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, status as http_status, Depends
 from pydantic import ValidationError
 from beanie import PydanticObjectId
+from pymongo.asynchronous.client_session import AsyncClientSession
 
+from packages.database.decorators import use_transaction
 from registry.auth.dependencies import CurrentUserWithACLMap
 from registry.services.server_service import server_service_v1
 from registry.services.oauth.mcp_service import get_mcp_service
@@ -296,6 +298,7 @@ async def get_server(
     summary="Register Server",
     description="Register a new MCP server",
 )
+@use_transaction
 async def create_server(
     data: ServerCreateRequest,
     user_context: dict = Depends(get_user_context),
@@ -303,7 +306,7 @@ async def create_server(
     """Create a new server"""
     try:
         user_id = user_context.get("user_id")
-        
+
         server = await server_service_v1.create_server(
             data=data,
             user_id=user_id,
@@ -313,18 +316,13 @@ async def create_server(
             logger.error("Server creation failed without exception")
             raise ValueError("Failed to create server")
 
-        acl_entry = await acl_service.grant_permission(
+        await acl_service.grant_permission(
             principal_type=PrincipalType.USER,
             principal_id=PydanticObjectId(user_id),
             resource_type=ResourceType.MCPSERVER,
             resource_id=server.id,
             perm_bits=RoleBits.OWNER
         )
-        
-        if not acl_entry:
-            await server.delete()
-            logger.error(f"Failed to create ACL entry for server: {server.id}. Rolling back server creation")
-            raise ValueError(f"Failed to create ACL entry for server: {server.id}. Rolling back server creation")
 
         logger.info(f"Granted user {user_id} {RoleBits.OWNER} permissions for server Id {server.id}")
         return convert_to_create_response(server)
@@ -366,6 +364,7 @@ async def create_server(
     summary="Update Server",
     description="Update server configuration",
 )
+@use_transaction
 async def update_server(
     server_id: str,
     data: ServerUpdateRequest,
@@ -420,6 +419,7 @@ async def update_server(
     summary="Delete Server",
     description="Delete a server",
 )
+@use_transaction
 async def delete_server(
     server_id: str,
     user_context: dict = Depends(get_user_context),
