@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List, Union
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ValidationInfo
 import time
 
 from registry.schemas.enums import OAuthFlowStatus
@@ -15,12 +15,12 @@ class OAuthTokens(BaseModel):
     obtained_at: Optional[int] = Field(None, description="Obtained timestamp")
     expires_at: Optional[int] = Field(None, description="Expiration timestamp")
 
-    @field_validator("expires_at")
-    def set_expires_at(cls, v, values):
-        """Calculate expires_at based on expires_in"""
-        if v is None and values.get("expires_in") is not None:
-            import time
-            return int(time.time()) + values["expires_in"]
+    @classmethod
+    @field_validator("expires_at", mode="before")
+    def set_expires_at(cls, v: Optional[int], info: ValidationInfo) -> Optional[int]:
+        """Calculate expires_at based on expires_in if not provided"""
+        if v is None and info.data.get("expires_in") is not None:
+            return int(time.time()) + info.data["expires_in"]
         return v
 
 
@@ -92,6 +92,7 @@ class TokenTransformConfig(BaseModel):
 class MCPOAuthFlowMetadata(BaseModel):
     """MCP OAuth flow metadata"""
     server_name: str = Field(..., description="Server name")
+    server_path: str = Field(..., description="Server path")
     server_id: str = Field(..., description="Server id")
     user_id: str = Field(..., description="User ID")
     authorization_url: str = Field(..., description="Authorization URL")

@@ -1,3 +1,4 @@
+import logging
 import os
 import secrets
 from pathlib import Path
@@ -85,8 +86,9 @@ class Settings(BaseSettings):
     JWT_AUDIENCE: str = "jarvis-services"
     JWT_SELF_SIGNED_KID: str = "self-signed-key-v1"
     API_VERSION: str = "v1"
-    LOG_LEVEL: str = "INFO"
-    
+    log_level: int = logging.INFO  # Default to INFO (20), can be overridden by LOG_LEVEL env var
+    log_format: str = "%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s"
+
     # Encryption key for sensitive data (client secrets, API keys, etc.)
     # Hex-encoded AES key for encrypting OAuth client secrets and API keys
     CREDS_KEY: Optional[str] = None
@@ -99,6 +101,7 @@ class Settings(BaseSettings):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
         # Generate secret key if not provided
         if not self.secret_key:
             self.secret_key = secrets.token_hex(32)

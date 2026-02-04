@@ -4,9 +4,11 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
+from ..core.config import settings
+
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+    level=settings.log_level,
+    format=settings.log_format
 )
 
 logger = logging.getLogger(__name__)

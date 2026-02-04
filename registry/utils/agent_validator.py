@@ -20,6 +20,7 @@ from typing import (
 import httpx
 from pydantic import BaseModel
 
+from registry.core.config import settings
 from registry.schemas.agent_models import (
     AgentCard,
     SecurityScheme,
@@ -29,8 +30,8 @@ from registry.schemas.agent_models import (
 
 # Configure logging with basicConfig
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+    level=settings.log_level,
+    format=settings.log_format
 )
 
 logger = logging.getLogger(__name__)

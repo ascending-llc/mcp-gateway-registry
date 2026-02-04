@@ -46,11 +46,14 @@ from typing import Dict, Any, Optional
 
 import requests
 
+from registry.core.config import settings
+
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+    level=settings.log_level,
+    format=settings.log_format
 )
+
 logger = logging.getLogger(__name__)
 
 # Try to load .env file if python-dotenv is available

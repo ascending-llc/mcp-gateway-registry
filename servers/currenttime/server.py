@@ -8,12 +8,14 @@ import logging
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 from typing import Annotated
+from registry.core.config import settings
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
+    level=settings.log_level,
+    format=settings.log_format
 )
+
 logger = logging.getLogger(__name__)
 
 def parse_arguments():

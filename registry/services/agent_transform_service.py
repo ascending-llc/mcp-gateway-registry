@@ -9,6 +9,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from ..constants import REGISTRY_CONSTANTS
+from ..core.config import settings
 from ..schemas.anthropic_schema import (
     Package,
     PaginationMetadata,
@@ -19,8 +20,8 @@ from ..schemas.anthropic_schema import (
 
 
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+    level=settings.log_level,
+    format=settings.log_format
 )
 
 logger = logging.getLogger(__name__)

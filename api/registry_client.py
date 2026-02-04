@@ -13,7 +13,6 @@ the get-m2m-token.sh script.
 
 import json
 import logging
-import subprocess
 from typing import Optional, List, Dict, Any, Union
 from enum import Enum
 from datetime import datetime
@@ -21,12 +20,14 @@ from urllib.parse import quote
 
 import requests
 from pydantic import BaseModel, Field, HttpUrl, ConfigDict
+from registry.core.config import settings
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
+    level=settings.log_level,
+    format=settings.log_format
 )
+
 logger = logging.getLogger(__name__)
 
 
