@@ -62,7 +62,6 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             "/redirect/{provider}",
             "/api/auth/providers",
             "/api/auth/config",
-            "/api/auth/login",
             f"/api/{settings.API_VERSION}/mcp/{{server_name}}/oauth/callback",  # OAuth callback is public
             "/.well-known/{path:path}",  # OAuth discovery endpoints must be public
         ])
