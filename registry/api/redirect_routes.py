@@ -289,7 +289,7 @@ async def logout_handler(
         return response
 
 
-@router.post("/logout")
+@router.post("/redirect/logout")
 async def logout_post(
     request: Request,
     session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None
