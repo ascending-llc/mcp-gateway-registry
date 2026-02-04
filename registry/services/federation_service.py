@@ -24,12 +24,7 @@ from ..schemas.federation_schema import (
 from .federation.anthropic_client import AnthropicFederationClient
 from .federation.asor_client import AsorFederationClient
 
-
-logging.basicConfig(
-    level=settings.log_level,
-    format=settings.log_format
-)
-
+# Get logger - logging is configured centrally in main.py via settings.configure_logging()
 logger = logging.getLogger(__name__)
 
 

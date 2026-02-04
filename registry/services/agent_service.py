@@ -16,13 +16,7 @@ from typing import Any, Dict, List, Optional
 from ..core.config import settings
 from ..schemas.agent_models import AgentCard, AgentInfo
 
-
-# Configure logging with basicConfig
-logging.basicConfig(
-    level=settings.log_level,
-    format=settings.log_format
-)
-
+# Get logger - logging is configured centrally in main.py via settings.configure_logging()
 logger = logging.getLogger(__name__)
 
 
