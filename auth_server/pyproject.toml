@@ -37,7 +37,7 @@ dependencies = [
     "boto3>=1.28.0",  # For Cognito
     "requests>=2.28.0",
 
-    # Database (MongoDB)
+    # Shared packages
     "packages",
 ]
 

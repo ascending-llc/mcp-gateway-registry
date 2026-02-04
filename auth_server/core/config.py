@@ -100,7 +100,7 @@ class AuthSettings(BaseSettings):
     entra_token_kind: str = "id"  # "id" or "access"
 
     # ==================== Logging Settings ====================
-    log_level: int = logging.INFO  # Default to INFO (20), can be overridden by LOG_LEVEL env var
+    log_level: str = "INFO"  # Default to INFO, can be overridden by LOG_LEVEL env var (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     log_format: str = "%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s"
 
     # ==================== Metrics Settings ====================
@@ -169,6 +169,22 @@ class AuthSettings(BaseSettings):
         if v.lower() not in allowed:
             raise ValueError(f"auth_provider must be one of {allowed}, got '{v}'")
         return v.lower()
+
+    def configure_logging(self) -> None:
+        """Configure application-wide logging with consistent format and level.
+        
+        This should be called once at application startup to initialize logging
+        for all modules. Individual modules can then use logging.getLogger(__name__)
+        without needing to call basicConfig again.
+        """
+        # Convert string log level to numeric level
+        numeric_level = getattr(logging, self.log_level.upper(), logging.INFO)
+        
+        logging.basicConfig(
+            level=numeric_level,
+            format=self.log_format,
+            force=True  # Override any existing configuration
+        )
 
 
 # Global settings instance

@@ -12,8 +12,7 @@ import httpx
 
 from ...core.config import settings
 
-logging.basicConfig(level=settings.log_level, format=settings.log_format)
-
+# Get logger - logging is configured centrally in main.py via settings.configure_logging()
 logger = logging.getLogger(__name__)
 
 

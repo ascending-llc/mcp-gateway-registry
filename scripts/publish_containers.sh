@@ -43,7 +43,6 @@ declare -a COMPONENTS=(
     "realserverfaketools-server:servers/realserverfaketools:./docker/Dockerfile.mcp-server"
     "fininfo-server:servers/fininfo:./docker/Dockerfile.mcp-server"
     "mcpgw-server:servers/mcpgw:./docker/Dockerfile.mcp-server"
-    "metrics-service:metrics-service:./metrics-service/Dockerfile"
 )
 
 # External images to mirror (pull from source and push to our registries)
@@ -370,7 +369,7 @@ OPTIONS:
     -g, --ghcr          Push to GitHub Container Registry (requires GITHUB_TOKEN)
     -v, --version       Version tag (default: latest)
     -p, --platforms     Platforms to build for (note: only current platform supported without buildx)
-    -c, --component     Build specific component only (registry, auth-server, nginx-proxy, currenttime-server, realserverfaketools, metrics-service)
+    -c, --component     Build specific component only (registry, auth-server, nginx-proxy, currenttime-server, realserverfaketools)
     -s, --skip-mirror   Skip mirroring external images (by default, external images ARE mirrored)
     -l, --local         Build locally without pushing (for testing)
     -h, --help          Display this help message

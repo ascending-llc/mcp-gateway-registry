@@ -15,6 +15,17 @@ from fastapi import status as http_status
 from pydantic import ValidationError
 
 from registry.auth.dependencies import CurrentUserWithACLMap
+from registry.core.telemetry_decorators import track_registry_operation
+from registry.services.server_service import server_service_v1
+from registry.services.oauth.mcp_service import get_mcp_service
+from registry.services.oauth.connection_status_service import (
+    get_servers_connection_status,
+    get_single_server_connection_status
+)
+from registry.services.access_control_service import acl_service
+from registry.services.permissions_utils import (
+    check_required_permission,
+)
 from registry.core.acl_constants import PrincipalType, ResourceType, RoleBits
 from registry.schemas.enums import ConnectionState
 from registry.schemas.server_api_schemas import (
@@ -99,6 +110,7 @@ def apply_connection_status_to_server(
     summary="List Servers",
     description="List all servers with filtering, searching, and pagination. Includes connection status for each server.",
 )
+@track_registry_operation("list", resource_type="server")
 async def list_servers(
     query: str | None = None,
     scope: str | None = None,
@@ -193,6 +205,7 @@ async def list_servers(
     summary="Get System Statistics",
     description="Get system-wide statistics (Admin only). Includes server, token, and user metrics using MongoDB aggregation pipelines.",
 )
+@track_registry_operation("read", resource_type="stats")
 async def get_server_stats(
     user_context: dict = Depends(get_user_context),
 ):
@@ -242,6 +255,7 @@ async def get_server_stats(
     summary="Get Server Details",
     description="Get detailed information about a specific server, including connection status",
 )
+@track_registry_operation("read", resource_type="server")
 async def get_server(
     server_id: str,
     user_context: dict = Depends(get_user_context),
@@ -300,6 +314,7 @@ async def get_server(
     summary="Register Server",
     description="Register a new MCP server",
 )
+@track_registry_operation("create", resource_type="server")
 async def create_server(
     data: ServerCreateRequest,
     user_context: dict = Depends(get_user_context),
@@ -370,6 +385,7 @@ async def create_server(
     summary="Update Server",
     description="Update server configuration",
 )
+@track_registry_operation("update", resource_type="server")
 async def update_server(
     server_id: str,
     data: ServerUpdateRequest,
@@ -423,6 +439,7 @@ async def update_server(
     summary="Delete Server",
     description="Delete a server",
 )
+@track_registry_operation("delete", resource_type="server")
 async def delete_server(
     server_id: str,
     user_context: dict = Depends(get_user_context),
@@ -479,6 +496,7 @@ async def delete_server(
     summary="Toggle Server Status",
     description="Enable or disable a server",
 )
+@track_registry_operation("update", resource_type="server")
 async def toggle_server(
     server_id: str,
     data: ServerToggleRequest,
@@ -531,6 +549,7 @@ async def toggle_server(
     summary="Get Server Tools",
     description="Get the list of tools provided by a server",
 )
+@track_registry_operation("read", resource_type="tool")
 async def get_server_tools(
     server_id: str,
     user_context: dict = Depends(get_user_context),
@@ -588,6 +607,7 @@ async def get_server_tools(
     summary="Refresh Server Health",
     description="Refresh server health status and check connectivity",
 )
+@track_registry_operation("refresh", resource_type="health")
 async def refresh_server_health(
     server_id: str,
     user_context: dict = Depends(get_user_context),

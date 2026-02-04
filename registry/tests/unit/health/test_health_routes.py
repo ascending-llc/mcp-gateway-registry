@@ -17,14 +17,23 @@ class TestHealthRoutes:
 
     @pytest.fixture
     def mock_session_cookie(self):
-        """Create a valid session cookie for testing."""
-        from registry.auth.dependencies import create_session_cookie
+        """Create a valid session cookie for testing WebSocket (uses old itsdangerous format).
+        
+        TODO: Update WebSocket authentication to support JWT tokens, then update this fixture.
+        WebSocket route currently uses itsdangerous signer, not JWT validation.
+        """
+        from registry.auth.dependencies import signer
         from registry.core.config import settings
-
-        # Use admin user for traditional auth, or oauth2 for regular users
-        return create_session_cookie(
-            settings.admin_user, auth_method="traditional", provider="local"
-        )
+        
+        # WebSocket authentication still uses itsdangerous signer
+        session_data = {
+            "username": settings.admin_user,
+            "auth_method": "traditional",
+            "provider": "local",
+            "groups": ["registry-admins"]
+        }
+        
+        return signer.dumps(session_data)
 
     @pytest.fixture
     def mock_websocket(self, mock_session_cookie):

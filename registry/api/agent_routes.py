@@ -33,9 +33,7 @@ from ..schemas.agent_models import (
 )
 from ..services.agent_service import agent_service
 
-# Configure logging with basicConfig
-logging.basicConfig(level=settings.log_level, format=settings.log_format)
-
+# Get logger - logging is configured centrally in main.py via settings.configure_logging()
 logger = logging.getLogger(__name__)
 
 router = APIRouter()

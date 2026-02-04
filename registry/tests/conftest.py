@@ -124,13 +124,55 @@ def server_with_tools() -> dict[str, Any]:
     return create_server_with_tools(num_tools=5)
 
 
+def create_test_jwt_token(username: str, groups: list, role: str = "user", 
+                          auth_method: str = "oauth2", provider: str = "keycloak",
+                          user_id: str = None) -> str:
+    """
+    Helper function to create JWT access tokens for testing.
+    
+    Args:
+        username: Username
+        groups: List of user groups
+        role: User role (default: "user")
+        auth_method: Auth method (default: "oauth2")
+        provider: Auth provider (default: "keycloak")
+        user_id: User ID (default: auto-generated from username)
+    
+    Returns:
+        JWT access token string
+    """
+    from registry.utils.crypto_utils import generate_access_token
+    from registry.auth.dependencies import map_cognito_groups_to_scopes
+    
+    if user_id is None:
+        user_id = f"test-{username}-id"
+    
+    scopes = map_cognito_groups_to_scopes(groups) or groups
+    
+    return generate_access_token(
+        user_id=user_id,
+        username=username,
+        email=f"{username}@test.local",
+        groups=groups,
+        scopes=scopes,
+        role=role,
+        auth_method=auth_method,
+        provider=provider
+    )
+
+
 @pytest.fixture
 def admin_session_cookie():
-    """Create a valid admin session cookie for testing."""
-    from registry.auth.dependencies import create_session_cookie
+    """Create a valid admin session cookie (JWT access token) for testing."""
     from registry.core.config import settings
-
-    return create_session_cookie(settings.admin_user, auth_method="traditional", provider="local")
+    return create_test_jwt_token(
+        username=settings.admin_user,
+        groups=['registry-admins'],
+        role="admin",
+        auth_method="traditional",
+        provider="local",
+        user_id="test-admin-id"
+    )
 
 
 @pytest.fixture
@@ -139,6 +181,26 @@ def test_client(admin_session_cookie) -> TestClient:
     from registry.core.config import settings
 
     return TestClient(app, cookies={settings.session_cookie_name: admin_session_cookie})
+
+
+@pytest.fixture
+def user_session_cookie():
+    """Create a valid user session cookie (JWT access token) for testing."""
+    return create_test_jwt_token(
+        username="testuser",
+        groups=["mcp-registry-user"],
+        role="user",
+        auth_method="oauth2",
+        provider="keycloak",
+        user_id="test-user-id"
+    )
+
+
+@pytest.fixture
+def user_test_client(user_session_cookie) -> TestClient:
+    """Create a test client with regular user authentication."""
+    from registry.core.config import settings
+    return TestClient(app, cookies={settings.session_cookie_name: user_session_cookie})
 
 
 @pytest.fixture
@@ -220,12 +282,59 @@ def mock_websocket():
 
 
 @pytest.fixture(autouse=True)
+def mock_telemetry_metrics(monkeypatch):
+    """
+    Mock telemetry metrics to prevent background thread issues during tests.
+
+    This prevents the OTel background exporter from trying to serialize
+    mock objects (like AsyncMock) which causes encoding errors.
+    """
+    # Mock the generic metrics client
+    mock_metrics_client = Mock()
+    mock_metrics_client.record_counter = Mock()
+    mock_metrics_client.record_histogram = Mock()
+
+    # Mock the metrics client at the source module
+    monkeypatch.setattr(
+        "registry.utils.otel_metrics.metrics",
+        mock_metrics_client
+    )
+
+    # Mock the domain functions where they're imported
+    monkeypatch.setattr(
+        "registry.core.telemetry_decorators._record_registry_operation",
+        Mock()
+    )
+    monkeypatch.setattr(
+        "registry.core.telemetry_decorators._record_auth_request",
+        Mock()
+    )
+    monkeypatch.setattr(
+        "registry.core.telemetry_decorators._record_tool_execution",
+        Mock()
+    )
+    monkeypatch.setattr(
+        "registry.core.telemetry_decorators._record_tool_discovery",
+        Mock()
+    )
+    monkeypatch.setattr(
+        "registry.core.telemetry_decorators._record_resource_access",
+        Mock()
+    )
+    monkeypatch.setattr(
+        "registry.core.telemetry_decorators._record_prompt_execution",
+        Mock()
+    )
+
+    yield mock_metrics_client
+
+
+@pytest.fixture(autouse=True)
 def cleanup_services():
     """Automatically cleanup services after each test."""
     yield
     # Reset global service states
     from registry.health.service import health_service
-    from registry.services.server_service import server_service_v1
 
     # Clear server service state if methods exist
     if hasattr(server_service_v1, "registered_servers"):

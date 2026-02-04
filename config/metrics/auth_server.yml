@@ -1,0 +1,71 @@
+service_name: auth_server
+
+counters:
+  # Auth requests
+  - name: auth_requests_total
+    description: Total number of authentication attempts
+    unit: "1"
+    capture: true
+
+  # Token operations
+  - name: token_refreshes_total
+    description: Total number of token refresh attempts
+    unit: "1"
+    capture: true
+
+  - name: token_generations_total
+    description: Total number of token generation attempts
+    unit: "1"
+    capture: true
+
+  - name: token_revocations_total
+    description: Total number of token revocation attempts
+    unit: "1"
+    capture: true
+
+  # OAuth operations
+  - name: oauth_callbacks_total
+    description: Total number of OAuth callback requests
+    unit: "1"
+    capture: true
+
+  - name: oauth_authorizations_total
+    description: Total number of OAuth authorization requests
+    unit: "1"
+    capture: true
+
+  # Session operations
+  - name: session_creations_total
+    description: Total number of session creation attempts
+    unit: "1"
+    capture: true
+
+  - name: session_validations_total
+    description: Total number of session validation attempts
+    unit: "1"
+    capture: true
+
+histograms:
+  # Auth request latency
+  - name: auth_request_duration_seconds
+    description: Authentication request duration in seconds
+    unit: "s"
+    capture: true
+
+  # Token generation latency
+  - name: token_generation_duration_seconds
+    description: Token generation duration in seconds
+    unit: "s"
+    capture: true
+
+  # OAuth flow latency
+  - name: oauth_flow_duration_seconds
+    description: Complete OAuth flow duration in seconds
+    unit: "s"
+    capture: true
+
+  # Session validation latency
+  - name: session_validation_duration_seconds
+    description: Session validation duration in seconds
+    unit: "s"
+    capture: true

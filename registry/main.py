@@ -14,9 +14,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.staticfiles import StaticFiles
-
-from packages.database import close_mongodb, init_mongodb
-from packages.database.redis_client import close_redis, init_redis
+# Import domain routers
+from registry.api.v1.meta_routes import router as meta_router
+from registry.api.v1.token_routes import router as token_router
+from registry.api.v1.server.server_routes import router as servers_router_v1
+from registry.api.v1.search_routes import router as search_router
+from registry.api.wellknown_routes import router as wellknown_router
 from registry.api.agent_routes import router as agent_router
 from registry.api.management_routes import router as management_router
 from registry.api.proxy_routes import router as proxy_router
@@ -24,19 +27,10 @@ from registry.api.proxy_routes import shutdown_proxy_client
 from registry.api.redirect_routes import router as auth_provider_router
 from registry.api.server_routes import router as servers_router
 from registry.api.v1.acl_routes import router as acl_router
-from registry.api.v1.mcp.connection_router import router as connection_router
-from registry.api.v1.mcp.oauth_router import router as oauth_router
-
-# Import domain routers
-from registry.api.v1.meta_routes import router as meta_router
-from registry.api.v1.search_routes import router as search_router
-from registry.api.v1.server.server_routes import router as servers_router_v1
-from registry.api.wellknown_routes import router as wellknown_router
+from registry.version import __version__
+from registry.api.proxy_routes import router as proxy_router, shutdown_proxy_client
+from packages.telemetry import setup_metrics
 from registry.auth.dependencies import CurrentUserWithACLMap
-from registry.auth.middleware import UnifiedAuthMiddleware
-from registry.core.config import settings
-from registry.health.routes import router as health_router
-from registry.health.service import health_service
 
 # Import services for initialization
 from registry.services.agent_service import agent_service
@@ -49,9 +43,18 @@ from registry.version import __version__
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown lifecycle management."""
+    # Configure logging first before any other operations
+    settings.configure_logging()
+    
     logger.info("🚀 Starting MCP Gateway Registry...")
 
     try:
+        logger.info("🔭 Initializing Telemetry...")
+        try:
+            setup_metrics("mcp-gateway-registry")
+        except Exception as e:
+            logger.warning(f"Failed to initialize telemetry: {e}")
+
         # Initialize MongoDB connection first
         logger.info("🗄️  Initializing MongoDB connection...")
         await init_mongodb()
@@ -205,10 +208,8 @@ else:
 
 # Register API routers with /api prefix
 app.include_router(meta_router, prefix="/api/auth", tags=["Authentication metadata"])
-app.include_router(servers_router, prefix="/api", tags=["Server Management"])
-app.include_router(
-    servers_router_v1, prefix=f"/api/{settings.API_VERSION}", tags=["Server Management V1"]
-)
+app.include_router(token_router, prefix=f"/api/{settings.API_VERSION}", tags=["Server Management"])
+app.include_router(servers_router_v1, prefix=f"/api/{settings.API_VERSION}", tags=["Server Management V1"])
 app.include_router(agent_router, prefix="/api", tags=["Agent Management"])
 app.include_router(management_router, prefix="/api")
 app.include_router(search_router, prefix=f"/api/{settings.API_VERSION}", tags=["Semantic Search"])
@@ -304,10 +305,16 @@ async def get_version():
 app.include_router(proxy_router, prefix="/proxy", tags=["MCP Proxy"])
 
 if __name__ == "__main__":
-    import os
-
     import uvicorn
+    
+    # Configure logging before starting server
+    settings.configure_logging()
 
-    log_level = os.getenv("LOG_LEVEL", "INFO").lower()
-
-    uvicorn.run("registry.main:app", host="0.0.0.0", port=7860, reload=True, log_level=log_level)
+    uvicorn.run(
+        "registry.main:app",
+        host="0.0.0.0",
+        port=7860,
+        reload=True,
+        log_level=settings.log_level.lower(),
+        log_config=None  # Disable uvicorn's default logging config to use ours
+    )

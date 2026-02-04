@@ -14,6 +14,9 @@ from registry.core.config import settings
 from registry.health.service import health_service
 from registry.main import app
 from registry.services.server_service import server_service_v1
+from registry.health.service import health_service
+from registry.constants import REGISTRY_CONSTANTS
+from registry.core.config import settings
 
 # Alias for tests
 server_service = server_service_v1
@@ -71,8 +74,23 @@ def mock_enhanced_auth_user():
 
 @pytest.fixture
 def admin_session_cookie():
-    """Create a valid admin session cookie."""
-    return create_session_cookie(settings.admin_user, auth_method="traditional", provider="local")
+    """Create a valid admin session cookie (JWT access token)."""
+    from registry.utils.crypto_utils import generate_access_token
+    from registry.auth.dependencies import map_cognito_groups_to_scopes
+    
+    groups = ['registry-admins']
+    scopes = map_cognito_groups_to_scopes(groups) or ['registry-admins']
+    
+    return generate_access_token(
+        user_id="test-admin-id",
+        username=settings.admin_user,
+        email="admin@test.local",
+        groups=groups,
+        scopes=scopes,
+        role="admin",
+        auth_method="traditional",
+        provider="local"
+    )
 
 
 @pytest.fixture
@@ -168,19 +186,28 @@ class TestV0ListServers:
         self, mock_enhanced_auth_user, sample_servers_data
     ):
         """Test that regular users see only authorized servers."""
+        from registry.utils.crypto_utils import generate_access_token
+        from registry.auth.dependencies import map_cognito_groups_to_scopes
         from fastapi.testclient import TestClient
 
         from registry.auth.dependencies import create_session_cookie
 
         # Create user context for a regular (non-admin) user
         user_context = mock_enhanced_auth_user()
-
-        # Create session cookie for this user
-        user_session_cookie = create_session_cookie(
-            user_context["username"],
+        
+        # Create session cookie (JWT access token) for this user
+        groups = user_context["groups"]
+        scopes = map_cognito_groups_to_scopes(groups) or []
+        
+        user_session_cookie = generate_access_token(
+            user_id="test-user-id",
+            username=user_context["username"],
+            email=f"{user_context['username']}@test.local",
+            groups=groups,
+            scopes=scopes,
+            role="user",
             auth_method=user_context["auth_method"],
-            provider=user_context["provider"],
-            groups=user_context["groups"],
+            provider=user_context["provider"]
         )
 
         # User should only see servers they have permission for
@@ -388,16 +415,25 @@ class TestV0ListServerVersions:
 
     def test_list_versions_unauthorized_user(self, mock_enhanced_auth_user, sample_servers_data):
         """Test that users cannot access servers they don't have permission for."""
+        from registry.utils.crypto_utils import generate_access_token
+        from registry.auth.dependencies import map_cognito_groups_to_scopes
         from fastapi.testclient import TestClient
 
         from registry.auth.dependencies import create_session_cookie
 
         user_context = mock_enhanced_auth_user()
-        user_session_cookie = create_session_cookie(
-            user_context["username"],
+        groups = user_context["groups"]
+        scopes = map_cognito_groups_to_scopes(groups) or []
+        
+        user_session_cookie = generate_access_token(
+            user_id="test-user-id",
+            username=user_context["username"],
+            email=f"{user_context['username']}@test.local",
+            groups=groups,
+            scopes=scopes,
+            role="user",
             auth_method=user_context["auth_method"],
-            provider=user_context["provider"],
-            groups=user_context["groups"],
+            provider=user_context["provider"]
         )
 
         with patch.object(

@@ -1,6 +1,20 @@
 version: '3.8'
 
 services:
+  # OpenTelemetry Collector
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./config/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4318:4318"   # OTLP HTTP receiver
+      - "4317:4317"   # OTLP gRPC receiver
+      - "8889:8889"   # Prometheus exporter (optional)
+    restart: unless-stopped
+    profiles:
+      - full
+
   # Registry service (includes nginx, SSL, FAISS, models)
   registry:
     build:
@@ -22,11 +36,6 @@ services:
       - HEALTH_CHECK_INTERVAL_SECONDS=${HEALTH_CHECK_INTERVAL_SECONDS:-30}
       - SRE_GATEWAY_AUTH_TOKEN=${SRE_GATEWAY_AUTH_TOKEN}
       - ATLASSIAN_AUTH_TOKEN=${ATLASSIAN_AUTH_TOKEN}
-      # Metrics configuration
-      - METRICS_SERVICE_URL=http://metrics-service:8890
-      - METRICS_API_KEY=${METRICS_API_KEY_REGISTRY}
-      - METRICS_API_KEY_NGINX=${METRICS_API_KEY_REGISTRY}
-      - AUTH_SERVER_URL=http://auth-server:8888
       # External Registry Configuration
       - EXTERNAL_REGISTRY_TAGS=${EXTERNAL_REGISTRY_TAGS:-anthropic-registry,workday-asor}
       - ASOR_ACCESS_TOKEN=${ASOR_ACCESS_TOKEN}
@@ -40,6 +49,10 @@ services:
       - SECURITY_ADD_PENDING_TAG=${SECURITY_ADD_PENDING_TAG:-true}
       - MCP_SCANNER_LLM_API_KEY=${MCP_SCANNER_LLM_API_KEY}
       - MONGO_URI=mongodb://registry-mongodb:27017/jarvis
+      # Sends logs to OpenTelemetry Collector
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_SERVICE_NAME=mcp-gateway-registry
+
       # Embeddings Configuration
       # - EMBEDDINGS_PROVIDER=${EMBEDDINGS_PROVIDER:-sentence-transformers}
       # - EMBEDDINGS_MODEL_NAME=${EMBEDDINGS_MODEL_NAME:-all-MiniLM-L6-v2}
@@ -58,8 +71,6 @@ services:
     depends_on:
       auth-server:
         condition: service_started
-      metrics-service:
-        condition: service_healthy
       weaviate:
         condition: service_healthy
       registry-mongodb:
@@ -90,41 +101,7 @@ services:
       - .env
     profiles:
       - full
-
-  # Metrics Collection Service
-  metrics-service:
-    build:
-      context: metrics-service
-      dockerfile: Dockerfile
-    environment:
-      - METRICS_SERVICE_PORT=8890
-      - METRICS_SERVICE_HOST=0.0.0.0
-      - SQLITE_DB_PATH=/var/lib/sqlite/metrics.db
-      - METRICS_RETENTION_DAYS=90
-      - METRICS_API_KEY_AUTH=${METRICS_API_KEY_AUTH_SERVER}
-      - METRICS_API_KEY_REGISTRY=${METRICS_API_KEY_REGISTRY}
-      - METRICS_API_KEY_MCPGW=${METRICS_API_KEY_MCPGW_SERVER}
-      - OTEL_SERVICE_NAME=mcp-metrics-service
-      - OTEL_PROMETHEUS_ENABLED=true
-      - OTEL_PROMETHEUS_PORT=9465
-      - METRICS_RATE_LIMIT=1000
-    ports:
-      - "8890:8890"
-      - "9465:9465"  # Prometheus metrics endpoint
-    volumes:
-      - metrics-db-data:/var/lib/sqlite
-      - ${APP_HOME}/mcp-gateway/logs:/app/logs
-    depends_on:
-      - metrics-db
-    restart: unless-stopped
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8890/health" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    profiles:
-      - full
-
+  
   # MongoDB Database
   registry-mongodb:
     container_name: registry-mongodb
@@ -176,9 +153,6 @@ services:
         GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     environment:
       - AWS_REGION=${AWS_REGION:-us-east-1}
-      # Metrics configuration
-      - METRICS_SERVICE_URL=http://metrics-service:8890
-      - METRICS_API_KEY=${METRICS_API_KEY_AUTH_SERVER}
       # Keycloak configuration
       - AUTH_PROVIDER=${AUTH_PROVIDER:-cognito}  # 'cognito' or 'keycloak' or 'entra'
       - KEYCLOAK_ENABLED=${KEYCLOAK_ENABLED:-false}
@@ -199,6 +173,8 @@ services:
       - ENTRA_EMAIL_CLAIM=${ENTRA_EMAIL_CLAIM:-upn}
       - ENTRA_NAME_CLAIM=${ENTRA_NAME_CLAIM:-name}
       - ENTRA_ROLE_TOKEN_KIND=${ENTRA_ROLE_TOKEN_KIND:-id}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_SERVICE_NAME=auth-server
       - REGISTRY_CLIENT_URL=${REGISTRY_CLIENT_URL:-http://registry-frontend}
       # MongoDB configuration
       - MONGO_URI=mongodb://registry-mongodb:27017/jarvis
@@ -258,7 +234,7 @@ services:
     restart: on-failure:0
     ports:
       - 8099:8080
-      - 50051:50051
+      # - 50051:50051
     env_file:
       - .env
     volumes:
@@ -272,21 +248,6 @@ services:
     profiles:
       - full
       - dev
-
-  # SQLite container for metrics database
-  metrics-db:
-    image: alpine:latest
-    volumes:
-      - metrics-db-data:/var/lib/sqlite
-    command: [ "sh", "-c", "apk add --no-cache sqlite && mkdir -p /var/lib/sqlite && sqlite3 /var/lib/sqlite/metrics.db 'CREATE TABLE IF NOT EXISTS _health (id INTEGER);' && tail -f /dev/null" ]
-    restart: unless-stopped
-    healthcheck:
-      test: [ "CMD", "sqlite3", "/var/lib/sqlite/metrics.db", ".tables" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    profiles:
-      - full
 
   # Prometheus for metrics collection
   prometheus:
@@ -396,7 +357,6 @@ volumes:
     driver: local
   mongodb-config:
     driver: local
-  metrics-db-data:
   prometheus-data:
   grafana-data:
   weaviate_data:

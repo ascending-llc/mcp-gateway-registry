@@ -96,8 +96,12 @@ class Settings(BaseSettings):
     JWT_AUDIENCE: str = "jarvis-services"
     JWT_SELF_SIGNED_KID: str = "self-signed-key-v1"
     API_VERSION: str = "v1"
-    log_level: int = logging.INFO  # Default to INFO (20), can be overridden by LOG_LEVEL env var
+    log_level: str = "INFO"  # Default to INFO, can be overridden by LOG_LEVEL env var (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     log_format: str = "%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s"
+
+    # Encryption key for sensitive data (client secrets, API keys, etc.)
+    # Hex-encoded AES key for encrypting OAuth client secrets and API keys
+    CREDS_KEY: Optional[str] = None
 
     # Local development mode detection
     @property
@@ -177,6 +181,22 @@ class Settings(BaseSettings):
     def agent_state_file_path(self) -> Path:
         """Path to agent state file (enabled/disabled tracking)."""
         return self.agents_dir / "agent_state.json"
+
+    def configure_logging(self) -> None:
+        """Configure application-wide logging with consistent format and level.
+        
+        This should be called once at application startup to initialize logging
+        for all modules. Individual modules can then use logging.getLogger(__name__)
+        without needing to call basicConfig again.
+        """
+        # Convert string log level to numeric level
+        numeric_level = getattr(logging, self.log_level.upper(), logging.INFO)
+        
+        logging.basicConfig(
+            level=numeric_level,
+            format=self.log_format,
+            force=True  # Override any existing configuration
+        )
 
 
 # Global settings instance

@@ -5,9 +5,12 @@ import secrets
 import urllib.parse
 from typing import Annotated
 
-import httpx
-from fastapi import APIRouter, Cookie, Form, HTTPException, Request, status
-from fastapi.responses import JSONResponse, RedirectResponse
+from ..core.config import settings
+from auth_server.core.config import settings as auth_settings
+from ..auth.dependencies import create_session_cookie, validate_login_credentials
+from ..utils.crypto_utils import generate_token_pair
+from packages.models._generated import IUser
+from registry.services.user_service import user_service
 from itsdangerous import URLSafeTimedSerializer
 
 from auth_server.core.config import settings as auth_settings
@@ -100,7 +103,7 @@ async def oauth2_callback(
             logger.error("Missing authorization code in OAuth2 callback")
             return RedirectResponse(
                 url=f"{settings.registry_client_url}/login?error=oauth2_missing_code",
-                status_code=302,
+                status_code=302
             )
 
         # Exchange authorization code for JWT access token (standard OAuth2 flow)
@@ -121,12 +124,10 @@ async def oauth2_callback(
                 )
 
                 if response.status_code != 200:
-                    logger.error(
-                        f"Failed to exchange code for token: {response.status_code} - {response.text}"
-                    )
+                    logger.error(f"Failed to exchange code for token: {response.status_code} - {response.text}")
                     return RedirectResponse(
                         url=f"{settings.registry_client_url}/login?error=oauth2_token_exchange_failed",
-                        status_code=302,
+                        status_code=302
                     )
 
                 token_response = response.json()
@@ -136,7 +137,7 @@ async def oauth2_callback(
                     logger.error("No access_token returned from auth server")
                     return RedirectResponse(
                         url=f"{settings.registry_client_url}/login?error=oauth2_invalid_response",
-                        status_code=302,
+                        status_code=302
                     )
 
                 # Decode JWT to extract user information (no signature verification for internal use)
@@ -160,13 +161,14 @@ async def oauth2_callback(
         except httpx.TimeoutException:
             logger.error("Timeout exchanging authorization code with auth server")
             return RedirectResponse(
-                url=f"{settings.registry_client_url}/login?error=oauth2_timeout", status_code=302
+                url=f"{settings.registry_client_url}/login?error=oauth2_timeout",
+                status_code=302
             )
         except Exception as e:
             logger.error(f"Failed to exchange authorization code for token: {e}")
             return RedirectResponse(
                 url=f"{settings.registry_client_url}/login?error=oauth2_exchange_error",
-                status_code=302,
+                status_code=302
             )
 
         # Validate that user_id was resolved by auth_server
@@ -174,7 +176,7 @@ async def oauth2_callback(
             logger.warning(f"User {userinfo.get('username')} has no user_id - not found in MongoDB")
             return RedirectResponse(
                 url=f"{settings.registry_client_url}/login?error=User+not+found+in+registry",
-                status_code=302,
+                status_code=302
             )
 
         # Look up user object to get role (user_id already provided in JWT)
@@ -185,29 +187,54 @@ async def oauth2_callback(
                 url=f"{settings.registry_client_url}/login?error=User+not+found+in+registry",
                 status_code=302,
             )
+        
+        # Generate JWT access and refresh tokens
+        access_token, refresh_token = generate_token_pair(
+            user_id=str(user_obj.id),
+            username=userinfo.get("username"),
+            email=userinfo.get("email", ""),
+            groups=userinfo.get("groups", []),
+            scopes=userinfo.get("scopes", []),
+            role=user_obj.role,
+            auth_method="oauth2",
+            provider=userinfo.get("provider", "unknown"),
+            idp_id=userinfo.get("idp_id")
+        )
 
-        # Session data already contains user_id from auth_server, just add role
-        session_data = {**userinfo, "role": user_obj.role}
-        registry_session = signer.dumps(session_data)
-        response = RedirectResponse(url=settings.registry_client_url.rstrip("/"), status_code=302)
+        response = RedirectResponse(url=settings.registry_client_url.rstrip('/'), status_code=302)
+
+        # Determine cookie security settings
         cookie_secure_config = auth_settings.oauth2_config.get("session", {}).get("secure", False)
         x_forwarded_proto = request.headers.get("x-forwarded-proto", "")
         is_https = x_forwarded_proto == "https" or request.url.scheme == "https"
         cookie_secure = cookie_secure_config and is_https
 
-        cookie_params = {
-            "key": "jarvis_registry_session",
-            "value": registry_session,
-            "max_age": auth_settings.oauth2_config.get("session", {}).get("max_age_seconds", 28800),
-            "httponly": auth_settings.oauth2_config.get("session", {}).get("httponly", True),
-            "samesite": auth_settings.oauth2_config.get("session", {}).get("samesite", "lax"),
-            "secure": cookie_secure,
-            "path": "/",
-        }
+        # Set access token cookie (1 day)
+        response.set_cookie(
+            key=settings.session_cookie_name,  # jarvis_registry_session
+            value=access_token,
+            max_age=86400,  # 1 day in seconds
+            httponly=True,
+            samesite="lax",
+            secure=cookie_secure,
+            path="/"
+        )
 
-        # Set cookie and redirect back to UI
-        response.set_cookie(**cookie_params)
+        # Set refresh token cookie (7 days)
+        response.set_cookie(
+            key="jarvis_registry_refresh",
+            value=refresh_token,
+            max_age=604800,  # 7 days in seconds
+            httponly=True,
+            samesite="lax",
+            secure=cookie_secure,
+            path="/"
+        )
+
+        # Clean up temporary cookies
         response.delete_cookie("oauth2_temp_session")
+
+        logger.info(f"OAuth2 login successful for user {userinfo.get('username')}, JWT tokens set in httpOnly cookies")
         return response
 
     except Exception as e:
@@ -217,91 +244,38 @@ async def oauth2_callback(
         )
 
 
-@router.post("/login")
-async def login_submit(
-    request: Request, username: Annotated[str, Form()], password: Annotated[str, Form()]
-):
-    """Handle login form submission - supports both traditional and API calls"""
-    logger.info(f"Login attempt for username: {username}")
-
-    # Check if this is an API call (React) or traditional form submission
-    accept_header = request.headers.get("accept", "")
-    is_api_call = "application/json" in accept_header
-
-    if validate_login_credentials(username, password):
-        session_data = create_session_cookie(username)
-
-        if is_api_call:
-            # API response for React
-            response = JSONResponse(content={"success": True, "message": "Login successful"})
-        else:
-            # Traditional redirect response
-            response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-
-        # Security Note: This implementation uses domain cookies for single-tenant deployments
-        # where cross-subdomain authentication is required (e.g., auth.domain.com and registry.domain.com).
-        # For multi-tenant SaaS deployments with tenant-based subdomains, do NOT use domain cookies
-        # as they would allow cross-tenant session sharing. Consider alternative authentication methods
-        # such as token-based auth or separate auth domains per tenant.
-        cookie_params = {
-            "key": settings.session_cookie_name,
-            "value": session_data,
-            "max_age": settings.session_max_age_seconds,
-            "httponly": True,  # Prevents JavaScript access (XSS protection)
-            "samesite": "lax",  # CSRF protection
-            "secure": settings.session_cookie_secure,  # Only transmit over HTTPS when True
-            "path": "/",  # Explicit path for clarity
-        }
-
-        # Add domain attribute if configured for cross-subdomain cookie sharing
-        if settings.session_cookie_domain:
-            cookie_params["domain"] = settings.session_cookie_domain
-
-        response.set_cookie(**cookie_params)
-        logger.info(f"User '{username}' logged in successfully.")
-        return response
-    logger.info(f"Login failed for user '{username}'.")
-
-    if is_api_call:
-        # API error response for React
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password"
-        )
-    # Traditional redirect with error
-    return RedirectResponse(
-        url=f"{settings.registry_client_url}/login?error=Invalid+username+or+password",
-        status_code=status.HTTP_303_SEE_OTHER,
-    )
-
 
 async def logout_handler(
     request: Request,
     session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
 ):
-    """Shared logout logic for both GET and POST requests"""
+    """Shared logout logic for GET and POST requests"""
     try:
         # Check if user was logged in via OAuth2
         provider = None
         if session:
             try:
-                from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
-
-                serializer = URLSafeTimedSerializer(settings.secret_key)
-                session_data = serializer.loads(session, max_age=settings.session_max_age_seconds)
-
-                if session_data.get("auth_method") == "oauth2":
-                    provider = session_data.get("provider")
+                import jwt as pyjwt
+                # Try to decode JWT to check auth method
+                claims = pyjwt.decode(
+                    session,
+                    settings.secret_key,
+                    algorithms=['HS256'],
+                    options={"verify_exp": False}  # Don't verify expiration for logout
+                )
+                
+                if claims.get('auth_method') == 'oauth2':
+                    provider = claims.get('provider')
                     logger.info(f"User was authenticated via OAuth2 provider: {provider}")
-
-            except (SignatureExpired, BadSignature, Exception) as e:
-                logger.debug(f"Could not decode session for logout: {e}")
-
-        # Clear local session cookie
-        response = RedirectResponse(
-            url=f"{settings.registry_client_url}/login", status_code=status.HTTP_303_SEE_OTHER
-        )
-        response.delete_cookie(settings.session_cookie_name)
-
+                    
+            except Exception as e:
+                logger.debug(f"Could not decode JWT for logout: {e}")
+        
+        # Clear all authentication cookies
+        response = RedirectResponse(url=f"{settings.registry_client_url}/login", status_code=status.HTTP_303_SEE_OTHER)
+        response.delete_cookie(settings.session_cookie_name, path="/")
+        response.delete_cookie("jarvis_registry_refresh", path="/")
+        
         # If user was logged in via OAuth2, redirect to provider logout
         if provider:
             auth_external_url = settings.auth_server_external_url
@@ -310,31 +284,22 @@ async def logout_handler(
             logout_url = f"{auth_external_url}/oauth2/logout/{provider}?redirect_uri={redirect_uri}"
             logger.info(f"Redirecting to {provider} logout: {logout_url}")
             response = RedirectResponse(url=logout_url, status_code=status.HTTP_303_SEE_OTHER)
-            response.delete_cookie(settings.session_cookie_name)
-
-        logger.info("User logged out.")
+            response.delete_cookie(settings.session_cookie_name, path="/")
+            response.delete_cookie("jarvis_registry_refresh", path="/")
+        
+        logger.info("User logged out, JWT cookies cleared")
         return response
 
     except Exception as e:
         logger.error(f"Error during logout: {e}")
         # Fallback to simple logout
-        response = RedirectResponse(
-            url=f"{settings.registry_client_url}/login", status_code=status.HTTP_303_SEE_OTHER
-        )
-        response.delete_cookie(settings.session_cookie_name)
+        response = RedirectResponse(url=f"{settings.registry_client_url}/login", status_code=status.HTTP_303_SEE_OTHER)
+        response.delete_cookie(settings.session_cookie_name, path="/")
+        response.delete_cookie("jarvis_registry_refresh", path="/")
         return response
 
 
-@router.get("/logout")
-async def logout_get(
-    request: Request,
-    session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,
-):
-    """Handle logout via GET request (for URL navigation)"""
-    return await logout_handler(request, session)
-
-
-@router.post("/logout")
+@router.post("/redirect/logout")
 async def logout_post(
     request: Request,
     session: Annotated[str | None, Cookie(alias=settings.session_cookie_name)] = None,

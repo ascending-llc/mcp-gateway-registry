@@ -73,8 +73,9 @@ class Settings(BaseSettings):
     )
 
     # Logging configuration
-    log_level: int = Field(
-        default=logging.INFO, description="Logging level (integer constant from logging module)"
+    log_level: str = Field(
+        default="INFO",
+        description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
     )
     log_format: str = Field(
         default="%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s",
@@ -99,8 +100,8 @@ class Settings(BaseSettings):
         if not v:
             raise ValueError("REGISTRY_URL must be set")
         return v.rstrip("/")
-
-    @field_validator("LOG_LEVEL", mode="before")
+    
+    @field_validator("log_level", mode='before')
     @classmethod
     def convert_log_level(cls, v):
         """Convert string log level names to integers (e.g., 'DEBUG' -> 10)."""
@@ -136,7 +137,7 @@ class Settings(BaseSettings):
         logger.info(f"  MCP Transport: {self.MCP_TRANSPORT}")
         logger.info(f"  Listen Port: {self.MCP_SERVER_LISTEN_PORT}")
         logger.info(f"  Auth Server URL: {self.AUTH_SERVER_URL}")
-        logger.info(f"  Log Level: {self.LOG_LEVEL}")
+        logger.info(f"  Log Level: {self.log_level}")
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -169,7 +170,22 @@ def parse_arguments() -> argparse.Namespace:
 # Create global settings instance
 settings = Settings()
 
-logging.basicConfig(level=settings.log_level, format=settings.log_format)
-logger.setLevel(settings.log_level)
+def configure_logging():
+    """Configure application-wide logging with consistent format and level.
+    
+    This should be called once at application startup to initialize logging
+    for all modules. Individual modules can then use logging.getLogger(__name__)
+    without needing to call basicConfig again.
+    """
+    # Convert string log level to numeric level
+    numeric_level = getattr(logging, settings.log_level.upper(), logging.INFO)
+    
+    logging.basicConfig(
+        level=numeric_level,
+        format=settings.log_format,
+        force=True  # Override any existing configuration
+    )
 
+# Configure logging on module import
+configure_logging()
 settings.log_config()

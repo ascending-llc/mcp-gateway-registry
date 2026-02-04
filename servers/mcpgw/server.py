@@ -13,10 +13,17 @@ from config import parse_arguments, settings
 logger = logging.getLogger(__name__)
 
 
-mcp = FastMCP(
-    "RegistryGateway",
-    auth=jwtVerifier,  # JWT verifier (requires middleware to swap headers if using custom header)
-    instructions="""This MCP Gateway provides unified access to 100+ MCP servers, tools, resources, and prompts through a centralized discovery and execution interface.
+def create_mcp_app() -> FastMCP:
+    """
+    Factory function to create a stateless FastMCP application instance.
+    
+    Returns:
+        Configured FastMCP application instance
+    """
+    mcp = FastMCP(
+        "RegistryGateway",
+        auth=jwtVerifier,  # JWT verifier (requires middleware to swap headers if using custom header)
+        instructions="""This MCP Gateway provides unified access to 100+ MCP servers, tools, resources, and prompts through a centralized discovery and execution interface.
 
 KEY CAPABILITIES:
 - 🔍 Discover any tool, resource, or prompt across all registered MCP servers
@@ -25,44 +32,64 @@ KEY CAPABILITIES:
 - 💬 Use prompts from any server for specialized workflows
 - 🎯 Automatic routing, authentication, and execution
 
-WHEN TO USE:
-- User needs external data or functionality → Use discover_tools to find relevant capabilities
-- User asks what you can do → Use discover_servers (empty query) to list all available services
-- User mentions a specific service/domain → Use discover_servers with keyword (e.g., "search", "github", "database")
-- Unknown capability needed → Always try discover_tools first with a descriptive query
+CRITICAL RULE - ALWAYS USE DISCOVERY FIRST:
+⚠️ MANDATORY: If you don't have a suitable tool for the user's request, you MUST use discover_tools or discover_servers to find one.
+⚠️ NEVER respond with "I don't have the capability" without first attempting discovery.
+⚠️ The gateway provides access to 100+ specialized tools - they must be discovered before use.
 
-WORKFLOW:
-1. Discover: Use discover_tools (find specific tools) OR discover_servers (explore available services)
-2. Execute: Use execute_tool with discovered server_path, tool_name, and required arguments
+WHEN TO USE DISCOVERY TOOLS:
+✓ User needs external/real-time data (news, weather, stock prices, current events)
+✓ User asks "what can you do?" → Use discover_servers to show all available services
+✓ User mentions specific services (GitHub, databases, APIs, search engines)
+✓ User requests functionality you don't have built-in → ALWAYS try discover_tools first
+✓ You encounter a task requiring specialized tools → discover_tools before saying "I can't"
+✓ User asks about capabilities in a domain → Use discover_servers with domain keyword
+
+DISCOVERY WORKFLOW:
+1. User makes request → Check if you have suitable tools
+2. No suitable tools? → MUST call discover_tools("description of need") or discover_servers("domain")
+3. Review discovered tools/servers
+4. Execute appropriate tool with execute_tool(server_path, tool_name, arguments)
+5. Present results to user
 
 EXAMPLES:
-- Current information → discover_tools("search web") then execute_tool with found search tool
-- Code analysis → discover_tools("analyze code") then execute_tool with code analysis tool
-- Any external API → discover_tools(description) then execute_tool with appropriate parameters
+- "What's the weather?" → discover_tools("weather forecast current conditions")
+- "Search for news on AI" → discover_tools("web search news articles")
+- "What can you do?" → discover_servers("" to browse all available services)
+- "Analyze this GitHub repo" → discover_tools("github repository analysis")
+- "Get stock prices" → discover_tools("financial data stock market")
 
-ALWAYS proactively discover and use available tools when user requests could benefit from external data, APIs, or specialized functionality.""",
-)
+ALWAYS be proactive: Discover and use available tools automatically. The gateway is your superpower - use it!"""
+    )
 
-# Add header swap middleware (must be BEFORE AuthMiddleware)
-mcp.add_middleware(HeaderSwapMiddleware(custom_header=settings.INTERNAL_AUTH_HEADER))
+    # Add header swap middleware (must be BEFORE AuthMiddleware)
+    mcp.add_middleware(HeaderSwapMiddleware(custom_header=settings.INTERNAL_AUTH_HEADER)) 
 
-# Add authentication middleware
-mcp.add_middleware(AuthMiddleware())
+    # Add authentication middleware
+    mcp.add_middleware(AuthMiddleware())
+    
+    return mcp
 
 
 # ============================================================================
 # MCP Prompts - Guide AI Assistant Behavior (Claude, ChatGPT, etc.)
 # ============================================================================
 
-
-@mcp.prompt()
-def gateway_capabilities():
-    """📚 Overview of MCP Gateway capabilities and available services.
-
-    Use this prompt to understand what services and tools are available through the gateway.
-    This is automatically invoked when you need to know what you can do.
+def register_prompts(mcp: FastMCP) -> None:
     """
-    return f"""# MCP Gateway - Available Capabilities
+    Register prompts for the MCP application.
+    
+    Args:
+        mcp: FastMCP application instance
+    """
+    @mcp.prompt()
+    def gateway_capabilities():
+        """📚 Overview of MCP Gateway capabilities and available services.
+        
+        Use this prompt to understand what services and tools are available through the gateway.
+        This is automatically invoked when you need to know what you can do.
+        """
+        return f"""# MCP Gateway - Available Capabilities
 
 You have access to a powerful MCP Gateway that provides unified access to 100+ MCP servers.
 
@@ -149,28 +176,39 @@ Total Available: 100+ MCP servers with diverse tools, resources, and prompts.
 # Custom HTTP Routes
 # ============================================================================
 
+def register_routes(mcp: FastMCP) -> None:
+    """
+    Register custom HTTP routes for the MCP application.
+    
+    Args:
+        mcp: FastMCP application instance
+    """
+    @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
+    async def _health_check_route(request):
+        """Health check endpoint for the MCP Gateway server."""
+        logger.debug("Health check endpoint called.")
+        return JSONResponse({"status": "ok"})
 
-@mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
-async def _health_check_route(request):
-    """Health check endpoint for the MCP Gateway server."""
-    logger.debug("Health check endpoint called.")
-    return JSONResponse({"status": "ok"})
 
 
 # ============================================================================
-# Search and Discovery Tools
+# Tool Registration
 # ============================================================================
 
-# Register search tools (discover_tools, discover_servers) using Pattern 3
-for tool_name, tool_func in search.get_tools():
-    mcp.tool(name=tool_name)(tool_func)
+def register_tools(mcp: FastMCP) -> None:
+    """
+    Register all tools for the MCP application.
+    
+    Args:
+        mcp: FastMCP application instance
+    """
+    # Register search tools (discover_tools, discover_servers)
+    for tool_name, tool_func in search.get_tools():
+        mcp.tool(name=tool_name)(tool_func)
 
-# ============================================================================
-# Registry API Tools
-# ============================================================================
-
-for tool_name, tool_func in registry_api.get_tools():
-    mcp.tool(name=tool_name)(tool_func)
+    # Register registry API tools
+    for tool_name, tool_func in registry_api.get_tools():
+        mcp.tool(name=tool_name)(tool_func)
 
 
 # ============================================================================
@@ -181,6 +219,7 @@ for tool_name, tool_func in registry_api.get_tools():
 def main():
     """
     Main entry point for the MCPGW server.
+    Creates a new stateless application instance and starts the server.
     """
     # Parse command line arguments
     args = parse_arguments()
@@ -202,12 +241,21 @@ def main():
     logger.info(f"  Endpoint: http://0.0.0.0:{settings.MCP_SERVER_LISTEN_PORT}/mcp")
     logger.info("=" * 80)
 
+    # Create stateless application instance
+    mcp = create_mcp_app()
+    
+    # Register all components
+    register_prompts(mcp)
+    register_routes(mcp)
+    register_tools(mcp)
+
     logger.info("Starting server...")
     try:
         mcp.run(
             transport=settings.MCP_TRANSPORT,
             host="0.0.0.0",
             port=int(settings.MCP_SERVER_LISTEN_PORT),
+            stateless_http=True
         )
     except KeyboardInterrupt:
         logger.info("Server shutdown requested by user")

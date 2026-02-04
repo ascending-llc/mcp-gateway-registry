@@ -140,6 +140,7 @@ class TestProxyToMCPServer:
         mock_server = Mock(spec=MCPServerDocument)
         mock_server.path = MCPGW_PATH
         mock_server.serverName = "mcpgw"
+        mock_server.config = {}
 
         # Mock backend response
         mock_response = Mock()
@@ -236,6 +237,7 @@ class TestProxyToMCPServer:
         mock_server_for_sse = Mock(spec=MCPServerDocument)
         mock_server_for_sse.path = "/sse-server"
         mock_server_for_sse.serverName = "sse-server"
+        mock_server_for_sse.config = {}
 
         mock_backend_response = Mock()
         mock_backend_response.status_code = 200
