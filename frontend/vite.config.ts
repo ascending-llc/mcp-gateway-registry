@@ -48,6 +48,11 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       host: '0.0.0.0',
       proxy: {
+        logout: {
+          target: backendURL,
+          changeOrigin: true,
+          secure: false,
+        },
         '/oauth2': {
           target: authURL,
           changeOrigin: true,

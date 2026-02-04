@@ -90,7 +90,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = async () => {
     try {
-      await axios.post('/logout');
+      await SERVICES.AUTH.logout();
     } catch (_error) {
       // Ignore errors during logout
     } finally {

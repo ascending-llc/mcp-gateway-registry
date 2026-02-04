@@ -340,7 +340,7 @@ const TokenGeneration: React.FC = () => {
               </div>
 
               {/* Token Details */}
-              <div className='space-y-2 text-sm mb-4'>
+              <div className='space-y-2 text-sm mb-4 text-gray-900 dark:text-white'>
                 <p>
                   <strong>Expires:</strong>{' '}
                   {new Date(Date.now() + tokenDetails.token_data.expires_in * 1000).toLocaleString()}

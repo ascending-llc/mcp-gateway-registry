@@ -5,7 +5,9 @@ const SERVER_BASE_URL = `${BASE_URL}/servers`;
 const API = {
   // auth
   getAuthMe: '/api/auth/me',
+
   getToken: `${BASE_URL}/tokens/generate`,
+  logout: '/logout',
 
   getVersion: '/api/version',
 
