@@ -3,7 +3,6 @@ import {
   ArrowRightOnRectangleIcon,
   Bars3Icon,
   ChevronDownIcon,
-  Cog6ToothIcon,
   KeyIcon,
   MoonIcon,
   SunIcon,

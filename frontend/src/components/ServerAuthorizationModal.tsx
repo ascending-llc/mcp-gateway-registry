@@ -3,6 +3,7 @@ import { ArrowPathIcon, KeyIcon, TrashIcon, XMarkIcon } from '@heroicons/react/2
 import type React from 'react';
 import { useState } from 'react';
 
+import { useGlobal } from '@/contexts/GlobalContext';
 import { useServer } from '@/contexts/ServerContext';
 import SERVICES from '@/services';
 import { SERVER_CONNECTION } from '../services/mcp/type';
@@ -13,7 +14,6 @@ interface ServerAuthorizationModalProps {
   status: SERVER_CONNECTION | undefined;
   showApiKeyDialog: boolean;
   handleCancelAuth: () => void;
-  onShowToast?: (message: string, type: 'success' | 'error') => void;
   onCloseAuthDialog: () => void;
 }
 
@@ -23,9 +23,9 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
   status,
   showApiKeyDialog,
   handleCancelAuth,
-  onShowToast,
   onCloseAuthDialog,
 }) => {
+  const { showToast } = useGlobal();
   const { refreshServerData, getServerStatusByPolling, cancelPolling } = useServer();
 
   const [loading, setLoading] = useState(false);
@@ -50,12 +50,12 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
         setLoading(true);
         const result = await SERVICES.MCP.revokeAuth(serverId);
         if (result.success) {
-          onShowToast?.(result?.message || 'OAuth flow cancelled', 'success');
+          showToast?.(result?.message || 'OAuth flow cancelled', 'success');
         } else {
-          onShowToast?.(result?.message || 'Unknown error', 'error');
+          showToast?.(result?.message || 'Unknown error', 'error');
         }
       } catch (error) {
-        onShowToast?.(error instanceof Error ? error.message : 'Unknown error', 'error');
+        showToast?.(error instanceof Error ? error.message : 'Unknown error', 'error');
       } finally {
         setLoading(false);
         refreshServerData?.();
@@ -73,10 +73,10 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
         getServerStatusByPolling?.(serverId);
         onCloseAuthDialog();
       } else {
-        onShowToast?.('Failed to get auth URL', 'error');
+        showToast?.('Failed to get auth URL', 'error');
       }
     } catch (error) {
-      onShowToast?.(error instanceof Error ? error.message : 'Unknown error', 'error');
+      showToast?.(error instanceof Error ? error.message : 'Unknown error', 'error');
     } finally {
       setLoading(false);
     }
@@ -89,7 +89,7 @@ const ServerAuthorizationModal: React.FC<ServerAuthorizationModalProps> = ({
       if (result.success) {
         await getServerStatusByPolling?.(serverId, state => {
           if (state === SERVER_CONNECTION.CONNECTED) {
-            onShowToast?.(result?.message || 'Server reinitialized successfully', 'success');
+            showToast?.(result?.message || 'Server reinitialized successfully', 'success');
             onCloseAuthDialog();
           } else if (state === SERVER_CONNECTION.DISCONNECTED || state === SERVER_CONNECTION.ERROR) {
             oauthInit();

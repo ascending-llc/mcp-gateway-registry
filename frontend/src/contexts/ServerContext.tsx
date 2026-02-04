@@ -72,8 +72,8 @@ interface ServerContextType {
   agentError: string | null;
 
   // Shared state
-  viewMode: 'all' | 'servers' | 'agents';
-  setViewMode: (mode: 'all' | 'servers' | 'agents') => void;
+  viewMode: 'servers' | 'agents';
+  setViewMode: (mode: 'servers' | 'agents') => void;
   activeFilter: string;
   setActiveFilter: (filter: string) => void;
 
@@ -102,7 +102,7 @@ interface ServerProviderProps {
 export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
   const [servers, setServers] = useState<ServerInfo[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [viewMode, setViewMode] = useState<'all' | 'servers' | 'agents'>('all');
+  const [viewMode, setViewMode] = useState<'servers' | 'agents'>('servers');
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [serverLoading, setServerLoading] = useState(true);
   const [agentLoading, setAgentLoading] = useState(true);
