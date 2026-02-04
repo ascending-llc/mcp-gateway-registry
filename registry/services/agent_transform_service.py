@@ -9,7 +9,6 @@ import logging
 from typing import Any
 
 from ..constants import REGISTRY_CONSTANTS
-from ..core.config import settings
 from ..schemas.anthropic_schema import (
     Package,
     PaginationMetadata,

@@ -9,13 +9,10 @@ import asyncio
 import functools
 import logging
 import time
+from collections.abc import Callable
 from typing import (
     Any,
-    Callable,
-    Dict,
-    Optional,
     TypeVar,
-    Union,
 )
 
 logger = logging.getLogger(__name__)
@@ -24,12 +21,12 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 
 def _safe_extract_labels(
-    extract_labels: Optional[Callable],
+    extract_labels: Callable | None,
     args: tuple,
     kwargs: dict,
     result: Any = None,
-    error: Optional[Exception] = None,
-) -> Dict[str, str]:
+    error: Exception | None = None,
+) -> dict[str, str]:
     """
     Safely extract labels from function arguments.
 
@@ -56,8 +53,8 @@ def _safe_extract_labels(
 
 
 def track_duration(
-    record_func: Callable[[float, Dict[str, str]], None],
-    extract_labels: Optional[Callable[..., Dict[str, str]]] = None,
+    record_func: Callable[[float, dict[str, str]], None],
+    extract_labels: Callable[..., dict[str, str]] | None = None,
     include_success: bool = True,
 ) -> Callable[[F], F]:
     """
@@ -152,8 +149,8 @@ def track_duration(
 
 
 def create_timed_context(
-    record_func: Callable[[float, Dict[str, str]], None],
-    labels: Optional[Dict[str, str]] = None,
+    record_func: Callable[[float, dict[str, str]], None],
+    labels: dict[str, str] | None = None,
 ):
     """
     Create a context manager for timing code blocks.
@@ -180,7 +177,7 @@ def create_timed_context(
         def __init__(self):
             self.start_time: float = 0
             self.success: bool = True
-            self.extra_labels: Dict[str, str] = {}
+            self.extra_labels: dict[str, str] = {}
 
         def set_success(self, success: bool) -> None:
             """Set the success status for this context."""

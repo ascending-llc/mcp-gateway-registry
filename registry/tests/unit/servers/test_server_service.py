@@ -1146,6 +1146,7 @@ class TestHealthCheckEndpointUrlConstruction:
     def mock_mcp_server(self):
         """Create a mock MCP server document."""
         from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+
         server = Mock(spec=MCPServerDocument)
         server.serverName = "test-server"
         return server
@@ -1153,13 +1154,11 @@ class TestHealthCheckEndpointUrlConstruction:
     @pytest.mark.asyncio
     async def test_http_url_used_as_is(self, mock_mcp_server):
         """Test that HTTP URLs are used as-is without modification."""
-        from registry.services.server_service import ServerServiceV1
         from unittest.mock import AsyncMock
 
-        mock_mcp_server.config = {
-            "url": "https://example.com/api/v1",
-            "type": "streamable-http"
-        }
+        from registry.services.server_service import ServerServiceV1
+
+        mock_mcp_server.config = {"url": "https://example.com/api/v1", "type": "streamable-http"}
 
         service = ServerServiceV1()
 
@@ -1181,13 +1180,11 @@ class TestHealthCheckEndpointUrlConstruction:
     @pytest.mark.asyncio
     async def test_http_url_trailing_slash_stripped(self, mock_mcp_server):
         """Test that trailing slashes are stripped from URLs."""
-        from registry.services.server_service import ServerServiceV1
         from unittest.mock import AsyncMock
 
-        mock_mcp_server.config = {
-            "url": "https://example.com/api/v1/",
-            "type": "streamable-http"
-        }
+        from registry.services.server_service import ServerServiceV1
+
+        mock_mcp_server.config = {"url": "https://example.com/api/v1/", "type": "streamable-http"}
 
         service = ServerServiceV1()
 
@@ -1209,15 +1206,13 @@ class TestHealthCheckEndpointUrlConstruction:
     @pytest.mark.asyncio
     async def test_snowflake_url_used_as_is(self, mock_mcp_server):
         """Test that Snowflake-style URLs are used as-is."""
-        from registry.services.server_service import ServerServiceV1
         from unittest.mock import AsyncMock
+
+        from registry.services.server_service import ServerServiceV1
 
         snowflake_url = "https://oec25260.us-east-1.snowflakecomputing.com/api/v2/databases/SNOWFLAKE_LEARNING_DB/schemas/MOCKSCHEMA/mcp-servers/JARVIS-DEMO-MCP"
 
-        mock_mcp_server.config = {
-            "url": snowflake_url,
-            "type": "streamable-http"
-        }
+        mock_mcp_server.config = {"url": snowflake_url, "type": "streamable-http"}
 
         service = ServerServiceV1()
 
@@ -1239,13 +1234,11 @@ class TestHealthCheckEndpointUrlConstruction:
     @pytest.mark.asyncio
     async def test_sse_url_used_as_is(self, mock_mcp_server):
         """Test that SSE URLs are used as-is without modification."""
-        from registry.services.server_service import ServerServiceV1
         from unittest.mock import AsyncMock
 
-        mock_mcp_server.config = {
-            "url": "https://example.com/api/v1/sse",
-            "type": "sse"
-        }
+        from registry.services.server_service import ServerServiceV1
+
+        mock_mcp_server.config = {"url": "https://example.com/api/v1/sse", "type": "sse"}
 
         service = ServerServiceV1()
 
@@ -1267,13 +1260,11 @@ class TestHealthCheckEndpointUrlConstruction:
     @pytest.mark.asyncio
     async def test_sse_url_trailing_slash_stripped(self, mock_mcp_server):
         """Test that trailing slashes are stripped from SSE URLs."""
-        from registry.services.server_service import ServerServiceV1
         from unittest.mock import AsyncMock
 
-        mock_mcp_server.config = {
-            "url": "https://example.com/sse-endpoint/",
-            "type": "sse"
-        }
+        from registry.services.server_service import ServerServiceV1
+
+        mock_mcp_server.config = {"url": "https://example.com/sse-endpoint/", "type": "sse"}
 
         service = ServerServiceV1()
 
@@ -1295,13 +1286,11 @@ class TestHealthCheckEndpointUrlConstruction:
     @pytest.mark.asyncio
     async def test_health_check_returns_healthy_for_200(self, mock_mcp_server):
         """Test that health check returns healthy for 200 status code."""
-        from registry.services.server_service import ServerServiceV1
         from unittest.mock import AsyncMock
 
-        mock_mcp_server.config = {
-            "url": "https://example.com/api",
-            "type": "streamable-http"
-        }
+        from registry.services.server_service import ServerServiceV1
+
+        mock_mcp_server.config = {"url": "https://example.com/api", "type": "streamable-http"}
 
         service = ServerServiceV1()
 
@@ -1323,13 +1312,11 @@ class TestHealthCheckEndpointUrlConstruction:
     @pytest.mark.asyncio
     async def test_health_check_returns_healthy_for_auth_required(self, mock_mcp_server):
         """Test that health check returns healthy (auth required) for 401 status."""
-        from registry.services.server_service import ServerServiceV1
         from unittest.mock import AsyncMock
 
-        mock_mcp_server.config = {
-            "url": "https://example.com/api",
-            "type": "streamable-http"
-        }
+        from registry.services.server_service import ServerServiceV1
+
+        mock_mcp_server.config = {"url": "https://example.com/api", "type": "streamable-http"}
 
         service = ServerServiceV1()
 
@@ -1367,10 +1354,7 @@ class TestHealthCheckEndpointUrlConstruction:
         """Test health check is skipped for stdio transport."""
         from registry.services.server_service import ServerServiceV1
 
-        mock_mcp_server.config = {
-            "url": "/path/to/binary",
-            "type": "stdio"
-        }
+        mock_mcp_server.config = {"url": "/path/to/binary", "type": "stdio"}
 
         service = ServerServiceV1()
 

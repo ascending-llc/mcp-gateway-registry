@@ -6,15 +6,14 @@ Configuration is passed via headers instead of environment variables.
 import argparse
 import logging
 import time
-from typing import List
-from fastapi.middleware.cors import CORSMiddleware
-from packages.telemetry import setup_metrics
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Import database utilities
 from packages.database import close_mongodb, init_mongodb
+from packages.telemetry import setup_metrics
 
 from .core.config import settings
 
@@ -182,7 +181,7 @@ app = FastAPI(
     openapi_url=f"{api_prefix}/openapi.json" if api_prefix else "/openapi.json",
 )
 
-logger.info("🔭 Initializing Telemetry...")    
+logger.info("🔭 Initializing Telemetry...")
 try:
     setup_metrics("auth-server")
 except Exception as e:
@@ -294,12 +293,11 @@ def parse_arguments():
 
     return parser.parse_args()
 
+
 # TODO: This function is completely skipped in the dockerfile.
 def main():
-    
     """Run the server"""
     args = parse_arguments()
-    
 
     # Update global validator with default region
     global validator

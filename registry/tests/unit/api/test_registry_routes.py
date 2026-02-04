@@ -8,15 +8,11 @@ import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
-from registry.auth.dependencies import create_session_cookie
 from registry.constants import REGISTRY_CONSTANTS
 from registry.core.config import settings
 from registry.health.service import health_service
 from registry.main import app
 from registry.services.server_service import server_service_v1
-from registry.health.service import health_service
-from registry.constants import REGISTRY_CONSTANTS
-from registry.core.config import settings
 
 # Alias for tests
 server_service = server_service_v1
@@ -75,12 +71,12 @@ def mock_enhanced_auth_user():
 @pytest.fixture
 def admin_session_cookie():
     """Create a valid admin session cookie (JWT access token)."""
-    from registry.utils.crypto_utils import generate_access_token
     from registry.auth.dependencies import map_cognito_groups_to_scopes
-    
-    groups = ['registry-admins']
-    scopes = map_cognito_groups_to_scopes(groups) or ['registry-admins']
-    
+    from registry.utils.crypto_utils import generate_access_token
+
+    groups = ["registry-admins"]
+    scopes = map_cognito_groups_to_scopes(groups) or ["registry-admins"]
+
     return generate_access_token(
         user_id="test-admin-id",
         username=settings.admin_user,
@@ -89,7 +85,7 @@ def admin_session_cookie():
         scopes=scopes,
         role="admin",
         auth_method="traditional",
-        provider="local"
+        provider="local",
     )
 
 
@@ -186,19 +182,18 @@ class TestV0ListServers:
         self, mock_enhanced_auth_user, sample_servers_data
     ):
         """Test that regular users see only authorized servers."""
-        from registry.utils.crypto_utils import generate_access_token
-        from registry.auth.dependencies import map_cognito_groups_to_scopes
         from fastapi.testclient import TestClient
 
-        from registry.auth.dependencies import create_session_cookie
+        from registry.auth.dependencies import map_cognito_groups_to_scopes
+        from registry.utils.crypto_utils import generate_access_token
 
         # Create user context for a regular (non-admin) user
         user_context = mock_enhanced_auth_user()
-        
+
         # Create session cookie (JWT access token) for this user
         groups = user_context["groups"]
         scopes = map_cognito_groups_to_scopes(groups) or []
-        
+
         user_session_cookie = generate_access_token(
             user_id="test-user-id",
             username=user_context["username"],
@@ -207,7 +202,7 @@ class TestV0ListServers:
             scopes=scopes,
             role="user",
             auth_method=user_context["auth_method"],
-            provider=user_context["provider"]
+            provider=user_context["provider"],
         )
 
         # User should only see servers they have permission for
@@ -415,16 +410,15 @@ class TestV0ListServerVersions:
 
     def test_list_versions_unauthorized_user(self, mock_enhanced_auth_user, sample_servers_data):
         """Test that users cannot access servers they don't have permission for."""
-        from registry.utils.crypto_utils import generate_access_token
-        from registry.auth.dependencies import map_cognito_groups_to_scopes
         from fastapi.testclient import TestClient
 
-        from registry.auth.dependencies import create_session_cookie
+        from registry.auth.dependencies import map_cognito_groups_to_scopes
+        from registry.utils.crypto_utils import generate_access_token
 
         user_context = mock_enhanced_auth_user()
         groups = user_context["groups"]
         scopes = map_cognito_groups_to_scopes(groups) or []
-        
+
         user_session_cookie = generate_access_token(
             user_id="test-user-id",
             username=user_context["username"],
@@ -433,7 +427,7 @@ class TestV0ListServerVersions:
             scopes=scopes,
             role="user",
             auth_method=user_context["auth_method"],
-            provider=user_context["provider"]
+            provider=user_context["provider"],
         )
 
         with patch.object(

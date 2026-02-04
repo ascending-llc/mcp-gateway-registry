@@ -10,8 +10,6 @@ from typing import Any
 
 import httpx
 
-from ...core.config import settings
-
 # Get logger - logging is configured centrally in main.py via settings.configure_logging()
 logger = logging.getLogger(__name__)
 

@@ -10,7 +10,6 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import quote
 
-from ...core.config import settings
 from ...schemas.federation_schema import AnthropicServerConfig
 from .base_client import BaseFederationClient
 

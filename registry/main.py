@@ -14,22 +14,21 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.staticfiles import StaticFiles
-# Import domain routers
-from registry.api.v1.meta_routes import router as meta_router
-from registry.api.v1.token_routes import router as token_router
-from registry.api.v1.server.server_routes import router as servers_router_v1
-from registry.api.v1.search_routes import router as search_router
-from registry.api.wellknown_routes import router as wellknown_router
+
+from packages.telemetry import setup_metrics
 from registry.api.agent_routes import router as agent_router
 from registry.api.management_routes import router as management_router
 from registry.api.proxy_routes import router as proxy_router
 from registry.api.proxy_routes import shutdown_proxy_client
 from registry.api.redirect_routes import router as auth_provider_router
-from registry.api.server_routes import router as servers_router
 from registry.api.v1.acl_routes import router as acl_router
-from registry.version import __version__
-from registry.api.proxy_routes import router as proxy_router, shutdown_proxy_client
-from packages.telemetry import setup_metrics
+
+# Import domain routers
+from registry.api.v1.meta_routes import router as meta_router
+from registry.api.v1.search_routes import router as search_router
+from registry.api.v1.server.server_routes import router as servers_router_v1
+from registry.api.v1.token_routes import router as token_router
+from registry.api.wellknown_routes import router as wellknown_router
 from registry.auth.dependencies import CurrentUserWithACLMap
 
 # Import services for initialization
@@ -45,7 +44,7 @@ async def lifespan(app: FastAPI):
     """Application startup and shutdown lifecycle management."""
     # Configure logging first before any other operations
     settings.configure_logging()
-    
+
     logger.info("🚀 Starting MCP Gateway Registry...")
 
     try:
@@ -209,7 +208,9 @@ else:
 # Register API routers with /api prefix
 app.include_router(meta_router, prefix="/api/auth", tags=["Authentication metadata"])
 app.include_router(token_router, prefix=f"/api/{settings.API_VERSION}", tags=["Server Management"])
-app.include_router(servers_router_v1, prefix=f"/api/{settings.API_VERSION}", tags=["Server Management V1"])
+app.include_router(
+    servers_router_v1, prefix=f"/api/{settings.API_VERSION}", tags=["Server Management V1"]
+)
 app.include_router(agent_router, prefix="/api", tags=["Agent Management"])
 app.include_router(management_router, prefix="/api")
 app.include_router(search_router, prefix=f"/api/{settings.API_VERSION}", tags=["Semantic Search"])
@@ -306,7 +307,7 @@ app.include_router(proxy_router, prefix="/proxy", tags=["MCP Proxy"])
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     # Configure logging before starting server
     settings.configure_logging()
 
@@ -316,5 +317,5 @@ if __name__ == "__main__":
         port=7860,
         reload=True,
         log_level=settings.log_level.lower(),
-        log_config=None  # Disable uvicorn's default logging config to use ours
+        log_config=None,  # Disable uvicorn's default logging config to use ours
     )

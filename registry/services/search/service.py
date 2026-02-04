@@ -15,8 +15,7 @@ from registry.core.config import settings
 from .base import VectorSearchService
 
 if TYPE_CHECKING:
-    from .embedded_service import EmbeddedFaissService
-    from .external_service import ExternalVectorSearchService
+    pass
 
 # Get logger - logging is configured centrally in main.py via settings.configure_logging()
 logger = logging.getLogger(__name__)

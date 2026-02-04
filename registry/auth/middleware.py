@@ -14,13 +14,13 @@ from registry.auth.dependencies import (
     get_accessible_services_for_user,
     get_ui_permissions_for_user,
     get_user_accessible_servers,
-    map_cognito_groups_to_scopes,
     signer,
     user_can_modify_servers,
     user_has_wildcard_access,
 )
 from registry.core.config import settings
 from registry.core.telemetry_decorators import AuthMetricsContext
+
 
 class UnifiedAuthMiddleware(BaseHTTPMiddleware):
     """
@@ -58,20 +58,22 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         #     "/api/{versions}/mcp/{path:path}",
         #     "/api/search/{path:path}",
         # ])
-        self.public_paths_compiled = self._compile_patterns([
-            "/",
-            "/health",
-            "/docs",
-            "/openapi.json",
-            "/static/{path:path}",
-            "/redirect",
-            "/redirect/{provider}",
-            "/api/auth/providers",
-            "/api/auth/config",
-            f"/api/{settings.API_VERSION}/mcp/{{server_name}}/oauth/callback",  # OAuth callback is public
-            "/.well-known/{path:path}",  # OAuth discovery endpoints must be public
-        ])
-        
+        self.public_paths_compiled = self._compile_patterns(
+            [
+                "/",
+                "/health",
+                "/docs",
+                "/openapi.json",
+                "/static/{path:path}",
+                "/redirect",
+                "/redirect/{provider}",
+                "/api/auth/providers",
+                "/api/auth/config",
+                f"/api/{settings.API_VERSION}/mcp/{{server_name}}/oauth/callback",  # OAuth callback is public
+                "/.well-known/{path:path}",  # OAuth discovery endpoints must be public
+            ]
+        )
+
         # =====================================================================
         # INTERNAL PATHS (Admin/Internal - Require Basic Auth)
         # =====================================================================
@@ -141,8 +143,12 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 if server_name:
                     # For MCP proxy paths, RFC 9728 (OAuth 2.0 Protected Resource Metadata)
                     registry_url = settings.registry_client_url.rstrip("/")
-                    oauth_discovery = f"{registry_url}/.well-known/oauth-protected-resource/proxy/{server_name}"
-                    headers["WWW-Authenticate"] = f'Bearer realm="mcp-registry", resource_metadata="{oauth_discovery}"'
+                    oauth_discovery = (
+                        f"{registry_url}/.well-known/oauth-protected-resource/proxy/{server_name}"
+                    )
+                    headers["WWW-Authenticate"] = (
+                        f'Bearer realm="mcp-registry", resource_metadata="{oauth_discovery}"'
+                    )
                 else:
                     # For other authenticated paths, use general OAuth discovery
                     headers["WWW-Authenticate"] = 'Bearer realm="mcp-registry"'
@@ -317,19 +323,20 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 return None
 
             # Extract groups first
-            groups = claims.get('groups', [])
-            
+            groups = claims.get("groups", [])
+
             # Extract scopes from space-separated string
             scope_string = claims.get("scope", "")
             scopes = scope_string.split() if scope_string else []
-            
+
             # If no scopes but has groups, map groups to scopes
             if not scopes and groups:
-                from auth_server.utils.security_mask import map_groups_to_scopes
                 from auth_server.core.config import settings as auth_settings
+                from auth_server.utils.security_mask import map_groups_to_scopes
+
                 scopes = map_groups_to_scopes(groups, auth_settings.scopes_config)
                 logger.info(f"Mapped JWT groups {groups} to scopes: {scopes}")
-            
+
             # Verify we have at least some scopes
             if not scopes:
                 logger.debug(f"JWT token has no scopes and groups mapping failed. Groups: {groups}")
@@ -369,86 +376,94 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             session_cookie = request.cookies.get(settings.session_cookie_name)
             if not session_cookie:
                 return None
-            
+
             # Try to verify JWT access token
             from registry.utils.crypto_utils import verify_access_token, verify_refresh_token
+
             claims = verify_access_token(session_cookie)
-            
+
             if claims:
                 # Valid access token - extract user info and build context
-                username = claims.get('sub')
-                user_id = claims.get('user_id')
-                groups = claims.get('groups', [])
-                auth_method = claims.get('auth_method', 'traditional')
-                
+                username = claims.get("sub")
+                user_id = claims.get("user_id")
+                groups = claims.get("groups", [])
+                auth_method = claims.get("auth_method", "traditional")
+
                 # Extract scopes from JWT (space-separated string)
-                scope_string = claims.get('scope', '')
+                scope_string = claims.get("scope", "")
                 scopes = scope_string.split() if scope_string else []
-                
+
                 # If no scopes but has groups, map groups to scopes
                 if not scopes and groups:
-                    from auth_server.utils.security_mask import map_groups_to_scopes
                     from auth_server.core.config import settings as auth_settings
+                    from auth_server.utils.security_mask import map_groups_to_scopes
+
                     scopes = map_groups_to_scopes(groups, auth_settings.scopes_config)
                     logger.info(f"Mapped session groups {groups} to scopes: {scopes}")
-                
+
                 logger.debug(f"JWT access token valid for user {username} (user_id: {user_id})")
-                
+
                 return self._build_user_context(
                     username=username,
                     groups=groups,
                     scopes=scopes,
                     auth_method=auth_method,
-                    provider=claims.get('provider', 'local'),
-                    auth_source='jwt_session_auth',
-                    user_id=user_id
+                    provider=claims.get("provider", "local"),
+                    auth_source="jwt_session_auth",
+                    user_id=user_id,
                 )
-            
+
             # Access token invalid/expired - try refresh token
             logger.debug("Access token expired or invalid, attempting refresh")
             refresh_token = request.cookies.get("jarvis_registry_refresh")
-            
+
             if not refresh_token:
                 logger.debug("No refresh token available")
                 return None
-            
+
             # Verify refresh token
             refresh_claims = verify_refresh_token(refresh_token)
             if not refresh_claims:
                 logger.debug("Refresh token invalid or expired")
                 return None
-            
+
             # Refresh token valid - extract user info from refresh token claims
-            user_id = refresh_claims.get('user_id')
-            username = refresh_claims.get('sub')
-            auth_method = refresh_claims.get('auth_method')
-            provider = refresh_claims.get('provider')
-            
+            user_id = refresh_claims.get("user_id")
+            username = refresh_claims.get("sub")
+            auth_method = refresh_claims.get("auth_method")
+            provider = refresh_claims.get("provider")
+
             # Extract groups and scopes from refresh token
-            groups = refresh_claims.get('groups', [])
-            scope_string = refresh_claims.get('scope', '')
+            groups = refresh_claims.get("groups", [])
+            scope_string = refresh_claims.get("scope", "")
             scopes = scope_string.split() if scope_string else []
-            
+
             # If no scopes but has groups, map groups to scopes
             if not scopes and groups:
-                from auth_server.utils.security_mask import map_groups_to_scopes
                 from auth_server.core.config import settings as auth_settings
+                from auth_server.utils.security_mask import map_groups_to_scopes
+
                 scopes = map_groups_to_scopes(groups, auth_settings.scopes_config)
                 logger.info(f"Mapped refresh token groups {groups} to scopes: {scopes}")
-            
-            role = refresh_claims.get('role', 'user')
-            email = refresh_claims.get('email', f"{username}@local")
-            
-            logger.info(f"Refresh token valid for user {username} ({auth_method}), generating new access token")
+
+            role = refresh_claims.get("role", "user")
+            email = refresh_claims.get("email", f"{username}@local")
+
+            logger.info(
+                f"Refresh token valid for user {username} ({auth_method}), generating new access token"
+            )
             logger.debug(f"User groups from refresh token: {groups}, scopes: {scopes}")
-            
+
             # Validate that we have the required information
             if not scopes:
-                logger.warning(f"Refresh token for user {username} has no scopes (groups: {groups}), cannot refresh")
+                logger.warning(
+                    f"Refresh token for user {username} has no scopes (groups: {groups}), cannot refresh"
+                )
                 return None
-            
+
             # Generate new access token using information from refresh token
             from registry.utils.crypto_utils import generate_access_token
+
             try:
                 new_access_token = generate_access_token(
                     user_id=user_id,
@@ -458,22 +473,22 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                     scopes=scopes,
                     role=role,
                     auth_method=auth_method,
-                    provider=provider
+                    provider=provider,
                 )
-                
+
                 # Store new access token in request state for response modification
                 request.state.new_access_token = new_access_token
-                
+
                 logger.info(f"Successfully refreshed access token for user {username}")
-                
+
                 return self._build_user_context(
                     username=username,
                     groups=groups,
                     scopes=scopes,
                     auth_method=auth_method,
                     provider=provider,
-                    auth_source='jwt_session_auth_refreshed',
-                    user_id=user_id
+                    auth_source="jwt_session_auth_refreshed",
+                    user_id=user_id,
                 )
             except Exception as e:
                 logger.error(f"Error generating new access token during refresh: {e}")

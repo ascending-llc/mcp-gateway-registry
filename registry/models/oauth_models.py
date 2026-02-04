@@ -1,11 +1,8 @@
-from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, List, Union
-from pydantic import BaseModel, Field, field_validator, ValidationInfo
 import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 from registry.schemas.enums import OAuthFlowStatus
 
@@ -23,7 +20,7 @@ class OAuthTokens(BaseModel):
 
     @classmethod
     @field_validator("expires_at", mode="before")
-    def set_expires_at(cls, v: Optional[int], info: ValidationInfo) -> Optional[int]:
+    def set_expires_at(cls, v: int | None, info: ValidationInfo) -> int | None:
         """Calculate expires_at based on expires_in if not provided"""
         if v is None and info.data.get("expires_in") is not None:
             return int(time.time()) + info.data["expires_in"]

@@ -10,15 +10,14 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from registry.core.telemetry_decorators import (
-    track_tool_execution,
-    track_resource_access,
-    track_prompt_execution,
-)
-from registry.utils.otel_metrics import record_server_request
 from packages.models.extended_mcp_server import MCPServerDocument
 from registry.auth.dependencies import CurrentUser
 from registry.core.mcp_client import clear_session, get_session, initialize_mcp_session
+from registry.core.telemetry_decorators import (
+    track_prompt_execution,
+    track_resource_access,
+    track_tool_execution,
+)
 from registry.schemas.errors import (
     AuthenticationError,
     MissingUserIdError,
@@ -34,6 +33,7 @@ from registry.schemas.proxy_tool_schema import (
     ToolExecutionResponse,
 )
 from registry.services.server_service import _build_complete_headers_for_server, server_service_v1
+from registry.utils.otel_metrics import record_server_request
 
 logger = logging.getLogger(__name__)
 
@@ -523,15 +523,10 @@ async def execute_tool(
     user_id = user_context.get("user_id", "unknown")
 
     server = await server_service_v1.get_server_by_id(body.server_id)
-    logger.info(
-        f"Tool execution from user '{username}:{user_id}': {tool_name} on {body.server_id}"
-    )
+    logger.info(f"Tool execution from user '{username}:{user_id}': {tool_name} on {body.server_id}")
 
     if not server:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Server not found: {body.server_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Server not found: {body.server_id}")
 
     server_name = getattr(server, "serverName", None) or server.path.strip("/")
 
@@ -573,7 +568,9 @@ async def execute_tool(
 
             if session_initialized:
                 additional_headers["mcp-Session-Id"] = stored_session_id
-                logger.info(f"Reusing initialized session for {server.serverName}: {stored_session_id}")
+                logger.info(
+                    f"Reusing initialized session for {server.serverName}: {stored_session_id}"
+                )
 
         if not stored_session_id:
             init_headers = await _build_authenticated_headers(
@@ -583,14 +580,18 @@ async def execute_tool(
             )
             # Get transport type from server config (default to streamable-http)
             transport_type = server.config.get("type", "streamable-http")
-            session_id = await initialize_mcp_session(target_url, init_headers, session_key, transport_type)
+            session_id = await initialize_mcp_session(
+                target_url, init_headers, session_key, transport_type
+            )
 
             if session_id:
                 additional_headers["mcp-Session-Id"] = session_id
             else:
-                logger.warning(f"Failed to initialize session, will attempt tool call without session")
+                logger.warning(
+                    "Failed to initialize session, will attempt tool call without session"
+                )
     else:
-        logger.debug(f"Stateless server (requiresInit=False), skipping session management")
+        logger.debug("Stateless server (requiresInit=False), skipping session management")
 
     # Build final authenticated headers with session ID (if applicable)
     headers = await _build_authenticated_headers(
@@ -623,7 +624,11 @@ async def execute_tool(
             )
             result = json.loads(result_text)
         except Exception:
-            result = {"raw": response.body.decode('utf-8') if isinstance(response.body, bytes) else str(response.body)}
+            result = {
+                "raw": response.body.decode("utf-8")
+                if isinstance(response.body, bytes)
+                else str(response.body)
+            }
 
         # Check for non-200 status code or MCP error in result
         if response.status_code != 200 and response.status_code != 202:
@@ -707,15 +712,10 @@ async def read_resource(
     username = user_context.get("username", "unknown")
 
     server = await server_service_v1.get_server_by_id(body.server_id)
-    logger.info(
-        f"Resource read from user '{username}': {resource_uri} on {body.server_id}"
-    )
+    logger.info(f"Resource read from user '{username}': {resource_uri} on {body.server_id}")
 
     if not server:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Server not found: {body.server_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Server not found: {body.server_id}")
 
     server_name = getattr(server, "serverName", None) or server.path.strip("/")
 
@@ -811,15 +811,10 @@ async def execute_prompt(
     username = user_context.get("username", "unknown")
 
     server = await server_service_v1.get_server_by_id(body.server_id)
-    logger.info(
-        f"Prompt execution from user '{username}': {prompt_name} on {body.server_id}"
-    )
+    logger.info(f"Prompt execution from user '{username}': {prompt_name} on {body.server_id}")
 
     if not server:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Server not found: {body.server_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"Server not found: {body.server_id}")
 
     server_name = getattr(server, "serverName", None) or server.path.strip("/")
 
@@ -833,7 +828,9 @@ async def execute_prompt(
     topic = arguments.get("topic", "general topic")
     depth = arguments.get("depth", "basic")
 
-    logger.info(f"(MOCK) Returning prompt messages for: {prompt_name} (topic={topic}, depth={depth})")
+    logger.info(
+        f"(MOCK) Returning prompt messages for: {prompt_name} (topic={topic}, depth={depth})"
+    )
 
     return PromptExecutionResponse(
         success=True,

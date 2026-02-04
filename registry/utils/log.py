@@ -1,6 +1,5 @@
 # Configure logging with file and console handlers
 import logging
-import os
 import sys
 
 from registry.core.config import settings

@@ -1,6 +1,7 @@
-import pytest
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from packages.telemetry import setup_metrics
 
@@ -18,8 +19,9 @@ class TestTelemetrySetup:
         # Clean up after test to prevent background thread issues
         try:
             from opentelemetry import metrics
+
             provider = metrics.get_meter_provider()
-            if hasattr(provider, 'shutdown'):
+            if hasattr(provider, "shutdown"):
                 provider.shutdown(timeout_millis=100)
         except Exception:
             pass
@@ -32,12 +34,13 @@ class TestTelemetrySetup:
         """
         module_path = "packages.telemetry"
 
-        with patch(f"{module_path}.metrics") as mock_metrics, \
-             patch(f"{module_path}.Resource") as mock_resource, \
-             patch(f"{module_path}.MeterProvider") as mock_meter_provider, \
-             patch(f"{module_path}.PeriodicExportingMetricReader") as mock_periodic_reader, \
-             patch(f"{module_path}.SafeOTLPMetricExporter") as mock_safe_exporter:
-
+        with (
+            patch(f"{module_path}.metrics") as mock_metrics,
+            patch(f"{module_path}.Resource") as mock_resource,
+            patch(f"{module_path}.MeterProvider") as mock_meter_provider,
+            patch(f"{module_path}.PeriodicExportingMetricReader") as mock_periodic_reader,
+            patch(f"{module_path}.SafeOTLPMetricExporter") as mock_safe_exporter,
+        ):
             mock_resource_instance = MagicMock()
             mock_resource.create.return_value = mock_resource_instance
 
@@ -72,8 +75,7 @@ class TestTelemetrySetup:
         assert kwargs["attributes"]["service.name"] == service_name
 
         mock_otel_deps["safe_exporter"].assert_called_once_with(
-            endpoint=f"{otlp_endpoint}/v1/metrics",
-            timeout=5
+            endpoint=f"{otlp_endpoint}/v1/metrics", timeout=5
         )
         mock_otel_deps["metrics"].set_meter_provider.assert_called_once()
 
@@ -85,12 +87,11 @@ class TestTelemetrySetup:
 
     def test_setup_prometheus_enabled(self, mock_otel_deps):
         """Test that Prometheus reader is added when env var is set."""
-        with patch.dict(os.environ, {"OTEL_PROMETHEUS_ENABLED": "true"}), \
-             patch(
-                 "opentelemetry.exporter.prometheus.PrometheusMetricReader"
-             ) as _mock_prom_reader, \
-             patch("prometheus_client.start_http_server") as mock_start_server:
-
+        with (
+            patch.dict(os.environ, {"OTEL_PROMETHEUS_ENABLED": "true"}),
+            patch("opentelemetry.exporter.prometheus.PrometheusMetricReader") as _mock_prom_reader,
+            patch("prometheus_client.start_http_server") as mock_start_server,
+        ):
             # Suppress unused variable warning - we just need to mock it
             _ = _mock_prom_reader
 
@@ -108,8 +109,7 @@ class TestTelemetrySetup:
             setup_metrics("test-service", otlp_endpoint=None)
 
             mock_otel_deps["safe_exporter"].assert_called_with(
-                endpoint=f"{env_endpoint}/v1/metrics",
-                timeout=5
+                endpoint=f"{env_endpoint}/v1/metrics", timeout=5
             )
 
     def test_setup_handles_initialization_failure(self, mock_otel_deps):
@@ -139,9 +139,7 @@ class TestSafeOTLPMetricExporter:
             mock_exporter.export.side_effect = Exception("Export failed")
             mock_exporter_class.return_value = mock_exporter
 
-            safe_exporter = SafeOTLPMetricExporter(
-                endpoint="http://localhost:4318/v1/metrics"
-            )
+            safe_exporter = SafeOTLPMetricExporter(endpoint="http://localhost:4318/v1/metrics")
 
             # Should not raise
             result = safe_exporter.export(MagicMock())
@@ -158,9 +156,7 @@ class TestSafeOTLPMetricExporter:
             mock_exporter.export.return_value = "success"
             mock_exporter_class.return_value = mock_exporter
 
-            safe_exporter = SafeOTLPMetricExporter(
-                endpoint="http://localhost:4318/v1/metrics"
-            )
+            safe_exporter = SafeOTLPMetricExporter(endpoint="http://localhost:4318/v1/metrics")
 
             result = safe_exporter.export(MagicMock())
             assert result == "success"
@@ -174,9 +170,7 @@ class TestSafeOTLPMetricExporter:
         ) as mock_exporter_class:
             mock_exporter_class.side_effect = Exception("Connection refused")
 
-            safe_exporter = SafeOTLPMetricExporter(
-                endpoint="http://localhost:4318/v1/metrics"
-            )
+            safe_exporter = SafeOTLPMetricExporter(endpoint="http://localhost:4318/v1/metrics")
 
             # Should not raise, and export should be a no-op
             result = safe_exporter.export(MagicMock())
@@ -193,9 +187,7 @@ class TestSafeOTLPMetricExporter:
             mock_exporter.shutdown.side_effect = Exception("Shutdown failed")
             mock_exporter_class.return_value = mock_exporter
 
-            safe_exporter = SafeOTLPMetricExporter(
-                endpoint="http://localhost:4318/v1/metrics"
-            )
+            safe_exporter = SafeOTLPMetricExporter(endpoint="http://localhost:4318/v1/metrics")
 
             # Should not raise
             safe_exporter.shutdown()

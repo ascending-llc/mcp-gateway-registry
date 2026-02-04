@@ -1,5 +1,6 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from packages.telemetry.metrics_client import (
     OTelMetricsClient,
@@ -16,7 +17,7 @@ class TestOTelMetricsClient:
     @pytest.fixture
     def mock_meter(self):
         """Fixture to mock the OpenTelemetry meter and its instruments."""
-        with patch('packages.telemetry.metrics_client.metrics.get_meter') as mock_get_meter:
+        with patch("packages.telemetry.metrics_client.metrics.get_meter") as mock_get_meter:
             meter_instance = MagicMock()
             mock_get_meter.return_value = meter_instance
 
@@ -34,8 +35,12 @@ class TestOTelMetricsClient:
                 {"name": "errors_total", "description": "Total errors", "unit": "1"},
             ],
             "histograms": [
-                {"name": "request_duration_seconds", "description": "Request duration", "unit": "s"},
-            ]
+                {
+                    "name": "request_duration_seconds",
+                    "description": "Request duration",
+                    "unit": "s",
+                },
+            ],
         }
 
     def test_init_creates_meter(self, mock_meter):
@@ -80,7 +85,7 @@ class TestOTelMetricsClient:
         mock_get_meter, _ = mock_meter
         mock_get_meter.side_effect = Exception("Meter creation failed")
 
-        with patch('packages.telemetry.metrics_client.logger') as mock_logger:
+        with patch("packages.telemetry.metrics_client.logger") as mock_logger:
             OTelMetricsClient("test-service")
             mock_logger.error.assert_called_once()
 
@@ -92,6 +97,7 @@ class TestSafeTelemetryDecorator:
 
     def test_safe_telemetry_swallows_exception(self):
         """Test that safe_telemetry decorator swallows exceptions."""
+
         @safe_telemetry
         def failing_function():
             raise ValueError("Test error")
@@ -102,6 +108,7 @@ class TestSafeTelemetryDecorator:
 
     def test_safe_telemetry_returns_value_on_success(self):
         """Test that safe_telemetry returns value when no exception."""
+
         @safe_telemetry
         def successful_function():
             return "success"
@@ -111,21 +118,22 @@ class TestSafeTelemetryDecorator:
 
     def test_safe_telemetry_logs_warning_on_exception(self):
         """Test that safe_telemetry logs warning when exception occurs."""
+
         @safe_telemetry
         def failing_function():
             raise ValueError("Test error")
 
-        with patch('packages.telemetry.metrics_client.logger') as mock_logger:
+        with patch("packages.telemetry.metrics_client.logger") as mock_logger:
             failing_function()
             mock_logger.warning.assert_called_once()
             assert "Test error" in str(mock_logger.warning.call_args)
 
     def test_safe_telemetry_preserves_function_metadata(self):
         """Test that safe_telemetry preserves function name and docstring."""
+
         @safe_telemetry
         def my_function():
             """My docstring."""
-            pass
 
         assert my_function.__name__ == "my_function"
         assert my_function.__doc__ == "My docstring."
@@ -138,28 +146,26 @@ class TestCreateMetricsClient:
 
     def test_create_metrics_client_returns_client(self):
         """Test that factory function returns OTelMetricsClient instance."""
-        with patch('packages.telemetry.metrics_client.metrics.get_meter'):
+        with patch("packages.telemetry.metrics_client.metrics.get_meter"):
             client = create_metrics_client("api")
             assert isinstance(client, OTelMetricsClient)
             assert client.service_name == "api"
 
     def test_create_metrics_client_uses_service_name(self):
         """Test that factory function passes service_name to client."""
-        with patch('packages.telemetry.metrics_client.metrics.get_meter') as mock_get_meter:
+        with patch("packages.telemetry.metrics_client.metrics.get_meter") as mock_get_meter:
             create_metrics_client("worker")
             mock_get_meter.assert_called_once_with("mcp.worker")
 
     def test_create_metrics_client_with_config(self):
         """Test that factory function accepts config parameter."""
         config = {
-            "counters": [
-                {"name": "custom_counter", "description": "Custom counter", "unit": "1"}
-            ],
+            "counters": [{"name": "custom_counter", "description": "Custom counter", "unit": "1"}],
             "histograms": [
                 {"name": "custom_histogram", "description": "Custom histogram", "unit": "s"}
-            ]
+            ],
         }
-        with patch('packages.telemetry.metrics_client.metrics.get_meter') as mock_get_meter:
+        with patch("packages.telemetry.metrics_client.metrics.get_meter") as mock_get_meter:
             meter_instance = MagicMock()
             mock_get_meter.return_value = meter_instance
             meter_instance.create_counter.return_value = MagicMock()
@@ -181,7 +187,7 @@ class TestGenericMetricMethods:
     @pytest.fixture
     def mock_meter(self):
         """Fixture to mock the OpenTelemetry meter and its instruments."""
-        with patch('packages.telemetry.metrics_client.metrics.get_meter') as mock_get_meter:
+        with patch("packages.telemetry.metrics_client.metrics.get_meter") as mock_get_meter:
             meter_instance = MagicMock()
             mock_get_meter.return_value = meter_instance
 
@@ -195,11 +201,7 @@ class TestGenericMetricMethods:
         _, meter_instance = mock_meter
         client = OTelMetricsClient("test-service")
 
-        counter = client.create_counter(
-            name="test_counter",
-            description="Test counter",
-            unit="1"
-        )
+        counter = client.create_counter(name="test_counter", description="Test counter", unit="1")
 
         assert counter is not None
         assert "test_counter" in client._counters
@@ -220,9 +222,7 @@ class TestGenericMetricMethods:
         client = OTelMetricsClient("test-service")
 
         histogram = client.create_histogram(
-            name="test_histogram",
-            description="Test histogram",
-            unit="s"
+            name="test_histogram", description="Test histogram", unit="s"
         )
 
         assert histogram is not None
@@ -255,7 +255,7 @@ class TestGenericMetricMethods:
         _, meter_instance = mock_meter
         client = OTelMetricsClient("test-service")
 
-        with patch('packages.telemetry.metrics_client.logger') as mock_logger:
+        with patch("packages.telemetry.metrics_client.logger") as mock_logger:
             client.record_counter("nonexistent_counter", 1.0)
             mock_logger.warning.assert_called_once()
             assert "nonexistent_counter" in str(mock_logger.warning.call_args)
@@ -277,7 +277,7 @@ class TestGenericMetricMethods:
         _, meter_instance = mock_meter
         client = OTelMetricsClient("test-service")
 
-        with patch('packages.telemetry.metrics_client.logger') as mock_logger:
+        with patch("packages.telemetry.metrics_client.logger") as mock_logger:
             client.record_histogram("nonexistent_histogram", 1.0)
             mock_logger.warning.assert_called_once()
             assert "nonexistent_histogram" in str(mock_logger.warning.call_args)
@@ -311,7 +311,7 @@ class TestGenericMetricMethods:
         _, meter_instance = mock_meter
         client = OTelMetricsClient("test-service")
 
-        with patch('packages.telemetry.metrics_client.logger') as mock_logger:
+        with patch("packages.telemetry.metrics_client.logger") as mock_logger:
             client.record_metric("unknown_metric", 1.0)
             mock_logger.warning.assert_called_once()
             assert "unknown_metric" in str(mock_logger.warning.call_args)
@@ -365,7 +365,7 @@ class TestGenericMetricMethods:
             ],
             "histograms": [
                 {"name": "config_histogram_1", "description": "Histogram 1", "unit": "ms"},
-            ]
+            ],
         }
 
         client = OTelMetricsClient("test-service", config=config)
@@ -384,7 +384,7 @@ class TestGenericMetricMethods:
             ],
             "histograms": [
                 {"name": "enabled_histogram", "description": "Enabled", "capture": True},
-            ]
+            ],
         }
 
         client = OTelMetricsClient("test-service", config=config)
@@ -404,7 +404,7 @@ class TestGenericMetricMethods:
             "histograms": [
                 {"name": "disabled_histogram", "description": "Disabled", "capture": False},
                 {"name": "enabled_histogram", "description": "Enabled"},  # Default is true
-            ]
+            ],
         }
 
         client = OTelMetricsClient("test-service", config=config)

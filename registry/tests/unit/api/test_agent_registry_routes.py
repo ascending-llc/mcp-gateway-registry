@@ -13,7 +13,6 @@ import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
-from registry.auth.dependencies import create_session_cookie
 from registry.constants import REGISTRY_CONSTANTS
 from registry.core.config import settings
 from registry.main import app
@@ -95,12 +94,12 @@ def sample_agent_card() -> dict[str, Any]:
 @pytest.fixture
 def admin_session_cookie():
     """Create a valid admin session cookie (JWT access token)."""
-    from registry.utils.crypto_utils import generate_access_token
     from registry.auth.dependencies import map_cognito_groups_to_scopes
-    
-    groups = ['registry-admins']
-    scopes = map_cognito_groups_to_scopes(groups) or ['registry-admins']
-    
+    from registry.utils.crypto_utils import generate_access_token
+
+    groups = ["registry-admins"]
+    scopes = map_cognito_groups_to_scopes(groups) or ["registry-admins"]
+
     return generate_access_token(
         user_id="test-admin-id",
         username=settings.admin_user,
@@ -109,7 +108,7 @@ def admin_session_cookie():
         scopes=scopes,
         role="admin",
         auth_method="traditional",
-        provider="local"
+        provider="local",
     )
 
 

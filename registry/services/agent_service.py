@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core.config import settings
-from ..schemas.agent_models import AgentCard, AgentInfo
+from ..schemas.agent_models import AgentCard
 
 # Get logger - logging is configured centrally in main.py via settings.configure_logging()
 logger = logging.getLogger(__name__)

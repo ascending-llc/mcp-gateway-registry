@@ -15,18 +15,8 @@ from fastapi import status as http_status
 from pydantic import ValidationError
 
 from registry.auth.dependencies import CurrentUserWithACLMap
-from registry.core.telemetry_decorators import track_registry_operation
-from registry.services.server_service import server_service_v1
-from registry.services.oauth.mcp_service import get_mcp_service
-from registry.services.oauth.connection_status_service import (
-    get_servers_connection_status,
-    get_single_server_connection_status
-)
-from registry.services.access_control_service import acl_service
-from registry.services.permissions_utils import (
-    check_required_permission,
-)
 from registry.core.acl_constants import PrincipalType, ResourceType, RoleBits
+from registry.core.telemetry_decorators import track_registry_operation
 from registry.schemas.enums import ConnectionState
 from registry.schemas.server_api_schemas import (
     PaginationMetadata,

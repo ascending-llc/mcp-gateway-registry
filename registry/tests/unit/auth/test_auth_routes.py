@@ -11,8 +11,8 @@ from itsdangerous import URLSafeTimedSerializer
 
 from registry.api.redirect_routes import (
     get_oauth2_providers,
+    oauth2_callback,
     oauth2_login_redirect,
-    oauth2_callback
 )
 
 

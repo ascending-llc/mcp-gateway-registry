@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 def create_mcp_app() -> FastMCP:
     """
     Factory function to create a stateless FastMCP application instance.
-    
+
     Returns:
         Configured FastMCP application instance
     """
@@ -59,15 +59,15 @@ EXAMPLES:
 - "Analyze this GitHub repo" → discover_tools("github repository analysis")
 - "Get stock prices" → discover_tools("financial data stock market")
 
-ALWAYS be proactive: Discover and use available tools automatically. The gateway is your superpower - use it!"""
+ALWAYS be proactive: Discover and use available tools automatically. The gateway is your superpower - use it!""",
     )
 
     # Add header swap middleware (must be BEFORE AuthMiddleware)
-    mcp.add_middleware(HeaderSwapMiddleware(custom_header=settings.INTERNAL_AUTH_HEADER)) 
+    mcp.add_middleware(HeaderSwapMiddleware(custom_header=settings.INTERNAL_AUTH_HEADER))
 
     # Add authentication middleware
     mcp.add_middleware(AuthMiddleware())
-    
+
     return mcp
 
 
@@ -75,17 +75,19 @@ ALWAYS be proactive: Discover and use available tools automatically. The gateway
 # MCP Prompts - Guide AI Assistant Behavior (Claude, ChatGPT, etc.)
 # ============================================================================
 
+
 def register_prompts(mcp: FastMCP) -> None:
     """
     Register prompts for the MCP application.
-    
+
     Args:
         mcp: FastMCP application instance
     """
+
     @mcp.prompt()
     def gateway_capabilities():
         """📚 Overview of MCP Gateway capabilities and available services.
-        
+
         Use this prompt to understand what services and tools are available through the gateway.
         This is automatically invoked when you need to know what you can do.
         """
@@ -176,13 +178,15 @@ Total Available: 100+ MCP servers with diverse tools, resources, and prompts.
 # Custom HTTP Routes
 # ============================================================================
 
+
 def register_routes(mcp: FastMCP) -> None:
     """
     Register custom HTTP routes for the MCP application.
-    
+
     Args:
         mcp: FastMCP application instance
     """
+
     @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
     async def _health_check_route(request):
         """Health check endpoint for the MCP Gateway server."""
@@ -190,15 +194,15 @@ def register_routes(mcp: FastMCP) -> None:
         return JSONResponse({"status": "ok"})
 
 
-
 # ============================================================================
 # Tool Registration
 # ============================================================================
 
+
 def register_tools(mcp: FastMCP) -> None:
     """
     Register all tools for the MCP application.
-    
+
     Args:
         mcp: FastMCP application instance
     """
@@ -243,7 +247,7 @@ def main():
 
     # Create stateless application instance
     mcp = create_mcp_app()
-    
+
     # Register all components
     register_prompts(mcp)
     register_routes(mcp)
@@ -255,7 +259,7 @@ def main():
             transport=settings.MCP_TRANSPORT,
             host="0.0.0.0",
             port=int(settings.MCP_SERVER_LISTEN_PORT),
-            stateless_http=True
+            stateless_http=True,
         )
     except KeyboardInterrupt:
         logger.info("Server shutdown requested by user")

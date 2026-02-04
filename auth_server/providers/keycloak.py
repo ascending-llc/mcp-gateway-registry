@@ -9,7 +9,6 @@ from urllib.parse import urlencode
 import jwt
 import requests
 
-from ..core.config import settings
 from .base import AuthProvider
 
 # Get logger - logging is configured centrally in server.py via settings.configure_logging()

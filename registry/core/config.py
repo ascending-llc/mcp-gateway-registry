@@ -184,18 +184,18 @@ class Settings(BaseSettings):
 
     def configure_logging(self) -> None:
         """Configure application-wide logging with consistent format and level.
-        
+
         This should be called once at application startup to initialize logging
         for all modules. Individual modules can then use logging.getLogger(__name__)
         without needing to call basicConfig again.
         """
         # Convert string log level to numeric level
         numeric_level = getattr(logging, self.log_level.upper(), logging.INFO)
-        
+
         logging.basicConfig(
             level=numeric_level,
             format=self.log_format,
-            force=True  # Override any existing configuration
+            force=True,  # Override any existing configuration
         )
 
 

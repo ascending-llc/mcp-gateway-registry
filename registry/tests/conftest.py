@@ -124,12 +124,17 @@ def server_with_tools() -> dict[str, Any]:
     return create_server_with_tools(num_tools=5)
 
 
-def create_test_jwt_token(username: str, groups: list, role: str = "user", 
-                          auth_method: str = "oauth2", provider: str = "keycloak",
-                          user_id: str = None) -> str:
+def create_test_jwt_token(
+    username: str,
+    groups: list,
+    role: str = "user",
+    auth_method: str = "oauth2",
+    provider: str = "keycloak",
+    user_id: str = None,
+) -> str:
     """
     Helper function to create JWT access tokens for testing.
-    
+
     Args:
         username: Username
         groups: List of user groups
@@ -137,18 +142,18 @@ def create_test_jwt_token(username: str, groups: list, role: str = "user",
         auth_method: Auth method (default: "oauth2")
         provider: Auth provider (default: "keycloak")
         user_id: User ID (default: auto-generated from username)
-    
+
     Returns:
         JWT access token string
     """
-    from registry.utils.crypto_utils import generate_access_token
     from registry.auth.dependencies import map_cognito_groups_to_scopes
-    
+    from registry.utils.crypto_utils import generate_access_token
+
     if user_id is None:
         user_id = f"test-{username}-id"
-    
+
     scopes = map_cognito_groups_to_scopes(groups) or groups
-    
+
     return generate_access_token(
         user_id=user_id,
         username=username,
@@ -157,7 +162,7 @@ def create_test_jwt_token(username: str, groups: list, role: str = "user",
         scopes=scopes,
         role=role,
         auth_method=auth_method,
-        provider=provider
+        provider=provider,
     )
 
 
@@ -165,13 +170,14 @@ def create_test_jwt_token(username: str, groups: list, role: str = "user",
 def admin_session_cookie():
     """Create a valid admin session cookie (JWT access token) for testing."""
     from registry.core.config import settings
+
     return create_test_jwt_token(
         username=settings.admin_user,
-        groups=['registry-admins'],
+        groups=["registry-admins"],
         role="admin",
         auth_method="traditional",
         provider="local",
-        user_id="test-admin-id"
+        user_id="test-admin-id",
     )
 
 
@@ -192,7 +198,7 @@ def user_session_cookie():
         role="user",
         auth_method="oauth2",
         provider="keycloak",
-        user_id="test-user-id"
+        user_id="test-user-id",
     )
 
 
@@ -200,6 +206,7 @@ def user_session_cookie():
 def user_test_client(user_session_cookie) -> TestClient:
     """Create a test client with regular user authentication."""
     from registry.core.config import settings
+
     return TestClient(app, cookies={settings.session_cookie_name: user_session_cookie})
 
 
@@ -295,38 +302,17 @@ def mock_telemetry_metrics(monkeypatch):
     mock_metrics_client.record_histogram = Mock()
 
     # Mock the metrics client at the source module
-    monkeypatch.setattr(
-        "registry.utils.otel_metrics.metrics",
-        mock_metrics_client
-    )
+    monkeypatch.setattr("registry.utils.otel_metrics.metrics", mock_metrics_client)
 
     # Mock the domain functions where they're imported
-    monkeypatch.setattr(
-        "registry.core.telemetry_decorators._record_registry_operation",
-        Mock()
-    )
-    monkeypatch.setattr(
-        "registry.core.telemetry_decorators._record_auth_request",
-        Mock()
-    )
-    monkeypatch.setattr(
-        "registry.core.telemetry_decorators._record_tool_execution",
-        Mock()
-    )
-    monkeypatch.setattr(
-        "registry.core.telemetry_decorators._record_tool_discovery",
-        Mock()
-    )
-    monkeypatch.setattr(
-        "registry.core.telemetry_decorators._record_resource_access",
-        Mock()
-    )
-    monkeypatch.setattr(
-        "registry.core.telemetry_decorators._record_prompt_execution",
-        Mock()
-    )
+    monkeypatch.setattr("registry.core.telemetry_decorators._record_registry_operation", Mock())
+    monkeypatch.setattr("registry.core.telemetry_decorators._record_auth_request", Mock())
+    monkeypatch.setattr("registry.core.telemetry_decorators._record_tool_execution", Mock())
+    monkeypatch.setattr("registry.core.telemetry_decorators._record_tool_discovery", Mock())
+    monkeypatch.setattr("registry.core.telemetry_decorators._record_resource_access", Mock())
+    monkeypatch.setattr("registry.core.telemetry_decorators._record_prompt_execution", Mock())
 
-    yield mock_metrics_client
+    return mock_metrics_client
 
 
 @pytest.fixture(autouse=True)

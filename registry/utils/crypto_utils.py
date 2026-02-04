@@ -12,14 +12,16 @@ TypeScript equivalent:
 """
 
 import os
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
 import jwt
-from datetime import datetime, timezone, timedelta
-from registry.utils.log import logger
-from typing import Optional, List
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
-from typing import Dict, Any, Optional, Tuple
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
 from registry.core.config import settings
+from registry.utils.log import logger
+
 # Token expiration defaults
 ACCESS_TOKEN_EXPIRES_HOURS = 24  # 1 day
 REFRESH_TOKEN_EXPIRES_DAYS = 7  # 7 days
@@ -41,7 +43,7 @@ _ENCRYPTION_KEY: bytes | None = None
 def _get_encryption_key() -> bytes:
     """
     Get the encryption key from settings configuration.
-    
+
     Returns:
         bytes: encryption key from CREDS_KEY (hex decoded)
 
@@ -57,7 +59,7 @@ def _get_encryption_key() -> bytes:
                 "CREDS_KEY configuration must be set for encryption/decryption. "
                 "Set the CREDS_KEY environment variable."
             )
-        
+
         # Decode from hex (matching TypeScript: Buffer.from(process.env.CREDS_KEY, 'hex'))
         try:
             key_bytes = bytes.fromhex(creds_key)
@@ -375,17 +377,18 @@ def decrypt_auth_fields(config: dict) -> dict:
 
     return config
 
+
 def generate_access_token(
-        user_id: str,
-        username: str,
-        email: str,
-        groups: list,
-        scopes: list,
-        role: str,
-        auth_method: str,
-        provider: str,
-        idp_id: Optional[str] = None,
-        expires_hours: int = ACCESS_TOKEN_EXPIRES_HOURS
+    user_id: str,
+    username: str,
+    email: str,
+    groups: list,
+    scopes: list,
+    role: str,
+    auth_method: str,
+    provider: str,
+    idp_id: str | None = None,
+    expires_hours: int = ACCESS_TOKEN_EXPIRES_HOURS,
 ) -> str:
     """
     Generate a JWT access token for authenticated user.
@@ -405,7 +408,7 @@ def generate_access_token(
     Returns:
         JWT token string
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     exp = now + timedelta(hours=expires_hours)
 
     # Build JWT payload
@@ -416,7 +419,6 @@ def generate_access_token(
         "aud": settings.JWT_AUDIENCE,
         "iat": int(now.timestamp()),
         "exp": int(exp.timestamp()),
-
         # Custom claims
         "user_id": user_id,
         "email": email,
@@ -433,34 +435,25 @@ def generate_access_token(
         payload["idp_id"] = idp_id
 
     # JWT header
-    headers = {
-        "kid": settings.JWT_SELF_SIGNED_KID,
-        "typ": "JWT",
-        "alg": "HS256"
-    }
+    headers = {"kid": settings.JWT_SELF_SIGNED_KID, "typ": "JWT", "alg": "HS256"}
 
     # Generate JWT
-    token = jwt.encode(
-        payload,
-        settings.secret_key,
-        algorithm="HS256",
-        headers=headers
-    )
+    token = jwt.encode(payload, settings.secret_key, algorithm="HS256", headers=headers)
 
     logger.debug(f"Generated access token for user {username}, expires in {expires_hours}h")
     return token
 
 
 def generate_refresh_token(
-        user_id: str,
-        username: str,
-        auth_method: str,
-        provider: str,
-        groups: list,
-        scopes: list,
-        role: str,
-        email: str,
-        expires_days: int = REFRESH_TOKEN_EXPIRES_DAYS
+    user_id: str,
+    username: str,
+    auth_method: str,
+    provider: str,
+    groups: list,
+    scopes: list,
+    role: str,
+    email: str,
+    expires_days: int = REFRESH_TOKEN_EXPIRES_DAYS,
 ) -> str:
     """
     Generate a JWT refresh token.
@@ -482,7 +475,7 @@ def generate_refresh_token(
     Returns:
         JWT token string
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     exp = now + timedelta(days=expires_days)
 
     payload = {
@@ -492,7 +485,6 @@ def generate_refresh_token(
         "aud": settings.JWT_AUDIENCE,
         "iat": int(now.timestamp()),
         "exp": int(exp.timestamp()),
-
         # Custom claims - include groups/scopes for token refresh
         "user_id": user_id,
         "auth_method": auth_method,
@@ -504,24 +496,15 @@ def generate_refresh_token(
         "token_type": "refresh_token",
     }
 
-    headers = {
-        "kid": settings.JWT_SELF_SIGNED_KID,
-        "typ": "JWT",
-        "alg": "HS256"
-    }
+    headers = {"kid": settings.JWT_SELF_SIGNED_KID, "typ": "JWT", "alg": "HS256"}
 
-    token = jwt.encode(
-        payload,
-        settings.secret_key,
-        algorithm="HS256",
-        headers=headers
-    )
+    token = jwt.encode(payload, settings.secret_key, algorithm="HS256", headers=headers)
 
     logger.debug(f"Generated refresh token for user {username}, expires in {expires_days} days")
     return token
 
 
-def verify_access_token(token: str) -> Optional[Dict[str, Any]]:
+def verify_access_token(token: str) -> dict[str, Any] | None:
     """
     Verify and decode an access token.
 
@@ -534,7 +517,7 @@ def verify_access_token(token: str) -> Optional[Dict[str, Any]]:
     try:
         # Verify kid in header
         unverified_header = jwt.get_unverified_header(token)
-        kid = unverified_header.get('kid')
+        kid = unverified_header.get("kid")
 
         if kid != settings.JWT_SELF_SIGNED_KID:
             logger.debug(f"Invalid kid in token: {kid}")
@@ -544,16 +527,16 @@ def verify_access_token(token: str) -> Optional[Dict[str, Any]]:
         claims = jwt.decode(
             token,
             settings.secret_key,
-            algorithms=['HS256'],
+            algorithms=["HS256"],
             issuer=settings.JWT_ISSUER,
             audience=settings.JWT_AUDIENCE,
             options={
                 "verify_exp": True,
                 "verify_iat": True,
                 "verify_iss": True,
-                "verify_aud": True
+                "verify_aud": True,
             },
-            leeway=30  # 30 second leeway for clock skew
+            leeway=30,  # 30 second leeway for clock skew
         )
 
         # Verify token type
@@ -575,7 +558,7 @@ def verify_access_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def verify_refresh_token(token: str) -> Optional[Dict[str, Any]]:
+def verify_refresh_token(token: str) -> dict[str, Any] | None:
     """
     Verify and decode a refresh token.
 
@@ -588,7 +571,7 @@ def verify_refresh_token(token: str) -> Optional[Dict[str, Any]]:
     try:
         # Verify kid in header
         unverified_header = jwt.get_unverified_header(token)
-        kid = unverified_header.get('kid')
+        kid = unverified_header.get("kid")
 
         if kid != settings.JWT_SELF_SIGNED_KID:
             logger.debug(f"Invalid kid in refresh token: {kid}")
@@ -598,15 +581,15 @@ def verify_refresh_token(token: str) -> Optional[Dict[str, Any]]:
         claims = jwt.decode(
             token,
             settings.secret_key,
-            algorithms=['HS256'],
+            algorithms=["HS256"],
             issuer=settings.JWT_ISSUER,
             audience=settings.JWT_AUDIENCE,
             options={
                 "verify_exp": True,
                 "verify_iat": True,
                 "verify_iss": True,
-                "verify_aud": True
-            }
+                "verify_aud": True,
+            },
         )
 
         # Verify token type
@@ -629,16 +612,16 @@ def verify_refresh_token(token: str) -> Optional[Dict[str, Any]]:
 
 
 def generate_token_pair(
-        user_id: str,
-        username: str,
-        email: str,
-        groups: list,
-        scopes: list,
-        role: str,
-        auth_method: str,
-        provider: str,
-        idp_id: Optional[str] = None
-) -> Tuple[str, str]:
+    user_id: str,
+    username: str,
+    email: str,
+    groups: list,
+    scopes: list,
+    role: str,
+    auth_method: str,
+    provider: str,
+    idp_id: str | None = None,
+) -> tuple[str, str]:
     """
     Generate both access and refresh tokens.
 
@@ -665,7 +648,7 @@ def generate_token_pair(
         role=role,
         auth_method=auth_method,
         provider=provider,
-        idp_id=idp_id
+        idp_id=idp_id,
     )
 
     refresh_token = generate_refresh_token(
@@ -676,7 +659,7 @@ def generate_token_pair(
         groups=groups,
         scopes=scopes,
         role=role,
-        email=email
+        email=email,
     )
 
     return access_token, refresh_token

@@ -8,23 +8,32 @@ All decorators use time.perf_counter() for accurate timing and handle
 exceptions gracefully without affecting business logic.
 """
 
+import logging
 import time
+from collections.abc import Callable
 from functools import wraps
 from typing import (
     Any,
-    Callable,
-    Optional,
     TypeVar,
 )
-import logging
 
 from registry.utils.otel_metrics import (
     record_auth_request as _record_auth_request,
-    record_registry_operation as _record_registry_operation,
-    record_tool_execution as _record_tool_execution,
-    record_tool_discovery as _record_tool_discovery,
-    record_resource_access as _record_resource_access,
+)
+from registry.utils.otel_metrics import (
     record_prompt_execution as _record_prompt_execution,
+)
+from registry.utils.otel_metrics import (
+    record_registry_operation as _record_registry_operation,
+)
+from registry.utils.otel_metrics import (
+    record_resource_access as _record_resource_access,
+)
+from registry.utils.otel_metrics import (
+    record_tool_discovery as _record_tool_discovery,
+)
+from registry.utils.otel_metrics import (
+    record_tool_execution as _record_tool_execution,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,8 +43,8 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 def track_registry_operation(
     operation: str,
-    resource_type: Optional[str] = None,
-    extract_resource: Optional[Callable[..., str]] = None,
+    resource_type: str | None = None,
+    extract_resource: Callable[..., str] | None = None,
 ) -> Callable[[F], F]:
     """
     Universal decorator for tracking registry API operations.
@@ -477,5 +486,3 @@ class ToolExecutionMetricsContext:
             )
         except Exception as e:
             logger.warning(f"Failed to record tool execution metric: {e}")
-
-

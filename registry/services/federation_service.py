@@ -15,7 +15,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from ..core.config import settings
 from ..schemas.federation_schema import (
     FederationConfig,
 )

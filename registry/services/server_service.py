@@ -12,14 +12,16 @@ ODM Schema:
 """
 
 import asyncio
-from typing import Dict, List, Optional, Tuple, Any
-from datetime import datetime, timezone
+from datetime import datetime
+from typing import Any
+
 from beanie import PydanticObjectId
 
 from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
 from registry.core.acl_constants import ResourceType
 from registry.core.mcp_client import get_tools_from_server_with_server_info
+from registry.core.telemetry_decorators import track_tool_discovery
 from registry.schemas.errors import (
     AuthenticationError,
     MissingUserIdError,
@@ -31,29 +33,18 @@ from registry.schemas.server_api_schemas import (
     ServerUpdateRequest,
 )
 from registry.services.user_service import user_service
-from registry.schemas.errors import (
-    OAuthReAuthRequiredError,
-    OAuthTokenError,
-    MissingUserIdError,
-    AuthenticationError,
-)
-from registry.core.telemetry_decorators import track_tool_discovery
 
 logger = logging.getLogger(__name__)
 
 
-def _extract_config_field(
-    server: MCPServerDocument, field: str, default: Any = None
-) -> Any:
+def _extract_config_field(server: MCPServerDocument, field: str, default: Any = None) -> Any:
     """Extract a field from server.config with fallback to default"""
     if not server or not server.config:
         return default
     return server.config.get(field, default)
 
 
-def _build_server_info_for_mcp_client(
-    config: Dict[str, Any], tags: List[str]
-) -> Dict[str, Any]:
+def _build_server_info_for_mcp_client(config: dict[str, Any], tags: list[str]) -> dict[str, Any]:
     """
     Build server_info dictionary for MCP client operations.
 
@@ -80,8 +71,8 @@ def _build_server_info_for_mcp_client(
 
 
 async def _build_complete_headers_for_server(
-    server: MCPServerDocument, user_id: Optional[str] = None
-) -> Dict[str, str]:
+    server: MCPServerDocument, user_id: str | None = None
+) -> dict[str, str]:
     """
     Build complete HTTP headers with ALL authentication types.
     Consolidates OAuth, apiKey, and custom header logic in one place.
@@ -135,17 +126,13 @@ async def _build_complete_headers_for_server(
                     if isinstance(value, list):
                         # Join list values with comma (HTTP header standard)
                         headers[key] = ", ".join(str(v) for v in value)
-                        logger.debug(
-                            f"Joined list header {key}: {value} -> {headers[key]}"
-                        )
+                        logger.debug(f"Joined list header {key}: {value} -> {headers[key]}")
                     elif value is not None:
                         headers[key] = str(value)
                         logger.debug(f"Added custom header {key}: {value}")
 
     # 2. Check OAuth and add OAuth headers LAST (highest priority, overrides custom headers)
-    requires_oauth = (
-        decrypted_config.get("requiresOAuth", False) or "oauth" in decrypted_config
-    )
+    requires_oauth = decrypted_config.get("requiresOAuth", False) or "oauth" in decrypted_config
 
     if requires_oauth:
         if not user_id:
@@ -223,16 +210,12 @@ async def _build_complete_headers_for_server(
                     base64.b64decode(key_value, validate=True)
                     # Already base64 encoded
                     headers["Authorization"] = f"Basic {key_value}"
-                    logger.debug(
-                        f"Added Basic auth (pre-encoded) for {server.serverName}"
-                    )
+                    logger.debug(f"Added Basic auth (pre-encoded) for {server.serverName}")
                 except Exception:
                     # Not base64 encoded, encode it
                     encoded_key = base64.b64encode(key_value.encode()).decode()
                     headers["Authorization"] = f"Basic {encoded_key}"
-                    logger.debug(
-                        f"Added Basic auth (auto-encoded) for {server.serverName}"
-                    )
+                    logger.debug(f"Added Basic auth (auto-encoded) for {server.serverName}")
             elif authorization_type == "custom":
                 custom_header = api_key_config.get("custom_header")
                 if custom_header:
@@ -270,8 +253,8 @@ def _detect_oauth_requirement(oauth_field: Any | None) -> bool:
 
 
 def _validate_and_merge_oauth_metadata(
-    oauth_config: Optional[Dict[str, Any]], oauth_metadata: Optional[Dict[str, Any]]
-) -> Dict[str, Any]:
+    oauth_config: dict[str, Any] | None, oauth_metadata: dict[str, Any] | None
+) -> dict[str, Any]:
     """
     Merge OAuth metadata using database config.oauth as authoritative source.
 
@@ -316,8 +299,8 @@ def _get_current_utc_time() -> datetime:
 
 
 def _convert_tool_list_to_functions(
-    tool_list: List[Dict[str, Any]], server_name: str
-) -> Dict[str, Any]:
+    tool_list: list[dict[str, Any]], server_name: str
+) -> dict[str, Any]:
     """
     Convert tool_list array to toolFunctions object in OpenAI format.
 
@@ -369,7 +352,7 @@ def _convert_tool_list_to_functions(
 
 def _build_config_from_request(
     data: ServerCreateRequest, server_name: str = None
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Build config dictionary from ServerCreateRequest
 
@@ -388,9 +371,7 @@ def _build_config_from_request(
     config = {
         "title": data.serverName,  # Use serverName as default title
         "description": data.description or "",
-        "type": data.supported_transports[0]
-        if data.supported_transports
-        else "streamable-http",
+        "type": data.supported_transports[0] if data.supported_transports else "streamable-http",
         "url": data.url,
         "requiresOAuth": requires_oauth,  # Auto-detect based on oauth/authentication fields
         "capabilities": "{}",  # Default empty JSON string
@@ -411,14 +392,10 @@ def _build_config_from_request(
     # Convert tool_list to toolFunctions in OpenAI format
     if data.tool_list is not None:
         use_server_name = server_name or data.serverName
-        config["toolFunctions"] = _convert_tool_list_to_functions(
-            data.tool_list, use_server_name
-        )
+        config["toolFunctions"] = _convert_tool_list_to_functions(data.tool_list, use_server_name)
 
         # Build tools string (comma-separated tool names)
-        tool_names = [
-            tool.get("name", "") for tool in data.tool_list if tool.get("name")
-        ]
+        tool_names = [tool.get("name", "") for tool in data.tool_list if tool.get("name")]
         if tool_names:
             config["tools"] = ", ".join(tool_names)
         else:
@@ -443,8 +420,8 @@ def _build_config_from_request(
 
 
 def _update_config_from_request(
-    config: Dict[str, Any], data: ServerUpdateRequest, server_name: str = None
-) -> Dict[str, Any]:
+    config: dict[str, Any], data: ServerUpdateRequest, server_name: str = None
+) -> dict[str, Any]:
     """
     Update config dictionary from ServerUpdateRequest
 
@@ -475,16 +452,14 @@ def _update_config_from_request(
     # If one is being updated, remove the other from config
     if "oauth" in update_dict:
         # When oauth is provided, remove apiKey field and store oauth
-        if "apiKey" in config:
-            del config["apiKey"]
+        config.pop("apiKey", None)
         # Store oauth with all its fields
         config["oauth"] = update_dict["oauth"]
         # Remove from update_dict to avoid duplicate processing
         del update_dict["oauth"]
     elif "apiKey" in update_dict:
         # When apiKey is provided, remove oauth field and store apiKey
-        if "oauth" in config:
-            del config["oauth"]
+        config.pop("oauth", None)
         # Store apiKey with all its fields
         config["apiKey"] = update_dict["apiKey"]
         # Remove from update_dict to avoid duplicate processing
@@ -528,9 +503,7 @@ def _update_config_from_request(
 
         # Convert to toolFunctions format
         if server_name:
-            config["toolFunctions"] = _convert_tool_list_to_functions(
-                tool_list, server_name
-            )
+            config["toolFunctions"] = _convert_tool_list_to_functions(tool_list, server_name)
 
         # Generate tools string
         tool_names = [tool.get("name", "") for tool in tool_list if tool.get("name")]
@@ -552,14 +525,14 @@ class ServerServiceV1:
 
     async def list_servers(
         self,
-        query: Optional[str] = None,
-        scope: Optional[str] = None,
-        status: Optional[str] = None,
+        query: str | None = None,
+        scope: str | None = None,
+        status: str | None = None,
         page: int = 1,
         per_page: int = 20,
-        user_id: Optional[str] = None,
-        acl_permissions_map: Dict[str, Any] = {},
-    ) -> Tuple[List[MCPServerDocument], int]:
+        user_id: str | None = None,
+        acl_permissions_map: dict[str, Any] = {},
+    ) -> tuple[list[MCPServerDocument], int]:
         """
         List servers with filtering and pagination.
 
@@ -603,9 +576,7 @@ class ServerServiceV1:
             filters.append(text_filter)
 
         # Access control filter
-        accessible_servers = acl_permissions_map.get(
-            ResourceType.MCPSERVER.value, {}
-        ).keys()
+        accessible_servers = acl_permissions_map.get(ResourceType.MCPSERVER.value, {}).keys()
         accessible_server_ids = [PydanticObjectId(sid) for sid in accessible_servers]
         filters.append({"_id": {"$in": accessible_server_ids}})
 
@@ -629,8 +600,8 @@ class ServerServiceV1:
     async def get_server_by_id(
         self,
         server_id: str,
-        user_id: Optional[str] = None,
-    ) -> Optional[MCPServerDocument]:
+        user_id: str | None = None,
+    ) -> MCPServerDocument | None:
         """
         Get a server by its ID.
 
@@ -693,9 +664,7 @@ class ServerServiceV1:
                 )
 
         # Check if serverName already exists
-        existing_name = await MCPServerDocument.find_one(
-            {"serverName": data.serverName}
-        )
+        existing_name = await MCPServerDocument.find_one({"serverName": data.serverName})
         if existing_name:
             raise ValueError(f"Server with name '{data.serverName}' already exists")
 
@@ -742,9 +711,7 @@ class ServerServiceV1:
         )
 
         await server.insert()
-        logger.info(
-            f"Created server: {server.serverName} (ID: {server.id}, Path: {data.path})"
-        )
+        logger.info(f"Created server: {server.serverName} (ID: {server.id}, Path: {data.path})")
 
         # Perform health check and tool retrieval after registration
         if data.url:
@@ -765,9 +732,7 @@ class ServerServiceV1:
 
                 if not is_healthy:
                     # Health check failed - delete the server and reject registration
-                    logger.error(
-                        f"Health check failed for {server.serverName}: {status_msg}"
-                    )
+                    logger.error(f"Health check failed for {server.serverName}: {status_msg}")
                     await server.delete()
                     raise ValueError(
                         f"Server registration rejected: Health check failed - {status_msg}"
@@ -778,9 +743,7 @@ class ServerServiceV1:
                 server.status = "active"
 
                 # 2. Retrieve capabilities (but skip tools - they will be fetched on-demand)
-                logger.info(
-                    f"Retrieving capabilities for {server.serverName} (skipping tools)"
-                )
+                logger.info(f"Retrieving capabilities for {server.serverName} (skipping tools)")
 
                 # Initialize empty toolFunctions and tools (will be populated on first use)
                 config["toolFunctions"] = {}
@@ -827,9 +790,7 @@ class ServerServiceV1:
                 except Exception as e:
                     # If capabilities retrieval fails, just use empty capabilities
                     config["capabilities"] = "{}"
-                    logger.warning(
-                        f"Failed to retrieve capabilities for {server.serverName}: {e}"
-                    )
+                    logger.warning(f"Failed to retrieve capabilities for {server.serverName}: {e}")
 
                 logger.info(
                     f"Server {server.serverName} registered successfully. Tools will be fetched on-demand."
@@ -856,9 +817,7 @@ class ServerServiceV1:
                     if "headers" in config:
                         server_info["headers"] = config["headers"]
 
-                    oauth_metadata = await get_oauth_metadata_from_server(
-                        data.url, server_info
-                    )
+                    oauth_metadata = await get_oauth_metadata_from_server(data.url, server_info)
 
                     if oauth_metadata:
                         import json
@@ -902,7 +861,7 @@ class ServerServiceV1:
         self,
         server_id: str,
         data: ServerUpdateRequest,
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
     ) -> MCPServerDocument:
         """
         Update a server.
@@ -945,9 +904,7 @@ class ServerServiceV1:
             server.status = data.status
 
         # Update config with MCP-specific values only
-        updated_config = _update_config_from_request(
-            config, data, server_name=server.serverName
-        )
+        updated_config = _update_config_from_request(config, data, server_name=server.serverName)
 
         # Encrypt sensitive authentication fields if they were updated
         if data.oauth is not None or data.apiKey is not None:
@@ -971,7 +928,7 @@ class ServerServiceV1:
     async def delete_server(
         self,
         server_id: str,
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
     ) -> bool:
         """
         Delete a server.
@@ -1005,7 +962,7 @@ class ServerServiceV1:
     async def _fetch_and_update_tools(
         self,
         server: MCPServerDocument,
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
     ) -> bool:
         """
         Fetch tools, resources, and prompts from server and update config.
@@ -1018,9 +975,7 @@ class ServerServiceV1:
             True if tools were successfully fetched and updated, False otherwise
         """
         # Use consolidated retrieve_from_server which handles both OAuth and apiKey
-        logger.info(
-            f"Fetching tools, resources, and prompts for server {server.serverName}"
-        )
+        logger.info(f"Fetching tools, resources, and prompts for server {server.serverName}")
         (
             tool_list,
             resource_list,
@@ -1037,17 +992,13 @@ class ServerServiceV1:
 
         if tool_list:
             # Convert tool_list to toolFunctions format
-            tool_functions = _convert_tool_list_to_functions(
-                tool_list, server.serverName
-            )
+            tool_functions = _convert_tool_list_to_functions(tool_list, server.serverName)
 
             # Update config with toolFunctions (full replacement)
             server.config["toolFunctions"] = tool_functions
 
             # Update tools string (comma-separated tool names)
-            tool_names = [
-                tool.get("name", "") for tool in tool_list if tool.get("name")
-            ]
+            tool_names = [tool.get("name", "") for tool in tool_list if tool.get("name")]
             server.config["tools"] = ", ".join(tool_names) if tool_names else ""
 
             # Update numTools at root level
@@ -1061,17 +1012,14 @@ class ServerServiceV1:
                 f"Successfully fetched and updated {len(tool_functions)} tools, {len(resource_list or [])} resources, {len(prompt_list or [])} prompts for {server.serverName}"
             )
             return True
-        else:
-            logger.warning(
-                f"Failed to fetch tools for {server.serverName}: {error_msg}"
-            )
-            return False
+        logger.warning(f"Failed to fetch tools for {server.serverName}: {error_msg}")
+        return False
 
     async def toggle_server_status(
         self,
         server_id: str,
         enabled: bool,
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
     ) -> MCPServerDocument:
         """
         Toggle server enabled/disabled status.
@@ -1106,16 +1054,12 @@ class ServerServiceV1:
                 # Rollback enabled status
                 server.config["enabled"] = False
                 await server.save()
-                raise ValueError(
-                    "Failed to fetch tools from server. Server remains disabled."
-                )
+                raise ValueError("Failed to fetch tools from server. Server remains disabled.")
 
         # Update the updatedAt timestamp
         server.updatedAt = _get_current_utc_time()
         await server.save()
-        logger.info(
-            f"Toggled server {server.serverName} (ID: {server.id}) enabled to {enabled}"
-        )
+        logger.info(f"Toggled server {server.serverName} (ID: {server.id}) enabled to {enabled}")
 
         asyncio.create_task(self.mcp_server_repo.smart_sync(server))
         return server
@@ -1123,8 +1067,8 @@ class ServerServiceV1:
     async def get_server_tools(
         self,
         server_id: str,
-        user_id: Optional[str] = None,
-    ) -> Tuple[MCPServerDocument, Dict[str, Any]]:
+        user_id: str | None = None,
+    ) -> tuple[MCPServerDocument, dict[str, Any]]:
         """
         Get server tools in toolFunctions format.
 
@@ -1149,7 +1093,7 @@ class ServerServiceV1:
     async def perform_health_check(
         self,
         server: MCPServerDocument,
-    ) -> Tuple[bool, str, Optional[int]]:
+    ) -> tuple[bool, str, int | None]:
         """
         Perform health check on a server.
 
@@ -1178,9 +1122,7 @@ class ServerServiceV1:
             # Perform simple HTTP health check
             start_time = _get_current_utc_time()
 
-            async with httpx.AsyncClient(
-                timeout=mcp_config.HEALTH_CHECK_TIMEOUT
-            ) as client:
+            async with httpx.AsyncClient(timeout=mcp_config.HEALTH_CHECK_TIMEOUT) as client:
                 # Try to access the MCP endpoint
                 endpoint = url.rstrip("/")
 
@@ -1192,25 +1134,19 @@ class ServerServiceV1:
 
                         # Calculate response time
                         end_time = _get_current_utc_time()
-                        response_time_ms = int(
-                            (end_time - start_time).total_seconds() * 1000
-                        )
+                        response_time_ms = int((end_time - start_time).total_seconds() * 1000)
 
                         # Check if response indicates a healthy server
                         if response.status_code in mcp_config.HEALTHY_STATUS_CODES:
                             return True, "healthy", response_time_ms
-                        elif (
-                            response.status_code
-                            in mcp_config.AUTH_REQUIRED_STATUS_CODES
-                        ):
+                        if response.status_code in mcp_config.AUTH_REQUIRED_STATUS_CODES:
                             # Auth required but server is responding
                             return True, "healthy (auth required)", response_time_ms
-                        else:
-                            return (
-                                False,
-                                f"unhealthy: status {response.status_code}",
-                                response_time_ms,
-                            )
+                        return (
+                            False,
+                            f"unhealthy: status {response.status_code}",
+                            response_time_ms,
+                        )
                     except Exception as e:
                         logger.warning(f"Health check failed for {endpoint}: {e}")
                         return False, f"unhealthy: {type(e).__name__}", None
@@ -1220,18 +1156,15 @@ class ServerServiceV1:
                     try:
                         response = await client.get(endpoint, follow_redirects=True)
                         end_time = _get_current_utc_time()
-                        response_time_ms = int(
-                            (end_time - start_time).total_seconds() * 1000
-                        )
+                        response_time_ms = int((end_time - start_time).total_seconds() * 1000)
 
                         if response.status_code in mcp_config.HEALTHY_STATUS_CODES:
                             return True, "healthy", response_time_ms
-                        else:
-                            return (
-                                False,
-                                f"unhealthy: status {response.status_code}",
-                                response_time_ms,
-                            )
+                        return (
+                            False,
+                            f"unhealthy: status {response.status_code}",
+                            response_time_ms,
+                        )
                     except Exception as e:
                         logger.warning(f"Health check failed for {endpoint}: {e}")
                         return False, f"unhealthy: {type(e).__name__}", None
@@ -1251,13 +1184,13 @@ class ServerServiceV1:
         include_capabilities: bool = True,
         include_resources: bool = True,
         include_prompts: bool = True,
-        user_id: Optional[str] = None,
-    ) -> Tuple[
-        Optional[List[Dict[str, Any]]],
-        Optional[List[Dict[str, Any]]],
-        Optional[List[Dict[str, Any]]],
-        Optional[Dict[str, Any]],
-        Optional[str],
+        user_id: str | None = None,
+    ) -> tuple[
+        list[dict[str, Any]] | None,
+        list[dict[str, Any]] | None,
+        list[dict[str, Any]] | None,
+        dict[str, Any] | None,
+        str | None,
     ]:
         """
         Consolidated method to retrieve tools, resources, prompts, and optionally capabilities from a server.
@@ -1362,19 +1295,15 @@ class ServerServiceV1:
                     result.capabilities,
                     None,
                 )
-            else:
-                if result.tools is None:
-                    error_msg = (
-                        result.error_message
-                        or "Failed to retrieve tools from MCP server"
-                    )
-                    logger.warning(f"{error_msg} for {server.serverName}")
-                    return None, None, None, None, error_msg
+            if result.tools is None:
+                error_msg = result.error_message or "Failed to retrieve tools from MCP server"
+                logger.warning(f"{error_msg} for {server.serverName}")
+                return None, None, None, None, error_msg
 
-                logger.info(
-                    f"Retrieved {len(result.tools)} tools, {len(result.resources or [])} resources, {len(result.prompts or [])} prompts from {server.serverName}"
-                )
-                return result.tools, result.resources, result.prompts, None, None
+            logger.info(
+                f"Retrieved {len(result.tools)} tools, {len(result.resources or [])} resources, {len(result.prompts or [])} prompts from {server.serverName}"
+            )
+            return result.tools, result.resources, result.prompts, None, None
 
         except Exception as e:
             error_msg = f"Error: {type(e).__name__} - {e!s}"
@@ -1385,7 +1314,7 @@ class ServerServiceV1:
         self,
         server: MCPServerDocument,
         user_id: str,
-    ) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
+    ) -> tuple[list[dict[str, Any]] | None, str | None]:
         """
         Retrieve tools from a server using OAuth authentication.
 
@@ -1409,9 +1338,7 @@ class ServerServiceV1:
 
         try:
             # Get OAuth tokens for the user
-            oauth_tokens = await token_service.get_oauth_tokens(
-                user_id, server.serverName
-            )
+            oauth_tokens = await token_service.get_oauth_tokens(user_id, server.serverName)
 
             if not oauth_tokens or not oauth_tokens.access_token:
                 return None, f"No OAuth tokens found for user {user_id}"
@@ -1479,12 +1406,8 @@ class ServerServiceV1:
                 )
 
                 # Retry with new token
-                server_info["headers"] = [
-                    {"Authorization": f"Bearer {new_tokens.access_token}"}
-                ]
-                tool_list = await get_tools_from_server_with_server_info(
-                    url, server_info
-                )
+                server_info["headers"] = [{"Authorization": f"Bearer {new_tokens.access_token}"}]
+                tool_list = await get_tools_from_server_with_server_info(url, server_info)
 
             if tool_list is None:
                 return (
@@ -1492,15 +1415,11 @@ class ServerServiceV1:
                     "Failed to retrieve tools from MCP server even after token refresh",
                 )
 
-            logger.info(
-                f"Retrieved {len(tool_list)} tools from {server.serverName} with OAuth"
-            )
+            logger.info(f"Retrieved {len(tool_list)} tools from {server.serverName} with OAuth")
             return tool_list, None
 
         except Exception as e:
-            error_msg = (
-                f"Error retrieving tools with OAuth: {type(e).__name__} - {str(e)}"
-            )
+            error_msg = f"Error retrieving tools with OAuth: {type(e).__name__} - {e!s}"
             logger.error(
                 f"OAuth tool retrieval error for server {server.serverName}: {e}",
                 exc_info=True,
@@ -1510,13 +1429,13 @@ class ServerServiceV1:
     async def retrieve_tools_and_capabilities_from_server(
         self,
         server: MCPServerDocument,
-        user_id: Optional[str] = None,
-    ) -> Tuple[
-        Optional[List[Dict[str, Any]]],
-        Optional[List[Dict[str, Any]]],
-        Optional[List[Dict[str, Any]]],
-        Optional[Dict[str, Any]],
-        Optional[str],
+        user_id: str | None = None,
+    ) -> tuple[
+        list[dict[str, Any]] | None,
+        list[dict[str, Any]] | None,
+        list[dict[str, Any]] | None,
+        dict[str, Any] | None,
+        str | None,
     ]:
         """
         Retrieve tools, resources, prompts, and capabilities from a server using MCP client (legacy method).
@@ -1547,8 +1466,8 @@ class ServerServiceV1:
     async def refresh_server_health(
         self,
         server_id: str,
-        user_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        user_id: str | None = None,
+    ) -> dict[str, Any]:
         """
         Refresh server health status.
 
@@ -1625,15 +1544,11 @@ class ServerServiceV1:
         # Update toolFunctions if tools were retrieved
         if tool_list:
             # Convert tool_list to toolFunctions format
-            tool_functions = _convert_tool_list_to_functions(
-                tool_list, server.serverName
-            )
+            tool_functions = _convert_tool_list_to_functions(tool_list, server.serverName)
             config["toolFunctions"] = tool_functions
 
             # Update tools string (comma-separated tool names)
-            tool_names = [
-                tool.get("name", "") for tool in tool_list if tool.get("name")
-            ]
+            tool_names = [tool.get("name", "") for tool in tool_list if tool.get("name")]
             config["tools"] = ", ".join(tool_names) if tool_names else ""
 
             # Update numTools at root level
@@ -1686,15 +1601,9 @@ class ServerServiceV1:
                 {
                     "$facet": {
                         "total": [{"$count": "count"}],
-                        "by_scope": [
-                            {"$group": {"_id": "$scope", "count": {"$sum": 1}}}
-                        ],
-                        "by_status": [
-                            {"$group": {"_id": "$status", "count": {"$sum": 1}}}
-                        ],
-                        "by_transport": [
-                            {"$group": {"_id": "$config.type", "count": {"$sum": 1}}}
-                        ],
+                        "by_scope": [{"$group": {"_id": "$scope", "count": {"$sum": 1}}}],
+                        "by_status": [{"$group": {"_id": "$status", "count": {"$sum": 1}}}],
+                        "by_transport": [{"$group": {"_id": "$config.type", "count": {"$sum": 1}}}],
                         "total_tools": [
                             {
                                 "$addFields": {
@@ -1722,9 +1631,7 @@ class ServerServiceV1:
                 result = server_results[0]
 
                 # Total servers
-                stats["total_servers"] = (
-                    result["total"][0]["count"] if result["total"] else 0
-                )
+                stats["total_servers"] = result["total"][0]["count"] if result["total"] else 0
 
                 # Servers by scope
                 servers_by_scope = {}
@@ -1803,9 +1710,7 @@ class ServerServiceV1:
                 result = token_results[0]
 
                 # Total tokens
-                stats["total_tokens"] = (
-                    result["total"][0]["count"] if result["total"] else 0
-                )
+                stats["total_tokens"] = result["total"][0]["count"] if result["total"] else 0
 
                 # Tokens by type
                 tokens_by_type = {}
@@ -1852,14 +1757,10 @@ class ServerServiceV1:
 
             # Use PyMongo collection directly for aggregation
             active_users_collection = Token.get_pymongo_collection()
-            active_users_cursor = active_users_collection.aggregate(
-                active_users_pipeline
-            )
+            active_users_cursor = active_users_collection.aggregate(active_users_pipeline)
             active_users_results = await active_users_cursor.to_list(length=None)
 
-            stats["active_users"] = (
-                active_users_results[0]["count"] if active_users_results else 0
-            )
+            stats["active_users"] = active_users_results[0]["count"] if active_users_results else 0
 
         except Exception as e:
             logger.error(f"Error gathering active users statistics: {e}", exc_info=True)

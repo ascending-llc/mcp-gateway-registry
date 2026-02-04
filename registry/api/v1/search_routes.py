@@ -1,20 +1,19 @@
 import asyncio
 import logging
 import time
-from typing import List, Literal, Optional
-from registry.auth.dependencies import CurrentUser
+from typing import Literal
+
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
 
 from packages.models.enums import ServerEntityType
-from registry.services.search.service import faiss_service
-from registry.core.telemetry_decorators import track_registry_operation
-from registry.utils.otel_metrics import record_tool_discovery
 from packages.vector.enum.enums import SearchType
 from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
 from registry.auth.dependencies import CurrentUser
+from registry.core.telemetry_decorators import track_registry_operation
 from registry.services.search.service import faiss_service
 from registry.services.server_service import server_service_v1
+from registry.utils.otel_metrics import record_tool_discovery
 
 from ...services.agent_service import agent_service
 
@@ -150,9 +149,7 @@ async def semantic_search(
                 max_results=search_request.max_results,
             )
         except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-            ) from exc
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         except RuntimeError as exc:
             logger.error("FAISS search service unavailable: %s", exc, exc_info=True)
             raise HTTPException(
@@ -160,7 +157,7 @@ async def semantic_search(
                 detail="Semantic search is temporarily unavailable. Please try again later.",
             ) from exc
 
-        filtered_servers: List[ServerSearchResult] = []
+        filtered_servers: list[ServerSearchResult] = []
         for server in raw_results.get("servers", []):
             matching_tools = [
                 MatchingToolResult(
@@ -186,7 +183,7 @@ async def semantic_search(
                 )
             )
 
-        filtered_tools: List[ToolSearchResult] = []
+        filtered_tools: list[ToolSearchResult] = []
         for tool in raw_results.get("tools", []):
             server_path = tool.get("server_path", "")
             server_name = tool.get("server_name", "")
@@ -201,7 +198,7 @@ async def semantic_search(
                 )
             )
 
-        filtered_agents: List[AgentSearchResult] = []
+        filtered_agents: list[AgentSearchResult] = []
         for agent in raw_results.get("agents", []):
             agent_path = agent.get("path", "")
             if not agent_path:
@@ -212,18 +209,13 @@ async def semantic_search(
 
             agent_card_obj = agent_service.get_agent_info(agent_path)
             agent_card_dict = (
-                agent_card_obj.model_dump()
-                if agent_card_obj
-                else agent.get("agent_card", {})
+                agent_card_obj.model_dump() if agent_card_obj else agent.get("agent_card", {})
             )
 
             tags = agent_card_dict.get("tags", []) or agent.get("tags", [])
             raw_skills = agent_card_dict.get("skills", []) or agent.get("skills", [])
             skills = [
-                skill.get("name")
-                if isinstance(skill, dict)
-                else skill
-                for skill in raw_skills
+                skill.get("name") if isinstance(skill, dict) else skill for skill in raw_skills
             ]
 
             filtered_agents.append(
@@ -232,17 +224,14 @@ async def semantic_search(
                     agent_name=agent_card_dict.get(
                         "name", agent.get("agent_name", agent_path.strip("/"))
                     ),
-                    description=agent_card_dict.get(
-                        "description", agent.get("description")
-                    ),
+                    description=agent_card_dict.get("description", agent.get("description")),
                     tags=tags or [],
                     skills=[s for s in skills if s],
                     trust_level=agent_card_dict.get("trust_level"),
                     visibility=agent_card_dict.get("visibility"),
                     is_enabled=agent_card_dict.get("is_enabled", False),
                     relevance_score=agent.get("relevance_score", 0.0),
-                    match_context=agent.get("match_context")
-                                  or agent_card_dict.get("description"),
+                    match_context=agent.get("match_context") or agent_card_dict.get("description"),
                 )
             )
 
@@ -308,10 +297,7 @@ class SearchRequest(BaseModel):
 
 @router.post("/search/servers")
 @track_registry_operation("search", resource_type="server")
-async def search_servers(
-        search: SearchRequest,
-        user_context: CurrentUser
-):
+async def search_servers(search: SearchRequest, user_context: CurrentUser):
     """
     Search for MCP servers with their tools, resources, and prompts.
     POC endpoint returning raw JSON with dual-format tool definitions.
@@ -343,25 +329,27 @@ async def search_servers(
         # search only server and get server detail from mongo
         if len(search.type_list) == 1 and search.type_list[0] == ServerEntityType.SERVER:
             filters = {"enabled": not search.include_disabled}
-            results = await mcp_server_repo.asearch_with_rerank(query=query,
-                                                                search_type=search.search_type,
-                                                                filters=filters, k=top_n)
-            server_ids = [str(result.get('server_id')) for result in results]
+            results = await mcp_server_repo.asearch_with_rerank(
+                query=query, search_type=search.search_type, filters=filters, k=top_n
+            )
+            server_ids = [str(result.get("server_id")) for result in results]
             async with asyncio.TaskGroup() as tg:
-                tasks = [tg.create_task(server_service_v1.get_server_by_id(sid)) for sid in server_ids]
+                tasks = [
+                    tg.create_task(server_service_v1.get_server_by_id(sid)) for sid in server_ids
+                ]
             search_results = [t.result() for t in tasks]
             logger.info(f"Found {len(search_results)} servers with full details")
         else:
             filters = {
                 "enabled": not search.include_disabled,
-                "entity_type": [dt.value for dt in search.type_list]
+                "entity_type": [dt.value for dt in search.type_list],
             }
             search_results = await mcp_server_repo.asearch_with_rerank(
                 query=query,
                 k=top_n,
                 candidate_k=min(top_n * 5, 100),  # Fetch 5x candidates for reranking (max 100)
                 search_type=search.search_type,
-                filters=filters
+                filters=filters,
             )
             logger.info(
                 "Search completed: %d results for query=%r",
@@ -372,11 +360,7 @@ async def search_servers(
 
         success = True
         results_count = len(search_results)
-        return {
-            "query": query,
-            "total": len(search_results),
-            "servers": search_results
-        }
+        return {"query": query, "total": len(search_results), "servers": search_results}
     finally:
         # Record tool discovery metrics for server search
         duration = time.perf_counter() - start_time

@@ -1,6 +1,7 @@
 import logging
 import os
-from fastapi import (APIRouter, Request, HTTPException, status)
+
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 
 from auth_server.core.config import settings

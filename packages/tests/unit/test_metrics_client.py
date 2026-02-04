@@ -1,11 +1,11 @@
-import pytest
+from unittest.mock import MagicMock, patch
+
 from packages.telemetry.metrics_client import OTelMetricsClient, create_metrics_client
-from unittest.mock import patch, MagicMock
 
 
 def test_metrics_client_instantiation():
     """Test that OTelMetricsClient can be instantiated with service name."""
-    with patch('opentelemetry.metrics.get_meter') as mock_get_meter:
+    with patch("opentelemetry.metrics.get_meter") as mock_get_meter:
         client = OTelMetricsClient("test-service")
 
         mock_get_meter.assert_called_once_with("mcp.test-service")
@@ -18,14 +18,24 @@ def test_metrics_client_with_config():
     """Test that OTelMetricsClient initializes metrics from config."""
     config = {
         "counters": [
-            {"name": "requests_total", "description": "Total requests", "unit": "1", "capture": True}
+            {
+                "name": "requests_total",
+                "description": "Total requests",
+                "unit": "1",
+                "capture": True,
+            }
         ],
         "histograms": [
-            {"name": "request_duration_seconds", "description": "Request duration", "unit": "s", "capture": True}
-        ]
+            {
+                "name": "request_duration_seconds",
+                "description": "Request duration",
+                "unit": "s",
+                "capture": True,
+            }
+        ],
     }
 
-    with patch('opentelemetry.metrics.get_meter') as mock_get_meter:
+    with patch("opentelemetry.metrics.get_meter") as mock_get_meter:
         mock_meter = MagicMock()
         mock_get_meter.return_value = mock_meter
 
@@ -33,16 +43,12 @@ def test_metrics_client_with_config():
 
         # Verify counter was created
         mock_meter.create_counter.assert_called_once_with(
-            name="requests_total",
-            description="Total requests",
-            unit="1"
+            name="requests_total", description="Total requests", unit="1"
         )
 
         # Verify histogram was created
         mock_meter.create_histogram.assert_called_once_with(
-            name="request_duration_seconds",
-            description="Request duration",
-            unit="s"
+            name="request_duration_seconds", description="Request duration", unit="s"
         )
 
 
@@ -51,15 +57,15 @@ def test_metrics_client_skips_disabled_metrics():
     config = {
         "counters": [
             {"name": "enabled_counter", "description": "Enabled", "capture": True},
-            {"name": "disabled_counter", "description": "Disabled", "capture": False}
+            {"name": "disabled_counter", "description": "Disabled", "capture": False},
         ],
         "histograms": [
             {"name": "enabled_histogram", "description": "Enabled", "capture": True},
-            {"name": "disabled_histogram", "description": "Disabled", "capture": False}
-        ]
+            {"name": "disabled_histogram", "description": "Disabled", "capture": False},
+        ],
     }
 
-    with patch('opentelemetry.metrics.get_meter') as mock_get_meter:
+    with patch("opentelemetry.metrics.get_meter") as mock_get_meter:
         mock_meter = MagicMock()
         mock_get_meter.return_value = mock_meter
 
@@ -71,20 +77,16 @@ def test_metrics_client_skips_disabled_metrics():
 
         # Verify correct metrics were created
         mock_meter.create_counter.assert_called_with(
-            name="enabled_counter",
-            description="Enabled",
-            unit="1"
+            name="enabled_counter", description="Enabled", unit="1"
         )
         mock_meter.create_histogram.assert_called_with(
-            name="enabled_histogram",
-            description="Enabled",
-            unit="s"
+            name="enabled_histogram", description="Enabled", unit="s"
         )
 
 
 def test_record_counter():
     """Test recording a counter metric."""
-    with patch('opentelemetry.metrics.get_meter') as mock_get_meter:
+    with patch("opentelemetry.metrics.get_meter") as mock_get_meter:
         mock_meter = MagicMock()
         mock_counter = MagicMock()
         mock_meter.create_counter.return_value = mock_counter
@@ -99,7 +101,7 @@ def test_record_counter():
 
 def test_record_histogram():
     """Test recording a histogram metric."""
-    with patch('opentelemetry.metrics.get_meter') as mock_get_meter:
+    with patch("opentelemetry.metrics.get_meter") as mock_get_meter:
         mock_meter = MagicMock()
         mock_histogram = MagicMock()
         mock_meter.create_histogram.return_value = mock_histogram
@@ -114,8 +116,8 @@ def test_record_histogram():
 
 def test_record_unregistered_metric_logs_warning():
     """Test that recording an unregistered metric logs a warning."""
-    with patch('opentelemetry.metrics.get_meter'):
-        with patch('packages.telemetry.metrics_client.logger') as mock_logger:
+    with patch("opentelemetry.metrics.get_meter"):
+        with patch("packages.telemetry.metrics_client.logger") as mock_logger:
             client = OTelMetricsClient("test-service")
             client.record_counter("nonexistent_counter", 1)
 
@@ -124,11 +126,9 @@ def test_record_unregistered_metric_logs_warning():
 
 def test_create_metrics_client_factory():
     """Test the create_metrics_client factory function."""
-    config = {
-        "counters": [{"name": "test_counter", "description": "Test"}]
-    }
+    config = {"counters": [{"name": "test_counter", "description": "Test"}]}
 
-    with patch('opentelemetry.metrics.get_meter') as mock_get_meter:
+    with patch("opentelemetry.metrics.get_meter") as mock_get_meter:
         mock_meter = MagicMock()
         mock_get_meter.return_value = mock_meter
 

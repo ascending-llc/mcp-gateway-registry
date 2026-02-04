@@ -14,7 +14,6 @@ import re
 import httpx
 from pydantic import BaseModel
 
-from registry.core.config import settings
 from registry.schemas.agent_models import (
     AgentCard,
     SecurityScheme,
