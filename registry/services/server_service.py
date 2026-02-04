@@ -33,7 +33,7 @@ from registry.schemas.errors import (
     MissingUserIdError,
     AuthenticationError,
 )
-from registry.core.telemetry_decorators import ToolDiscoveryMetricsContext
+from registry.core.telemetry_decorators import track_tool_discovery
 
 logger = logging.getLogger(__name__)
 
@@ -1241,6 +1241,7 @@ class ServerServiceV1:
             logger.error(f"Health check error for server {server.serverName}: {e}")
             return False, f"error: {type(e).__name__}", None
 
+    @track_tool_discovery
     async def retrieve_from_server(
         self,
         server: MCPServerDocument,
@@ -1288,109 +1289,94 @@ class ServerServiceV1:
                 "OAuth server requires user_id for token retrieval",
             )
 
-        # Get transport type for metrics
+        # Get transport type
         transport_type = config.get("type", "streamable-http")
 
-        # Use metrics context to track tool discovery
-        async with ToolDiscoveryMetricsContext(
-            server_name=server.serverName,
-            transport_type=transport_type,
-        ) as metrics_ctx:
+        try:
+            # Build complete headers with all authentication (OAuth, apiKey, custom)
+            # This consolidates all auth logic in one place
             try:
-                # Build complete headers with all authentication (OAuth, apiKey, custom)
-                # This consolidates all auth logic in one place
-                try:
-                    headers = await _build_complete_headers_for_server(server, user_id)
-                except OAuthReAuthRequiredError as e:
-                    # OAuth re-authentication needed - return special error format
-                    metrics_ctx.set_success(False)
-                    return (
-                        None,
-                        None,
-                        None,
-                        None,
-                        f"oauth_required:{e.auth_url or str(e)}",
-                    )
-                except (OAuthTokenError, MissingUserIdError) as e:
-                    # OAuth token errors or missing user ID
-                    metrics_ctx.set_success(False)
-                    return None, None, None, None, f"Authentication error: {str(e)}"
-                except AuthenticationError as e:
-                    # Other authentication errors
-                    metrics_ctx.set_success(False)
-                    return None, None, None, None, f"Authentication error: {str(e)}"
+                headers = await _build_complete_headers_for_server(server, user_id)
+            except OAuthReAuthRequiredError as e:
+                # OAuth re-authentication needed - return special error format
+                return (
+                    None,
+                    None,
+                    None,
+                    None,
+                    f"oauth_required:{e.auth_url or str(e)}",
+                )
+            except (OAuthTokenError, MissingUserIdError) as e:
+                # OAuth token errors or missing user ID
+                return None, None, None, None, f"Authentication error: {str(e)}"
+            except AuthenticationError as e:
+                # Other authentication errors
+                return None, None, None, None, f"Authentication error: {str(e)}"
 
-                items_to_retrieve = []
-                if include_capabilities:
-                    items_to_retrieve.append("capabilities")
-                items_to_retrieve.append("tools")
-                if include_resources:
-                    items_to_retrieve.append("resources")
-                if include_prompts:
-                    items_to_retrieve.append("prompts")
+            items_to_retrieve = []
+            if include_capabilities:
+                items_to_retrieve.append("capabilities")
+            items_to_retrieve.append("tools")
+            if include_resources:
+                items_to_retrieve.append("resources")
+            if include_prompts:
+                items_to_retrieve.append("prompts")
+
+            logger.info(
+                f"Retrieving {', '.join(items_to_retrieve)} from {url} for server {server.serverName}"
+            )
+
+            # Use the mcp_client with pre-built headers (pure transport layer)
+            from registry.core.mcp_client import (
+                get_tools_and_capabilities_from_server,
+            )
+
+            result = await get_tools_and_capabilities_from_server(
+                url,
+                headers=headers,
+                transport_type=transport_type,
+                include_resources=include_resources,
+                include_prompts=include_prompts,
+            )
+            server.config["requiresInit"] = True if result.requires_init else False
+
+            if include_capabilities:
+                if result.tools is None or result.capabilities is None:
+                    error_msg = (
+                        result.error_message
+                        or "Failed to retrieve tools and capabilities from MCP server"
+                    )
+                    logger.warning(f"{error_msg} for {server.serverName}")
+                    return None, None, None, None, error_msg
 
                 logger.info(
-                    f"Retrieving {', '.join(items_to_retrieve)} from {url} for server {server.serverName}"
+                    f"Retrieved {len(result.tools)} tools, {len(result.resources or [])} resources, {len(result.prompts or [])} prompts, and capabilities from {server.serverName}"
                 )
-
-                # Use the mcp_client with pre-built headers (pure transport layer)
-                from registry.core.mcp_client import (
-                    get_tools_and_capabilities_from_server,
+                return (
+                    result.tools,
+                    result.resources,
+                    result.prompts,
+                    result.capabilities,
+                    None,
                 )
+            else:
+                if result.tools is None:
+                    error_msg = (
+                        result.error_message
+                        or "Failed to retrieve tools from MCP server"
+                    )
+                    logger.warning(f"{error_msg} for {server.serverName}")
+                    return None, None, None, None, error_msg
 
-                result = await get_tools_and_capabilities_from_server(
-                    url,
-                    headers=headers,
-                    transport_type=transport_type,
-                    include_resources=include_resources,
-                    include_prompts=include_prompts,
+                logger.info(
+                    f"Retrieved {len(result.tools)} tools, {len(result.resources or [])} resources, {len(result.prompts or [])} prompts from {server.serverName}"
                 )
-                server.config["requiresInit"] = True if result.requires_init else False
+                return result.tools, result.resources, result.prompts, None, None
 
-                if include_capabilities:
-                    if result.tools is None or result.capabilities is None:
-                        error_msg = (
-                            result.error_message
-                            or "Failed to retrieve tools and capabilities from MCP server"
-                        )
-                        logger.warning(f"{error_msg} for {server.serverName}")
-                        metrics_ctx.set_success(False)
-                        return None, None, None, None, error_msg
-
-                    logger.info(
-                        f"Retrieved {len(result.tools)} tools, {len(result.resources or [])} resources, {len(result.prompts or [])} prompts, and capabilities from {server.serverName}"
-                    )
-                    metrics_ctx.set_tools_count(len(result.tools))
-                    metrics_ctx.set_success(True)
-                    return (
-                        result.tools,
-                        result.resources,
-                        result.prompts,
-                        result.capabilities,
-                        None,
-                    )
-                else:
-                    if result.tools is None:
-                        error_msg = (
-                            result.error_message
-                            or "Failed to retrieve tools from MCP server"
-                        )
-                        logger.warning(f"{error_msg} for {server.serverName}")
-                        metrics_ctx.set_success(False)
-                        return None, None, None, None, error_msg
-
-                    logger.info(
-                        f"Retrieved {len(result.tools)} tools, {len(result.resources or [])} resources, {len(result.prompts or [])} prompts from {server.serverName}"
-                    )
-                    metrics_ctx.set_tools_count(len(result.tools))
-                    metrics_ctx.set_success(True)
-                    return result.tools, result.resources, result.prompts, None, None
-
-            except Exception as e:
-                error_msg = f"Error: {type(e).__name__} - {str(e)}"
-                logger.error(f"Retrieval error for server {server.serverName}: {e}")
-                metrics_ctx.set_success(False)
-                return None, None, None, None, error_msg
+        except Exception as e:
+            error_msg = f"Error: {type(e).__name__} - {str(e)}"
+            logger.error(f"Retrieval error for server {server.serverName}: {e}")
+            return None, None, None, None, error_msg
 
     async def retrieve_tools_with_oauth(
         self,

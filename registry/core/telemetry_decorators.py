@@ -273,6 +273,76 @@ def track_prompt_execution(func: F) -> F:
     return wrapper  # type: ignore
 
 
+def track_tool_discovery(func: F) -> F:
+    """
+    Decorator to automatically track tool discovery metrics.
+
+    Extracts server_name and transport_type from server argument,
+    and tools_count/success from result tuple.
+
+    Expected function signature:
+        async def retrieve_from_server(self, server, ...) -> Tuple[tools, resources, prompts, caps, error]
+
+    Success is determined by: error (last element) is None
+    Tools count is determined by: len(tools) if tools is not None
+
+    Example:
+        @track_tool_discovery
+        async def retrieve_from_server(self, server: MCPServerDocument, ...) -> Tuple[...]:
+            ...
+    """
+
+    @wraps(func)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        start_time = time.perf_counter()
+        success = False
+        server_name = "unknown"
+        transport_type = "unknown"
+        tools_count = 0
+
+        try:
+            # Extract server from args (first arg after self for methods)
+            server = kwargs.get("server")
+            if server is None and len(args) > 1:
+                server = args[1]  # args[0] is self for methods
+
+            if server:
+                server_name = getattr(server, "serverName", "unknown")
+                config = getattr(server, "config", {}) or {}
+                transport_type = config.get("type", "streamable-http")
+
+            # Execute business logic
+            result = await func(*args, **kwargs)
+
+            # Result is expected to be a tuple: (tools, resources, prompts, capabilities, error)
+            if isinstance(result, tuple) and len(result) >= 5:
+                tools, _resources, _prompts, _capabilities, error = result
+                success = error is None
+                if tools is not None:
+                    tools_count = len(tools)
+
+            return result
+
+        except Exception:
+            success = False
+            raise
+
+        finally:
+            duration = time.perf_counter() - start_time
+            try:
+                _record_tool_discovery(
+                    server_name=server_name,
+                    success=success,
+                    duration_seconds=duration,
+                    transport_type=transport_type,
+                    tools_count=tools_count,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to record tool discovery metric: {e}")
+
+    return wrapper  # type: ignore
+
+
 class AuthMetricsContext:
     """
     Context manager for tracking authentication with dynamic mechanism detection.
@@ -409,189 +479,3 @@ class ToolExecutionMetricsContext:
             logger.warning(f"Failed to record tool execution metric: {e}")
 
 
-class ResourceAccessMetricsContext:
-    """
-    Context manager for tracking resource access.
-
-    Example:
-        async with ResourceAccessMetricsContext(resource_uri=uri) as ctx:
-            server = await get_server(id)
-            ctx.set_server_name(server.name)
-            ...
-            ctx.set_success(True)
-    """
-
-    def __init__(
-        self,
-        resource_uri: str,
-        server_name: str = "unknown",
-    ):
-        self._start_time: float = 0
-        self._resource_uri: str = resource_uri
-        self._server_name: str = server_name
-        self._success: bool = False
-
-    def set_server_name(self, server_name: str) -> None:
-        """Set the server name."""
-        self._server_name = server_name
-
-    def set_success(self, success: bool) -> None:
-        """Set the success status."""
-        self._success = success
-
-    async def __aenter__(self) -> "ResourceAccessMetricsContext":
-        self._start_time = time.perf_counter()
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: Any,
-        exc_val: Any,
-        exc_tb: Any,
-    ) -> None:
-        if exc_type is not None:
-            self._success = False
-
-        duration = time.perf_counter() - self._start_time
-
-        try:
-            _record_resource_access(
-                resource_uri=self._resource_uri,
-                server_name=self._server_name,
-                success=self._success,
-                duration_seconds=duration,
-            )
-        except Exception as e:
-            logger.warning(f"Failed to record resource access metric: {e}")
-
-
-class PromptExecutionMetricsContext:
-    """
-    Context manager for tracking prompt execution.
-
-    Example:
-        async with PromptExecutionMetricsContext(prompt_name=name) as ctx:
-            server = await get_server(id)
-            ctx.set_server_name(server.name)
-            ...
-            ctx.set_success(True)
-    """
-
-    def __init__(
-        self,
-        prompt_name: str,
-        server_name: str = "unknown",
-    ):
-        self._start_time: float = 0
-        self._prompt_name: str = prompt_name
-        self._server_name: str = server_name
-        self._success: bool = False
-
-    def set_server_name(self, server_name: str) -> None:
-        """Set the server name."""
-        self._server_name = server_name
-
-    def set_success(self, success: bool) -> None:
-        """Set the success status."""
-        self._success = success
-
-    async def __aenter__(self) -> "PromptExecutionMetricsContext":
-        self._start_time = time.perf_counter()
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: Any,
-        exc_val: Any,
-        exc_tb: Any,
-    ) -> None:
-        if exc_type is not None:
-            self._success = False
-
-        duration = time.perf_counter() - self._start_time
-
-        try:
-            _record_prompt_execution(
-                prompt_name=self._prompt_name,
-                server_name=self._server_name,
-                success=self._success,
-                duration_seconds=duration,
-            )
-        except Exception as e:
-            logger.warning(f"Failed to record prompt execution metric: {e}")
-
-
-class ToolDiscoveryMetricsContext:
-    """
-    Context manager for tracking tool discovery operations.
-
-    Used when fetching/discovering tools from MCP servers, such as during:
-    - Server registration
-    - Server health refresh
-    - Server enable (toggle)
-
-    Example:
-        async with ToolDiscoveryMetricsContext(server_name=server.serverName) as ctx:
-            ctx.set_transport_type(config.get("type", "streamable-http"))
-
-            tool_list, resources, prompts, caps, error = await retrieve_from_server(...)
-
-            if tool_list:
-                ctx.set_tools_count(len(tool_list))
-                ctx.set_success(True)
-            else:
-                ctx.set_success(False)
-    """
-
-    def __init__(
-        self,
-        server_name: str = "unknown",
-        transport_type: str = "unknown",
-    ):
-        self._start_time: float = 0
-        self._server_name: str = server_name
-        self._transport_type: str = transport_type
-        self._tools_count: int = 0
-        self._success: bool = False
-
-    def set_server_name(self, server_name: str) -> None:
-        """Set the server name."""
-        self._server_name = server_name
-
-    def set_transport_type(self, transport_type: str) -> None:
-        """Set the transport type."""
-        self._transport_type = transport_type
-
-    def set_tools_count(self, tools_count: int) -> None:
-        """Set the number of tools discovered."""
-        self._tools_count = tools_count
-
-    def set_success(self, success: bool) -> None:
-        """Set the success status."""
-        self._success = success
-
-    async def __aenter__(self) -> "ToolDiscoveryMetricsContext":
-        self._start_time = time.perf_counter()
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: Any,
-        exc_val: Any,
-        exc_tb: Any,
-    ) -> None:
-        if exc_type is not None:
-            self._success = False
-
-        duration = time.perf_counter() - self._start_time
-
-        try:
-            _record_tool_discovery(
-                server_name=self._server_name,
-                success=self._success,
-                duration_seconds=duration,
-                transport_type=self._transport_type,
-                tools_count=self._tools_count,
-            )
-        except Exception as e:
-            logger.warning(f"Failed to record tool discovery metric: {e}")
