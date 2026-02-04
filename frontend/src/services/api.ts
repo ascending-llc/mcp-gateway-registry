@@ -7,7 +7,7 @@ const API = {
   getAuthMe: '/api/auth/me',
 
   getToken: `${BASE_URL}/tokens/generate`,
-  logout: '/logout',
+  logout: '/redirect/logout',
 
   getVersion: '/api/version',
 
