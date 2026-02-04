@@ -9,10 +9,10 @@ import {
 import axios from 'axios';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 
 import { ServerFormDialog } from '@/components/ServerFormDialog';
 import type { ServerInfo } from '@/contexts/ServerContext';
+import { useToast } from '@/contexts/ToastContext';
 import AgentCard from '../components/AgentCard';
 import SemanticSearchResults from '../components/SemanticSearchResults';
 import ServerCard from '../components/ServerCard';
@@ -36,55 +36,6 @@ interface Agent {
   status?: 'healthy' | 'healthy-auth-expired' | 'unhealthy' | 'unknown';
 }
 
-// Toast notification component
-interface ToastProps {
-  message: string;
-  type: 'success' | 'error';
-  onClose: () => void;
-}
-
-const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      onClose();
-    }, 4000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  return createPortal(
-    <div
-      className='fixed top-4 right-4 z-[100] max-w-full animate-slide-in-top'
-      onClick={e => e.stopPropagation()}
-      onMouseDown={e => e.stopPropagation()}
-    >
-      <div
-        className={`flex items-center p-4 rounded-lg shadow-lg border ${
-          type === 'success'
-            ? 'bg-green-50 border-green-200 text-green-800 dark:bg-green-900/50 dark:border-green-700 dark:text-green-200'
-            : 'bg-red-50 border-red-200 text-red-800 dark:bg-red-900/50 dark:border-red-700 dark:text-red-200'
-        }`}
-      >
-        {type === 'success' ? (
-          <CheckCircleIcon className='h-5 w-5 mr-3 flex-shrink-0' />
-        ) : (
-          <ExclamationCircleIcon className='h-5 w-5 mr-3 flex-shrink-0' />
-        )}
-        <p className='text-sm font-medium max-w-full truncate'>{message}</p>
-        <button
-          onClick={e => {
-            e.stopPropagation();
-            onClose();
-          }}
-          onMouseDown={e => e.stopPropagation()}
-          className='ml-3 flex-shrink-0 text-current opacity-70 hover:opacity-100'
-        >
-          <XMarkIcon className='h-4 w-4' />
-        </button>
-      </div>
-    </div>,
-    document.body,
-  );
-};
 
 const Dashboard: React.FC = () => {
   const {
@@ -109,7 +60,7 @@ const Dashboard: React.FC = () => {
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [serverId, setServerId] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const { showToast } = useToast();
 
   // Agent state management
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
@@ -353,14 +304,6 @@ const Dashboard: React.FC = () => {
     setEditingAgent(null);
   };
 
-  const showToast = (message: string, type: 'success' | 'error') => {
-    setToast({ message: String(message), type });
-  };
-
-  const hideToast = () => {
-    setToast(null);
-  };
-
   const handleSaveEditAgent = async () => {
     if (editAgentLoading || !editingAgent) return;
 
@@ -434,7 +377,6 @@ const Dashboard: React.FC = () => {
                       server={server}
                       canModify={user?.can_modify_servers || false}
                       onEdit={handleEditServer}
-                      onShowToast={showToast}
                       onServerUpdate={handleServerUpdate}
                       onRefreshSuccess={refreshServerData}
                     />
@@ -481,7 +423,6 @@ const Dashboard: React.FC = () => {
                       onEdit={handleEditAgent}
                       canModify={user?.can_modify_servers || false}
                       onRefreshSuccess={refreshAgentData}
-                      onShowToast={showToast}
                       onAgentUpdate={handleAgentUpdate}
                       authToken={agentApiToken}
                     />
@@ -534,7 +475,6 @@ const Dashboard: React.FC = () => {
                           server={server}
                           canModify={user?.can_modify_servers || false}
                           onEdit={handleEditServer}
-                          onShowToast={showToast}
                           onServerUpdate={handleServerUpdate}
                           onRefreshSuccess={refreshServerData}
                         />
@@ -562,7 +502,6 @@ const Dashboard: React.FC = () => {
                           onEdit={handleEditAgent}
                           canModify={user?.can_modify_servers || false}
                           onRefreshSuccess={refreshAgentData}
-                          onShowToast={showToast}
                           onAgentUpdate={handleAgentUpdate}
                         />
                       ))}
@@ -604,9 +543,6 @@ const Dashboard: React.FC = () => {
 
   return (
     <>
-      {/* Toast Notification */}
-      {toast && <Toast message={toast.message} type={toast.type} onClose={hideToast} />}
-
       <div className='flex flex-col h-full'>
         {/* Fixed Header Section */}
         <div className='flex-shrink-0 space-y-4 pb-4'>
