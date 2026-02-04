@@ -65,7 +65,7 @@ def use_transaction(func: Callable) -> Callable:
                         return result
                     finally: 
                         _tx_session.reset(context_token)
-        except (OperationFailure, ConnectionFailure) as exc:
+        except OperationFailure as exc:
             if exc.code == MONGODB_TRANSACTION_NOT_SUPPORTED_ERROR_CODE:
                 logger.error(
                     "Transaction failed for %s - MongoDB must run as a replica set. "
@@ -81,6 +81,13 @@ def use_transaction(func: Callable) -> Callable:
                     func.__name__,
                     exc,
                 )
+            raise
+        except ConnectionFailure as exc: 
+            logger.error(
+                "Transaction failed for %s due to connection error: %s",
+                func.__name__,
+                exc,
+            )
             raise
         except Exception:
             logger.error(
