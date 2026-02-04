@@ -22,6 +22,7 @@ from registry.utils.otel_metrics import (
     record_auth_request as _record_auth_request,
     record_registry_operation as _record_registry_operation,
     record_tool_execution as _record_tool_execution,
+    record_tool_discovery as _record_tool_discovery,
     record_resource_access as _record_resource_access,
     record_prompt_execution as _record_prompt_execution,
 )
@@ -345,3 +346,79 @@ class PromptExecutionMetricsContext:
             )
         except Exception as e:
             logger.warning(f"Failed to record prompt execution metric: {e}")
+
+
+class ToolDiscoveryMetricsContext:
+    """
+    Context manager for tracking tool discovery operations.
+
+    Used when fetching/discovering tools from MCP servers, such as during:
+    - Server registration
+    - Server health refresh
+    - Server enable (toggle)
+
+    Example:
+        async with ToolDiscoveryMetricsContext(server_name=server.serverName) as ctx:
+            ctx.set_transport_type(config.get("type", "streamable-http"))
+
+            tool_list, resources, prompts, caps, error = await retrieve_from_server(...)
+
+            if tool_list:
+                ctx.set_tools_count(len(tool_list))
+                ctx.set_success(True)
+            else:
+                ctx.set_success(False)
+    """
+
+    def __init__(
+        self,
+        server_name: str = "unknown",
+        transport_type: str = "unknown",
+    ):
+        self._start_time: float = 0
+        self._server_name: str = server_name
+        self._transport_type: str = transport_type
+        self._tools_count: int = 0
+        self._success: bool = False
+
+    def set_server_name(self, server_name: str) -> None:
+        """Set the server name."""
+        self._server_name = server_name
+
+    def set_transport_type(self, transport_type: str) -> None:
+        """Set the transport type."""
+        self._transport_type = transport_type
+
+    def set_tools_count(self, tools_count: int) -> None:
+        """Set the number of tools discovered."""
+        self._tools_count = tools_count
+
+    def set_success(self, success: bool) -> None:
+        """Set the success status."""
+        self._success = success
+
+    async def __aenter__(self) -> "ToolDiscoveryMetricsContext":
+        self._start_time = time.perf_counter()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: Any,
+        exc_val: Any,
+        exc_tb: Any,
+    ) -> None:
+        if exc_type is not None:
+            self._success = False
+
+        duration = time.perf_counter() - self._start_time
+
+        try:
+            _record_tool_discovery(
+                server_name=self._server_name,
+                success=self._success,
+                duration_seconds=duration,
+                transport_type=self._transport_type,
+                tools_count=self._tools_count,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to record tool discovery metric: {e}")

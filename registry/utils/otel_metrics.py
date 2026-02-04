@@ -9,6 +9,7 @@ Usage:
         metrics,
         record_registry_operation,
         record_tool_execution,
+        record_tool_discovery,
         record_server_request,
         record_resource_access,
         record_prompt_execution,
@@ -16,6 +17,7 @@ Usage:
 
     # Using domain functions (recommended)
     record_registry_operation("create", "server", success=True, duration_seconds=0.1)
+    record_tool_discovery("my-server", success=True, duration_seconds=0.5, tools_count=10)
 
     # Using generic client directly
     metrics.record_counter("custom_metric", 1, {"label": "value"})
@@ -67,7 +69,9 @@ def record_registry_operation(
     metrics.record_counter("registry_operations_total", 1, attributes)
 
     if duration_seconds is not None:
-        metrics.record_histogram("registry_operation_duration_seconds", duration_seconds, attributes)
+        metrics.record_histogram(
+            "registry_operation_duration_seconds", duration_seconds, attributes
+        )
 
 
 def record_tool_execution(
@@ -101,7 +105,9 @@ def record_tool_execution(
     metrics.record_counter("mcp_tool_execution_total", 1, attributes)
 
     if duration_seconds is not None:
-        metrics.record_histogram("mcp_tool_execution_duration_seconds", duration_seconds, attributes)
+        metrics.record_histogram(
+            "mcp_tool_execution_duration_seconds", duration_seconds, attributes
+        )
 
 
 def record_resource_access(
@@ -132,7 +138,9 @@ def record_resource_access(
     metrics.record_counter("mcp_resource_access_total", 1, attributes)
 
     if duration_seconds is not None:
-        metrics.record_histogram("mcp_resource_access_duration_seconds", duration_seconds, attributes)
+        metrics.record_histogram(
+            "mcp_resource_access_duration_seconds", duration_seconds, attributes
+        )
 
 
 def record_prompt_execution(
@@ -163,7 +171,9 @@ def record_prompt_execution(
     metrics.record_counter("mcp_prompt_execution_total", 1, attributes)
 
     if duration_seconds is not None:
-        metrics.record_histogram("mcp_prompt_execution_duration_seconds", duration_seconds, attributes)
+        metrics.record_histogram(
+            "mcp_prompt_execution_duration_seconds", duration_seconds, attributes
+        )
 
 
 def record_server_request(server_name: str) -> None:
@@ -208,4 +218,47 @@ def record_auth_request(
     metrics.record_counter("auth_requests_total", 1, attributes)
 
     if duration_seconds is not None:
-        metrics.record_histogram("auth_request_duration_seconds", duration_seconds, attributes)
+        metrics.record_histogram(
+            "auth_request_duration_seconds", duration_seconds, attributes
+        )
+
+
+def record_tool_discovery(
+    server_name: str,
+    success: bool,
+    duration_seconds: Optional[float] = None,
+    transport_type: str = "unknown",
+    tools_count: int = 0,
+) -> None:
+    """
+    Record tool discovery operation with latency tracking.
+
+    This metric captures tool discovery operations including:
+    - Search/discovery via registry API (server_name="registry")
+    - Backend fetching of tools from MCP servers (server_name=<mcp-server-name>)
+
+    Requires these metrics in config:
+    - counter: mcp_tool_discovery_total
+    - histogram: mcp_tool_discovery_duration_seconds
+
+    Args:
+        server_name: Source of discovery - "registry" for API search, or MCP server name for backend
+        success: Whether the discovery was successful
+        duration_seconds: Discovery duration in seconds for p50/p95/p99 calculation
+        transport_type: Transport/search type (e.g., "streamable-http", "sse", "hybrid", "semantic")
+        tools_count: Number of tools/results discovered (0 if failed)
+    """
+    attributes = {
+        "source": server_name,  # Used by Grafana dashboard for grouping
+        "server_name": server_name,
+        "status": "success" if success else "failure",
+        "transport_type": transport_type,
+        "tools_count": str(tools_count),
+    }
+
+    metrics.record_counter("mcp_tool_discovery_total", 1, attributes)
+
+    if duration_seconds is not None:
+        metrics.record_histogram(
+            "mcp_tool_discovery_duration_seconds", duration_seconds, attributes
+        )
