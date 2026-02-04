@@ -95,7 +95,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        
+
         # Check authenticated paths first (these override public patterns)
         if self._match_path(path, self.public_paths_compiled):
             logger.debug(f"Public path: {path}")
@@ -290,15 +290,24 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 logger.debug("JWT token missing 'sub' claim")
                 return None
 
+            # Extract groups first
+            groups = claims.get('groups', [])
+            
             # Extract scopes from space-separated string
             scope_string = claims.get('scope', '')
             scopes = scope_string.split() if scope_string else []
-
+            
+            # If no scopes but has groups, map groups to scopes
+            if not scopes and groups:
+                from auth_server.utils.security_mask import map_groups_to_scopes
+                from auth_server.core.config import settings as auth_settings
+                scopes = map_groups_to_scopes(groups, auth_settings.scopes_config)
+                logger.info(f"Mapped JWT groups {groups} to scopes: {scopes}")
+            
             # Verify we have at least some scopes
             if not scopes:
-                logger.debug("JWT token has no scopes")
+                logger.debug(f"JWT token has no scopes and groups mapping failed. Groups: {groups}")
                 return None
-            groups = claims.get('groups', [])
             # Optional: Verify client_id if present
             client_id = claims.get('client_id')
             if client_id and client_id != 'user-generated':
@@ -348,6 +357,13 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 scope_string = claims.get('scope', '')
                 scopes = scope_string.split() if scope_string else []
                 
+                # If no scopes but has groups, map groups to scopes
+                if not scopes and groups:
+                    from auth_server.utils.security_mask import map_groups_to_scopes
+                    from auth_server.core.config import settings as auth_settings
+                    scopes = map_groups_to_scopes(groups, auth_settings.scopes_config)
+                    logger.info(f"Mapped session groups {groups} to scopes: {scopes}")
+                
                 logger.debug(f"JWT access token valid for user {username} (user_id: {user_id})")
                 
                 return self._build_user_context(
@@ -384,6 +400,14 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             groups = refresh_claims.get('groups', [])
             scope_string = refresh_claims.get('scope', '')
             scopes = scope_string.split() if scope_string else []
+            
+            # If no scopes but has groups, map groups to scopes
+            if not scopes and groups:
+                from auth_server.utils.security_mask import map_groups_to_scopes
+                from auth_server.core.config import settings as auth_settings
+                scopes = map_groups_to_scopes(groups, auth_settings.scopes_config)
+                logger.info(f"Mapped refresh token groups {groups} to scopes: {scopes}")
+            
             role = refresh_claims.get('role', 'user')
             email = refresh_claims.get('email', f"{username}@local")
             
@@ -391,8 +415,8 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.debug(f"User groups from refresh token: {groups}, scopes: {scopes}")
             
             # Validate that we have the required information
-            if not groups or not scopes:
-                logger.warning(f"Refresh token for user {username} missing groups or scopes, cannot refresh")
+            if not scopes:
+                logger.warning(f"Refresh token for user {username} has no scopes (groups: {groups}), cannot refresh")
                 return None
             
             # Generate new access token using information from refresh token
