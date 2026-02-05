@@ -280,6 +280,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                   required
                   disabled={isReadOnly}
                   className={`${getInputClass('authorization_url')} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  placeholder='https://...'
                   value={config.authorization_url || ''}
                   onChange={e => updateConfig({ authorization_url: e.target.value })}
                 />
@@ -294,6 +295,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                   required
                   disabled={isReadOnly}
                   className={`${getInputClass('token_url')} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  placeholder='https://...'
                   value={config.token_url || ''}
                   onChange={e => updateConfig({ token_url: e.target.value })}
                 />
@@ -306,6 +308,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                   type='text'
                   disabled={isReadOnly}
                   className={`${getInputClass('scope')} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  placeholder='read write'
                   value={config.scope || ''}
                   onChange={e => updateConfig({ scope: e.target.value })}
                 />
