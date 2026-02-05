@@ -101,6 +101,71 @@ def clear_session(session_key: str) -> None:
         logger.error(f"Failed to clear session from Redis: {e}")
 
 
+async def initialize_mcp(
+    target_url: str,
+    headers: Dict[str, str] = None,
+    transport_type: str = "streamable-http"
+) -> Optional[Any]:
+    """
+    Perform MCP initialization using MCP client library and return the init_result.
+    
+    This is a pure transport layer function that performs the MCP initialize handshake
+    and returns the raw InitializeResult. The caller is responsible for interpreting
+    the result (e.g., for health checks, validation, etc.).
+    
+    Args:
+        target_url: MCP server URL
+        headers: HTTP headers (optional, defaults to standard MCP headers)
+        transport_type: Transport type ("streamable-http" or "sse")
+    
+    Returns:
+        InitializeResult object from MCP library, or None if initialization failed
+    """
+    import httpx
+    
+    # Use provided headers or default MCP headers
+    if headers is None:
+        headers = mcp_config.DEFAULT_HEADERS.copy()
+    
+    # Prepare URL based on transport type
+    strategy = get_server_strategy({"type": transport_type})
+    mcp_url = strategy.modify_url(target_url)
+    
+    logger.info(f"Initializing MCP connection to {mcp_url} using {transport_type} transport")
+    
+    try:
+        # Create custom httpx client with headers
+        async with httpx.AsyncClient(headers=headers, timeout=30.0) as http_client:
+            if transport_type == "streamable-http":
+                async with streamable_http_client(url=mcp_url, http_client=http_client) as (read, write, _):
+                    async with ClientSession(read, write) as session:
+                        # Perform MCP initialization
+                        init_result = await asyncio.wait_for(
+                            session.initialize(),
+                            timeout=mcp_config.INIT_TIMEOUT
+                        )
+                        logger.info(f"MCP initialization successful for {target_url}")
+                        return init_result
+            
+            elif transport_type == "sse":
+                async with sse_client(mcp_url, http_client=http_client) as (read, write):
+                    async with ClientSession(read, write) as session:
+                        # Perform MCP initialization
+                        init_result = await asyncio.wait_for(
+                            session.initialize(),
+                            timeout=mcp_config.INIT_TIMEOUT
+                        )
+                        logger.info(f"MCP initialization successful for {target_url}")
+                        return init_result
+            else:
+                logger.error(f"Unsupported transport type: {transport_type}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"MCP initialization failed for {target_url}: {type(e).__name__} - {e}")
+        return None
+
+
 async def initialize_mcp_session(
     target_url: str,
     headers: Dict[str, str],

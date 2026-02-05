@@ -137,18 +137,7 @@ async def oauth2_callback(request: Request, code: str = None, error: str = None,
                 import jwt as pyjwt
                 user_claims = pyjwt.decode(access_token, options={"verify_signature": False})
 
-                # Extract user info from JWT claims
-                userinfo = {
-                    "user_id": user_claims.get("user_id"),
-                    "username": user_claims.get("sub"),
-                    "email": user_claims.get("email"),
-                    "name": user_claims.get("name"),
-                    "groups": user_claims.get("groups", []),
-                    "provider": user_claims.get("provider"),
-                    "auth_method": "oauth2"
-                }
-
-                logger.info(f"OAuth2 callback exchanged code for JWT token: {userinfo['username']}")
+                logger.info(f"OAuth2 callback exchanged code for JWT token: {user_claims.get('sub')}")
 
         except httpx.TimeoutException:
             logger.error("Timeout exchanging authorization code with auth server")
@@ -164,34 +153,40 @@ async def oauth2_callback(request: Request, code: str = None, error: str = None,
             )
 
         # Validate that user_id was resolved by auth_server
-        if not userinfo.get("user_id"):
-            logger.warning(f"User {userinfo.get('username')} has no user_id - not found in MongoDB")
+        if not user_claims.get("user_id"):
+            logger.warning(f"User {user_claims.get('sub')} has no user_id - not found in MongoDB")
             return RedirectResponse(
                 url=f"{settings.registry_client_url}/login?error=User+not+found+in+registry",
                 status_code=302
             )
 
-        # Look up user object to get role (user_id already provided in JWT)
-        user_obj = await user_service.get_user_by_user_id(userinfo.get("user_id"))
+        # Look up user object to merge with OAuth claims
+        user_obj = await user_service.get_user_by_user_id(user_claims.get("user_id"))
         if not user_obj: 
-            logger.warning(f"User ID {userinfo.get('user_id')} not found in registry database")
+            logger.warning(f"User ID {user_claims.get('user_id')} not found in registry database")
             return RedirectResponse(
                 url=f"{settings.registry_client_url}/login?error=User+not+found+in+registry", 
                 status_code=302
             )
         
-        # Generate JWT access and refresh tokens
-        access_token, refresh_token = generate_token_pair(
-            user_id=str(user_obj.id),
-            username=userinfo.get("username"),
-            email=userinfo.get("email", ""),
-            groups=userinfo.get("groups", []),
-            scopes=userinfo.get("scopes", []),
-            role=user_obj.role,
-            auth_method="oauth2",
-            provider=userinfo.get("provider", "unknown"),
-            idp_id=userinfo.get("idp_id")
-        )
+        # Merge OAuth claims with user object data
+        # OAuth claims take precedence except for email and role which come from database
+        user_info = {
+            "user_id": str(user_obj.id),
+            "username": user_obj.username,
+            "email": user_obj.email or user_claims.get("email", ""),
+            "groups": user_claims.get("groups", []),
+            "scopes": user_claims.get("scope", []),
+            "role": user_obj.role,
+            "auth_method": "oauth2",
+            "provider": user_claims.get("provider", "unknown"),
+            "idp_id": user_claims.get("idp_id"),
+            "iat": user_claims.get("iat"),
+            "exp": user_claims.get("exp")
+        }
+        
+        # Generate JWT access and refresh tokens, honoring OAuth token timing
+        access_token, refresh_token = generate_token_pair(user_info=user_info)
 
         response = RedirectResponse(url=settings.registry_client_url.rstrip('/'), status_code=302)
 
@@ -226,7 +221,7 @@ async def oauth2_callback(request: Request, code: str = None, error: str = None,
         # Clean up temporary cookies
         response.delete_cookie("oauth2_temp_session")
 
-        logger.info(f"OAuth2 login successful for user {userinfo.get('username')}, JWT tokens set in httpOnly cookies")
+        logger.info(f"OAuth2 login successful for user {user_obj.username}, JWT tokens set in httpOnly cookies")
         return response
         
     except Exception as e:
