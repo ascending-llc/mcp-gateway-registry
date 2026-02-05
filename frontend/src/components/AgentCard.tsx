@@ -14,6 +14,7 @@ import type React from 'react';
 import { useCallback, useState } from 'react';
 import HELPER from '@/helper';
 import AgentDetailsModal from './AgentDetailsModal';
+import { useToast } from '@/contexts/ToastContext';
 
 /**
  * Agent interface representing an A2A agent.
@@ -43,7 +44,6 @@ interface AgentCardProps {
   onEdit?: (agent: Agent) => void;
   canModify?: boolean;
   onRefreshSuccess?: () => void;
-  onShowToast?: (message: string, type: 'success' | 'error') => void;
   onAgentUpdate?: (path: string, updates: Partial<Agent>) => void;
   authToken?: string | null;
 }
@@ -70,7 +70,6 @@ const AgentCard: React.FC<AgentCardProps> = ({
   onEdit,
   canModify,
   onRefreshSuccess,
-  onShowToast,
   onAgentUpdate,
   authToken,
 }) => {
@@ -78,7 +77,7 @@ const AgentCard: React.FC<AgentCardProps> = ({
   const [loadingRefresh, setLoadingRefresh] = useState(false);
   const [fullAgentDetails, setFullAgentDetails] = useState<any>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
-
+  const { showToast } = useToast();
   const getTrustLevelColor = () => {
     switch (agent.trust_level) {
       case 'trusted':
@@ -136,30 +135,26 @@ const AgentCard: React.FC<AgentCardProps> = ({
         onRefreshSuccess();
       }
 
-      if (onShowToast) {
-        onShowToast('Agent health status refreshed successfully', 'success');
-      }
+      showToast('Agent health status refreshed successfully', 'success');
     } catch (error: any) {
       console.error('Failed to refresh agent health:', error);
-      if (onShowToast) {
-        onShowToast(error.response?.data?.detail || 'Failed to refresh agent health status', 'error');
-      }
+      showToast(error.response?.data?.detail || 'Failed to refresh agent health status', 'error');
     } finally {
       setLoadingRefresh(false);
     }
-  }, [agent.path, authToken, loadingRefresh, onRefreshSuccess, onShowToast, onAgentUpdate]);
+  }, [agent.path, authToken, loadingRefresh, onRefreshSuccess, showToast, onAgentUpdate]);
 
   const handleCopyDetails = useCallback(
     async (data: any) => {
       try {
         await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-        onShowToast?.('Full agent JSON copied to clipboard!', 'success');
+        showToast('Full agent JSON copied to clipboard!', 'success');
       } catch (error) {
         console.error('Failed to copy JSON:', error);
-        onShowToast?.('Failed to copy JSON', 'error');
+        showToast('Failed to copy JSON', 'error');
       }
     },
-    [onShowToast],
+    [showToast],
   );
 
   return (
@@ -238,9 +233,7 @@ const AgentCard: React.FC<AgentCardProps> = ({
                   setFullAgentDetails(response.data);
                 } catch (error) {
                   console.error('Failed to fetch agent details:', error);
-                  if (onShowToast) {
-                    onShowToast('Failed to load full agent details', 'error');
-                  }
+                  showToast('Failed to load full agent details', 'error');
                 } finally {
                   setLoadingDetails(false);
                 }

@@ -10,10 +10,10 @@ interface ServerConfigModalProps {
   server: ServerInfo;
   isOpen: boolean;
   onClose: () => void;
-  onShowToast?: (message: string, type: 'success' | 'error') => void;
 }
 
-const ServerConfigModal: React.FC<ServerConfigModalProps> = ({ server, isOpen, onClose, onShowToast }) => {
+const ServerConfigModal: React.FC<ServerConfigModalProps> = ({ server, isOpen, onClose }) => {
+  const { showToast } = useToast();
   const [selectedIDE, setSelectedIDE] = useState<IDE>('vscode');
 
   useEffect(() => {
@@ -118,12 +118,12 @@ const ServerConfigModal: React.FC<ServerConfigModalProps> = ({ server, isOpen, o
       const configText = JSON.stringify(config, null, 2);
       await navigator.clipboard.writeText(configText);
 
-      onShowToast?.('Configuration copied to clipboard!', 'success');
+      showToast('Configuration copied to clipboard!', 'success');
     } catch (error) {
       console.error('Failed to copy to clipboard:', error);
-      onShowToast?.('Failed to copy configuration', 'error');
+      showToast('Failed to copy configuration', 'error');
     }
-  }, [generateMCPConfig, onShowToast]);
+  }, [generateMCPConfig, showToast]);
 
   if (!isOpen) {
     return null;

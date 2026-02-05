@@ -5,6 +5,7 @@ import { getBasePath } from './config';
 import { AuthProvider } from './contexts/AuthContext';
 import { ServerProvider } from './contexts/ServerContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { ToastProvider } from './contexts/ToastContext';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import OAuthCallback from './pages/OAuthCallback';
@@ -14,8 +15,9 @@ function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <ServerProvider>
-          <Router basename={getBasePath() || '/'}>
+        <ToastProvider>
+          <ServerProvider>
+            <Router basename={getBasePath() || '/'}>
             <Routes>
               <Route path='/login' element={<Login />} />
               <Route
@@ -49,6 +51,7 @@ function App() {
             </Routes>
           </Router>
         </ServerProvider>
+      </ToastProvider>
       </AuthProvider>
     </ThemeProvider>
   );

@@ -8,11 +8,11 @@ import SERVICES from '@/services';
 import MainConfigForm from './MainConfigForm';
 import ServerCreationSuccessDialog from './ServerCreationSuccessDialog';
 import type { AuthenticationConfig as AuthConfigType, ServerConfig } from './types';
+import { useToast } from '@/contexts/ToastContext';
 
 interface ServerFormDialogProps {
   isOpen: boolean;
   id?: string | null;
-  showToast: (message: string, type: 'success' | 'error') => void;
   refreshData: (notLoading?: boolean) => void;
   onServerUpdate: (id: string, updates: Partial<ServerInfo>) => void;
   onClose: () => void;
@@ -34,7 +34,6 @@ const INIT_DATA: ServerConfig = {
 const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
   isOpen,
   id,
-  showToast,
   refreshData,
   onServerUpdate,
   onClose,
@@ -46,7 +45,7 @@ const ServerFormDialog: React.FC<ServerFormDialogProps> = ({
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [serverData, setServerData] = useState<{ serverName: string; path: string }>({ serverName: '', path: '' });
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
-
+  const { showToast } = useToast();
   const isEditMode = !!id;
 
   useEffect(() => {
