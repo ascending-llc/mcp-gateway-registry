@@ -272,7 +272,7 @@ const Dashboard: React.FC = () => {
   };
 
   const handleEditServer = async (server: ServerInfo) => {
-    navigate(`/server-edit?id=${(server as any).id}`);
+    navigate(`/server-edit?id=${server.id}`);
   };
 
   const handleEditAgent = async (agent: Agent) => {
@@ -597,7 +597,7 @@ const Dashboard: React.FC = () => {
 
             <button onClick={handleRegisterServer} className='btn-primary flex items-center space-x-2 flex-shrink-0'>
               <PlusIcon className='h-4 w-4' />
-              <span>Register Server</span>
+              <span>Register</span>
             </button>
 
             <button
@@ -606,7 +606,7 @@ const Dashboard: React.FC = () => {
               className='btn-secondary flex items-center space-x-2 flex-shrink-0'
             >
               <ArrowPathIcon className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-              <span>Refresh Health</span>
+              <span>Refresh</span>
             </button>
           </div>
 

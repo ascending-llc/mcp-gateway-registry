@@ -10,6 +10,7 @@ import {
 } from '@heroicons/react/24/outline';
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { useGlobal } from '@/contexts/GlobalContext';
 import type { ServerInfo } from '@/contexts/ServerContext';
@@ -30,6 +31,7 @@ interface ServerCardProps {
 }
 
 const ServerCard: React.FC<ServerCardProps> = ({ server, canModify, onEdit, onServerUpdate, onRefreshSuccess }) => {
+  const navigate = useNavigate();
   const { showToast } = useGlobal();
   const { cancelPolling, refreshServerData } = useServer();
   const [loading, setLoading] = useState(false);
@@ -188,7 +190,10 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, canModify, onEdit, onSe
           <div className='flex items-start justify-between mb-3'>
             <div className='flex-1 min-w-0'>
               <div className='flex flex-wrap items-center gap-1.5 mb-2'>
-                <h3 className='text-base font-bold text-gray-900 dark:text-white truncate max-w-[160px]'>
+                <h3
+                  className='text-base font-bold text-gray-900 dark:text-white truncate max-w-[160px] cursor-pointer hover:text-purple-600 dark:hover:text-purple-400 transition-colors'
+                  onClick={() => navigate(`/server-edit?id=${server.id}&isReadOnly=true`)}
+                >
                   {server.name}
                 </h3>
                 {server.official && (

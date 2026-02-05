@@ -8,6 +8,7 @@ interface AuthenticationConfigProps {
   isEditMode?: boolean;
   onChange: (config: AuthConfigType) => void;
   errors?: Record<string, string | undefined>;
+  isReadOnly?: boolean;
 }
 
 const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
@@ -15,6 +16,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
   isEditMode = false,
   onChange,
   errors = {},
+  isReadOnly = false,
 }) => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [showClientSecret, setShowClientSecret] = useState(false);
@@ -42,7 +44,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
   return (
     <div className='space-y-6'>
       <div>
-        <h3 className='text-lg font-semibold text-gray-900 dark:text-white mb-4'>Authentication</h3>
+        <h3 className='text-lg font-semibold text-gray-900 dark:text-white mb-2'>Authentication</h3>
 
         <div className='space-y-4'>
           <div>
@@ -52,34 +54,37 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
             <div className='flex p-1 bg-gray-200 dark:bg-gray-700/50 rounded-lg'>
               <button
                 type='button'
+                disabled={isReadOnly}
                 onClick={() => updateConfig({ type: 'auto' })}
                 className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
                   config.type === 'auto'
                     ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
+                } ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 No Auth
               </button>
               <button
                 type='button'
+                disabled={isReadOnly}
                 onClick={() => updateConfig({ type: 'apiKey' })}
                 className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
                   config.type === 'apiKey'
                     ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
+                } ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 API Key
               </button>
               <button
                 type='button'
+                disabled={isReadOnly}
                 onClick={() => updateConfig({ type: 'oauth' })}
                 className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
                   config.type === 'oauth'
                     ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
+                } ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 OAuth
               </button>
@@ -103,9 +108,10 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                   <input
                     type='checkbox'
                     id='apiKeySource'
+                    disabled={isReadOnly}
                     checked={config.source === 'user'}
                     onChange={e => updateConfig({ source: e.target.checked ? 'user' : 'admin' })}
-                    className='h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700'
+                    className='h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-600 bg-white dark:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed'
                   />
                   <label htmlFor='apiKeySource' className='text-sm text-gray-900 dark:text-gray-100'>
                     Each user provides their own key
@@ -122,7 +128,8 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                   <div className='relative rounded-md shadow-sm'>
                     <input
                       type={showApiKey ? 'text' : 'password'}
-                      className={`${getInputClass('key')} pr-10`}
+                      disabled={isReadOnly}
+                      className={`${getInputClass('key')} pr-10 disabled:opacity-50 disabled:cursor-not-allowed`}
                       style={{ fontFamily: 'Menlo, Consolas, Courier New, monospace' }}
                       value={isEditMode && !isApiKeyDirty ? '' : config.key || ''}
                       placeholder={isEditMode && !isApiKeyDirty ? config.key : '...'}
@@ -145,6 +152,9 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                       </button>
                     )}
                   </div>
+                  <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+                    Leave empty if using OAuth or no authentication
+                  </p>
                   {renderError('key')}
                 </div>
               )}
@@ -154,34 +164,37 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                 <div className='flex p-1 bg-gray-200 dark:bg-gray-700/50 rounded-lg'>
                   <button
                     type='button'
+                    disabled={isReadOnly}
                     onClick={() => updateConfig({ authorization_type: 'bearer' })}
                     className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
                       config.authorization_type === 'bearer'
                         ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                    }`}
+                    } ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     Bearer
                   </button>
                   <button
                     type='button'
+                    disabled={isReadOnly}
                     onClick={() => updateConfig({ authorization_type: 'basic' })}
                     className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
                       config.authorization_type === 'basic'
                         ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                    }`}
+                    } ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     Basic
                   </button>
                   <button
                     type='button'
+                    disabled={isReadOnly}
                     onClick={() => updateConfig({ authorization_type: 'custom' })}
                     className={`flex-1 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
                       config.authorization_type === 'custom'
                         ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                    }`}
+                    } ${isReadOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     Custom
                   </button>
@@ -195,7 +208,8 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                     <input
                       type='text'
                       required
-                      className={getInputClass('custom_header')}
+                      disabled={isReadOnly}
+                      className={`${getInputClass('custom_header')} disabled:opacity-50 disabled:cursor-not-allowed`}
                       value={config.custom_header || ''}
                       onChange={e => updateConfig({ custom_header: e.target.value })}
                       placeholder='X-Custom-Auth'
@@ -216,7 +230,8 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                 <input
                   type='text'
                   required
-                  className={getInputClass('client_id')}
+                  disabled={isReadOnly}
+                  className={`${getInputClass('client_id')} disabled:opacity-50 disabled:cursor-not-allowed`}
                   value={config.client_id || ''}
                   onChange={e => updateConfig({ client_id: e.target.value })}
                 />
@@ -230,7 +245,8 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                   <input
                     type={showClientSecret ? 'text' : 'password'}
                     required
-                    className={`${getInputClass('client_secret')} pr-10`}
+                    disabled={isReadOnly}
+                    className={`${getInputClass('client_secret')} pr-10 disabled:opacity-50 disabled:cursor-not-allowed`}
                     style={{ fontFamily: 'Menlo, Consolas, Courier New, monospace' }}
                     value={isEditMode && !isClientSecretDirty ? '' : config.client_secret || ''}
                     placeholder={isEditMode && !isClientSecretDirty ? config.client_secret : ''}
@@ -262,7 +278,8 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                 <input
                   type='url'
                   required
-                  className={getInputClass('authorization_url')}
+                  disabled={isReadOnly}
+                  className={`${getInputClass('authorization_url')} disabled:opacity-50 disabled:cursor-not-allowed`}
                   value={config.authorization_url || ''}
                   onChange={e => updateConfig({ authorization_url: e.target.value })}
                 />
@@ -275,7 +292,8 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                 <input
                   type='url'
                   required
-                  className={getInputClass('token_url')}
+                  disabled={isReadOnly}
+                  className={`${getInputClass('token_url')} disabled:opacity-50 disabled:cursor-not-allowed`}
                   value={config.token_url || ''}
                   onChange={e => updateConfig({ token_url: e.target.value })}
                 />
@@ -286,7 +304,8 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                 <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>Scope</label>
                 <input
                   type='text'
-                  className={getInputClass('scope')}
+                  disabled={isReadOnly}
+                  className={`${getInputClass('scope')} disabled:opacity-50 disabled:cursor-not-allowed`}
                   value={config.scope || ''}
                   onChange={e => updateConfig({ scope: e.target.value })}
                 />

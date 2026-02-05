@@ -3,6 +3,7 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
+import { McpIcon } from '@/assets/McpIcon';
 import { useGlobal } from '@/contexts/GlobalContext';
 import { useServer } from '@/contexts/ServerContext';
 import SERVICES from '@/services';
@@ -27,6 +28,7 @@ const ServerRegistryOrEdit: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const id = searchParams.get('id');
+  const isReadOnly = searchParams.get('isReadOnly') === 'true';
   const { showToast } = useGlobal();
   const { refreshServerData, handleServerUpdate } = useServer();
 
@@ -276,30 +278,44 @@ const ServerRegistryOrEdit: React.FC = () => {
   };
 
   return (
-    <div className='flex justify-center h-full'>
-      <div className='flex flex-col w-3/4 h-full bg-white dark:bg-gray-800 rounded-lg'>
+    <div className='h-full overflow-y-auto custom-scrollbar -mr-4 sm:-mr-6 lg:-mr-8'>
+      <div className='mx-auto flex flex-col w-3/4 min-h-full bg-white dark:bg-gray-800 rounded-lg'>
         {/* Header */}
-        <div className='px-6 py-4 flex items-center justify-between border-b border-gray-100 dark:border-gray-700'>
-          <div className='text-lg font-bold text-gray-900 dark:text-white'>
-            {isEditMode ? 'Edit MCP Server' : 'Register MCP Server'}
+        <div className='px-6 py-6 flex items-center gap-4 border-b border-gray-100 dark:border-gray-700'>
+          <div className='flex items-center justify-center p-3 rounded-xl bg-[#F3E8FF] dark:bg-purple-900/30'>
+            <McpIcon className='h-8 w-8 text-purple-600 dark:text-purple-300' />
+          </div>
+          <div>
+            <h1 className='text-2xl font-bold text-gray-900 dark:text-white'>
+              {isEditMode ? 'Edit MCP Server' : 'Register MCP Server'}
+            </h1>
+            <p className='text-base text-gray-500 dark:text-gray-400 mt-0.5'>
+              Configure a Model Context Protocol server
+            </p>
           </div>
         </div>
 
         {/* Content */}
-        <div className='px-6 py-4 overflow-y-auto custom-scrollbar flex-1'>
+        <div className='px-6 py-4 flex-1 flex flex-col'>
           {loadingDetail ? (
-            <div className='flex items-center justify-center h-full min-h-[200px]'>
+            <div className='flex-1 flex items-center justify-center min-h-[200px]'>
               <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600'></div>
             </div>
           ) : (
-            <MainConfigForm formData={formData} updateField={updateField} errors={errors} isEditMode={isEditMode} />
+            <MainConfigForm
+              formData={formData}
+              updateField={updateField}
+              errors={errors}
+              isEditMode={isEditMode}
+              isReadOnly={isReadOnly}
+            />
           )}
         </div>
 
         {/* Footer */}
-        <div className='px-6 py-4 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-gray-800/50'>
+        <div className='px-6 py-4 border-t border-gray-100  dark:border-gray-700 flex items-center justify-between'>
           <div>
-            {isEditMode && (
+            {isEditMode && !isReadOnly && (
               <button
                 onClick={handleDelete}
                 disabled={loading}
@@ -313,18 +329,20 @@ const ServerRegistryOrEdit: React.FC = () => {
             <button
               onClick={goBack}
               disabled={loading}
-              className='px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed'
+              className='px-4 md:px-28 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed'
             >
               Cancel
             </button>
-            <button
-              onClick={handleSave}
-              disabled={loading}
-              className='inline-flex items-center gap-2 px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-700 hover:bg-purple-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed'
-            >
-              {loading && <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white'></div>}
-              {isEditMode ? 'Update' : 'Create'}
-            </button>
+            {!isReadOnly && (
+              <button
+                onClick={handleSave}
+                disabled={loading}
+                className='inline-flex items-center gap-2 px-4 md:px-28 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-700 hover:bg-purple-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed'
+              >
+                {loading && <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white'></div>}
+                {isEditMode ? 'Update' : 'Create'}
+              </button>
+            )}
           </div>
         </div>
       </div>

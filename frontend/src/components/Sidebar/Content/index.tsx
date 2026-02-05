@@ -60,7 +60,7 @@ const Content: React.FC<any> = ({ setSidebarOpen }) => {
               tabIndex={0}
             >
               <ArrowLeftIcon className='h-4 w-4' />
-              <span>Back to Dashboard</span>
+              <span>Back to MCP</span>
             </Link>
           </div>
         </div>
