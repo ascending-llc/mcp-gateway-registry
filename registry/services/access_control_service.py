@@ -130,60 +130,6 @@ class ACLService:
 		except Exception as e: 
 			logger.error(f"Error deleting ACL entries for resource {resource_type} with ID {resource_id}: {e}")
 			return 0
-
-	async def get_permissions_map_for_user_id(
-		self,
-		principal_type: str,
-		principal_id: PydanticObjectId,
-	) -> dict:
-		"""
-		Return a permissions map for a user, showing access rights for each resource type and resource ID.
-
-		.. deprecated::
-			This method is deprecated. Use ``get_user_permissions_for_resource``,
-			``check_user_permission``, or ``get_accessible_resource_ids`` instead
-			for targeted, per-resource ACL queries.
-
-		Args:
-			principal_type (str): Type of principal ('user', 'group', etc.).
-			principal_id (PydanticObjectId): ID of the principal (user ID, group ID, etc.).
-
-		Returns:
-			dict: Mapping of resource types to resource IDs, each with a ResourcePermissions instance.
-
-		Raises:
-			None (returns empty dict on error).
-		"""
-
-		try:
-			resource_types = [rt.value for rt in ResourceType]
-			query = {
-				"principalType": {"$in": [principal_type, PrincipalType.PUBLIC.value]},
-				"resourceType": {"$in": resource_types},
-				"$or": [
-					{"principalId": principal_id},
-					{"principalId": None}
-				]
-			}
-			acl_entries = await IAclEntry.find(query).to_list()
-			result = {rt.value: {} for rt in ResourceType}
-			specific = [e for e in acl_entries if e.principalType != PrincipalType.PUBLIC.value and e.principalId is not None]
-			public = [e for e in acl_entries if e.principalType == PrincipalType.PUBLIC.value]
-			for entry in specific + public:
-				rtype = entry.resourceType
-				rid = str(entry.resourceId)
-				if rid in result[rtype]:
-					continue
-				result[rtype][rid] = ResourcePermissions(
-					VIEW=bool(int(entry.permBits) & PermissionBits.VIEW),
-					EDIT=bool(int(entry.permBits) & PermissionBits.EDIT),
-					DELETE=bool(int(entry.permBits) & PermissionBits.DELETE),
-					SHARE=bool(int(entry.permBits) & PermissionBits.SHARE),
-				)
-			return result
-		except Exception as e:
-			logger.error(f"Error fetching ACL permissions map for user id: {principal_id}: {e}")
-			return {}
 	
 	async def delete_permission(
 		self,
@@ -359,10 +305,7 @@ class ACLService:
 		if not getattr(permissions, required_permission, False):
 			raise HTTPException(
 				status_code=http_status.HTTP_403_FORBIDDEN,
-				detail={
-					"error": "forbidden",
-					"message": f"You do not have {required_permission} permissions for this resource.",
-				},
+				detail=f"You do not have {required_permission} permissions for this resource.",
 			)
 		return permissions
 
