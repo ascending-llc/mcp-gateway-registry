@@ -17,7 +17,7 @@ from registry.schemas.acl_schema import (
     UpdateResourcePermissionsRequest,
     PermissionPrincipalOut
 )
-from registry.services.acl_utils import validate_resource_type
+from registry.utils.utils import validate_resource_type
 
 from typing import Dict, Any, List, Optional
 

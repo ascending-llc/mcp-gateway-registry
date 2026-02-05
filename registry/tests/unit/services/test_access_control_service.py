@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from beanie import PydanticObjectId
 from registry.services.access_control_service import ACLService
 from registry.schemas.acl_schema import ResourcePermissions
-from registry.core.acl_constants import ResourceType, PermissionBits, PrincipalType, RoleBits
+from registry.core.acl_constants import ResourceType, PermissionBits, RoleBits
 
 class TestACLService:
     @pytest.mark.asyncio

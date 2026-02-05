@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from registry.schemas.acl_schema import PermissionPrincipalOut, ResourcePermissions
-from typing import Optional, Union, List, Dict, Any
+from typing import Optional, Union, List, Dict, Any, Set
 from fastapi import HTTPException, status as http_status
 from packages.models._generated import (
 	IAccessRole,
@@ -339,7 +339,7 @@ class ACLService:
 				}
 			).to_list()
 
-			seen: set[str] = set()
+			seen: Set[str] = set()
 			result: List[str] = []
 			for entry in acl_entries:
 				if not (int(entry.permBits) & PermissionBits.VIEW):

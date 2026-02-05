@@ -270,7 +270,6 @@ async def get_server(
         # Convert to response model
         server_detail = convert_to_detail(server, acl_permission=permissions)
         try:
-            user_id = user_context.get('user_id')
             mcp_service = await get_mcp_service()
             server_status = await get_single_server_connection_status(
                 user_id=user_id,
