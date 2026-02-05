@@ -110,6 +110,30 @@ class Settings(BaseSettings):
         if not v:
             raise ValueError("REGISTRY_URL must be set")
         return v.rstrip("/")
+    
+    def parse_arguments() -> argparse.Namespace:
+        """
+        Parse command line arguments.
+        
+        Command line arguments override environment variables.
+        
+        Returns:
+            argparse.Namespace: Parsed command line arguments
+        """
+        parser = argparse.ArgumentParser(description=Constants.DESCRIPTION)
+        parser.add_argument(
+            "--port",
+            type=str,
+            help=f"Port for the MCP server to listen on (default: from env or {Constants.DEFAULT_MCP_SERVER_LISTEN_PORT})",
+        )
+
+        parser.add_argument(
+            "--transport",
+            type=str,
+            choices=["streamable-http"],
+            help=f"Transport type for the MCP server (default: from env or {Constants.DEFAULT_MCP_TRANSPORT})",
+        )
+        return parser.parse_args()
 
     def configure_logging(self) -> None:
         """Configure application-wide logging with consistent format and level.
