@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Union
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, model_serializer
 from registry.utils.crypto_utils import decrypt_auth_fields
+from registry.schemas.acl_schema import ResourcePermissions
 
 
 # ==================== Request Schemas ====================
@@ -20,7 +21,6 @@ class ServerCreateRequest(BaseModel):
     path: str = Field(..., description="Unique path/route for the server")
     description: Optional[str] = Field(default="", description="Server description")
     url: Optional[str] = Field(default=None, description="Backend proxy URL")
-    scope: str = Field(default="private_user", description="Access scope: shared_app, shared_user, or private_user")
     tags: List[str] = Field(default_factory=list, description="Server tags")
     num_tools: int = Field(default=0, description="Number of tools")
     num_stars: int = Field(default=0, description="Star count")
@@ -54,14 +54,6 @@ class ServerCreateRequest(BaseModel):
             return [tag.lower() if isinstance(tag, str) else tag for tag in v]
         return v
     
-    @field_validator('scope')
-    @classmethod
-    def validate_scope(cls, v):
-        """Validate scope values"""
-        valid_scopes = ['shared_app', 'shared_user', 'private_user']
-        if v not in valid_scopes:
-            raise ValueError(f"scope must be one of {valid_scopes}")
-        return v
 
 
 class ServerUpdateRequest(BaseModel):
@@ -92,7 +84,6 @@ class ServerUpdateRequest(BaseModel):
     custom_user_vars: Optional[Dict[str, Any]] = None
     apiKey: Optional[Dict[str, Any]] = None
     status: Optional[str] = None
-    scope: Optional[str] = None
     enabled: Optional[bool] = None
     
     class ConfigDict:
@@ -116,15 +107,6 @@ class ServerUpdateRequest(BaseModel):
                 raise ValueError(f"status must be one of {valid_statuses}")
         return v
     
-    @field_validator('scope')
-    @classmethod
-    def validate_scope(cls, v):
-        """Validate scope values"""
-        if v is not None:
-            valid_scopes = ['shared_app', 'shared_user', 'private_user']
-            if v not in valid_scopes:
-                raise ValueError(f"scope must be one of {valid_scopes}")
-        return v
 
 
 class ServerToggleRequest(BaseModel):
@@ -159,7 +141,6 @@ class ServerListItemResponse(BaseModel):
     oauthMetadata: Optional[Dict[str, Any]] = Field(None, alias="oauthMetadata", description="OAuth metadata from autodiscovery")
     tools: Optional[str] = Field(None, description="Comma-separated list of tool names")
     author: Optional[str] = Field(None, description="Author user ID")
-    scope: str
     status: str = "active"
     path: str
     tags: List[str] = Field(default_factory=list)
@@ -172,7 +153,9 @@ class ServerListItemResponse(BaseModel):
     # Connection status fields
     connectionState: Optional[str] = Field(default=None, description="Connection state")
     error: Optional[str] = Field(default=None, description="Error message if connection failed")
-    
+    # ACL permissions for the requesting user
+    permissions: Optional[ResourcePermissions] = Field(default=None, description="Resolved ACL permissions for the current user")
+
     class ConfigDict:
         from_attributes = True
         populate_by_name = True
@@ -183,7 +166,7 @@ class ServerListItemResponse(BaseModel):
         # Handle mutually exclusive authentication fields: oauth and apiKey
         has_oauth = data.get('oauth') is not None
         has_api_key = data.get('apiKey') is not None
-        
+
         if has_oauth:
             # If oauth exists, remove apiKey from response
             data.pop('apiKey', None)
@@ -216,7 +199,6 @@ class ServerDetailResponse(BaseModel):
     prompts: Optional[List[Dict[str, Any]]] = Field(None, description="List of available prompts")
     initDuration: Optional[int] = Field(None, alias="initDuration", description="Initialization duration in ms")
     author: Optional[str] = Field(None, description="Author user ID")
-    scope: str
     status: str
     path: str
     tags: List[str] = Field(default_factory=list)
@@ -231,7 +213,9 @@ class ServerDetailResponse(BaseModel):
 
     connectionState: Optional[str] = Field(default=None, description="Connection state")
     error: Optional[str] = Field(default=None, description="Error message if connection failed")
-    
+    # ACL permissions for the requesting user
+    permissions: Optional[ResourcePermissions] = Field(default=None, description="Resolved ACL permissions for the current user")
+
     class ConfigDict:
         from_attributes = True
         populate_by_name = True
@@ -274,7 +258,6 @@ class ServerCreateResponse(BaseModel):
     prompts: Optional[List[Dict[str, Any]]] = Field(None, description="List of available prompts")
     initDuration: Optional[int] = Field(None, alias="initDuration")
     author: Optional[str] = None
-    scope: str
     status: str
     path: str
     tags: List[str] = Field(default_factory=list)
@@ -403,7 +386,6 @@ class ErrorResponse(BaseModel):
 class ServerStatsResponse(BaseModel):
     """Response schema for server statistics (Admin only)"""
     total_servers: int = Field(..., description="Total number of servers")
-    servers_by_scope: Dict[str, int] = Field(..., description="Server count grouped by scope")
     servers_by_status: Dict[str, int] = Field(..., description="Server count grouped by status")
     servers_by_transport: Dict[str, int] = Field(..., description="Server count grouped by transport type")
     total_tokens: int = Field(..., description="Total number of tokens")
@@ -478,37 +460,45 @@ def _mask_apikey(apikey_config: Optional[Dict[str, Any]]) -> Optional[Dict[str, 
     return masked_apikey
 
 
-def convert_to_list_item(server) -> ServerListItemResponse:
-    """Convert ExtendedMCPServer to ServerListItemResponse matching API documentation"""
+def convert_to_list_item(
+    server,
+    acl_permission: Optional[ResourcePermissions] = None,
+) -> ServerListItemResponse:
+    """Convert ExtendedMCPServer to ServerListItemResponse matching API documentation.
+
+    Args:
+        server: The ExtendedMCPServer document.
+        acl_permission: Optional resolved permissions for the requesting user.
+    """
     config = server.config or {}
-    
+
     # Decrypt sensitive authentication fields before returning
     config = decrypt_auth_fields(config)
-    
+
     # Mask OAuth client_secret to only show last 6 characters
     oauth_config = _mask_oauth_client_secret(config.get("oauth"))
-    
+
     # Mask API Key to only show last 6 characters
     apikey_config = _mask_apikey(config.get("apiKey"))
-    
+
     # Extract author_id from server.author PydanticObjectId
     author_id = str(server.author) if server.author else None
-    
+
     # Get transport type from config.type
     transport_type = config.get("type", "streamable-http")
-    
+
     # Generate title from config.title or serverName
     title = config.get("title") or server.serverName
-    
+
     # Get tools string from config (already comma-separated)
     tools_str = config.get("tools", "")
-    
+
     # Get capabilities from config (already JSON string)
     capabilities_str = config.get("capabilities", "{}")
-    
+
     # Get numTools from root level (already calculated)
     num_tools = server.numTools if hasattr(server, 'numTools') else 0
-    
+
     return ServerListItemResponse(
         id=str(server.id),
         serverName=server.serverName,
@@ -524,7 +514,6 @@ def convert_to_list_item(server) -> ServerListItemResponse:
         tools=tools_str,
         author=author_id,
         # Registry fields from root level
-        scope=server.scope,
         status=server.status,
         path=server.path,
         tags=server.tags,
@@ -534,52 +523,61 @@ def convert_to_list_item(server) -> ServerListItemResponse:
         lastConnected=server.lastConnected,
         createdAt=server.createdAt or datetime.now(),
         updatedAt=server.updatedAt or datetime.now(),
+        permissions=acl_permission,
     )
 
 
-def convert_to_detail(server) -> ServerDetailResponse:
-    """Convert ExtendedMCPServer to ServerDetailResponse matching API documentation"""
+def convert_to_detail(
+    server,
+    acl_permission: Optional[ResourcePermissions] = None,
+) -> ServerDetailResponse:
+    """Convert ExtendedMCPServer to ServerDetailResponse matching API documentation.
+
+    Args:
+        server: The ExtendedMCPServer document.
+        acl_permission: Optional resolved permissions for the requesting user.
+    """
     config = server.config or {}
-    
+
     # Decrypt sensitive authentication fields before returning
     config = decrypt_auth_fields(config)
-    
+
     # Mask OAuth client_secret to only show last 6 characters
     oauth_config = _mask_oauth_client_secret(config.get("oauth"))
-    
+
     # Mask API Key to only show last 6 characters
     apikey_config = _mask_apikey(config.get("apiKey"))
-    
+
     # Extract author_id from server.author PydanticObjectId
     author_id = str(server.author) if server.author else None
-    
+
     # Get transport type from config.type
     transport_type = config.get("type", "streamable-http")
-    
+
     # Generate title from config.title or serverName
     title = config.get("title") or server.serverName
-    
+
     # Get tools string from config (already comma-separated)
     tools_str = config.get("tools", "")
-    
+
     # Get toolFunctions directly from config (already in OpenAI format with mcpToolName)
     tool_functions = config.get("toolFunctions")
-    
+
     # Get resources and prompts from config
     resources = config.get("resources", [])
     prompts = config.get("prompts", [])
-    
+
     # Get capabilities from config (already JSON string)
     capabilities_str = config.get("capabilities", "{}")
-    
+
     # Get numTools from root level (already calculated)
     num_tools = server.numTools if hasattr(server, 'numTools') else 0
-    
+
     # Format lastError as ISO string if present
     last_error_str = None
     if server.lastError:
         last_error_str = server.lastError.isoformat() if isinstance(server.lastError, datetime) else str(server.lastError)
-    
+
     return ServerDetailResponse(
         id=str(server.id),
         serverName=server.serverName,
@@ -599,7 +597,6 @@ def convert_to_detail(server) -> ServerDetailResponse:
         initDuration=config.get("initDuration"),
         author=author_id,
         # Registry fields from root level
-        scope=server.scope,
         status=server.status,
         path=server.path,
         tags=server.tags,
@@ -611,6 +608,7 @@ def convert_to_detail(server) -> ServerDetailResponse:
         errorMessage=server.errorMessage if hasattr(server, 'errorMessage') else None,
         createdAt=server.createdAt or datetime.now(),
         updatedAt=server.updatedAt or datetime.now(),
+        permissions=acl_permission,
     )
 
 
@@ -655,7 +653,6 @@ def convert_to_create_response(server) -> ServerCreateResponse:
         prompts=config.get("prompts", []),
         initDuration=config.get("initDuration"),
         author=author_id,
-        scope=server.scope,
         status=server.status,
         path=server.path,
         tags=server.tags,

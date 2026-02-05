@@ -34,7 +34,7 @@ from registry.api.v1.acl_routes import router as acl_router
 from registry.version import __version__
 from registry.api.proxy_routes import router as proxy_router, shutdown_proxy_client
 from packages.telemetry import setup_metrics
-from registry.auth.dependencies import CurrentUserWithACLMap
+from registry.auth.dependencies import CurrentUser
 
 # Import services for initialization
 from registry.services.agent_service import agent_service
@@ -270,7 +270,7 @@ app.openapi = custom_openapi
 
 # Add user info endpoint for React auth context
 @app.get("/api/auth/me")
-async def get_current_user(user_context: CurrentUserWithACLMap):
+async def get_current_user(user_context: CurrentUser):
     """Get current user information for React auth context"""
     return {
         "username": user_context.get("username"),
@@ -281,7 +281,6 @@ async def get_current_user(user_context: CurrentUserWithACLMap):
         "can_modify_servers": user_context.get("can_modify_servers", False),
         "is_admin": user_context.get("is_admin", False),
         "user_id": user_context.get("user_id"),
-        "acl_permission_map": user_context.get("acl_permission_map", {})
     }
 
 

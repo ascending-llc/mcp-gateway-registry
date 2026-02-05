@@ -4,6 +4,8 @@ import base64
 from pathlib import Path
 from typing import Dict
 from registry.utils.log import logger
+from fastapi import HTTPException, status as http_status
+from registry.core.acl_constants import ResourceType
 
 
 # PKCE utility functions
@@ -48,3 +50,14 @@ def load_template(template_name: str, context: Dict[str, str]) -> str:
     except Exception as e:
         logger.error(f"Failed to load template {template_name}: {e}")
         return f"<h1>Template Error</h1><p>Failed to load template: {e}</p>"
+
+# ACL utility function
+def validate_resource_type(resource_type: str) -> None:
+    if resource_type not in [rt.value for rt in ResourceType]:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "invalid_resource_type",
+                "message": f"Resource type '{resource_type}' is not valid."
+            }
+        )
