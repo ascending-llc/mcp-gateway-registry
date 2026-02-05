@@ -110,14 +110,22 @@ class Settings(BaseSettings):
         if not v:
             raise ValueError("REGISTRY_URL must be set")
         return v.rstrip("/")
-    
-    @field_validator("log_level", mode='before')
-    @classmethod
-    def convert_log_level(cls, v):
-        """Convert string log level names to integers (e.g., 'DEBUG' -> 10)."""
-        if isinstance(v, str):
-            return getattr(logging, v.upper(), logging.INFO)
-        return v
+
+    def configure_logging(self) -> None:
+        """Configure application-wide logging with consistent format and level.
+        
+        This should be called once at application startup to initialize logging
+        for all modules. Individual modules can then use logging.getLogger(__name__)
+        without needing to call basicConfig again.
+        """
+        # Convert string log level to numeric level
+        numeric_level = getattr(logging, self.log_level.upper(), logging.INFO)
+        
+        logging.basicConfig(
+            level=numeric_level,
+            format=self.log_format,
+            force=True  # Override any existing configuration
+        )
 
     @property
     def scopes_config_path(self) -> Path:
@@ -150,52 +158,9 @@ class Settings(BaseSettings):
         logger.info(f"  Log Level: {self.log_level}")
 
 
-def parse_arguments() -> argparse.Namespace:
-    """
-    Parse command line arguments.
-    
-    Command line arguments override environment variables.
-    
-    Returns:
-        argparse.Namespace: Parsed command line arguments
-    """
-    parser = argparse.ArgumentParser(description=Constants.DESCRIPTION)
-
-    parser.add_argument(
-        "--port",
-        type=str,
-        help=f"Port for the MCP server to listen on (default: from env or {Constants.DEFAULT_MCP_SERVER_LISTEN_PORT})",
-    )
-
-    parser.add_argument(
-        "--transport",
-        type=str,
-        choices=["streamable-http"],
-        help=f"Transport type for the MCP server (default: from env or {Constants.DEFAULT_MCP_TRANSPORT})",
-    )
-
-    return parser.parse_args()
-
-
 # Create global settings instance
 settings = Settings()
 
-def configure_logging():
-    """Configure application-wide logging with consistent format and level.
-    
-    This should be called once at application startup to initialize logging
-    for all modules. Individual modules can then use logging.getLogger(__name__)
-    without needing to call basicConfig again.
-    """
-    # Convert string log level to numeric level
-    numeric_level = getattr(logging, settings.log_level.upper(), logging.INFO)
-    
-    logging.basicConfig(
-        level=numeric_level,
-        format=settings.log_format,
-        force=True  # Override any existing configuration
-    )
-
 # Configure logging on module import
-configure_logging()
+settings.configure_logging()
 settings.log_config()

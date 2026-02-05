@@ -390,7 +390,9 @@ def generate_access_token(
         auth_method: str,
         provider: str,
         idp_id: Optional[str] = None,
-        expires_hours: int = ACCESS_TOKEN_EXPIRES_HOURS
+        expires_hours: int = ACCESS_TOKEN_EXPIRES_HOURS,
+        iat: Optional[int] = None,
+        exp: Optional[int] = None
 ) -> str:
     """
     Generate a JWT access token for authenticated user.
@@ -406,12 +408,17 @@ def generate_access_token(
         provider: Auth provider (entra, keycloak, local, etc.)
         idp_id: Identity provider user ID (optional)
         expires_hours: Token expiration in hours (default: 24)
+        iat: Issued at timestamp (optional, honors OAuth token iat)
+        exp: Expiration timestamp (optional, honors OAuth token exp)
 
     Returns:
         JWT token string
     """
-    now = datetime.now(timezone.utc)
-    exp = now + timedelta(hours=expires_hours)
+    # Use provided iat/exp if available (from OAuth), otherwise generate new
+    if iat is None or exp is None:
+        now = datetime.utcnow()
+        iat = int(now.timestamp())
+        exp = int((now + timedelta(hours=expires_hours)).timestamp())
 
     # Build JWT payload
     payload = {
@@ -419,8 +426,8 @@ def generate_access_token(
         "sub": username,
         "iss": settings.JWT_ISSUER,
         "aud": settings.JWT_AUDIENCE,
-        "iat": int(now.timestamp()),
-        "exp": int(exp.timestamp()),
+        "iat": iat,
+        "exp": exp,
 
         # Custom claims
         "user_id": user_id,
@@ -634,18 +641,24 @@ def verify_refresh_token(token: str) -> Optional[Dict[str, Any]]:
 
 
 def generate_token_pair(
-        user_id: str,
-        username: str,
-        email: str,
-        groups: list,
-        scopes: list,
-        role: str,
-        auth_method: str,
-        provider: str,
-        idp_id: Optional[str] = None
+        user_id: str = None,
+        username: str = None,
+        email: str = None,
+        groups: list = None,
+        scopes: list = None,
+        role: str = None,
+        auth_method: str = None,
+        provider: str = None,
+        idp_id: Optional[str] = None,
+        user_info: Optional[Dict[str, Any]] = None,
+        iat: Optional[int] = None,
+        exp: Optional[int] = None
 ) -> Tuple[str, str]:
     """
     Generate both access and refresh tokens.
+    
+    Can accept either individual parameters or a user_info dict.
+    If user_info is provided, it takes precedence over individual parameters.
 
     Args:
         user_id: User's database ID
@@ -657,10 +670,27 @@ def generate_token_pair(
         auth_method: Authentication method
         provider: Auth provider
         idp_id: Identity provider user ID (optional)
+        user_info: Dict containing user info (takes precedence if provided)
+        iat: Issued at timestamp (optional, honors OAuth token iat)
+        exp: Expiration timestamp (optional, honors OAuth token exp)
 
     Returns:
         Tuple of (access_token, refresh_token)
     """
+    # Use user_info dict if provided, otherwise use individual parameters
+    if user_info:
+        user_id = user_info.get("user_id", user_id)
+        username = user_info.get("username", username)
+        email = user_info.get("email", email)
+        groups = user_info.get("groups", groups or [])
+        scopes = user_info.get("scopes", scopes or [])
+        role = user_info.get("role", role)
+        auth_method = user_info.get("auth_method", auth_method)
+        provider = user_info.get("provider", provider)
+        idp_id = user_info.get("idp_id", idp_id)
+        iat = user_info.get("iat", iat)
+        exp = user_info.get("exp", exp)
+    
     access_token = generate_access_token(
         user_id=user_id,
         username=username,
@@ -670,7 +700,9 @@ def generate_token_pair(
         role=role,
         auth_method=auth_method,
         provider=provider,
-        idp_id=idp_id
+        idp_id=idp_id,
+        iat=iat,
+        exp=exp
     )
 
     refresh_token = generate_refresh_token(

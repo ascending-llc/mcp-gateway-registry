@@ -1157,6 +1157,7 @@ class ServerServiceV1:
             Tuple of (is_healthy, status_message, response_time_ms)
         """
         from registry.core.mcp_config import mcp_config
+        from registry.core.mcp_client import initialize_mcp
 
         config = server.config or {}
         url = config.get("url")
@@ -1171,75 +1172,41 @@ class ServerServiceV1:
             logger.info(f"Skipping health check for stdio transport: {url}")
             return True, "healthy (stdio transport skipped)", None
 
-        try:
-            # Perform simple HTTP health check
-            start_time = _get_current_utc_time()
+        # Build basic headers for health check (no authentication needed for initialize)
+        headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+        }
 
-            async with httpx.AsyncClient(
-                timeout=mcp_config.HEALTH_CHECK_TIMEOUT
-            ) as client:
-                # Try to access the MCP endpoint
-                endpoint = url.rstrip("/")
-
-                # Try streamable-http transport first (most common)
-                if transport_type in [mcp_config.TRANSPORT_HTTP, "http"]:
-                    try:
-                        # Try a simple GET request first
-                        response = await client.get(endpoint, follow_redirects=True)
-
-                        # Calculate response time
-                        end_time = _get_current_utc_time()
-                        response_time_ms = int(
-                            (end_time - start_time).total_seconds() * 1000
-                        )
-
-                        # Check if response indicates a healthy server
-                        if response.status_code in mcp_config.HEALTHY_STATUS_CODES:
-                            return True, "healthy", response_time_ms
-                        elif (
-                            response.status_code
-                            in mcp_config.AUTH_REQUIRED_STATUS_CODES
-                        ):
-                            # Auth required but server is responding
-                            return True, "healthy (auth required)", response_time_ms
-                        else:
-                            return (
-                                False,
-                                f"unhealthy: status {response.status_code}",
-                                response_time_ms,
-                            )
-                    except Exception as e:
-                        logger.warning(f"Health check failed for {endpoint}: {e}")
-                        return False, f"unhealthy: {type(e).__name__}", None
-
-                # Try SSE transport if configured
-                elif transport_type == mcp_config.TRANSPORT_SSE:
-                    try:
-                        response = await client.get(endpoint, follow_redirects=True)
-                        end_time = _get_current_utc_time()
-                        response_time_ms = int(
-                            (end_time - start_time).total_seconds() * 1000
-                        )
-
-                        if response.status_code in mcp_config.HEALTHY_STATUS_CODES:
-                            return True, "healthy", response_time_ms
-                        else:
-                            return (
-                                False,
-                                f"unhealthy: status {response.status_code}",
-                                response_time_ms,
-                            )
-                    except Exception as e:
-                        logger.warning(f"Health check failed for {endpoint}: {e}")
-                        return False, f"unhealthy: {type(e).__name__}", None
-
-                # Unknown transport
-                else:
-                    return False, f"unsupported transport: {transport_type}", None
-
-        except Exception as e:
-            logger.error(f"Health check error for server {server.serverName}: {e}")
-            return False, f"error: {type(e).__name__}", None
+        logger.debug(f"Performing MCP initialization health check for {server.serverName}")
+        
+        # Measure response time
+        start_time = _get_current_utc_time()
+        
+        # Perform MCP initialization
+        init_result = await initialize_mcp(
+            target_url=url,
+            headers=headers,
+            transport_type=transport_type
+        )
+        
+        # Calculate response time
+        end_time = _get_current_utc_time()
+        response_time_ms = int((end_time - start_time).total_seconds() * 1000)
+        
+        # Validate init_result structure per MCP spec
+        if init_result is None:
+            logger.warning(f"Server {server.serverName} health check failed: initialization returned None")
+            return False, "unhealthy: initialization failed", response_time_ms
+        
+        # Check for required fields: protocolVersion and serverInfo
+        if hasattr(init_result, 'protocolVersion') and hasattr(init_result, 'serverInfo'):
+            server_name = init_result.serverInfo.name if hasattr(init_result.serverInfo, 'name') else 'unknown'
+            logger.debug(f"Server {server.serverName} health check passed: {server_name} (protocol: {init_result.protocolVersion})")
+            return True, "healthy", response_time_ms
+        else:
+            logger.warning(f"Server {server.serverName} health check failed: invalid initialize response (missing protocolVersion or serverInfo)")
+            return False, "unhealthy: invalid initialize response", response_time_ms
 
     @track_tool_discovery
     async def retrieve_from_server(
