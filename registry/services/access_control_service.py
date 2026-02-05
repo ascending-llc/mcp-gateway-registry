@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
-from registry.schemas.acl_schema import PermissionPrincipalOut
+from registry.schemas.acl_schema import PermissionPrincipalOut, ResourcePermissions
 from typing import Optional, Union, List, Dict, Any
+from fastapi import HTTPException, status as http_status
 from packages.models._generated import (
 	IAccessRole,
 )
@@ -138,23 +139,17 @@ class ACLService:
 		"""
 		Return a permissions map for a user, showing access rights for each resource type and resource ID.
 
+		.. deprecated::
+			This method is deprecated. Use ``get_user_permissions_for_resource``,
+			``check_user_permission``, or ``get_accessible_resource_ids`` instead
+			for targeted, per-resource ACL queries.
+
 		Args:
 			principal_type (str): Type of principal ('user', 'group', etc.).
-			principal_id (str): ID of the principal (user ID, group ID, etc.).
+			principal_id (PydanticObjectId): ID of the principal (user ID, group ID, etc.).
 
 		Returns:
-			dict: Mapping of resource types to resource IDs, each with a dict of permission flags (VIEW, EDIT, DELETE, SHARE).
-
-		Example:
-		{
-			"mcpServer": {
-				"resourceId1": {"VIEW": True, "EDIT": True, "DELETE": True, "SHARE": False},
-				"resourceId2": {"VIEW": True, "EDIT": False, "DELETE": False, "SHARE": False}
-			},
-			"agent": {
-				"resourceId3": {"VIEW": True, "EDIT": True, "DELETE": True, "SHARE": True}
-			}
-		}
+			dict: Mapping of resource types to resource IDs, each with a ResourcePermissions instance.
 
 		Raises:
 			None (returns empty dict on error).
@@ -179,14 +174,14 @@ class ACLService:
 				rid = str(entry.resourceId)
 				if rid in result[rtype]:
 					continue
-				result[rtype][rid] = {
-					"VIEW": entry.permBits >= PermissionBits.VIEW,
-					"EDIT": entry.permBits >= PermissionBits.EDIT,
-					"DELETE": entry.permBits >= PermissionBits.DELETE,
-					"SHARE": entry.permBits >= PermissionBits.SHARE,
-				}
+				result[rtype][rid] = ResourcePermissions(
+					VIEW=bool(int(entry.permBits) & PermissionBits.VIEW),
+					EDIT=bool(int(entry.permBits) & PermissionBits.EDIT),
+					DELETE=bool(int(entry.permBits) & PermissionBits.DELETE),
+					SHARE=bool(int(entry.permBits) & PermissionBits.SHARE),
+				)
 			return result
-		except Exception as e: 
+		except Exception as e:
 			logger.error(f"Error fetching ACL permissions map for user id: {principal_id}: {e}")
 			return {}
 	
@@ -281,7 +276,141 @@ class ACLService:
 			logger.error(f"Error fetching resource permissions for {resource_type} {resource_id}: {e}")
 			raise
 
+	async def get_user_permissions_for_resource(
+		self,
+		user_id: PydanticObjectId,
+		resource_type: str,
+		resource_id: PydanticObjectId,
+	) -> ResourcePermissions:
+		"""
+		Get the resolved permissions for a single user on a single resource.
 
+		Performs one targeted MongoDB query using $or to match both the
+		user-specific ACL entry and any PUBLIC entry for the resource.
+		User-specific entries take precedence (sorted by permBits descending).
+
+		Args:
+			user_id: The user's ID.
+			resource_type: The resource type (e.g., ResourceType.MCPSERVER.value).
+			resource_id: The resource document ID.
+
+		Returns:
+			ResourcePermissions with the resolved access flags.
+			Returns all-False permissions on no match or error.
+		"""
+		try:
+			acl_entry = await IAclEntry.find_one(
+				{
+					"resourceType": resource_type,
+					"resourceId": resource_id,
+					"$or": [
+						{"principalType": PrincipalType.USER.value, "principalId": user_id},
+						{"principalType": PrincipalType.PUBLIC.value, "principalId": None},
+					],
+				},
+				sort=[("permBits", -1)],
+			)
+			if not acl_entry:
+				return ResourcePermissions()
+
+			return ResourcePermissions(
+				VIEW=bool(int(acl_entry.permBits) & PermissionBits.VIEW),
+				EDIT=bool(int(acl_entry.permBits) & PermissionBits.EDIT),
+				DELETE=bool(int(acl_entry.permBits) & PermissionBits.DELETE),
+				SHARE=bool(int(acl_entry.permBits) & PermissionBits.SHARE),
+			)
+		except Exception as e:
+			logger.error(
+				f"Error fetching permissions for user {user_id} on "
+				f"{resource_type}/{resource_id}: {e}"
+			)
+			return ResourcePermissions()
+
+	async def check_user_permission(
+		self,
+		user_id: PydanticObjectId,
+		resource_type: str,
+		resource_id: PydanticObjectId,
+		required_permission: str,
+	) -> ResourcePermissions:
+		"""
+		Verify a user holds a specific permission on a resource.
+
+		Resolves permissions via ``get_user_permissions_for_resource`` and raises
+		HTTP 403 if the required permission flag is False.
+
+		Args:
+			user_id: The user's ID.
+			resource_type: The resource type string.
+			resource_id: The resource document ID.
+			required_permission: One of 'VIEW', 'EDIT', 'DELETE', 'SHARE'.
+
+		Returns:
+			The resolved ResourcePermissions on success.
+
+		Raises:
+			HTTPException(403): If the user lacks the required permission.
+		"""
+		permissions = await self.get_user_permissions_for_resource(
+			user_id=user_id,
+			resource_type=resource_type,
+			resource_id=resource_id,
+		)
+		if not getattr(permissions, required_permission, False):
+			raise HTTPException(
+				status_code=http_status.HTTP_403_FORBIDDEN,
+				detail={
+					"error": "forbidden",
+					"message": f"You do not have {required_permission} permissions for this resource.",
+				},
+			)
+		return permissions
+
+	async def get_accessible_resource_ids(
+		self,
+		user_id: PydanticObjectId,
+		resource_type: str,
+	) -> List[str]:
+		"""
+		Return the IDs of all resources of a given type that the user can VIEW.
+
+		Performs a single MongoDB query matching user-specific and PUBLIC
+		ACL entries, filters by the VIEW bit, and deduplicates results.
+
+		Args:
+			user_id: The user's ID.
+			resource_type: The resource type string (e.g., ResourceType.MCPSERVER.value).
+
+		Returns:
+			Deduplicated list of resource ID strings the user can VIEW.
+			Returns an empty list on error.
+		"""
+		try:
+			acl_entries = await IAclEntry.find(
+				{
+					"resourceType": resource_type,
+					"$or": [
+						{"principalType": PrincipalType.USER.value, "principalId": user_id},
+						{"principalType": PrincipalType.PUBLIC.value, "principalId": None},
+					],
+				}
+			).to_list()
+
+			seen: set[str] = set()
+			result: List[str] = []
+			for entry in acl_entries:
+				if not (int(entry.permBits) & PermissionBits.VIEW):
+					continue
+				rid = str(entry.resourceId)
+				if rid not in seen:
+					seen.add(rid)
+					result.append(rid)
+			return result
+		except Exception as e:
+			logger.error(
+				f"Error fetching accessible {resource_type} IDs for user {user_id}: {e}"
+			)
+			return []
 
 
 # Singleton instance

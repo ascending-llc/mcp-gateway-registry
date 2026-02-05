@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Union
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, model_serializer
 from registry.utils.crypto_utils import decrypt_auth_fields
+from registry.schemas.acl_schema import ResourcePermissions
 
 
 # ==================== Request Schemas ====================
@@ -172,7 +173,9 @@ class ServerListItemResponse(BaseModel):
     # Connection status fields
     connectionState: Optional[str] = Field(default=None, description="Connection state")
     error: Optional[str] = Field(default=None, description="Error message if connection failed")
-    
+    # ACL permissions for the requesting user
+    permissions: Optional[ResourcePermissions] = Field(default=None, description="Resolved ACL permissions for the current user")
+
     class ConfigDict:
         from_attributes = True
         populate_by_name = True
@@ -183,7 +186,7 @@ class ServerListItemResponse(BaseModel):
         # Handle mutually exclusive authentication fields: oauth and apiKey
         has_oauth = data.get('oauth') is not None
         has_api_key = data.get('apiKey') is not None
-        
+
         if has_oauth:
             # If oauth exists, remove apiKey from response
             data.pop('apiKey', None)
@@ -231,7 +234,9 @@ class ServerDetailResponse(BaseModel):
 
     connectionState: Optional[str] = Field(default=None, description="Connection state")
     error: Optional[str] = Field(default=None, description="Error message if connection failed")
-    
+    # ACL permissions for the requesting user
+    permissions: Optional[ResourcePermissions] = Field(default=None, description="Resolved ACL permissions for the current user")
+
     class ConfigDict:
         from_attributes = True
         populate_by_name = True
@@ -478,37 +483,45 @@ def _mask_apikey(apikey_config: Optional[Dict[str, Any]]) -> Optional[Dict[str, 
     return masked_apikey
 
 
-def convert_to_list_item(server) -> ServerListItemResponse:
-    """Convert ExtendedMCPServer to ServerListItemResponse matching API documentation"""
+def convert_to_list_item(
+    server,
+    acl_permission: Optional[ResourcePermissions] = None,
+) -> ServerListItemResponse:
+    """Convert ExtendedMCPServer to ServerListItemResponse matching API documentation.
+
+    Args:
+        server: The ExtendedMCPServer document.
+        acl_permission: Optional resolved permissions for the requesting user.
+    """
     config = server.config or {}
-    
+
     # Decrypt sensitive authentication fields before returning
     config = decrypt_auth_fields(config)
-    
+
     # Mask OAuth client_secret to only show last 6 characters
     oauth_config = _mask_oauth_client_secret(config.get("oauth"))
-    
+
     # Mask API Key to only show last 6 characters
     apikey_config = _mask_apikey(config.get("apiKey"))
-    
+
     # Extract author_id from server.author PydanticObjectId
     author_id = str(server.author) if server.author else None
-    
+
     # Get transport type from config.type
     transport_type = config.get("type", "streamable-http")
-    
+
     # Generate title from config.title or serverName
     title = config.get("title") or server.serverName
-    
+
     # Get tools string from config (already comma-separated)
     tools_str = config.get("tools", "")
-    
+
     # Get capabilities from config (already JSON string)
     capabilities_str = config.get("capabilities", "{}")
-    
+
     # Get numTools from root level (already calculated)
     num_tools = server.numTools if hasattr(server, 'numTools') else 0
-    
+
     return ServerListItemResponse(
         id=str(server.id),
         serverName=server.serverName,
@@ -534,52 +547,61 @@ def convert_to_list_item(server) -> ServerListItemResponse:
         lastConnected=server.lastConnected,
         createdAt=server.createdAt or datetime.now(),
         updatedAt=server.updatedAt or datetime.now(),
+        permissions=acl_permission,
     )
 
 
-def convert_to_detail(server) -> ServerDetailResponse:
-    """Convert ExtendedMCPServer to ServerDetailResponse matching API documentation"""
+def convert_to_detail(
+    server,
+    acl_permission: Optional[ResourcePermissions] = None,
+) -> ServerDetailResponse:
+    """Convert ExtendedMCPServer to ServerDetailResponse matching API documentation.
+
+    Args:
+        server: The ExtendedMCPServer document.
+        acl_permission: Optional resolved permissions for the requesting user.
+    """
     config = server.config or {}
-    
+
     # Decrypt sensitive authentication fields before returning
     config = decrypt_auth_fields(config)
-    
+
     # Mask OAuth client_secret to only show last 6 characters
     oauth_config = _mask_oauth_client_secret(config.get("oauth"))
-    
+
     # Mask API Key to only show last 6 characters
     apikey_config = _mask_apikey(config.get("apiKey"))
-    
+
     # Extract author_id from server.author PydanticObjectId
     author_id = str(server.author) if server.author else None
-    
+
     # Get transport type from config.type
     transport_type = config.get("type", "streamable-http")
-    
+
     # Generate title from config.title or serverName
     title = config.get("title") or server.serverName
-    
+
     # Get tools string from config (already comma-separated)
     tools_str = config.get("tools", "")
-    
+
     # Get toolFunctions directly from config (already in OpenAI format with mcpToolName)
     tool_functions = config.get("toolFunctions")
-    
+
     # Get resources and prompts from config
     resources = config.get("resources", [])
     prompts = config.get("prompts", [])
-    
+
     # Get capabilities from config (already JSON string)
     capabilities_str = config.get("capabilities", "{}")
-    
+
     # Get numTools from root level (already calculated)
     num_tools = server.numTools if hasattr(server, 'numTools') else 0
-    
+
     # Format lastError as ISO string if present
     last_error_str = None
     if server.lastError:
         last_error_str = server.lastError.isoformat() if isinstance(server.lastError, datetime) else str(server.lastError)
-    
+
     return ServerDetailResponse(
         id=str(server.id),
         serverName=server.serverName,
@@ -611,6 +633,7 @@ def convert_to_detail(server) -> ServerDetailResponse:
         errorMessage=server.errorMessage if hasattr(server, 'errorMessage') else None,
         createdAt=server.createdAt or datetime.now(),
         updatedAt=server.updatedAt or datetime.now(),
+        permissions=acl_permission,
     )
 
 

@@ -553,7 +553,7 @@ class ServerServiceV1:
         page: int = 1,
         per_page: int = 20,
         user_id: Optional[str] = None,
-        acl_permissions_map: Dict[str, Any] = {},
+        accessible_server_ids: Optional[List[str]] = None,
     ) -> Tuple[List[MCPServerDocument], int]:
         """
         List servers with filtering and pagination.
@@ -565,7 +565,8 @@ class ServerServiceV1:
             page: Page number (min: 1)
             per_page: Items per page (min: 1, max: 100)
             user_id: Current user's ID (kept for compatibility but not used for filtering)
-            acl_permissions_map: Mapping from resource type (e.g. ResourceType.MCPSERVER.value)
+            accessible_server_ids: List of server ID strings the user has VIEW access to.
+
         Returns:
             Tuple of (servers list, total count)
         """
@@ -597,12 +598,10 @@ class ServerServiceV1:
             }
             filters.append(text_filter)
 
-        # Access control filter
-        accessible_servers = acl_permissions_map.get(
-            ResourceType.MCPSERVER.value, {}
-        ).keys()
-        accessible_server_ids = [PydanticObjectId(sid) for sid in accessible_servers]
-        filters.append({"_id": {"$in": accessible_server_ids}})
+        # Access control filter (only applied when caller supplies an explicit list)
+        if accessible_server_ids is not None:
+            object_ids = [PydanticObjectId(sid) for sid in accessible_server_ids]
+            filters.append({"_id": {"$in": object_ids}})
 
         # Combine all filters
         if filters:

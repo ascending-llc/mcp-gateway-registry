@@ -9,7 +9,7 @@ import logging
 from fastapi import APIRouter, HTTPException, status as http_status, Depends, Query
 from beanie import PydanticObjectId
 
-from registry.auth.dependencies import CurrentUserWithACLMap
+from registry.auth.dependencies import CurrentUser
 from registry.services.access_control_service import acl_service
 from registry.core.acl_constants import PrincipalType, PermissionBits
 from registry.schemas.acl_schema import (
@@ -17,10 +17,7 @@ from registry.schemas.acl_schema import (
     UpdateResourcePermissionsRequest,
     PermissionPrincipalOut
 )
-from registry.services.acl_utils import (
-    check_required_permission,
-    validate_resource_type
-)
+from registry.services.acl_utils import validate_resource_type
 
 from typing import Dict, Any, List, Optional
 
@@ -28,7 +25,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def get_user_context(user_context: CurrentUserWithACLMap):
+def get_user_context(user_context: CurrentUser):
     """Extract user context from authentication dependency"""
     return user_context
 
@@ -77,9 +74,14 @@ async def update_resource_permissions(
 ) -> UpdateResourcePermissionsResponse:
     validate_resource_type(resource_type)
 
-    acl_permission_map = user_context.get("acl_permission_map", {})
-    check_required_permission(acl_permission_map, resource_type, resource_id, "SHARE")
-    
+    user_id = user_context.get("user_id")
+    await acl_service.check_user_permission(
+        user_id=PydanticObjectId(user_id),
+        resource_type=resource_type,
+        resource_id=PydanticObjectId(resource_id),
+        required_permission="SHARE",
+    )
+
     try:
         deleted_count = 0
         updated_count = 0
@@ -167,8 +169,13 @@ async def get_resource_permissions(
     """
     validate_resource_type(resource_type)
 
-    acl_permission_map = user_context.get("acl_permission_map", {})
-    check_required_permission(acl_permission_map, resource_type, resource_id, "VIEW")
+    user_id = user_context.get("user_id")
+    await acl_service.check_user_permission(
+        user_id=PydanticObjectId(user_id),
+        resource_type=resource_type,
+        resource_id=PydanticObjectId(resource_id),
+        required_permission="VIEW",
+    )
 
     try:
         result = await acl_service.get_resource_permissions(

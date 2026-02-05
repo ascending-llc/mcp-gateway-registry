@@ -9,6 +9,20 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from registry.core.acl_constants import PrincipalType
 
+
+class ResourcePermissions(BaseModel):
+    """Type-safe permission model for ACL resource access.
+
+    Represents the resolved permissions a user has for a specific resource.
+    All fields default to False (no access). This model replaces all prior
+    Dict[str, bool] permission representations.
+    """
+
+    VIEW: bool = False
+    EDIT: bool = False
+    DELETE: bool = False
+    SHARE: bool = False
+
 class PermissionPrincipalIn(BaseModel):
     principal_id: str
     principal_type: PrincipalType
