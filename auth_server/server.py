@@ -11,15 +11,13 @@ import jwt
 import time
 from typing import List
 from fastapi.middleware.cors import CORSMiddleware
+from packages.telemetry import setup_metrics
 import uvicorn
 
 # Import database utilities
 from packages.database import init_mongodb, close_mongodb
 
 from .core.config import settings
-
-# Import metrics middleware
-from .metrics_middleware import add_auth_metrics_middleware
 
 # Import provider factory
 from .providers.factory import get_auth_provider
@@ -46,7 +44,6 @@ validator = SimplifiedCognitoValidator()
 settings.configure_logging()
 
 logger = logging.getLogger(__name__)
-
 
 # Configuration for token generation (from settings)
 JWT_ISSUER = settings.jwt_issuer
@@ -184,6 +181,13 @@ app = FastAPI(
     openapi_url=f"{api_prefix}/openapi.json" if api_prefix else "/openapi.json"
 )
 
+logger.info("🔭 Initializing Telemetry...")    
+try:
+    setup_metrics("auth-server")
+except Exception as e:
+    logger.warning(f"Failed to initialize telemetry: {e}")
+
+
 # Add CORS middleware to support browser-based OAuth clients (like Claude Desktop)
 # Parse CORS origins from settings (comma-separated list or "*")
 cors_origins_list = [origin.strip() for origin in settings.cors_origins.split(",")] if settings.cors_origins != "*" else ["*"]
@@ -197,9 +201,6 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["WWW-Authenticate", "X-User-Id", "X-Username", "X-Client-Id","X-Scopes","X-Jarvis-Auth"],
 )
-
-# Add metrics collection middleware
-add_auth_metrics_middleware(app)
 
 # Include .well-known routes at root level (for mcp-remote RFC 8414 compliance)
 # mcp-remote strips path when building /.well-known/oauth-authorization-server URL /authorize
@@ -283,10 +284,13 @@ def parse_arguments():
 
     return parser.parse_args()
 
+# TODO: This function is completely skipped in the dockerfile.
 def main():
+    
     """Run the server"""
     args = parse_arguments()
     
+
     # Update global validator with default region
     global validator
     validator = SimplifiedCognitoValidator(region=args.region)

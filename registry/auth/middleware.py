@@ -14,7 +14,7 @@ from registry.auth.dependencies import (map_cognito_groups_to_scopes, signer, ge
                                         get_accessible_agents_for_user, user_can_modify_servers,
                                         user_has_wildcard_access)
 from registry.core.config import settings
-
+from registry.core.telemetry_decorators import AuthMetricsContext
 
 class UnifiedAuthMiddleware(BaseHTTPMiddleware):
     """
@@ -104,35 +104,48 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.debug(f"Authenticated path: {path}")
             # Continue to authentication logic below
 
-        try:
-            user_context = await self._authenticate(request)
-            request.state.user = user_context
-            request.state.is_authenticated = True
-            request.state.auth_source = user_context.get('auth_source', 'unknown')
-            logger.info(f"User {user_context.get('username')} authenticated via {user_context.get('auth_source')}")
-            return await call_next(request)
-        except AuthenticationError as e:
-            logger.warning(f"Auth failed for {path}: {e}")
-            # Add WWW-Authenticate header for MCP OAuth discovery
-            # Extract server name from path for MCP proxy requests
-            server_name = None
-            if path.startswith("/proxy/"):
-                server_name = path.split("/")[2] if len(path.split("/")) > 2 else None
+        # Use context manager for clean metrics tracking
+        async with AuthMetricsContext() as auth_ctx:
+            try:
+                user_context = await self._authenticate(request)
+                request.state.user = user_context
+                request.state.is_authenticated = True
+                auth_source = user_context.get("auth_source", "unknown")
+                request.state.auth_source = auth_source
 
-            headers = {"Connection": "close"}
-            if server_name:
-                # For MCP proxy paths, RFC 9728 (OAuth 2.0 Protected Resource Metadata) - the official specification
-                registry_url = settings.registry_client_url.rstrip('/')
-                oauth_discovery = f"{registry_url}/.well-known/oauth-protected-resource/proxy/{server_name}"
-                headers["WWW-Authenticate"] = f'Bearer realm="mcp-registry", resource_metadata="{oauth_discovery}"'
-            else:
-                # For other authenticated paths, use general OAuth discovery
-                headers["WWW-Authenticate"] = 'Bearer realm="mcp-registry"'
+                # Update metrics context with auth result
+                auth_ctx.set_mechanism(auth_source)
+                auth_ctx.set_success(True)
 
-            return JSONResponse(status_code=401, content={"detail": str(e)}, headers=headers)
-        except Exception as e:
-            logger.error(f"Auth error for {path}: {e}")
-            return JSONResponse(status_code=500, content={"detail": "Authentication error"})
+                logger.info(f"User {user_context.get('username')} authenticated via {auth_source}")
+                return await call_next(request)
+
+            except AuthenticationError as e:
+                auth_ctx.set_success(False)
+                logger.warning(f"Auth failed for {path}: {e}")
+
+                # Add WWW-Authenticate header for MCP OAuth discovery
+                # Extract server name from path for MCP proxy requests
+                server_name = None
+                if path.startswith("/proxy/"):
+                    server_name = path.split("/")[2] if len(path.split("/")) > 2 else None
+
+                headers = {"Connection": "close"}
+                if server_name:
+                    # For MCP proxy paths, RFC 9728 (OAuth 2.0 Protected Resource Metadata)
+                    registry_url = settings.registry_client_url.rstrip("/")
+                    oauth_discovery = f"{registry_url}/.well-known/oauth-protected-resource/proxy/{server_name}"
+                    headers["WWW-Authenticate"] = f'Bearer realm="mcp-registry", resource_metadata="{oauth_discovery}"'
+                else:
+                    # For other authenticated paths, use general OAuth discovery
+                    headers["WWW-Authenticate"] = 'Bearer realm="mcp-registry"'
+
+                return JSONResponse(status_code=401, content={"detail": str(e)}, headers=headers)
+
+            except Exception as e:
+                auth_ctx.set_success(False)
+                logger.error(f"Auth error for {path}: {e}")
+                return JSONResponse(status_code=500, content={"detail": "Authentication error"})
 
     def _match_path(self, path: str, compiled_patterns: List[Tuple]) -> bool:
         """
