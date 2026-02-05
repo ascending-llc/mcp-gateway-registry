@@ -276,19 +276,67 @@ def mock_websocket():
 
 
 @pytest.fixture(autouse=True)
+def mock_telemetry_metrics(monkeypatch):
+    """
+    Mock telemetry metrics to prevent background thread issues during tests.
+
+    This prevents the OTel background exporter from trying to serialize
+    mock objects (like AsyncMock) which causes encoding errors.
+    """
+    # Mock the generic metrics client
+    mock_metrics_client = Mock()
+    mock_metrics_client.record_counter = Mock()
+    mock_metrics_client.record_histogram = Mock()
+
+    # Mock the metrics client at the source module
+    monkeypatch.setattr(
+        "registry.utils.otel_metrics.metrics",
+        mock_metrics_client
+    )
+
+    # Mock the domain functions where they're imported
+    monkeypatch.setattr(
+        "registry.core.telemetry_decorators._record_registry_operation",
+        Mock()
+    )
+    monkeypatch.setattr(
+        "registry.core.telemetry_decorators._record_auth_request",
+        Mock()
+    )
+    monkeypatch.setattr(
+        "registry.core.telemetry_decorators._record_tool_execution",
+        Mock()
+    )
+    monkeypatch.setattr(
+        "registry.core.telemetry_decorators._record_tool_discovery",
+        Mock()
+    )
+    monkeypatch.setattr(
+        "registry.core.telemetry_decorators._record_resource_access",
+        Mock()
+    )
+    monkeypatch.setattr(
+        "registry.core.telemetry_decorators._record_prompt_execution",
+        Mock()
+    )
+
+    yield mock_metrics_client
+
+
+@pytest.fixture(autouse=True)
 def cleanup_services():
     """Automatically cleanup services after each test."""
     yield
     # Reset global service states
     from registry.services.server_service import server_service_v1
     from registry.health.service import health_service
-    
+
     # Clear server service state if methods exist
     if hasattr(server_service_v1, 'registered_servers'):
         server_service_v1.registered_servers.clear()
     if hasattr(server_service_v1, 'service_state'):
         server_service_v1.service_state.clear()
-    
+
     health_service.server_health_status.clear()
     health_service.server_last_check_time.clear()
     # Clear active_connections only if it exists (websocket feature)

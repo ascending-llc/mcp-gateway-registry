@@ -1,0 +1,81 @@
+service_name: registry
+
+counters:
+  # Registry operations
+  - name: registry_operations_total
+    description: Total number of registry operations
+    unit: "1"
+    capture: true
+
+  # MCP server requests
+  - name: mcp_server_requests_total
+    description: Total requests to MCP servers
+    unit: "1"
+    capture: true
+
+  # Tool discovery
+  - name: mcp_tool_discovery_total
+    description: Total number of tool discovery operations
+    unit: "1"
+    capture: true
+
+  # Tool execution
+  - name: mcp_tool_execution_total
+    description: Total number of tool executions
+    unit: "1"
+    capture: true
+
+  # Resource access
+  - name: mcp_resource_access_total
+    description: Total number of resource access operations
+    unit: "1"
+    capture: true
+
+  # Prompt execution
+  - name: mcp_prompt_execution_total
+    description: Total number of prompt executions
+    unit: "1"
+    capture: true
+
+  # Auth requests (for middleware)
+  - name: auth_requests_total
+    description: Total number of authentication attempts
+    unit: "1"
+    capture: true
+
+histograms:
+  # Registry operation latency
+  - name: registry_operation_duration_seconds
+    description: Registry operation latency in seconds
+    unit: "s"
+    capture: true
+
+  # Tool execution latency
+  - name: mcp_tool_execution_duration_seconds
+    description: Tool execution duration in seconds
+    unit: "s"
+    capture: true
+
+  # Tool discovery latency
+  - name: mcp_tool_discovery_duration_seconds
+    description: Tool discovery latency in seconds
+    unit: "s"
+    capture: true
+
+  # Resource access latency
+  - name: mcp_resource_access_duration_seconds
+    description: Resource access duration in seconds
+    unit: "s"
+    capture: true
+
+  # Prompt execution latency
+  - name: mcp_prompt_execution_duration_seconds
+    description: Prompt execution duration in seconds
+    unit: "s"
+    capture: true
+
+  # Auth request latency (for middleware)
+  - name: auth_request_duration_seconds
+    description: Authentication request duration in seconds
+    unit: "s"
+    capture: true

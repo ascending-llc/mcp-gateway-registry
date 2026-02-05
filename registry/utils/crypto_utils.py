@@ -494,7 +494,7 @@ def generate_refresh_token(
     Returns:
         JWT token string
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     exp = now + timedelta(days=expires_days)
 
     payload = {
