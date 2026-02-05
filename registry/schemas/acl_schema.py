@@ -11,13 +11,6 @@ from registry.core.acl_constants import PrincipalType
 
 
 class ResourcePermissions(BaseModel):
-    """Type-safe permission model for ACL resource access.
-
-    Represents the resolved permissions a user has for a specific resource.
-    All fields default to False (no access). This model replaces all prior
-    Dict[str, bool] permission representations.
-    """
-
     VIEW: bool = False
     EDIT: bool = False
     DELETE: bool = False
@@ -33,7 +26,6 @@ class UpdateResourcePermissionsRequest(BaseModel):
     updated: List[PermissionPrincipalIn] = Field(default_factory=list)
     removed: List[PermissionPrincipalIn] = Field(default_factory=list)
     public: bool = False
-
 
 class PermissionPrincipalOut(BaseModel):
     principal_type: PrincipalType

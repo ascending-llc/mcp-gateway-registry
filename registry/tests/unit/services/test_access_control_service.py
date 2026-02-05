@@ -178,8 +178,6 @@ class TestACLService:
         )
         assert deleted == 0
 
-    # ---- Tests for targeted ACL methods (Phase 3) ----
-
     @pytest.mark.asyncio
     @patch('registry.services.access_control_service.IAclEntry')
     async def test_get_user_permissions_for_resource_owner(self, mock_acl_entry):
