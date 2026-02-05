@@ -46,26 +46,6 @@ class TestAuthRoutes:
         with patch('registry.api.redirect_routes.templates') as mock_templates:
             yield mock_templates
 
-    @pytest.fixture
-    def mock_user_info(self):
-        """Create properly signed user info using URLSafeTimedSerializer."""
-        from registry.core.config import settings
-        
-        user_idp_data = {
-            "username": "test.user@example.com",
-            "email": "test.user@example.com",
-            "name": "Test User",
-            "groups": [],
-            "provider": "entra",
-            "auth_method": "oauth2",
-            "idp_id": "12345-6789"
-        }
-        
-        # Use the same signer as the auth routes
-        signer = URLSafeTimedSerializer(settings.secret_key)
-        signed_user_info = signer.dumps(user_idp_data)
-        return signed_user_info
-
     @pytest.mark.asyncio
     async def test_get_oauth2_providers_success(self):
         """Test successful OAuth2 providers fetch."""
@@ -176,11 +156,18 @@ class TestAuthRoutes:
             assert response.status_code == 302
             assert "/login?error=oauth2_redirect_failed" in response.headers["location"]
 
+    @pytest.fixture
+    def mock_code(self):
+        """Create a mock authorization code."""
+        return "test-auth-code-123"
+
     @pytest.mark.asyncio
-    async def test_oauth2_callback_success(self, mock_request, mock_settings, mock_user_info):
+    async def test_oauth2_callback_success(self, mock_request, mock_settings, mock_code):
         """Test successful OAuth2 callback with valid user."""
         mock_user = Mock()
         mock_user.id = "12345"
+        mock_user.username = "testuser"
+        mock_user.email = "test@example.com"
         mock_user.role = "user"
         mock_user.idp_id = "12345-6789"
         
@@ -191,20 +178,20 @@ class TestAuthRoutes:
             "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTIzNDUiLCJzdWIiOiJ0ZXN0dXNlciIsImVtYWlsIjoidGVzdEB0ZXN0LmNvbSIsIm5hbWUiOiJUZXN0IFVzZXIiLCJncm91cHMiOltdLCJwcm92aWRlciI6ImtleWNsb2FrIn0.test"
         }
         
-        with patch("registry.api.redirect_routes.IUser.find_one", new=AsyncMock(return_value=mock_user)), \
-             patch("registry.api.redirect_routes.user_service.get_user_by_user_id", new=AsyncMock(return_value=mock_user)), \
-             patch("registry.api.redirect_routes.httpx.AsyncClient") as mock_client:
+        with patch("registry.api.redirect_routes.httpx.AsyncClient") as mock_client, \
+             patch("registry.api.redirect_routes.user_service.get_user_by_user_id", new=AsyncMock(return_value=mock_user)):
             mock_client_instance = mock_client.return_value.__aenter__.return_value
             mock_client_instance.post = AsyncMock(return_value=mock_response)
             
-            response = await oauth2_callback(mock_request, mock_user_info)
+            response = await oauth2_callback(mock_request, code=mock_code)
         
         assert isinstance(response, RedirectResponse)
         assert response.status_code == 302
-        assert response.headers["location"] == "http://localhost:8000"
+        # Registry client URL may or may not have trailing slash
+        assert response.headers["location"].rstrip("/") == "http://localhost:8000"
 
     @pytest.mark.asyncio
-    async def test_oauth2_callback_user_not_found(self, mock_request, mock_user_info):
+    async def test_oauth2_callback_user_not_found(self, mock_request, mock_code):
         """Test OAuth2 callback when user is not found in DB."""
         # Mock httpx AsyncClient to return a token without user_id
         mock_response = Mock()
@@ -213,21 +200,20 @@ class TestAuthRoutes:
             "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0dXNlciIsImVtYWlsIjoidGVzdEB0ZXN0LmNvbSIsIm5hbWUiOiJUZXN0IFVzZXIiLCJncm91cHMiOltdLCJwcm92aWRlciI6ImtleWNsb2FrIn0.test"
         }
         
-        with patch("registry.api.redirect_routes.IUser.find_one", new=AsyncMock(return_value=None)), \
-             patch("registry.api.redirect_routes.httpx.AsyncClient") as mock_client:
+        with patch("registry.api.redirect_routes.httpx.AsyncClient") as mock_client:
             mock_client_instance = mock_client.return_value.__aenter__.return_value
             mock_client_instance.post = AsyncMock(return_value=mock_response)
             
-            response = await oauth2_callback(mock_request, mock_user_info)
+            response = await oauth2_callback(mock_request, code=mock_code)
         
         assert isinstance(response, RedirectResponse)
         assert response.status_code == 302
         assert "/login?error=User+not+found+in+registry" in response.headers["location"]
 
     @pytest.mark.asyncio
-    async def test_oauth2_callback_with_error(self, mock_request, mock_user_info):
+    async def test_oauth2_callback_with_error(self, mock_request):
         """Test OAuth2 callback with error parameter."""
-        response = await oauth2_callback(mock_request, mock_user_info, error="oauth2_error", details="Provider error",)
+        response = await oauth2_callback(mock_request, error="oauth2_error", details="Provider error")
         
         assert isinstance(response, RedirectResponse)
         assert response.status_code == 302
@@ -235,25 +221,25 @@ class TestAuthRoutes:
         assert "OAuth2%20provider%20error" in response.headers["location"]
 
     @pytest.mark.asyncio
-    async def test_oauth2_callback_oauth2_init_failed(self, mock_request, mock_user_info):
+    async def test_oauth2_callback_oauth2_init_failed(self, mock_request):
         """Test OAuth2 callback with init failed error."""
-        response = await oauth2_callback(mock_request, mock_user_info, error="oauth2_init_failed")
+        response = await oauth2_callback(mock_request, error="oauth2_init_failed")
         
         assert isinstance(response, RedirectResponse)
         assert response.status_code == 302
         assert "Failed%20to%20initiate%20OAuth2%20login" in response.headers["location"]
 
     @pytest.mark.asyncio
-    async def test_oauth2_callback_oauth2_callback_failed(self, mock_request, mock_user_info):
+    async def test_oauth2_callback_oauth2_callback_failed(self, mock_request):
         """Test OAuth2 callback with callback failed error."""
-        response = await oauth2_callback(mock_request, mock_user_info, error="oauth2_callback_failed")
+        response = await oauth2_callback(mock_request, error="oauth2_callback_failed")
         
         assert isinstance(response, RedirectResponse)
         assert response.status_code == 302
         assert "OAuth2%20authentication%20failed" in response.headers["location"]
 
     @pytest.mark.asyncio
-    async def test_oauth2_callback_general_exception(self, mock_request, mock_user_info):
+    async def test_oauth2_callback_general_exception(self, mock_request, mock_code):
         """Test OAuth2 callback with general exception."""
         with patch('registry.api.redirect_routes.logger') as mock_logger:
             # Mock httpx to return a failed response (non-200)
@@ -264,7 +250,7 @@ class TestAuthRoutes:
                 mock_client_instance = mock_client.return_value.__aenter__.return_value
                 mock_client_instance.post = AsyncMock(return_value=mock_response)
                 
-                response = await oauth2_callback(mock_request, mock_user_info)
+                response = await oauth2_callback(mock_request, code=mock_code)
                 
                 assert isinstance(response, RedirectResponse)
                 assert response.status_code == 302

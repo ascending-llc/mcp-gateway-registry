@@ -82,15 +82,15 @@ def user_session_cookie():
 
 
 @pytest.fixture
-def authenticated_client(admin_session_cookie):
-    """Create a test client with admin authentication."""
-    return TestClient(app, cookies={settings.session_cookie_name: admin_session_cookie})
+def authenticated_client(mock_auth_middleware):
+    """Create a test client with admin authentication using mocked middleware."""
+    return TestClient(app)
 
 
 @pytest.fixture
-def user_authenticated_client(user_session_cookie):
-    """Create a test client with user authentication."""
-    return TestClient(app, cookies={settings.session_cookie_name: user_session_cookie})
+def user_authenticated_client(mock_auth_middleware):
+    """Create a test client with user authentication using mocked middleware."""
+    return TestClient(app)
 
 
 @pytest.fixture

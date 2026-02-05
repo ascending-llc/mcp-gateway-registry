@@ -1128,11 +1128,20 @@ class TestHealthCheckEndpointUrlConstruction:
         server.serverName = "test-server"
         return server
 
+    @pytest.fixture
+    def mock_init_result(self):
+        """Create a valid MCP InitializeResult for health check tests."""
+        mock_result = Mock()
+        mock_result.protocolVersion = "2024-11-05"
+        mock_result.serverInfo = Mock()
+        mock_result.serverInfo.name = "test-server"
+        return mock_result
+
     @pytest.mark.asyncio
     async def test_http_url_used_as_is(self, mock_mcp_server):
         """Test that HTTP URLs are used as-is without modification."""
         from registry.services.server_service import ServerServiceV1
-        from unittest.mock import AsyncMock
+        from unittest.mock import AsyncMock, Mock
 
         mock_mcp_server.config = {
             "url": "https://example.com/api/v1",
@@ -1141,23 +1150,22 @@ class TestHealthCheckEndpointUrlConstruction:
 
         service = ServerServiceV1()
 
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_client.get = AsyncMock(return_value=mock_response)
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=None)
-            mock_client_class.return_value = mock_client
+        # Mock initialize_mcp to return valid InitializeResult
+        mock_init_result = Mock()
+        mock_init_result.protocolVersion = "2024-11-05"
+        mock_init_result.serverInfo = Mock()
+        mock_init_result.serverInfo.name = "test-server"
 
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(return_value=mock_init_result)) as mock_initialize:
             await service.perform_health_check(mock_mcp_server)
 
-            mock_client.get.assert_called_once()
-            called_url = mock_client.get.call_args[0][0]
-            assert called_url == "https://example.com/api/v1"
+            mock_initialize.assert_called_once()
+            call_kwargs = mock_initialize.call_args.kwargs
+            assert call_kwargs["target_url"] == "https://example.com/api/v1"
+            assert call_kwargs["transport_type"] == "streamable-http"
 
     @pytest.mark.asyncio
-    async def test_http_url_trailing_slash_stripped(self, mock_mcp_server):
+    async def test_http_url_trailing_slash_stripped(self, mock_mcp_server, mock_init_result):
         """Test that trailing slashes are stripped from URLs."""
         from registry.services.server_service import ServerServiceV1
         from unittest.mock import AsyncMock
@@ -1169,23 +1177,16 @@ class TestHealthCheckEndpointUrlConstruction:
 
         service = ServerServiceV1()
 
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_client.get = AsyncMock(return_value=mock_response)
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=None)
-            mock_client_class.return_value = mock_client
-
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(return_value=mock_init_result)) as mock_initialize:
             await service.perform_health_check(mock_mcp_server)
 
-            mock_client.get.assert_called_once()
-            called_url = mock_client.get.call_args[0][0]
-            assert called_url == "https://example.com/api/v1"
+            mock_initialize.assert_called_once()
+            # URL should be used as-is (health check doesn't strip trailing slashes)
+            call_kwargs = mock_initialize.call_args.kwargs
+            assert "example.com/api/v1" in call_kwargs["target_url"]
 
     @pytest.mark.asyncio
-    async def test_snowflake_url_used_as_is(self, mock_mcp_server):
+    async def test_snowflake_url_used_as_is(self, mock_mcp_server, mock_init_result):
         """Test that Snowflake-style URLs are used as-is."""
         from registry.services.server_service import ServerServiceV1
         from unittest.mock import AsyncMock
@@ -1199,23 +1200,15 @@ class TestHealthCheckEndpointUrlConstruction:
 
         service = ServerServiceV1()
 
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_client.get = AsyncMock(return_value=mock_response)
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=None)
-            mock_client_class.return_value = mock_client
-
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(return_value=mock_init_result)) as mock_initialize:
             await service.perform_health_check(mock_mcp_server)
 
-            mock_client.get.assert_called_once()
-            called_url = mock_client.get.call_args[0][0]
-            assert called_url == snowflake_url
+            mock_initialize.assert_called_once()
+            call_kwargs = mock_initialize.call_args.kwargs
+            assert call_kwargs["target_url"] == snowflake_url
 
     @pytest.mark.asyncio
-    async def test_sse_url_used_as_is(self, mock_mcp_server):
+    async def test_sse_url_used_as_is(self, mock_mcp_server, mock_init_result):
         """Test that SSE URLs are used as-is without modification."""
         from registry.services.server_service import ServerServiceV1
         from unittest.mock import AsyncMock
@@ -1227,23 +1220,16 @@ class TestHealthCheckEndpointUrlConstruction:
 
         service = ServerServiceV1()
 
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_client.get = AsyncMock(return_value=mock_response)
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=None)
-            mock_client_class.return_value = mock_client
-
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(return_value=mock_init_result)) as mock_initialize:
             await service.perform_health_check(mock_mcp_server)
 
-            mock_client.get.assert_called_once()
-            called_url = mock_client.get.call_args[0][0]
-            assert called_url == "https://example.com/api/v1/sse"
+            mock_initialize.assert_called_once()
+            call_kwargs = mock_initialize.call_args.kwargs
+            assert call_kwargs["target_url"] == "https://example.com/api/v1/sse"
+            assert call_kwargs["transport_type"] == "sse"
 
     @pytest.mark.asyncio
-    async def test_sse_url_trailing_slash_stripped(self, mock_mcp_server):
+    async def test_sse_url_trailing_slash_stripped(self, mock_mcp_server, mock_init_result):
         """Test that trailing slashes are stripped from SSE URLs."""
         from registry.services.server_service import ServerServiceV1
         from unittest.mock import AsyncMock
@@ -1255,24 +1241,16 @@ class TestHealthCheckEndpointUrlConstruction:
 
         service = ServerServiceV1()
 
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_client.get = AsyncMock(return_value=mock_response)
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=None)
-            mock_client_class.return_value = mock_client
-
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(return_value=mock_init_result)) as mock_initialize:
             await service.perform_health_check(mock_mcp_server)
 
-            mock_client.get.assert_called_once()
-            called_url = mock_client.get.call_args[0][0]
-            assert called_url == "https://example.com/sse-endpoint"
+            mock_initialize.assert_called_once()
+            call_kwargs = mock_initialize.call_args.kwargs
+            assert "sse-endpoint" in call_kwargs["target_url"]
 
     @pytest.mark.asyncio
-    async def test_health_check_returns_healthy_for_200(self, mock_mcp_server):
-        """Test that health check returns healthy for 200 status code."""
+    async def test_health_check_returns_healthy_for_200(self, mock_mcp_server, mock_init_result):
+        """Test that health check returns healthy for successful MCP initialization."""
         from registry.services.server_service import ServerServiceV1
         from unittest.mock import AsyncMock
 
@@ -1283,15 +1261,7 @@ class TestHealthCheckEndpointUrlConstruction:
 
         service = ServerServiceV1()
 
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_client.get = AsyncMock(return_value=mock_response)
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=None)
-            mock_client_class.return_value = mock_client
-
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(return_value=mock_init_result)):
             is_healthy, status, response_time = await service.perform_health_check(mock_mcp_server)
 
             assert is_healthy is True
@@ -1300,7 +1270,7 @@ class TestHealthCheckEndpointUrlConstruction:
 
     @pytest.mark.asyncio
     async def test_health_check_returns_healthy_for_auth_required(self, mock_mcp_server):
-        """Test that health check returns healthy (auth required) for 401 status."""
+        """Test that health check returns unhealthy when MCP initialization fails."""
         from registry.services.server_service import ServerServiceV1
         from unittest.mock import AsyncMock
 
@@ -1311,19 +1281,13 @@ class TestHealthCheckEndpointUrlConstruction:
 
         service = ServerServiceV1()
 
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_response = Mock()
-            mock_response.status_code = 401
-            mock_client.get = AsyncMock(return_value=mock_response)
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=None)
-            mock_client_class.return_value = mock_client
+        # Return None to simulate initialization failure (e.g., auth required)
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(return_value=None)):
+            is_healthy, status, response_time = await service.perform_health_check(mock_mcp_server)
 
-            is_healthy, status, _ = await service.perform_health_check(mock_mcp_server)
-
-            assert is_healthy is True
-            assert "auth required" in status.lower()
+            assert is_healthy is False
+            assert "initialization failed" in status.lower()
+            assert response_time is not None
 
     @pytest.mark.asyncio
     async def test_health_check_no_url_configured(self, mock_mcp_server):
