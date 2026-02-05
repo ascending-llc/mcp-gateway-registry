@@ -98,7 +98,6 @@ def apply_connection_status_to_server(
 @track_registry_operation("list", resource_type="server")
 async def list_servers(
     query: Optional[str] = None,
-    scope: Optional[str] = None,
     status: Optional[str] = None,
     page: int = 1,
     per_page: int = 20,
@@ -107,22 +106,14 @@ async def list_servers(
     """
     List servers with optional filtering and pagination.
     Includes connection status (connection_state, requires_oauth, error) for each server.
-    
+
     Query Parameters:
     - query: Free-text search across server_name, description, tags
-    - scope: Filter by access level (shared_app, shared_user, private_user)
     - status: Filter by operational state (active, inactive, error)
     - page: Page number (default: 1, min: 1)
     - per_page: Items per page (default: 20, min: 1, max: 100)
     """
     try:
-        # Validate scope if provided
-        if scope and scope not in ["shared_app", "shared_user", "private_user"]:
-            raise HTTPException(
-                status_code=http_status.HTTP_400_BAD_REQUEST,
-                detail="Invalid scope. Must be one of: shared_app, shared_user, private_user"
-            )
-        
         # Validate status if provided
         if status and status not in ["active", "inactive", "error"]:
             raise HTTPException(
@@ -138,7 +129,6 @@ async def list_servers(
 
         servers, total = await server_service_v1.list_servers(
             query=query,
-            scope=scope,
             status=status,
             page=page,
             per_page=per_page,

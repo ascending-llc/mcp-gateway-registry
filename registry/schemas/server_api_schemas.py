@@ -21,7 +21,6 @@ class ServerCreateRequest(BaseModel):
     path: str = Field(..., description="Unique path/route for the server")
     description: Optional[str] = Field(default="", description="Server description")
     url: Optional[str] = Field(default=None, description="Backend proxy URL")
-    scope: str = Field(default="private_user", description="Access scope: shared_app, shared_user, or private_user")
     tags: List[str] = Field(default_factory=list, description="Server tags")
     num_tools: int = Field(default=0, description="Number of tools")
     num_stars: int = Field(default=0, description="Star count")
@@ -55,14 +54,6 @@ class ServerCreateRequest(BaseModel):
             return [tag.lower() if isinstance(tag, str) else tag for tag in v]
         return v
     
-    @field_validator('scope')
-    @classmethod
-    def validate_scope(cls, v):
-        """Validate scope values"""
-        valid_scopes = ['shared_app', 'shared_user', 'private_user']
-        if v not in valid_scopes:
-            raise ValueError(f"scope must be one of {valid_scopes}")
-        return v
 
 
 class ServerUpdateRequest(BaseModel):
@@ -93,7 +84,6 @@ class ServerUpdateRequest(BaseModel):
     custom_user_vars: Optional[Dict[str, Any]] = None
     apiKey: Optional[Dict[str, Any]] = None
     status: Optional[str] = None
-    scope: Optional[str] = None
     enabled: Optional[bool] = None
     
     class ConfigDict:
@@ -117,15 +107,6 @@ class ServerUpdateRequest(BaseModel):
                 raise ValueError(f"status must be one of {valid_statuses}")
         return v
     
-    @field_validator('scope')
-    @classmethod
-    def validate_scope(cls, v):
-        """Validate scope values"""
-        if v is not None:
-            valid_scopes = ['shared_app', 'shared_user', 'private_user']
-            if v not in valid_scopes:
-                raise ValueError(f"scope must be one of {valid_scopes}")
-        return v
 
 
 class ServerToggleRequest(BaseModel):
@@ -160,7 +141,6 @@ class ServerListItemResponse(BaseModel):
     oauthMetadata: Optional[Dict[str, Any]] = Field(None, alias="oauthMetadata", description="OAuth metadata from autodiscovery")
     tools: Optional[str] = Field(None, description="Comma-separated list of tool names")
     author: Optional[str] = Field(None, description="Author user ID")
-    scope: str
     status: str = "active"
     path: str
     tags: List[str] = Field(default_factory=list)
@@ -219,7 +199,6 @@ class ServerDetailResponse(BaseModel):
     prompts: Optional[List[Dict[str, Any]]] = Field(None, description="List of available prompts")
     initDuration: Optional[int] = Field(None, alias="initDuration", description="Initialization duration in ms")
     author: Optional[str] = Field(None, description="Author user ID")
-    scope: str
     status: str
     path: str
     tags: List[str] = Field(default_factory=list)
@@ -279,7 +258,6 @@ class ServerCreateResponse(BaseModel):
     prompts: Optional[List[Dict[str, Any]]] = Field(None, description="List of available prompts")
     initDuration: Optional[int] = Field(None, alias="initDuration")
     author: Optional[str] = None
-    scope: str
     status: str
     path: str
     tags: List[str] = Field(default_factory=list)
@@ -408,7 +386,6 @@ class ErrorResponse(BaseModel):
 class ServerStatsResponse(BaseModel):
     """Response schema for server statistics (Admin only)"""
     total_servers: int = Field(..., description="Total number of servers")
-    servers_by_scope: Dict[str, int] = Field(..., description="Server count grouped by scope")
     servers_by_status: Dict[str, int] = Field(..., description="Server count grouped by status")
     servers_by_transport: Dict[str, int] = Field(..., description="Server count grouped by transport type")
     total_tokens: int = Field(..., description="Total number of tokens")
@@ -537,7 +514,6 @@ def convert_to_list_item(
         tools=tools_str,
         author=author_id,
         # Registry fields from root level
-        scope=server.scope,
         status=server.status,
         path=server.path,
         tags=server.tags,
@@ -621,7 +597,6 @@ def convert_to_detail(
         initDuration=config.get("initDuration"),
         author=author_id,
         # Registry fields from root level
-        scope=server.scope,
         status=server.status,
         path=server.path,
         tags=server.tags,
@@ -678,7 +653,6 @@ def convert_to_create_response(server) -> ServerCreateResponse:
         prompts=config.get("prompts", []),
         initDuration=config.get("initDuration"),
         author=author_id,
-        scope=server.scope,
         status=server.status,
         path=server.path,
         tags=server.tags,

@@ -44,7 +44,6 @@ class TestExtendedMCPServerStructure:
             "author": str(PydanticObjectId()),
             "path": "/mcp/test",
             "tags": ["test", "demo"],
-            "scope": "private_user",
             "status": "active",
             "numTools": 2,
             "numStars": 5,
@@ -54,7 +53,6 @@ class TestExtendedMCPServerStructure:
         server = ExtendedMCPServer.model_construct(**server_dict)
         
         # Root-level fields should NOT be in config
-        assert "scope" not in server.config
         assert "status" not in server.config
         assert "path" not in server.config
         assert "tags" not in server.config
@@ -65,7 +63,6 @@ class TestExtendedMCPServerStructure:
         assert "errorMessage" not in server.config
         
         # Root-level fields should be accessible directly
-        assert server.scope == "private_user"
         assert server.status == "active"
         assert server.path == "/mcp/test"
         assert server.tags == ["test", "demo"]
@@ -156,21 +153,6 @@ class TestExtendedMCPServerStructure:
         assert server.lastConnected == now
         assert server.lastError == now
         assert server.errorMessage == "Connection timeout"
-
-    def test_scope_values(self):
-        """Test valid scope values."""
-        valid_scopes = ["private_user", "shared_user", "shared_app"]
-        
-        for scope in valid_scopes:
-            server_dict = {
-                "serverName": f"test-{scope}",
-                "config": {"title": "Test", "type": "sse", "url": "http://test:8000"},
-                "author": str(PydanticObjectId()),
-                "path": f"/mcp/{scope}",
-                "scope": scope,
-            }
-            server = ExtendedMCPServer.model_construct(**server_dict)
-            assert server.scope == scope
 
     def test_status_values(self):
         """Test valid status values."""

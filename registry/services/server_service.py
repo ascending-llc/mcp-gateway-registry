@@ -457,7 +457,6 @@ def _update_config_from_request(
     registry_fields = [
         "path",
         "tags",
-        "scope",
         "status",
         "serverName",
         "num_stars",
@@ -548,7 +547,6 @@ class ServerServiceV1:
     async def list_servers(
         self,
         query: Optional[str] = None,
-        scope: Optional[str] = None,
         status: Optional[str] = None,
         page: int = 1,
         per_page: int = 20,
@@ -560,7 +558,6 @@ class ServerServiceV1:
 
         Args:
             query: Free-text search across server_name, description, tags
-            scope: Filter by access level (shared_app, shared_user, private_user)
             status: Filter by operational state (active, inactive, error)
             page: Page number (min: 1)
             per_page: Items per page (min: 1, max: 100)
@@ -577,10 +574,6 @@ class ServerServiceV1:
 
         # Build filter conditions
         filters = []
-
-        # Scope filter (now at root level)
-        if scope:
-            filters.append({"scope": scope})
 
         # Status filter (now at root level)
         if status:
@@ -723,7 +716,6 @@ class ServerServiceV1:
             # Registry-specific root-level fields
             path=data.path,
             tags=[tag.lower() for tag in data.tags],  # Normalize tags to lowercase
-            scope=data.scope,
             status="active",  # Default status (independent of enabled field)
             numTools=num_tools,  # Store calculated numTools at root level
             numStars=data.num_stars,
@@ -933,8 +925,6 @@ class ServerServiceV1:
             server.path = data.path
         if data.tags is not None:
             server.tags = [tag.lower() for tag in data.tags]
-        if data.scope is not None:
-            server.scope = data.scope
         if data.status is not None:
             server.status = data.status
 
@@ -1649,9 +1639,6 @@ class ServerServiceV1:
                 {
                     "$facet": {
                         "total": [{"$count": "count"}],
-                        "by_scope": [
-                            {"$group": {"_id": "$scope", "count": {"$sum": 1}}}
-                        ],
                         "by_status": [
                             {"$group": {"_id": "$status", "count": {"$sum": 1}}}
                         ],
@@ -1689,13 +1676,6 @@ class ServerServiceV1:
                     result["total"][0]["count"] if result["total"] else 0
                 )
 
-                # Servers by scope
-                servers_by_scope = {}
-                for item in result.get("by_scope", []):
-                    scope = item["_id"] or "unknown"
-                    servers_by_scope[scope] = item["count"]
-                stats["servers_by_scope"] = servers_by_scope
-
                 # Servers by status
                 servers_by_status = {}
                 for item in result.get("by_status", []):
@@ -1717,7 +1697,6 @@ class ServerServiceV1:
             else:
                 # No servers found
                 stats["total_servers"] = 0
-                stats["servers_by_scope"] = {}
                 stats["servers_by_status"] = {}
                 stats["servers_by_transport"] = {}
                 stats["total_tools"] = 0

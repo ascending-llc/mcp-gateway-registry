@@ -429,7 +429,6 @@ class MCPServerRepository(Repository[ExtendedMCPServer]):
         """
         try:
             new_metadata = {
-                "scope": server.scope,
                 "enabled": server.config.get("enabled", False) if server.config else False,
             }
 

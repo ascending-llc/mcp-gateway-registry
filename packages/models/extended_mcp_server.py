@@ -131,7 +131,7 @@ class ExtendedMCPServer(Document):
     # These fields are specific to the registry and should NOT be in config
     path: str = Field(..., description="API path for this server (e.g., /mcp/github)")
     tags: List[str] = Field(default_factory=list, description="Tags for categorization")
-    scope: str = Field(default="private_user", description="Access level: shared_app, shared_user, private_user")
+    scope: Optional[str] = Field(default=None, description="Deprecated. Access control is handled by ACL permissions.")
     status: str = Field(default="active", description="Operational state: active, inactive, error")
     numTools: int = Field(default=0, alias="numTools", description="Number of tools (calculated from toolFunctions)")
     numStars: int = Field(default=0, alias="numStars", description="Number of stars/favorites")
@@ -247,7 +247,6 @@ class ExtendedMCPServer(Document):
             "entity_type": entity_type,
             "server_id": str(self.id) if self.id else None,
             "server_name": self.serverName,
-            "scope": self.scope,
         }
         enabled = False
         if self.config:
@@ -517,7 +516,6 @@ class ExtendedMCPServer(Document):
             serverName=server_name,
             path=path,
             config=config,
-            scope=server_info.get('scope', 'private_user'),
             status=status,
             tags=server_info.get('tags', []),
             author=server_info.get('author') or PydanticObjectId(),
