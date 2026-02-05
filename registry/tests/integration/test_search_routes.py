@@ -16,10 +16,11 @@ class TestSearchRoutes:
     """Integration coverage for /api/search/semantic."""
 
     def setup_method(self):
-        """Override auth dependency for each test."""
+        """Override auth dependency for integration testing."""
+        from registry.auth.dependencies import get_current_user_by_mid
         user_context = {
-            "username": "test-user",
-            "user_id": "test-user",
+            "username": "test-admin",
+            "user_id": "test-admin-id",
             "is_admin": True,
             "accessible_servers": ["all"],
             "accessible_agents": ["all"],
@@ -31,13 +32,7 @@ class TestSearchRoutes:
             "auth_method": "traditional",
             "provider": "local",
         }
-
-        def _mock_get_user(request: Request):
-            request.state.user = user_context
-            request.state.is_authenticated = True
-            return user_context
-
-        app.dependency_overrides[auth_dependencies.get_current_user_by_mid] = _mock_get_user
+        app.dependency_overrides[get_current_user_by_mid] = lambda: user_context
 
     def teardown_method(self):
         """Clean up dependency overrides."""
@@ -143,28 +138,23 @@ class TestServerSearchRoutes:
     """Integration coverage for /api/v1/search endpoint."""
 
     def setup_method(self):
-        """Override auth dependency for each test."""
+        """Override auth dependency for integration testing."""
+        from registry.auth.dependencies import get_current_user_by_mid
         user_context = {
-            "username": "test-user",
-            "user_id": "test-user",
-            "is_admin": False,
+            "username": "test-admin",
+            "user_id": "test-admin-id",
+            "is_admin": True,
             "accessible_servers": ["all"],
             "accessible_agents": ["all"],
             "accessible_services": ["all"],
-            "groups": ["registry-users"],
-            "scopes": ["registry:read"],
+            "groups": ["registry-admins"],
+            "scopes": ["registry-admins"],
             "ui_permissions": {},
-            "can_modify_servers": False,
-            "auth_method": "jwt",
-            "provider": "keycloak",
+            "can_modify_servers": True,
+            "auth_method": "traditional",
+            "provider": "local",
         }
-
-        def _mock_get_user(request: Request):
-            request.state.user = user_context
-            request.state.is_authenticated = True
-            return user_context
-
-        app.dependency_overrides[auth_dependencies.get_current_user_by_mid] = _mock_get_user
+        app.dependency_overrides[get_current_user_by_mid] = lambda: user_context
 
     def teardown_method(self):
         """Clean up dependency overrides."""

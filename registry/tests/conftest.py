@@ -5,7 +5,7 @@ import asyncio
 import tempfile
 from pathlib import Path
 from typing import Dict, Any, AsyncGenerator, Generator
-from unittest.mock import Mock, AsyncMock
+from unittest.mock import Mock, AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
@@ -172,10 +172,39 @@ def admin_session_cookie():
 
 
 @pytest.fixture
-def test_client(admin_session_cookie) -> TestClient:
-    """Create a test client for the FastAPI application with admin authentication."""
-    from registry.core.config import settings
-    return TestClient(app, cookies={settings.session_cookie_name: admin_session_cookie})
+def mock_auth_middleware():
+    """Mock the authentication middleware to bypass auth checks in tests."""
+    test_user_context = {
+        "username": "testadmin",
+        "user_id": "test-admin-id",
+        "groups": ["registry-admins"],
+        "scopes": ["registry-admins"],
+        "role": "admin",
+        "is_admin": True,
+        "auth_method": "test",
+        "provider": "test"
+    }
+    
+    async def mock_authenticate(self, request):
+        """Mock authenticate method that always returns admin user."""
+        return test_user_context
+    
+    # Import the actual middleware class
+    from registry.auth.middleware import UnifiedAuthMiddleware
+    
+    # Patch the instance method on the middleware class
+    with patch.object(UnifiedAuthMiddleware, "_authenticate", mock_authenticate):
+        yield
+
+
+@pytest.fixture
+def test_client(mock_auth_middleware) -> TestClient:
+    """Create a test client for the FastAPI application with mocked authentication.
+    
+    Uses mock_auth_middleware to bypass authentication checks.
+    """
+    client = TestClient(app)
+    return client
 
 
 @pytest.fixture
