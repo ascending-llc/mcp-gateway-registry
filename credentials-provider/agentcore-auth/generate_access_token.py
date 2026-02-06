@@ -25,9 +25,9 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import requests
 from dotenv import load_dotenv
@@ -41,7 +41,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _load_gateway_configs() -> List[Dict[str, Any]]:
+def _load_gateway_configs() -> list[dict[str, Any]]:
     """
     Load gateway configurations from environment variables.
     Supports multiple configurations with _1, _2, _3 suffixes.
@@ -65,7 +65,7 @@ def _load_gateway_configs() -> List[Dict[str, Any]]:
                 "client_secret": client_secret,
                 "gateway_arn": gateway_arn,
                 "server_name": server_name,
-                "index": i
+                "index": i,
             }
             configs.append(config)
             logger.debug(f"Found gateway configuration #{i}: {server_name or 'unnamed'}")
@@ -98,7 +98,7 @@ def _get_cognito_token(
     client_id: str,
     client_secret: str,
     audience: str = "MCPGateway",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get OAuth2 token from Amazon Cognito or Auth0 using client credentials grant type.
 
@@ -123,8 +123,10 @@ def _get_cognito_token(
             "grant_type": "client_credentials",
             "scope": "invoke:gateway",
         }
+
         # Send as JSON for Auth0
-        response_method = lambda: requests.post(url, headers=headers, json=data)
+        def response_method():
+            return requests.post(url, headers=headers, json=data)
     else:
         # Cognito format
         url = f"{cognito_domain_url.rstrip('/')}/oauth2/token"
@@ -134,8 +136,10 @@ def _get_cognito_token(
             "client_id": client_id,
             "client_secret": client_secret,
         }
+
         # Send as form data for Cognito
-        response_method = lambda: requests.post(url, headers=headers, data=data)
+        def response_method():
+            return requests.post(url, headers=headers, data=data)
 
     try:
         # Make the request
@@ -154,10 +158,10 @@ def _get_cognito_token(
 
 
 def _save_egress_token(
-    token_response: Dict[str, Any],
+    token_response: dict[str, Any],
     provider: str = "bedrock-agentcore",
-    server_name: Optional[str] = None,
-    oauth_tokens_dir: str = ".oauth-tokens"
+    server_name: str | None = None,
+    oauth_tokens_dir: str = ".oauth-tokens",
 ) -> str:
     """
     Save the access token as an egress token file following the same structure as Atlassian tokens.
@@ -167,21 +171,21 @@ def _save_egress_token(
         provider: Auth provider name (default: bedrock-agentcore)
         server_name: Server name from config (for filename)
         oauth_tokens_dir: Path to .oauth-tokens directory
-        
+
     Returns:
         Path to the saved token file
     """
     # Create oauth-tokens directory if it doesn't exist
     tokens_dir = Path(oauth_tokens_dir)
     tokens_dir.mkdir(exist_ok=True, mode=0o700)
-    
+
     # Calculate expiration timestamp and human-readable format
-    expires_in = token_response.get('expires_in', 10800)  # Default 3 hours
+    expires_in = token_response.get("expires_in", 10800)  # Default 3 hours
     current_time = time.time()
     expires_at = current_time + expires_in
-    expires_at_human = datetime.fromtimestamp(expires_at, tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
-    saved_at = datetime.fromtimestamp(current_time, tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
-    
+    expires_at_human = datetime.fromtimestamp(expires_at, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    saved_at = datetime.fromtimestamp(current_time, tz=UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+
     # Build egress token data structure
     egress_data = {
         "provider": provider,
@@ -191,35 +195,35 @@ def _save_egress_token(
         "token_type": token_response.get("token_type", "Bearer"),
         "scope": token_response.get("scope", "invoke:gateway"),
         "saved_at": saved_at,
-        "usage_notes": f"This token is for EGRESS authentication to {provider} external services"
+        "usage_notes": f"This token is for EGRESS authentication to {provider} external services",
     }
-    
+
     # Add refresh token if present (though Cognito client credentials doesn't have refresh tokens)
     if "refresh_token" in token_response:
         egress_data["refresh_token"] = token_response["refresh_token"]
-    
+
     # Determine filename: {provider}-{server_name}-egress.json or {provider}-egress.json
     if server_name:
         filename = f"{provider}-{server_name.lower()}-egress.json"
     else:
         filename = f"{provider}-egress.json"
-    
+
     # Save to file
     egress_path = tokens_dir / filename
-    with open(egress_path, 'w') as f:
+    with open(egress_path, "w") as f:
         json.dump(egress_data, f, indent=2)
-    
+
     # Set secure file permissions
     egress_path.chmod(0o600)
-    
+
     logger.info(f"Egress token saved to {egress_path}")
     logger.info(f"Token expires at: {expires_at_human}")
     logger.info(f"Token expires in {expires_in} seconds")
-    
+
     return str(egress_path)
 
 
-def _get_cognito_domain_from_env() -> Tuple[str, Optional[str]]:
+def _get_cognito_domain_from_env() -> tuple[str, str | None]:
     """
     Get Cognito domain and user pool ID from environment variables.
 
@@ -239,11 +243,11 @@ def _get_cognito_domain_from_env() -> Tuple[str, Optional[str]]:
 
 
 def generate_access_token(
-    gateway_index: Optional[int] = None,
-    gateway_name: Optional[str] = None,
+    gateway_index: int | None = None,
+    gateway_name: str | None = None,
     oauth_tokens_dir: str = ".oauth-tokens",
     audience: str = "MCPGateway",
-    generate_all: bool = False
+    generate_all: bool = False,
 ) -> None:
     """
     Generate access token for AgentCore Gateway using environment variables.
@@ -268,7 +272,9 @@ def generate_access_token(
     gateway_configs = _load_gateway_configs()
 
     if not gateway_configs:
-        raise ValueError("No gateway configurations found. Please set AGENTCORE_CLIENT_ID_1, AGENTCORE_CLIENT_SECRET_1, etc. in .env file")
+        raise ValueError(
+            "No gateway configurations found. Please set AGENTCORE_CLIENT_ID_1, AGENTCORE_CLIENT_SECRET_1, etc. in .env file"
+        )
 
     # Determine which configurations to process
     configs_to_process = []
@@ -277,15 +283,17 @@ def generate_access_token(
         configs_to_process = gateway_configs
         logger.info(f"Generating tokens for all {len(gateway_configs)} configured gateways")
     elif gateway_index:
-        config = next((c for c in gateway_configs if c['index'] == gateway_index), None)
+        config = next((c for c in gateway_configs if c["index"] == gateway_index), None)
         if not config:
             raise ValueError(f"No configuration found for index {gateway_index}")
         configs_to_process = [config]
     elif gateway_name:
-        config = next((c for c in gateway_configs if c.get('server_name') == gateway_name), None)
+        config = next((c for c in gateway_configs if c.get("server_name") == gateway_name), None)
         if not config:
-            available_names = [c.get('server_name', f"config_{c['index']}") for c in gateway_configs]
-            raise ValueError(f"No configuration found for gateway '{gateway_name}'. Available: {', '.join(available_names)}")
+            available_names = [c.get("server_name", f"config_{c['index']}") for c in gateway_configs]
+            raise ValueError(
+                f"No configuration found for gateway '{gateway_name}'. Available: {', '.join(available_names)}"
+            )
         configs_to_process = [config]
     else:
         # Default to first configuration
@@ -300,10 +308,10 @@ def generate_access_token(
 
     # Process each configuration
     for config in configs_to_process:
-        client_id = config['client_id']
-        client_secret = config['client_secret']
-        gateway_arn = config.get('gateway_arn')
-        server_name = config.get('server_name')
+        client_id = config["client_id"]
+        client_secret = config["client_secret"]
+        gateway_arn = config.get("gateway_arn")
+        server_name = config.get("server_name")
 
         logger.info(f"\nProcessing gateway configuration #{config['index']}: {server_name or 'unnamed'}")
 
@@ -326,13 +334,13 @@ def generate_access_token(
                 token_response=token_response,
                 provider="bedrock-agentcore",
                 server_name=server_name,
-                oauth_tokens_dir=str(oauth_tokens_path)
+                oauth_tokens_dir=str(oauth_tokens_path),
             )
 
             logger.info(f"Token generation completed successfully! Egress token saved to {saved_path}")
 
         except Exception as e:
-            logger.error(f"Failed to generate token for {server_name or f'config_{config['index']}'}: {e}")
+            logger.error(f"Failed to generate token for {server_name or f'config_{config["index"]}'}: {e}")
             if not generate_all:
                 raise
 

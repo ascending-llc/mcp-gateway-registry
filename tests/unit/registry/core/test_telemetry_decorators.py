@@ -5,14 +5,14 @@ Tests for registry-specific telemetry decorators that provide automatic
 metrics collection for API operations.
 """
 
+from unittest.mock import patch
+
 import pytest
-import asyncio
-from unittest.mock import MagicMock, patch, AsyncMock
 
 from registry.core.telemetry_decorators import (
-    track_registry_operation,
     AuthMetricsContext,
     ToolExecutionMetricsContext,
+    track_registry_operation,
 )
 
 # Module path for mocking domain functions
@@ -28,6 +28,7 @@ class TestTrackRegistryOperation:
     async def test_tracks_successful_operation(self):
         """Test decorator tracks successful registry operations."""
         with patch(f"{DOMAIN_FUNCS_PATH}._record_registry_operation") as mock_record:
+
             @track_registry_operation("create", resource_type="server")
             async def create_server():
                 return {"id": "123"}
@@ -46,6 +47,7 @@ class TestTrackRegistryOperation:
     async def test_tracks_failed_operation(self):
         """Test decorator tracks failed registry operations."""
         with patch(f"{DOMAIN_FUNCS_PATH}._record_registry_operation") as mock_record:
+
             @track_registry_operation("delete", resource_type="server")
             async def delete_server():
                 raise ValueError("Server not found")
@@ -62,6 +64,7 @@ class TestTrackRegistryOperation:
     async def test_extracts_resource_dynamically(self):
         """Test decorator extracts resource type from args."""
         with patch(f"{DOMAIN_FUNCS_PATH}._record_registry_operation") as mock_record:
+
             def extract_resource(query, **kwargs):
                 return query.get("entity_type", "unknown")
 
@@ -78,6 +81,7 @@ class TestTrackRegistryOperation:
     async def test_handles_extract_resource_error(self):
         """Test decorator handles extract_resource errors gracefully."""
         with patch(f"{DOMAIN_FUNCS_PATH}._record_registry_operation") as mock_record:
+
             def failing_extract(*args, **kwargs):
                 raise RuntimeError("Extraction failed")
 
@@ -94,6 +98,7 @@ class TestTrackRegistryOperation:
     async def test_uses_function_name_as_fallback(self):
         """Test decorator uses function name when no resource_type."""
         with patch(f"{DOMAIN_FUNCS_PATH}._record_registry_operation") as mock_record:
+
             @track_registry_operation("read")
             async def get_config():
                 return {}
@@ -128,7 +133,7 @@ class TestAuthMetricsContext:
         """Test context manager records failure on exception."""
         with patch(f"{DOMAIN_FUNCS_PATH}._record_auth_request") as mock_record:
             with pytest.raises(ValueError):
-                async with AuthMetricsContext(default_mechanism="session") as ctx:
+                async with AuthMetricsContext(default_mechanism="session"):
                     raise ValueError("Auth error")
 
             call_kwargs = mock_record.call_args[1]
@@ -156,9 +161,7 @@ class TestToolExecutionMetricsContext:
         """Test context manager records tool execution metrics on exit."""
         with patch(f"{DOMAIN_FUNCS_PATH}._record_tool_execution") as mock_record:
             async with ToolExecutionMetricsContext(
-                tool_name="calculator",
-                server_name="math-server",
-                method="POST"
+                tool_name="calculator", server_name="math-server", method="POST"
             ) as ctx:
                 ctx.set_success(True)
 
@@ -189,10 +192,7 @@ class TestToolExecutionMetricsContext:
         """Test context manager records failure on exception."""
         with patch(f"{DOMAIN_FUNCS_PATH}._record_tool_execution") as mock_record:
             with pytest.raises(TimeoutError):
-                async with ToolExecutionMetricsContext(
-                    tool_name="slow-tool",
-                    server_name="slow-server"
-                ):
+                async with ToolExecutionMetricsContext(tool_name="slow-tool", server_name="slow-server"):
                     raise TimeoutError("Timeout")
 
             call_kwargs = mock_record.call_args[1]

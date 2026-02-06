@@ -8,18 +8,20 @@ into Weaviate for semantic search. Already existing servers are skipped.
 
 Usage:
     uv run python scripts/sync_mongo_to_weaviate.py [--clean] [--batch-size N]
-    
+
 Options:
     --clean: Delete all existing servers from Weaviate before syncing
     --batch-size N: Number of servers to process per batch (default: 100)
 """
-import traceback
+
 import asyncio
 import os
 import sys
-from datetime import datetime, timezone
+import traceback
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Any
+
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -32,6 +34,7 @@ from packages.database.mongodb import MongoDB
 from packages.models.extended_mcp_server import ExtendedMCPServer
 from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
 from registry.services.server_service import server_service_v1
+
 mcp_server_repo = get_mcp_server_repo()
 
 
@@ -46,19 +49,21 @@ class SyncStats:
         self.tools_imported = 0
         self.tools_skipped = 0
         self.tools_failed = 0
-        self.servers_processed: List[Dict[str, Any]] = []
-        self.errors: List[str] = []
+        self.servers_processed: list[dict[str, Any]] = []
+        self.errors: list[str] = []
 
     def add_server(self, server_name: str, server_path: str, tool_count: int, imported: int, skipped: int, failed: int):
         """Record server processing stats."""
-        self.servers_processed.append({
-            'name': server_name,
-            'path': server_path,
-            'total_tools': tool_count,
-            'imported': imported,
-            'skipped': skipped,
-            'failed': failed
-        })
+        self.servers_processed.append(
+            {
+                "name": server_name,
+                "path": server_path,
+                "total_tools": tool_count,
+                "imported": imported,
+                "skipped": skipped,
+                "failed": failed,
+            }
+        )
 
     def add_error(self, error: str):
         """Record an error."""
@@ -82,10 +87,11 @@ class SyncStats:
             print("PER-SERVER BREAKDOWN:")
             print(f"{'-' * 80}")
             for server in self.servers_processed:
-                status = "✓" if server['imported'] > 0 else "○"
+                status = "✓" if server["imported"] > 0 else "○"
                 print(f"{status} {server['name']:<30} ({server['path']:<20})")
                 print(
-                    f"  Imported: {server['imported']:>3} | Skipped: {server['skipped']:>3} | Failed: {server['failed']:>3}")
+                    f"  Imported: {server['imported']:>3} | Skipped: {server['skipped']:>3} | Failed: {server['failed']:>3}"
+                )
 
         if self.errors:
             print(f"\n{'-' * 80}")
@@ -110,10 +116,10 @@ class SyncStats:
 async def check_server_exists(server_id: str) -> bool:
     """
     Check if server already exists in Weaviate.
-    
+
     Args:
         server_id: Server document ID (MongoDB _id)
-        
+
     Returns:
         True if server exists in Weaviate
     """
@@ -140,25 +146,25 @@ async def sync_server(server: Any, stats: SyncStats):
         exists = await check_server_exists(server_id)
 
         if exists:
-            print(f"  ○ Server already exists, skipping...")
+            print("  ○ Server already exists, skipping...")
             stats.servers_without_tools += 1
             stats.tools_skipped += 1
             stats.add_server(server_name, server_path, 1, 0, 1, 0)
             return
 
         # Count tools for stats
-        num_tools = server.numTools if hasattr(server, 'numTools') else 0
+        num_tools = server.numTools if hasattr(server, "numTools") else 0
         print(f"  Server has {num_tools} tools")
         stats.servers_with_tools += 1
         stats.total_tools += 1  # Count servers, not individual tools
 
         result = await mcp_server_repo.sync_server_to_vector_db(
             server=server,
-            is_delete=False  # No need to delete, we already checked existence
+            is_delete=False,  # No need to delete, we already checked existence
         )
 
         if result and result.get("indexed_tools", 0) > 0:
-            print(f"  ✓ Successfully imported server")
+            print("  ✓ Successfully imported server")
             stats.tools_imported += 1
             stats.add_server(server_name, server_path, 1, 1, 0, 0)
         else:
@@ -182,9 +188,7 @@ async def clean_weaviate():
     print("Deleting all existing servers...")
     try:
         # Use specialized repository
-        deleted = await mcp_server_repo.adelete_by_filter(
-            filters={"collection": ExtendedMCPServer.COLLECTION_NAME}
-        )
+        deleted = await mcp_server_repo.adelete_by_filter(filters={"collection": ExtendedMCPServer.COLLECTION_NAME})
         print(f"✓ Deleted {deleted} servers from Weaviate")
         print("=" * 80 + "\n")
         return deleted
@@ -199,7 +203,7 @@ async def sync_all_servers(batch_size: int = 100):
     print("\n" + "=" * 80)
     print("MONGODB TO WEAVIATE SYNC")
     print("=" * 80)
-    print(f"Started at: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    print(f"Started at: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')}")
     print(f"Batch size: {batch_size} servers per batch")
     print("=" * 80)
 
@@ -224,14 +228,12 @@ async def sync_all_servers(batch_size: int = 100):
         for page in range(1, total_pages + 1):
             print(f"\n{'─' * 80}")
             print(
-                f"BATCH {page}/{total_pages} (Servers {processed_count + 1}-{min(processed_count + batch_size, total)})")
+                f"BATCH {page}/{total_pages} (Servers {processed_count + 1}-{min(processed_count + batch_size, total)})"
+            )
             print(f"{'─' * 80}")
 
             # Fetch current batch
-            servers, _ = await server_service_v1.list_servers(
-                page=page,
-                per_page=batch_size
-            )
+            servers, _ = await server_service_v1.list_servers(page=page, per_page=batch_size)
 
             if not servers:
                 print(f"  No servers returned for page {page}, stopping...")
@@ -247,7 +249,8 @@ async def sync_all_servers(batch_size: int = 100):
 
             print(f"\n{'─' * 80}")
             print(
-                f"Batch {page} completed. Progress: {processed_count}/{total} servers ({processed_count / total * 100:.1f}%)")
+                f"Batch {page} completed. Progress: {processed_count}/{total} servers ({processed_count / total * 100:.1f}%)"
+            )
             print(f"{'─' * 80}")
 
         return stats
@@ -283,10 +286,10 @@ async def main():
     # Parse database name from URI
     db_name = None
     uri_without_scheme = mongo_uri.split("://")[-1]
-    if '/' in uri_without_scheme:
+    if "/" in uri_without_scheme:
         uri_path = uri_without_scheme
-        if '/' in uri_path:
-            db_name = uri_path.split('/')[-1].split('?')[0]
+        if "/" in uri_path:
+            db_name = uri_path.split("/")[-1].split("?")[0]
 
     if not db_name:
         db_name = "jarvis"

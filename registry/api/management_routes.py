@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 
 from ..auth.dependencies import CurrentUser
 from ..schemas.management import (
@@ -27,7 +26,6 @@ from ..utils.keycloak_manager import (
     list_keycloak_groups,
     list_keycloak_users,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -176,10 +174,7 @@ async def management_create_group(
     """Create a new Keycloak group (admin only)."""
     _require_admin(user_context)
     try:
-        result = await create_keycloak_group(
-            group_name=payload.name,
-            description=payload.description or ""
-        )
+        result = await create_keycloak_group(group_name=payload.name, description=payload.description or "")
         return KeycloakGroupSummary(
             id=result.get("id", ""),
             name=result.get("name", ""),

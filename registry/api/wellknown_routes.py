@@ -1,11 +1,10 @@
 import logging
-from typing import Optional
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from ..core.config import settings
-# from ..services.server_service import server_service
+from ..services.server_service import server_service_v1 as server_service
 
 logger = logging.getLogger(__name__)
 
@@ -15,50 +14,43 @@ router = APIRouter()
 def _get_required_env_vars() -> tuple[str, str, str]:
     """
     Get required settings for protected resource endpoints.
-    
+
     Returns:
         Tuple of (base_url, auth_server_url, registry_url) where:
             - base_url: Base origin without prefix (for RFC 8705 issuer compliance)
             - auth_server_url: Full URL with prefix (for OAuth operational endpoints)
             - registry_url: Registry client URL
-        
+
     Raises:
         HTTPException: If required settings are not configured
     """
     auth_server_url = settings.auth_server_external_url
     registry_url = settings.registry_client_url
-    
+
     if not auth_server_url:
         logger.error("auth_server_external_url setting is not configured")
         raise HTTPException(
-            status_code=500,
-            detail="Server configuration error: auth_server_external_url not configured"
+            status_code=500, detail="Server configuration error: auth_server_external_url not configured"
         )
-    
+
     if not registry_url:
         logger.error("registry_client_url setting is not configured")
-        raise HTTPException(
-            status_code=500,
-            detail="Server configuration error: registry_client_url not configured"
-        )
-    
+        raise HTTPException(status_code=500, detail="Server configuration error: registry_client_url not configured")
+
     # Strip the API prefix from auth server URL to get base URL
     # This is required for RFC 8705 compliance - the authorization server URL
     # in Protected Resource Metadata must match the issuer in the auth server's metadata
     base_url = auth_server_url
     if settings.auth_server_api_prefix:
-        prefix = settings.auth_server_api_prefix.rstrip('/')
+        prefix = settings.auth_server_api_prefix.rstrip("/")
         if auth_server_url.endswith(prefix):
-            base_url = auth_server_url[:-len(prefix)].rstrip('/')
-    
+            base_url = auth_server_url[: -len(prefix)].rstrip("/")
+
     return base_url, auth_server_url, registry_url
 
 
 # @router.get("/mcp-servers")
-async def get_wellknown_mcp_servers(
-    request: Request,
-    user_context: Optional[dict] = None
-) -> JSONResponse:
+async def get_wellknown_mcp_servers(request: Request, user_context: dict | None = None) -> JSONResponse:
     """
     Main endpoint handler for /.well-known/mcp-servers
     Returns JSON with all discoverable MCP servers
@@ -87,18 +79,12 @@ async def get_wellknown_mcp_servers(
             "name": "Enterprise MCP Gateway",
             "description": "Centralized MCP server registry for enterprise tools",
             "version": "1.0.0",
-            "contact": {
-                "url": str(request.base_url).rstrip('/'),
-                "support": "mcp-support@company.com"
-            }
-        }
+            "contact": {"url": str(request.base_url).rstrip("/"), "support": "mcp-support@company.com"},
+        },
     }
 
     # Step 5: Return JSONResponse with cache headers
-    headers = {
-        "Cache-Control": f"public, max-age={settings.wellknown_cache_ttl}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Cache-Control": f"public, max-age={settings.wellknown_cache_ttl}", "Content-Type": "application/json"}
 
     logger.info(f"Returned {len(discoverable_servers)} servers for well-known discovery")
     return JSONResponse(content=response_data, headers=headers)
@@ -130,17 +116,17 @@ def _format_server_discovery(server_info: dict, request: Request) -> dict:
         "authentication": auth_info,
         "capabilities": ["tools", "resources"],
         "health_status": "healthy",  # TODO: Get actual health status
-        "tools_preview": tools_preview
+        "tools_preview": tools_preview,
     }
 
 
 def _get_server_url(server_path: str, request: Request) -> str:
     """Generate full URL for MCP server based on request host"""
     # Get host from request headers
-    registry_url = settings.registry_client_url.rstrip('/')
+    registry_url = settings.registry_client_url.rstrip("/")
 
     # Clean up server path (remove leading and trailing slashes)
-    clean_path = server_path.strip('/')
+    clean_path = server_path.strip("/")
 
     # Return formatted URL
     return f"{registry_url}/{clean_path}/mcp"
@@ -166,21 +152,17 @@ def _get_authentication_info(server_info: dict) -> dict:
             "required": True,
             "authorization_url": "/auth/oauth/authorize",
             "provider": auth_provider,
-            "scopes": ["mcp:read", f"{auth_provider}:read"]
+            "scopes": ["mcp:read", f"{auth_provider}:read"],
         }
     elif auth_type == "api-key":
-        return {
-            "type": "api-key",
-            "required": True,
-            "header": "X-API-Key"
-        }
+        return {"type": "api-key", "required": True, "header": "X-API-Key"}
     else:
         # Default to OAuth2 for unknown types
         return {
             "type": "oauth2",
             "required": True,
             "authorization_url": "/auth/oauth/authorize",
-            "scopes": ["mcp:read", f"{server_name.lower()}:read"]
+            "scopes": ["mcp:read", f"{server_name.lower()}:read"],
         }
 
 
@@ -194,17 +176,13 @@ def _get_tools_preview(server_info: dict, max_tools: int = 5) -> list:
     for tool in tools[:max_tools]:
         if isinstance(tool, dict):
             # Try to get description from parsed_description.main first, then fall back to description field
-            description = tool.get("parsed_description", {}).get("main", tool.get("description", "No description available"))
-            preview_tools.append({
-                "name": tool.get("name", "unknown"),
-                "description": description
-            })
+            description = tool.get("parsed_description", {}).get(
+                "main", tool.get("description", "No description available")
+            )
+            preview_tools.append({"name": tool.get("name", "unknown"), "description": description})
         elif isinstance(tool, str):
             # Handle case where tools are just strings
-            preview_tools.append({
-                "name": tool,
-                "description": "No description available"
-            })
+            preview_tools.append({"name": tool, "description": "No description available"})
 
     return preview_tools
 
@@ -213,25 +191,21 @@ def _get_tools_preview(server_info: dict, max_tools: int = 5) -> list:
 async def oauth_protected_resource_metadata() -> JSONResponse:
     """
     OAuth 2.0 Protected Resource Metadata (RFC 8705).
-    
+
     Describes the protected resource (MCP Registry/Gateway) and its authentication
     requirements. This endpoint helps MCP clients discover the authentication
     requirements for accessing the registry's proxied MCP servers.
     """
     base_url, auth_server_url, registry_url = _get_required_env_vars()
-    
+
     data = {
         "resource": registry_url,
         "authorization_servers": [base_url],
-        "scopes_supported": [
-            "mcp-registry-admin",
-            "mcp-servers-unrestricted/read",
-            "mcp-servers-unrestricted/execute"
-        ],
+        "scopes_supported": ["mcp-registry-admin", "mcp-servers-unrestricted/read", "mcp-servers-unrestricted/execute"],
         "bearer_methods_supported": ["header"],
-        "resource_signing_alg_values_supported": ["HS256", "RS256"]
+        "resource_signing_alg_values_supported": ["HS256", "RS256"],
     }
-    
+
     return JSONResponse(content=data)
 
 
@@ -239,30 +213,24 @@ async def oauth_protected_resource_metadata() -> JSONResponse:
 async def mcp_oauth_metadata() -> JSONResponse:
     """
     MCP-specific OAuth metadata endpoint.
-    
+
     Provides MCP-specific authentication and authorization metadata for
     MCP clients like Claude Desktop. This endpoint follows the MCP OAuth
     specification for protected resource discovery.
     """
     base_url, auth_server_url, registry_url = _get_required_env_vars()
-    
+
     data = {
         "resource": f"{registry_url}/proxy",
         "authorization_server": base_url,
         "device_authorization_endpoint": f"{auth_server_url}/oauth2/device/code",
         "token_endpoint": f"{auth_server_url}/oauth2/token",
         "verification_uri": f"{auth_server_url}/oauth2/device/verify",
-        "scopes_supported": [
-            "mcp-registry-admin",
-            "mcp-servers-unrestricted/read",
-            "mcp-servers-unrestricted/execute"
-        ],
-        "grant_types_supported": [
-            "urn:ietf:params:oauth:grant-type:device_code"
-        ],
-        "mcp_version": "2024-11-05"
+        "scopes_supported": ["mcp-registry-admin", "mcp-servers-unrestricted/read", "mcp-servers-unrestricted/execute"],
+        "grant_types_supported": ["urn:ietf:params:oauth:grant-type:device_code"],
+        "mcp_version": "2024-11-05",
     }
-    
+
     return JSONResponse(content=data)
 
 
@@ -270,28 +238,24 @@ async def mcp_oauth_metadata() -> JSONResponse:
 async def oauth_protected_resource_metadata_for_server(server_path: str, request: Request) -> JSONResponse:
     """
     OAuth 2.0 Protected Resource Metadata (RFC 8705) for a specific proxied server.
-    
+
     Allows MCP clients to discover OAuth metadata for individual proxied MCP servers.
     For example: /.well-known/oauth-protected-resource/proxy/mcpgw
     """
     base_url, auth_server_url, registry_url = _get_required_env_vars()
-    
+
     # Clean server path (remove leading/trailing slashes)
-    clean_path = server_path.strip('/')
+    clean_path = server_path.strip("/")
     resource_url = f"{registry_url}/{clean_path}"
-    
+
     data = {
         "resource": resource_url,
         "authorization_servers": [base_url],
-        "scopes_supported": [
-            "mcp-registry-admin",
-            "mcp-servers-unrestricted/read",
-            "mcp-servers-unrestricted/execute"
-        ],
+        "scopes_supported": ["mcp-registry-admin", "mcp-servers-unrestricted/read", "mcp-servers-unrestricted/execute"],
         "bearer_methods_supported": ["header"],
-        "resource_signing_alg_values_supported": ["HS256", "RS256"]
+        "resource_signing_alg_values_supported": ["HS256", "RS256"],
     }
-    
+
     return JSONResponse(content=data)
 
 
@@ -299,32 +263,26 @@ async def oauth_protected_resource_metadata_for_server(server_path: str, request
 async def mcp_oauth_metadata_for_server(server_path: str, request: Request) -> JSONResponse:
     """
     MCP-specific OAuth metadata endpoint for a specific proxied server.
-    
+
     Provides MCP-specific authentication and authorization metadata for
     individual proxied servers. For example: /.well-known/oauth-protected-resource/mcp/proxy/mcpgw
     """
     base_url, auth_server_url, registry_url = _get_required_env_vars()
-    
+
     # Clean server path (remove leading/trailing slashes)
-    clean_path = server_path.strip('/')
-    
+    clean_path = server_path.strip("/")
+
     resource_url = f"{registry_url}/{clean_path}"
-    
+
     data = {
         "resource": resource_url,
         "authorization_server": base_url,
         "device_authorization_endpoint": f"{auth_server_url}/oauth2/device/code",
         "token_endpoint": f"{auth_server_url}/oauth2/token",
         "verification_uri": f"{auth_server_url}/oauth2/device/verify",
-        "scopes_supported": [
-            "mcp-registry-admin",
-            "mcp-servers-unrestricted/read",
-            "mcp-servers-unrestricted/execute"
-        ],
-        "grant_types_supported": [
-            "urn:ietf:params:oauth:grant-type:device_code"
-        ],
-        "mcp_version": "2024-11-05"
+        "scopes_supported": ["mcp-registry-admin", "mcp-servers-unrestricted/read", "mcp-servers-unrestricted/execute"],
+        "grant_types_supported": ["urn:ietf:params:oauth:grant-type:device_code"],
+        "mcp_version": "2024-11-05",
     }
-    
+
     return JSONResponse(content=data)

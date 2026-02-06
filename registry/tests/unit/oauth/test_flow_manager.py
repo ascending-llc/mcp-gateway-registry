@@ -1,7 +1,8 @@
-import pytest
-import time
-import sys
 import os
+import sys
+import time
+
+import pytest
 
 # Add project root to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
@@ -17,7 +18,7 @@ class TestFlowStateManager:
     def test_init_default_values(self):
         """Test initialization with default values."""
         manager = FlowStateManager()
-        
+
         assert manager._flow_ttl == 600
         assert manager._memory_flows == {}
         assert manager.DEFAULT_FLOW_TTL == 600
@@ -25,7 +26,7 @@ class TestFlowStateManager:
     def test_init_fallback_to_memory(self):
         """Test initialization with memory fallback."""
         manager = FlowStateManager(fallback_to_memory=True)
-        
+
         # Should initialize with memory storage when Redis is unavailable
         assert manager._memory_flows is not None
 
@@ -34,9 +35,9 @@ class TestFlowStateManager:
         manager = FlowStateManager()
         user_id = "test-user"
         server_name = "test-server"
-        
+
         flow_id = manager.generate_flow_id(user_id, server_name)
-        
+
         # Check format: user_id:server_name
         assert flow_id == f"{user_id}:{server_name}"
 
@@ -44,11 +45,11 @@ class TestFlowStateManager:
         """Test encoding and decoding state parameter."""
         manager = FlowStateManager()
         flow_id = "test-flow-id"
-        
+
         # Encode state
         state = manager.encode_state(flow_id)
         assert manager.STATE_SEPARATOR in state
-        
+
         # Decode state
         decoded_flow_id, security_token = manager.decode_state(state)
         assert decoded_flow_id == flow_id
@@ -57,7 +58,7 @@ class TestFlowStateManager:
     def test_decode_state_invalid_format(self):
         """Test decoding invalid state format."""
         manager = FlowStateManager()
-        
+
         with pytest.raises(ValueError, match="Invalid state format"):
             manager.decode_state("invalid-state-without-separator")
 
@@ -76,13 +77,13 @@ class TestFlowStateManager:
             "client_secret": "test-secret",
             "scope": ["read", "write"],
             "authorization_url": authorization_url,
-            "token_url": "https://example.com/oauth/token"
+            "token_url": "https://example.com/oauth/token",
         }
-        
+
         metadata = manager.create_flow_metadata(
             server_name, server_path, server_id, user_id, authorization_url, code_verifier, oauth_config, flow_id
         )
-        
+
         assert metadata.server_name == server_name
         assert metadata.user_id == user_id
         assert metadata.authorization_url == authorization_url
@@ -97,21 +98,27 @@ class TestFlowStateManager:
         server_id = "test-server"
         user_id = "test-user"
         code_verifier = "test-verifier"
-        
+
         # Create minimal metadata
         oauth_config = {
             "client_id": "test-client",
             "scope": ["read"],
             "authorization_url": "https://example.com/auth",
-            "token_url": "https://example.com/token"
+            "token_url": "https://example.com/token",
         }
         metadata = manager.create_flow_metadata(
-            server_name, "/test-server", server_id, user_id, "https://example.com/auth", 
-            code_verifier, oauth_config, flow_id
+            server_name,
+            "/test-server",
+            server_id,
+            user_id,
+            "https://example.com/auth",
+            code_verifier,
+            oauth_config,
+            flow_id,
         )
-        
+
         flow = manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
-        
+
         assert flow.flow_id == flow_id
         assert flow.server_name == server_name
         assert flow.user_id == user_id
@@ -125,23 +132,29 @@ class TestFlowStateManager:
         server_id = "test-server"
         user_id = "test-user"
         code_verifier = "test-verifier"
-        
+
         # Create flow
         oauth_config = {
             "client_id": "test-client",
             "scope": ["read"],
             "authorization_url": "https://example.com/auth",
-            "token_url": "https://example.com/token"
+            "token_url": "https://example.com/token",
         }
         metadata = manager.create_flow_metadata(
-            server_name, "/test-server", server_id, user_id, "https://example.com/auth",
-            code_verifier, oauth_config, flow_id
+            server_name,
+            "/test-server",
+            server_id,
+            user_id,
+            "https://example.com/auth",
+            code_verifier,
+            oauth_config,
+            flow_id,
         )
         manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
-        
+
         # Retrieve flow
         flow = manager.get_flow(flow_id)
-        
+
         assert flow is not None
         assert flow.flow_id == flow_id
         assert flow.status == OAuthFlowStatus.PENDING
@@ -150,9 +163,9 @@ class TestFlowStateManager:
         """Test retrieving a non-existent flow."""
         manager = FlowStateManager()
         flow_id = "non-existent-flow"
-        
+
         result = manager.get_flow(flow_id)
-        
+
         assert result is None
 
     def test_is_flow_expired(self):
@@ -163,23 +176,29 @@ class TestFlowStateManager:
         server_id = "test-server"
         user_id = "test-user"
         code_verifier = "test-verifier"
-        
+
         # Create flow
         oauth_config = {
             "client_id": "test-client",
             "scope": ["read"],
             "authorization_url": "https://example.com/auth",
-            "token_url": "https://example.com/token"
+            "token_url": "https://example.com/token",
         }
         metadata = manager.create_flow_metadata(
-            server_name, "/test-server", server_id, user_id, "https://example.com/auth",
-            code_verifier, oauth_config, flow_id
+            server_name,
+            "/test-server",
+            server_id,
+            user_id,
+            "https://example.com/auth",
+            code_verifier,
+            oauth_config,
+            flow_id,
         )
         flow = manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
-        
+
         # Should not be expired immediately
         assert not manager.is_flow_expired(flow)
-        
+
         # Simulate expired flow
         flow.created_at = time.time() - 700  # More than DEFAULT_FLOW_TTL
         assert manager.is_flow_expired(flow)
@@ -192,29 +211,32 @@ class TestFlowStateManager:
         server_id = "test-server"
         user_id = "test-user"
         code_verifier = "test-verifier"
-        
+
         # Create flow
         oauth_config = {
             "client_id": "test-client",
             "scope": ["read"],
             "authorization_url": "https://example.com/auth",
-            "token_url": "https://example.com/token"
+            "token_url": "https://example.com/token",
         }
         metadata = manager.create_flow_metadata(
-            server_name, "/test-server", server_id, user_id, "https://example.com/auth",
-            code_verifier, oauth_config, flow_id
+            server_name,
+            "/test-server",
+            server_id,
+            user_id,
+            "https://example.com/auth",
+            code_verifier,
+            oauth_config,
+            flow_id,
         )
         manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
-        
+
         # Complete the flow
         from registry.models.oauth_models import OAuthTokens
-        tokens = OAuthTokens(
-            access_token="test-token",
-            token_type="Bearer",
-            expires_in=3600
-        )
+
+        tokens = OAuthTokens(access_token="test-token", token_type="Bearer", expires_in=3600)
         manager.complete_flow(flow_id, tokens)
-        
+
         # Verify the flow was updated
         flow = manager.get_flow(flow_id)
         assert flow is not None
@@ -225,14 +247,11 @@ class TestFlowStateManager:
         """Test completing a non-existent flow."""
         manager = FlowStateManager()
         flow_id = "non-existent-flow"
-        
+
         from registry.models.oauth_models import OAuthTokens
-        tokens = OAuthTokens(
-            access_token="test-token",
-            token_type="Bearer",
-            expires_in=3600
-        )
-        
+
+        tokens = OAuthTokens(access_token="test-token", token_type="Bearer", expires_in=3600)
+
         # Should not raise an exception
         manager.complete_flow(flow_id, tokens)
 
@@ -245,23 +264,29 @@ class TestFlowStateManager:
         user_id = "test-user"
         code_verifier = "test-verifier"
         error_message = "Authentication failed"
-        
+
         # Create flow
         oauth_config = {
             "client_id": "test-client",
             "scope": ["read"],
             "authorization_url": "https://example.com/auth",
-            "token_url": "https://example.com/token"
+            "token_url": "https://example.com/token",
         }
         metadata = manager.create_flow_metadata(
-            server_name, "/test-server", server_id, user_id, "https://example.com/auth",
-            code_verifier, oauth_config, flow_id
+            server_name,
+            "/test-server",
+            server_id,
+            user_id,
+            "https://example.com/auth",
+            code_verifier,
+            oauth_config,
+            flow_id,
         )
         manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
-        
+
         # Fail the flow
         manager.fail_flow(flow_id, error_message)
-        
+
         # Verify the flow was updated
         flow = manager.get_flow(flow_id)
         assert flow is not None
@@ -273,7 +298,7 @@ class TestFlowStateManager:
         manager = FlowStateManager()
         flow_id = "non-existent-flow"
         error_message = "Authentication failed"
-        
+
         # Should not raise an exception
         manager.fail_flow(flow_id, error_message)
 
@@ -285,26 +310,32 @@ class TestFlowStateManager:
         server_id = "test-server"
         user_id = "test-user"
         code_verifier = "test-verifier"
-        
+
         # Create flow
         oauth_config = {
             "client_id": "test-client",
             "scope": ["read"],
             "authorization_url": "https://example.com/auth",
-            "token_url": "https://example.com/token"
+            "token_url": "https://example.com/token",
         }
         metadata = manager.create_flow_metadata(
-            server_name, "/test-server", server_id, user_id, "https://example.com/auth",
-            code_verifier, oauth_config, flow_id
+            server_name,
+            "/test-server",
+            server_id,
+            user_id,
+            "https://example.com/auth",
+            code_verifier,
+            oauth_config,
+            flow_id,
         )
         manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
-        
+
         # Verify it exists
         assert manager.get_flow(flow_id) is not None
-        
+
         # Delete the flow
         manager.delete_flow(flow_id)
-        
+
         # Verify it's deleted
         assert manager.get_flow(flow_id) is None
 
@@ -316,25 +347,31 @@ class TestFlowStateManager:
         server_id = "test-server"
         user_id = "test-user"
         code_verifier = "test-verifier"
-        
+
         # Create flow
         oauth_config = {
             "client_id": "test-client",
             "scope": ["read"],
             "authorization_url": "https://example.com/auth",
-            "token_url": "https://example.com/token"
+            "token_url": "https://example.com/token",
         }
         metadata = manager.create_flow_metadata(
-            server_name, "/test-server", server_id, user_id, "https://example.com/auth",
-            code_verifier, oauth_config, flow_id
+            server_name,
+            "/test-server",
+            server_id,
+            user_id,
+            "https://example.com/auth",
+            code_verifier,
+            oauth_config,
+            flow_id,
         )
         manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
-        
+
         # Cancel the flow
         result = manager.cancel_user_flow(user_id, server_id)
-        
+
         assert result is True
-        
+
         # Verify flow is marked as failed
         flow = manager.get_flow(flow_id)
         assert flow.status == OAuthFlowStatus.FAILED
@@ -346,26 +383,32 @@ class TestFlowStateManager:
         server_id = "test-server"
         user_id = "test-user"
         code_verifier = "test-verifier"
-        
+
         # Create multiple flows for same user/server
         oauth_config = {
             "client_id": "test-client",
             "scope": ["read"],
             "authorization_url": "https://example.com/auth",
-            "token_url": "https://example.com/token"
+            "token_url": "https://example.com/token",
         }
-        
+
         for i in range(3):
             flow_id = f"flow-{i}"
             metadata = manager.create_flow_metadata(
-                server_name, "/test-server", server_id, user_id, "https://example.com/auth",
-                code_verifier, oauth_config, flow_id
+                server_name,
+                "/test-server",
+                server_id,
+                user_id,
+                "https://example.com/auth",
+                code_verifier,
+                oauth_config,
+                flow_id,
             )
             manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
-        
+
         # Get user flows
         flows = manager.get_user_flows(user_id, server_id)
-        
+
         assert len(flows) == 3
         for flow in flows:
             assert flow.user_id == user_id
@@ -374,15 +417,15 @@ class TestFlowStateManager:
     def test_singleton_get_flow_manager(self):
         """Test the singleton get_flow_manager function."""
         from registry.auth.oauth.flow_state_manager import get_flow_state_manager
-        
+
         # First call should create instance
         manager1 = get_flow_state_manager()
         assert manager1 is not None
-        
+
         # Second call should return same instance
         manager2 = get_flow_state_manager()
         assert manager2 is manager1
-        
+
         # Verify it's a FlowStateManager instance
         assert isinstance(manager1, FlowStateManager)
 
@@ -390,7 +433,7 @@ class TestFlowStateManager:
     async def test_cleanup_expired_flows(self):
         """Test cleanup of expired flows."""
         manager = FlowStateManager()
-        
+
         # Create some flows
         flows = []
         for i in range(3):
@@ -399,26 +442,32 @@ class TestFlowStateManager:
             server_id = "test-server"
             user_id = "test-user"
             code_verifier = "test-verifier"
-            
+
             oauth_config = {
                 "client_id": "test-client",
                 "scope": ["read"],
                 "authorization_url": "https://example.com/auth",
-                "token_url": "https://example.com/token"
+                "token_url": "https://example.com/token",
             }
             metadata = manager.create_flow_metadata(
-                server_name, "/test-server", server_id, user_id, "https://example.com/auth",
-                code_verifier, oauth_config, flow_id
+                server_name,
+                "/test-server",
+                server_id,
+                user_id,
+                "https://example.com/auth",
+                code_verifier,
+                oauth_config,
+                flow_id,
             )
             flow = manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
             # Make first flow expired
             if i == 0:
                 flow.created_at = time.time() - 700
             flows.append(flow_id)
-        
+
         # Clean up expired flows
         cleaned = await manager.cleanup_expired_flows()
-        
+
         # Should clean up at least 1 expired flow
         assert cleaned >= 1
 
@@ -426,61 +475,65 @@ class TestFlowStateManager:
 @pytest.mark.unit
 class TestFlowStateManagerIntegration:
     """Integration tests for FlowStateManager."""
-    
+
     def test_full_flow_lifecycle(self):
         """Test a complete OAuth flow lifecycle."""
         manager = FlowStateManager()
         user_id = "test-user"
         server_name = "test-server"
         server_id = "test-server"
-        
+
         # Generate flow ID
         flow_id = manager.generate_flow_id(user_id, server_id)
-        
+
         # Create flow
         code_verifier = "test-verifier"
         oauth_config = {
             "client_id": "test-client",
             "scope": ["read"],
             "authorization_url": "https://example.com/auth",
-            "token_url": "https://example.com/token"
+            "token_url": "https://example.com/token",
         }
         metadata = manager.create_flow_metadata(
-            server_name, "/test-server", server_id, user_id, "https://example.com/auth",
-            code_verifier, oauth_config, flow_id
+            server_name,
+            "/test-server",
+            server_id,
+            user_id,
+            "https://example.com/auth",
+            code_verifier,
+            oauth_config,
+            flow_id,
         )
         manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
-        
+
         # Verify flow exists and is pending
         flow = manager.get_flow(flow_id)
         assert flow is not None
         assert flow.status == OAuthFlowStatus.PENDING
-        
+
         # Complete the flow
         from registry.models.oauth_models import OAuthTokens
+
         tokens = OAuthTokens(
-            access_token="test-access-token",
-            refresh_token="test-refresh-token",
-            token_type="Bearer",
-            expires_in=3600
+            access_token="test-access-token", refresh_token="test-refresh-token", token_type="Bearer", expires_in=3600
         )
         manager.complete_flow(flow_id, tokens)
-        
+
         # Verify flow is completed
         completed_flow = manager.get_flow(flow_id)
         assert completed_flow.status == OAuthFlowStatus.COMPLETED
         assert completed_flow.tokens.access_token == "test-access-token"
-        
+
         # Delete the flow
         manager.delete_flow(flow_id)
-        
+
         # Verify flow is deleted
         assert manager.get_flow(flow_id) is None
 
     def test_concurrent_flows(self):
         """Test handling multiple concurrent flows."""
         manager = FlowStateManager()
-        
+
         # Create multiple flows
         flows = []
         for i in range(5):
@@ -489,30 +542,36 @@ class TestFlowStateManagerIntegration:
             server_id = f"server-{i}"
             flow_id = manager.generate_flow_id(user_id, server_id)
             code_verifier = "test-verifier"
-            
+
             oauth_config = {
                 "client_id": "test-client",
                 "scope": ["read"],
                 "authorization_url": "https://example.com/auth",
-                "token_url": "https://example.com/token"
+                "token_url": "https://example.com/token",
             }
             metadata = manager.create_flow_metadata(
-                server_name, "/test-server", server_id, user_id, "https://example.com/auth",
-                code_verifier, oauth_config, flow_id
+                server_name,
+                "/test-server",
+                server_id,
+                user_id,
+                "https://example.com/auth",
+                code_verifier,
+                oauth_config,
+                flow_id,
             )
             manager.create_flow(flow_id, server_id, user_id, code_verifier, metadata)
             flows.append(flow_id)
-        
+
         # Verify all flows exist
         for flow_id in flows:
             flow = manager.get_flow(flow_id)
             assert flow is not None
             assert flow.flow_id == flow_id
-        
+
         # Delete all flows
         for flow_id in flows:
             manager.delete_flow(flow_id)
-        
+
         # Verify all flows are deleted
         for flow_id in flows:
             assert manager.get_flow(flow_id) is None
