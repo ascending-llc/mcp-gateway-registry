@@ -47,7 +47,7 @@ async def discover_servers_impl(
     """
     if type_list is None:
         type_list = ["tool"]
-    
+
     # Smart defaults for top_n based on entity type
     if top_n is None:
         # For specific entity types (tool/resource/prompt), return more results (3)
@@ -121,7 +121,7 @@ def get_tools() -> list[tuple[str, Callable]]:
         1. **First try:** type_list=["tool"] (DEFAULT) - Returns 3 tools (~100 tokens each)
         2. **If no tools found, try:** type_list=["resource"] or type_list=["prompt"] - Returns 3 results each
         3. **Last resort:** type_list=["server"] - Returns 1 full server config (1000+ tokens)
-        
+
         **Smart Defaults:**
         - type_list=["tool"] (default): Returns top 3 tools
         - type_list=["resource"]: Returns top 3 resources

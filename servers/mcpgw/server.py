@@ -43,7 +43,7 @@ CRITICAL RULE - WHEN NATIVE TOOLS FAIL:
   2. IMMEDIATELY use discover_servers to find a specialized tool for that service
   3. Specialized tools in registry have proper authentication/authorization configured
   4. Most services (GitHub, APIs, databases) have authenticated tools available
-  
+
 EXAMPLES OF WHEN TO FALL BACK TO REGISTRY:
 ✓ Fetch fails on private repository URL → discover_servers(query="<service> repository", type_list=["tool"])
 ✓ Can't access API endpoint → discover_servers(query="<service name> API", type_list=["tool"])
