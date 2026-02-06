@@ -554,7 +554,7 @@ class A2AAgent(Document):
     model_config = ConfigDict(
         json_encoders={
             datetime: lambda v: v.isoformat() if v else None,
-            HttpUrl: lambda v: str(v),
+            HttpUrl: str,
         },
         populate_by_name=True,
         use_enum_values=True,
