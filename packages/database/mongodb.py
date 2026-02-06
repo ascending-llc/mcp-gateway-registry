@@ -19,6 +19,7 @@ from packages.models._generated import (
 )
 from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
 from packages.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
+from packages.models.a2a_agent import A2AAgent
 from packages.core.config import settings
 
 class MongoDB:
@@ -84,12 +85,14 @@ class MongoDB:
                 "Token": Token,
                 "IAction": IAction,
                 "Key": Key,
+                "A2AAgent": A2AAgent,
             }
             MCPServerDocument.model_rebuild(_types_namespace=rebuild_namespace)
             Token.model_rebuild(_types_namespace=rebuild_namespace)
             IAclEntry.model_rebuild(_types_namespace=rebuild_namespace)
             IAction.model_rebuild(_types_namespace=rebuild_namespace)
             Key.model_rebuild(_types_namespace=rebuild_namespace)
+            A2AAgent.model_rebuild(_types_namespace=rebuild_namespace)
 
             # Initialize Beanie with all document models
             await init_beanie(
@@ -103,6 +106,7 @@ class MongoDB:
                     Token,
                     IAction,
                     Key,
+                    A2AAgent,
                 ]
             )
         except Exception as e:
