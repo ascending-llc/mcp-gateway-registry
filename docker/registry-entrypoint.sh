@@ -87,7 +87,7 @@ EOF
         # Config paths matching Dockerfile.registry-frontend
         NGINX_HTTP_ONLY_CONF="/nginx_http_only.conf"
         NGINX_HTTP_AND_HTTPS_CONF="/nginx_http_and_https.conf"
-        NGINX_CONFIG_PATH="/etc/nginx/conf.d/default.conf" 
+        NGINX_CONFIG_PATH="/etc/nginx/conf.d/default.conf"
 
         install_nginx_config "$NGINX_HTTP_ONLY_CONF" "$NGINX_HTTP_AND_HTTPS_CONF" "$NGINX_CONFIG_PATH"
 

@@ -42,18 +42,18 @@ from packages.models import ExtendedMCPServer
 class ServerService:
     def __init__(self):
         self.mcp_server_repo = get_mcp_server_repo()
-    
+
     async def toggle_server_status(self, server: ExtendedMCPServer, enabled: bool):
         """
         Toggle server status and sync to vector DB.
-        
+
         enabled=True: Upsert to vector DB (create or update)
         enabled=False: Delete from vector DB
         """
         # Update MongoDB
         server.config['enabled'] = enabled
         await server.save()
-        
+
         # Sync to vector DB (non-blocking)
         asyncio.create_task(
             self.mcp_server_repo.sync_by_enabled_status(
@@ -62,14 +62,14 @@ class ServerService:
                 fields_changed={'enabled'}
             )
         )
-    
+
     async def update_server(self, server: ExtendedMCPServer, fields_changed: set):
         """
         Update server and sync changes to vector DB.
         """
         # Update MongoDB
         await server.save()
-        
+
         # Smart sync to vector DB (non-blocking)
         enabled = server.config.get('enabled', False)
         asyncio.create_task(
@@ -79,14 +79,14 @@ class ServerService:
                 fields_changed=fields_changed
             )
         )
-    
+
     async def delete_server(self, server_id: str, server_name: str):
         """
         Delete server from MongoDB and vector DB.
         """
         # Delete from MongoDB
         await server.delete()
-        
+
         # Remove from vector DB (non-blocking)
         asyncio.create_task(
             self.mcp_server_repo.delete_by_server_id(server_id, server_name)
@@ -284,7 +284,7 @@ server.tags = ['popular', 'recommended']
 server.rating = 4.5
 
 await repo.sync_by_enabled_status(
-    server, 
+    server,
     enabled=True,
     fields_changed={'tags', 'rating'}  # Metadata only
 )
@@ -297,7 +297,7 @@ server.description = "New comprehensive description"
 
 await repo.sync_by_enabled_status(
     server,
-    enabled=True, 
+    enabled=True,
     fields_changed={'description'}  # Content field
 )
 ```
@@ -327,11 +327,11 @@ return {"status": "success", "message": "Server updated"}
 ```python
 try:
     success = await repo.sync_by_enabled_status(server, enabled=True)
-    
+
     if not success:
         logger.warning(f"Failed to sync {server.serverName}")
         # Optional: Queue for retry, alert admin, etc.
-        
+
 except Exception as e:
     logger.error(f"Unexpected sync error: {e}", exc_info=True)
     # Handle critical errors
@@ -362,11 +362,11 @@ async def toggle_server(server_id: str, enabled: bool):
     """Toggle server status and sync to vector DB."""
     # Get server from MongoDB
     server = await ExtendedMCPServer.get(server_id)
-    
+
     # Update status
     server.config['enabled'] = enabled
     await server.save()
-    
+
     # Sync to vector DB
     await mcp_server_repo.sync_by_enabled_status(
         server=server,
@@ -381,10 +381,10 @@ async def toggle_server(server_id: str, enabled: bool):
 async def update_server_tags(server_id: str, tags: List[str]):
     """Update server tags (metadata-only, fast)."""
     server = await ExtendedMCPServer.get(server_id)
-    
+
     server.tags = tags
     await server.save()
-    
+
     # Fast metadata update (no re-vectorization)
     enabled = server.config.get('enabled', False)
     await mcp_server_repo.sync_by_enabled_status(
@@ -400,10 +400,10 @@ async def update_server_tags(server_id: str, tags: List[str]):
 async def update_server_description(server_id: str, description: str):
     """Update server description (content change, requires re-vectorization)."""
     server = await ExtendedMCPServer.get(server_id)
-    
+
     server.description = description
     await server.save()
-    
+
     # Full update with re-vectorization
     enabled = server.config.get('enabled', False)
     await mcp_server_repo.sync_by_enabled_status(
@@ -419,10 +419,10 @@ async def update_server_description(server_id: str, description: str):
 async def delete_server(server_id: str):
     """Delete server from MongoDB and vector DB."""
     server = await ExtendedMCPServer.get(server_id)
-    
+
     # Delete from MongoDB
     await server.delete()
-    
+
     # Delete from vector DB
     await mcp_server_repo.delete_by_server_id(
         server_id=server_id,
@@ -436,13 +436,13 @@ async def delete_server(server_id: str):
 async def search_servers(query: str, enabled_only: bool = True):
     """Semantic search for servers."""
     filters = {'enabled': True} if enabled_only else {}
-    
+
     results = await mcp_server_repo.search(
         query=query,
         k=10,
         filters=filters
     )
-    
+
     return results
 ```
 
@@ -456,15 +456,15 @@ import uuid
 
 class MyCustomModel:
     """Custom model example."""
-    
+
     # Required: Collection name
     COLLECTION_NAME = "MY_CUSTOM_COLLECTION"
-    
+
     def __init__(self, name: str, description: str):
         self.id = str(uuid.uuid4())
         self.name = name
         self.description = description
-    
+
     def to_document(self) -> Document:
         """Convert model to LangChain Document for vectorization."""
         return Document(
@@ -476,7 +476,7 @@ class MyCustomModel:
             },
             id=self.id  # Weaviate UUID
         )
-    
+
     @classmethod
     def from_document(cls, doc: Document):
         """Reconstruct model from LangChain Document."""
@@ -551,7 +551,7 @@ class PineconeStore(VectorStoreAdapter):
             index_name=collection_name,
             embedding=self.embedding
         )
-    
+
     # Implement required methods
     def get_by_id(self, doc_id: str, ...) -> Optional[Document]:
         # Pinecone-specific implementation

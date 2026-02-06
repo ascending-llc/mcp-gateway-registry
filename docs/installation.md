@@ -85,7 +85,7 @@ open http://localhost:8080
 - Network: Ports 80, 443, 7860, 8080 accessible
 
 **Recommended (Production)**:
-- EC2 Instance: `t3.2xlarge` (8 vCPU, 32GB RAM)  
+- EC2 Instance: `t3.2xlarge` (8 vCPU, 32GB RAM)
 - Storage: 50GB+ SSD
 - Network: Multi-AZ with load balancer
 
@@ -116,7 +116,7 @@ open http://localhost:8080
    # Configure OAuth credentials
    cp credentials-provider/oauth/.env.example credentials-provider/oauth/.env
    nano credentials-provider/oauth/.env
-   
+
    # Generate tokens and client configurations
    ./credentials-provider/generate_creds.sh
    ```
@@ -127,7 +127,7 @@ open http://localhost:8080
    curl -LsSf https://astral.sh/uv/install.sh | sh
    source $HOME/.local/bin/env
    uv venv --python 3.12 && source .venv/bin/activate
-   
+
    # Install Docker
    sudo apt-get update
    sudo apt-get install --reinstall docker.io -y
@@ -384,26 +384,26 @@ graph TB
             ALB[Application Load Balancer]
             IC[Ingress Controller]
         end
-        
+
         subgraph "Application Pods"
             RP[Registry Pod]
             AS[Auth Server Pod]
             NG[Nginx Pod]
         end
-        
+
         subgraph "MCP Servers"
             MS1[MCP Server 1]
             MS2[MCP Server 2]
             MSN[MCP Server N]
         end
     end
-    
+
     subgraph "AWS Services"
         COG[Amazon Cognito]
         CW[CloudWatch]
         ECR[Amazon ECR]
     end
-    
+
     ALB --> IC
     IC --> RP
     IC --> AS

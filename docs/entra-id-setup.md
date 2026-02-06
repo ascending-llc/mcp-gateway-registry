@@ -17,11 +17,11 @@ This guide provides step-by-step instructions for setting up Microsoft Entra ID 
 2. **Create New Registration**
    - Click **New registration**
    - **Name**: `MCP Gateway Registry` (or your preferred name)
-   - **Supported account types**: 
+   - **Supported account types**:
      - For single tenant: *Accounts in this organizational directory only*
      - For multi-tenant: *Accounts in any organizational directory*
      - (See [Multi-Tenant Configuration](#multi-tenant-setup) for detailed setup)
-   - **Redirect URI**: 
+   - **Redirect URI**:
      - Type: **Web**
      - URI: `https://your-registry-domain/auth/callback`
      - Replace `your-registry-domain` with your actual registry URL
@@ -115,11 +115,11 @@ The `ENTRA_TOKEN_KIND` variable determines how user information is extracted:
   - Fast: Local JWT decoding, no network calls
   - Standard: OpenID Connect standard approach
   - Contains standard user claims: username, email, name, groups
-  
+
 - **`access`**: Extracts user info from access token
   - Used when ID token is not available
   - May not contain all user claims
-  
+
 - **Automatic fallback**: If token extraction fails, the system automatically falls back to Microsoft Graph API
 
 **Example Configuration:**

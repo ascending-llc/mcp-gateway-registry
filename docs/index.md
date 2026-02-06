@@ -71,7 +71,7 @@ cd mcp-gateway-registry
 cp .env.example .env
 # Edit .env with your Amazon Cognito credentials
 
-# 3. Generate authentication credentials  
+# 3. Generate authentication credentials
 ./credentials-provider/generate_creds.sh
 
 # 4. Deploy with Docker Compose
@@ -106,33 +106,33 @@ flowchart TB
         subgraph NGINX["NGINX Reverse Proxy"]
             RP["Reverse Proxy Router"]
         end
-        
+
         subgraph AuthRegistry["Authentication & Registry Services"]
             AuthServer["Auth Server<br/>(Dual Auth)"]
             Registry["Registry<br/>Web UI"]
             RegistryMCP["Registry<br/>MCP Server"]
         end
-        
+
         subgraph LocalMCPServers["Local MCP Servers"]
             MCP_Local1["MCP Server 1"]
             MCP_Local2["MCP Server 2"]
         end
     end
-    
+
     %% Identity Provider
     IdP[Identity Provider<br/>Amazon Cognito]
-    
+
     subgraph EKS_Cluster["Amazon EKS/EC2 Cluster"]
         MCP_EKS1["MCP Server 3"]
         MCP_EKS2["MCP Server 4"]
     end
-    
+
     subgraph APIGW_Lambda["Amazon API Gateway + AWS Lambda"]
         API_GW["Amazon API Gateway"]
         Lambda1["AWS Lambda Function 1"]
         Lambda2["AWS Lambda Function 2"]
     end
-    
+
     subgraph External_Systems["External Data Sources & APIs"]
         DB1[(Database 1)]
         DB2[(Database 2)]
@@ -140,7 +140,7 @@ flowchart TB
         API2["External API 2"]
         API3["External API 3"]
     end
-    
+
     %% Connections from Human Users
     User1 -->|Web Browser<br>Authentication| IdP
     User2 -->|Web Browser<br>Authentication| IdP
@@ -148,31 +148,31 @@ flowchart TB
     User1 -->|Web Browser<br>HTTPS| Registry
     User2 -->|Web Browser<br>HTTPS| Registry
     UserN -->|Web Browser<br>HTTPS| Registry
-    
+
     %% Connections from Agents to Gateway
     Agent1 -->|MCP Protocol<br>SSE with Auth| RP
     Agent2 -->|MCP Protocol<br>SSE with Auth| RP
     Agent3 -->|MCP Protocol<br>Streamable HTTP with Auth| RP
     AgentN -->|MCP Protocol<br>Streamable HTTP with Auth| RP
-    
+
     %% Auth flow connections
     RP -->|Auth validation| AuthServer
     AuthServer -.->|Validate credentials| IdP
     Registry -.->|User authentication| IdP
     RP -->|Tool discovery| RegistryMCP
     RP -->|Web UI access| Registry
-    
+
     %% Connections from Gateway to MCP Servers
     RP -->|SSE| MCP_Local1
     RP -->|SSE| MCP_Local2
     RP -->|SSE| MCP_EKS1
     RP -->|SSE| MCP_EKS2
     RP -->|Streamable HTTP| API_GW
-    
+
     %% Connections within API GW + Lambda
     API_GW --> Lambda1
     API_GW --> Lambda2
-    
+
     %% Connections to External Systems
     MCP_Local1 -->|Tool Connection| DB1
     MCP_Local2 -->|Tool Connection| DB2
@@ -190,7 +190,7 @@ flowchart TB
     classDef apiGw fill:#fce4ec,stroke:#ec407a,stroke-width:2px
     classDef lambda fill:#ffebee,stroke:#ef5350,stroke-width:2px
     classDef dataSource fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
-    
+
     %% Apply styles
     class User1,User2,UserN user
     class Agent1,Agent2,Agent3,AgentN agent
