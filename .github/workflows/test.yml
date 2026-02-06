@@ -97,13 +97,26 @@ jobs:
       with:
         python-version: "3.12"
 
+    - name: 📦 Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
     - name: 📦 Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install bandit black isort flake8
+        uv sync --all-groups
+
+    - name: 🔍 Lint with ruff
+      run: |
+        uv run ruff check . --output-format=github
+
+    - name: 🎨 Check formatting with ruff
+      run: |
+        uv run ruff format --check .
 
     - name: 🔒 Security check with bandit
       run: |
+        uv run pip install bandit
         bandit -r auth_server/ -f json -o bandit-report-auth.json || true
         bandit -r registry/ -f json -o bandit-report.json || true
 

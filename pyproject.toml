@@ -36,6 +36,8 @@ members = [
 [dependency-groups]
 dev = [
     "poethepoet>=0.40.0",
+    "ruff>=0.15.0",
+    "pre-commit>=4.0.0",
 ]
 
 [tool.poe.tasks]
@@ -58,3 +60,61 @@ test-auth-server-cov = { shell = "cd auth_server && uv run poe test-cov" }
 # Packages tests
 test-packages = { shell = "cd packages && uv run poe test" }
 test-packages-cov = { shell = "cd packages && uv run poe test-cov" }
+
+# Linting and formatting
+lint = { shell = "uv run ruff check .", help = "Run ruff linter" }
+lint-fix = { shell = "uv run ruff check --fix .", help = "Run ruff linter with auto-fix" }
+format = { shell = "uv run ruff format .", help = "Format code with ruff" }
+format-check = { shell = "uv run ruff format --check .", help = "Check code formatting" }
+check = { shell = "uv run ruff check . && uv run ruff format --check .", help = "Run all code quality checks" }
+fix = { shell = "uv run ruff check --fix . && uv run ruff format .", help = "Fix all auto-fixable issues and format" }
+
+# Pre-commit hooks
+hooks-install = { shell = "uv run pre-commit install", help = "Install pre-commit hooks" }
+hooks-run = { shell = "uv run pre-commit run --all-files", help = "Run pre-commit on all files" }
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "*.egg-info",
+    "node_modules",
+    "frontend",
+    "packages/models/_generated",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "SIM",    # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # do not perform function calls in argument defaults (FastAPI uses this pattern)
+    "B904",   # raise-without-from-inside-except (too noisy)
+    "SIM108", # use ternary operator (not always clearer)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["registry", "auth_server", "packages"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.bandit]
+exclude_dirs = ["tests", "frontend", ".venv", "node_modules"]
+skips = ["B101"]  # Skip assert warnings (used in tests)
