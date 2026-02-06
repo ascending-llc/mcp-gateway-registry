@@ -13,7 +13,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Python build artifacts  
+# Python build artifacts
 __pycache__/
 *.pyc
 *.pyo
@@ -37,7 +37,7 @@ docs/
 *.md
 README*
 
-# Tests  
+# Tests
 tests/
 test/
 **/tests/

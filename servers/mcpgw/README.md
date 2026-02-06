@@ -50,7 +50,7 @@ mcpgw/
 │   └── registry.py        # ⭐ Centralized API client + JWT auth
 ├── tools/                 # Tool implementations
 │   ├── proxy_mcp_tools.py     # execute_tool
-│   ├── search.py              # discover_tools  
+│   ├── search.py              # discover_tools
 │   └── service_mgmt.py        # Service management
 └── search/                # Vector search (FAISS/external)
 ```

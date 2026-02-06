@@ -32,9 +32,9 @@ sequenceDiagram
     participant Gateway as MCP Gateway
     participant AuthServer as Auth Server<br/>(Fine-Grained Access Control)
     participant MCPServer as External MCP Server<br/>(e.g., Atlassian)
-    
+
     Note over User,ExtProvider: Phase 1: OAuth Setup (One-time)
-    
+
     User->>CLI: 1. Run oauth_creds.sh
     CLI->>Cognito: 2. Ingress OAuth (M2M/2LO)
     Cognito->>CLI: 3. JWT Token + Scopes
@@ -42,9 +42,9 @@ sequenceDiagram
     Note over CLI,ExtProvider: Browser opens for user consent
     ExtProvider->>CLI: 5. Access Token + Metadata
     CLI->>CLI: 6. Store tokens locally (.oauth-tokens/)
-    
+
     Note over Agent,MCPServer: Phase 2: MCP Request Flow (Runtime)
-    
+
     Agent->>Gateway: 7. MCP Request + Auth Headers<br/>(JWT + OAuth tokens)
     Gateway->>AuthServer: 8. Validate ingress JWT
     AuthServer->>Cognito: 9. Verify JWT signature & claims
@@ -103,22 +103,22 @@ sequenceDiagram
     participant Gateway as MCP Gateway
     participant AuthServer as Auth Server
     participant Cognito as Amazon Cognito
-    
+
     Note over Agent,Cognito: Ingress Authentication (2LO)
-    
+
     Agent->>Cognito: 1. Client Credentials Grant
     Note right of Agent: POST /oauth2/token<br/>grant_type=client_credentials<br/>client_id + client_secret
-    
+
     Cognito->>Agent: 2. JWT Access Token + Scopes
-    
+
     Agent->>Gateway: 3. MCP Request with Auth Headers
     Note right of Agent: Headers:<br/>X-Authorization: Bearer {jwt}<br/>X-User-Pool-Id: {user_pool_id}<br/>X-Client-Id: {client_id}<br/>X-Region: {region}
-    
+
     Gateway->>AuthServer: 4. Validate JWT Token
     AuthServer->>Cognito: 5. Verify Token Signature
     Cognito->>AuthServer: 6. Token Valid + Scopes
     AuthServer->>Gateway: 7. Authorization Success + Scopes
-    
+
     Gateway->>Agent: 8. MCP Response or Tool Discovery
 ```
 
@@ -180,7 +180,7 @@ providers:
    - Note the **Cloud ID** from your Atlassian instance
 
 4. **Configure Environment Variables**
-   
+
    Add the credentials to [`agents/oauth/.env`](../agents/oauth/.env):
 
    ```bash
@@ -198,30 +198,30 @@ sequenceDiagram
     participant Gateway as MCP Gateway
     participant Browser
     participant Provider as External OAuth Provider<br/>(e.g., Atlassian)
-    
+
     Note over User,Provider: Egress Authentication (3LO)
-    
+
     User->>Gateway: 1. Run egress_oauth.py
     Gateway->>Browser: 2. Open Authorization URL
     Note right of Gateway: https://auth.atlassian.com/authorize<br/>?client_id={id}<br/>&redirect_uri={callback}<br/>&scope={scopes}<br/>&response_type=code
-    
+
     Browser->>Provider: 3. User Authorization
-    
+
     rect rgb(255, 248, 220)
         Note over User,Provider: 🔑 THREE-LEGGED OAUTH (3LO) STEP
         User->>Provider: 4. Grant Permissions (User clicks "Accept")
         Note over User,Provider: This is where the user explicitly<br/>authorizes the application access
     end
-    
+
     Provider->>Browser: 5. Redirect with Auth Code
     Browser->>Gateway: 6. Authorization Code
-    
+
     Gateway->>Provider: 7. Exchange Code for Token
     Note right of Gateway: POST /oauth/token<br/>grant_type=authorization_code<br/>code={auth_code}<br/>client_id + client_secret
-    
+
     Provider->>Gateway: 8. Access Token + Metadata
     Note left of Provider: Response includes:<br/>- access_token<br/>- refresh_token<br/>- cloud_id (Atlassian)<br/>- scopes
-    
+
     Gateway->>Gateway: 9. Store Egress Tokens
     Note right of Gateway: Saved to .oauth-tokens/egress.json
 ```

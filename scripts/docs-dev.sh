@@ -32,7 +32,7 @@ fi
 # Function to install dependencies
 install_deps() {
     print_status "Installing MkDocs dependencies with uv..."
-    
+
     if command -v uv &> /dev/null; then
         uv pip install -r requirements-docs.txt
     elif command -v pip3 &> /dev/null; then
@@ -46,7 +46,7 @@ install_deps() {
         print_status "To install uv: curl -LsSf https://astral.sh/uv/install.sh | sh"
         exit 1
     fi
-    
+
     print_status "Dependencies installed successfully!"
 }
 
@@ -55,16 +55,16 @@ serve_docs() {
     print_status "Starting MkDocs development server..."
     print_status "Documentation will be available at: http://127.0.0.1:8000"
     print_status "Press Ctrl+C to stop the server"
-    
+
     mkdocs serve
 }
 
 # Function to build documentation
 build_docs() {
     print_status "Building static documentation..."
-    
+
     mkdocs build --clean --strict
-    
+
     print_status "Documentation built successfully in ./site/"
 }
 
@@ -72,7 +72,7 @@ build_docs() {
 deploy_docs() {
     print_warning "This will deploy to GitHub Pages. Are you sure? (y/N)"
     read -r response
-    
+
     if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
         print_status "Deploying to GitHub Pages..."
         mkdocs gh-deploy
@@ -85,7 +85,7 @@ deploy_docs() {
 # Function to check documentation
 check_docs() {
     print_status "Checking documentation for issues..."
-    
+
     # Check for broken links
     if command -v mkdocs &> /dev/null; then
         mkdocs build --strict 2>&1 | grep -i "warning\|error" || print_status "No issues found!"

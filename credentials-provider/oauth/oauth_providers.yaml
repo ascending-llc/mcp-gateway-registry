@@ -14,7 +14,7 @@ providers:
       # - "write:jira-work"
       # - "read:confluence-space.summary"
       # - "offline_access"
-      
+
       # Expanded comprehensive scopes for full Atlassian access
       - "offline_access"
       - "write:confluence-content"
@@ -122,7 +122,7 @@ providers:
       - region
     template_var_defaults:
       region: "us-east-1"
-      
+
   cognito_m2m:
     display_name: "Amazon Cognito (M2M/Client Credentials)"
     # M2M flow doesn't use authorization URL

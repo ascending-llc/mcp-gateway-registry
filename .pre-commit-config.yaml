@@ -37,6 +37,16 @@ repos:
         additional_dependencies: ["bandit[toml]"]
         exclude: ^(tests/|frontend/)
 
+  # Local hooks using poethepoet
+  - repo: local
+    hooks:
+      - id: lint-fix
+        name: Run lint-fix
+        entry: uv run poe lint-fix
+        language: system
+        pass_filenames: false
+        always_run: true
+
 # CI configuration
 ci:
   autofix_commit_msg: "style: auto-fix by pre-commit hooks"

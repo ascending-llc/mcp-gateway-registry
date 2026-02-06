@@ -154,8 +154,8 @@ The implementation provides flexible user information extraction with automatic 
 
 ```python
 def get_user_info(
-    self, 
-    access_token: str, 
+    self,
+    access_token: str,
     id_token: Optional[str] = None
 ) -> Dict[str, Any]:
 ```

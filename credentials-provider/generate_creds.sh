@@ -15,7 +15,7 @@
 # Usage:
 #   ./oauth_creds.sh                    # Run both ingress and egress (default)
 #   ./oauth_creds.sh --ingress-only     # Run only ingress authentication
-#   ./oauth_creds.sh --egress-only      # Run only egress authentication  
+#   ./oauth_creds.sh --egress-only      # Run only egress authentication
 #   ./oauth_creds.sh --both             # Explicitly run both (same as default)
 #   ./oauth_creds.sh --provider google  # Run both with Google as egress provider
 #   ./oauth_creds.sh --verbose          # Enable verbose logging
@@ -88,7 +88,7 @@ show_help() {
     cat << EOF
 OAuth Credentials Orchestrator Script
 
-This script manages OAuth authentication for both ingress (MCP Gateway) and 
+This script manages OAuth authentication for both ingress (MCP Gateway) and
 egress (external services) flows, and generates MCP configuration files.
 
 USAGE:
@@ -127,7 +127,7 @@ BEHAVIOR:
 ENVIRONMENT VARIABLES:
     For ingress (Cognito M2M):
         INGRESS_OAUTH_USER_POOL_ID     # Required
-        INGRESS_OAUTH_CLIENT_ID        # Required  
+        INGRESS_OAUTH_CLIENT_ID        # Required
         INGRESS_OAUTH_CLIENT_SECRET    # Required
         AWS_REGION                     # Optional (default: us-east-1)
 
@@ -212,19 +212,19 @@ done
 # Function to run ingress authentication
 run_ingress_auth() {
     log_info " Running INGRESS OAuth authentication (Cognito M2M)..."
-    
+
     local cmd="python3 '$SCRIPT_DIR/oauth/ingress_oauth.py'"
-    
+
     if [ "$FORCE" = true ]; then
         cmd="$cmd --force"
     fi
-    
+
     if [ "$VERBOSE" = true ]; then
         cmd="$cmd --verbose"
     fi
-    
+
     log_debug "Executing: $cmd"
-    
+
     if eval "$cmd"; then
         log_info "✅ INGRESS authentication completed successfully"
         return 0
@@ -237,24 +237,24 @@ run_ingress_auth() {
 # Function to run egress authentication
 run_egress_auth() {
     log_info " Running EGRESS OAuth authentication for: $EGRESS_PROVIDER"
-    
+
     local cmd="python3 '$SCRIPT_DIR/oauth/egress_oauth.py' --provider '$EGRESS_PROVIDER'"
-    
+
     # Add MCP server name if provided
     if [ -n "$EGRESS_MCP_SERVER_NAME" ]; then
         cmd="$cmd --mcp-server-name '$EGRESS_MCP_SERVER_NAME'"
     fi
-    
+
     if [ "$FORCE" = true ]; then
         cmd="$cmd --force"
     fi
-    
+
     if [ "$VERBOSE" = true ]; then
         cmd="$cmd --verbose"
     fi
-    
+
     log_debug "Executing: $cmd"
-    
+
     if eval "$cmd"; then
         log_info "✅ EGRESS authentication completed successfully for $EGRESS_PROVIDER"
         return 0
@@ -313,18 +313,18 @@ run_keycloak_auth() {
 # Function to generate MCP configuration files
 generate_mcp_configs() {
     log_info " Generating MCP configuration files..."
-    
+
     local token_dir="$(pwd)/.oauth-tokens"
     local ingress_file="$token_dir/ingress.json"
-    
+
     # Check which token files exist
     local has_ingress=false
-    
+
     if [ -f "$ingress_file" ]; then
         has_ingress=true
         log_debug "Found ingress tokens: $ingress_file"
     fi
-    
+
     # Find all egress token files
     local egress_files=()
     for file in "$token_dir"/*-egress.json; do
@@ -333,21 +333,21 @@ generate_mcp_configs() {
             log_debug "Found egress tokens: $file"
         fi
     done
-    
+
     if [ "$has_ingress" = false ] && [ ${#egress_files[@]} -eq 0 ]; then
         log_warn "No token files found, skipping MCP configuration generation"
         return 0
     fi
-    
+
     # Generate VS Code MCP configuration
     generate_vscode_config "$has_ingress" "$ingress_file" "${egress_files[@]}"
-    
-    # Generate Roocode MCP configuration  
+
+    # Generate Roocode MCP configuration
     generate_roocode_config "$has_ingress" "$ingress_file" "${egress_files[@]}"
-    
+
     # Add no-auth services to MCP configurations
     add_noauth_services
-    
+
     log_info "✅ MCP configuration files generated successfully"
 }
 
@@ -393,18 +393,18 @@ generate_vscode_config() {
             log_debug "Using Keycloak agent token for VS Code MCP config"
         fi
     fi
-    
+
     # Add all egress provider configurations
     for egress_file in "${egress_files[@]}"; do
         if [ "$first_server" = false ]; then
             echo ',' >> "$temp_file"
         fi
-        
+
         # Extract egress token data using jq
         local egress_provider=$(jq -r '.provider // empty' "$egress_file")
         local egress_token=$(jq -r '.access_token // empty' "$egress_file")
         local cloud_id=$(jq -r '.cloud_id // empty' "$egress_file")
-        
+
         # Generate provider-specific configuration
         if [ "$egress_provider" = "atlassian" ]; then
             cat >> "$temp_file" << EOF
@@ -453,20 +453,20 @@ EOF
       }
 EOF
         fi
-        
+
         first_server=false
     done
-    
+
     # Close JSON
     echo '' >> "$temp_file"
     echo '    }' >> "$temp_file"
     echo '  }' >> "$temp_file"
     echo '}' >> "$temp_file"
-    
+
     # Move temp file to final location
     mv "$temp_file" "$config_file"
     chmod 600 "$config_file"
-    
+
     log_info " Generated VS Code MCP config: $config_file"
 }
 
@@ -511,18 +511,18 @@ generate_roocode_config() {
             log_debug "Using Keycloak agent token for Roocode MCP config"
         fi
     fi
-    
+
     # Add all egress provider configurations
     for egress_file in "${egress_files[@]}"; do
         if [ "$first_server" = false ]; then
             echo ',' >> "$temp_file"
         fi
-        
+
         # Extract egress token data using jq
         local egress_provider=$(jq -r '.provider // empty' "$egress_file")
         local egress_token=$(jq -r '.access_token // empty' "$egress_file")
         local cloud_id=$(jq -r '.cloud_id // empty' "$egress_file")
-        
+
         # Generate provider-specific configuration
         if [ "$egress_provider" = "atlassian" ]; then
             cat >> "$temp_file" << EOF
@@ -566,7 +566,7 @@ EOF
             # Generic external provider configuration
             cat >> "$temp_file" << EOF
     "$egress_provider": {
-      "type": "streamable-http", 
+      "type": "streamable-http",
       "url": "${registry_url}/$egress_provider/mcp",
       "headers": {
         "Authorization": "Bearer $egress_token"$([ "$has_ingress" = true ] && echo ",
@@ -580,34 +580,34 @@ EOF
     }
 EOF
         fi
-        
+
         first_server=false
     done
-    
+
     # Close JSON
     echo '' >> "$temp_file"
     echo '  }' >> "$temp_file"
     echo '}' >> "$temp_file"
-    
+
     # Move temp file to final location
     mv "$temp_file" "$config_file"
     chmod 600 "$config_file"
-    
+
     log_info " Generated Roocode MCP config: $config_file"
 }
 
 # Function to add no-auth services to MCP configurations
 add_noauth_services() {
     log_info " Adding no-auth services to MCP configurations..."
-    
+
     local cmd="python3 '$SCRIPT_DIR/add_noauth_services.py'"
-    
+
     if [ "$VERBOSE" = true ]; then
         cmd="$cmd --verbose"
     fi
-    
+
     log_debug "Executing: $cmd"
-    
+
     if eval "$cmd"; then
         log_info "✅ No-auth services added to MCP configurations"
         return 0
@@ -621,12 +621,12 @@ add_noauth_services() {
 main() {
     log_info " Starting OAuth Credentials Orchestrator"
     log_info "Configuration: ingress=$RUN_INGRESS, egress=$RUN_EGRESS (provider=$EGRESS_PROVIDER), agentcore=$RUN_AGENTCORE, keycloak=$RUN_KEYCLOAK"
-    
+
     local ingress_success=false
     local egress_success=false
     local agentcore_success=false
     local keycloak_success=false
-    
+
     # Run ingress authentication if requested
     if [ "$RUN_INGRESS" = true ]; then
         if run_ingress_auth; then
@@ -639,7 +639,7 @@ main() {
             fi
         fi
     fi
-    
+
     # Run egress authentication if requested
     if [ "$RUN_EGRESS" = true ]; then
         if run_egress_auth; then
@@ -648,7 +648,7 @@ main() {
             log_warn "Egress authentication failed, but continuing to generate configs"
         fi
     fi
-    
+
     # Run AgentCore authentication if requested
     if [ "$RUN_AGENTCORE" = true ]; then
         if run_agentcore_auth; then
@@ -666,10 +666,10 @@ main() {
             log_warn "Keycloak authentication failed, but continuing to generate configs"
         fi
     fi
-    
+
     # Generate MCP configuration files
     generate_mcp_configs
-    
+
     # Summary
     log_info " Summary:"
     if [ "$RUN_INGRESS" = true ]; then
@@ -679,7 +679,7 @@ main() {
             log_info "  ❌ Ingress authentication: FAILED"
         fi
     fi
-    
+
     if [ "$RUN_EGRESS" = true ]; then
         if [ "$egress_success" = true ]; then
             log_info "  ✅ Egress authentication ($EGRESS_PROVIDER): SUCCESS"
@@ -687,7 +687,7 @@ main() {
             log_info "  ❌ Egress authentication ($EGRESS_PROVIDER): FAILED"
         fi
     fi
-    
+
     if [ "$RUN_AGENTCORE" = true ]; then
         if [ "$agentcore_success" = true ]; then
             log_info "  ✅ AgentCore authentication: SUCCESS"
@@ -703,7 +703,7 @@ main() {
             log_info "  ❌ Keycloak authentication: FAILED"
         fi
     fi
-    
+
     log_info " OAuth credentials orchestration completed!"
     log_info " Check ./.oauth-tokens/ for generated token and config files"
 }

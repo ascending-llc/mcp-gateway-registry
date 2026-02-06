@@ -28,7 +28,7 @@ graph TB
         Agent[AI Agent]
         User --- CLIAuth
     end
-    
+
     %% MCP Gateway & Registry Components (Separate)
     subgraph Infrastructure["MCP Gateway & Registry Infrastructure"]
         direction TB
@@ -37,10 +37,10 @@ graph TB
         Registry["Registry<br/>Web UI"]
         RegistryMCP["Registry<br/>MCP Server"]
     end
-    
+
     %% Identity Provider
     IdP[Identity Provider<br/>Amazon Cognito]
-    
+
     %% MCP Server Farm
     subgraph MCPFarm["MCP Server Farm"]
         direction TB
@@ -49,14 +49,14 @@ graph TB
         MCP3[MCP Server 3<br/>Custom]
         MCPn[MCP Server n<br/>...]
     end
-    
+
     %% All connections go through gateway/registry only
     User -->|1. Web UI access<br/>Server management| Nginx
     User -->|2. Registry access<br/>Tool discovery| Registry
-    
+
     Agent -->|1. Discover tools<br/>with auth headers| Nginx
     Agent -->|2. MCP requests<br/>with auth headers| Nginx
-    
+
     %% Internal routing
     Nginx -->|Route /mcpgw/*<br/>Auth validation| AuthServer
     Nginx -->|Route /mcpgw/*<br/>Tool discovery| RegistryMCP
@@ -65,20 +65,20 @@ graph TB
     Nginx -->|Route /server2/*<br/>Proxy to MCP servers| MCP2
     Nginx -->|Route /serverN/*<br/>Proxy to MCP servers| MCP3
     Nginx -->|Route /serverN/*<br/>Proxy to MCP servers| MCPn
-    
+
     %% Auth flows
     IdP -.->|M2M: JWT tokens<br/>Client Credentials| Agent
     IdP -.->|User: OAuth PKCE flow<br/>Authorization Code| CLIAuth
     CLIAuth -.->|Session cookie<br/>Signed with SECRET_KEY| User
     AuthServer -.->|Validate JWT/cookies<br/>Get user groups/scopes| IdP
-    
+
     %% Registry management (User-driven)
     Registry -->|Server registration<br/>Health monitoring| RegistryMCP
     RegistryMCP -->|Tool metadata<br/>Health checks| MCP1
     RegistryMCP -->|Tool metadata<br/>Health checks| MCP2
     RegistryMCP -->|Tool metadata<br/>Health checks| MCP3
     RegistryMCP -->|Tool metadata<br/>Health checks| MCPn
-    
+
     %% Styling
     classDef userStyle fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
     classDef agentStyle fill:#e1f5fe,stroke:#01579b,stroke-width:2px
@@ -89,7 +89,7 @@ graph TB
     classDef registryStyle fill:#fff8e1,stroke:#f57f17,stroke-width:2px
     classDef mcpStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
     classDef cliStyle fill:#fce4ec,stroke:#880e4f,stroke-width:2px
-    
+
     class Clients clientStyle
     class User userStyle
     class Agent agentStyle
@@ -128,13 +128,13 @@ sequenceDiagram
     participant User
     participant Agent as Agent<br/>(includes MCP client)
     participant IdP as Enterprise IdP
-    
+
     box rgba(0,0,0,0) MCP Gateway & Registry Solution
         participant Gateway as Gateway<br/>(Reverse Proxy)
         participant AuthServer as Auth Server
         participant Registry as Registry<br/>MCP Server
     end
-    
+
     participant MCP as External<br/>MCP Server
 
     %% Step 1: Get credentials
@@ -173,7 +173,7 @@ sequenceDiagram
     end
     AuthServer->>Gateway: 200 OK + allowed scopes
     Gateway->>Registry: Tool discovery request + scope headers
-    
+
     Note over Registry: Registry filters tools based<br/>on Agent's allowed scopes
     Registry->>Gateway: Filtered tool list (only accessible tools)
     Gateway->>Agent: Available tools response
@@ -184,7 +184,7 @@ sequenceDiagram
     Gateway->>AuthServer: Validate credentials + scope
     AuthServer->>IdP: Verify credentials
     IdP->>AuthServer: Auth response + scope
-    
+
     alt Valid credentials + sufficient scope
         AuthServer->>Gateway: 200 OK + allowed scopes
         Gateway->>MCP: Forward MCP request
@@ -205,7 +205,7 @@ sequenceDiagram
 
 1. The MCP servers are only accessible through the Gateway (reverse proxy), upon receiving the messages the Gateway hands them off to an auth server which validates the credentials embedded in the these messages with the enterprise IdP. This validation includes both authentication as well as authorization. The auth server retrieves the access scope for the Agent from the IdP auth validation response and then compares it with the MCP method (`initialize`, `tools/call` etc.) and tool being requested. The auth server responds with a 200 OK if the access should be allowed based on the credentials provided and the scope requested or a an HTTP 403 access denied otherwise. The auth server also includes the list of allowed scopes in its 200 OK response.
 
-1. The Gateway then proceeds to pass on the request to the MCP server to which the request was addressed to in case the access was allowed (200 OK from the auth server) or sends the 403 access denied to the Agent. 
+1. The Gateway then proceeds to pass on the request to the MCP server to which the request was addressed to in case the access was allowed (200 OK from the auth server) or sends the 403 access denied to the Agent.
 
 1. An Agent uses the same mechanism to talk to the Registry's MCP server for tool discovery. The Agent may request access to a special tool discovery tool available via the Registry's MCP server. The tool discovery tool now has access to the Agent's scope (through the auth server including the scope in the response headers for the 200 OK) and applies the scopes while searching for potential tools that the Agent can have access to, thus it only lists the tools that the Agent has access to in its response via the tool discovery tool. Here is a example scenario, a general purpose AI assistant may be able to discover through the tool finder tool that there is a tool to get the current time at a given location but based on its access it may not have access to a tool to determine stock information and hence the Registry never list the stock information tool as an available tool to the Agent (if the Agent knows about this tool through some out of band mechanism and tries to invoke the tool it would get an access denied as explained in the previous steps).
 

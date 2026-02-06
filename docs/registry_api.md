@@ -27,8 +27,8 @@ This document provides a comprehensive overview of all API endpoints available i
 
 Displays the login form for the MCP Gateway Registry.
 
-**URL:** `/login`  
-**Method:** `GET`  
+**URL:** `/login`
+**Method:** `GET`
 **Response:** HTML login form
 
 **Example:**
@@ -41,9 +41,9 @@ curl -X GET http://localhost:7860/login
 
 Authenticates a user and creates a session. **This endpoint must be called first** to obtain the session cookie required for all other authenticated endpoints.
 
-**URL:** `/login`  
-**Method:** `POST`  
-**Content-Type:** `application/x-www-form-urlencoded`  
+**URL:** `/login`
+**Method:** `POST`
+**Content-Type:** `application/x-www-form-urlencoded`
 **Parameters:**
 - `username` (required): Admin username
 - `password` (required): Admin password
@@ -65,9 +65,9 @@ curl -X POST http://localhost:7860/login \
 
 Logs out the current user by invalidating their session.
 
-**URL:** `/logout`  
-**Method:** `POST`  
-**Authentication:** Required (session cookie)  
+**URL:** `/logout`
+**Method:** `POST`
+**Authentication:** Required (session cookie)
 **Response:** Redirects to `/login`
 
 **Example:**
@@ -85,10 +85,10 @@ curl -X POST http://localhost:7860/logout \
 
 Registers a new MCP service with the gateway.
 
-**URL:** `/register`  
-**Method:** `POST`  
-**Content-Type:** `application/x-www-form-urlencoded`  
-**Authentication:** Required (session cookie)  
+**URL:** `/register`
+**Method:** `POST`
+**Content-Type:** `application/x-www-form-urlencoded`
+**Authentication:** Required (session cookie)
 **Parameters:**
 - `name` (required): Display name of the service
 - `description` (required): Description of the service
@@ -117,10 +117,10 @@ curl -X POST http://localhost:7860/register \
 
 Enables or disables a registered service.
 
-**URL:** `/toggle/{service_path}`  
-**Method:** `POST`  
-**Content-Type:** `application/x-www-form-urlencoded`  
-**Authentication:** Required (session cookie)  
+**URL:** `/toggle/{service_path}`
+**Method:** `POST`
+**Content-Type:** `application/x-www-form-urlencoded`
+**Authentication:** Required (session cookie)
 **URL Parameters:**
 - `service_path`: Path of the service to toggle
 **Form Parameters:**
@@ -145,10 +145,10 @@ curl -X POST http://localhost:7860/toggle/weather \
 
 Updates the details of an existing service.
 
-**URL:** `/edit/{service_path}`  
-**Method:** `POST`  
-**Content-Type:** `application/x-www-form-urlencoded`  
-**Authentication:** Required (session cookie)  
+**URL:** `/edit/{service_path}`
+**Method:** `POST`
+**Content-Type:** `application/x-www-form-urlencoded`
+**Authentication:** Required (session cookie)
 **URL Parameters:**
 - `service_path`: Path of the service to edit
 **Form Parameters:**
@@ -180,9 +180,9 @@ curl -X POST http://localhost:7860/edit/weather \
 
 Retrieves detailed information about a registered service.
 
-**URL:** `/api/server_details/{service_path}`  
-**Method:** `GET`  
-**Authentication:** Required (session cookie)  
+**URL:** `/api/server_details/{service_path}`
+**Method:** `GET`
+**Authentication:** Required (session cookie)
 **URL Parameters:**
 - `service_path`: Path of the service to get details for, or "all" to get details for all services
 
@@ -204,9 +204,9 @@ curl -X GET http://localhost:7860/api/server_details/all \
 
 Retrieves the list of tools provided by a service.
 
-**URL:** `/api/tools/{service_path}`  
-**Method:** `GET`  
-**Authentication:** Required (session cookie)  
+**URL:** `/api/tools/{service_path}`
+**Method:** `GET`
+**Authentication:** Required (session cookie)
 **URL Parameters:**
 - `service_path`: Path of the service to get tools for, or "all" to get tools from all services
 
@@ -228,9 +228,9 @@ curl -X GET http://localhost:7860/api/tools/all \
 
 Manually triggers a health check and tool discovery for a service.
 
-**URL:** `/api/refresh/{service_path}`  
-**Method:** `POST`  
-**Authentication:** Required (session cookie)  
+**URL:** `/api/refresh/{service_path}`
+**Method:** `POST`
+**Authentication:** Required (session cookie)
 **URL Parameters:**
 - `service_path`: Path of the service to refresh
 
@@ -250,9 +250,9 @@ curl -X POST http://localhost:7860/api/refresh/weather \
 
 Provides real-time updates on the health status of all registered services.
 
-**URL:** `/ws/health_status`  
-**Protocol:** WebSocket  
-**Authentication:** Not required (public endpoint)  
+**URL:** `/ws/health_status`
+**Protocol:** WebSocket
+**Authentication:** Not required (public endpoint)
 **Response:** JSON messages with health status updates
 
 **Example using websocat:**
@@ -284,13 +284,13 @@ async def health_status_monitor():
     uri = "ws://localhost:7860/ws/health_status"
     async with websockets.connect(uri) as websocket:
         print("WebSocket connection established")
-        
+
         while True:
             try:
                 # Receive health status updates
                 message = await websocket.recv()
                 data = json.loads(message)
-                
+
                 print("Health status update received:")
                 for path, info in data.items():
                     print(f"Service {path}: {info['status']}")

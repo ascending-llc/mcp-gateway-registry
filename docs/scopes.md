@@ -229,7 +229,7 @@ The scope validation is implemented in the [`validate_server_tool_access()`](../
 def validate_server_tool_access(server_name: str, method: str, tool_name: str, user_scopes: List[str]) -> bool:
     """
     Validate if the user has access to the specified server method/tool based on scopes.
-    
+
     Returns True if access is allowed, False otherwise
     """
 ```
@@ -514,11 +514,11 @@ import yaml
 def test_scope_config():
     with open('auth_server/scopes.yml', 'r') as f:
         config = yaml.safe_load(f)
-    
+
     # Test group mappings
     for group, scopes in config.get('group_mappings', {}).items():
         print(f"Group: {group} -> Scopes: {scopes}")
-    
+
     # Test scope definitions
     for scope in ['mcp-servers-restricted/read', 'mcp-servers-restricted/execute']:
         if scope in config:
