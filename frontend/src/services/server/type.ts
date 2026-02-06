@@ -7,7 +7,6 @@ export type GET_VERSION_RESPONSE = {
 
 export type GET_SERVERS_REQUEST = {
   query?: string;
-  scope?: string;
   status?: string;
   page?: string;
   per_page?: string;
@@ -45,7 +44,6 @@ export type Server = {
   capabilities: string;
   tools: string;
   author: string;
-  scope: string;
   status: StatusType;
   path: string;
   permissions: PermissionType;

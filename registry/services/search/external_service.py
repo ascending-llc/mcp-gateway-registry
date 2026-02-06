@@ -275,7 +275,6 @@ class ExternalVectorSearchService(VectorSearchService):
                 "tags": server.tags or [],
                 "is_enabled": server.status == 'active',
                 "status": server.status,
-                "scope": server.scope,
                 "numTools": server.numTools,
                 "numStars": server.numStars,
             }
@@ -502,7 +501,6 @@ class ExternalVectorSearchService(VectorSearchService):
                     "relevance_score": relevance_score,
                     "tags": server.tags or [],
                     "is_enabled": server.status == 'active',
-                    "scope": server.scope,
                 }
                 
                 # Add to servers results

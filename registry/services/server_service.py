@@ -457,7 +457,6 @@ def _update_config_from_request(
     registry_fields = [
         "path",
         "tags",
-        "scope",
         "status",
         "serverName",
         "num_stars",
@@ -548,24 +547,23 @@ class ServerServiceV1:
     async def list_servers(
         self,
         query: Optional[str] = None,
-        scope: Optional[str] = None,
         status: Optional[str] = None,
         page: int = 1,
         per_page: int = 20,
         user_id: Optional[str] = None,
-        acl_permissions_map: Dict[str, Any] = {},
+        accessible_server_ids: Optional[List[str]] = None,
     ) -> Tuple[List[MCPServerDocument], int]:
         """
         List servers with filtering and pagination.
 
         Args:
             query: Free-text search across server_name, description, tags
-            scope: Filter by access level (shared_app, shared_user, private_user)
             status: Filter by operational state (active, inactive, error)
             page: Page number (min: 1)
             per_page: Items per page (min: 1, max: 100)
             user_id: Current user's ID (kept for compatibility but not used for filtering)
-            acl_permissions_map: Mapping from resource type (e.g. ResourceType.MCPSERVER.value)
+            accessible_server_ids: List of server ID strings the user has VIEW access to.
+
         Returns:
             Tuple of (servers list, total count)
         """
@@ -576,10 +574,6 @@ class ServerServiceV1:
 
         # Build filter conditions
         filters = []
-
-        # Scope filter (now at root level)
-        if scope:
-            filters.append({"scope": scope})
 
         # Status filter (now at root level)
         if status:
@@ -597,12 +591,10 @@ class ServerServiceV1:
             }
             filters.append(text_filter)
 
-        # Access control filter
-        accessible_servers = acl_permissions_map.get(
-            ResourceType.MCPSERVER.value, {}
-        ).keys()
-        accessible_server_ids = [PydanticObjectId(sid) for sid in accessible_servers]
-        filters.append({"_id": {"$in": accessible_server_ids}})
+        # Access control filter (only applied when caller supplies an explicit list)
+        if accessible_server_ids is not None:
+            object_ids = [PydanticObjectId(sid) for sid in accessible_server_ids]
+            filters.append({"_id": {"$in": object_ids}})
 
         # Combine all filters
         if filters:
@@ -724,7 +716,6 @@ class ServerServiceV1:
             # Registry-specific root-level fields
             path=data.path,
             tags=[tag.lower() for tag in data.tags],  # Normalize tags to lowercase
-            scope=data.scope,
             status="active",  # Default status (independent of enabled field)
             numTools=num_tools,  # Store calculated numTools at root level
             numStars=data.num_stars,
@@ -934,8 +925,6 @@ class ServerServiceV1:
             server.path = data.path
         if data.tags is not None:
             server.tags = [tag.lower() for tag in data.tags]
-        if data.scope is not None:
-            server.scope = data.scope
         if data.status is not None:
             server.status = data.status
 
@@ -1650,9 +1639,6 @@ class ServerServiceV1:
                 {
                     "$facet": {
                         "total": [{"$count": "count"}],
-                        "by_scope": [
-                            {"$group": {"_id": "$scope", "count": {"$sum": 1}}}
-                        ],
                         "by_status": [
                             {"$group": {"_id": "$status", "count": {"$sum": 1}}}
                         ],
@@ -1690,13 +1676,6 @@ class ServerServiceV1:
                     result["total"][0]["count"] if result["total"] else 0
                 )
 
-                # Servers by scope
-                servers_by_scope = {}
-                for item in result.get("by_scope", []):
-                    scope = item["_id"] or "unknown"
-                    servers_by_scope[scope] = item["count"]
-                stats["servers_by_scope"] = servers_by_scope
-
                 # Servers by status
                 servers_by_status = {}
                 for item in result.get("by_status", []):
@@ -1718,7 +1697,6 @@ class ServerServiceV1:
             else:
                 # No servers found
                 stats["total_servers"] = 0
-                stats["servers_by_scope"] = {}
                 stats["servers_by_status"] = {}
                 stats["servers_by_transport"] = {}
                 stats["total_tools"] = 0

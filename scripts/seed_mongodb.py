@@ -226,7 +226,6 @@ async def seed_mcp_servers(users):
             "serverName": "github-copilot",
             "author": users[0].id,  # Admin user
             "path": "/github-copilot",
-            "scope": "shared_app",
             "status": "active",
             "tags": ["github", "oauth", "code", "vcs"],
             "numTools": 4,
@@ -273,7 +272,6 @@ async def seed_mcp_servers(users):
             "serverName": "tavilysearchv1",
             "author": users[1].id,  # John Developer
             "path": "/tavilysearch",
-            "scope": "shared_user",
             "status": "active",
             "tags": ["search", "api-key", "tavily"],
             "numTools": 4,
@@ -317,7 +315,6 @@ async def seed_mcp_servers(users):
             "serverName": "slack-notifications",
             "author": users[1].id,  # John Developer
             "path": "/slack",
-            "scope": "shared_user",
             "status": "active",
             "tags": ["slack", "oauth", "notifications", "collaboration"],
             "numTools": 3,
@@ -363,7 +360,6 @@ async def seed_mcp_servers(users):
             "serverName": "weather-service",
             "author": users[2].id,  # Jane Smith
             "path": "/weather",
-            "scope": "private_user",
             "status": "active",
             "tags": ["weather", "api-key", "data"],
             "numTools": 3,
@@ -407,7 +403,6 @@ async def seed_mcp_servers(users):
             "serverName": "public-api-service",
             "author": users[1].id,  # John Developer
             "path": "/public-api",
-            "scope": "shared_app",
             "status": "active",
             "tags": ["public", "no-auth", "api", "open"],
             "numTools": 3,
@@ -448,7 +443,6 @@ async def seed_mcp_servers(users):
             "serverName": "google-workspace",
             "author": users[1].id,  # John Developer
             "path": "/google-workspace",
-            "scope": "private_user",
             "status": "active",
             "tags": ["google", "oauth", "productivity", "cloud"],
             "numTools": 4,
@@ -492,7 +486,6 @@ async def seed_mcp_servers(users):
             "serverName": "atlassian-jira",
             "author": users[2].id,  # Jane Smith
             "path": "/jira",
-            "scope": "shared_user",
             "status": "active",
             "tags": ["atlassian", "jira", "oauth", "project-management"],
             "numTools": 4,
@@ -539,7 +532,6 @@ async def seed_mcp_servers(users):
             "serverName": "currenttime-server",
             "author": users[0].id,  # Admin user
             "path": "/time",
-            "scope": "shared_app",
             "status": "active",
             "tags": ["time", "utility", "no-auth"],
             "numTools": 3,
@@ -604,7 +596,7 @@ async def seed_mcp_servers(users):
             elif "authentication" in server_data["config"]:
                 auth_type = server_data["config"]["authentication"].get("type", "none")
             
-            print(f"  Created server: {server_data['serverName']} (scope: {server_data['scope']}, auth: {auth_type}, tools: {server_data['numTools']})")
+            print(f"  Created server: {server_data['serverName']} (auth: {auth_type}, tools: {server_data['numTools']})")
 
     return created_servers
 
