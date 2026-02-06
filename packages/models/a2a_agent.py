@@ -32,11 +32,7 @@ Storage Structure:
   "provider": {"organization": "...", "url": "..."},
   
   # Registry Metadata
-  "tags": ["aws", "research", "intelligence"],
-  "scope": "private_user",
   "status": "active",
-  "visibility": "public",
-  "trustLevel": "verified",
   "isEnabled": true,
   
   # Ratings & Stats
@@ -85,25 +81,6 @@ TRANSPORT_GRPC = "GRPC"
 TRANSPORT_HTTP_JSON = "HTTP+JSON"
 VALID_TRANSPORTS: Set[str] = {TRANSPORT_JSONRPC, TRANSPORT_GRPC, TRANSPORT_HTTP_JSON}
 
-# Registry Visibility Levels
-VISIBILITY_PUBLIC = "public"
-VISIBILITY_PRIVATE = "private"
-VISIBILITY_GROUP_RESTRICTED = "group-restricted"
-VALID_VISIBILITY_VALUES: Set[str] = {VISIBILITY_PUBLIC, VISIBILITY_PRIVATE, VISIBILITY_GROUP_RESTRICTED}
-
-# Registry Trust Levels
-TRUST_LEVEL_UNVERIFIED = "unverified"
-TRUST_LEVEL_COMMUNITY = "community"
-TRUST_LEVEL_VERIFIED = "verified"
-TRUST_LEVEL_TRUSTED = "trusted"
-VALID_TRUST_LEVELS: Set[str] = {TRUST_LEVEL_UNVERIFIED, TRUST_LEVEL_COMMUNITY, TRUST_LEVEL_VERIFIED, TRUST_LEVEL_TRUSTED}
-
-# Registry Scope Levels
-SCOPE_SHARED_APP = "shared_app"
-SCOPE_SHARED_USER = "shared_user"
-SCOPE_PRIVATE_USER = "private_user"
-VALID_SCOPES: Set[str] = {SCOPE_SHARED_APP, SCOPE_SHARED_USER, SCOPE_PRIVATE_USER}
-
 # Registry Status Values
 STATUS_ACTIVE = "active"
 STATUS_INACTIVE = "inactive"
@@ -151,19 +128,6 @@ class WellKnownConfig(BaseModel):
     lastSyncStatus: Optional[str] = Field(None, description="success | failed | unreachable")
     lastSyncVersion: Optional[str] = Field(None, description="Agent version from last sync")
     syncError: Optional[str] = Field(None, description="Error message from last sync attempt")
-    
-    model_config = ConfigDict(populate_by_name=True)
-
-
-class RatingDetail(BaseModel):
-    """Individual user rating detail."""
-    username: str = Field(..., description="User who submitted the rating")
-    rating: int = Field(..., ge=1, le=5, description="Rating value (1-5)")
-    timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        description="When rating was submitted"
-    )
-    comment: Optional[str] = Field(None, description="Optional rating comment")
     
     model_config = ConfigDict(populate_by_name=True)
 
@@ -245,25 +209,17 @@ class A2AAgent(Document):
     
     # ========== Registry Metadata ==========
     tags: List[str] = Field(default_factory=list, description="Categorization tags")
-    scope: str = Field(
-        default="private_user",
-        description="Access level: shared_app, shared_user, private_user"
+    scope: Optional[str] = Field(
+        default=None,
+        description="Deprecated. Access control is handled by ACL permissions."
     )
     status: str = Field(
         default="active",
         description="Operational state: active, inactive, error"
     )
-    visibility: str = Field(
-        default="public",
-        description="Visibility: public, private, group-restricted"
-    )
-    allowedGroups: List[str] = Field(
-        default_factory=list,
-        description="Groups with access (for group-restricted visibility)"
-    )
-    trustLevel: str = Field(
+    trustLevel: Optional[str] = Field(
         default="unverified",
-        description="Verification status: unverified, community, verified, trusted"
+        description="Trust badge for display purposes only. Does not control access (use ACL permissions)."
     )
     isEnabled: bool = Field(default=False, description="Whether agent is enabled in registry")
     license: str = Field(default="N/A", description="License information")
@@ -273,7 +229,7 @@ class A2AAgent(Document):
     numStars: float = Field(default=0.0, ge=0.0, le=5.0, description="Average community rating")
     numRatings: int = Field(default=0, ge=0, description="Total number of ratings")
     avgRating: float = Field(default=0.0, ge=0.0, le=5.0, description="Average rating (same as numStars)")
-    ratingDetails: List[RatingDetail] = Field(
+    ratingDetails: List[Dict[str, Any]] = Field(
         default_factory=list,
         description="Individual user ratings"
     )
@@ -396,31 +352,24 @@ class A2AAgent(Document):
     
     def is_accessible_by_user(self, username: str, user_groups: List[str], is_admin: bool = False) -> bool:
         """
-        Check if user can access this agent.
+        DEPRECATED: Access control is now handled by ACL permissions.
+        Use ACLService.check_user_permission() instead.
+        
+        This method is kept for backward compatibility and always returns True.
         
         Args:
-            username: Username
-            user_groups: User's group memberships
-            is_admin: Whether user is admin
+            username: Username (unused)
+            user_groups: User's group memberships (unused)
+            is_admin: Whether user is admin (unused)
         
         Returns:
-            True if user can access agent
+            Always returns True (use ACL system for actual access control)
         """
-        # Admins can access everything
-        if is_admin:
-            return True
-        
-        # Check visibility
-        if self.visibility == "public":
-            return True
-        
-        if self.visibility == "private":
-            return self.registeredBy == username
-        
-        if self.visibility == "group-restricted":
-            return bool(set(user_groups) & set(self.allowedGroups))
-        
-        return False
+        logger.warning(
+            "is_accessible_by_user() is deprecated. "
+            "Use ACLService.check_user_permission() for access control."
+        )
+        return True
     
     def to_a2a_agent_card(self) -> Dict[str, Any]:
         """
@@ -487,9 +436,8 @@ class A2AAgent(Document):
             card: A2A agent card dictionary
             path: Registry path (auto-generated from name if not provided)
             **registry_fields: Additional registry metadata such as:
-                - scope: Access level (default: "private_user")
-                - visibility: Visibility (default: "public")
-                - trustLevel: Trust level (default: "unverified")
+                - scope: Deprecated (default: None)
+                - trustLevel: Trust badge for display (default: "unverified")
                 - isEnabled: Enabled state (default: False)
                 - registeredBy: Username
                 - tags: List of tags
@@ -541,9 +489,8 @@ class A2AAgent(Document):
             metadata=card.get("metadata", {}),
             # Registry Fields (from kwargs or defaults)
             path=path,
-            scope=registry_fields.get("scope", SCOPE_PRIVATE_USER),
-            visibility=registry_fields.get("visibility", VISIBILITY_PUBLIC),
-            trustLevel=registry_fields.get("trustLevel", TRUST_LEVEL_UNVERIFIED),
+            scope=registry_fields.get("scope"),  # Deprecated, defaults to None
+            trustLevel=registry_fields.get("trustLevel", "unverified"),
             isEnabled=registry_fields.get("isEnabled", False),
             tags=registry_fields.get("tags", []),
             registeredBy=registry_fields.get("registeredBy"),
@@ -600,29 +547,6 @@ class A2AAgent(Document):
                 raise ValueError("Protocol version parts must be numeric")
         return v
     
-    @field_validator("visibility")
-    @classmethod
-    def validate_visibility(cls, v: str) -> str:
-        """Validate visibility value."""
-        if v not in VALID_VISIBILITY_VALUES:
-            raise ValueError(f"Visibility must be one of: {', '.join(sorted(VALID_VISIBILITY_VALUES))}")
-        return v
-    
-    @field_validator("trustLevel")
-    @classmethod
-    def validate_trust_level(cls, v: str) -> str:
-        """Validate trust level value."""
-        if v not in VALID_TRUST_LEVELS:
-            raise ValueError(f"Trust level must be one of: {', '.join(sorted(VALID_TRUST_LEVELS))}")
-        return v
-    
-    @field_validator("scope")
-    @classmethod
-    def validate_scope(cls, v: str) -> str:
-        """Validate scope value."""
-        if v not in VALID_SCOPES:
-            raise ValueError(f"Scope must be one of: {', '.join(sorted(VALID_SCOPES))}")
-        return v
     
     @field_validator("status")
     @classmethod
@@ -664,15 +588,6 @@ class A2AAgent(Document):
             raise ValueError(f"Duplicate skill IDs found: {', '.join(unique_duplicates)}")
         
         return v
-    
-    @model_validator(mode="after")
-    def validate_group_restricted_access(self) -> "A2AAgent":
-        """Validate group-restricted visibility has allowed groups."""
-        if self.visibility == "group-restricted" and not self.allowedGroups:
-            raise ValueError(
-                "Group-restricted visibility requires at least one allowed group"
-            )
-        return self
     
     @model_validator(mode="after")
     def validate_security_references(self) -> "A2AAgent":
