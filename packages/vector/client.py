@@ -1,51 +1,51 @@
 """Unified database client interface."""
 
 import logging
-from typing import Optional, Dict, Any, Type, TypeVar
+from typing import Any, TypeVar
 
+from .adapters.adapter import VectorStoreAdapter
 from .adapters.factory import VectorStoreFactory
 from .config import BackendConfig
-from .adapters.adapter import VectorStoreAdapter
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class DatabaseClient:
     """
     Lightweight database manager.
-    
+
     Core responsibilities:
     - Configuration management
     - Connection lifecycle (initialize/close)
     - Repository factory (for_model)
     - Direct adapter access for advanced users
-    
+
     Recommended usage:
         db = initialize_database()
         tools_repo = db.for_model(McpTool)  # High-level Model API
         tools = tools_repo.search("query")
-        
+
     Advanced usage:
         adapter = db.adapter  # Low-level Document API
         docs = adapter.similarity_search(collection_name="...", query="...")
     """
 
-    def __init__(self, config: Optional[BackendConfig] = None):
+    def __init__(self, config: BackendConfig | None = None):
         """Initialize database client with optional configuration."""
         self._config = config
-        self._adapter: Optional[VectorStoreAdapter] = None
+        self._adapter: VectorStoreAdapter | None = None
         self._initialized = False
         self._repositories = {}
 
-    def initialize(self, config: Optional[BackendConfig] = None) -> None:
+    def initialize(self, config: BackendConfig | None = None) -> None:
         """
         Initialize database client with configuration.
-        
+
         Args:
             config: Database configuration (uses instance config if not provided)
-            
+
         Raises:
             ValueError: If no configuration is provided
             RuntimeError: If initialization fails
@@ -76,19 +76,19 @@ class DatabaseClient:
         """Close database connection and clean up resources."""
         if not self._initialized:
             return
-            
+
         try:
             logger.info("Closing database client...")
 
-            if hasattr(self._adapter, 'close'):
+            if hasattr(self._adapter, "close"):
                 self._adapter.close()
-            elif hasattr(self._adapter, '__exit__'):
+            elif hasattr(self._adapter, "__exit__"):
                 self._adapter.__exit__(None, None, None)
 
             self._adapter = None
             self._initialized = False
             self._repositories.clear()
-            
+
             logger.info("Database client closed")
 
         except Exception as e:
@@ -102,17 +102,17 @@ class DatabaseClient:
     def adapter(self) -> VectorStoreAdapter:
         """
         Get direct access to the underlying adapter.
-        
+
         For advanced users who need low-level Document operations.
-        
+
         """
         self._ensure_initialized()
         return self._adapter
 
-    def get_info(self) -> Dict[str, Any]:
+    def get_info(self) -> dict[str, Any]:
         """
         Get client information and status.
-        
+
         Returns:
             Dictionary with client status and configuration
         """
@@ -122,8 +122,8 @@ class DatabaseClient:
         info = {
             "initialized": True,
             "adapter_type": type(self._adapter).__name__,
-            "default_collection": getattr(self._adapter, '_default_collection', 'unknown'),
-            "initialized_collections": getattr(self._adapter, 'list_collections', lambda: [])(),
+            "default_collection": getattr(self._adapter, "_default_collection", "unknown"),
+            "initialized_collections": getattr(self._adapter, "list_collections", lambda: [])(),
         }
 
         return info
@@ -135,7 +135,7 @@ class DatabaseClient:
 
 
 # Global client instance for convenience
-_db_instance: Optional[DatabaseClient] = None
+_db_instance: DatabaseClient | None = None
 
 
 def get_db_client() -> DatabaseClient:
@@ -146,10 +146,10 @@ def get_db_client() -> DatabaseClient:
     return _db_instance
 
 
-def initialize_database(config: Optional[BackendConfig] = None) -> DatabaseClient:
+def initialize_database(config: BackendConfig | None = None) -> DatabaseClient:
     """
     Initialize the global database client.
-    
+
     If config is None, automatically loads from environment variables.
 
     Args:
@@ -161,7 +161,7 @@ def initialize_database(config: Optional[BackendConfig] = None) -> DatabaseClien
     # Auto-load config from environment if not provided
     if config is None:
         config = BackendConfig.from_env()
-    
+
     client = get_db_client()
     client.initialize(config)
     return client

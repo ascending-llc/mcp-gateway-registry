@@ -15,7 +15,7 @@ try:
     from ._generated import *  # noqa: F403, F401
     from ._generated import __all__ as _generated_all
 
-    __all__ = ['ToolDiscoveryMode', 'ExtendedMCPServer', 'MCPServerDocument'] + _generated_all
+    __all__ = ["ToolDiscoveryMode", "ExtendedMCPServer", "MCPServerDocument"] + _generated_all
 except ImportError:
     # _generated doesn't exist yet - will be created by import-schemas
-    __all__ = ['ToolDiscoveryMode', 'ExtendedMCPServer', 'MCPServerDocument']
+    __all__ = ["ToolDiscoveryMode", "ExtendedMCPServer", "MCPServerDocument"]

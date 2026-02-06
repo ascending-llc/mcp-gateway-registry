@@ -1,9 +1,11 @@
-from typing import Dict, Any, Optional, List
-from packages.vector.enum.enums import SearchType, RerankerProvider
+from typing import Any
+
 from packages.models.extended_mcp_server import ExtendedMCPServer
-from .base import VectorSearchService
-from registry.utils.log import logger
+from packages.vector.enum.enums import RerankerProvider, SearchType
 from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from registry.utils.log import logger
+
+from .base import VectorSearchService
 
 
 class ExternalVectorSearchService(VectorSearchService):
@@ -12,14 +14,14 @@ class ExternalVectorSearchService(VectorSearchService):
     """
 
     def __init__(
-            self,
-            enable_rerank: bool = True,
-            search_type: SearchType = SearchType.HYBRID,
-            reranker_model: str = "ms-marco-TinyBERT-L-2-v2"
+        self,
+        enable_rerank: bool = True,
+        search_type: SearchType = SearchType.HYBRID,
+        reranker_model: str = "ms-marco-TinyBERT-L-2-v2",
     ):
         """
         Initialize vector search service with rerank support.
-        
+
         Args:
             enable_rerank: Enable reranking (default: True)
             search_type: Default search type (NEAR_TEXT, BM25, HYBRID)
@@ -34,8 +36,10 @@ class ExternalVectorSearchService(VectorSearchService):
             self.client = self.mcp_server_repo.db_client
             self._initialized = True
 
-            logger.info(f"Registry vector search service initialized (specialized repository): "
-                        f"rerank={enable_rerank}, search_type={search_type.value}")
+            logger.info(
+                f"Registry vector search service initialized (specialized repository): "
+                f"rerank={enable_rerank}, search_type={search_type.value}"
+            )
         except Exception as e:
             self.client = None
             self.mcp_server_repo = None
@@ -55,7 +59,7 @@ class ExternalVectorSearchService(VectorSearchService):
             collection_name = ExtendedMCPServer.COLLECTION_NAME
             adapter = self.client.adapter
 
-            if hasattr(adapter, 'collection_exists'):
+            if hasattr(adapter, "collection_exists"):
                 exists = adapter.collection_exists(collection_name)
                 if exists:
                     logger.info(f"Collection '{collection_name}' verified")
@@ -69,24 +73,19 @@ class ExternalVectorSearchService(VectorSearchService):
             self._initialized = False
             raise Exception(f"Cannot verify vector search: {e}")
 
-    def get_retriever(
-            self,
-            search_type: Optional[SearchType] = None,
-            enable_rerank: Optional[bool] = None,
-            top_k: int = 10
-    ):
+    def get_retriever(self, search_type: SearchType | None = None, enable_rerank: bool | None = None, top_k: int = 10):
         """
         Get a LangChain retriever (with optional rerank) for RAG applications.
-        
+
         Similar to BedrockRerank usage:
         - Creates base retriever
         - Optionally wraps with ContextualCompressionRetriever for reranking
-        
+
         Args:
             search_type: Search type (uses default if None)
             enable_rerank: Enable rerank (uses instance setting if None)
             top_k: Number of results to return
-            
+
         Returns:
             BaseRetriever or ContextualCompressionRetriever
 
@@ -103,24 +102,15 @@ class ExternalVectorSearchService(VectorSearchService):
                 reranker_type=RerankerProvider.FLASHRANK,
                 search_type=use_search_type,
                 search_kwargs={"k": top_k * 3},  # 3x candidates
-                reranker_kwargs={
-                    "top_k": top_k,
-                    "model": self.reranker_model
-                }
+                reranker_kwargs={"top_k": top_k, "model": self.reranker_model},
             )
         else:
             # Return base retriever without rerank
-            return self.mcp_server_repo.get_retriever(
-                search_type=use_search_type,
-                k=top_k
-            )
+            return self.mcp_server_repo.get_retriever(search_type=use_search_type, k=top_k)
 
     async def add_or_update_service(
-            self,
-            service_path: str,
-            server_info: Dict[str, Any],
-            is_enabled: bool = False
-    ) -> Optional[Dict[str, int]]:
+        self, service_path: str, server_info: dict[str, Any], is_enabled: bool = False
+    ) -> dict[str, int] | None:
         """
         Add or update server in vector database.
 
@@ -129,20 +119,14 @@ class ExternalVectorSearchService(VectorSearchService):
         """
         try:
             # Ensure path is in server_info
-            if 'path' not in server_info:
-                server_info['path'] = service_path
+            if "path" not in server_info:
+                server_info["path"] = service_path
 
             # Create server instance from server_info
-            server = ExtendedMCPServer.from_server_info(
-                server_info=server_info,
-                is_enabled=is_enabled
-            )
+            server = ExtendedMCPServer.from_server_info(server_info=server_info, is_enabled=is_enabled)
 
             # Use specialized repository's sync method
-            result = await self.mcp_server_repo.sync_server_to_vector_db(
-                server=server,
-                is_delete=True
-            )
+            result = await self.mcp_server_repo.sync_server_to_vector_db(server=server, is_delete=True)
 
             return result if result else {"indexed_tools": 0, "failed_tools": 1}
 
@@ -150,25 +134,23 @@ class ExternalVectorSearchService(VectorSearchService):
             logger.error(f"Failed to add/update service: {e}", exc_info=True)
             return {"indexed_tools": 0, "failed_tools": 1}
 
-    async def remove_service(self, service_path: str) -> Optional[Dict[str, int]]:
+    async def remove_service(self, service_path: str) -> dict[str, int] | None:
         """
         Remove server from vector database.
 
         Note: Uses path as identifier. Prefer using server_id when available.
         """
-        deleted_count = await self.mcp_server_repo.adelete_by_filter(
-            filters={"path": service_path}
-        )
+        deleted_count = await self.mcp_server_repo.adelete_by_filter(filters={"path": service_path})
         return {"deleted_tools": deleted_count}
 
     async def search(
-            self,
-            query: Optional[str] = None,
-            tags: Optional[List[str]] = None,
-            top_k: int = 10,
-            filters: Optional[Dict[str, Any]] = None,
-            search_type: Optional[SearchType] = None
-    ) -> List[Dict[str, Any]]:
+        self,
+        query: str | None = None,
+        tags: list[str] | None = None,
+        top_k: int = 10,
+        filters: dict[str, Any] | None = None,
+        search_type: SearchType | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Search tools with optional reranking.
 
@@ -187,8 +169,9 @@ class ExternalVectorSearchService(VectorSearchService):
             return []
 
         use_search_type = search_type or self.search_type
-        logger.info(f"Search: query='{query}', tags={tags}, top_k={top_k}, "
-                    f"filters={filters}, search_type={use_search_type}")
+        logger.info(
+            f"Search: query='{query}', tags={tags}, top_k={top_k}, filters={filters}, search_type={use_search_type}"
+        )
 
         try:
             if not query:
@@ -196,18 +179,17 @@ class ExternalVectorSearchService(VectorSearchService):
                 if not filters:
                     logger.warning("No query and no filters provided")
                     return []
-                servers = self.mcp_server_repo.filter(
-                    filters=filters,
-                    limit=top_k * 2 if tags else top_k
-                )
+                servers = self.mcp_server_repo.filter(filters=filters, limit=top_k * 2 if tags else top_k)
             elif self.enable_rerank:
                 # Use rerank - Repository layer handles candidate_k automatically
                 candidate_k = min(top_k * 3, 100)
                 if tags:
                     candidate_k = min(candidate_k * 2, 150)
 
-                logger.info(f"Using rerank: type={use_search_type.value}, "
-                            f"candidate_k={candidate_k}, k={top_k * 2 if tags else top_k}")
+                logger.info(
+                    f"Using rerank: type={use_search_type.value}, "
+                    f"candidate_k={candidate_k}, k={top_k * 2 if tags else top_k}"
+                )
                 servers = self.mcp_server_repo.search_with_rerank(
                     query=query,
                     search_type=use_search_type,
@@ -215,15 +197,12 @@ class ExternalVectorSearchService(VectorSearchService):
                     candidate_k=candidate_k,
                     filters=filters,
                     reranker_type=RerankerProvider.FLASHRANK,
-                    reranker_kwargs={"model": self.reranker_model}
+                    reranker_kwargs={"model": self.reranker_model},
                 )
             else:
                 # Regular search without rerank
                 servers = self.mcp_server_repo.search(
-                    query=query,
-                    search_type=use_search_type,
-                    k=top_k * 2 if tags else top_k,
-                    filters=filters
+                    query=query, search_type=use_search_type, k=top_k * 2 if tags else top_k, filters=filters
                 )
 
             # Apply tag filtering if needed (in-memory)
@@ -246,7 +225,7 @@ class ExternalVectorSearchService(VectorSearchService):
             logger.error(f"Search failed: {e}", exc_info=True)
             return []
 
-    def _servers_to_results(self, servers: List[ExtendedMCPServer]) -> List[Dict[str, Any]]:
+    def _servers_to_results(self, servers: list[ExtendedMCPServer]) -> list[dict[str, Any]]:
         """
         Convert ExtendedMCPServer instances to result dictionaries.
 
@@ -262,54 +241,47 @@ class ExternalVectorSearchService(VectorSearchService):
 
         for server in servers:
             logger.info(f"Processing server: {server.serverName}")
-            
+
             # Get config details
             config = server.config or {}
-            
+
             result = {
                 "server_name": server.serverName,
                 "server_path": server.path,
                 "path": server.path,
-                "description": config.get('description', ''),
-                "title": config.get('title', server.serverName),
+                "description": config.get("description", ""),
+                "title": config.get("title", server.serverName),
                 "tags": server.tags or [],
-                "is_enabled": server.status == 'active',
+                "is_enabled": server.status == "active",
                 "status": server.status,
                 "numTools": server.numTools,
                 "numStars": server.numStars,
             }
 
             # Add relevance score if available
-            if hasattr(server, 'relevance_score'):
-                result['relevance_score'] = round(server.relevance_score, 4)
-            
+            if hasattr(server, "relevance_score"):
+                result["relevance_score"] = round(server.relevance_score, 4)
+
             # Add score field if available
-            if hasattr(server, 'score') and server.score is not None:
-                result['score'] = server.score
-                
+            if hasattr(server, "score") and server.score is not None:
+                result["score"] = server.score
+
             results.append(result)
         return results
 
-    def _agent_to_server_info(
-            self,
-            agent_card_dict: Dict[str, Any],
-            entity_path: str
-    ) -> Dict[str, Any]:
+    def _agent_to_server_info(self, agent_card_dict: dict[str, Any], entity_path: str) -> dict[str, Any]:
         """
         Convert AgentCard dictionary to server_info format for McpTool.
-        
+
         Args:
             agent_card_dict: AgentCard data as dictionary
             entity_path: Agent path
-            
+
         Returns:
             server_info dictionary compatible with add_or_update_service
         """
         skills = agent_card_dict.get("skills", [])
-        skills_text = ", ".join([
-            skill.get("name", "") if isinstance(skill, dict) else str(skill)
-            for skill in skills
-        ])
+        ", ".join([skill.get("name", "") if isinstance(skill, dict) else str(skill) for skill in skills])
 
         return {
             "server_name": agent_card_dict.get("name", entity_path.strip("/")),
@@ -323,50 +295,49 @@ class ExternalVectorSearchService(VectorSearchService):
         }
 
     async def add_or_update_entity(
-            self,
-            entity_path: str,
-            entity_info: Dict[str, Any],
-            entity_type: str,
-            is_enabled: bool = False,
-    ) -> Optional[Dict[str, int]]:
+        self,
+        entity_path: str,
+        entity_info: dict[str, Any],
+        entity_type: str,
+        is_enabled: bool = False,
+    ) -> dict[str, int] | None:
         """
         Add or update an entity (agent or server) in the search index.
-        
+
         Unified interface compatible with EmbeddedFaissService.
-        
+
         Args:
             entity_path: Entity path identifier
             entity_info: Entity data dictionary
             entity_type: Entity type ("a2a_agent" or "mcp_server")
             is_enabled: Whether the entity is enabled
-            
+
         Returns:
             Result dictionary or None if unavailable
         """
 
-        
         if entity_type == "a2a_agent":
             # Convert AgentCard to server_info format
             server_info = self._agent_to_server_info(entity_info, entity_path)
             server_info["is_enabled"] = is_enabled
             # Ensure path is in server_info
-            if 'path' not in server_info:
-                server_info['path'] = entity_path
-            
+            if "path" not in server_info:
+                server_info["path"] = entity_path
+
             # Start background sync
             # asyncio.create_task(mcp_server_repo.sync_full(
             #     server_info=server_info,
             #     is_enabled=is_enabled
             # ))
             return {"indexed_tools": 1, "failed_tools": 0}
-            
+
         elif entity_type == "mcp_server":
             # Ensure entity_type and path are set
             if "entity_type" not in entity_info:
                 entity_info["entity_type"] = "mcp_server"
-            if 'path' not in entity_info:
-                entity_info['path'] = entity_path
-            
+            if "path" not in entity_info:
+                entity_info["path"] = entity_path
+
             # Start background sync
             # asyncio.create_task(mcp_server_repo.sync_full(
             #     server_info=entity_info,
@@ -378,29 +349,27 @@ class ExternalVectorSearchService(VectorSearchService):
             return None
 
     async def remove_entity(
-            self,
-            entity_path: str,
-    ) -> Optional[Dict[str, int]]:
+        self,
+        entity_path: str,
+    ) -> dict[str, int] | None:
         """
         Remove an entity (agent or server) from the search index.
-        
+
         Unified interface compatible with EmbeddedFaissService.
-        
+
         Args:
             entity_path: Entity path identifier
-            
+
         Returns:
             Result dictionary
         """
-        deleted_count = await self.mcp_server_repo.adelete_by_filter(
-            filters={"path": entity_path}
-        )
+        deleted_count = await self.mcp_server_repo.adelete_by_filter(filters={"path": entity_path})
         return {"deleted_tools": deleted_count}
 
     async def cleanup(self):
         """
         Cleanup resources.
-        
+
         Note: Does not close database connection as it's shared with Repository.
         """
         logger.info("Cleaning up Registry vector search service")
@@ -410,12 +379,12 @@ class ExternalVectorSearchService(VectorSearchService):
         logger.info("Registry vector search cleanup complete (shared connection preserved)")
 
     async def search_mixed(
-            self,
-            query: str,
-            entity_types: Optional[List[str]] = None,
-            max_results: int = 20,
-            search_type: Optional[SearchType] = None
-    ) -> Dict[str, List[Dict[str, Any]]]:
+        self,
+        query: str,
+        entity_types: list[str] | None = None,
+        max_results: int = 20,
+        search_type: SearchType | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
         """
         Search across multiple entity types with rerank support.
 
@@ -448,14 +417,13 @@ class ExternalVectorSearchService(VectorSearchService):
         if not entity_filter:
             entity_filter = list(allowed_types)
 
-        logger.info(f"search_mixed: query='{query}', types={entity_filter}, "
-                    f"max={max_results}, search_type={search_type or self.search_type}")
+        logger.info(
+            f"search_mixed: query='{query}', types={entity_filter}, "
+            f"max={max_results}, search_type={search_type or self.search_type}"
+        )
 
         use_search_type = search_type or self.search_type
-        results = {
-            "servers": [],
-            "agents": []
-        }
+        results = {"servers": [], "agents": []}
 
         try:
             # Calculate search parameters
@@ -465,8 +433,7 @@ class ExternalVectorSearchService(VectorSearchService):
             # Use rerank if enabled
             if self.enable_rerank:
                 logger.info(
-                    f"Mixed search with rerank: type={use_search_type.value}, "
-                    f"candidate_k={candidate_k}, k={search_k}"
+                    f"Mixed search with rerank: type={use_search_type.value}, candidate_k={candidate_k}, k={search_k}"
                 )
                 servers = self.mcp_server_repo.search_with_rerank(
                     query=query,
@@ -474,35 +441,31 @@ class ExternalVectorSearchService(VectorSearchService):
                     k=search_k,
                     candidate_k=candidate_k,
                     reranker_type=RerankerProvider.FLASHRANK,
-                    reranker_kwargs={"model": self.reranker_model}
+                    reranker_kwargs={"model": self.reranker_model},
                 )
             else:
                 # Regular search without rerank
-                servers = self.mcp_server_repo.search(
-                    query=query,
-                    search_type=use_search_type,
-                    k=search_k
-                )
+                servers = self.mcp_server_repo.search(query=query, search_type=use_search_type, k=search_k)
 
             # Filter and categorize results
             for server in servers:
                 config = server.config or {}
-                description = config.get('description', '')
-                
-                relevance_score = round(server.relevance_score, 4) if hasattr(server, 'relevance_score') else 0.0
-                
+                description = config.get("description", "")
+
+                relevance_score = round(server.relevance_score, 4) if hasattr(server, "relevance_score") else 0.0
+
                 # Build result dict
                 result = {
                     "server_path": server.path,
                     "server_name": server.serverName,
                     "path": server.path,
                     "description": description,
-                    "match_context": description[:200] if description else '',
+                    "match_context": description[:200] if description else "",
                     "relevance_score": relevance_score,
                     "tags": server.tags or [],
-                    "is_enabled": server.status == 'active',
+                    "is_enabled": server.status == "active",
                 }
-                
+
                 # Add to servers results
                 if "mcp_server" in entity_filter:
                     results["servers"].append(result)
@@ -519,15 +482,14 @@ class ExternalVectorSearchService(VectorSearchService):
             # Sort and limit results
             for key in ["servers", "agents"]:
                 # Sort by relevance_score (with fallback to 0.0 for safety)
-                results[key].sort(
-                    key=lambda x: x.get("relevance_score", 0.0),
-                    reverse=True
-                )
+                results[key].sort(key=lambda x: x.get("relevance_score", 0.0), reverse=True)
                 results[key] = results[key][:max_results]
 
-            logger.info(f"Found {len(results['servers'])} servers, "
-                        f"{len(results['agents'])} agents "
-                        f"(rerank={'ON' if self.enable_rerank else 'OFF'})")
+            logger.info(
+                f"Found {len(results['servers'])} servers, "
+                f"{len(results['agents'])} agents "
+                f"(rerank={'ON' if self.enable_rerank else 'OFF'})"
+            )
             return results
 
         except Exception as e:

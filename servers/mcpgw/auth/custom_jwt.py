@@ -1,8 +1,9 @@
 import logging
-import jwt
-from typing import Optional
 from datetime import datetime
-from fastmcp.server.auth import TokenVerifier, AccessToken
+
+import jwt
+from fastmcp.server.auth import AccessToken, TokenVerifier
+
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -11,25 +12,25 @@ logger = logging.getLogger(__name__)
 class CustomJWTVerifier(TokenVerifier):
     """
     JWT Token Verifier for HS256 (HMAC with SHA-256) signed tokens.
-    
+
     This provider validates JWT tokens signed with a shared secret key,
     commonly used in microservices architectures where the token issuer
     and verifier share the same secret.
     """
 
     def __init__(
-            self,
-            secret_key: str,
-            issuer: str,
-            audience: str,
-            base_url: Optional[str] = None,
-            required_scopes: Optional[list[str]] = None,
-            algorithms: Optional[list] = None,
-            expected_kid: Optional[str] = None
+        self,
+        secret_key: str,
+        issuer: str,
+        audience: str,
+        base_url: str | None = None,
+        required_scopes: list[str] | None = None,
+        algorithms: list | None = None,
+        expected_kid: str | None = None,
     ):
         """
         Initialize JWT verifier.
-        
+
         Args:
             secret_key: Shared secret key for verifying JWT signature
             issuer: Expected token issuer (iss claim)
@@ -49,13 +50,13 @@ class CustomJWTVerifier(TokenVerifier):
     async def verify_token(self, token: str) -> AccessToken | None:
         """
         Verify JWT token and return access information.
-        
+
         This method is called by FastMCP framework's BearerAuthBackend to verify each request.
         The framework automatically extracts the Bearer token from the Authorization header.
-        
+
         Args:
             token: JWT token string (without "Bearer " prefix)
-            
+
         Returns:
             AccessToken object if verification succeeds, otherwise None
         """
@@ -72,9 +73,7 @@ class CustomJWTVerifier(TokenVerifier):
                     token_kid = unverified_header.get("kid")
 
                     if token_kid != self.expected_kid:
-                        logger.warning(
-                            f"Token kid mismatch: expected={self.expected_kid}, got={token_kid}"
-                        )
+                        logger.warning(f"Token kid mismatch: expected={self.expected_kid}, got={token_kid}")
                         return None
                 except jwt.DecodeError as e:
                     logger.error(f"Failed to decode token header: {e}")
@@ -83,33 +82,25 @@ class CustomJWTVerifier(TokenVerifier):
             # Decode and verify JWT token
             # For self-signed tokens (kid='mcp-self-signed'), skip audience validation
             # because the audience is now the resource URL (RFC 8707 Resource Indicators)
-            is_self_signed = (token_kid == self.expected_kid)
-            
+            is_self_signed = token_kid == self.expected_kid
+
             decode_options = {
                 "verify_signature": True,
                 "verify_exp": True,
                 "verify_iss": True,
                 "verify_aud": not is_self_signed,  # Skip aud check for self-signed tokens
-                "require": ["exp", "iss", "aud", "sub"]
+                "require": ["exp", "iss", "aud", "sub"],
             }
-            
-            decode_kwargs = {
-                "algorithms": self.algorithms,
-                "issuer": self.issuer,
-                "options": decode_options
-            }
-            
+
+            decode_kwargs = {"algorithms": self.algorithms, "issuer": self.issuer, "options": decode_options}
+
             # Only validate audience for provider tokens (not self-signed)
             if not is_self_signed:
                 decode_kwargs["audience"] = self.audience
             else:
                 logger.debug("Skipping audience validation for self-signed token (RFC 8707 Resource Indicators)")
-            
-            claims = jwt.decode(
-                token,
-                self.secret_key,
-                **decode_kwargs
-            )
+
+            claims = jwt.decode(token, self.secret_key, **decode_kwargs)
 
             # Extract user information
             subject = claims.get("sub")
@@ -142,7 +133,7 @@ class CustomJWTVerifier(TokenVerifier):
                 client_id=client_id,  # Client ID (required)
                 scopes=scopes,  # Scope list (required, list type)
                 expires_at=expires_at,  # Expiration timestamp (optional)
-                claims=claims  # FastMCP extension field: complete JWT claims
+                claims=claims,  # FastMCP extension field: complete JWT claims
             )
 
         except jwt.ExpiredSignatureError:
@@ -169,5 +160,5 @@ jwtVerifier = CustomJWTVerifier(
     secret_key=settings.SECRET_KEY,
     issuer=settings.JWT_ISSUER,
     audience=settings.JWT_AUDIENCE,
-    expected_kid=settings.JWT_SELF_SIGNED_KID
+    expected_kid=settings.JWT_SELF_SIGNED_KID,
 )

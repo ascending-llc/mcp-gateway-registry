@@ -6,10 +6,9 @@ Provides common functionality for all federation clients.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
-from ...core.config import settings
 
 # Get logger - logging is configured centrally in main.py via settings.configure_logging()
 logger = logging.getLogger(__name__)
@@ -18,12 +17,7 @@ logger = logging.getLogger(__name__)
 class BaseFederationClient(ABC):
     """Base class for federation clients."""
 
-    def __init__(
-        self,
-        endpoint: str,
-        timeout_seconds: int = 30,
-        retry_attempts: int = 3
-    ):
+    def __init__(self, endpoint: str, timeout_seconds: int = 30, retry_attempts: int = 3):
         """
         Initialize federation client.
 
@@ -43,11 +37,7 @@ class BaseFederationClient(ABC):
             self.client.close()
 
     @abstractmethod
-    def fetch_server(
-        self,
-        server_name: str,
-        **kwargs
-    ) -> Optional[Dict[str, Any]]:
+    def fetch_server(self, server_name: str, **kwargs) -> dict[str, Any] | None:
         """
         Fetch a single server from the federated registry.
 
@@ -61,11 +51,7 @@ class BaseFederationClient(ABC):
         pass
 
     @abstractmethod
-    def fetch_all_servers(
-        self,
-        server_names: List[str],
-        **kwargs
-    ) -> List[Dict[str, Any]]:
+    def fetch_all_servers(self, server_names: list[str], **kwargs) -> list[dict[str, Any]]:
         """
         Fetch multiple servers from the federated registry.
 
@@ -82,10 +68,10 @@ class BaseFederationClient(ABC):
         self,
         url: str,
         method: str = "GET",
-        headers: Optional[Dict[str, str]] = None,
-        params: Optional[Dict[str, Any]] = None,
-        data: Optional[Dict[str, Any]] = None
-    ) -> Optional[Dict[str, Any]]:
+        headers: dict[str, str] | None = None,
+        params: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
         """
         Make HTTP request with retry logic.
 
@@ -103,13 +89,7 @@ class BaseFederationClient(ABC):
             try:
                 logger.debug(f"Making {method} request to {url} (attempt {attempt + 1}/{self.retry_attempts})")
 
-                response = self.client.request(
-                    method=method,
-                    url=url,
-                    headers=headers,
-                    params=params,
-                    json=data
-                )
+                response = self.client.request(method=method, url=url, headers=headers, params=params, json=data)
 
                 response.raise_for_status()
                 return response.json()

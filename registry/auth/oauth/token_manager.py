@@ -1,25 +1,18 @@
 import asyncio
 import time
 
-from typing import Dict, Optional
-
 from registry.models.oauth_models import OAuthTokens
-
 from registry.utils.log import logger
+
 
 class OAuthTokenManager:
     """OAuth token manager"""
 
     def __init__(self):
-        self.tokens: Dict[str, Dict[str, OAuthTokens]] = {}  # user_id -> {server_id -> tokens}
+        self.tokens: dict[str, dict[str, OAuthTokens]] = {}  # user_id -> {server_id -> tokens}
         self._lock = asyncio.Lock()
 
-    async def store_tokens(
-            self,
-            user_id: str,
-            server_id: str,
-            tokens: OAuthTokens
-    ) -> None:
+    async def store_tokens(self, user_id: str, server_id: str, tokens: OAuthTokens) -> None:
         """Store tokens"""
         async with self._lock:
             if user_id not in self.tokens:
@@ -28,7 +21,7 @@ class OAuthTokenManager:
             self.tokens[user_id][server_id] = tokens
             logger.debug(f"Stored tokens for {user_id}/{server_id}")
 
-    async def get_tokens(self, user_id: str, server_id: str) -> Optional[OAuthTokens]:
+    async def get_tokens(self, user_id: str, server_id: str) -> OAuthTokens | None:
         """Get user's OAuth tokens"""
         async with self._lock:
             if user_id in self.tokens and server_id in self.tokens[user_id]:
@@ -52,7 +45,7 @@ class OAuthTokenManager:
                 return True
             return False
 
-    async def get_all_user_tokens(self, user_id: str) -> Dict[str, OAuthTokens]:
+    async def get_all_user_tokens(self, user_id: str) -> dict[str, OAuthTokens]:
         """Get all tokens for user"""
         async with self._lock:
             if user_id in self.tokens:
@@ -69,12 +62,7 @@ class OAuthTokenManager:
                 return valid_tokens
             return {}
 
-    async def refresh_tokens(
-            self,
-            user_id: str,
-            server_id: str,
-            new_tokens: OAuthTokens
-    ) -> bool:
+    async def refresh_tokens(self, user_id: str, server_id: str, new_tokens: OAuthTokens) -> bool:
         """Refresh tokens"""
         async with self._lock:
             if user_id not in self.tokens:

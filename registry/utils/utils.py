@@ -1,18 +1,20 @@
-import secrets
-import hashlib
 import base64
+import hashlib
+import secrets
 from pathlib import Path
-from typing import Dict
-from registry.utils.log import logger
-from fastapi import HTTPException, status as http_status
+
+from fastapi import HTTPException
+from fastapi import status as http_status
+
 from registry.core.acl_constants import ResourceType
+from registry.utils.log import logger
 
 
 # PKCE utility functions
 def generate_code_verifier() -> str:
     """
     Generate PKCE code_verifier
-    
+
     Python implementation: Use secrets.token_urlsafe to generate secure random string
     """
     return secrets.token_urlsafe(32)
@@ -22,8 +24,8 @@ def generate_code_challenge(code_verifier: str) -> str:
     """
     Generate PKCE code_challenge
     """
-    sha256_hash = hashlib.sha256(code_verifier.encode('utf-8')).digest()
-    code_challenge = base64.urlsafe_b64encode(sha256_hash).decode('utf-8').replace('=', '')
+    sha256_hash = hashlib.sha256(code_verifier.encode("utf-8")).digest()
+    code_challenge = base64.urlsafe_b64encode(sha256_hash).decode("utf-8").replace("=", "")
     return code_challenge
 
 
@@ -31,7 +33,7 @@ def generate_code_challenge(code_verifier: str) -> str:
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates" / "oauth"
 
 
-def load_template(template_name: str, context: Dict[str, str]) -> str:
+def load_template(template_name: str, context: dict[str, str]) -> str:
     """Load and render HTML template"""
     template_path = TEMPLATE_DIR / template_name
     if not template_path.exists():
@@ -39,7 +41,7 @@ def load_template(template_name: str, context: Dict[str, str]) -> str:
         return f"<h1>Template Error</h1><p>Template {template_name} not found</p>"
     try:
         content = None
-        with open(template_path, 'r', encoding='utf-8') as f:
+        with open(template_path, encoding="utf-8") as f:
             content = f.read()
 
         # Simple template rendering - handle both {{ key }} and {{ {key} }} formats
@@ -51,13 +53,11 @@ def load_template(template_name: str, context: Dict[str, str]) -> str:
         logger.error(f"Failed to load template {template_name}: {e}")
         return f"<h1>Template Error</h1><p>Failed to load template: {e}</p>"
 
+
 # ACL utility function
 def validate_resource_type(resource_type: str) -> None:
     if resource_type not in [rt.value for rt in ResourceType]:
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "invalid_resource_type",
-                "message": f"Resource type '{resource_type}' is not valid."
-            }
+            detail={"error": "invalid_resource_type", "message": f"Resource type '{resource_type}' is not valid."},
         )

@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+
 async def get_oauth2_providers():
     """Fetch available OAuth2 providers from auth server"""
     try:
@@ -27,11 +28,13 @@ async def get_oauth2_providers():
         logger.warning(f"Failed to fetch OAuth2 providers from auth server: {e}", exc_info=True)
     return []
 
+
 @router.get("/providers")
 async def get_providers_api():
     """API endpoint to get available OAuth2 providers for React frontend"""
     providers = await get_oauth2_providers()
     return {"providers": providers}
+
 
 @router.get("/config")
 async def get_auth_config():

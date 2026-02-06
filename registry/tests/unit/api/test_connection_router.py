@@ -1,12 +1,13 @@
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
-from fastapi.testclient import TestClient
-from unittest.mock import Mock, patch, AsyncMock
-from registry.api.v1.mcp.connection_router import router
-from registry.services.oauth.mcp_service import MCPService
-from fastapi import Request
 from bson import ObjectId
+from fastapi import Request
+from fastapi.testclient import TestClient
+
+from registry.api.v1.mcp.connection_router import router
 from registry.schemas.enums import ConnectionState
-from registry.services.oauth.mcp_service import get_mcp_service
+from registry.services.oauth.mcp_service import MCPService, get_mcp_service
 
 # Valid MongoDB ObjectId for testing (24 hex characters)
 TEST_SERVER_ID = "507f1f77bcf86cd799439011"
@@ -75,7 +76,7 @@ def client():
             "id": "test_user_id",
             "groups": ["registry-admins"],
             "scopes": ["registry-admins"],
-            "is_admin": True
+            "is_admin": True,
         }
         request.state.is_authenticated = True
         response = await call_next(request)
@@ -85,12 +86,15 @@ def client():
     app.dependency_overrides[get_mcp_service] = lambda: mock_mcp_service
 
     # Mock server_service_v1
-    with patch('registry.api.v1.mcp.connection_router.server_service_v1', mock_server_service_v1):
+    with patch("registry.api.v1.mcp.connection_router.server_service_v1", mock_server_service_v1):
         # Mock connection status service functions
-        with patch('registry.api.v1.mcp.connection_router.get_servers_connection_status',
-                   mock_get_servers_connection_status):
-            with patch('registry.api.v1.mcp.connection_router.get_single_server_connection_status',
-                       mock_get_single_server_connection_status):
+        with patch(
+            "registry.api.v1.mcp.connection_router.get_servers_connection_status", mock_get_servers_connection_status
+        ):
+            with patch(
+                "registry.api.v1.mcp.connection_router.get_single_server_connection_status",
+                mock_get_single_server_connection_status,
+            ):
                 yield TestClient(app)
 
 
@@ -107,7 +111,7 @@ class TestConnectionRouter:
 
         # Mock server_service_v1.get_server_by_id to return the mock server
         mock_server_service_v1.get_server_by_id.return_value = mock_server
-        
+
         # Mock connection service to successfully disconnect
         mock_mcp_service.connection_service.disconnect_user_connection.return_value = True
 
@@ -127,7 +131,7 @@ class TestConnectionRouter:
         """Test reinitialization with non-existent server"""
         # Mock server_service_v1.get_server_by_id to return None
         mock_server_service_v1.get_server_by_id.return_value = None
-        
+
         response = client.post(f"/mcp/{TEST_SERVER_ID}/reinitialize")
 
         # Endpoint raises HTTPException 404
@@ -144,7 +148,7 @@ class TestConnectionRouter:
 
         # Mock server_service_v1.get_server_by_id to return the mock server
         mock_server_service_v1.get_server_by_id.return_value = mock_server
-        
+
         # Mock connection service to fail disconnect
         mock_mcp_service.connection_service.disconnect_user_connection.return_value = False
 
@@ -171,7 +175,7 @@ class TestConnectionRouter:
 
         # Mock server_service_v1.get_server_by_id to return the mock server
         mock_server_service_v1.get_server_by_id.return_value = mock_server
-        
+
         # Mock connection service to successfully disconnect
         mock_mcp_service.connection_service.disconnect_user_connection.return_value = True
 
@@ -194,7 +198,7 @@ class TestConnectionRouter:
 
         # Mock server_service_v1.get_server_by_id to return the mock server
         mock_server_service_v1.get_server_by_id.return_value = mock_server
-        
+
         # Mock connection service to successfully disconnect
         mock_mcp_service.connection_service.disconnect_user_connection.return_value = True
 
@@ -226,7 +230,7 @@ class TestConnectionRouter:
                 "server_id": TEST_SERVER_ID,
                 "server_name": TEST_SERVER_NAME,
                 "connection_state": ConnectionState.CONNECTED,
-                "requires_oauth": True
+                "requires_oauth": True,
             }
         ]
 
@@ -234,7 +238,7 @@ class TestConnectionRouter:
 
         assert response.status_code == 200
         response_data = response.json()
-        assert response_data["success"] == True
+        assert response_data["success"]
         assert "connectionStatus" in response_data
         assert len(response_data["connectionStatus"]) == 1
         assert response_data["connectionStatus"][0]["server_id"] == TEST_SERVER_ID
@@ -251,7 +255,7 @@ class TestConnectionRouter:
 
         assert response.status_code == 200
         response_data = response.json()
-        assert response_data["success"] == True
+        assert response_data["success"]
         assert "connectionStatus" in response_data
         assert len(response_data["connectionStatus"]) == 0
 
@@ -275,28 +279,28 @@ class TestConnectionRouter:
 
         # Mock server_service_v1.get_server_by_id to return the mock server
         mock_server_service_v1.get_server_by_id.return_value = mock_server
-        
+
         # Mock get_single_server_connection_status to return status
         mock_get_single_server_connection_status.return_value = {
             "connection_state": ConnectionState.CONNECTED,
-            "requires_oauth": True
+            "requires_oauth": True,
         }
 
         response = client.get(f"/mcp/connection/status/{TEST_SERVER_ID}")
 
         assert response.status_code == 200
         response_data = response.json()
-        assert response_data["success"] == True
+        assert response_data["success"]
         assert response_data["serverName"] == TEST_SERVER_NAME
         assert response_data["connectionState"] == ConnectionState.CONNECTED
-        assert response_data["requiresOAuth"] == True
+        assert response_data["requiresOAuth"]
         assert response_data["serverId"] == TEST_SERVER_ID
 
     def test_get_server_connection_status_not_found(self, client):
         """Test retrieval of single server connection status when server not found"""
         # Mock server_service_v1.get_server_by_id to return None
         mock_server_service_v1.get_server_by_id.return_value = None
-        
+
         response = client.get(f"/mcp/connection/status/{TEST_SERVER_ID}")
 
         assert response.status_code == 404
@@ -312,7 +316,7 @@ class TestConnectionRouter:
 
         # Mock server_service_v1.get_server_by_id to return the mock server
         mock_server_service_v1.get_server_by_id.return_value = mock_server
-        
+
         mock_get_single_server_connection_status.side_effect = Exception("Status error")
 
         response = client.get(f"/mcp/connection/status/{TEST_SERVER_ID}")
@@ -329,9 +333,9 @@ class TestConnectionRouter:
 
         assert response.status_code == 200
         response_data = response.json()
-        assert response_data["success"] == True
+        assert response_data["success"]
         assert response_data["server_name"] == TEST_SERVER_NAME
-        assert response_data["auth_value_flags"]["oauth_tokens"] == True
+        assert response_data["auth_value_flags"]["oauth_tokens"]
 
     def test_check_auth_values_without_tokens(self, client):
         """Test checking auth values when no OAuth tokens exist"""
@@ -341,9 +345,9 @@ class TestConnectionRouter:
 
         assert response.status_code == 200
         response_data = response.json()
-        assert response_data["success"] == True
+        assert response_data["success"]
         assert response_data["server_name"] == TEST_SERVER_NAME
-        assert response_data["auth_value_flags"]["oauth_tokens"] == False
+        assert not response_data["auth_value_flags"]["oauth_tokens"]
 
     def test_check_auth_values_failure(self, client):
         """Test failure when checking auth values"""

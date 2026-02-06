@@ -16,14 +16,14 @@ logger = logging.getLogger(__name__)
 
 
 # Simple singleton providers
-@lru_cache()
+@lru_cache
 def get_env() -> EnvSettings:
     """Get environment settings singleton."""
     logger.debug("Getting environment settings")
     return EnvSettings()
 
 
-@lru_cache()
+@lru_cache
 def get_db_manager() -> BookingDatabaseManager:
     """Get database manager singleton."""
     env = get_env()

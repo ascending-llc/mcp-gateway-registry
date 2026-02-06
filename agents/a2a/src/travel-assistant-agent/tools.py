@@ -2,16 +2,9 @@
 
 import json
 import logging
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional,
-)
-
-from strands import tool
 
 from dependencies import get_db_manager
+from strands import tool
 
 # Configure logging with basicConfig
 logging.basicConfig(
@@ -74,7 +67,7 @@ def check_prices(
 @tool
 def get_recommendations(
     max_price: float,
-    preferred_airlines: Optional[List[str]] = None,
+    preferred_airlines: list[str] | None = None,
 ) -> str:
     """Get flight recommendations based on customer preferences."""
     logger.info(f"Tool called: get_recommendations(max_price={max_price}, preferred_airlines={preferred_airlines})")
@@ -100,8 +93,8 @@ def create_trip_plan(
     departure_city: str,
     arrival_city: str,
     departure_date: str,
-    return_date: Optional[str] = None,
-    budget: Optional[float] = None,
+    return_date: str | None = None,
+    budget: float | None = None,
 ) -> str:
     """Create and save a trip planning record."""
     logger.info(
@@ -131,7 +124,11 @@ def create_trip_plan(
             },
             "outbound_flights": outbound_flights,
             "return_flights": return_flights,
-            "next_steps": ["Review available flights", "Select preferred flights", "Contact Flight Booking Agent for reservation"],
+            "next_steps": [
+                "Review available flights",
+                "Select preferred flights",
+                "Contact Flight Booking Agent for reservation",
+            ],
         }
 
         logger.debug(f"Trip plan result:\n{json.dumps(result, indent=2)}")

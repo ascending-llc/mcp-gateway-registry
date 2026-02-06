@@ -1,10 +1,11 @@
 import asyncio
 import time
-from typing import Dict, Optional, Any
 from dataclasses import dataclass
+from typing import Any
+
 from registry.schemas.enums import ConnectionState
-from registry.services.server_service import server_service_v1
 from registry.services.oauth.base import Connection, ConnectionManager
+from registry.services.server_service import server_service_v1
 from registry.utils.log import logger
 
 
@@ -12,7 +13,7 @@ from registry.utils.log import logger
 class MCPConnection(Connection):
     """MCP connection"""
 
-    def is_stale(self, max_idle_time: Optional[float] = 900) -> bool:
+    def is_stale(self, max_idle_time: float | None = 900) -> bool:
         """
         Check if connection is stale based on idle time.
 
@@ -24,19 +25,16 @@ class MCPConnection(Connection):
         """
         current_time = time.time()
         idle_time = current_time - self.last_activity
-        
-        if idle_time > max_idle_time:
-            return True
-        
-        return False
+
+        return idle_time > max_idle_time
 
 
 class MCPConnectionService(ConnectionManager):
     """MCP connection service"""
 
     def __init__(self):
-        self.app_connections: Dict[str, MCPConnection] = {}
-        self.user_connections: Dict[str, Dict[str, MCPConnection]] = {}  # user_id -> {server_id -> connection}
+        self.app_connections: dict[str, MCPConnection] = {}
+        self.user_connections: dict[str, dict[str, MCPConnection]] = {}  # user_id -> {server_id -> connection}
         self._lock = asyncio.Lock()
         self._max_error_count = 3  # Maximum error count
 
@@ -46,11 +44,7 @@ class MCPConnectionService(ConnectionManager):
         """
         async with self._lock:
             try:
-                servers, total = await server_service_v1.list_servers(
-                    page=1,
-                    per_page=1000,
-                    status="active"
-                )
+                servers, total = await server_service_v1.list_servers(page=1, per_page=1000, status="active")
                 logger.info(f"Found {total} active servers in MongoDB")
 
                 for server in servers:
@@ -64,27 +58,23 @@ class MCPConnectionService(ConnectionManager):
                                 "url": server.config.get("url"),
                                 "config": server.config,
                                 "created_at": time.time(),
-                                "last_health_check": time.time()
-                            }
+                                "last_health_check": time.time(),
+                            },
                         )
                         logger.debug(f"Created app connection for non-OAuth server: {server.serverName}")
                     else:
                         logger.debug(f"Skipped OAuth server: {server.serverName}")
-                
+
                 logger.info(f"Initialized {len(self.app_connections)} app-level connections from MongoDB")
-                
+
             except Exception as e:
                 logger.error(f"Failed to initialize app connections: {e}", exc_info=True)
 
-    def get_user_connections(self, user_id: str) -> Dict[str, MCPConnection]:
+    def get_user_connections(self, user_id: str) -> dict[str, MCPConnection]:
         """Get user connections"""
         return self.user_connections.get(user_id, {})
 
-    async def get_connection(
-            self,
-            user_id: str,
-            server_id: str
-    ) -> Optional[MCPConnection]:
+    async def get_connection(self, user_id: str, server_id: str) -> MCPConnection | None:
         """Get connection (application-level or user-level)"""
         # First check application-level connections
         if server_id in self.app_connections:
@@ -98,11 +88,7 @@ class MCPConnectionService(ConnectionManager):
         return None
 
     async def update_connection_state(
-            self,
-            user_id: str,
-            server_id: str,
-            state: ConnectionState,
-            details: Optional[Dict[str, Any]] = None
+        self, user_id: str, server_id: str, state: ConnectionState, details: dict[str, Any] | None = None
     ) -> None:
         """Update connection state"""
         async with self._lock:
@@ -127,22 +113,18 @@ class MCPConnectionService(ConnectionManager):
                     connection.error_count = 0
 
     async def create_user_connection(
-            self,
-            user_id: str,
-            server_id: str,
-            initial_state: ConnectionState = ConnectionState.CONNECTING,
-            details: Optional[Dict[str, Any]] = None
+        self,
+        user_id: str,
+        server_id: str,
+        initial_state: ConnectionState = ConnectionState.CONNECTING,
+        details: dict[str, Any] | None = None,
     ) -> MCPConnection:
         """Create user connection"""
         async with self._lock:
             if user_id not in self.user_connections:
                 self.user_connections[user_id] = {}
 
-            connection = MCPConnection(
-                server_id=server_id,
-                connection_state=initial_state,
-                details=details or {}
-            )
+            connection = MCPConnection(server_id=server_id, connection_state=initial_state, details=details or {})
             self.user_connections[user_id][server_id] = connection
             logger.info(f"Created user connection: {user_id}/{server_id}")
             return connection
@@ -195,7 +177,7 @@ class MCPConnectionService(ConnectionManager):
             logger.info(f"Cleaned {cleaned_count} stale connections")
             return cleaned_count
 
-    async def get_connection_stats(self) -> Dict[str, Any]:
+    async def get_connection_stats(self) -> dict[str, Any]:
         """Get connection statistics"""
         async with self._lock:
             total_app_connections = len(self.app_connections)
@@ -203,13 +185,7 @@ class MCPConnectionService(ConnectionManager):
             total_users = len(self.user_connections)
 
             # Count connection statuses
-            status_counts = {
-                "connected": 0,
-                "disconnected": 0,
-                "connecting": 0,
-                "error": 0,
-                "unknown": 0
-            }
+            status_counts = {"connected": 0, "disconnected": 0, "connecting": 0, "error": 0, "unknown": 0}
 
             # Count application connection statuses
             for connection in self.app_connections.values():
@@ -228,11 +204,11 @@ class MCPConnectionService(ConnectionManager):
                 "total_app_connections": total_app_connections,
                 "total_user_connections": total_user_connections,
                 "total_users": total_users,
-                "status_counts": status_counts
+                "status_counts": status_counts,
             }
 
 
-_connection_service_instance: Optional[MCPConnectionService] = None
+_connection_service_instance: MCPConnectionService | None = None
 
 
 async def get_connection_service() -> MCPConnectionService:

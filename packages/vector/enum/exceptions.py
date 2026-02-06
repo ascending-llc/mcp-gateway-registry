@@ -4,7 +4,7 @@ from langchain_core.exceptions import LangChainException
 class DependencyMissingError(LangChainException):
     """
     Required dependency package is missing.
-    
+
     Provides clear installation instructions.
     """
 
@@ -22,13 +22,14 @@ class DependencyMissingError(LangChainException):
 class UnsupportedBackendError(LangChainException):
     """
     Unsupported database backend requested.
-    
+
     Lists available backends for quick reference.
     """
 
     def __init__(self, backend_name: str, supported_backends: list = None):
         if supported_backends is None:
             from .enums import VectorStoreType
+
             supported_backends = [e.value for e in VectorStoreType]
 
         message = (

@@ -5,9 +5,6 @@ This module defines Pydantic models for security scan results, configurations,
 and related data structures used throughout the security scanning workflow.
 """
 
-from datetime import datetime
-from typing import Optional
-
 from pydantic import BaseModel, Field
 
 
@@ -40,9 +37,9 @@ class SecurityScanResult(BaseModel):
     low_severity: int = Field(default=0, description="Count of low severity issues")
     analyzers_used: list[str] = Field(default_factory=list, description="List of analyzers used in scan")
     raw_output: dict = Field(default_factory=dict, description="Full scanner output")
-    output_file: Optional[str] = Field(None, description="Path to detailed JSON output file")
+    output_file: str | None = Field(None, description="Path to detailed JSON output file")
     scan_failed: bool = Field(default=False, description="Whether the scan failed to complete")
-    error_message: Optional[str] = Field(None, description="Error message if scan failed")
+    error_message: str | None = Field(None, description="Error message if scan failed")
 
 
 class SecurityScanConfig(BaseModel):
@@ -53,7 +50,7 @@ class SecurityScanConfig(BaseModel):
     block_unsafe_servers: bool = Field(default=True, description="Disable servers that fail security scan")
     analyzers: str = Field(default="yara", description="Comma-separated list of analyzers to use")
     scan_timeout_seconds: int = Field(default=300, description="Timeout for security scans in seconds")
-    llm_api_key: Optional[str] = Field(None, description="API key for LLM-based analysis")
+    llm_api_key: str | None = Field(None, description="API key for LLM-based analysis")
     add_security_pending_tag: bool = Field(default=True, description="Add 'security-pending' tag to unsafe servers")
 
 
@@ -63,8 +60,10 @@ class ServerSecurityStatus(BaseModel):
     server_path: str = Field(..., description="Server path (e.g., /mcpgw)")
     server_name: str = Field(..., description="Display name of the server")
     is_safe: bool = Field(..., description="Whether the server passed security scan")
-    last_scan_timestamp: Optional[str] = Field(None, description="ISO timestamp of last scan")
+    last_scan_timestamp: str | None = Field(None, description="ISO timestamp of last scan")
     critical_issues: int = Field(default=0, description="Count of critical issues")
     high_severity: int = Field(default=0, description="Count of high severity issues")
     scan_status: str = Field(default="pending", description="Status: pending, completed, failed")
-    is_disabled_for_security: bool = Field(default=False, description="Whether server is disabled due to security issues")
+    is_disabled_for_security: bool = Field(
+        default=False, description="Whether server is disabled due to security issues"
+    )

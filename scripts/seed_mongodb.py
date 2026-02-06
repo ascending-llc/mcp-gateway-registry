@@ -10,13 +10,16 @@ Usage:
     python scripts/seed_mongodb.py seed     # Seed data
     python scripts/seed_mongodb.py clean    # Clean all collections
 """
+
 import asyncio
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
 from dotenv import load_dotenv
-from registry.core.acl_constants import PrincipalType, ResourceType, RoleBits, PermissionBits
+
+from registry.core.acl_constants import PermissionBits, PrincipalType, ResourceType, RoleBits
 
 # Load environment variables from .env file
 load_dotenv()
@@ -25,11 +28,11 @@ load_dotenv()
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from packages.database.mongodb import MongoDB
-from packages.models._generated.user import IUser
 from packages.models._generated.key import Key
 from packages.models._generated.token import Token
-from packages.models.extended_mcp_server import MCPServerDocument
+from packages.models._generated.user import IUser
 from packages.models.extended_acl_entry import IAclEntry
+from packages.models.extended_mcp_server import MCPServerDocument
 from registry.utils.crypto_utils import encrypt_auth_fields
 
 
@@ -41,14 +44,14 @@ async def seed_users():
         {
             "name": "Admin User",
             "username": "admin",
-            "email":"admin@example.com",
+            "email": "admin@example.com",
             "emailVerified": True,
             "password": "$2b$10$abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGH",  # hashed password
             "role": "ADMIN",
             "provider": "local",
             "idOnTheSource": "entra-uid-1",
-            "createdAt": datetime.now(timezone.utc),
-            "updatedAt": datetime.now(timezone.utc),
+            "createdAt": datetime.now(UTC),
+            "updatedAt": datetime.now(UTC),
         },
         {
             "name": "John Developer",
@@ -59,8 +62,8 @@ async def seed_users():
             "role": "USER",
             "provider": "local",
             "idOnTheSource": "entra-uid-2",
-            "createdAt": datetime.now(timezone.utc),
-            "updatedAt": datetime.now(timezone.utc),
+            "createdAt": datetime.now(UTC),
+            "updatedAt": datetime.now(UTC),
         },
         {
             "name": "Jane Smith",
@@ -71,8 +74,8 @@ async def seed_users():
             "role": "USER",
             "provider": "local",
             "idOnTheSource": "entra-uid-3",
-            "createdAt": datetime.now(timezone.utc),
-            "updatedAt": datetime.now(timezone.utc),
+            "createdAt": datetime.now(UTC),
+            "updatedAt": datetime.now(UTC),
         },
         {
             "name": "Test User",
@@ -83,8 +86,8 @@ async def seed_users():
             "role": "USER",
             "provider": "local",
             "idOnTheSource": "entra-uid-4",
-            "createdAt": datetime.now(timezone.utc),
-            "updatedAt": datetime.now(timezone.utc),
+            "createdAt": datetime.now(UTC),
+            "updatedAt": datetime.now(UTC),
         },
     ]
 
@@ -113,25 +116,25 @@ async def seed_keys(users):
             "userId": users[0].id,  # Admin user
             "name": "Admin API Key",
             "value": "sk_admin_1234567890abcdefghijklmnopqrstuvwxyz",
-            "expiresAt": datetime.now(timezone.utc) + timedelta(days=365),
+            "expiresAt": datetime.now(UTC) + timedelta(days=365),
         },
         {
             "userId": users[1].id,  # John Developer
             "name": "Development Key",
             "value": "sk_dev_abcdefghijklmnopqrstuvwxyz1234567890",
-            "expiresAt": datetime.now(timezone.utc) + timedelta(days=90),
+            "expiresAt": datetime.now(UTC) + timedelta(days=90),
         },
         {
             "userId": users[1].id,  # John Developer
             "name": "Testing Key",
             "value": "sk_test_xyz789012345678901234567890abcdefgh",
-            "expiresAt": datetime.now(timezone.utc) + timedelta(days=30),
+            "expiresAt": datetime.now(UTC) + timedelta(days=30),
         },
         {
             "userId": users[2].id,  # Jane Smith
             "name": "Production API Key",
             "value": "sk_prod_mnopqrstuvwxyz1234567890abcdefghijkl",
-            "expiresAt": datetime.now(timezone.utc) + timedelta(days=180),
+            "expiresAt": datetime.now(UTC) + timedelta(days=180),
         },
     ]
 
@@ -162,8 +165,8 @@ async def seed_tokens(users):
             "type": "oauth",
             "identifier": "mcp:github:client",
             "token": "gho_abcdefghijklmnopqrstuvwxyz1234567890",
-            "createdAt": datetime.now(timezone.utc),
-            "expiresAt": datetime.now(timezone.utc) + timedelta(hours=24),
+            "createdAt": datetime.now(UTC),
+            "expiresAt": datetime.now(UTC) + timedelta(hours=24),
             "metadata": {
                 "provider": "github",
                 "scope": "read:user,repo",
@@ -176,8 +179,8 @@ async def seed_tokens(users):
             "type": "oauth",
             "identifier": "mcp:google:client",
             "token": "ya29.a0abcdefghijklmnopqrstuvwxyz123456789",
-            "createdAt": datetime.now(timezone.utc),
-            "expiresAt": datetime.now(timezone.utc) + timedelta(hours=1),
+            "createdAt": datetime.now(UTC),
+            "expiresAt": datetime.now(UTC) + timedelta(hours=1),
             "metadata": {
                 "provider": "google",
                 "scope": "openid email profile",
@@ -191,8 +194,8 @@ async def seed_tokens(users):
             "type": "refresh",
             "identifier": "mcp:local:refresh",
             "token": "rt_dev_xyz123456789abcdefghijklmnopqrstuv",
-            "createdAt": datetime.now(timezone.utc),
-            "expiresAt": datetime.now(timezone.utc) + timedelta(days=30),
+            "createdAt": datetime.now(UTC),
+            "expiresAt": datetime.now(UTC) + timedelta(days=30),
             "metadata": {
                 "ip": "192.168.1.100",
                 "user_agent": "Mozilla/5.0",
@@ -241,9 +244,9 @@ async def seed_mcp_servers(users):
                     "token_url": "https://github.com/login/oauth/access_token",
                     "client_id": "7x23l1dGc5dy1s3Y-2sI",
                     "client_secret": "hc3i0fc68e0a9eece6ad4110574f797b894cba",
-                    "scope": "repo read:user read:org"
+                    "scope": "repo read:user read:org",
                 },
-                "capabilities": "{\"tools\":{\"listChanged\":true},\"resources\":{\"subscribe\":false,\"listChanged\":true},\"prompts\":{\"listChanged\":true}}",
+                "capabilities": '{"tools":{"listChanged":true},"resources":{"subscribe":false,"listChanged":true},"prompts":{"listChanged":true}}',
                 "tools": "create_issue, list_repos, search_code, get_pull_requests",
                 "toolFunctions": {
                     "create_issue_mcp_github": {
@@ -256,17 +259,17 @@ async def seed_mcp_servers(users):
                                 "properties": {
                                     "repo": {"type": "string", "description": "Repository name"},
                                     "title": {"type": "string", "description": "Issue title"},
-                                    "body": {"type": "string", "description": "Issue description"}
+                                    "body": {"type": "string", "description": "Issue description"},
                                 },
-                                "required": ["repo", "title"]
-                            }
-                        }
+                                "required": ["repo", "title"],
+                            },
+                        },
                     }
                 },
-                "initDuration": 120
+                "initDuration": 120,
             },
-            "createdAt": datetime.now(timezone.utc),
-            "updatedAt": datetime.now(timezone.utc),
+            "createdAt": datetime.now(UTC),
+            "updatedAt": datetime.now(UTC),
         },
         {
             "serverName": "tavilysearchv1",
@@ -286,9 +289,9 @@ async def seed_mcp_servers(users):
                     "source": "admin",
                     "authorization_type": "custom",
                     "custom_header": "tavilyApiKey",
-                    "key": "ea2ea0ba31151267149220601bd4299dfe09eccf2c4d51f3026b396fe5881a77610b"
+                    "key": "ea2ea0ba31151267149220601bd4299dfe09eccf2c4d51f3026b396fe5881a77610b",
                 },
-                "capabilities": "{\"experimental\":{},\"prompts\":{\"listChanged\":true},\"resources\":{\"subscribe\":true,\"listChanged\":true},\"tools\":{\"listChanged\":true}}",
+                "capabilities": '{"experimental":{},"prompts":{"listChanged":true},"resources":{"subscribe":true,"listChanged":true},"tools":{"listChanged":true}}',
                 "tools": "tavily_search, tavily_extract, tavily_crawl, tavily_map",
                 "toolFunctions": {
                     "tavily_search_mcp_tavilysearchv1": {
@@ -298,18 +301,16 @@ async def seed_mcp_servers(users):
                             "description": "Search the web using Tavily",
                             "parameters": {
                                 "type": "object",
-                                "properties": {
-                                    "query": {"type": "string", "description": "Search query"}
-                                },
-                                "required": ["query"]
-                            }
-                        }
+                                "properties": {"query": {"type": "string", "description": "Search query"}},
+                                "required": ["query"],
+                            },
+                        },
                     }
                 },
-                "initDuration": 170
+                "initDuration": 170,
             },
-            "createdAt": datetime.now(timezone.utc),
-            "updatedAt": datetime.now(timezone.utc),
+            "createdAt": datetime.now(UTC),
+            "updatedAt": datetime.now(UTC),
         },
         {
             "serverName": "slack-notifications",
@@ -330,9 +331,9 @@ async def seed_mcp_servers(users):
                     "token_url": "https://slack.com/api/oauth.v2.access",
                     "client_id": "slack_client_123",
                     "client_secret": "slack_secret_xyz789",
-                    "scope": "chat:write channels:read users:read"
+                    "scope": "chat:write channels:read users:read",
                 },
-                "capabilities": "{\"tools\":{\"listChanged\":true},\"resources\":{\"subscribe\":false,\"listChanged\":true}}",
+                "capabilities": '{"tools":{"listChanged":true},"resources":{"subscribe":false,"listChanged":true}}',
                 "tools": "send_message, list_channels, get_user_info",
                 "toolFunctions": {
                     "send_message_mcp_slack": {
@@ -344,17 +345,17 @@ async def seed_mcp_servers(users):
                                 "type": "object",
                                 "properties": {
                                     "channel": {"type": "string", "description": "Channel ID or name"},
-                                    "text": {"type": "string", "description": "Message text"}
+                                    "text": {"type": "string", "description": "Message text"},
                                 },
-                                "required": ["channel", "text"]
-                            }
-                        }
+                                "required": ["channel", "text"],
+                            },
+                        },
                     }
                 },
-                "initDuration": 95
+                "initDuration": 95,
             },
-            "createdAt": datetime.now(timezone.utc),
-            "updatedAt": datetime.now(timezone.utc),
+            "createdAt": datetime.now(UTC),
+            "updatedAt": datetime.now(UTC),
         },
         {
             "serverName": "weather-service",
@@ -374,9 +375,9 @@ async def seed_mcp_servers(users):
                     "source": "user",
                     "authorization_type": "custom",
                     "custom_header": "X-Weather-API-Key",
-                    "key": "weather_api_key_abc123xyz456789"
+                    "key": "weather_api_key_abc123xyz456789",
                 },
-                "capabilities": "{\"tools\":{\"listChanged\":true}}",
+                "capabilities": '{"tools":{"listChanged":true}}',
                 "tools": "get_weather, get_forecast, get_alerts",
                 "toolFunctions": {
                     "get_weather_mcp_weather": {
@@ -389,15 +390,15 @@ async def seed_mcp_servers(users):
                                 "properties": {
                                     "location": {"type": "string", "description": "City name or coordinates"}
                                 },
-                                "required": ["location"]
-                            }
-                        }
+                                "required": ["location"],
+                            },
+                        },
                     }
                 },
-                "initDuration": 80
+                "initDuration": 80,
             },
-            "createdAt": datetime.now(timezone.utc),
-            "updatedAt": datetime.now(timezone.utc),
+            "createdAt": datetime.now(UTC),
+            "updatedAt": datetime.now(UTC),
         },
         {
             "serverName": "public-api-service",
@@ -413,10 +414,8 @@ async def seed_mcp_servers(users):
                 "type": "streamable-http",
                 "url": "http://public-api-server:8015",
                 "requiresOAuth": False,
-                "authentication": {
-                    "type": "auto"
-                },
-                "capabilities": "{\"tools\":{\"listChanged\":true}}",
+                "authentication": {"type": "auto"},
+                "capabilities": '{"tools":{"listChanged":true}}',
                 "tools": "get_public_data, search_content, get_stats",
                 "toolFunctions": {
                     "get_public_data_mcp_public": {
@@ -426,18 +425,16 @@ async def seed_mcp_servers(users):
                             "description": "Get public data from the API",
                             "parameters": {
                                 "type": "object",
-                                "properties": {
-                                    "endpoint": {"type": "string", "description": "API endpoint path"}
-                                },
-                                "required": ["endpoint"]
-                            }
-                        }
+                                "properties": {"endpoint": {"type": "string", "description": "API endpoint path"}},
+                                "required": ["endpoint"],
+                            },
+                        },
                     }
                 },
-                "initDuration": 50
+                "initDuration": 50,
             },
-            "createdAt": datetime.now(timezone.utc),
-            "updatedAt": datetime.now(timezone.utc),
+            "createdAt": datetime.now(UTC),
+            "updatedAt": datetime.now(UTC),
         },
         {
             "serverName": "google-workspace",
@@ -458,9 +455,9 @@ async def seed_mcp_servers(users):
                     "token_url": "https://oauth2.googleapis.com/token",
                     "client_id": "google_client_12345",
                     "client_secret": "google_secret_abc789xyz",
-                    "scope": "https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar"
+                    "scope": "https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar",
                 },
-                "capabilities": "{\"tools\":{\"listChanged\":true},\"resources\":{\"subscribe\":false,\"listChanged\":true}}",
+                "capabilities": '{"tools":{"listChanged":true},"resources":{"subscribe":false,"listChanged":true}}',
                 "tools": "list_files, create_document, read_sheet, schedule_event",
                 "toolFunctions": {
                     "list_files_mcp_google": {
@@ -470,17 +467,15 @@ async def seed_mcp_servers(users):
                             "description": "List files in Google Drive",
                             "parameters": {
                                 "type": "object",
-                                "properties": {
-                                    "folder": {"type": "string", "description": "Folder ID (optional)"}
-                                }
-                            }
-                        }
+                                "properties": {"folder": {"type": "string", "description": "Folder ID (optional)"}},
+                            },
+                        },
                     }
                 },
-                "initDuration": 150
+                "initDuration": 150,
             },
-            "createdAt": datetime.now(timezone.utc),
-            "updatedAt": datetime.now(timezone.utc),
+            "createdAt": datetime.now(UTC),
+            "updatedAt": datetime.now(UTC),
         },
         {
             "serverName": "atlassian-jira",
@@ -501,9 +496,9 @@ async def seed_mcp_servers(users):
                     "token_url": "https://auth.atlassian.com/oauth/token",
                     "client_id": "jira_client_456",
                     "client_secret": "jira_secret_def456uvw",
-                    "scope": "read:jira-work write:jira-work read:jira-user"
+                    "scope": "read:jira-work write:jira-work read:jira-user",
                 },
-                "capabilities": "{\"tools\":{\"listChanged\":true},\"resources\":{\"subscribe\":false,\"listChanged\":true}}",
+                "capabilities": '{"tools":{"listChanged":true},"resources":{"subscribe":false,"listChanged":true}}',
                 "tools": "create_issue, update_issue, search_issues, get_project",
                 "toolFunctions": {
                     "create_issue_mcp_jira": {
@@ -516,17 +511,17 @@ async def seed_mcp_servers(users):
                                 "properties": {
                                     "project": {"type": "string", "description": "Project key"},
                                     "summary": {"type": "string", "description": "Issue summary"},
-                                    "description": {"type": "string", "description": "Issue description"}
+                                    "description": {"type": "string", "description": "Issue description"},
                                 },
-                                "required": ["project", "summary"]
-                            }
-                        }
+                                "required": ["project", "summary"],
+                            },
+                        },
                     }
                 },
-                "initDuration": 110
+                "initDuration": 110,
             },
-            "createdAt": datetime.now(timezone.utc),
-            "updatedAt": datetime.now(timezone.utc),
+            "createdAt": datetime.now(UTC),
+            "updatedAt": datetime.now(UTC),
         },
         {
             "serverName": "currenttime-server",
@@ -542,10 +537,8 @@ async def seed_mcp_servers(users):
                 "type": "streamable-http",
                 "url": "http://currenttime-server:8000",
                 "requiresOAuth": False,
-                "authentication": {
-                    "type": "auto"
-                },
-                "capabilities": "{\"tools\":{\"listChanged\":true}}",
+                "authentication": {"type": "auto"},
+                "capabilities": '{"tools":{"listChanged":true}}',
                 "tools": "get_time, get_timezone, convert_time",
                 "toolFunctions": {
                     "get_time_mcp_currenttime": {
@@ -557,36 +550,34 @@ async def seed_mcp_servers(users):
                                 "type": "object",
                                 "properties": {
                                     "format": {"type": "string", "description": "Time format (ISO, unix, etc.)"},
-                                    "timezone": {"type": "string", "description": "Timezone (optional)"}
-                                }
-                            }
-                        }
+                                    "timezone": {"type": "string", "description": "Timezone (optional)"},
+                                },
+                            },
+                        },
                     }
                 },
-                "initDuration": 30
+                "initDuration": 30,
             },
-            "createdAt": datetime.now(timezone.utc),
-            "updatedAt": datetime.now(timezone.utc),
+            "createdAt": datetime.now(UTC),
+            "updatedAt": datetime.now(UTC),
         },
     ]
 
     created_servers = []
     for server_data in servers_data:
         # Check if server already exists
-        existing_server = await MCPServerDocument.find_one(
-            MCPServerDocument.serverName == server_data["serverName"]
-        )
+        existing_server = await MCPServerDocument.find_one(MCPServerDocument.serverName == server_data["serverName"])
         if existing_server:
             print(f"  Server {server_data['serverName']} already exists, skipping...")
             created_servers.append(existing_server)
         else:
             # Encrypt sensitive authentication fields before storing
             server_data["config"] = encrypt_auth_fields(server_data["config"])
-            
+
             server = MCPServerDocument(**server_data)
             await server.insert()
             created_servers.append(server)
-            
+
             # Determine auth type for logging
             auth_type = "none"
             if server_data["config"].get("requiresOAuth"):
@@ -595,38 +586,43 @@ async def seed_mcp_servers(users):
                 auth_type = "apiKey"
             elif "authentication" in server_data["config"]:
                 auth_type = server_data["config"]["authentication"].get("type", "none")
-            
-            print(f"  Created server: {server_data['serverName']} (auth: {auth_type}, tools: {server_data['numTools']})")
+
+            print(
+                f"  Created server: {server_data['serverName']} (auth: {auth_type}, tools: {server_data['numTools']})"
+            )
 
     return created_servers
 
-async def seed_acl_entries(users, servers): 
+
+async def seed_acl_entries(users, servers):
     print("Seeding ACL Entries...")
     # Grant admin OWNER on all servers, authors OWNER, others VIEWER
     acl_entries = []
     admin_user = next((u for u in users if getattr(u, "role", "").upper() == "ADMIN"), None)
     for server in servers:
-        # Create a public entry 
+        # Create a public entry
         print(f"Seeding public ACL Entry for server: {server.id}")
-        existing_public_acl = await IAclEntry.find_one({
-            "principalType": PrincipalType.PUBLIC,
-            "principalId": None,
-            "resourceType": ResourceType.MCPSERVER,
-            "resourceId": server.id,
-        })
+        existing_public_acl = await IAclEntry.find_one(
+            {
+                "principalType": PrincipalType.PUBLIC,
+                "principalId": None,
+                "resourceType": ResourceType.MCPSERVER,
+                "resourceId": server.id,
+            }
+        )
         if existing_public_acl:
             print(f"  Public ACL entry for server {server.serverName} already exists, skipping...")
             acl_entries.append(existing_public_acl)
-        else: 
+        else:
             public_acl_entry = IAclEntry(
                 principalType=PrincipalType.PUBLIC,
                 principalId=None,
                 resourceType=ResourceType.MCPSERVER.value,
                 resourceId=server.id,
                 permBits=PermissionBits.VIEW,
-                grantedAt=datetime.now(timezone.utc),
-                createdAt=datetime.now(timezone.utc),
-                updatedAt=datetime.now(timezone.utc)
+                grantedAt=datetime.now(UTC),
+                createdAt=datetime.now(UTC),
+                updatedAt=datetime.now(UTC),
             )
             created_public_entry = await public_acl_entry.insert()
             acl_entries.append(created_public_entry)
@@ -638,12 +634,14 @@ async def seed_acl_entries(users, servers):
             if user.id == admin_user.id or user.id == server.author:
                 perm_bits = RoleBits.OWNER
 
-                existing_acl = await IAclEntry.find_one({
-                    "principalType": PrincipalType.USER,
-                    "principalId": user.id,
-                    "resourceType": ResourceType.MCPSERVER,
-                    "resourceId": server.id,
-                })
+                existing_acl = await IAclEntry.find_one(
+                    {
+                        "principalType": PrincipalType.USER,
+                        "principalId": user.id,
+                        "resourceType": ResourceType.MCPSERVER,
+                        "resourceId": server.id,
+                    }
+                )
                 if existing_acl:
                     print(f"  ACL entry for user {user} and server {server.serverName} already exists, skipping...")
                     acl_entries.append(existing_acl)
@@ -654,16 +652,19 @@ async def seed_acl_entries(users, servers):
                         resourceType=ResourceType.MCPSERVER.value,
                         resourceId=server.id,
                         permBits=perm_bits,
-                        grantedAt=datetime.now(timezone.utc),
-                        createdAt=datetime.now(timezone.utc),
-                        updatedAt=datetime.now(timezone.utc)
+                        grantedAt=datetime.now(UTC),
+                        createdAt=datetime.now(UTC),
+                        updatedAt=datetime.now(UTC),
                     )
                     await acl_entry.insert()
                     acl_entries.append(acl_entry)
-                    print(f"  Created ACL entry for user {user.username} and server {server.serverName} (permBits={perm_bits})")
+                    print(
+                        f"  Created ACL entry for user {user.username} and server {server.serverName} (permBits={perm_bits})"
+                    )
 
     print(f"  - {len(acl_entries)} ACL entries seeded")
     return acl_entries
+
 
 async def clean_database():
     """Clean all seeded collections."""
@@ -713,11 +714,11 @@ async def main():
 
     # Parse database name from URI if present
     db_name = None
-    if '/' in mongo_uri.split('://')[-1]:
+    if "/" in mongo_uri.split("://")[-1]:
         # Extract database name from URI (everything after the last /)
-        uri_path = mongo_uri.split('://')[-1]
-        if '/' in uri_path:
-            db_name = uri_path.split('/')[-1].split('?')[0]  # Handle query params
+        uri_path = mongo_uri.split("://")[-1]
+        if "/" in uri_path:
+            db_name = uri_path.split("/")[-1].split("?")[0]  # Handle query params
 
     # Fall back to default if not in URI
     if not db_name:
@@ -755,22 +756,26 @@ async def main():
             print("=" * 60)
             print("✅ Database seeding completed successfully!")
             print("=" * 60)
-            print(f"Created/Found:")
+            print("Created/Found:")
             print(f"  - {len(users)} users")
             print(f"  - {len(keys)} API keys")
             print(f"  - {len(tokens)} tokens")
             print(f"  - {len(servers)} MCP servers")
             print(f"  - {len(aclEntries)} ACL entries")
             print(
-                f"    • API Key auth: {sum(1 for s in servers if s.config.get('authentication', {}).get('type') == 'api_key')}")
+                f"    • API Key auth: {sum(1 for s in servers if s.config.get('authentication', {}).get('type') == 'api_key')}"
+            )
             print(
-                f"    • OAuth auth: {sum(1 for s in servers if s.config.get('authentication', {}).get('type') == 'oauth')}")
+                f"    • OAuth auth: {sum(1 for s in servers if s.config.get('authentication', {}).get('type') == 'oauth')}"
+            )
             print(
-                f"    • No auth: {sum(1 for s in servers if s.config.get('authentication', {}).get('type') == 'none')}")
+                f"    • No auth: {sum(1 for s in servers if s.config.get('authentication', {}).get('type') == 'none')}"
+            )
 
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
     finally:

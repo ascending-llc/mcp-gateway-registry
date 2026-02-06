@@ -1,30 +1,29 @@
 import logging
-from typing import Dict, Any, Optional, List, Callable, Tuple
+from collections.abc import Callable
+from typing import Any
+
+from core.registry import call_registry_api
 from fastmcp import Context
 from pydantic import Field
-from core.registry import call_registry_api
+
 from config import settings
 
 logger = logging.getLogger(__name__)
 
 
-async def discover_tools_impl(
-    query: str,
-    top_n: int = 5,
-    ctx: Context = None
-) -> List[Dict[str, Any]]:
+async def discover_tools_impl(query: str, top_n: int = 5, ctx: Context = None) -> list[dict[str, Any]]:
     """
     🔍 Discover available tools to accomplish any user request.
-    
+
     This tool searches across all registered MCP servers to find the best tools for the job.
     After discovering tools, use execute_tool to actually run the selected tool.
-    
+
     Args:
         query: Natural language description of the user's request or task
                (e.g., "search for news", "get GitHub data", "find information about X")
         top_n: Maximum number of tools to return (default: 5)
         ctx: FastMCP context with user auth
-    
+
     Returns:
         List of matching tools with their metadata, including:
         - tool_name: Exact name to use with execute_tool
@@ -43,10 +42,7 @@ async def discover_tools_impl(
             method="POST",
             endpoint=f"/api/{settings.API_VERSION}/search/tools",
             ctx=ctx,
-            json={
-                "query": query,
-                "top_n": top_n
-            }
+            json={"query": query, "top_n": top_n},
         )
 
         matches = result.get("matches", [])
@@ -62,17 +58,14 @@ async def discover_tools_impl(
 
 
 async def discover_servers_impl(
-    query: str,
-    top_n: int = 1,
-    search_type: str = "hybrid",
-    ctx: Context = None
-) -> List[Dict[str, Any]]:
+    query: str, top_n: int = 1, search_type: str = "hybrid", ctx: Context = None
+) -> list[dict[str, Any]]:
     """
     🔍 Discover available MCP servers and their capabilities.
-    
+
     This tool searches across all registered MCP servers to find servers matching your query.
     Returns comprehensive server information including tools, resources, and prompts.
-    
+
     Args:
         query: Natural language description or keywords to search for servers
                (e.g., "github", "search engines", "database tools")
@@ -83,7 +76,7 @@ async def discover_servers_impl(
                     - "bm25": Pure keyword search (best for exact term matching)
                     - "similarity_store": Alternative similarity algorithm
         ctx: FastMCP context with user auth
-    
+
     Returns:
         List of matching servers with their complete metadata:
         - serverName: Name of the server
@@ -92,7 +85,6 @@ async def discover_servers_impl(
         - tags: Server tags for categorization
         - numTools: Number of tools available
     """
-    
 
     logger.info(f"🔍 Discovering servers for query: '{query}' (search_type={search_type})")
 
@@ -102,11 +94,7 @@ async def discover_servers_impl(
             method="POST",
             endpoint=f"/api/{settings.API_VERSION}/search/servers",
             ctx=ctx,
-            json={
-                "query": query,
-                "top_n": top_n,
-                "search_type": search_type
-            }
+            json={"query": query, "top_n": top_n, "search_type": search_type},
         )
 
         servers = result.get("servers", [])
@@ -121,25 +109,28 @@ async def discover_servers_impl(
         raise Exception(f"Server discovery failed: {str(e)}")
 
 
-
 # ============================================================================
 # Tool Factory Functions for Registration
 # ============================================================================
 
-def get_tools() -> List[Tuple[str, Callable]]:
+
+def get_tools() -> list[tuple[str, Callable]]:
     """
     Export tools for registration in server.py.
-    
+
     Returns:
         List of (tool_name, tool_function) tuples ready for registration
     """
 
     # Define tool wrapper functions with proper signatures and decorators
     async def discover_tools(
-        query: str = Field(..., description="Natural language description of what you want to accomplish (e.g., 'find latest news', 'search GitHub repositories', 'get weather data', 'analyze code')"),
+        query: str = Field(
+            ...,
+            description="Natural language description of what you want to accomplish (e.g., 'find latest news', 'search GitHub repositories', 'get weather data', 'analyze code')",
+        ),
         top_n: int = Field(5, description="Maximum number of tools to return (default: 5)"),
-        ctx: Optional[Context] = None
-    ) -> List[Dict[str, Any]]:
+        ctx: Context | None = None,
+    ) -> list[dict[str, Any]]:
         """
         🔍 AUTO-USE: Discover tools to accomplish any task using semantic search.
 
@@ -184,11 +175,19 @@ def get_tools() -> List[Tuple[str, Callable]]:
         return await discover_tools_impl(query, top_n, ctx)
 
     async def discover_servers(
-        query: str = Field("", description="Natural language query or keywords to find servers (e.g., 'web search', 'github integration', 'productivity tools', 'email and calendar') - leave empty to see all servers"),
-        top_n: int = Field(1, description="Maximum number of servers to return (default: 1, optimized for token efficiency)"),
-        search_type: str = Field("hybrid", description="Search strategy: 'hybrid' (semantic+keyword, best overall), 'near_text' (pure semantic/vector), 'bm25' (pure keyword), or 'similarity_store' (alternative)"),
-        ctx: Optional[Context] = None
-    ) -> List[Dict[str, Any]]:
+        query: str = Field(
+            "",
+            description="Natural language query or keywords to find servers (e.g., 'web search', 'github integration', 'productivity tools', 'email and calendar') - leave empty to see all servers",
+        ),
+        top_n: int = Field(
+            1, description="Maximum number of servers to return (default: 1, optimized for token efficiency)"
+        ),
+        search_type: str = Field(
+            "hybrid",
+            description="Search strategy: 'hybrid' (semantic+keyword, best overall), 'near_text' (pure semantic/vector), 'bm25' (pure keyword), or 'similarity_store' (alternative)",
+        ),
+        ctx: Context | None = None,
+    ) -> list[dict[str, Any]]:
         """
         🔍 Discover available MCP servers using semantic search with multiple search strategies.
 
@@ -200,22 +199,22 @@ def get_tools() -> List[Tuple[str, Callable]]:
 
         **Search Type Strategies:**
         The tool supports 4 different search algorithms - try different ones if results aren't optimal:
-        
+
         1. **"hybrid" (default, recommended)** - Combines semantic + keyword search
            - Best for: General queries, balanced accuracy
            - Example: "web search news" → finds Tavily, web search servers
            - Uses AI reranking for highest precision
-        
+
         2. **"near_text"** - Pure semantic/vector search
            - Best for: Concept matching, related functionality
            - Example: "find information online" → matches search engines semantically
            - Understands intent even with different wording
-        
+
         3. **"bm25"** - Pure keyword/lexical search
            - Best for: Exact term matching, specific names
            - Example: "github" → finds servers with "github" in name/description
            - Fast and deterministic
-        
+
         4. **"similarity_store"** - Alternative similarity algorithm
            - Best for: Alternative ranking when other methods fail
            - Experimental alternative approach
@@ -243,7 +242,7 @@ def get_tools() -> List[Tuple[str, Callable]]:
         **Key Differences from discover_tools:**
         - discover_servers: Browse server catalogs and capabilities (broader)
         - discover_tools: Find specific tools for immediate tasks (narrower)
-        
+
         Use discover_tools when you know what task to accomplish.
         Use discover_servers when exploring what's available.
 

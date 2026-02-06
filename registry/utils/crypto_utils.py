@@ -12,14 +12,16 @@ TypeScript equivalent:
 """
 
 import os
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
 import jwt
-from datetime import datetime, timezone, timedelta
-from registry.utils.log import logger
-from typing import Optional, List
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
-from typing import Dict, Any, Optional, Tuple
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
 from registry.core.config import settings
+from registry.utils.log import logger
+
 # Token expiration defaults
 ACCESS_TOKEN_EXPIRES_HOURS = 24  # 1 day
 REFRESH_TOKEN_EXPIRES_DAYS = 7  # 7 days
@@ -30,57 +32,56 @@ ALGORITHM = "AES-CBC"
 IV_LENGTH = 16  # 128 bits
 
 # Get encryption key from environment
-_ENCRYPTION_KEY: Optional[bytes] = None
+_ENCRYPTION_KEY: bytes | None = None
 
 
 def _get_encryption_key() -> bytes:
     """
     Get the encryption key from settings configuration.
-    
+
     Returns:
         bytes: encryption key from CREDS_KEY (hex decoded)
-        
+
     Raises:
         ValueError: If CREDS_KEY is not set or invalid
     """
     global _ENCRYPTION_KEY
-    
+
     if _ENCRYPTION_KEY is None:
         creds_key = settings.CREDS_KEY
         if not creds_key:
             raise ValueError(
-                "CREDS_KEY configuration must be set for encryption/decryption. "
-                "Set the CREDS_KEY environment variable."
+                "CREDS_KEY configuration must be set for encryption/decryption. Set the CREDS_KEY environment variable."
             )
-        
+
         # Decode from hex (matching TypeScript: Buffer.from(process.env.CREDS_KEY, 'hex'))
         try:
             key_bytes = bytes.fromhex(creds_key)
         except ValueError as e:
             raise ValueError(f"CREDS_KEY must be a valid hex string: {e}")
-        
+
         _ENCRYPTION_KEY = key_bytes
-    
+
     return _ENCRYPTION_KEY
 
 
-def generate_service_jwt(user_id: str, username: Optional[str] = None, scopes: Optional[List[str]] = None) -> str:
+def generate_service_jwt(user_id: str, username: str | None = None, scopes: list[str] | None = None) -> str:
     """
     Generate internal service JWT for MCP server authentication.
     Used to authenticate registry -> MCP server requests with user context.
-    
+
     Args:
         user_id: User ID to include in JWT
         username: Optional username/email
         scopes: Optional list of scopes
-    
+
     Returns:
         JWT token string (without Bearer prefix)
     """
     from registry.core.config import settings
-    
-    now = datetime.now(timezone.utc)
-    
+
+    now = datetime.now(UTC)
+
     # Build JWT payload with user context
     payload = {
         "user_id": user_id,
@@ -92,73 +93,65 @@ def generate_service_jwt(user_id: str, username: Optional[str] = None, scopes: O
         "client_id": settings.registry_app_name,
         "token_type": "service",
     }
-    
+
     # Add optional fields
     if scopes:
         payload["scopes"] = scopes
-    
+
     # Sign with registry secret
-    token = jwt.encode(
-        payload,
-        settings.secret_key,
-        algorithm="HS256"
-    )
-    
+    token = jwt.encode(payload, settings.secret_key, algorithm="HS256")
+
     return token
 
 
 def encrypt_value(plaintext: str) -> str:
     """
     Encrypts a value using AES-CBC with a random IV.
-    
+
     This implementation is compatible with the TypeScript encryptV2 function:
     - Uses AES-CBC encryption (matching Web Crypto API)
     - Generates a random 16-byte IV for each encryption
     - Returns format: hex(iv):hex(ciphertext)
     - NO padding (Web Crypto API handles this automatically)
-    
+
     Args:
         plaintext: The plaintext string to encrypt
-        
+
     Returns:
         str: Encrypted string in format "iv_hex:ciphertext_hex"
-        
+
     Raises:
         ValueError: If CREDS_KEY is not configured
         Exception: If encryption fails
     """
     if not plaintext:
         return plaintext
-    
+
     try:
         # Get encryption key
         key = _get_encryption_key()
-        
+
         # Generate random IV
         gen_iv = os.urandom(IV_LENGTH)
-        
+
         # Encode plaintext
         plaintext_bytes = plaintext.encode("utf-8")
-        
+
         # Pad to 16-byte boundary (AES block size)
         block_size = 16
         padding_length = block_size - (len(plaintext_bytes) % block_size)
         padded_data = plaintext_bytes + bytes([padding_length] * padding_length)
-        
+
         # Create cipher
-        cipher = Cipher(
-            algorithms.AES(key),
-            modes.CBC(gen_iv),
-            backend=default_backend()
-        )
+        cipher = Cipher(algorithms.AES(key), modes.CBC(gen_iv), backend=default_backend())
         encryptor = cipher.encryptor()
-        
+
         # Encrypt
         ciphertext = encryptor.update(padded_data) + encryptor.finalize()
-        
+
         # Return as hex(iv):hex(ciphertext)
         return gen_iv.hex() + ":" + ciphertext.hex()
-        
+
     except Exception as e:
         logger.error(f"Encryption failed: {e}", exc_info=True)
         raise Exception(f"Failed to encrypt value: {e}")
@@ -167,67 +160,63 @@ def encrypt_value(plaintext: str) -> str:
 def decrypt_value(encrypted_value: str) -> str:
     """
     Decrypts an encrypted value using AES-CBC.
-    
+
     This implementation is compatible with the TypeScript decryptV2 function:
     - Expects format: hex(iv):hex(ciphertext)
     - Uses AES-CBC decryption (matching Web Crypto API)
     - Returns original plaintext
-    
+
     If the value doesn't contain a colon separator, it's assumed to be
     already decrypted and returned as-is (for backward compatibility).
-    
+
     Args:
         encrypted_value: The encrypted string in format "iv_hex:ciphertext_hex"
-        
+
     Returns:
         str: Decrypted plaintext string
-        
+
     Raises:
         ValueError: If CREDS_KEY is not configured or format is invalid
         Exception: If decryption fails
     """
     if not encrypted_value:
         return encrypted_value
-    
+
     # Check if value is encrypted (contains colon separator)
     parts = encrypted_value.split(":")
     if len(parts) == 1:
         # Not encrypted, return as-is (matching TS: if (parts.length === 1) return parts[0])
         return parts[0]
-    
+
     try:
         # Get encryption key
         key = _get_encryption_key()
-        
+
         # Split IV and ciphertext (matching TS logic)
         gen_iv = bytes.fromhex(parts[0])
         encrypted = ":".join(parts[1:])
-        
+
         # Convert ciphertext from hex
         ciphertext = bytes.fromhex(encrypted)
-        
+
         # Validate IV length
         if len(gen_iv) != IV_LENGTH:
             raise ValueError(f"Invalid IV length: expected {IV_LENGTH}, got {len(gen_iv)}")
-        
+
         # Create cipher
-        cipher = Cipher(
-            algorithms.AES(key),
-            modes.CBC(gen_iv),
-            backend=default_backend()
-        )
+        cipher = Cipher(algorithms.AES(key), modes.CBC(gen_iv), backend=default_backend())
         decryptor = cipher.decryptor()
-        
+
         # Decrypt
         padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
-        
+
         # Remove padding (standard PKCS#7 unpadding)
         padding_length = padded_plaintext[-1]
         plaintext_bytes = padded_plaintext[:-padding_length]
-        
+
         # Convert to string
         return plaintext_bytes.decode("utf-8")
-        
+
     except Exception as e:
         logger.error(f"Decryption failed: {e}", exc_info=True)
         raise Exception(f"Failed to decrypt value: {e}")
@@ -236,26 +225,26 @@ def decrypt_value(encrypted_value: str) -> str:
 def encrypt_auth_fields(config: dict) -> dict:
     """
     Encrypt sensitive authentication fields in server config.
-    
+
     Handles two authentication patterns:
     1. authentication.client_secret (when type=oauth)
     2. apiKey.key
-    
+
     Args:
         config: Server configuration dictionary
-        
+
     Returns:
         dict: Config with encrypted sensitive fields
-    
+
     Note:
         If CREDS_KEY is not set, values will be stored as plaintext.
         A warning will be logged in this case.
     """
     if not config:
         return config
-    
+
     config = config.copy()
-    
+
     # Check if CREDS_KEY is available
     if not settings.CREDS_KEY:
         logger.warning(
@@ -264,13 +253,13 @@ def encrypt_auth_fields(config: dict) -> dict:
             "Set CREDS_KEY environment variable to enable encryption of credentials."
         )
         return config
-    
+
     try:
         # Handle authentication field
         if "authentication" in config and isinstance(config["authentication"], dict):
             auth = config["authentication"].copy()
             auth_type = auth.get("type", "").lower()
-            
+
             if auth_type == "oauth" and "client_secret" in auth:
                 # Encrypt OAuth client_secret
                 client_secret = auth["client_secret"]
@@ -283,11 +272,11 @@ def encrypt_auth_fields(config: dict) -> dict:
                     except Exception as encrypt_error:
                         logger.error(f"Failed to encrypt client_secret: {encrypt_error}")
                         # Keep plaintext value
-        
+
         # Handle apiKey field
         if "apiKey" in config and isinstance(config["apiKey"], dict):
             api_key = config["apiKey"].copy()
-            
+
             if "key" in api_key:
                 key_value = api_key["key"]
                 if key_value and ":" not in str(key_value):
@@ -299,38 +288,38 @@ def encrypt_auth_fields(config: dict) -> dict:
                     except Exception as encrypt_error:
                         logger.error(f"Failed to encrypt apiKey.key: {encrypt_error}")
                         # Keep plaintext value
-    
+
     except Exception as e:
         logger.error(f"Failed to encrypt auth fields: {e}", exc_info=True)
         # Return original config if encryption fails
         return config
-    
+
     return config
 
 
 def decrypt_auth_fields(config: dict) -> dict:
     """
     Decrypt sensitive authentication fields in server config.
-    
+
     Handles two authentication patterns:
     1. authentication.client_secret (when type=oauth)
     2. apiKey.key
-    
+
     Args:
         config: Server configuration dictionary with encrypted fields
-        
+
     Returns:
         dict: Config with decrypted sensitive fields
-    
+
     Note:
         If CREDS_KEY is not set, encrypted values will be returned as-is (still encrypted).
         This prevents the API from crashing when CREDS_KEY is not configured.
     """
     if not config:
         return config
-    
+
     config = config.copy()
-    
+
     # Check if CREDS_KEY is available
     if not settings.CREDS_KEY:
         logger.warning(
@@ -339,13 +328,13 @@ def decrypt_auth_fields(config: dict) -> dict:
             "Set CREDS_KEY environment variable to decrypt sensitive credentials."
         )
         return config
-    
+
     try:
         # Handle authentication field
         if "authentication" in config and isinstance(config["authentication"], dict):
             auth = config["authentication"].copy()
             auth_type = auth.get("type", "").lower()
-            
+
             if auth_type == "oauth" and "client_secret" in auth:
                 # Decrypt OAuth client_secret
                 client_secret = auth["client_secret"]
@@ -357,11 +346,11 @@ def decrypt_auth_fields(config: dict) -> dict:
                     except Exception as decrypt_error:
                         logger.warning(f"Failed to decrypt client_secret: {decrypt_error}")
                         # Keep encrypted value
-        
+
         # Handle apiKey field
         if "apiKey" in config and isinstance(config["apiKey"], dict):
             api_key = config["apiKey"].copy()
-            
+
             if "key" in api_key:
                 key_value = api_key["key"]
                 if key_value:
@@ -372,27 +361,28 @@ def decrypt_auth_fields(config: dict) -> dict:
                     except Exception as decrypt_error:
                         logger.warning(f"Failed to decrypt apiKey.key: {decrypt_error}")
                         # Keep encrypted value
-    
+
     except Exception as e:
         logger.error(f"Failed to decrypt auth fields: {e}", exc_info=True)
         # Return original config if decryption fails
         return config
-    
+
     return config
 
+
 def generate_access_token(
-        user_id: str,
-        username: str,
-        email: str,
-        groups: list,
-        scopes: list,
-        role: str,
-        auth_method: str,
-        provider: str,
-        idp_id: Optional[str] = None,
-        expires_hours: int = ACCESS_TOKEN_EXPIRES_HOURS,
-        iat: Optional[int] = None,
-        exp: Optional[int] = None
+    user_id: str,
+    username: str,
+    email: str,
+    groups: list,
+    scopes: list,
+    role: str,
+    auth_method: str,
+    provider: str,
+    idp_id: str | None = None,
+    expires_hours: int = ACCESS_TOKEN_EXPIRES_HOURS,
+    iat: int | None = None,
+    exp: int | None = None,
 ) -> str:
     """
     Generate a JWT access token for authenticated user.
@@ -428,7 +418,6 @@ def generate_access_token(
         "aud": settings.JWT_AUDIENCE,
         "iat": iat,
         "exp": exp,
-
         # Custom claims
         "user_id": user_id,
         "email": email,
@@ -445,34 +434,25 @@ def generate_access_token(
         payload["idp_id"] = idp_id
 
     # JWT header
-    headers = {
-        "kid": settings.JWT_SELF_SIGNED_KID,
-        "typ": "JWT",
-        "alg": "HS256"
-    }
+    headers = {"kid": settings.JWT_SELF_SIGNED_KID, "typ": "JWT", "alg": "HS256"}
 
     # Generate JWT
-    token = jwt.encode(
-        payload,
-        settings.secret_key,
-        algorithm="HS256",
-        headers=headers
-    )
+    token = jwt.encode(payload, settings.secret_key, algorithm="HS256", headers=headers)
 
     logger.debug(f"Generated access token for user {username}, expires in {expires_hours}h")
     return token
 
 
 def generate_refresh_token(
-        user_id: str,
-        username: str,
-        auth_method: str,
-        provider: str,
-        groups: list,
-        scopes: list,
-        role: str,
-        email: str,
-        expires_days: int = REFRESH_TOKEN_EXPIRES_DAYS
+    user_id: str,
+    username: str,
+    auth_method: str,
+    provider: str,
+    groups: list,
+    scopes: list,
+    role: str,
+    email: str,
+    expires_days: int = REFRESH_TOKEN_EXPIRES_DAYS,
 ) -> str:
     """
     Generate a JWT refresh token.
@@ -494,7 +474,7 @@ def generate_refresh_token(
     Returns:
         JWT token string
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     exp = now + timedelta(days=expires_days)
 
     payload = {
@@ -504,7 +484,6 @@ def generate_refresh_token(
         "aud": settings.JWT_AUDIENCE,
         "iat": int(now.timestamp()),
         "exp": int(exp.timestamp()),
-
         # Custom claims - include groups/scopes for token refresh
         "user_id": user_id,
         "auth_method": auth_method,
@@ -516,24 +495,15 @@ def generate_refresh_token(
         "token_type": "refresh_token",
     }
 
-    headers = {
-        "kid": settings.JWT_SELF_SIGNED_KID,
-        "typ": "JWT",
-        "alg": "HS256"
-    }
+    headers = {"kid": settings.JWT_SELF_SIGNED_KID, "typ": "JWT", "alg": "HS256"}
 
-    token = jwt.encode(
-        payload,
-        settings.secret_key,
-        algorithm="HS256",
-        headers=headers
-    )
+    token = jwt.encode(payload, settings.secret_key, algorithm="HS256", headers=headers)
 
     logger.debug(f"Generated refresh token for user {username}, expires in {expires_days} days")
     return token
 
 
-def verify_access_token(token: str) -> Optional[Dict[str, Any]]:
+def verify_access_token(token: str) -> dict[str, Any] | None:
     """
     Verify and decode an access token.
 
@@ -546,7 +516,7 @@ def verify_access_token(token: str) -> Optional[Dict[str, Any]]:
     try:
         # Verify kid in header
         unverified_header = jwt.get_unverified_header(token)
-        kid = unverified_header.get('kid')
+        kid = unverified_header.get("kid")
 
         if kid != settings.JWT_SELF_SIGNED_KID:
             logger.debug(f"Invalid kid in token: {kid}")
@@ -556,16 +526,11 @@ def verify_access_token(token: str) -> Optional[Dict[str, Any]]:
         claims = jwt.decode(
             token,
             settings.secret_key,
-            algorithms=['HS256'],
+            algorithms=["HS256"],
             issuer=settings.JWT_ISSUER,
             audience=settings.JWT_AUDIENCE,
-            options={
-                "verify_exp": True,
-                "verify_iat": True,
-                "verify_iss": True,
-                "verify_aud": True
-            },
-            leeway=30  # 30 second leeway for clock skew
+            options={"verify_exp": True, "verify_iat": True, "verify_iss": True, "verify_aud": True},
+            leeway=30,  # 30 second leeway for clock skew
         )
 
         # Verify token type
@@ -587,7 +552,7 @@ def verify_access_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def verify_refresh_token(token: str) -> Optional[Dict[str, Any]]:
+def verify_refresh_token(token: str) -> dict[str, Any] | None:
     """
     Verify and decode a refresh token.
 
@@ -600,7 +565,7 @@ def verify_refresh_token(token: str) -> Optional[Dict[str, Any]]:
     try:
         # Verify kid in header
         unverified_header = jwt.get_unverified_header(token)
-        kid = unverified_header.get('kid')
+        kid = unverified_header.get("kid")
 
         if kid != settings.JWT_SELF_SIGNED_KID:
             logger.debug(f"Invalid kid in refresh token: {kid}")
@@ -610,15 +575,10 @@ def verify_refresh_token(token: str) -> Optional[Dict[str, Any]]:
         claims = jwt.decode(
             token,
             settings.secret_key,
-            algorithms=['HS256'],
+            algorithms=["HS256"],
             issuer=settings.JWT_ISSUER,
             audience=settings.JWT_AUDIENCE,
-            options={
-                "verify_exp": True,
-                "verify_iat": True,
-                "verify_iss": True,
-                "verify_aud": True
-            }
+            options={"verify_exp": True, "verify_iat": True, "verify_iss": True, "verify_aud": True},
         )
 
         # Verify token type
@@ -641,22 +601,22 @@ def verify_refresh_token(token: str) -> Optional[Dict[str, Any]]:
 
 
 def generate_token_pair(
-        user_id: str = None,
-        username: str = None,
-        email: str = None,
-        groups: list = None,
-        scopes: list = None,
-        role: str = None,
-        auth_method: str = None,
-        provider: str = None,
-        idp_id: Optional[str] = None,
-        user_info: Optional[Dict[str, Any]] = None,
-        iat: Optional[int] = None,
-        exp: Optional[int] = None
-) -> Tuple[str, str]:
+    user_id: str = None,
+    username: str = None,
+    email: str = None,
+    groups: list = None,
+    scopes: list = None,
+    role: str = None,
+    auth_method: str = None,
+    provider: str = None,
+    idp_id: str | None = None,
+    user_info: dict[str, Any] | None = None,
+    iat: int | None = None,
+    exp: int | None = None,
+) -> tuple[str, str]:
     """
     Generate both access and refresh tokens.
-    
+
     Can accept either individual parameters or a user_info dict.
     If user_info is provided, it takes precedence over individual parameters.
 
@@ -690,7 +650,7 @@ def generate_token_pair(
         idp_id = user_info.get("idp_id", idp_id)
         iat = user_info.get("iat", iat)
         exp = user_info.get("exp", exp)
-    
+
     access_token = generate_access_token(
         user_id=user_id,
         username=username,
@@ -702,7 +662,7 @@ def generate_token_pair(
         provider=provider,
         idp_id=idp_id,
         iat=iat,
-        exp=exp
+        exp=exp,
     )
 
     refresh_token = generate_refresh_token(
@@ -713,7 +673,7 @@ def generate_token_pair(
         groups=groups,
         scopes=scopes,
         role=role,
-        email=email
+        email=email,
     )
 
     return access_token, refresh_token

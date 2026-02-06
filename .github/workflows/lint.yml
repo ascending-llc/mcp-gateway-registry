@@ -1,0 +1,70 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  ruff:
+    name: "Ruff Lint & Format"
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.12"
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        uv sync --all-groups
+
+    - name: Lint with ruff
+      run: |
+        uv run ruff check . --output-format=github
+
+    - name: Check formatting with ruff
+      run: |
+        uv run ruff format --check .
+
+  security:
+    name: "Security Scan"
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.12"
+
+    - name: Install bandit
+      run: |
+        pip install bandit
+
+    - name: Security check with bandit
+      run: |
+        bandit -r auth_server/ -f json -o bandit-report-auth.json || true
+        bandit -r registry/ -f json -o bandit-report.json || true
+
+    - name: Upload security report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: bandit-reports
+        path: |
+          bandit-report.json
+          bandit-report-auth.json
