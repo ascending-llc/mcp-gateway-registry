@@ -1,8 +1,10 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
+from fastapi import HTTPException
 from beanie import PydanticObjectId
 from registry.services.access_control_service import ACLService
-from registry.core.acl_constants import ResourceType, PermissionBits, PrincipalType
+from registry.schemas.acl_schema import ResourcePermissions
+from registry.core.acl_constants import ResourceType, PermissionBits, RoleBits
 
 class TestACLService:
     @pytest.mark.asyncio
@@ -92,16 +94,61 @@ class TestACLService:
 
     @pytest.mark.asyncio
     @patch('registry.services.access_control_service.IAclEntry')
-    async def test_get_permissions_map_for_user_id(self, mock_acl_entry):
+    async def test_get_user_permissions_for_resource_edit_only(self, mock_acl_entry):
+        """EDIT bit (2) should only grant EDIT, not VIEW."""
         service = ACLService()
         entry = MagicMock()
-        entry.resourceType = ResourceType.MCPSERVER.value
-        entry.resourceId = PydanticObjectId()
         entry.permBits = PermissionBits.EDIT
-        mock_acl_entry.find.return_value.to_list = AsyncMock(return_value=[entry])
-        result = await service.get_permissions_map_for_user_id('user', PydanticObjectId())
-        assert ResourceType.MCPSERVER.value in result
-        assert isinstance(result[ResourceType.MCPSERVER.value], dict)
+        mock_acl_entry.find_one = AsyncMock(return_value=entry)
+
+        perms = await service.get_user_permissions_for_resource(
+            user_id=PydanticObjectId(),
+            resource_type=ResourceType.MCPSERVER.value,
+            resource_id=PydanticObjectId(),
+        )
+        assert isinstance(perms, ResourcePermissions)
+        assert perms.VIEW is False
+        assert perms.EDIT is True
+        assert perms.DELETE is False
+        assert perms.SHARE is False
+
+    @pytest.mark.asyncio
+    @patch('registry.services.access_control_service.IAclEntry')
+    async def test_get_user_permissions_for_resource_editor(self, mock_acl_entry):
+        """Editor (permBits=3) should have VIEW and EDIT via bitwise AND."""
+        service = ACLService()
+        entry = MagicMock()
+        entry.permBits = RoleBits.EDITOR  # 3 = VIEW | EDIT
+        mock_acl_entry.find_one = AsyncMock(return_value=entry)
+
+        perms = await service.get_user_permissions_for_resource(
+            user_id=PydanticObjectId(),
+            resource_type=ResourceType.MCPSERVER.value,
+            resource_id=PydanticObjectId(),
+        )
+        assert perms.VIEW is True
+        assert perms.EDIT is True
+        assert perms.DELETE is False
+        assert perms.SHARE is False
+
+    @pytest.mark.asyncio
+    @patch('registry.services.access_control_service.IAclEntry')
+    async def test_get_user_permissions_for_resource_viewer(self, mock_acl_entry):
+        """Viewer (permBits=1) should only have VIEW."""
+        service = ACLService()
+        entry = MagicMock()
+        entry.permBits = RoleBits.VIEWER  # 1 = VIEW only
+        mock_acl_entry.find_one = AsyncMock(return_value=entry)
+
+        perms = await service.get_user_permissions_for_resource(
+            user_id=PydanticObjectId(),
+            resource_type=ResourceType.MCPSERVER.value,
+            resource_id=PydanticObjectId(),
+        )
+        assert perms.VIEW is True
+        assert perms.EDIT is False
+        assert perms.DELETE is False
+        assert perms.SHARE is False
 
     @pytest.mark.asyncio
     @patch('registry.services.access_control_service.IAclEntry')
@@ -130,3 +177,148 @@ class TestACLService:
             principal_id='user1'
         )
         assert deleted == 0
+
+    @pytest.mark.asyncio
+    @patch('registry.services.access_control_service.IAclEntry')
+    async def test_get_user_permissions_for_resource_owner(self, mock_acl_entry):
+        """User with OWNER bits should resolve all permissions."""
+        service = ACLService()
+        entry = MagicMock()
+        entry.permBits = RoleBits.OWNER  # 15
+        mock_acl_entry.find_one = AsyncMock(return_value=entry)
+
+        perms = await service.get_user_permissions_for_resource(
+            user_id=PydanticObjectId(),
+            resource_type=ResourceType.MCPSERVER.value,
+            resource_id=PydanticObjectId(),
+        )
+        assert isinstance(perms, ResourcePermissions)
+        assert perms.VIEW is True
+        assert perms.EDIT is True
+        assert perms.DELETE is True
+        assert perms.SHARE is True
+
+    @pytest.mark.asyncio
+    @patch('registry.services.access_control_service.IAclEntry')
+    async def test_get_user_permissions_for_resource_no_match(self, mock_acl_entry):
+        """No ACL entry should return all-False permissions."""
+        service = ACLService()
+        mock_acl_entry.find_one = AsyncMock(return_value=None)
+
+        perms = await service.get_user_permissions_for_resource(
+            user_id=PydanticObjectId(),
+            resource_type=ResourceType.MCPSERVER.value,
+            resource_id=PydanticObjectId(),
+        )
+        assert perms.VIEW is False
+        assert perms.EDIT is False
+        assert perms.DELETE is False
+        assert perms.SHARE is False
+
+    @pytest.mark.asyncio
+    @patch('registry.services.access_control_service.IAclEntry')
+    async def test_get_user_permissions_for_resource_exception(self, mock_acl_entry):
+        """Exception should return all-False permissions."""
+        service = ACLService()
+        mock_acl_entry.find_one = AsyncMock(side_effect=Exception('db error'))
+
+        perms = await service.get_user_permissions_for_resource(
+            user_id=PydanticObjectId(),
+            resource_type=ResourceType.MCPSERVER.value,
+            resource_id=PydanticObjectId(),
+        )
+        assert perms == ResourcePermissions()
+
+    @pytest.mark.asyncio
+    @patch('registry.services.access_control_service.IAclEntry')
+    async def test_check_user_permission_allowed(self, mock_acl_entry):
+        """User with VIEW should pass the VIEW check."""
+        service = ACLService()
+        entry = MagicMock()
+        entry.permBits = RoleBits.VIEWER  # 1
+        mock_acl_entry.find_one = AsyncMock(return_value=entry)
+
+        perms = await service.check_user_permission(
+            user_id=PydanticObjectId(),
+            resource_type=ResourceType.MCPSERVER.value,
+            resource_id=PydanticObjectId(),
+            required_permission="VIEW",
+        )
+        assert perms.VIEW is True
+
+    @pytest.mark.asyncio
+    @patch('registry.services.access_control_service.IAclEntry')
+    async def test_check_user_permission_denied(self, mock_acl_entry):
+        """User with VIEW-only should be denied EDIT."""
+        service = ACLService()
+        entry = MagicMock()
+        entry.permBits = RoleBits.VIEWER  # 1 = VIEW only
+        mock_acl_entry.find_one = AsyncMock(return_value=entry)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await service.check_user_permission(
+                user_id=PydanticObjectId(),
+                resource_type=ResourceType.MCPSERVER.value,
+                resource_id=PydanticObjectId(),
+                required_permission="EDIT",
+            )
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    @patch('registry.services.access_control_service.IAclEntry')
+    async def test_check_user_permission_no_entry(self, mock_acl_entry):
+        """No ACL entry should raise 403."""
+        service = ACLService()
+        mock_acl_entry.find_one = AsyncMock(return_value=None)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await service.check_user_permission(
+                user_id=PydanticObjectId(),
+                resource_type=ResourceType.MCPSERVER.value,
+                resource_id=PydanticObjectId(),
+                required_permission="VIEW",
+            )
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    @patch('registry.services.access_control_service.IAclEntry')
+    async def test_get_accessible_resource_ids(self, mock_acl_entry):
+        """Should return deduplicated resource IDs with VIEW bit set."""
+        service = ACLService()
+        rid1 = PydanticObjectId()
+        rid2 = PydanticObjectId()
+
+        entry_view = MagicMock()
+        entry_view.permBits = RoleBits.VIEWER  # 1 — has VIEW
+        entry_view.resourceId = rid1
+
+        entry_edit_only = MagicMock()
+        entry_edit_only.permBits = PermissionBits.EDIT  # 2 — no VIEW bit
+        entry_edit_only.resourceId = rid2
+
+        entry_owner = MagicMock()
+        entry_owner.permBits = RoleBits.OWNER  # 15 — has VIEW
+        entry_owner.resourceId = rid1  # duplicate of rid1
+
+        mock_acl_entry.find.return_value.to_list = AsyncMock(
+            return_value=[entry_view, entry_edit_only, entry_owner]
+        )
+
+        result = await service.get_accessible_resource_ids(
+            user_id=PydanticObjectId(),
+            resource_type=ResourceType.MCPSERVER.value,
+        )
+        # rid1 appears twice but should be deduplicated; rid2 has no VIEW bit
+        assert result == [str(rid1)]
+
+    @pytest.mark.asyncio
+    @patch('registry.services.access_control_service.IAclEntry')
+    async def test_get_accessible_resource_ids_exception(self, mock_acl_entry):
+        """Exception should return empty list."""
+        service = ACLService()
+        mock_acl_entry.find.return_value.to_list = AsyncMock(side_effect=Exception('fail'))
+        result = await service.get_accessible_resource_ids(
+            user_id=PydanticObjectId(),
+            resource_type=ResourceType.MCPSERVER.value,
+        )
+        assert result == []

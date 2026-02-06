@@ -9,6 +9,13 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from registry.core.acl_constants import PrincipalType
 
+
+class ResourcePermissions(BaseModel):
+    VIEW: bool = False
+    EDIT: bool = False
+    DELETE: bool = False
+    SHARE: bool = False
+
 class PermissionPrincipalIn(BaseModel):
     principal_id: str
     principal_type: PrincipalType
@@ -19,7 +26,6 @@ class UpdateResourcePermissionsRequest(BaseModel):
     updated: List[PermissionPrincipalIn] = Field(default_factory=list)
     removed: List[PermissionPrincipalIn] = Field(default_factory=list)
     public: bool = False
-
 
 class PermissionPrincipalOut(BaseModel):
     principal_type: PrincipalType

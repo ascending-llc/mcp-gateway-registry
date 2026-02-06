@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, status as http_status, Depends
 from pydantic import ValidationError
 from beanie import PydanticObjectId
 
-from registry.auth.dependencies import CurrentUserWithACLMap
+from registry.auth.dependencies import CurrentUser
 from registry.core.telemetry_decorators import track_registry_operation
 from registry.services.server_service import server_service_v1
 from registry.services.oauth.mcp_service import get_mcp_service
@@ -21,9 +21,6 @@ from registry.services.oauth.connection_status_service import (
     get_single_server_connection_status
 )
 from registry.services.access_control_service import acl_service
-from registry.services.permissions_utils import (
-    check_required_permission,
-)
 from registry.core.acl_constants import PrincipalType, ResourceType, RoleBits
 from registry.schemas.enums import ConnectionState
 from registry.schemas.server_api_schemas import (
@@ -53,7 +50,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def get_user_context(user_context: CurrentUserWithACLMap):
+def get_user_context(user_context: CurrentUser):
     """Extract user context from authentication dependency"""
     return user_context
 
@@ -101,7 +98,6 @@ def apply_connection_status_to_server(
 @track_registry_operation("list", resource_type="server")
 async def list_servers(
     query: Optional[str] = None,
-    scope: Optional[str] = None,
     status: Optional[str] = None,
     page: int = 1,
     per_page: int = 20,
@@ -110,22 +106,14 @@ async def list_servers(
     """
     List servers with optional filtering and pagination.
     Includes connection status (connection_state, requires_oauth, error) for each server.
-    
+
     Query Parameters:
     - query: Free-text search across server_name, description, tags
-    - scope: Filter by access level (shared_app, shared_user, private_user)
     - status: Filter by operational state (active, inactive, error)
     - page: Page number (default: 1, min: 1)
     - per_page: Items per page (default: 20, min: 1, max: 100)
     """
     try:
-        # Validate scope if provided
-        if scope and scope not in ["shared_app", "shared_user", "private_user"]:
-            raise HTTPException(
-                status_code=http_status.HTTP_400_BAD_REQUEST,
-                detail="Invalid scope. Must be one of: shared_app, shared_user, private_user"
-            )
-        
         # Validate status if provided
         if status and status not in ["active", "inactive", "error"]:
             raise HTTPException(
@@ -133,18 +121,29 @@ async def list_servers(
                 detail="Invalid status. Must be one of: active, inactive, error"
             )
 
+        user_id = user_context.get("user_id")
+        accessible_ids = await acl_service.get_accessible_resource_ids(
+            user_id=PydanticObjectId(user_id),
+            resource_type=ResourceType.MCPSERVER.value,
+        )
+
         servers, total = await server_service_v1.list_servers(
             query=query,
-            scope=scope,
             status=status,
             page=page,
             per_page=per_page,
             user_id=None,
-            acl_permissions_map=user_context.get("acl_permission_map", {})
+            accessible_server_ids=accessible_ids,
         )
-        
-        # Convert to response models
-        server_items = [convert_to_list_item(server) for server in servers]
+
+        server_items = []
+        for server in servers:
+            perms = await acl_service.get_user_permissions_for_resource(
+                user_id=PydanticObjectId(user_id),
+                resource_type=ResourceType.MCPSERVER.value,
+                resource_id=server.id,
+            )
+            server_items.append(convert_to_list_item(server, acl_permission=perms))
         
         # Get connection status and enrich server items
         try:
@@ -250,8 +249,13 @@ async def get_server(
 ):
     """Get detailed information about a server by ID, including connection status"""
     try:
-        acl_permission_map = user_context.get("acl_permission_map", {})
-        check_required_permission(acl_permission_map, ResourceType.MCPSERVER.value, server_id, "VIEW")
+        user_id = user_context.get("user_id")
+        permissions = await acl_service.check_user_permission(
+            user_id=PydanticObjectId(user_id),
+            resource_type=ResourceType.MCPSERVER.value,
+            resource_id=PydanticObjectId(server_id),
+            required_permission="VIEW",
+        )
 
         server = await server_service_v1.get_server_by_id(
             server_id=server_id,
@@ -262,11 +266,10 @@ async def get_server(
                 status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Server not found"
             )
-        
+
         # Convert to response model
-        server_detail = convert_to_detail(server)
+        server_detail = convert_to_detail(server, acl_permission=permissions)
         try:
-            user_id = user_context.get('user_id')
             mcp_service = await get_mcp_service()
             server_status = await get_single_server_connection_status(
                 user_id=user_id,
@@ -380,8 +383,12 @@ async def update_server(
     """Update a server with partial data"""
     try:
         user_id = user_context.get("user_id")
-        acl_permission_map = user_context.get("acl_permission_map", {})
-        check_required_permission(acl_permission_map, ResourceType.MCPSERVER.value, server_id, "EDIT")
+        await acl_service.check_user_permission(
+            user_id=PydanticObjectId(user_id),
+            resource_type=ResourceType.MCPSERVER.value,
+            resource_id=PydanticObjectId(server_id),
+            required_permission="EDIT",
+        )
 
         server = await server_service_v1.update_server(
             server_id=server_id,
@@ -433,8 +440,13 @@ async def delete_server(
 ):
     """Delete a server"""
     try:
-        acl_permission_map = user_context.get("acl_permission_map", {})
-        check_required_permission(acl_permission_map, ResourceType.MCPSERVER.value, server_id, "DELETE")
+        user_id = user_context.get("user_id")
+        await acl_service.check_user_permission(
+            user_id=PydanticObjectId(user_id),
+            resource_type=ResourceType.MCPSERVER.value,
+            resource_id=PydanticObjectId(server_id),
+            required_permission="DELETE",
+        )
 
         successful_delete = await server_service_v1.delete_server(
             server_id=server_id,
@@ -493,10 +505,13 @@ async def toggle_server(
 ):
     """Toggle server enabled/disabled status. When enabling, fetches tools from server."""
     try:
-        acl_permission_map = user_context.get("acl_permission_map", {})
-        check_required_permission(acl_permission_map, ResourceType.MCPSERVER.value, server_id, "EDIT")
-        
         user_id = user_context.get("user_id")
+        await acl_service.check_user_permission(
+            user_id=PydanticObjectId(user_id),
+            resource_type=ResourceType.MCPSERVER.value,
+            resource_id=PydanticObjectId(server_id),
+            required_permission="EDIT",
+        )
     
         server = await server_service_v1.toggle_server_status(
             server_id=server_id,
@@ -546,8 +561,13 @@ async def get_server_tools(
 ):
     """Get server tools"""
     try:
-        acl_permission_map = user_context.get("acl_permission_map", {})
-        check_required_permission(acl_permission_map, ResourceType.MCPSERVER.value, server_id, "VIEW")
+        user_id = user_context.get("user_id")
+        await acl_service.check_user_permission(
+            user_id=PydanticObjectId(user_id),
+            resource_type=ResourceType.MCPSERVER.value,
+            resource_id=PydanticObjectId(server_id),
+            required_permission="VIEW",
+        )
 
         server, tools = await server_service_v1.get_server_tools(
             server_id=server_id,
