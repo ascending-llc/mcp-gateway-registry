@@ -364,7 +364,6 @@ const Dashboard: React.FC = () => {
                   <ServerCard
                     key={server.id}
                     server={server}
-                    canModify={user?.can_modify_servers || false}
                     onEdit={handleEditServer}
                     onServerUpdate={handleServerUpdate}
                     onRefreshSuccess={refreshServerData}
@@ -461,7 +460,6 @@ const Dashboard: React.FC = () => {
                         <ServerCard
                           key={server.id}
                           server={server}
-                          canModify={user?.can_modify_servers || false}
                           onEdit={handleEditServer}
                           onServerUpdate={handleServerUpdate}
                           onRefreshSuccess={refreshServerData}
@@ -542,7 +540,7 @@ const Dashboard: React.FC = () => {
                   : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
             >
-              MCP Servers Only
+              MCP Servers
             </button>
             <button
               onClick={() => handleChangeViewFilter('agents')}
@@ -552,7 +550,7 @@ const Dashboard: React.FC = () => {
                   : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
             >
-              A2A Agents Only
+              A2A Agents
             </button>
             <button
               onClick={() => handleChangeViewFilter('external')}

@@ -7,6 +7,7 @@ import { McpIcon } from '@/assets/McpIcon';
 import { useGlobal } from '@/contexts/GlobalContext';
 import { useServer } from '@/contexts/ServerContext';
 import SERVICES from '@/services';
+import type { GET_SERVERS_DETAIL_RESPONSE } from '@/services/server/type';
 import MainConfigForm from './MainConfigForm';
 import ServerCreationSuccessDialog from './ServerCreationSuccessDialog';
 import type { AuthenticationConfig as AuthConfigType, ServerConfig } from './types';
@@ -34,6 +35,7 @@ const ServerRegistryOrEdit: React.FC = () => {
 
   const [loading, setLoading] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [serverDetail, setServerDetail] = useState<GET_SERVERS_DETAIL_RESPONSE | null>(null);
   const [formData, setFormData] = useState<ServerConfig>(INIT_DATA);
   const [originalData, setOriginalData] = useState<ServerConfig | null>(null);
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
@@ -85,8 +87,9 @@ const ServerRegistryOrEdit: React.FC = () => {
           scope: result.oauth?.scope,
         };
       }
-      setOriginalData(formData);
+      setServerDetail(result);
       setFormData(formData);
+      setOriginalData(formData);
     } catch (_error) {
       showToast('Failed to fetch server details', 'error');
     } finally {
@@ -315,7 +318,7 @@ const ServerRegistryOrEdit: React.FC = () => {
         {/* Footer */}
         <div className='px-6 py-4 border-t border-gray-100  dark:border-gray-700 flex items-center justify-between'>
           <div>
-            {isEditMode && !isReadOnly && (
+            {isEditMode && !isReadOnly && serverDetail?.permissions?.DELETE && (
               <button
                 onClick={handleDelete}
                 disabled={loading}

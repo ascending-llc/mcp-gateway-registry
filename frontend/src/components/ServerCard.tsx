@@ -24,13 +24,12 @@ import ServerConfigModal from './ServerConfigModal';
 
 interface ServerCardProps {
   server: ServerInfo;
-  canModify?: boolean;
   onEdit?: (server: ServerInfo) => void;
   onServerUpdate: (id: string, updates: Partial<ServerInfo>) => void;
   onRefreshSuccess?: () => void;
 }
 
-const ServerCard: React.FC<ServerCardProps> = ({ server, canModify, onEdit, onServerUpdate, onRefreshSuccess }) => {
+const ServerCard: React.FC<ServerCardProps> = ({ server, onEdit, onServerUpdate, onRefreshSuccess }) => {
   const navigate = useNavigate();
   const { showToast } = useGlobal();
   const { cancelPolling, refreshServerData } = useServer();
@@ -190,12 +189,19 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, canModify, onEdit, onSe
           <div className='flex items-start justify-between mb-3'>
             <div className='flex-1 min-w-0'>
               <div className='flex flex-wrap items-center gap-1.5 mb-2'>
-                <h3
-                  className='text-base font-bold text-gray-900 dark:text-white truncate max-w-[160px] cursor-pointer hover:text-purple-600 dark:hover:text-purple-400 transition-colors'
-                  onClick={() => navigate(`/server-edit?id=${server.id}&isReadOnly=true`)}
-                >
-                  {server.name}
-                </h3>
+                {server.permissions?.VIEW ? (
+                  <h3
+                    className='text-base font-bold text-gray-900 dark:text-white truncate max-w-[160px] cursor-pointer hover:text-purple-600 dark:hover:text-purple-400 transition-colors'
+                    onClick={() => navigate(`/server-edit?id=${server.id}&isReadOnly=true`)}
+                  >
+                    {server.name}
+                  </h3>
+                ) : (
+                  <h3 className='text-base font-bold text-gray-900 dark:text-white truncate max-w-[160px]'>
+                    {server.name}
+                  </h3>
+                )}
+
                 {server.official && (
                   <span className='px-1.5 py-0.5 text-xs font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded-full flex-shrink-0 whitespace-nowrap'>
                     OFFICIAL
@@ -234,7 +240,7 @@ const ServerCard: React.FC<ServerCardProps> = ({ server, canModify, onEdit, onSe
                   {getAuthStatusIcon()}
                 </button>
               )}
-              {canModify && (
+              {server?.permissions?.EDIT && (
                 <button
                   className='p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-all duration-200 flex-shrink-0'
                   onClick={() => onEdit?.(server)}

@@ -232,9 +232,13 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                   required
                   disabled={isReadOnly}
                   className={`${getInputClass('client_id')} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  placeholder='your-client-id-here'
                   value={config.client_id || ''}
                   onChange={e => updateConfig({ client_id: e.target.value })}
                 />
+                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+                  Required for static clients. Leave blank if using dynamic client registration
+                </p>
                 {renderError('client_id')}
               </div>
               <div>
@@ -249,7 +253,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                     className={`${getInputClass('client_secret')} pr-10 disabled:opacity-50 disabled:cursor-not-allowed`}
                     style={{ fontFamily: 'Menlo, Consolas, Courier New, monospace' }}
                     value={isEditMode && !isClientSecretDirty ? '' : config.client_secret || ''}
-                    placeholder={isEditMode && !isClientSecretDirty ? config.client_secret : ''}
+                    placeholder={isEditMode && !isClientSecretDirty ? config.client_secret : 'your-client-secret-here'}
                     onChange={e => {
                       setIsClientSecretDirty(true);
                       updateConfig({ client_secret: e.target.value });
@@ -269,6 +273,9 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                     </button>
                   )}
                 </div>
+                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+                  Required for static clients. Never share this value.
+                </p>
                 {renderError('client_secret')}
               </div>
               <div>
@@ -280,10 +287,13 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                   required
                   disabled={isReadOnly}
                   className={`${getInputClass('authorization_url')} disabled:opacity-50 disabled:cursor-not-allowed`}
-                  placeholder='https://...'
+                  placeholder='https://auth.example.com/oauth/authorize'
                   value={config.authorization_url || ''}
                   onChange={e => updateConfig({ authorization_url: e.target.value })}
                 />
+                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+                  The endpoint where users are redirected to authenticate and grant permissions.
+                </p>
                 {renderError('authorization_url')}
               </div>
               <div>
@@ -295,10 +305,13 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                   required
                   disabled={isReadOnly}
                   className={`${getInputClass('token_url')} disabled:opacity-50 disabled:cursor-not-allowed`}
-                  placeholder='https://...'
+                  placeholder='https://auth.example.com/oauth/token'
                   value={config.token_url || ''}
                   onChange={e => updateConfig({ token_url: e.target.value })}
                 />
+                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+                  The backend endpoint for exchanging authorization codes for access tokens.
+                </p>
                 {renderError('token_url')}
               </div>
 
@@ -312,6 +325,14 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                   value={config.scope || ''}
                   onChange={e => updateConfig({ scope: e.target.value })}
                 />
+                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+                  Space-separated list of permissions.Examples:
+                </p>
+                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+                  Generic: <span className='italic'>rea d write profile</span> • GitHub:
+                  <span className='italic'>repo read:user</span> • Google:
+                  <span className='italic'>openid email profile</span>
+                </p>
               </div>
             </div>
           )}

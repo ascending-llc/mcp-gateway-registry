@@ -27,6 +27,12 @@ export type ApiKeyConfig = {
   custom_header?: string;
 };
 export type StatusType = 'active' | 'inactive' | 'error';
+export type PermissionType = {
+  VIEW: boolean;
+  EDIT: boolean;
+  DELETE: boolean;
+  SHARE: boolean;
+};
 export type Server = {
   id: string;
   serverName: string;
@@ -42,6 +48,7 @@ export type Server = {
   scope: string;
   status: StatusType;
   path: string;
+  permissions: PermissionType;
   tags: string[];
   numTools: number;
   numStars: number;

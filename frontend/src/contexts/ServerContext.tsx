@@ -4,11 +4,12 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 
 import SERVICES from '@/services';
 import { SERVER_CONNECTION } from '@/services/mcp/type';
-import type { Server } from '@/services/server/type';
+import type { PermissionType, Server } from '@/services/server/type';
 
 export interface ServerInfo {
   id: string;
   name: string;
+  permissions: PermissionType;
   path: string;
   description?: string;
   official?: boolean;
@@ -161,6 +162,7 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
       return {
         id: serverInfo.id,
         name: serverInfo.serverName || 'Unknown Server',
+        permissions: serverInfo.permissions,
         path: serverInfo.path,
         description: serverInfo.description || '',
         official: serverInfo.is_official || false,
