@@ -44,6 +44,10 @@ class Settings(BaseSettings):
 
     # Server configuration
     MCP_TRANSPORT: str = Field(default=Constants.DEFAULT_MCP_TRANSPORT, description="Transport type for the MCP server")
+    MCP_SERVER_HOST: str = Field(
+        default="0.0.0.0",
+        description="Host interface for the MCP server to bind to (0.0.0.0 for all interfaces, 127.0.0.1 for localhost only)",
+    )
     MCP_SERVER_LISTEN_PORT: str = Field(
         default=Constants.DEFAULT_MCP_SERVER_LISTEN_PORT, description="Port for the MCP server to listen on"
     )

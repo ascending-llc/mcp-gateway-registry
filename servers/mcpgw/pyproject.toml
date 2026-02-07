@@ -7,7 +7,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     # MCP framework
     "mcp>=1.9.3",
-    "fastmcp>=2.13.1",
+    "fastmcp>=2.14.5",
     "fastapi>=0.115.12",
 
     # Core dependencies

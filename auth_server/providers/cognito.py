@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 
 import jwt
 import requests
+from authlib.integrations.requests_client import OAuth2Session
 
 from .base import AuthProvider
 
@@ -140,29 +141,26 @@ class CognitoProvider(AuthProvider):
             raise ValueError(f"Cannot retrieve JWKS: {e}")
 
     def exchange_code_for_token(self, code: str, redirect_uri: str) -> dict[str, Any]:
-        """Exchange authorization code for access token."""
+        """Exchange authorization code for access token using Authlib."""
         try:
             logger.debug("Exchanging authorization code for token")
 
-            data = {
-                "grant_type": "authorization_code",
-                "code": code,
-                "client_id": self.client_id,
-                "client_secret": self.client_secret,
-                "redirect_uri": redirect_uri,
-            }
+            client = OAuth2Session(
+                client_id=self.client_id,
+                client_secret=self.client_secret,
+                token_endpoint=self.token_url,
+            )
 
-            headers = {"Content-Type": "application/x-www-form-urlencoded"}
+            token_data = client.fetch_token(
+                self.token_url,
+                code=code,
+                redirect_uri=redirect_uri,
+            )
 
-            response = requests.post(self.token_url, data=data, headers=headers, timeout=10)
-            response.raise_for_status()
-
-            token_data = response.json()
             logger.debug("Token exchange successful")
-
             return token_data
 
-        except requests.RequestException as e:
+        except Exception as e:
             logger.error(f"Failed to exchange code for token: {e}")
             raise ValueError(f"Token exchange failed: {e}")
 

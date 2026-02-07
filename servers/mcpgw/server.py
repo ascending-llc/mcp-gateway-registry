@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 import logging
 
+from auth.patch_init_exempt import patch_init_exempt
+
+patch_init_exempt()
 from auth.custom_jwt import jwtVerifier
 from auth.middleware import AuthMiddleware, HeaderSwapMiddleware
 from fastmcp import FastMCP
@@ -322,7 +325,7 @@ def main():
     try:
         mcp.run(
             transport=settings.MCP_TRANSPORT,
-            host="0.0.0.0",
+            host=settings.MCP_SERVER_HOST,
             port=int(settings.MCP_SERVER_LISTEN_PORT),
             stateless_http=True,
         )

@@ -20,15 +20,15 @@ class TestMCPOAuthService:
         return Mock(spec=FlowStateManager)
 
     @pytest.fixture
-    def mock_http_client(self):
-        """Mock OAuthHttpClient"""
+    def mock_oauth_client(self):
+        """Mock OAuthClient"""
         return Mock()
 
     @pytest.fixture
-    def oauth_service(self, mock_flow_manager, mock_http_client):
+    def oauth_service(self, mock_flow_manager, mock_oauth_client):
         """Create MCPOAuthService instance with mocked dependencies"""
         service = MCPOAuthService(flow_manager=mock_flow_manager)
-        service.http_client = mock_http_client
+        service.oauth_client = mock_oauth_client
         return service
 
     @pytest.fixture
@@ -224,7 +224,9 @@ class TestMCPOAuthService:
         oauth_service.flow_manager.create_flow = Mock(return_value=Mock())
 
         # Mock HTTP client
-        oauth_service.http_client.build_authorization_url = Mock(return_value="https://example.com/auth?state=test")
+        oauth_service.oauth_client.build_authorization_url = AsyncMock(
+            return_value="https://example.com/auth?state=test"
+        )
 
         # Mock crypto utils
         with patch(
@@ -278,7 +280,7 @@ class TestMCPOAuthService:
 
         # Mock HTTP client
         mock_tokens = Mock(spec=OAuthTokens)
-        oauth_service.http_client.exchange_code_for_tokens = AsyncMock(return_value=mock_tokens)
+        oauth_service.oauth_client.exchange_code_for_tokens = AsyncMock(return_value=mock_tokens)
 
         # Mock token service
         token_service.store_oauth_tokens = AsyncMock()
@@ -362,7 +364,7 @@ class TestMCPOAuthService:
         mock_tokens = Mock(spec=OAuthTokens)
         mock_tokens.access_token = "new_access_token"
         mock_tokens.refresh_token = "new_refresh_token"  # Simulate token rotation
-        oauth_service.http_client.refresh_tokens = AsyncMock(return_value=mock_tokens)
+        oauth_service.oauth_client.refresh_tokens = AsyncMock(return_value=mock_tokens)
 
         # Mock token service
         token_service.store_oauth_tokens = AsyncMock()
@@ -389,7 +391,7 @@ class TestMCPOAuthService:
         }
 
         # Mock HTTP client to return None (failure)
-        oauth_service.http_client.refresh_tokens = AsyncMock(return_value=None)
+        oauth_service.oauth_client.refresh_tokens = AsyncMock(return_value=None)
 
         success, error = await oauth_service.refresh_token(
             user_id, server_id, server_name, refresh_token_value, oauth_config
