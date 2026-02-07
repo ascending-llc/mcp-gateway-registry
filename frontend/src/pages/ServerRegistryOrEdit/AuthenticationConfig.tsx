@@ -1,6 +1,8 @@
-import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+import { ClipboardDocumentIcon, EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import type React from 'react';
 import { useState } from 'react';
+
+import { getBasePath } from '@/config';
 import type { AuthenticationConfig as AuthConfigType } from './types';
 
 interface AuthenticationConfigProps {
@@ -9,6 +11,7 @@ interface AuthenticationConfigProps {
   onChange: (config: AuthConfigType) => void;
   errors?: Record<string, string | undefined>;
   isReadOnly?: boolean;
+  path?: string;
 }
 
 const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
@@ -17,6 +20,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
   onChange,
   errors = {},
   isReadOnly = false,
+  path = '',
 }) => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [showClientSecret, setShowClientSecret] = useState(false);
@@ -40,6 +44,10 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
     if (!errors[fieldName]) return null;
     return <p className='mt-1 text-xs text-red-500'>{errors[fieldName]}</p>;
   };
+
+  const cleanPath = path?.replace(/\/+$/, '') || '';
+  const serverPath = cleanPath && !cleanPath.startsWith('/') ? `/${cleanPath}` : cleanPath;
+  const redirectUri = `${window.location.protocol}//${window.location.host}${getBasePath()}/api/v1/mcp${serverPath}/oauth/callback`;
 
   return (
     <div className='space-y-6'>
@@ -224,12 +232,9 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
           {config.type === 'oauth' && (
             <div className='space-y-4 animate-fadeIn'>
               <div>
-                <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>
-                  Client ID <span className='text-red-500'>*</span>
-                </label>
+                <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>Client ID</label>
                 <input
                   type='text'
-                  required
                   disabled={isReadOnly}
                   className={`${getInputClass('client_id')} disabled:opacity-50 disabled:cursor-not-allowed`}
                   placeholder='your-client-id-here'
@@ -242,13 +247,10 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                 {renderError('client_id')}
               </div>
               <div>
-                <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>
-                  Client Secret <span className='text-red-500'>*</span>
-                </label>
+                <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>Client Secret</label>
                 <div className='relative rounded-md shadow-sm'>
                   <input
                     type={showClientSecret ? 'text' : 'password'}
-                    required
                     disabled={isReadOnly}
                     className={`${getInputClass('client_secret')} pr-10 disabled:opacity-50 disabled:cursor-not-allowed`}
                     style={{ fontFamily: 'Menlo, Consolas, Courier New, monospace' }}
@@ -313,6 +315,28 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                   The backend endpoint for exchanging authorization codes for access tokens.
                 </p>
                 {renderError('token_url')}
+              </div>
+
+              <div>
+                <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>Redirect URI</label>
+                <div className='flex gap-2'>
+                  <input
+                    type='text'
+                    readOnly
+                    disabled={isReadOnly}
+                    className='block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm sm:text-sm bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-not-allowed focus:ring-0 focus:border-gray-300 dark:focus:border-gray-600'
+                    value={redirectUri}
+                  />
+                  <button
+                    type='button'
+                    onClick={() => {
+                      navigator.clipboard.writeText(redirectUri);
+                    }}
+                    className='inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500'
+                  >
+                    <ClipboardDocumentIcon className='h-5 w-5' aria-hidden='true' />
+                  </button>
+                </div>
               </div>
 
               <div>

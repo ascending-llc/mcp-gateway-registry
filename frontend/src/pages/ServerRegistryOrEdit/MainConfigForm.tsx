@@ -172,6 +172,7 @@ const MainConfigForm: React.FC<MainConfigFormProps> = ({ formData, isEditMode, u
         onChange={handleAuthChange}
         errors={errors}
         isReadOnly={isReadOnly}
+        path={formData.path}
       />
 
       {/* Section Metadata */}

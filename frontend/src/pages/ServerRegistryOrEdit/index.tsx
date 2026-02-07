@@ -29,7 +29,6 @@ const ServerRegistryOrEdit: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const id = searchParams.get('id');
-  const isReadOnly = searchParams.get('isReadOnly') === 'true';
   const { showToast } = useGlobal();
   const { refreshServerData, handleServerUpdate } = useServer();
 
@@ -43,6 +42,7 @@ const ServerRegistryOrEdit: React.FC = () => {
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
 
   const isEditMode = !!id;
+  const isReadOnly = searchParams.get('isReadOnly') === 'true';
 
   useEffect(() => {
     if (id) getDetail();
@@ -128,8 +128,6 @@ const ServerRegistryOrEdit: React.FC = () => {
         newErrors.custom_header = 'Custom Header Name is required';
       }
     } else if (auth.type === 'oauth') {
-      if (!auth.client_id?.trim()) newErrors.client_id = 'Client ID is required';
-      if (!auth.client_secret?.trim()) newErrors.client_secret = 'Client Secret is required';
       if (!auth.authorization_url?.trim()) newErrors.authorization_url = 'Authorization URL is required';
       if (!auth.token_url?.trim()) newErrors.token_url = 'Token URL is required';
     }
@@ -155,14 +153,7 @@ const ServerRegistryOrEdit: React.FC = () => {
           nextErrors.custom_header = undefined;
           hasChanges = true;
         }
-        if (nextErrors.client_id && newConfig.client_id?.trim()) {
-          nextErrors.client_id = undefined;
-          hasChanges = true;
-        }
-        if (nextErrors.client_secret && newConfig.client_secret?.trim()) {
-          nextErrors.client_secret = undefined;
-          hasChanges = true;
-        }
+
         if (nextErrors.authorization_url && newConfig.authorization_url?.trim()) {
           nextErrors.authorization_url = undefined;
           hasChanges = true;
@@ -290,7 +281,7 @@ const ServerRegistryOrEdit: React.FC = () => {
           </div>
           <div>
             <h1 className='text-2xl font-bold text-gray-900 dark:text-white'>
-              {isEditMode ? 'Edit MCP Server' : 'Register MCP Server'}
+              {isEditMode ? 'Edit MCP Server' : isReadOnly ? 'View MCP Server' : 'Register MCP Server'}
             </h1>
             <p className='text-base text-gray-500 dark:text-gray-400 mt-0.5'>
               Configure a Model Context Protocol server
