@@ -298,6 +298,7 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                 </p>
                 {renderError('authorization_url')}
               </div>
+
               <div>
                 <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>
                   Token URL <span className='text-red-500'>*</span>
@@ -315,6 +316,26 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                   The backend endpoint for exchanging authorization codes for access tokens.
                 </p>
                 {renderError('token_url')}
+              </div>
+
+              <div>
+                <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>Scope</label>
+                <input
+                  type='text'
+                  disabled={isReadOnly}
+                  className={`${getInputClass('scope')} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  placeholder='read write'
+                  value={config.scope || ''}
+                  onChange={e => updateConfig({ scope: e.target.value })}
+                />
+                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+                  Space-separated list of permissions.Examples:
+                </p>
+                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+                  Generic: <span className='italic'>rea d write profile</span> • GitHub:
+                  <span className='italic'>repo read:user</span> • Google:
+                  <span className='italic'>openid email profile</span>
+                </p>
               </div>
 
               <div>
@@ -337,26 +358,6 @@ const AuthenticationConfig: React.FC<AuthenticationConfigProps> = ({
                     <ClipboardDocumentIcon className='h-5 w-5' aria-hidden='true' />
                   </button>
                 </div>
-              </div>
-
-              <div>
-                <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-1'>Scope</label>
-                <input
-                  type='text'
-                  disabled={isReadOnly}
-                  className={`${getInputClass('scope')} disabled:opacity-50 disabled:cursor-not-allowed`}
-                  placeholder='read write'
-                  value={config.scope || ''}
-                  onChange={e => updateConfig({ scope: e.target.value })}
-                />
-                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-                  Space-separated list of permissions.Examples:
-                </p>
-                <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-                  Generic: <span className='italic'>rea d write profile</span> • GitHub:
-                  <span className='italic'>repo read:user</span> • Google:
-                  <span className='italic'>openid email profile</span>
-                </p>
               </div>
             </div>
           )}

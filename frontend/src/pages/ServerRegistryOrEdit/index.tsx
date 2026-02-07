@@ -281,7 +281,7 @@ const ServerRegistryOrEdit: React.FC = () => {
           </div>
           <div>
             <h1 className='text-2xl font-bold text-gray-900 dark:text-white'>
-              {isEditMode ? 'Edit MCP Server' : isReadOnly ? 'View MCP Server' : 'Register MCP Server'}
+              {isReadOnly ? 'View MCP Server' : isEditMode ? 'Edit MCP Server' : 'Register MCP Server'}
             </h1>
             <p className='text-base text-gray-500 dark:text-gray-400 mt-0.5'>
               Configure a Model Context Protocol server
