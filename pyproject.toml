@@ -127,4 +127,4 @@ line-ending = "auto"
 
 [tool.bandit]
 exclude_dirs = ["tests", "frontend", ".venv", "node_modules"]
-skips = ["B101"]  # Skip assert warnings (used in tests)
+skips = ["B101", "B104"]  # Skip assert warnings (used in tests) and hardcoded bind_all_interfaces (required for containers)
