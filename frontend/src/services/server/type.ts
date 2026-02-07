@@ -15,9 +15,9 @@ export type GET_SERVERS_REQUEST = {
 export type OauthConfig = {
   authorization_url: string;
   token_url: string;
-  client_id: string;
-  client_secret: string;
-  scope: string;
+  client_id?: string;
+  client_secret?: string;
+  scope?: string;
 };
 export type ApiKeyConfig = {
   key: string;
