@@ -1,4 +1,4 @@
-import type { ApiKeyHeaderFormat, ApiKeySource, ServerType } from '@/components/ServerFormDialog/types';
+import type { ApiKeyHeaderFormat, ApiKeySource, ServerType } from '@/pages/ServerRegistryOrEdit/types';
 import type { SERVER_CONNECTION } from '@/services/mcp/type';
 
 export type GET_VERSION_RESPONSE = {
@@ -26,6 +26,12 @@ export type ApiKeyConfig = {
   custom_header?: string;
 };
 export type StatusType = 'active' | 'inactive' | 'error';
+export type PermissionType = {
+  VIEW: boolean;
+  EDIT: boolean;
+  DELETE: boolean;
+  SHARE: boolean;
+};
 export type Server = {
   id: string;
   serverName: string;
@@ -40,6 +46,7 @@ export type Server = {
   author: string;
   status: StatusType;
   path: string;
+  permissions: PermissionType;
   tags: string[];
   numTools: number;
   numStars: number;

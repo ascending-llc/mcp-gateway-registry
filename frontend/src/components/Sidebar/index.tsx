@@ -61,11 +61,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
                   </Transition.Child>
 
                   <div className='flex grow flex-col gap-y-5 overflow-y-auto bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700'>
-                    <Content
-                      setTokenData={setTokenData}
-                      setSidebarOpen={setSidebarOpen}
-                      setShowTokenModal={setShowTokenModal}
-                    />
+                    <Content setSidebarOpen={setSidebarOpen} />
                   </div>
                 </Dialog.Panel>
               </Transition.Child>

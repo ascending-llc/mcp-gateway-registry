@@ -4,11 +4,12 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 
 import SERVICES from '@/services';
 import { SERVER_CONNECTION } from '@/services/mcp/type';
-import type { Server } from '@/services/server/type';
+import type { PermissionType, Server } from '@/services/server/type';
 
 export interface ServerInfo {
   id: string;
   name: string;
+  permissions: PermissionType;
   path: string;
   description?: string;
   official?: boolean;
@@ -72,8 +73,8 @@ interface ServerContextType {
   agentError: string | null;
 
   // Shared state
-  viewMode: 'all' | 'servers' | 'agents';
-  setViewMode: (mode: 'all' | 'servers' | 'agents') => void;
+  viewMode: 'servers' | 'agents';
+  setViewMode: (mode: 'servers' | 'agents') => void;
   activeFilter: string;
   setActiveFilter: (filter: string) => void;
 
@@ -102,7 +103,7 @@ interface ServerProviderProps {
 export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
   const [servers, setServers] = useState<ServerInfo[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [viewMode, setViewMode] = useState<'all' | 'servers' | 'agents'>('all');
+  const [viewMode, setViewMode] = useState<'servers' | 'agents'>('servers');
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [serverLoading, setServerLoading] = useState(true);
   const [agentLoading, setAgentLoading] = useState(true);
@@ -161,6 +162,7 @@ export const ServerProvider: React.FC<ServerProviderProps> = ({ children }) => {
       return {
         id: serverInfo.id,
         name: serverInfo.serverName || 'Unknown Server',
+        permissions: serverInfo.permissions,
         path: serverInfo.path,
         description: serverInfo.description || '',
         official: serverInfo.is_official || false,
