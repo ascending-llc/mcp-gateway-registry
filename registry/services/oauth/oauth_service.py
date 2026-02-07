@@ -1,13 +1,13 @@
 from typing import Any
 
 from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
-from registry.auth.oauth import FlowStateManager, OAuthHttpClient, get_flow_state_manager, parse_scope
+from registry.auth.oauth import FlowStateManager, get_flow_state_manager, parse_scope
+from registry.auth.oauth.oauth_client import OAuthClient
 from registry.models.oauth_models import OAuthTokens
 from registry.schemas.enums import OAuthFlowStatus
 from registry.services.oauth.token_service import token_service
 from registry.utils.crypto_utils import decrypt_auth_fields
 from registry.utils.log import logger
-from registry.utils.utils import generate_code_challenge, generate_code_verifier
 
 
 class MCPOAuthService:
@@ -20,7 +20,7 @@ class MCPOAuthService:
 
     def __init__(self, flow_manager: FlowStateManager | None = None):
         self.flow_manager = flow_manager or get_flow_state_manager()
-        self.http_client = OAuthHttpClient()
+        self.oauth_client = OAuthClient()
 
     async def initiate_oauth_flow(
         self, user_id: str, server: MCPServerDocument
@@ -49,9 +49,9 @@ class MCPOAuthService:
             logger.debug(f"client_id: {oauth_config.get('client_id')}")
             logger.debug(f"scope: {oauth_config.get('scope')}")
 
-            # Generate PKCE parameters
-            code_verifier = generate_code_verifier()
-            code_challenge = generate_code_challenge(code_verifier)
+            # Generate PKCE parameters using Authlib
+            code_verifier = self.oauth_client.generate_code_verifier()
+            code_challenge = self.oauth_client.generate_code_challenge(code_verifier)
             flow_id = self.flow_manager.generate_flow_id(user_id, server_id)
 
             # Create OAuth flow metadata (using flow_id as state)
@@ -76,8 +76,8 @@ class MCPOAuthService:
                 metadata=flow_metadata,
             )
 
-            # Build authorization URL
-            auth_url = self.http_client.build_authorization_url(
+            # Build authorization URL using Authlib
+            auth_url = await self.oauth_client.build_authorization_url(
                 flow_metadata=flow_metadata, code_challenge=code_challenge, flow_id=flow_id
             )
 
@@ -128,8 +128,8 @@ class MCPOAuthService:
             if not flow.metadata:
                 return False, "Flow metadata not found"
 
-            # Exchange tokens
-            tokens = await self.http_client.exchange_code_for_tokens(
+            # Exchange tokens using Authlib
+            tokens = await self.oauth_client.exchange_code_for_tokens(
                 flow_metadata=flow.metadata, authorization_code=authorization_code
             )
 
@@ -304,8 +304,8 @@ class MCPOAuthService:
         try:
             logger.info(f"[OAuth] Refreshing token for user={user_id}, server={server_id}")
 
-            # 1. Refresh tokens via OAuth provider
-            new_tokens = await self.http_client.refresh_tokens(
+            # 1. Refresh tokens via OAuth provider using Authlib
+            new_tokens = await self.oauth_client.refresh_tokens(
                 oauth_config=oauth_config, refresh_token=refresh_token_value
             )
 

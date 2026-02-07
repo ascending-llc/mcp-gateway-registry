@@ -1260,7 +1260,7 @@ class ServerServiceV1:
             If successful, returns (tool_list, None)
             If failed, returns (None, error_message)
         """
-        from registry.auth.oauth import OAuthHttpClient
+        from registry.auth.oauth import OAuthClient
         from registry.services.oauth.token_service import token_service
 
         config = server.config or {}
@@ -1302,9 +1302,9 @@ class ServerServiceV1:
                 if not refresh_token_doc or not refresh_token_doc.token:
                     return None, "No refresh token available"
 
-                # Refresh tokens
-                http_client = OAuthHttpClient()
-                new_tokens = await http_client.refresh_tokens(
+                # Refresh tokens using Authlib
+                oauth_client = OAuthClient()
+                new_tokens = await oauth_client.refresh_tokens(
                     oauth_config=oauth_config, refresh_token=refresh_token_doc.token
                 )
 

@@ -127,4 +127,8 @@ line-ending = "auto"
 
 [tool.bandit]
 exclude_dirs = ["tests", "frontend", ".venv", "node_modules"]
-skips = ["B101", "B104"]  # Skip assert warnings (used in tests) and hardcoded bind_all_interfaces (required for containers)
+# B101: assert warnings (used in tests)
+# B104: hardcoded bind_all_interfaces (required for containers)
+# B105: hardcoded_password_string (false positives on 'id', 'access', 'Bearer' - these are OAuth token type identifiers)
+# B106: hardcoded_password_funcarg (false positives on 'Bearer' - this is the OAuth 2.0 standard token type)
+skips = ["B101", "B104", "B105", "B106"]

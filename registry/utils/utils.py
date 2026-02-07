@@ -1,6 +1,3 @@
-import base64
-import hashlib
-import secrets
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -8,26 +5,6 @@ from fastapi import status as http_status
 
 from registry.core.acl_constants import ResourceType
 from registry.utils.log import logger
-
-
-# PKCE utility functions
-def generate_code_verifier() -> str:
-    """
-    Generate PKCE code_verifier
-
-    Python implementation: Use secrets.token_urlsafe to generate secure random string
-    """
-    return secrets.token_urlsafe(32)
-
-
-def generate_code_challenge(code_verifier: str) -> str:
-    """
-    Generate PKCE code_challenge
-    """
-    sha256_hash = hashlib.sha256(code_verifier.encode("utf-8")).digest()
-    code_challenge = base64.urlsafe_b64encode(sha256_hash).decode("utf-8").replace("=", "")
-    return code_challenge
-
 
 # Template directory - go up two levels from utils.py to registry/, then to templates/oauth/
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates" / "oauth"

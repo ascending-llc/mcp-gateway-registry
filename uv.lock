@@ -140,6 +140,7 @@ name = "auth-server"
 version = "0.2.0"
 source = { virtual = "auth_server" }
 dependencies = [
+    { name = "authlib" },
     { name = "boto3" },
     { name = "cryptography" },
     { name = "fastapi" },
@@ -170,6 +171,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "authlib", specifier = ">=1.3.0" },
     { name = "boto3", specifier = ">=1.28.0" },
     { name = "cryptography", specifier = ">=40.0.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
@@ -3078,6 +3080,7 @@ version = "0.2.0"
 source = { virtual = "registry" }
 dependencies = [
     { name = "aiohttp" },
+    { name = "authlib" },
     { name = "awscli" },
     { name = "bandit" },
     { name = "boto3" },
@@ -3131,6 +3134,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.8.0" },
+    { name = "authlib", specifier = ">=1.3.0" },
     { name = "awscli", specifier = ">=1.36.0" },
     { name = "bandit", specifier = ">=1.8.3" },
     { name = "boto3", specifier = ">=1.35.0" },

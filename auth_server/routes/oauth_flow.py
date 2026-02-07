@@ -7,13 +7,13 @@ import base64
 import json
 import logging
 import os
-import random
 import secrets
 import time
 import urllib.parse
 from typing import Any
 
 import jwt
+from authlib.oauth2.rfc7636 import create_s256_code_challenge
 from fastapi import APIRouter, Cookie, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -172,7 +172,7 @@ def generate_user_code() -> str:
 
     chars = string.ascii_uppercase + string.digits
     chars = chars.replace("O", "").replace("0", "").replace("I", "").replace("1", "")
-    code = "".join(random.choices(chars, k=8))
+    code = "".join(secrets.choice(chars) for _ in range(8))
     return f"{code[:4]}-{code[4:]}"
 
 
@@ -327,17 +327,15 @@ async def device_token(
         if code_challenge:
             if not code_verifier:
                 return oauth_error_response("invalid_request", "code_verifier required for PKCE")
-            import base64 as _base64
-            import hashlib
 
             method = auth_code_data.get("code_challenge_method", "S256")
+            # Compute challenge from verifier and compare with stored challenge
             if method == "S256":
-                computed = (
-                    _base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).decode().rstrip("=")
-                )
+                computed_challenge = create_s256_code_challenge(code_verifier)
             else:
-                computed = code_verifier
-            if computed != code_challenge:
+                computed_challenge = code_verifier
+
+            if computed_challenge != code_challenge:
                 return oauth_error_response("invalid_grant", "code_verifier validation failed")
 
         user_info = auth_code_data["user_info"]
@@ -568,8 +566,8 @@ async def oauth2_callback(
             pad = "=" * (-len(state) % 4)
             state_decoded = __import__("json").loads(base64.urlsafe_b64decode(state + pad).decode())
             resource = state_decoded.get("resource")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to decode state parameter: {e}")
 
         # Validate temporary session
         try:
@@ -586,8 +584,8 @@ async def oauth2_callback(
                         base = f"{parsed.scheme}://{parsed.netloc}"
                         resource_metadata_url = f"{base}/.well-known/oauth-protected-resource/{'/'.join(path_parts)}"
                         www_authenticate_parts.append(f'resource_metadata="{resource_metadata_url}"')
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Failed to generate resource metadata URL: {e}")
             www_authenticate = ", ".join(www_authenticate_parts)
             raise HTTPException(
                 status_code=401,
