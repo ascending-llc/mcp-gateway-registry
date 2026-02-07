@@ -1,4 +1,3 @@
-import { useToast } from '@/contexts/ToastContext';
 import { StarIcon as StarIconOutline } from '@heroicons/react/24/outline';
 import { StarIcon } from '@heroicons/react/24/solid';
 import axios from 'axios';
@@ -21,6 +20,7 @@ interface StarRatingWidgetProps {
   initialRating?: number;
   initialCount?: number;
   authToken?: string | null;
+  onShowToast?: (message: string, type: 'success' | 'error') => void;
   onRatingUpdate?: (newRating: number) => void;
 }
 
@@ -30,6 +30,7 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
   initialRating = 0,
   initialCount = 0,
   authToken,
+  onShowToast,
   onRatingUpdate,
 }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -41,7 +42,7 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const { showToast } = useToast();
+
   // Load current rating on mount
   useEffect(() => {
     loadCurrentRating();
@@ -119,8 +120,9 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
 
       setShowSuccess(true);
 
-      showToast(currentUserRating ? 'Rating updated successfully!' : 'Rating submitted successfully!', 'success');
-
+      if (onShowToast) {
+        onShowToast(currentUserRating ? 'Rating updated successfully!' : 'Rating submitted successfully!', 'success');
+      }
 
       if (onRatingUpdate) {
         onRatingUpdate(newAverageRating);
@@ -136,7 +138,9 @@ const StarRatingWidget: React.FC<StarRatingWidgetProps> = ({
     } catch (error: any) {
       console.error('Failed to submit rating:', error);
       console.error('Error details:', error.response?.data);
-      showToast(error.response?.data?.detail || 'Failed to submit rating', 'error');
+      if (onShowToast) {
+        onShowToast(error.response?.data?.detail || 'Failed to submit rating', 'error');
+      }
     } finally {
       setIsSubmitting(false);
     }

@@ -1,24 +1,17 @@
-import {
-  ArrowPathIcon,
-  CheckCircleIcon,
-  ExclamationCircleIcon,
-  MagnifyingGlassIcon,
-  PlusIcon,
-  XMarkIcon,
-} from '@heroicons/react/24/outline';
+import { ArrowPathIcon, MagnifyingGlassIcon, PlusIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-import { ServerFormDialog } from '@/components/ServerFormDialog';
+import AgentCard from '@/components/AgentCard';
+import SemanticSearchResults from '@/components/SemanticSearchResults';
+import ServerCard from '@/components/ServerCard';
+import { useAuth } from '@/contexts/AuthContext';
+import { useGlobal } from '@/contexts/GlobalContext';
 import type { ServerInfo } from '@/contexts/ServerContext';
-import { useToast } from '@/contexts/ToastContext';
-import AgentCard from '../components/AgentCard';
-import SemanticSearchResults from '../components/SemanticSearchResults';
-import ServerCard from '../components/ServerCard';
-import { useAuth } from '../contexts/AuthContext';
-import { useServer } from '../contexts/ServerContext';
-import { useSemanticSearch } from '../hooks/useSemanticSearch';
+import { useServer } from '@/contexts/ServerContext';
+import { useSemanticSearch } from '@/hooks/useSemanticSearch';
 
 interface Agent {
   name: string;
@@ -36,8 +29,8 @@ interface Agent {
   status?: 'healthy' | 'healthy-auth-expired' | 'unhealthy' | 'unknown';
 }
 
-
 const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
   const {
     servers,
     serverLoading,
@@ -57,17 +50,15 @@ const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [committedQuery, setCommittedQuery] = useState('');
-  const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [serverId, setServerId] = useState<string | null>(null);
-  const { showToast } = useToast();
+  const { showToast } = useGlobal();
 
   // Agent state management
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
   const [agentApiToken, setAgentApiToken] = useState<string | null>(null);
 
   // Local view filter that includes 'external' mode not in context
-  const [viewFilter, setViewFilter] = useState<'all' | 'servers' | 'agents' | 'external'>('all');
+  const [viewFilter, setViewFilter] = useState<'servers' | 'agents' | 'external'>('servers');
   const [editAgentForm, setEditAgentForm] = useState({
     name: '',
     path: '',
@@ -250,7 +241,7 @@ const Dashboard: React.FC = () => {
   }, []);
 
   const handleChangeViewFilter = useCallback(
-    (filter: 'all' | 'servers' | 'agents' | 'external') => {
+    (filter: 'servers' | 'agents' | 'external') => {
       setViewFilter(filter);
       // Sync with context viewMode (external is local to Dashboard)
       if (filter !== 'external') {
@@ -281,8 +272,7 @@ const Dashboard: React.FC = () => {
   };
 
   const handleEditServer = async (server: ServerInfo) => {
-    setServerId((server as any).id);
-    setShowRegisterModal(true);
+    navigate(`/server-edit?id=${server.id}`);
   };
 
   const handleEditAgent = async (agent: Agent) => {
@@ -329,109 +319,106 @@ const Dashboard: React.FC = () => {
   };
 
   const handleRegisterServer = useCallback(() => {
-    setShowRegisterModal(true);
+    navigate('/server-registry');
   }, []);
 
   const renderDashboardCollections = () => (
     <>
       {/* MCP Servers Section */}
-      {(viewFilter === 'all' || viewFilter === 'servers') &&
-        (filteredServers.length > 0 || (!searchTerm && activeFilter === 'all')) && (
-          <div className='mb-8'>
-            <h2 className='text-xl font-bold text-gray-900 dark:text-white mb-4'>MCP Servers</h2>
-            <div className='relative'>
-              {serverLoading && (
-                <div className='absolute inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10'>
-                  <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600'></div>
-                </div>
-              )}
-              {filteredServers.length === 0 ? (
-                <div className='text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg'>
-                  <div className='text-gray-400 text-lg mb-2'>No servers found</div>
-                  <p className='text-gray-500 dark:text-gray-300 text-sm'>
-                    {searchTerm || activeFilter !== 'all'
-                      ? 'Press Enter in the search bar to search semantically'
-                      : 'No servers are registered yet'}
-                  </p>
-                  {!searchTerm && activeFilter === 'all' && (
-                    <button
-                      onClick={handleRegisterServer}
-                      className='mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-colors'
-                    >
-                      <PlusIcon className='h-4 w-4 mr-2' />
-                      Register Server
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div
-                  className='grid'
-                  style={{
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-                    gap: 'clamp(1.5rem, 1.5rem, 2.5rem)',
-                  }}
-                >
-                  {filteredServers.map(server => (
-                    <ServerCard
-                      key={server.id}
-                      server={server}
-                      canModify={user?.can_modify_servers || false}
-                      onEdit={handleEditServer}
-                      onServerUpdate={handleServerUpdate}
-                      onRefreshSuccess={refreshServerData}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+      {viewFilter === 'servers' && (filteredServers.length > 0 || (!searchTerm && activeFilter === 'all')) && (
+        <div className='mb-8'>
+          <h2 className='text-xl font-bold text-gray-900 dark:text-white mb-4'>MCP Servers</h2>
+          <div className='relative'>
+            {serverLoading && (
+              <div className='absolute inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10'>
+                <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600'></div>
+              </div>
+            )}
+            {filteredServers.length === 0 ? (
+              <div className='text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg'>
+                <div className='text-gray-400 text-lg mb-2'>No servers found</div>
+                <p className='text-gray-500 dark:text-gray-300 text-sm'>
+                  {searchTerm || activeFilter !== 'all'
+                    ? 'Press Enter in the search bar to search semantically'
+                    : 'No servers are registered yet'}
+                </p>
+                {!searchTerm && activeFilter === 'all' && (
+                  <button
+                    onClick={handleRegisterServer}
+                    className='mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-colors'
+                  >
+                    <PlusIcon className='h-4 w-4 mr-2' />
+                    Register Server
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div
+                className='grid'
+                style={{
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                  gap: 'clamp(1.5rem, 1.5rem, 2.5rem)',
+                }}
+              >
+                {filteredServers.map(server => (
+                  <ServerCard
+                    key={server.id}
+                    server={server}
+                    onEdit={handleEditServer}
+                    onServerUpdate={handleServerUpdate}
+                    onRefreshSuccess={refreshServerData}
+                  />
+                ))}
+              </div>
+            )}
           </div>
-        )}
+        </div>
+      )}
 
       {/* A2A Agents Section */}
-      {(viewFilter === 'all' || viewFilter === 'agents') &&
-        (filteredAgents.length > 0 || (!searchTerm && activeFilter === 'all')) && (
-          <div className='mb-8'>
-            <h2 className='text-xl font-bold text-gray-900 dark:text-white mb-4'>A2A Agents</h2>
-            <div className='relative'>
-              {agentLoading && (
-                <div className='absolute inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10'>
-                  <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600'></div>
-                </div>
-              )}
-              {filteredAgents.length === 0 ? (
-                <div className='text-center py-12 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800'>
-                  <div className='text-gray-400 text-lg mb-2'>No agents found</div>
-                  <p className='text-gray-500 dark:text-gray-300 text-sm'>
-                    {searchTerm || activeFilter !== 'all'
-                      ? 'Press Enter in the search bar to search semantically'
-                      : 'No agents are registered yet'}
-                  </p>
-                </div>
-              ) : (
-                <div
-                  className='grid'
-                  style={{
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-                    gap: 'clamp(1.5rem, 3vw, 2.5rem)',
-                  }}
-                >
-                  {filteredAgents.map(agent => (
-                    <AgentCard
-                      key={agent.path}
-                      agent={agent}
-                      onToggle={handleToggleAgent}
-                      onEdit={handleEditAgent}
-                      canModify={user?.can_modify_servers || false}
-                      onRefreshSuccess={refreshAgentData}
-                      onAgentUpdate={handleAgentUpdate}
-                      authToken={agentApiToken}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+      {viewFilter === 'agents' && (filteredAgents.length > 0 || (!searchTerm && activeFilter === 'all')) && (
+        <div className='mb-8'>
+          <h2 className='text-xl font-bold text-gray-900 dark:text-white mb-4'>A2A Agents</h2>
+          <div className='relative'>
+            {agentLoading && (
+              <div className='absolute inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10'>
+                <div className='animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-600'></div>
+              </div>
+            )}
+            {filteredAgents.length === 0 ? (
+              <div className='text-center py-12 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800'>
+                <div className='text-gray-400 text-lg mb-2'>No agents found</div>
+                <p className='text-gray-500 dark:text-gray-300 text-sm'>
+                  {searchTerm || activeFilter !== 'all'
+                    ? 'Press Enter in the search bar to search semantically'
+                    : 'No agents are registered yet'}
+                </p>
+              </div>
+            ) : (
+              <div
+                className='grid'
+                style={{
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+                  gap: 'clamp(1.5rem, 3vw, 2.5rem)',
+                }}
+              >
+                {filteredAgents.map(agent => (
+                  <AgentCard
+                    key={agent.path}
+                    agent={agent}
+                    onToggle={handleToggleAgent}
+                    onEdit={handleEditAgent}
+                    canModify={user?.can_modify_servers || false}
+                    onRefreshSuccess={refreshAgentData}
+                    onAgentUpdate={handleAgentUpdate}
+                    authToken={agentApiToken}
+                  />
+                ))}
+              </div>
+            )}
           </div>
-        )}
+        </div>
+      )}
 
       {/* External Registries Section */}
       {viewFilter === 'external' && (
@@ -473,7 +460,6 @@ const Dashboard: React.FC = () => {
                         <ServerCard
                           key={server.id}
                           server={server}
-                          canModify={user?.can_modify_servers || false}
                           onEdit={handleEditServer}
                           onServerUpdate={handleServerUpdate}
                           onRefreshSuccess={refreshServerData}
@@ -515,7 +501,7 @@ const Dashboard: React.FC = () => {
       )}
 
       {/* Empty state when both are filtered out */}
-      {((viewFilter === 'all' && filteredServers.length === 0 && filteredAgents.length === 0) ||
+      {((filteredServers.length === 0 && filteredAgents.length === 0) ||
         (viewFilter === 'servers' && filteredServers.length === 0) ||
         (viewFilter === 'agents' && filteredAgents.length === 0)) &&
         (searchTerm || activeFilter !== 'all') && (
@@ -532,9 +518,7 @@ const Dashboard: React.FC = () => {
   const getCardNumber = () => {
     const serverLength = semanticSectionVisible ? semanticServers.length : filteredServers?.length || 0;
     const agentLength = semanticSectionVisible ? semanticAgents.length : filteredAgents?.length || 0;
-    if (viewFilter === 'all') {
-      return `Showing ${serverLength} servers and ${agentLength} agents`;
-    } else if (viewFilter === 'servers') {
+    if (viewFilter === 'servers') {
       return `Showing ${serverLength} servers`;
     } else if (viewFilter === 'agents') {
       return `Showing ${agentLength} agents`;
@@ -549,16 +533,6 @@ const Dashboard: React.FC = () => {
           {/* View Filter Tabs */}
           <div className='flex gap-2 border-b border-gray-200 dark:border-gray-700 overflow-x-auto'>
             <button
-              onClick={() => handleChangeViewFilter('all')}
-              className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
-                viewFilter === 'all'
-                  ? 'border-purple-500 text-purple-600 dark:text-purple-400'
-                  : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-              }`}
-            >
-              All
-            </button>
-            <button
               onClick={() => handleChangeViewFilter('servers')}
               className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
                 viewFilter === 'servers'
@@ -566,7 +540,7 @@ const Dashboard: React.FC = () => {
                   : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
             >
-              MCP Servers Only
+              MCP Servers
             </button>
             <button
               onClick={() => handleChangeViewFilter('agents')}
@@ -576,7 +550,7 @@ const Dashboard: React.FC = () => {
                   : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
             >
-              A2A Agents Only
+              A2A Agents
             </button>
             <button
               onClick={() => handleChangeViewFilter('external')}
@@ -621,7 +595,7 @@ const Dashboard: React.FC = () => {
 
             <button onClick={handleRegisterServer} className='btn-primary flex items-center space-x-2 flex-shrink-0'>
               <PlusIcon className='h-4 w-4' />
-              <span>Register Server</span>
+              <span>Register</span>
             </button>
 
             <button
@@ -630,7 +604,7 @@ const Dashboard: React.FC = () => {
               className='btn-secondary flex items-center space-x-2 flex-shrink-0'
             >
               <ArrowPathIcon className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-              <span>Refresh Health</span>
+              <span>Refresh</span>
             </button>
           </div>
 
@@ -677,19 +651,6 @@ const Dashboard: React.FC = () => {
           )}
         </div>
       </div>
-
-      {/* Register and Edit Server Modal */}
-      <ServerFormDialog
-        isOpen={showRegisterModal}
-        id={serverId}
-        showToast={showToast}
-        refreshData={refreshServerData}
-        onServerUpdate={handleServerUpdate}
-        onClose={() => {
-          setServerId(null);
-          setShowRegisterModal(false);
-        }}
-      />
 
       {/* Edit Agent Modal */}
       {editingAgent && (
