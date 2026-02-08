@@ -19,6 +19,7 @@ from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamable_http_client
 
 from packages.database.redis_client import get_redis_client
+from registry.core.config import settings
 
 # Internal imports
 from registry.core.mcp_config import mcp_config
@@ -1130,7 +1131,7 @@ async def get_oauth_metadata_from_server(base_url: str) -> dict | None:
         async with httpx.AsyncClient(
             timeout=30.0,
             headers={
-                "User-Agent": "Jarvis-Registry/1.0",
+                "User-Agent": settings.registry_app_name,
                 "Accept": "application/json",
             },
             follow_redirects=True,

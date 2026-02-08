@@ -48,10 +48,6 @@ async def discover_oauth_metadata(
         - response_types_supported: Supported OAuth response types
         - grant_types_supported: Supported OAuth grant types
         - scopes_supported: Supported OAuth scopes (if available)
-
-    Raises:
-        400: Invalid or missing server URL
-        500: Internal server error
     """
     try:
         if not url:
