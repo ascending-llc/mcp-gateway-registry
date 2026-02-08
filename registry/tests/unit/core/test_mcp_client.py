@@ -476,3 +476,27 @@ class TestPerformHealthCheck:
             assert "initialize requires authentication" in status.lower()
             assert response_time is not None
             assert init_result is None
+
+    async def test_perform_health_check_403_response(self):
+        """Test health check when server returns 403 (Forbidden) - should still be considered healthy."""
+        import httpx
+
+        from registry.core.mcp_client import perform_health_check
+
+        url = "https://example.com/api"
+
+        # Create a mock 403 response
+        mock_response = Mock()
+        mock_response.status_code = 403
+
+        # Create HTTPStatusError with 403
+        error_403 = httpx.HTTPStatusError("403 Forbidden", request=Mock(), response=mock_response)
+
+        # Mock initialize_mcp to raise HTTPStatusError
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(side_effect=error_403)):
+            is_healthy, status, response_time, init_result = await perform_health_check(url, "streamable-http")
+
+            assert is_healthy is True
+            assert "initialize requires authentication" in status.lower()
+            assert response_time is not None
+            assert init_result is None

@@ -236,9 +236,11 @@ async def perform_health_check(
 
     # Application logic: Interpret the initialization result
 
-    # Check for 401 Unauthorized - server is healthy but requires auth
-    if http_status_code == 401:
-        logger.info(f"Health check passed for {url}: Connected successfully, initialize requires authentication (401)")
+    # Check for 401/403 Unauthorized/Forbidden - server is healthy but requires auth
+    if http_status_code in mcp_config.AUTH_REQUIRED_STATUS_CODES:
+        logger.info(
+            f"Health check passed for {url}: Connected successfully, initialize requires authentication ({http_status_code})"
+        )
         return True, "connected (initialize requires authentication)", response_time_ms, None
 
     # Validate init_result structure per MCP spec
