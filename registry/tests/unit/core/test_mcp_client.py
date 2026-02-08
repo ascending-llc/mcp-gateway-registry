@@ -477,6 +477,7 @@ class TestPerformHealthCheck:
             assert response_time is not None
             assert init_result is None
 
+    @pytest.mark.asyncio
     async def test_perform_health_check_403_response(self):
         """Test health check when server returns 403 (Forbidden) - should still be considered healthy."""
         import httpx
