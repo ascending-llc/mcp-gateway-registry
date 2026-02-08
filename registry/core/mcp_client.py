@@ -13,6 +13,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx
+from authlib.integrations.httpx_client import AsyncOAuth2Client
 from mcp import ClientSession
 from mcp.client.sse import sse_client
 from mcp.client.streamable_http import streamable_http_client
@@ -236,9 +237,11 @@ async def perform_health_check(
 
     # Application logic: Interpret the initialization result
 
-    # Check for 401 Unauthorized - server is healthy but requires auth
-    if http_status_code == 401:
-        logger.info(f"Health check passed for {url}: Connected successfully, initialize requires authentication (401)")
+    # Check for 401/403 Unauthorized/Forbidden - server is healthy but requires auth
+    if http_status_code in mcp_config.AUTH_REQUIRED_STATUS_CODES:
+        logger.info(
+            f"Health check passed for {url}: Connected successfully, initialize requires authentication ({http_status_code})"
+        )
         return True, "connected (initialize requires authentication)", response_time_ms, None
 
     # Validate init_result structure per MCP spec
@@ -1081,15 +1084,15 @@ async def get_tools_and_capabilities_from_server(
 
 async def get_oauth_metadata_from_server(base_url: str, server_info: dict = None) -> dict | None:
     """
-    Get OAuth metadata from MCP server's well-known endpoint.
+    Get OAuth metadata from MCP server's well-known endpoint using Authlib's RFC 8414 discovery.
 
-    According to MCP OAuth specification, OAuth metadata can be retrieved from:
-    - /.well-known/oauth-protected-resource (RFC 8725)
+    Uses Authlib's built-in OAuth server metadata discovery which automatically tries:
     - /.well-known/oauth-authorization-server (RFC 8414)
+    - /.well-known/openid-configuration (OIDC Discovery)
 
     Args:
         base_url: The base URL of the MCP server (e.g., http://localhost:8000).
-        server_info: Optional server configuration dict
+        server_info: Optional server configuration dict (unused, kept for compatibility)
 
     Returns:
         OAuth metadata dictionary or None if failed/not available
@@ -1102,45 +1105,38 @@ async def get_oauth_metadata_from_server(base_url: str, server_info: dict = None
     parsed = urlparse(base_url.rstrip("/"))
     base_domain = f"{parsed.scheme}://{parsed.netloc}"
 
-    # Try different well-known endpoints using configuration
-    wellknown_endpoints = [
-        f"{base_domain}{mcp_config.WELLKNOWN_OAUTH_RESOURCE}",
-        f"{base_domain}{mcp_config.WELLKNOWN_OAUTH_SERVER}",
-    ]
+    logger.info(f"Attempting OAuth metadata discovery for {base_domain} using Authlib")
 
-    # Build basic headers (no authentication needed for OAuth metadata)
-    headers = {"Accept": "application/json", "User-Agent": "MCP-Gateway-Registry/1.0"}
+    try:
+        # Create temporary OAuth client for discovery (no credentials needed)
+        client = AsyncOAuth2Client()
 
-    import httpx
+        # Authlib automatically tries RFC 8414 and OIDC discovery endpoints
+        # This is more robust than manual implementation
+        metadata = await client.fetch_server_metadata(base_domain)
 
-    for endpoint in wellknown_endpoints:
-        try:
-            logger.info(f"Attempting to retrieve OAuth metadata from {endpoint}")
+        logger.info(f"Successfully discovered OAuth metadata for {base_domain}")
+        logger.debug(f"OAuth metadata: {metadata}")
 
-            async with httpx.AsyncClient(timeout=mcp_config.OAUTH_METADATA_TIMEOUT, follow_redirects=True) as client:
-                response = await client.get(endpoint, headers=headers)
+        # Convert to dict for consistency with existing code
+        if hasattr(metadata, "model_dump"):
+            return metadata.model_dump()
+        elif hasattr(metadata, "__dict__"):
+            return dict(metadata.__dict__)
+        return metadata
 
-                if response.status_code == 200:
-                    try:
-                        metadata = response.json()
-                        logger.info(f"Successfully retrieved OAuth metadata from {endpoint}")
-                        logger.debug(f"OAuth metadata: {metadata}")
-                        return metadata
-                    except Exception as e:
-                        logger.warning(f"Failed to parse OAuth metadata JSON from {endpoint}: {e}")
-                        continue
-                else:
-                    logger.debug(f"OAuth metadata endpoint returned {response.status_code}: {endpoint}")
+    except Exception as e:
+        # Discovery failure is normal for servers without OAuth support
+        logger.debug(f"OAuth discovery failed for {base_domain}: {type(e).__name__} - {e}")
+        logger.info(
+            f"No OAuth metadata found for {base_domain} (this is normal for servers without OAuth autodiscovery)"
+        )
+        return None
 
-        except httpx.RequestError as e:
-            logger.debug(f"Failed to connect to OAuth metadata endpoint {endpoint}: {e}")
-            continue
-        except Exception as e:
-            logger.warning(f"Unexpected error retrieving OAuth metadata from {endpoint}: {e}")
-            continue
-
-    logger.info(f"No OAuth metadata found for {base_url} (this is normal for servers without OAuth autodiscovery)")
-    return None
+    finally:
+        # Clean up client connection
+        if "client" in locals():
+            await client.aclose()
 
 
 class MCPClientService:

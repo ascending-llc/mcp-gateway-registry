@@ -328,7 +328,7 @@ async def check_server_connection(
         logger.error(f"Error testing connection to {data.url}: {e}", exc_info=True)
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error while testing connection: {str(e)}",
+            detail="Internal server error while testing connection",
         )
 
 
