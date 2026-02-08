@@ -249,7 +249,7 @@ class TestMCPOAuthService:
 
         assert flow_id is None
         assert auth_url is None
-        assert "authentication configuration not found" in error
+        assert "OAuth configuration not found" in error
 
     # Tests for complete_oauth_flow method
     @pytest.mark.asyncio
