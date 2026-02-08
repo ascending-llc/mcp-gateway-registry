@@ -118,6 +118,13 @@ class ServerToggleRequest(BaseModel):
     enabled: bool = Field(..., description="Enable or disable the server")
 
 
+class ServerConnectionTestRequest(BaseModel):
+    """Request schema for testing connection to an MCP server URL"""
+
+    url: str = Field(..., description="MCP server URL to test connection")
+    transport: str | None = Field(default="streamable-http", description="Transport type (streamable-http, sse, stdio)")
+
+
 # ==================== Response Schemas ====================
 
 
@@ -384,6 +391,22 @@ class ServerHealthResponse(BaseModel):
     initDuration: int | None = None  # Initialization duration in ms
     message: str
     updatedAt: datetime
+
+    class ConfigDict:
+        from_attributes = True
+        populate_by_name = True
+
+
+class ServerConnectionTestResponse(BaseModel):
+    """Response schema for connection test"""
+
+    success: bool = Field(..., description="Whether the connection test was successful")
+    message: str = Field(..., description="Descriptive message about the connection result")
+    serverName: str | None = Field(None, description="MCP server name from serverInfo")
+    protocolVersion: str | None = Field(None, description="MCP protocol version")
+    responseTimeMs: int | None = Field(None, description="Response time in milliseconds")
+    capabilities: dict[str, Any] | None = Field(None, description="Server capabilities")
+    error: str | None = Field(None, description="Error message if connection failed")
 
     class ConfigDict:
         from_attributes = True
