@@ -29,7 +29,7 @@ class TestExtendedMCPServerStructure:
         assert "serverName" in required_fields
         assert "config" in required_fields
         assert "author" in required_fields
-        assert "path" in required_fields
+        # path is now optional to support external systems that don't provide it
 
     def test_root_level_fields_not_in_config(self):
         """Verify registry-specific fields are stored at root level, not in config."""
