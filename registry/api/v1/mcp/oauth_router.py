@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from registry.auth.dependencies import CurrentUser
 from registry.auth.oauth.reconnection import get_reconnection_manager
 from registry.constants import REGISTRY_CONSTANTS
+from registry.core.mcp_client import get_oauth_metadata_from_server
 from registry.schemas.enums import ConnectionState, OAuthFlowStatus
 from registry.services.oauth.mcp_service import MCPService, get_mcp_service
 from registry.services.oauth.token_service import token_service
@@ -15,6 +16,79 @@ from registry.services.server_service import server_service_v1
 from registry.utils.log import logger
 
 router = APIRouter(prefix="/mcp", tags=["oauth"])
+
+
+@router.get("/oauth/discover")
+async def discover_oauth_metadata(
+    url: str = Query(..., description="MCP server URL to discover OAuth metadata from"),
+) -> dict[str, Any]:
+    """
+    Discover OAuth metadata from MCP server's well-known endpoints.
+
+    This endpoint is used during the pre-server creation process to fetch OAuth metadata
+    before registering a server in the system.
+
+    Fetches OAuth server metadata using RFC 8414 and OIDC Discovery standards:
+    - /.well-known/oauth-authorization-server (RFC 8414)
+    - /.well-known/openid-configuration (OIDC Discovery)
+
+    Args:
+        url: The MCP server URL to discover OAuth metadata from
+
+    Returns:
+        Always returns 200 OK with:
+        - server_url: The requested server URL
+        - metadata: OAuth metadata dict (if found) or None (if not found)
+        - message: Success or failure message
+
+        When metadata is found, includes:
+        - issuer: OAuth issuer URL
+        - authorization_endpoint: URL for authorization requests
+        - token_endpoint: URL for token exchange
+        - response_types_supported: Supported OAuth response types
+        - grant_types_supported: Supported OAuth grant types
+        - scopes_supported: Supported OAuth scopes (if available)
+    """
+    try:
+        if not url:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Server URL is required")
+
+        logger.info(f"[OAuth Discovery] Discovering OAuth metadata for URL {url}")
+
+        # Discover OAuth metadata
+        metadata = await get_oauth_metadata_from_server(url)
+
+        if not metadata:
+            logger.info(
+                f"[OAuth Discovery] No OAuth metadata found for {url} - server may not support OAuth autodiscovery"
+            )
+            return {
+                "server_url": url,
+                "metadata": None,
+                "message": "OAuth metadata could not be discovered. This server may not support OAuth autodiscovery or does not expose well-known endpoints.",
+            }
+
+        logger.info(
+            f"[OAuth Discovery] Successfully discovered OAuth metadata for {url}: "
+            f"authorization_endpoint={metadata.get('authorization_endpoint', 'N/A')}, "
+            f"token_endpoint={metadata.get('token_endpoint', 'N/A')}"
+        )
+
+        return {
+            "server_url": url,
+            "metadata": metadata,
+            "message": "OAuth metadata discovered successfully.",
+        }
+
+    except HTTPException:
+        # Re-raise HTTP exceptions with their original status code
+        raise
+    except Exception as e:
+        logger.error(f"[OAuth Discovery] Failed to discover OAuth metadata: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to discover OAuth metadata: {str(e)}",
+        )
 
 
 @router.get("/{server_id}/oauth/initiate")

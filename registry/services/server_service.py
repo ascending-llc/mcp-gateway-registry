@@ -12,6 +12,7 @@ ODM Schema:
 """
 
 import asyncio
+import json
 import logging
 from datetime import UTC, datetime
 from typing import Any
@@ -748,8 +749,6 @@ class ServerServiceV1:
 
                     # Save capabilities if retrieved successfully
                     if result.capabilities:
-                        import json
-
                         config["capabilities"] = json.dumps(result.capabilities)
                         logger.info(f"Saved capabilities for {server.serverName}: {config['capabilities']}")
                     else:
@@ -779,21 +778,9 @@ class ServerServiceV1:
 
                     from registry.core.mcp_client import get_oauth_metadata_from_server
 
-                    # Build server_info dict for oauth metadata retrieval (no auth needed)
-                    server_info = {
-                        "type": config.get("type", "streamable-http"),
-                        "tags": server.tags or [],
-                    }
-
-                    # Add headers if present
-                    if "headers" in config:
-                        server_info["headers"] = config["headers"]
-
-                    oauth_metadata = await get_oauth_metadata_from_server(data.url, server_info)
+                    oauth_metadata = await get_oauth_metadata_from_server(data.url)
 
                     if oauth_metadata:
-                        import json
-
                         config["oauthMetadata"] = oauth_metadata
                         logger.info(f"Saved raw OAuth metadata for {server.serverName}: {json.dumps(oauth_metadata)}")
                     else:
@@ -1403,8 +1390,6 @@ class ServerServiceV1:
         server.updatedAt = now
 
         # Update capabilities, tools, resources, and prompts in config
-        import json
-
         config = server.config or {}
         if capabilities:
             config["capabilities"] = json.dumps(capabilities)

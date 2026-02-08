@@ -22,6 +22,77 @@ class MCPOAuthService:
         self.flow_manager = flow_manager or get_flow_state_manager()
         self.oauth_client = OAuthClient()
 
+    def _merge_oauth_config(
+        self, oauth_config: dict[str, Any], oauth_metadata: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """
+        Merge OAuth configuration with discovered OAuth metadata (pure merge function).
+
+        Merging strategy:
+        - oauth_config contains manually configured values (client_id, client_secret, scope, redirect_uri)
+        - oauth_metadata contains discovered values from well-known endpoints
+          (authorization_endpoint, token_endpoint, issuer, scopes_supported, etc.)
+        - Manual config takes precedence over discovered metadata
+        - Maps discovered endpoint names to expected config keys:
+          * authorization_endpoint -> authorization_url
+          * token_endpoint -> token_url
+
+        Args:
+            oauth_config: Manual OAuth configuration (should be decrypted before calling)
+            oauth_metadata: Discovered OAuth metadata from well-known endpoints (optional)
+
+        Returns:
+            Merged OAuth configuration dict
+
+        Example:
+            oauth_config = {
+                "client_id": "abc123",
+                "client_secret": "secret",
+                "scope": "read write",
+                "redirect_uri": "http://localhost/callback"
+            }
+            oauth_metadata = {
+                "authorization_endpoint": "https://example.com/oauth/authorize",
+                "token_endpoint": "https://example.com/oauth/token",
+                "issuer": "https://example.com"
+            }
+            Result = {
+                "client_id": "abc123",
+                "client_secret": "secret",
+                "scope": "read write",
+                "redirect_uri": "http://localhost/callback",
+                "authorization_url": "https://example.com/oauth/authorize",
+                "token_url": "https://example.com/oauth/token",
+                "issuer": "https://example.com"
+            }
+        """
+        # Create a copy to avoid mutating the original
+        merged_config = oauth_config.copy()
+
+        # Merge discovered metadata if provided
+        if oauth_metadata:
+            # Only use discovered values if not manually configured
+            if "authorization_endpoint" in oauth_metadata and not merged_config.get("authorization_url"):
+                merged_config["authorization_url"] = oauth_metadata["authorization_endpoint"]
+
+            if "token_endpoint" in oauth_metadata and not merged_config.get("token_url"):
+                merged_config["token_url"] = oauth_metadata["token_endpoint"]
+
+            if "issuer" in oauth_metadata and not merged_config.get("issuer"):
+                merged_config["issuer"] = oauth_metadata["issuer"]
+
+            # Add additional metadata fields if available
+            if "scopes_supported" in oauth_metadata:
+                merged_config["scopes_supported"] = oauth_metadata["scopes_supported"]
+
+            if "grant_types_supported" in oauth_metadata:
+                merged_config["grant_types_supported"] = oauth_metadata["grant_types_supported"]
+
+            if "response_types_supported" in oauth_metadata:
+                merged_config["response_types_supported"] = oauth_metadata["response_types_supported"]
+
+        return merged_config
+
     async def initiate_oauth_flow(
         self, user_id: str, server: MCPServerDocument
     ) -> tuple[str | None, str | None, str | None]:
@@ -34,13 +105,14 @@ class MCPOAuthService:
             server_id = str(server.id)
             logger.info(f"Starting OAuth flow for user={user_id}, server={server_id}")
 
-            # Get OAuth config from authentication
+            # Get OAuth config, decrypt, and merge with discovered metadata
             oauth_config = server.config.get("oauth")
             if not oauth_config:
-                return None, None, f"Server '{server.serverName}' authentication configuration not found"
+                return None, None, f"Server '{server.serverName}' OAuth configuration not found"
 
-            # OAuth configuration is directly under authentication
             oauth_config = decrypt_auth_fields(oauth_config)
+            oauth_metadata = server.config.get("oauthMetadata")
+            oauth_config = self._merge_oauth_config(oauth_config, oauth_metadata)
 
             # Debug logs: verify OAuth configuration
             logger.debug(f"OAuth config keys: {list(oauth_config.keys())}")
@@ -361,13 +433,14 @@ class MCPOAuthService:
             if not current_tokens or not current_tokens.refresh_token:
                 return False, "No refresh token available"
 
-            # 3. Get OAuth config
+            # 3. Get OAuth config, decrypt, and merge with discovered metadata
             oauth_config = mcp_server.config.get("oauth")
             if not oauth_config:
                 return False, f"Server '{server_id}' OAuth configuration not found"
 
-            # Decrypt OAuth config
             oauth_config = decrypt_auth_fields(oauth_config)
+            oauth_metadata = mcp_server.config.get("oauthMetadata")
+            oauth_config = self._merge_oauth_config(oauth_config, oauth_metadata)
 
             # 4. Call core refresh logic
             return await self.refresh_token(
@@ -485,7 +558,7 @@ class MCPOAuthService:
                 logger.error(f"[Reinitialize] Refresh token disappeared for {server_name}({server_id})")
                 return await self._build_oauth_required_response(user_id, server)
 
-            # Get and decrypt OAuth config
+            # Get OAuth config, decrypt, and merge with discovered metadata
             oauth_config = server.config.get("oauth")
             if not oauth_config:
                 logger.error(f"[Reinitialize] OAuth config not found for {server_name}")
@@ -497,6 +570,8 @@ class MCPOAuthService:
                 }
 
             oauth_config = decrypt_auth_fields(oauth_config)
+            oauth_metadata = server.config.get("oauthMetadata")
+            oauth_config = self._merge_oauth_config(oauth_config, oauth_metadata)
 
             # Call core refresh logic
             success, error = await self.refresh_token(
