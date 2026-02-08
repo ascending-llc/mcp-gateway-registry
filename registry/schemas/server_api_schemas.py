@@ -158,7 +158,7 @@ class ServerListItemResponse(BaseModel):
     tools: str | None = Field(None, description="Comma-separated list of tool names")
     author: str | None = Field(None, description="Author user ID")
     status: str = "active"
-    path: str
+    path: str | None = Field(None, description="API path for this server, option to consider jarvis model schema")
     tags: list[str] = Field(default_factory=list)
     numTools: int = Field(0, alias="numTools")
     numStars: int = Field(0, alias="numStars")
