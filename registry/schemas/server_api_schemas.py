@@ -223,7 +223,7 @@ class ServerDetailResponse(BaseModel):
     initDuration: int | None = Field(None, alias="initDuration", description="Initialization duration in ms")
     author: str | None = Field(None, description="Author user ID")
     status: str
-    path: str
+    path: str | None = Field(None, description="API path for this server, compatible with jarvis model schema")
     tags: list[str] = Field(default_factory=list)
     numTools: int = Field(0, alias="numTools")
     numStars: int = Field(0, alias="numStars")
