@@ -1,7 +1,7 @@
 [project]
 name = "mcp-registry-workspace"
 version = "0.2.0"
-description = "MCP Gateway Registry - Monorepo Workspace Root"
+description = "Jarvis Registry - Monorepo Workspace Root"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 

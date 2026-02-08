@@ -16,10 +16,13 @@ from pydantic import ValidationError
 
 from registry.auth.dependencies import CurrentUser
 from registry.core.acl_constants import PrincipalType, ResourceType, RoleBits
+from registry.core.mcp_client import perform_health_check
 from registry.core.telemetry_decorators import track_registry_operation
 from registry.schemas.enums import ConnectionState
 from registry.schemas.server_api_schemas import (
     PaginationMetadata,
+    ServerConnectionTestRequest,
+    ServerConnectionTestResponse,
     ServerCreateRequest,
     ServerCreateResponse,
     ServerDetailResponse,
@@ -232,6 +235,100 @@ async def get_server_stats(
         raise HTTPException(
             status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while getting statistics",
+        )
+
+
+@router.post(
+    "/servers/connection",
+    response_model=ServerConnectionTestResponse,
+    summary="Check MCP Server Connection",
+    description="Check connection and handshake to an MCP server URL without creating a server entry. Returns initialization result. No authentication required.",
+)
+@track_registry_operation("check", resource_type="connection")
+async def check_server_connection(
+    data: ServerConnectionTestRequest,
+):
+    """
+    Test connection to an MCP server URL.
+
+    This endpoint allows you to verify connectivity and handshake with an MCP server
+    before registering it. It performs an MCP initialization request and returns:
+    - Connection success/failure
+    - Server name and protocol version (if successful)
+    - Response time
+    - Server capabilities
+    - Error details (if failed)
+
+    **Use this before creating a server to validate the URL and configuration.**
+    **No authentication required** - this is a public endpoint for testing connectivity.
+    """
+    try:
+        # Validate URL
+        if not data.url:
+            return ServerConnectionTestResponse(
+                success=False,
+                message="URL is required",
+                serverName=None,
+                protocolVersion=None,
+                responseTimeMs=None,
+                capabilities=None,
+                error="URL is required",
+            )
+
+        # Perform health check
+        is_healthy, status_msg, response_time_ms, init_result = await perform_health_check(
+            url=data.url,
+            transport=data.transport or "streamable-http",
+        )
+
+        if not is_healthy:
+            return ServerConnectionTestResponse(
+                success=False,
+                message=f"Connection failed: {status_msg}",
+                serverName=None,
+                protocolVersion=None,
+                responseTimeMs=response_time_ms,
+                capabilities=None,
+                error=status_msg,
+            )
+
+        # Extract details from init_result
+        server_name = None
+        protocol_version = None
+        capabilities = None
+
+        if init_result:
+            if hasattr(init_result, "serverInfo") and hasattr(init_result.serverInfo, "name"):
+                server_name = init_result.serverInfo.name
+            if hasattr(init_result, "protocolVersion"):
+                protocol_version = init_result.protocolVersion
+            if hasattr(init_result, "capabilities"):
+                capabilities = init_result.capabilities
+
+        if "initialize requires authentication" in status_msg.lower():
+            message = "Connected successfully, initialize requires authentication"
+        elif "initialize handshake successful" in status_msg.lower():
+            message = "Initialize handshake successful"
+            if server_name:
+                message = f"Initialize handshake successful - {server_name}"
+        else:
+            message = f"Successfully connected to {server_name or 'server'}"
+
+        return ServerConnectionTestResponse(
+            success=True,
+            message=message,
+            serverName=server_name,
+            protocolVersion=protocol_version,
+            responseTimeMs=response_time_ms,
+            capabilities=capabilities,
+            error=None,
+        )
+
+    except Exception as e:
+        logger.error(f"Error testing connection to {data.url}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error while testing connection: {str(e)}",
         )
 
 

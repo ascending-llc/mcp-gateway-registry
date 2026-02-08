@@ -315,3 +315,164 @@ class TestMCPClient:
             assert result.tools is None
             assert result.capabilities is None
             assert result.error_message is not None
+
+
+@pytest.mark.unit
+@pytest.mark.core
+class TestPerformHealthCheck:
+    """Test suite for perform_health_check function."""
+
+    @pytest.fixture
+    def mock_init_result(self):
+        """Create mock MCP initialize result."""
+        mock_result = Mock()
+        mock_result.protocolVersion = "2024-11-05"
+        mock_result.serverInfo = Mock()
+        mock_result.serverInfo.name = "test-server"
+        # Simulate Pydantic model that will be converted to dict
+        mock_capabilities = Mock()
+        mock_capabilities.model_dump = Mock(return_value={"tools": {}})
+        mock_result.capabilities = mock_capabilities
+        return mock_result
+
+    @pytest.mark.asyncio
+    async def test_perform_health_check_success(self, mock_init_result):
+        """Test successful health check."""
+        from registry.core.mcp_client import perform_health_check
+
+        url = "https://example.com/api"
+        transport = "streamable-http"
+
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(return_value=mock_init_result)):
+            is_healthy, status, response_time, init_result = await perform_health_check(url, transport)
+
+            assert is_healthy is True
+            assert "initialize handshake successful" in status.lower()
+            assert response_time is not None
+            assert init_result == mock_init_result
+            # Verify capabilities were converted to dict by perform_health_check
+            assert isinstance(init_result.capabilities, dict)
+            assert init_result.capabilities == {"tools": {}}
+
+    @pytest.mark.asyncio
+    async def test_perform_health_check_no_url(self):
+        """Test health check with no URL."""
+        from registry.core.mcp_client import perform_health_check
+
+        is_healthy, status, response_time, init_result = await perform_health_check("", "streamable-http")
+
+        assert is_healthy is False
+        assert status == "No URL provided"
+        assert response_time is None
+        assert init_result is None
+
+    @pytest.mark.asyncio
+    async def test_perform_health_check_stdio_skipped(self):
+        """Test health check is skipped for stdio transport."""
+        from registry.core.mcp_client import perform_health_check
+
+        is_healthy, status, response_time, init_result = await perform_health_check("/path/to/binary", "stdio")
+
+        assert is_healthy is True
+        assert "stdio transport skipped" in status.lower()
+        assert response_time is None
+        assert init_result is None
+
+    @pytest.mark.asyncio
+    async def test_perform_health_check_initialization_failed(self):
+        """Test health check when initialization returns None."""
+        from registry.core.mcp_client import perform_health_check
+
+        url = "https://example.com/api"
+
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(return_value=None)):
+            is_healthy, status, response_time, init_result = await perform_health_check(url, "streamable-http")
+
+            assert is_healthy is False
+            assert "initialization failed" in status.lower()
+            assert response_time is not None
+            assert init_result is None
+
+    @pytest.mark.asyncio
+    async def test_perform_health_check_invalid_response(self):
+        """Test health check with invalid MCP response (missing fields)."""
+        from registry.core.mcp_client import perform_health_check
+
+        # Mock result missing required fields (protocolVersion and serverInfo)
+        invalid_result = Mock(spec=["some_other_field"])
+
+        url = "https://example.com/api"
+
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(return_value=invalid_result)):
+            is_healthy, status, response_time, init_result = await perform_health_check(url, "streamable-http")
+
+            assert is_healthy is False
+            assert "invalid initialize response" in status.lower()
+            assert response_time is not None
+            assert init_result is None
+
+    @pytest.mark.asyncio
+    async def test_perform_health_check_sse_transport(self, mock_init_result):
+        """Test health check with SSE transport."""
+        from registry.core.mcp_client import perform_health_check
+
+        url = "https://example.com/sse"
+
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(return_value=mock_init_result)):
+            is_healthy, status, response_time, init_result = await perform_health_check(url, "sse")
+
+            assert is_healthy is True
+            assert "initialize handshake successful" in status.lower()
+            assert init_result == mock_init_result
+            # Verify capabilities were converted to dict
+            assert isinstance(init_result.capabilities, dict)
+
+    @pytest.mark.asyncio
+    async def test_perform_health_check_401_response(self):
+        """Test health check when server returns 401 (Unauthorized) - should still be considered healthy."""
+        import httpx
+
+        from registry.core.mcp_client import perform_health_check
+
+        url = "https://example.com/api"
+
+        # Create a mock 401 response
+        mock_response = Mock()
+        mock_response.status_code = 401
+
+        # Create HTTPStatusError with 401
+        error_401 = httpx.HTTPStatusError("401 Unauthorized", request=Mock(), response=mock_response)
+
+        # Mock initialize_mcp to raise HTTPStatusError directly (already unwrapped)
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(side_effect=error_401)):
+            is_healthy, status, response_time, init_result = await perform_health_check(url, "streamable-http")
+
+            assert is_healthy is True
+            assert "initialize requires authentication" in status.lower()
+            assert response_time is not None
+            assert init_result is None
+
+    @pytest.mark.asyncio
+    async def test_perform_health_check_401_direct_exception(self):
+        """Test health check with direct HTTPStatusError (without ExceptionGroup wrapper)."""
+        import httpx
+
+        from registry.core.mcp_client import perform_health_check
+
+        url = "https://example.com/api"
+
+        # Create a mock 401 response
+        mock_response = Mock()
+        mock_response.status_code = 401
+
+        # Create HTTPStatusError with 401 (direct, not wrapped)
+        error_401 = httpx.HTTPStatusError("401 Unauthorized", request=Mock(), response=mock_response)
+
+        # Mock initialize_mcp to raise direct HTTPStatusError
+        with patch("registry.core.mcp_client.initialize_mcp", new=AsyncMock(side_effect=error_401)):
+            is_healthy, status, response_time, init_result = await perform_health_check(url, "streamable-http")
+
+            assert is_healthy is True
+            assert "initialize requires authentication" in status.lower()
+            assert response_time is not None
+            assert init_result is None

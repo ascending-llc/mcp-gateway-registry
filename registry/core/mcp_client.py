@@ -121,8 +121,10 @@ async def initialize_mcp(
 
     Returns:
         InitializeResult object from MCP library, or None if initialization failed
+
+    Raises:
+        httpx.HTTPStatusError: Re-raised to allow caller to inspect HTTP status codes
     """
-    import httpx
 
     # Use provided headers or default MCP headers
     if headers is None:
@@ -156,9 +158,111 @@ async def initialize_mcp(
                 logger.error(f"Unsupported transport type: {transport_type}")
                 return None
 
+    except ExceptionGroup as eg:
+        # Unwrap ExceptionGroup to extract HTTPStatusError (from asyncio.TaskGroup)
+        for exc in eg.exceptions:
+            if isinstance(exc, httpx.HTTPStatusError):
+                logger.debug(f"HTTP error during MCP initialization for {target_url}: {exc.response.status_code}")
+                raise exc  # Re-raise the unwrapped HTTPStatusError
+        logger.error(f"MCP initialization failed for {target_url}: ExceptionGroup - {eg}")
+        return None
+    except httpx.HTTPStatusError as e:
+        # Re-raise HTTP errors so caller can inspect status code (e.g., 401 for health checks)
+        logger.debug(f"HTTP error during MCP initialization for {target_url}: {e.response.status_code}")
+        raise
     except Exception as e:
         logger.error(f"MCP initialization failed for {target_url}: {type(e).__name__} - {e}")
         return None
+
+
+async def perform_health_check(
+    url: str,
+    transport: str = "streamable-http",
+) -> tuple[bool, str, int | None, Any | None]:
+    """
+    Perform health check on an MCP server URL.
+
+    Application-level health check logic that interprets initialization results:
+    - Success with init_result: Server is healthy, initialization handshake successful
+    - 401 Unauthorized: Server is healthy but requires authentication
+    - Other failures: Server is unhealthy
+
+    Args:
+        url: MCP server URL
+        transport: Transport type (streamable-http, sse, stdio)
+
+    Returns:
+        Tuple of (is_healthy, status_message, response_time_ms, init_result)
+        - is_healthy: True if server is reachable (including 401 responses)
+        - status_message: Granular status for frontend display
+        - init_result: Contains serverInfo and capabilities if successful, None for 401
+    """
+    if not url:
+        return False, "No URL provided", None, None
+
+    # Skip health checks for stdio transport
+    if transport == mcp_config.TRANSPORT_STDIO:
+        logger.info(f"Skipping health check for stdio transport: {url}")
+        return True, "healthy (stdio transport skipped)", None, None
+
+    # Build basic headers for health check (no authentication needed for initialize)
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    logger.debug(f"Performing MCP initialization health check for {url}")
+
+    # Measure response time
+    from datetime import UTC, datetime
+
+    start_time = datetime.now(UTC)
+
+    # Attempt MCP initialization
+    init_result = None
+    http_status_code = None
+
+    try:
+        init_result = await initialize_mcp(target_url=url, headers=headers, transport_type=transport)
+    except httpx.HTTPStatusError as e:
+        http_status_code = e.response.status_code
+        logger.debug(f"HTTP error {http_status_code} during health check for {url}")
+    except Exception as e:
+        logger.debug(f"Non-HTTP error during health check for {url}: {type(e).__name__} - {e}")
+
+    # Calculate response time
+    end_time = datetime.now(UTC)
+    response_time_ms = int((end_time - start_time).total_seconds() * 1000)
+
+    # Application logic: Interpret the initialization result
+
+    # Check for 401 Unauthorized - server is healthy but requires auth
+    if http_status_code == 401:
+        logger.info(f"Health check passed for {url}: Connected successfully, initialize requires authentication (401)")
+        return True, "connected (initialize requires authentication)", response_time_ms, None
+
+    # Validate init_result structure per MCP spec
+    if init_result is None:
+        logger.warning(f"Health check failed for {url}: initialization failed")
+        return False, "unhealthy: initialization failed", response_time_ms, None
+
+    # Check for required fields: protocolVersion and serverInfo
+    if hasattr(init_result, "protocolVersion") and hasattr(init_result, "serverInfo"):
+        remote_server_name = init_result.serverInfo.name if hasattr(init_result.serverInfo, "name") else "unknown"
+
+        # Convert capabilities to dict if present (normalize Pydantic models to dicts)
+        if hasattr(init_result, "capabilities"):
+            init_result.capabilities = _convert_pydantic_to_dict(init_result.capabilities)
+
+        logger.info(
+            f"Health check passed for {url}: Initialize handshake successful - {remote_server_name} (protocol: {init_result.protocolVersion})"
+        )
+        return True, "initialize handshake successful", response_time_ms, init_result
+    else:
+        logger.warning(
+            f"Health check failed for {url}: invalid initialize response (missing protocolVersion or serverInfo)"
+        )
+        return False, "unhealthy: invalid initialize response", response_time_ms, None
 
 
 async def initialize_mcp_session(

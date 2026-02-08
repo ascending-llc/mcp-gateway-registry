@@ -693,11 +693,21 @@ class ServerServiceV1:
 
             try:
                 # 1. Health check - REQUIRED
+                from registry.core.mcp_client import perform_health_check
+
+                config = server.config or {}
+                url = config.get("url")
+                transport = config.get("type", "streamable-http")
+
                 (
                     is_healthy,
                     status_msg,
                     response_time_ms,
-                ) = await self.perform_health_check(server)
+                    _,
+                ) = await perform_health_check(
+                    url=url,
+                    transport=transport,
+                )
                 logger.info(
                     f"Health check result for {server.serverName}: {status_msg} (response_time: {response_time_ms}ms)"
                 )
@@ -1048,71 +1058,6 @@ class ServerServiceV1:
 
         tool_functions = _extract_config_field(server, "toolFunctions", {})
         return server, tool_functions
-
-    async def perform_health_check(
-        self,
-        server: MCPServerDocument,
-    ) -> tuple[bool, str, int | None]:
-        """
-        Perform health check on a server.
-
-        Args:
-            server: Server document
-
-        Returns:
-            Tuple of (is_healthy, status_message, response_time_ms)
-        """
-        from registry.core.mcp_client import initialize_mcp
-        from registry.core.mcp_config import mcp_config
-
-        config = server.config or {}
-        url = config.get("url")
-
-        if not url:
-            return False, "No URL configured", None
-
-        transport_type = config.get("type", mcp_config.TRANSPORT_HTTP)
-
-        # Skip health checks for stdio transport
-        if transport_type == mcp_config.TRANSPORT_STDIO:
-            logger.info(f"Skipping health check for stdio transport: {url}")
-            return True, "healthy (stdio transport skipped)", None
-
-        # Build basic headers for health check (no authentication needed for initialize)
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
-
-        logger.debug(f"Performing MCP initialization health check for {server.serverName}")
-
-        # Measure response time
-        start_time = _get_current_utc_time()
-
-        # Perform MCP initialization
-        init_result = await initialize_mcp(target_url=url, headers=headers, transport_type=transport_type)
-
-        # Calculate response time
-        end_time = _get_current_utc_time()
-        response_time_ms = int((end_time - start_time).total_seconds() * 1000)
-
-        # Validate init_result structure per MCP spec
-        if init_result is None:
-            logger.warning(f"Server {server.serverName} health check failed: initialization returned None")
-            return False, "unhealthy: initialization failed", response_time_ms
-
-        # Check for required fields: protocolVersion and serverInfo
-        if hasattr(init_result, "protocolVersion") and hasattr(init_result, "serverInfo"):
-            server_name = init_result.serverInfo.name if hasattr(init_result.serverInfo, "name") else "unknown"
-            logger.debug(
-                f"Server {server.serverName} health check passed: {server_name} (protocol: {init_result.protocolVersion})"
-            )
-            return True, "healthy", response_time_ms
-        else:
-            logger.warning(
-                f"Server {server.serverName} health check failed: invalid initialize response (missing protocolVersion or serverInfo)"
-            )
-            return False, "unhealthy: invalid initialize response", response_time_ms
 
     @track_tool_discovery
     async def retrieve_from_server(
