@@ -1105,6 +1105,16 @@ async def get_oauth_metadata_from_server(base_url: str) -> dict | None:
 
     # Remove trailing slashes and path segments to get the base domain
     parsed = urlparse(base_url.rstrip("/"))
+
+    # Validate URL: require http/https scheme and non-empty netloc
+    if parsed.scheme not in ["http", "https"]:
+        logger.error(f"OAuth metadata retrieval: Invalid URL scheme '{parsed.scheme}' (only http/https allowed)")
+        return None
+
+    if not parsed.netloc:
+        logger.error(f"OAuth metadata retrieval: Invalid URL - missing host/netloc in '{base_url}'")
+        return None
+
     base_domain = f"{parsed.scheme}://{parsed.netloc}"
 
     logger.info(f"Attempting OAuth metadata discovery for {base_domain}")
@@ -1151,8 +1161,6 @@ async def get_oauth_metadata_from_server(base_url: str) -> dict | None:
                     else:
                         logger.debug(f"Discovery endpoint {url} returned status {response.status_code}")
 
-                except httpx.HTTPStatusError as e:
-                    logger.debug(f"HTTP error for {url}: {e.response.status_code}")
                 except Exception as e:
                     logger.debug(f"Discovery failed for {url}: {type(e).__name__} - {e}")
 

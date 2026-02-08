@@ -778,16 +778,6 @@ class ServerServiceV1:
 
                     from registry.core.mcp_client import get_oauth_metadata_from_server
 
-                    # Build server_info dict for oauth metadata retrieval (no auth needed)
-                    server_info = {
-                        "type": config.get("type", "streamable-http"),
-                        "tags": server.tags or [],
-                    }
-
-                    # Add headers if present
-                    if "headers" in config:
-                        server_info["headers"] = config["headers"]
-
                     oauth_metadata = await get_oauth_metadata_from_server(data.url)
 
                     if oauth_metadata:
