@@ -133,7 +133,7 @@ class ExtendedMCPServer(Document):
 
     # ========== Registry-Specific Root-Level Fields ==========
     # These fields are specific to the registry and should NOT be in config
-    path: str = Field(..., description="API path for this server (e.g., /mcp/github)")
+    path: str | None = Field(default=None, description="API path for this server (e.g., /mcp/github)")
     tags: list[str] = Field(default_factory=list, description="Tags for categorization")
     scope: str | None = Field(default=None, description="Deprecated. Access control is handled by ACL permissions.")
     status: str = Field(default="active", description="Operational state: active, inactive, error")
