@@ -75,7 +75,7 @@ from typing import Any, ClassVar
 
 from beanie import Document, Insert, PydanticObjectId, Replace, Save, before_event
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
-from pymongo import ASCENDING, IndexModel
+from pymongo import IndexModel
 
 from registry.utils.log import logger
 
@@ -229,7 +229,7 @@ class A2AAgent(Document):
 
         # Indexes for efficient queries
         indexes = [
-            IndexModel([("path", ASCENDING)], unique=True),  # Unique index on path
+            IndexModel([("path", 1)], unique=True),  # Unique index on path
             "tags",  # Tag-based filtering
             "isEnabled",  # Enabled/disabled filtering
             [("name", "text")],  # Text search on name
