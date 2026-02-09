@@ -11,6 +11,7 @@ TypeScript equivalent:
 - Format: hex(iv):hex(ciphertext)
 """
 
+import logging
 import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -20,7 +21,8 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from registry.core.config import settings
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 
 # Token expiration defaults
 ACCESS_TOKEN_EXPIRES_HOURS = 24  # 1 day

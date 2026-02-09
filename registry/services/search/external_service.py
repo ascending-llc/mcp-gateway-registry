@@ -1,9 +1,11 @@
+import logging
 from typing import Any
 
 from packages.models.extended_mcp_server import ExtendedMCPServer
 from packages.vector.enum.enums import RerankerProvider, SearchType
 from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 
 from .base import VectorSearchService
 

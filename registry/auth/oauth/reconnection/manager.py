@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from typing import Any, Optional
 
@@ -6,7 +7,8 @@ from registry.auth.oauth.flow_state_manager import get_flow_state_manager
 from registry.models.oauth_models import OAuthTokens
 from registry.schemas.enums import ConnectionState
 from registry.services.server_service import server_service_v1
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 
 from .tracker import OAuthReconnectionTracker
 

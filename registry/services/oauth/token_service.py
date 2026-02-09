@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -8,7 +9,8 @@ from packages.models._generated.token import Token
 from registry.models.emus import TokenType
 from registry.models.oauth_models import OAuthTokens
 from registry.services.user_service import user_service
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 
 
 class TokenService:

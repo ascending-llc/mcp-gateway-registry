@@ -1,8 +1,10 @@
 import asyncio
+import logging
 
 from registry.services.oauth.connection_service import get_connection_service
 from registry.services.oauth.oauth_service import get_oauth_service
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 
 
 class MCPService:

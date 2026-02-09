@@ -1,10 +1,12 @@
+import logging
 from pathlib import Path
 
 from fastapi import HTTPException
 from fastapi import status as http_status
 
 from registry.core.acl_constants import ResourceType
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 
 # Template directory - go up two levels from utils.py to registry/, then to templates/oauth/
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates" / "oauth"

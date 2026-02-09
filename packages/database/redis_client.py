@@ -3,13 +3,16 @@ Centralized Redis connection management for the registry.
 Follows the same pattern as MongoDB connection in packages/database.
 """
 
+import logging
+
 from redis import Redis
 
 from registry.constants import REGISTRY_CONSTANTS
-from registry.utils.log import logger
 
 # Global Redis client instance
 _redis_client: Redis | None = None
+
+logger = logging.getLogger(__name__)
 
 
 async def init_redis() -> None:

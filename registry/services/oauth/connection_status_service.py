@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from registry.auth.oauth.flow_state_manager import get_flow_state_manager
@@ -6,7 +7,8 @@ from registry.schemas.enums import ConnectionState
 from registry.services.oauth.mcp_service import MCPService, get_mcp_service
 from registry.services.oauth.status_resolver import ConnectionStateContext, get_status_resolver
 from registry.services.server_service import server_service_v1
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 
 
 async def get_servers_connection_status(

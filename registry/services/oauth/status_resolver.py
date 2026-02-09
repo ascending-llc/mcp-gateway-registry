@@ -1,8 +1,10 @@
+import logging
 from typing import Any
 
 from registry.schemas.enums import ConnectionState
 from registry.services.oauth.base import Connection, ConnectionStateContext
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 
 
 class ConnectionStatusResolver:

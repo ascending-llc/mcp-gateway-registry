@@ -7,6 +7,7 @@ This main.py file serves as the application coordinator, importing and registeri
 domain routers while handling core app configuration.
 """
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -43,7 +44,8 @@ from registry.health.service import health_service
 from registry.services.agent_service import agent_service
 from registry.services.federation_service import get_federation_service
 from registry.services.search.service import vector_service
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 from registry.version import __version__
 
 

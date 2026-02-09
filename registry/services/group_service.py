@@ -1,5 +1,8 @@
+import logging
+
 from packages.models._generated import IGroup
-from registry.utils.log import logger
+
+logger = logging.getLogger(__name__)
 
 
 class GroupService:
