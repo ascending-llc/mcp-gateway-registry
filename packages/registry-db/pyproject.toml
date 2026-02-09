@@ -1,5 +1,5 @@
 [project]
-name = "packages"
+name = "registry-db"
 version = "0.2.0"
 description = "Shared database ORM and models for MCP Gateway Registry"
 readme = "README.md"
@@ -37,16 +37,7 @@ dependencies = [
 
 ]
 
-[project.optional-dependencies]
-# Vector search with embedded FAISS (optional, adds ~2-3GB)
-embedded-search = [
-    "faiss-cpu>=1.7.4",
-    "sentence-transformers>=3.0.0",
-    "scikit-learn>=1.3.0",
-    "torch>=1.6.0",
-    "huggingface-hub[cli]>=0.31.1",
-]
-
+[dependency-groups]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
@@ -57,21 +48,31 @@ dev = [
     "poethepoet>=0.24.0",
 ]
 
+# Vector search with embedded FAISS (optional, adds ~2-3GB)
+embedded-search = [
+    "faiss-cpu>=1.7.4",
+    "sentence-transformers>=3.0.0",
+    "scikit-learn>=1.3.0",
+    "torch>=1.6.0",
+    "huggingface-hub[cli]>=0.31.1",
+]
+
 [project.scripts]
-import-schemas = "packages.models.import_schemas:main"
+import-schemas = "registry_db.models.import_schemas:main"
 
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=67", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-# Map the package "packages" to the parent directory
-package-dir = {"" = ".."}
+zip-safe = false
+include-package-data = true
 
 [tool.setuptools.packages.find]
-where = [".."]
-include = ["packages*"]
-namespaces = false
+where = ["src"]
+
+[tool.setuptools.package-data]
+registry_db = ["py.typed"]
 
 [tool.poe.tasks]
 # Run tests

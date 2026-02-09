@@ -4,34 +4,43 @@ version = "0.2.0"
 description = "Jarvis Registry - Monorepo Workspace Root"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-
 # Root workspace dependencies needed for scripts
-dependencies = []
+dependencies = [
+    # root must depend on all workspace members
+    "registry-db",
+    "registry",
+    "auth-server",
+    "mcpgw",
 
-[project.scripts]
-# Data management scripts (use workspace dependencies)
-seed-data = "scripts.seed_mongodb:cli"
-sync-mongo-weaviate = "scripts.sync_mongo_to_weaviate:cli"
-
-# Optional dependencies are defined in sub-projects where they're used
-[build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools]
-# Workspace root - no packages defined here
-# Packages are defined in sub-projects
-packages = []
-
-# Pytest and coverage configurations are in sub-projects
+    "python-dotenv>=1.0.0",
+]
 
 [tool.uv.workspace]
 members = [
-    "packages",
+    "packages/*",
     "registry",
-    "auth_server",
+    "auth-server",
     "servers/mcpgw",
 ]
+
+[tool.uv.sources]
+registry-db = { workspace = true }
+registry = { workspace = true }
+auth-server = { workspace = true }
+mcpgw = { workspace = true }
+
+[project.scripts]
+# Data management scripts
+seed-data = "scripts.seed_mongodb:cli"
+sync-mongo-weaviate = "scripts.sync_mongo_to_weaviate:cli"
+
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# Workspace root - script folders that are referenced in the [project.scripts] table should be included explicitly in "packages".
+packages = ["scripts"]
 
 [dependency-groups]
 dev = [
@@ -113,10 +122,11 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["registry", "auth_server", "packages"]
+known-first-party = ["registry", "auth_server", "packages/*"]
 
 [tool.ruff.lint.per-file-ignores]
 # Import order matters in __init__.py to avoid circular imports
+# NOTICE
 "packages/vector/__init__.py" = ["I001"]
 
 [tool.ruff.format]

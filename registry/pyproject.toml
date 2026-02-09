@@ -4,8 +4,8 @@ version = "0.2.0"
 description = "MCP Server Registry Service"
 requires-python = ">=3.12"
 dependencies = [
-    # Shared packages
-    "packages",
+    # workspace packages
+    "registry-db",
 
     # Web framework
     "fastapi>=0.115.12",
@@ -54,34 +54,6 @@ dependencies = [
     "langchain-text-splitters>=1.1.0",
 ]
 
-[tool.uv.sources]
-packages = { workspace = true }
-
-[tool.uv]
-package = false
-
-[build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools]
-# Auto-discover all packages, excluding tests
-packages = { find = { where = ["."], exclude = ["tests*"] } }
-
-[tool.poe.tasks]
-# Development server (runs from parent directory with parent's env)
-dev = { shell = "cd .. && uv run uvicorn registry.main:app --reload --host 0.0.0.0 --port 8000" }
-
-# Run all tests (use parent's uv environment)
-test = { shell = "cd .. && uv run pytest registry/tests/ -v" }
-test-cov = { shell = "cd .. && uv run pytest registry/tests/ -v --cov=registry --cov-report=html --cov-report=term --cov-report=xml" }
-
-# Run unit tests only
-test-unit = { shell = "cd .. && uv run pytest registry/tests/unit -v -m unit" }
-
-# Run integration tests only
-test-integration = { shell = "cd .. && uv run pytest registry/tests/integration -v -m integration" }
-
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
@@ -96,3 +68,34 @@ dev = [
     "faker>=24.0.0",
     "poethepoet>=0.40.0",
 ]
+
+[tool.uv.sources]
+registry-db = { workspace = true }
+
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+zip-safe = false
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+registry = ["py.typed"]
+
+[tool.poe.tasks]
+# Development server (runs from parent directory with parent's env)
+dev = { shell = "cd .. && uv run uvicorn registry.main:app --reload --host 0.0.0.0 --port 8000" }
+
+# Run all tests (use parent's uv environment)
+test = { shell = "cd .. && uv run pytest registry/tests/ -v" }
+test-cov = { shell = "cd .. && uv run pytest registry/tests/ -v --cov=registry --cov-report=html --cov-report=term --cov-report=xml" }
+
+# Run unit tests only
+test-unit = { shell = "cd .. && uv run pytest registry/tests/unit -v -m unit" }
+
+# Run integration tests only
+test-integration = { shell = "cd .. && uv run pytest registry/tests/integration -v -m integration" }
