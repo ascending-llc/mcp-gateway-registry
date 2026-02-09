@@ -18,16 +18,12 @@ import os
 import sys
 import traceback
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
-
-# Add packages to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from registry_db.database.mongodb import MongoDB
 from registry_db.models.extended_mcp_server import ExtendedMCPServer

@@ -14,7 +14,6 @@ import asyncio
 import os
 import sys
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -22,9 +21,6 @@ from registry.core.acl_constants import PermissionBits, PrincipalType, ResourceT
 
 # Load environment variables from .env file
 load_dotenv()
-
-# Add packages to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from registry_db.database.mongodb import MongoDB
 from registry_db.models._generated.key import Key

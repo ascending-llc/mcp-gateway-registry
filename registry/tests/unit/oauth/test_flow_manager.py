@@ -1,11 +1,6 @@
-import os
-import sys
 import time
 
 import pytest
-
-# Add project root to Python path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 
 from registry.auth.oauth.flow_state_manager import FlowStateManager
 from registry.schemas.enums import OAuthFlowStatus
