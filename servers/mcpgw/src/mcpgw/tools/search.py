@@ -2,11 +2,11 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from core.registry import call_registry_api
 from fastmcp import Context
 from pydantic import Field
 
-from config import settings
+from ..config import settings
+from ..core.registry import call_registry_api
 
 logger = logging.getLogger(__name__)
 

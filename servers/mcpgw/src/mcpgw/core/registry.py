@@ -29,7 +29,7 @@ def _generate_service_jwt(user_context: dict[str, Any]) -> str:
     Returns:
         JWT token string with Bearer prefix
     """
-    from config import settings
+    from ..config import settings
 
     now = datetime.now(UTC)
 
@@ -79,7 +79,7 @@ async def call_registry_api(method: str, endpoint: str, ctx: Context = None, **k
     Raises:
         Exception: If the API call fails
     """
-    from config import Constants, settings
+    from ..config import Constants, settings
 
     url = f"{settings.REGISTRY_URL}{endpoint}"
 

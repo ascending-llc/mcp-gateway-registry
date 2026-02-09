@@ -4,7 +4,7 @@ from datetime import datetime
 import jwt
 from fastmcp.server.auth import AccessToken, TokenVerifier
 
-from config import settings
+from ..config import settings
 
 logger = logging.getLogger(__name__)
 

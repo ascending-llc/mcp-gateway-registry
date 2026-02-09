@@ -1,16 +1,15 @@
-#!/usr/bin/env python3
 import logging
 
-from auth.patch_init_exempt import patch_init_exempt
+from mcpgw.auth.patch_init_exempt import patch_init_exempt
 
 patch_init_exempt()
-from auth.custom_jwt import jwtVerifier
-from auth.middleware import AuthMiddleware, HeaderSwapMiddleware
 from fastmcp import FastMCP
 from starlette.responses import JSONResponse
-from tools import registry_api, search
 
-from config import parse_arguments, settings
+from .auth.custom_jwt import jwtVerifier
+from .auth.middleware import AuthMiddleware, HeaderSwapMiddleware
+from .config import parse_arguments, settings
+from .tools import registry_api, search
 
 # Configure logging
 logger = logging.getLogger(__name__)

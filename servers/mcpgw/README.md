@@ -1,4 +1,4 @@
-# MCP Gateway Interaction Server (mcpgw)
+# MCP Gateway Interaction Server (`mcpgw`)
 
 FastMCP server providing tools to interact with the MCP Gateway Registry API.
 
@@ -13,27 +13,20 @@ cd servers/mcpgw
 python server.py --port 8003
 ```
 
-## Testing
-
-```bash
-# From workspace root
-uv run poe test-all        # Run all tests
-uv run poe test-all-cov    # With coverage
-
-# See pyproject.toml in root for all test commands
-```
-
 ## Key Architecture
 
 ### Authentication
+
 All registry API calls use **JWT-based authentication**:
-- User context extracted from FastMCP `Context` (ctx.user_auth)
-- JWT generated with HS256, signed with `JWT_SIGNING_SECRET`
-- Token includes: user context, `mcpgw` as issuer, 5-min expiry
-- See [core/registry.py](core/registry.py) `_generate_service_jwt()`
+- User context extracted from FastMCP `Context` (`ctx.user_auth`).
+- JWT generated with HS256, signed with `JWT_SIGNING_SECRET`.
+- Token includes: user context, `mcpgw` as issuer, 5-min expiration.
+- See [core/registry.py](core/registry.py) `_generate_service_jwt()`.
 
 ### Registry API Pattern
+
 **All registry API calls MUST use centralized client:**
+
 ```python
 from core.registry import call_registry_api
 
@@ -42,8 +35,9 @@ result = await call_registry_api("POST", "/api/v1/endpoint", ctx, json=payload)
 ```
 
 ### Code Structure
+
 ```
-mcpgw/
+servers/mcpgw/src/mcpgw/
 ├── server.py              # FastMCP entry point
 ├── config.py              # Pydantic settings
 ├── core/
@@ -60,10 +54,3 @@ mcpgw/
 Required:
 - `REGISTRY_URL`: Registry API URL (default: `http://localhost:7860`)
 - `SECRET_KEY`: JWT secret key (from env or Keycloak)
-
-## Installation Modes
-
-**External mode (recommended):**
-```bash
-pip install -e .
-```

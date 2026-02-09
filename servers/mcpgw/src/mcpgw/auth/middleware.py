@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from fastmcp.server.dependencies import get_http_request
 from fastmcp.server.middleware import Middleware, MiddlewareContext
 
-from config import settings
+from ..config import settings
 
 logger = logging.getLogger(__name__)
 
