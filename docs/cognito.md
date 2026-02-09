@@ -61,7 +61,7 @@ This setup is for users who will authenticate through the web interface and for 
 
 2. **Copy Client Credentials**
    - Copy and paste the **Client ID** and **Client Secret**
-   - Note them separately - you'll need them later for `.env` files for the MCP Gateway and agent. 
+   - Note them separately - you'll need them later for `.env` files for the MCP Gateway and agent.
 
 3. **Configure Login Pages**
    - Click on **"Login Pages"** and then **"Edit"**

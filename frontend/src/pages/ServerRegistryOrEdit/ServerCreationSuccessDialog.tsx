@@ -2,7 +2,7 @@ import { Dialog } from '@headlessui/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import type React from 'react';
 import { useState } from 'react';
-import { getBasePath } from '../../config';
+import { getBasePath } from '@/config';
 
 interface ServerCreationSuccessDialogProps {
   isOpen: boolean;
@@ -13,7 +13,8 @@ interface ServerCreationSuccessDialogProps {
 const ServerCreationSuccessDialog: React.FC<ServerCreationSuccessDialogProps> = ({ isOpen, serverData, onClose }) => {
   const [copied, setCopied] = useState(false);
   // Construct redirect URI using server path (ensure path starts with /)
-  const serverPath = serverData.path?.startsWith('/') ? serverData.path : `/${serverData.path}`;
+  const cleanPath = serverData.path?.replace(/\/+$/, '') || '';
+  const serverPath = cleanPath && !cleanPath.startsWith('/') ? `/${cleanPath}` : cleanPath;
   const redirectUri = `${window.location.protocol}//${window.location.host}${getBasePath()}/api/v1/mcp${serverPath}/oauth/callback`;
 
   const handleCopy = () => {

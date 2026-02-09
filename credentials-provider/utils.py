@@ -48,6 +48,7 @@ def redact_credentials_in_text(text: str, show_chars: int = 8) -> str:
 
     result = text
     for pattern in patterns:
+
         def replace_match(match):
             prefix = match.group(1)
             value = match.group(2)

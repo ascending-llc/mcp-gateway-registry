@@ -13,26 +13,25 @@ the get-m2m-token.sh script.
 
 import json
 import logging
-from typing import Optional, List, Dict, Any, Union
-from enum import Enum
 from datetime import datetime
+from enum import StrEnum
+from typing import Any
 from urllib.parse import quote
 
 import requests
-from pydantic import BaseModel, Field, HttpUrl, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
 from registry.core.config import settings
 
 # Configure logging
-logging.basicConfig(
-    level=settings.log_level,
-    format=settings.log_format
-)
+logging.basicConfig(level=settings.log_level, format=settings.log_format)
 
 logger = logging.getLogger(__name__)
 
 
-class HealthStatus(str, Enum):
+class HealthStatus(StrEnum):
     """Health status enumeration for servers."""
+
     HEALTHY = "healthy"
     UNHEALTHY = "unhealthy"
     UNKNOWN = "unknown"
@@ -46,26 +45,26 @@ class ServiceRegistration(BaseModel):
     description: str = Field(..., description="Service description")
     path: str = Field(..., description="Service path")
     proxy_pass_url: str = Field(..., description="Proxy pass URL")
-    tags: Optional[str] = Field(None, description="Comma-separated tags")
-    num_tools: Optional[int] = Field(None, description="Number of tools")
-    num_stars: Optional[int] = Field(None, description="Number of stars")
-    is_python: Optional[bool] = Field(None, description="Is Python server")
-    license: Optional[str] = Field(None, description="License type")
+    tags: str | None = Field(None, description="Comma-separated tags")
+    num_tools: int | None = Field(None, description="Number of tools")
+    num_stars: int | None = Field(None, description="Number of stars")
+    is_python: bool | None = Field(None, description="Is Python server")
+    license: str | None = Field(None, description="License type")
 
 
 class InternalServiceRegistration(BaseModel):
     """Internal service registration model (Admin/M2M registration)."""
 
     service_path: str = Field(..., alias="path", description="Service path (e.g., /cloudflare-docs)")
-    name: Optional[str] = Field(None, description="Service name")
-    description: Optional[str] = Field(None, description="Service description")
-    proxy_pass_url: Optional[str] = Field(None, description="Proxy pass URL")
-    auth_provider: Optional[str] = Field(None, description="Authentication provider")
-    auth_type: Optional[str] = Field(None, description="Authentication type")
-    supported_transports: Optional[List[str]] = Field(None, description="Supported transports")
-    headers: Optional[Dict[str, str]] = Field(None, description="Custom headers")
-    tool_list_json: Optional[str] = Field(None, description="Tool list as JSON string")
-    overwrite: Optional[bool] = Field(False, description="Overwrite if exists")
+    name: str | None = Field(None, description="Service name")
+    description: str | None = Field(None, description="Service description")
+    proxy_pass_url: str | None = Field(None, description="Proxy pass URL")
+    auth_provider: str | None = Field(None, description="Authentication provider")
+    auth_type: str | None = Field(None, description="Authentication type")
+    supported_transports: list[str] | None = Field(None, description="Supported transports")
+    headers: dict[str, str] | None = Field(None, description="Custom headers")
+    tool_list_json: str | None = Field(None, description="Tool list as JSON string")
+    overwrite: bool | None = Field(False, description="Overwrite if exists")
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -90,13 +89,13 @@ class ServerDetail(BaseModel):
     is_enabled: bool = Field(..., description="Whether service is enabled")
     num_tools: int = Field(..., description="Number of tools")
     health_status: str = Field(..., description="Health status")
-    last_health_check: Optional[datetime] = Field(None, description="Last health check timestamp")
+    last_health_check: datetime | None = Field(None, description="Last health check timestamp")
 
 
 class ServerListResponse(BaseModel):
     """Server list response model."""
 
-    servers: List[Server] = Field(..., description="List of servers")
+    servers: list[Server] = Field(..., description="List of servers")
 
 
 class ServiceResponse(BaseModel):
@@ -119,15 +118,15 @@ class ErrorResponse(BaseModel):
     """Error response model."""
 
     detail: str = Field(..., description="Error detail message")
-    error_code: Optional[str] = Field(None, description="Error code")
-    request_id: Optional[str] = Field(None, description="Request ID")
+    error_code: str | None = Field(None, description="Error code")
+    request_id: str | None = Field(None, description="Request ID")
 
 
 class SecurityScanResult(BaseModel):
     """Security scan result model."""
 
-    analysis_results: Dict[str, Any] = Field(..., description="Analysis results by analyzer")
-    tool_results: List[Dict[str, Any]] = Field(..., description="Detailed tool scan results")
+    analysis_results: dict[str, Any] = Field(..., description="Analysis results by analyzer")
+    tool_results: list[dict[str, Any]] = Field(..., description="Detailed tool scan results")
 
 
 class RescanResponse(BaseModel):
@@ -141,17 +140,17 @@ class RescanResponse(BaseModel):
     high_severity: int = Field(..., description="Number of high severity issues")
     medium_severity: int = Field(..., description="Number of medium severity issues")
     low_severity: int = Field(..., description="Number of low severity issues")
-    analyzers_used: List[str] = Field(..., description="Analyzers used in scan")
+    analyzers_used: list[str] = Field(..., description="Analyzers used in scan")
     scan_failed: bool = Field(..., description="Whether scan failed")
-    error_message: Optional[str] = Field(None, description="Error message if scan failed")
-    raw_output: Optional[Dict[str, Any]] = Field(None, description="Raw scan output")
+    error_message: str | None = Field(None, description="Error message if scan failed")
+    raw_output: dict[str, Any] | None = Field(None, description="Raw scan output")
 
 
 class AgentSecurityScanResponse(BaseModel):
     """Agent security scan results response model."""
 
-    analysis_results: Dict[str, Any] = Field(default_factory=dict, description="Analysis results by analyzer")
-    scan_results: Dict[str, Any] = Field(default_factory=dict, description="Scan results and metadata")
+    analysis_results: dict[str, Any] = Field(default_factory=dict, description="Analysis results by analyzer")
+    scan_results: dict[str, Any] = Field(default_factory=dict, description="Scan results and metadata")
 
 
 class AgentRescanResponse(BaseModel):
@@ -165,30 +164,32 @@ class AgentRescanResponse(BaseModel):
     high_severity: int = Field(..., description="Number of high severity issues")
     medium_severity: int = Field(..., description="Number of medium severity issues")
     low_severity: int = Field(..., description="Number of low severity issues")
-    analyzers_used: List[str] = Field(..., description="Analyzers used in scan")
+    analyzers_used: list[str] = Field(..., description="Analyzers used in scan")
     scan_failed: bool = Field(..., description="Whether scan failed")
-    error_message: Optional[str] = Field(None, description="Error message if scan failed")
-    output_file: Optional[str] = Field(None, description="Path to scan output file")
+    error_message: str | None = Field(None, description="Error message if scan failed")
+    output_file: str | None = Field(None, description="Path to scan output file")
 
 
 class GroupListResponse(BaseModel):
     """Group list response model."""
 
-    groups: List[Dict[str, Any]] = Field(..., description="List of groups")
+    groups: list[dict[str, Any]] = Field(..., description="List of groups")
 
 
 # Agent Management Models
 
 
-class AgentProvider(str, Enum):
+class AgentProvider(StrEnum):
     """Agent provider enumeration."""
+
     ANTHROPIC = "anthropic"
     CUSTOM = "custom"
     OTHER = "other"
 
 
-class AgentVisibility(str, Enum):
+class AgentVisibility(StrEnum):
     """Agent visibility enumeration."""
+
     PUBLIC = "public"
     PRIVATE = "private"
     GROUP_RESTRICTED = "group-restricted"
@@ -206,8 +207,9 @@ class Provider(BaseModel):
     url: str = Field(..., description="Provider website or documentation URL")
 
 
-class SecuritySchemeType(str, Enum):
+class SecuritySchemeType(StrEnum):
     """Security scheme type enumeration (A2A spec values)."""
+
     API_KEY = "apiKey"
     HTTP = "http"
     OAUTH2 = "oauth2"
@@ -221,34 +223,34 @@ class SecurityScheme(BaseModel):
     """
 
     type: SecuritySchemeType = Field(..., description="Security scheme type")
-    scheme: Optional[str] = Field(
+    scheme: str | None = Field(
         None,
         description="HTTP auth scheme: basic, bearer, digest",
     )
-    in_: Optional[str] = Field(
+    in_: str | None = Field(
         None,
         alias="in",
         description="API key location: header, query, cookie",
     )
-    name: Optional[str] = Field(
+    name: str | None = Field(
         None,
         description="Name of header/query/cookie for API key",
     )
-    bearer_format: Optional[str] = Field(
+    bearer_format: str | None = Field(
         None,
         alias="bearerFormat",
         description="Bearer token format hint (e.g., JWT)",
     )
-    flows: Optional[Dict[str, Any]] = Field(
+    flows: dict[str, Any] | None = Field(
         None,
         description="OAuth2 flows configuration",
     )
-    openid_connect_url: Optional[str] = Field(
+    openid_connect_url: str | None = Field(
         None,
         alias="openIdConnectUrl",
         description="OpenID Connect discovery URL",
     )
-    description: Optional[str] = Field(None, description="Security scheme description")
+    description: str | None = Field(None, description="Security scheme description")
 
     class Config:
         populate_by_name = True  # Allow both snake_case and camelCase on input
@@ -263,11 +265,11 @@ class Skill(BaseModel):
     id: str = Field(..., description="Unique skill identifier")
     name: str = Field(..., description="Human-readable skill name")
     description: str = Field(..., description="Detailed skill description")
-    tags: List[str] = Field(default_factory=list, description="Skill categorization tags")
-    examples: Optional[List[str]] = Field(None, description="Usage scenarios and examples")
-    input_modes: Optional[List[str]] = Field(None, alias="inputModes", description="Skill-specific input MIME types")
-    output_modes: Optional[List[str]] = Field(None, alias="outputModes", description="Skill-specific output MIME types")
-    security: Optional[List[Dict[str, List[str]]]] = Field(None, description="Skill-level security requirements")
+    tags: list[str] = Field(default_factory=list, description="Skill categorization tags")
+    examples: list[str] | None = Field(None, description="Usage scenarios and examples")
+    input_modes: list[str] | None = Field(None, alias="inputModes", description="Skill-specific input MIME types")
+    output_modes: list[str] | None = Field(None, alias="outputModes", description="Skill-specific output MIME types")
+    security: list[dict[str, list[str]]] | None = Field(None, description="Skill-level security requirements")
 
     class Config:
         populate_by_name = True  # Allow both snake_case and camelCase on input
@@ -287,33 +289,47 @@ class AgentRegistration(BaseModel):
     description: str = Field(..., description="Agent description")
     url: str = Field(..., description="Agent endpoint URL (HTTP or HTTPS)")
     version: str = Field(..., description="Agent version")
-    capabilities: Dict[str, Any] = Field(default_factory=dict, description="Feature declarations (e.g., {'streaming': true})")
-    default_input_modes: List[str] = Field(default_factory=lambda: ["text/plain"], alias="defaultInputModes", description="Supported input MIME types")
-    default_output_modes: List[str] = Field(default_factory=lambda: ["text/plain"], alias="defaultOutputModes", description="Supported output MIME types")
-    skills: List[Skill] = Field(default_factory=list, description="Agent capabilities (skills)")
+    capabilities: dict[str, Any] = Field(
+        default_factory=dict, description="Feature declarations (e.g., {'streaming': true})"
+    )
+    default_input_modes: list[str] = Field(
+        default_factory=lambda: ["text/plain"], alias="defaultInputModes", description="Supported input MIME types"
+    )
+    default_output_modes: list[str] = Field(
+        default_factory=lambda: ["text/plain"], alias="defaultOutputModes", description="Supported output MIME types"
+    )
+    skills: list[Skill] = Field(default_factory=list, description="Agent capabilities (skills)")
 
     # Optional A2A fields
-    preferred_transport: Optional[str] = Field("JSONRPC", alias="preferredTransport", description="Preferred transport protocol: JSONRPC, GRPC, HTTP+JSON")
-    provider: Optional[Provider] = Field(None, description="Agent provider information per A2A spec")
-    icon_url: Optional[str] = Field(None, alias="iconUrl", description="Agent icon URL")
-    documentation_url: Optional[str] = Field(None, alias="documentationUrl", description="Documentation URL")
-    security_schemes: Dict[str, SecurityScheme] = Field(default_factory=dict, alias="securitySchemes", description="Supported authentication methods")
-    security: Optional[List[Dict[str, List[str]]]] = Field(None, description="Security requirements array")
-    supports_authenticated_extended_card: Optional[bool] = Field(None, alias="supportsAuthenticatedExtendedCard", description="Supports extended card with auth")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    preferred_transport: str | None = Field(
+        "JSONRPC", alias="preferredTransport", description="Preferred transport protocol: JSONRPC, GRPC, HTTP+JSON"
+    )
+    provider: Provider | None = Field(None, description="Agent provider information per A2A spec")
+    icon_url: str | None = Field(None, alias="iconUrl", description="Agent icon URL")
+    documentation_url: str | None = Field(None, alias="documentationUrl", description="Documentation URL")
+    security_schemes: dict[str, SecurityScheme] = Field(
+        default_factory=dict, alias="securitySchemes", description="Supported authentication methods"
+    )
+    security: list[dict[str, list[str]]] | None = Field(None, description="Security requirements array")
+    supports_authenticated_extended_card: bool | None = Field(
+        None, alias="supportsAuthenticatedExtendedCard", description="Supports extended card with auth"
+    )
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
     # MCP Gateway Registry extensions (optional - not part of A2A spec)
-    path: Optional[str] = Field(None, description="Registry path (e.g., /agents/my-agent). Optional - auto-generated if not provided.")
-    tags: List[str] = Field(default_factory=list, description="Categorization tags")
+    path: str | None = Field(
+        None, description="Registry path (e.g., /agents/my-agent). Optional - auto-generated if not provided."
+    )
+    tags: list[str] = Field(default_factory=list, description="Categorization tags")
     is_enabled: bool = Field(False, alias="isEnabled", description="Whether agent is enabled in registry")
     num_stars: int = Field(0, ge=0, alias="numStars", description="Community rating")
     license: str = Field("N/A", description="License information")
-    registered_at: Optional[datetime] = Field(None, alias="registeredAt", description="Registration timestamp")
-    updated_at: Optional[datetime] = Field(None, alias="updatedAt", description="Last update timestamp")
-    registered_by: Optional[str] = Field(None, alias="registeredBy", description="Username who registered agent")
+    registered_at: datetime | None = Field(None, alias="registeredAt", description="Registration timestamp")
+    updated_at: datetime | None = Field(None, alias="updatedAt", description="Last update timestamp")
+    registered_by: str | None = Field(None, alias="registeredBy", description="Username who registered agent")
     visibility: str = Field("public", description="public, private, or group-restricted")
-    allowed_groups: List[str] = Field(default_factory=list, alias="allowedGroups", description="Groups with access")
-    signature: Optional[str] = Field(None, description="JWS signature for card integrity")
+    allowed_groups: list[str] = Field(default_factory=list, alias="allowedGroups", description="Groups with access")
+    signature: str | None = Field(None, description="JWS signature for card integrity")
     trust_level: str = Field("unverified", alias="trustLevel", description="unverified, community, verified, trusted")
 
     class Config:
@@ -347,11 +363,11 @@ class SkillDetail(BaseModel):
     id: str = Field(..., description="Unique skill identifier")
     name: str = Field(..., description="Human-readable skill name")
     description: str = Field(..., description="Detailed skill description")
-    tags: List[str] = Field(default_factory=list, description="Skill categorization tags")
-    examples: Optional[List[str]] = Field(None, description="Usage scenarios and examples")
-    input_modes: Optional[List[str]] = Field(None, alias="inputModes", description="Skill-specific input MIME types")
-    output_modes: Optional[List[str]] = Field(None, alias="outputModes", description="Skill-specific output MIME types")
-    security: Optional[List[Dict[str, List[str]]]] = Field(None, description="Skill-level security requirements")
+    tags: list[str] = Field(default_factory=list, description="Skill categorization tags")
+    examples: list[str] | None = Field(None, description="Usage scenarios and examples")
+    input_modes: list[str] | None = Field(None, alias="inputModes", description="Skill-specific input MIME types")
+    output_modes: list[str] | None = Field(None, alias="outputModes", description="Skill-specific output MIME types")
+    security: list[dict[str, list[str]]] | None = Field(None, description="Skill-level security requirements")
 
     class Config:
         populate_by_name = True  # Allow both snake_case and camelCase on input
@@ -371,34 +387,46 @@ class AgentDetail(BaseModel):
     description: str = Field(..., description="Agent description")
     url: str = Field(..., description="Agent endpoint URL")
     version: str = Field(..., description="Agent version")
-    capabilities: Dict[str, Any] = Field(default_factory=dict, description="Feature declarations (e.g., {'streaming': true})")
-    default_input_modes: List[str] = Field(default_factory=lambda: ["text/plain"], alias="defaultInputModes", description="Supported input MIME types")
-    default_output_modes: List[str] = Field(default_factory=lambda: ["text/plain"], alias="defaultOutputModes", description="Supported output MIME types")
-    skills: List[SkillDetail] = Field(default_factory=list, description="Agent capabilities (skills)")
+    capabilities: dict[str, Any] = Field(
+        default_factory=dict, description="Feature declarations (e.g., {'streaming': true})"
+    )
+    default_input_modes: list[str] = Field(
+        default_factory=lambda: ["text/plain"], alias="defaultInputModes", description="Supported input MIME types"
+    )
+    default_output_modes: list[str] = Field(
+        default_factory=lambda: ["text/plain"], alias="defaultOutputModes", description="Supported output MIME types"
+    )
+    skills: list[SkillDetail] = Field(default_factory=list, description="Agent capabilities (skills)")
 
     # Optional A2A fields
-    preferred_transport: Optional[str] = Field("JSONRPC", alias="preferredTransport", description="Preferred transport protocol: JSONRPC, GRPC, HTTP+JSON")
-    provider: Optional[Provider] = Field(None, description="Agent provider information per A2A spec")
-    icon_url: Optional[str] = Field(None, alias="iconUrl", description="Agent icon URL")
-    documentation_url: Optional[str] = Field(None, alias="documentationUrl", description="Documentation URL")
-    security_schemes: Dict[str, SecurityScheme] = Field(default_factory=dict, alias="securitySchemes", description="Supported authentication methods")
-    security: Optional[List[Dict[str, List[str]]]] = Field(None, description="Security requirements array")
-    supports_authenticated_extended_card: Optional[bool] = Field(None, alias="supportsAuthenticatedExtendedCard", description="Supports extended card with auth")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    preferred_transport: str | None = Field(
+        "JSONRPC", alias="preferredTransport", description="Preferred transport protocol: JSONRPC, GRPC, HTTP+JSON"
+    )
+    provider: Provider | None = Field(None, description="Agent provider information per A2A spec")
+    icon_url: str | None = Field(None, alias="iconUrl", description="Agent icon URL")
+    documentation_url: str | None = Field(None, alias="documentationUrl", description="Documentation URL")
+    security_schemes: dict[str, SecurityScheme] = Field(
+        default_factory=dict, alias="securitySchemes", description="Supported authentication methods"
+    )
+    security: list[dict[str, list[str]]] | None = Field(None, description="Security requirements array")
+    supports_authenticated_extended_card: bool | None = Field(
+        None, alias="supportsAuthenticatedExtendedCard", description="Supports extended card with auth"
+    )
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
     # MCP Gateway Registry extensions (optional - not part of A2A spec)
-    path: Optional[str] = Field(None, description="Registry path")
-    tags: List[str] = Field(default_factory=list, description="Categorization tags")
+    path: str | None = Field(None, description="Registry path")
+    tags: list[str] = Field(default_factory=list, description="Categorization tags")
     is_enabled: bool = Field(False, alias="isEnabled", description="Whether agent is enabled")
     num_stars: int = Field(0, ge=0, alias="numStars", description="Community rating")
     license: str = Field("N/A", description="License information")
-    registered_at: Optional[datetime] = Field(None, alias="registeredAt", description="Registration timestamp")
-    updated_at: Optional[datetime] = Field(None, alias="updatedAt", description="Last update timestamp")
-    registered_by: Optional[str] = Field(None, alias="registeredBy", description="Username who registered agent")
+    registered_at: datetime | None = Field(None, alias="registeredAt", description="Registration timestamp")
+    updated_at: datetime | None = Field(None, alias="updatedAt", description="Last update timestamp")
+    registered_by: str | None = Field(None, alias="registeredBy", description="Username who registered agent")
     visibility: str = Field("public", description="Visibility level")
-    allowed_groups: List[str] = Field(default_factory=list, alias="allowedGroups", description="Groups with access")
+    allowed_groups: list[str] = Field(default_factory=list, alias="allowedGroups", description="Groups with access")
     trust_level: str = Field("unverified", alias="trustLevel", description="Trust level")
-    signature: Optional[str] = Field(None, description="JWS signature for card integrity")
+    signature: str | None = Field(None, description="JWS signature for card integrity")
 
     class Config:
         populate_by_name = True  # Allow both snake_case and camelCase on input
@@ -414,12 +442,12 @@ class AgentListItem(BaseModel):
     description: str = Field(default="", description="Agent description")
     path: str = Field(..., description="Agent path")
     url: str = Field(..., description="Agent URL")
-    tags: List[str] = Field(default_factory=list, description="Categorization tags")
-    skills: List[str] = Field(default_factory=list, description="Skill names")
+    tags: list[str] = Field(default_factory=list, description="Categorization tags")
+    skills: list[str] = Field(default_factory=list, description="Skill names")
     num_skills: int = Field(default=0, alias="numSkills", description="Number of skills")
     num_stars: float = Field(default=0.0, alias="numStars", description="Average community rating (0.0-5.0)")
     is_enabled: bool = Field(default=False, alias="isEnabled", description="Whether agent is enabled")
-    provider: Optional[str] = Field(None, description="Agent provider")
+    provider: str | None = Field(None, description="Agent provider")
     streaming: bool = Field(default=False, description="Supports streaming")
     trust_level: str = Field(default="unverified", alias="trustLevel", description="Trust level")
 
@@ -430,7 +458,7 @@ class AgentListItem(BaseModel):
 class AgentListResponse(BaseModel):
     """Agent list response model."""
 
-    agents: List[AgentListItem] = Field(..., description="List of agents")
+    agents: list[AgentListItem] = Field(..., description="List of agents")
     total_count: int = Field(..., description="Total count of agents")
 
 
@@ -445,8 +473,8 @@ class AgentToggleResponse(BaseModel):
 class SkillDiscoveryRequest(BaseModel):
     """Skill-based discovery request model."""
 
-    skills: List[str] = Field(..., description="List of required skills")
-    tags: Optional[List[str]] = Field(None, description="Optional tag filters")
+    skills: list[str] = Field(..., description="List of required skills")
+    tags: list[str] | None = Field(None, description="Optional tag filters")
 
 
 class DiscoveredAgent(BaseModel):
@@ -455,13 +483,13 @@ class DiscoveredAgent(BaseModel):
     path: str = Field(..., description="Agent path")
     name: str = Field(..., description="Agent name")
     relevance_score: float = Field(..., description="Matching score (0.0 to 1.0)")
-    matching_skills: List[str] = Field(..., description="Matching skills")
+    matching_skills: list[str] = Field(..., description="Matching skills")
 
 
 class AgentDiscoveryResponse(BaseModel):
     """Agent discovery response model (skill-based)."""
 
-    agents: List[DiscoveredAgent] = Field(..., description="Discovered agents")
+    agents: list[DiscoveredAgent] = Field(..., description="Discovered agents")
 
 
 class SemanticDiscoveredAgent(BaseModel):
@@ -476,7 +504,7 @@ class SemanticDiscoveredAgent(BaseModel):
 class AgentSemanticDiscoveryResponse(BaseModel):
     """Agent semantic discovery response model."""
 
-    agents: List[SemanticDiscoveredAgent] = Field(..., description="Semantically discovered agents")
+    agents: list[SemanticDiscoveredAgent] = Field(..., description="Semantically discovered agents")
 
 
 class RatingDetail(BaseModel):
@@ -503,7 +531,7 @@ class RatingInfoResponse(BaseModel):
     """Rating information response."""
 
     num_stars: float = Field(..., ge=0.0, le=5.0, description="Average rating (0.0 if no ratings)")
-    rating_details: List[RatingDetail] = Field(..., description="Individual ratings (max 100)")
+    rating_details: list[RatingDetail] = Field(..., description="Individual ratings (max 100)")
 
 
 # Anthropic Registry API Models (v0.1)
@@ -513,20 +541,18 @@ class AnthropicRepository(BaseModel):
     """Repository metadata for MCP server source code (Anthropic Registry API)."""
 
     url: str = Field(..., description="Repository URL for browsing source code")
-    source: str = Field(
-        ..., description="Repository hosting service identifier (e.g., 'github')"
-    )
-    id: Optional[str] = Field(None, description="Repository ID from hosting service")
-    subfolder: Optional[str] = Field(None, description="Path within monorepo")
+    source: str = Field(..., description="Repository hosting service identifier (e.g., 'github')")
+    id: str | None = Field(None, description="Repository ID from hosting service")
+    subfolder: str | None = Field(None, description="Path within monorepo")
 
 
 class AnthropicStdioTransport(BaseModel):
     """Standard I/O transport configuration (Anthropic Registry API)."""
 
     type: str = Field(default="stdio")
-    command: Optional[str] = Field(None, description="Command to execute")
-    args: Optional[List[str]] = Field(None, description="Command arguments")
-    env: Optional[Dict[str, str]] = Field(None, description="Environment variables")
+    command: str | None = Field(None, description="Command to execute")
+    args: list[str] | None = Field(None, description="Command arguments")
+    env: dict[str, str] | None = Field(None, description="Environment variables")
 
 
 class AnthropicStreamableHttpTransport(BaseModel):
@@ -534,7 +560,7 @@ class AnthropicStreamableHttpTransport(BaseModel):
 
     type: str = Field(default="streamable-http")
     url: str = Field(..., description="HTTP endpoint URL")
-    headers: Optional[Dict[str, str]] = Field(None, description="HTTP headers")
+    headers: dict[str, str] | None = Field(None, description="HTTP headers")
 
 
 class AnthropicSseTransport(BaseModel):
@@ -550,13 +576,9 @@ class AnthropicPackage(BaseModel):
     registryType: str = Field(..., description="Registry type (npm, pypi, oci, etc.)")
     identifier: str = Field(..., description="Package identifier or URL")
     version: str = Field(..., description="Specific package version")
-    registryBaseUrl: Optional[str] = Field(
-        None, description="Base URL of package registry"
-    )
-    transport: Dict[str, Any] = Field(..., description="Transport configuration")
-    runtimeHint: Optional[str] = Field(
-        None, description="Runtime hint (npx, uvx, docker, etc.)"
-    )
+    registryBaseUrl: str | None = Field(None, description="Base URL of package registry")
+    transport: dict[str, Any] = Field(..., description="Transport configuration")
+    runtimeHint: str | None = Field(None, description="Runtime hint (npx, uvx, docker, etc.)")
 
 
 class AnthropicServerDetail(BaseModel):
@@ -567,11 +589,11 @@ class AnthropicServerDetail(BaseModel):
     name: str = Field(..., description="Server name in reverse-DNS format")
     description: str = Field(..., description="Server description")
     version: str = Field(..., description="Server version")
-    title: Optional[str] = Field(None, description="Human-readable server name")
-    repository: Optional[AnthropicRepository] = Field(None, description="Repository information")
-    websiteUrl: Optional[str] = Field(None, description="Server website URL")
-    packages: Optional[List[AnthropicPackage]] = Field(None, description="Package distributions")
-    meta: Optional[Dict[str, Any]] = Field(
+    title: str | None = Field(None, description="Human-readable server name")
+    repository: AnthropicRepository | None = Field(None, description="Repository information")
+    websiteUrl: str | None = Field(None, description="Server website URL")
+    packages: list[AnthropicPackage] | None = Field(None, description="Package distributions")
+    meta: dict[str, Any] | None = Field(
         None, alias="_meta", serialization_alias="_meta", description="Extensible metadata"
     )
 
@@ -582,7 +604,7 @@ class AnthropicServerResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     server: AnthropicServerDetail = Field(..., description="Server details")
-    meta: Optional[Dict[str, Any]] = Field(
+    meta: dict[str, Any] | None = Field(
         None, alias="_meta", serialization_alias="_meta", description="Registry-managed metadata"
     )
 
@@ -590,15 +612,15 @@ class AnthropicServerResponse(BaseModel):
 class AnthropicPaginationMetadata(BaseModel):
     """Pagination information for server lists (Anthropic Registry API)."""
 
-    nextCursor: Optional[str] = Field(None, description="Cursor for next page")
-    count: Optional[int] = Field(None, description="Number of items in current page")
+    nextCursor: str | None = Field(None, description="Cursor for next page")
+    count: int | None = Field(None, description="Number of items in current page")
 
 
 class AnthropicServerList(BaseModel):
     """Response for server list queries (Anthropic Registry API)."""
 
-    servers: List[AnthropicServerResponse] = Field(..., description="List of servers")
-    metadata: Optional[AnthropicPaginationMetadata] = Field(None, description="Pagination info")
+    servers: list[AnthropicServerResponse] = Field(..., description="List of servers")
+    metadata: AnthropicPaginationMetadata | None = Field(None, description="Pagination info")
 
 
 class AnthropicErrorResponse(BaseModel):
@@ -614,8 +636,8 @@ class M2MAccountRequest(BaseModel):
     """Request model for creating M2M service account."""
 
     name: str = Field(..., min_length=1, description="Service account name/client ID")
-    groups: List[str] = Field(..., min_length=1, description="List of group names")
-    description: Optional[str] = Field(None, description="Account description")
+    groups: list[str] = Field(..., min_length=1, description="List of group names")
+    description: str | None = Field(None, description="Account description")
 
 
 class HumanUserRequest(BaseModel):
@@ -625,8 +647,8 @@ class HumanUserRequest(BaseModel):
     email: str = Field(..., description="Email address")
     first_name: str = Field(..., min_length=1, description="First name")
     last_name: str = Field(..., min_length=1, description="Last name")
-    groups: List[str] = Field(..., min_length=1, description="List of group names")
-    password: Optional[str] = Field(None, description="Initial password")
+    groups: list[str] = Field(..., min_length=1, description="List of group names")
+    password: str | None = Field(None, description="Initial password")
 
 
 class KeycloakUserSummary(BaseModel):
@@ -634,17 +656,17 @@ class KeycloakUserSummary(BaseModel):
 
     id: str = Field(..., description="User ID")
     username: str = Field(..., description="Username")
-    email: Optional[str] = Field(None, description="Email address")
-    firstName: Optional[str] = Field(None, description="First name")
-    lastName: Optional[str] = Field(None, description="Last name")
+    email: str | None = Field(None, description="Email address")
+    firstName: str | None = Field(None, description="First name")
+    lastName: str | None = Field(None, description="Last name")
     enabled: bool = Field(True, description="Whether user is enabled")
-    groups: List[str] = Field(default_factory=list, description="User groups")
+    groups: list[str] = Field(default_factory=list, description="User groups")
 
 
 class UserListResponse(BaseModel):
     """Response model for list users endpoint."""
 
-    users: List[KeycloakUserSummary] = Field(default_factory=list, description="List of users")
+    users: list[KeycloakUserSummary] = Field(default_factory=list, description="List of users")
     total: int = Field(..., description="Total number of users")
 
 
@@ -660,14 +682,14 @@ class M2MAccountResponse(BaseModel):
 
     client_id: str = Field(..., description="Client ID")
     client_secret: str = Field(..., description="Client secret")
-    groups: List[str] = Field(default_factory=list, description="Assigned groups")
+    groups: list[str] = Field(default_factory=list, description="Assigned groups")
 
 
 class GroupCreateRequest(BaseModel):
     """Request model for creating a Keycloak group."""
 
     name: str = Field(..., min_length=1, description="Group name")
-    description: Optional[str] = Field(None, description="Group description")
+    description: str | None = Field(None, description="Group description")
 
 
 class KeycloakGroupSummary(BaseModel):
@@ -676,13 +698,13 @@ class KeycloakGroupSummary(BaseModel):
     id: str = Field(..., description="Group ID")
     name: str = Field(..., description="Group name")
     path: str = Field(..., description="Group path")
-    attributes: Optional[Dict[str, Any]] = Field(None, description="Group attributes")
+    attributes: dict[str, Any] | None = Field(None, description="Group attributes")
 
 
-class GroupListResponse(BaseModel):
+class KeycloakGroupListResponse(BaseModel):
     """Response model for list groups endpoint."""
 
-    groups: List[KeycloakGroupSummary] = Field(default_factory=list, description="List of groups")
+    groups: list[KeycloakGroupSummary] = Field(default_factory=list, description="List of groups")
     total: int = Field(..., description="Total number of groups")
 
 
@@ -706,11 +728,7 @@ class RegistryClient:
     Authentication is handled via JWT tokens passed to the constructor.
     """
 
-    def __init__(
-        self,
-        registry_url: str,
-        token: str
-    ):
+    def __init__(self, registry_url: str, token: str):
         """
         Initialize the Registry Client.
 
@@ -718,30 +736,24 @@ class RegistryClient:
             registry_url: Base URL of the registry (e.g., https://registry.mycorp.click)
             token: JWT access token for authentication
         """
-        self.registry_url = registry_url.rstrip('/')
+        self.registry_url = registry_url.rstrip("/")
         self._token = token
 
         # Redact token in logs - show only first 8 characters
         redacted_token = f"{token[:8]}..." if len(token) > 8 else "***"
         logger.info(f"Initialized RegistryClient for {self.registry_url} (token: {redacted_token})")
 
-    def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self) -> dict[str, str]:
         """
         Get request headers with JWT token.
 
         Returns:
             Dictionary of HTTP headers
         """
-        return {
-            "Authorization": f"Bearer {self._token}"
-        }
+        return {"Authorization": f"Bearer {self._token}"}
 
     def _make_request(
-        self,
-        method: str,
-        endpoint: str,
-        data: Optional[Dict[str, Any]] = None,
-        params: Optional[Dict[str, Any]] = None
+        self, method: str, endpoint: str, data: dict[str, Any] | None = None, params: dict[str, Any] | None = None
     ) -> requests.Response:
         """
         Make HTTP request to the Registry API.
@@ -767,28 +779,14 @@ class RegistryClient:
         # Agent and Management API endpoints use JSON, server registration uses form data
         if endpoint.startswith("/api/agents") or endpoint.startswith("/api/management"):
             # Send as JSON for agent and management endpoints
-            response = requests.request(
-                method=method,
-                url=url,
-                headers=headers,
-                json=data,
-                params=params,
-                timeout=30
-            )
+            response = requests.request(method=method, url=url, headers=headers, json=data, params=params, timeout=30)
         else:
             # Send as form-encoded for server registration
-            response = requests.request(
-                method=method,
-                url=url,
-                headers=headers,
-                data=data,
-                params=params,
-                timeout=30
-            )
+            response = requests.request(method=method, url=url, headers=headers, data=data, params=params, timeout=30)
 
         try:
             response.raise_for_status()
-        except requests.HTTPError as e:
+        except requests.HTTPError:
             # For 422 errors, try to extract validation details
             if response.status_code == 422:
                 try:
@@ -799,10 +797,7 @@ class RegistryClient:
             raise
         return response
 
-    def register_service(
-        self,
-        registration: InternalServiceRegistration
-    ) -> ServiceResponse:
+    def register_service(self, registration: InternalServiceRegistration) -> ServiceResponse:
         """
         Register a new service in the registry.
 
@@ -820,13 +815,13 @@ class RegistryClient:
         response = self._make_request(
             method="POST",
             endpoint="/api/servers/register",
-            data=registration.model_dump(exclude_none=True, by_alias=True)
+            data=registration.model_dump(exclude_none=True, by_alias=True),
         )
 
         logger.info(f"Service registered successfully: {registration.service_path}")
         return ServiceResponse(**response.json())
 
-    def remove_service(self, service_path: str) -> Dict[str, Any]:
+    def remove_service(self, service_path: str) -> dict[str, Any]:
         """
         Remove a service from the registry.
 
@@ -841,11 +836,7 @@ class RegistryClient:
         """
         logger.info(f"Removing service: {service_path}")
 
-        response = self._make_request(
-            method="POST",
-            endpoint="/api/servers/remove",
-            data={"path": service_path}
-        )
+        response = self._make_request(method="POST", endpoint="/api/servers/remove", data={"path": service_path})
 
         logger.info(f"Service removed successfully: {service_path}")
         return response.json()
@@ -866,9 +857,7 @@ class RegistryClient:
         logger.info(f"Toggling service: {service_path}")
 
         response = self._make_request(
-            method="POST",
-            endpoint="/api/servers/toggle",
-            data={"service_path": service_path}
+            method="POST", endpoint="/api/servers/toggle", data={"service_path": service_path}
         )
 
         result = ToggleResponse(**response.json())
@@ -887,10 +876,7 @@ class RegistryClient:
         """
         logger.info("Listing all services")
 
-        response = self._make_request(
-            method="GET",
-            endpoint="/api/servers"
-        )
+        response = self._make_request(method="GET", endpoint="/api/servers")
 
         response_data = response.json()
         logger.debug(f"Raw API response: {json.dumps(response_data, indent=2, default=str)}")
@@ -904,7 +890,7 @@ class RegistryClient:
             logger.error(f"Raw response data: {json.dumps(response_data, indent=2, default=str)}")
             raise
 
-    def healthcheck(self) -> Dict[str, Any]:
+    def healthcheck(self) -> dict[str, Any]:
         """
         Perform health check on all services.
 
@@ -916,20 +902,13 @@ class RegistryClient:
         """
         logger.info("Performing health check on all services")
 
-        response = self._make_request(
-            method="GET",
-            endpoint="/api/servers/health"
-        )
+        response = self._make_request(method="GET", endpoint="/api/servers/health")
 
         result = response.json()
         logger.info(f"Health check completed: {result.get('status', 'unknown')}")
         return result
 
-    def add_server_to_groups(
-        self,
-        server_name: str,
-        group_names: List[str]
-    ) -> Dict[str, Any]:
+    def add_server_to_groups(self, server_name: str, group_names: list[str]) -> dict[str, Any]:
         """
         Add a server to user groups.
 
@@ -948,20 +927,13 @@ class RegistryClient:
         response = self._make_request(
             method="POST",
             endpoint="/api/servers/groups/add",
-            data={
-                "server_name": server_name,
-                "group_names": ",".join(group_names)
-            }
+            data={"server_name": server_name, "group_names": ",".join(group_names)},
         )
 
-        logger.info(f"Server added to groups successfully")
+        logger.info("Server added to groups successfully")
         return response.json()
 
-    def remove_server_from_groups(
-        self,
-        server_name: str,
-        group_names: List[str]
-    ) -> Dict[str, Any]:
+    def remove_server_from_groups(self, server_name: str, group_names: list[str]) -> dict[str, Any]:
         """
         Remove a server from user groups.
 
@@ -980,21 +952,15 @@ class RegistryClient:
         response = self._make_request(
             method="POST",
             endpoint="/api/servers/groups/remove",
-            data={
-                "server_name": server_name,
-                "group_names": ",".join(group_names)
-            }
+            data={"server_name": server_name, "group_names": ",".join(group_names)},
         )
 
-        logger.info(f"Server removed from groups successfully")
+        logger.info("Server removed from groups successfully")
         return response.json()
 
     def create_group(
-        self,
-        group_name: str,
-        description: Optional[str] = None,
-        create_in_keycloak: bool = False
-    ) -> Dict[str, Any]:
+        self, group_name: str, description: str | None = None, create_in_keycloak: bool = False
+    ) -> dict[str, Any]:
         """
         Create a new user group.
 
@@ -1017,21 +983,12 @@ class RegistryClient:
         if create_in_keycloak:
             data["create_in_keycloak"] = True
 
-        response = self._make_request(
-            method="POST",
-            endpoint="/api/servers/groups/create",
-            data=data
-        )
+        response = self._make_request(method="POST", endpoint="/api/servers/groups/create", data=data)
 
         logger.info(f"Group created successfully: {group_name}")
         return response.json()
 
-    def delete_group(
-        self,
-        group_name: str,
-        delete_from_keycloak: bool = False,
-        force: bool = False
-    ) -> Dict[str, Any]:
+    def delete_group(self, group_name: str, delete_from_keycloak: bool = False, force: bool = False) -> dict[str, Any]:
         """
         Delete a user group.
 
@@ -1054,20 +1011,12 @@ class RegistryClient:
         if force:
             data["force"] = True
 
-        response = self._make_request(
-            method="POST",
-            endpoint="/api/servers/groups/delete",
-            data=data
-        )
+        response = self._make_request(method="POST", endpoint="/api/servers/groups/delete", data=data)
 
         logger.info(f"Group deleted successfully: {group_name}")
         return response.json()
 
-    def list_groups(
-        self,
-        include_keycloak: bool = True,
-        include_scopes: bool = True
-    ) -> GroupListResponse:
+    def list_groups(self, include_keycloak: bool = True, include_scopes: bool = True) -> GroupListResponse:
         """
         List all user groups.
 
@@ -1083,16 +1032,9 @@ class RegistryClient:
         """
         logger.info("Listing all groups")
 
-        params = {
-            "include_keycloak": str(include_keycloak).lower(),
-            "include_scopes": str(include_scopes).lower()
-        }
+        params = {"include_keycloak": str(include_keycloak).lower(), "include_scopes": str(include_scopes).lower()}
 
-        response = self._make_request(
-            method="GET",
-            endpoint="/api/servers/groups",
-            params=params
-        )
+        response = self._make_request(method="GET", endpoint="/api/servers/groups", params=params)
 
         result = GroupListResponse(**response.json())
         logger.info(f"Retrieved {len(result.groups)} groups")
@@ -1100,10 +1042,7 @@ class RegistryClient:
 
     # Agent Management Methods
 
-    def register_agent(
-        self,
-        agent: AgentRegistration
-    ) -> AgentRegistrationResponse:
+    def register_agent(self, agent: AgentRegistration) -> AgentRegistrationResponse:
         """
         Register a new A2A agent.
 
@@ -1121,21 +1060,14 @@ class RegistryClient:
         agent_data = agent.model_dump(exclude_none=True)
         logger.debug(f"Agent data being sent: {json.dumps(agent_data, indent=2, default=str)}")
 
-        response = self._make_request(
-            method="POST",
-            endpoint="/api/agents/register",
-            data=agent_data
-        )
+        response = self._make_request(method="POST", endpoint="/api/agents/register", data=agent_data)
 
         result = AgentRegistrationResponse(**response.json())
         logger.info(f"Agent registered successfully: {agent.path}")
         return result
 
     def list_agents(
-        self,
-        query: Optional[str] = None,
-        enabled_only: bool = False,
-        visibility: Optional[str] = None
+        self, query: str | None = None, enabled_only: bool = False, visibility: str | None = None
     ) -> AgentListResponse:
         """
         List all agents with optional filtering.
@@ -1161,20 +1093,13 @@ class RegistryClient:
         if visibility:
             params["visibility"] = visibility
 
-        response = self._make_request(
-            method="GET",
-            endpoint="/api/agents",
-            params=params
-        )
+        response = self._make_request(method="GET", endpoint="/api/agents", params=params)
 
         result = AgentListResponse(**response.json())
         logger.info(f"Retrieved {len(result.agents)} agents")
         return result
 
-    def get_agent(
-        self,
-        path: str
-    ) -> AgentDetail:
+    def get_agent(self, path: str) -> AgentDetail:
         """
         Get detailed information about a specific agent.
 
@@ -1189,20 +1114,13 @@ class RegistryClient:
         """
         logger.info(f"Getting agent details: {path}")
 
-        response = self._make_request(
-            method="GET",
-            endpoint=f"/api/agents{path}"
-        )
+        response = self._make_request(method="GET", endpoint=f"/api/agents{path}")
 
         result = AgentDetail(**response.json())
         logger.info(f"Retrieved agent details: {path}")
         return result
 
-    def update_agent(
-        self,
-        path: str,
-        agent: AgentRegistration
-    ) -> AgentDetail:
+    def update_agent(self, path: str, agent: AgentRegistration) -> AgentDetail:
         """
         Update an existing agent.
 
@@ -1219,19 +1137,14 @@ class RegistryClient:
         logger.info(f"Updating agent: {path}")
 
         response = self._make_request(
-            method="PUT",
-            endpoint=f"/api/agents{path}",
-            data=agent.model_dump(exclude_none=True)
+            method="PUT", endpoint=f"/api/agents{path}", data=agent.model_dump(exclude_none=True)
         )
 
         result = AgentDetail(**response.json())
         logger.info(f"Agent updated successfully: {path}")
         return result
 
-    def delete_agent(
-        self,
-        path: str
-    ) -> None:
+    def delete_agent(self, path: str) -> None:
         """
         Delete an agent from the registry.
 
@@ -1243,18 +1156,11 @@ class RegistryClient:
         """
         logger.info(f"Deleting agent: {path}")
 
-        self._make_request(
-            method="DELETE",
-            endpoint=f"/api/agents{path}"
-        )
+        self._make_request(method="DELETE", endpoint=f"/api/agents{path}")
 
         logger.info(f"Agent deleted successfully: {path}")
 
-    def toggle_agent(
-        self,
-        path: str,
-        enabled: bool
-    ) -> AgentToggleResponse:
+    def toggle_agent(self, path: str, enabled: bool) -> AgentToggleResponse:
         """
         Toggle agent enabled/disabled status.
 
@@ -1272,21 +1178,14 @@ class RegistryClient:
 
         params = {"enabled": str(enabled).lower()}
 
-        response = self._make_request(
-            method="POST",
-            endpoint=f"/api/agents{path}/toggle",
-            params=params
-        )
+        response = self._make_request(method="POST", endpoint=f"/api/agents{path}/toggle", params=params)
 
         result = AgentToggleResponse(**response.json())
         logger.info(f"Agent toggled: {path} is now {'enabled' if result.is_enabled else 'disabled'}")
         return result
 
     def discover_agents_by_skills(
-        self,
-        skills: List[str],
-        tags: Optional[List[str]] = None,
-        max_results: int = 10
+        self, skills: list[str], tags: list[str] | None = None, max_results: int = 10
     ) -> AgentDiscoveryResponse:
         """
         Discover agents by required skills.
@@ -1311,18 +1210,14 @@ class RegistryClient:
             method="POST",
             endpoint="/api/agents/discover",
             data=request_data.model_dump(exclude_none=True),
-            params=params
+            params=params,
         )
 
         result = AgentDiscoveryResponse(**response.json())
         logger.info(f"Discovered {len(result.agents)} agents matching skills")
         return result
 
-    def discover_agents_semantic(
-        self,
-        query: str,
-        max_results: int = 10
-    ) -> AgentSemanticDiscoveryResponse:
+    def discover_agents_semantic(self, query: str, max_results: int = 10) -> AgentSemanticDiscoveryResponse:
         """
         Discover agents using semantic search (FAISS vector search).
 
@@ -1338,27 +1233,15 @@ class RegistryClient:
         """
         logger.info(f"Discovering agents semantically: {query}")
 
-        params = {
-            "query": query,
-            "max_results": max_results
-        }
+        params = {"query": query, "max_results": max_results}
 
-        response = self._make_request(
-            method="POST",
-            endpoint="/api/agents/discover/semantic",
-            params=params
-        )
+        response = self._make_request(method="POST", endpoint="/api/agents/discover/semantic", params=params)
 
         result = AgentSemanticDiscoveryResponse(**response.json())
         logger.info(f"Discovered {len(result.agents)} agents via semantic search")
         return result
 
-
-    def rate_agent(
-        self,
-        path: str,
-        rating: int
-    ) -> RatingResponse:
+    def rate_agent(self, path: str, rating: int) -> RatingResponse:
         """
         Submit a rating for an agent (1-5 stars).
 
@@ -1380,21 +1263,13 @@ class RegistryClient:
 
         request_data = RatingRequest(rating=rating)
 
-        response = self._make_request(
-            method="POST",
-            endpoint=f"/api/agents{path}/rate",
-            data=request_data.model_dump()
-        )
+        response = self._make_request(method="POST", endpoint=f"/api/agents{path}/rate", data=request_data.model_dump())
 
         result = RatingResponse(**response.json())
         logger.info(f"Agent '{path}' rated successfully. New average: {result.average_rating:.2f}")
         return result
 
-
-    def get_agent_rating(
-        self,
-        path: str
-    ) -> RatingInfoResponse:
+    def get_agent_rating(self, path: str) -> RatingInfoResponse:
         """
         Get rating information for an agent.
 
@@ -1412,20 +1287,15 @@ class RegistryClient:
         """
         logger.info(f"Getting ratings for agent: {path}")
 
-        response = self._make_request(
-            method="GET",
-            endpoint=f"/api/agents{path}/rating"
-        )
+        response = self._make_request(method="GET", endpoint=f"/api/agents{path}/rating")
 
         result = RatingInfoResponse(**response.json())
-        logger.info(f"Retrieved ratings for '{path}': {result.num_stars:.2f} stars ({len(result.rating_details)} ratings)")
+        logger.info(
+            f"Retrieved ratings for '{path}': {result.num_stars:.2f} stars ({len(result.rating_details)} ratings)"
+        )
         return result
 
-
-    def rescan_agent(
-        self,
-        path: str
-    ) -> AgentRescanResponse:
+    def rescan_agent(self, path: str) -> AgentRescanResponse:
         """
         Trigger a manual security scan for an agent.
 
@@ -1444,10 +1314,7 @@ class RegistryClient:
         """
         logger.info(f"Triggering security scan for agent: {path}")
 
-        response = self._make_request(
-            method="POST",
-            endpoint=f"/api/agents{path}/rescan"
-        )
+        response = self._make_request(method="POST", endpoint=f"/api/agents{path}/rescan")
 
         result = AgentRescanResponse(**response.json())
         logger.info(
@@ -1458,11 +1325,7 @@ class RegistryClient:
         )
         return result
 
-
-    def get_agent_security_scan(
-        self,
-        path: str
-    ) -> AgentSecurityScanResponse:
+    def get_agent_security_scan(self, path: str) -> AgentSecurityScanResponse:
         """
         Get security scan results for an agent.
 
@@ -1481,20 +1344,13 @@ class RegistryClient:
         """
         logger.info(f"Getting security scan results for agent: {path}")
 
-        response = self._make_request(
-            method="GET",
-            endpoint=f"/api/agents{path}/security-scan"
-        )
+        response = self._make_request(method="GET", endpoint=f"/api/agents{path}/security-scan")
 
         result = AgentSecurityScanResponse(**response.json())
         logger.info(f"Retrieved security scan results for '{path}'")
         return result
 
-    def rate_server(
-        self,
-        path: str,
-        rating: int
-    ) -> RatingResponse:
+    def rate_server(self, path: str, rating: int) -> RatingResponse:
         """
         Submit a rating for a server (1-5 stars).
 
@@ -1517,19 +1373,14 @@ class RegistryClient:
         request_data = RatingRequest(rating=rating)
 
         response = self._make_request(
-            method="POST",
-            endpoint=f"/api/servers{path}/rate",
-            data=request_data.model_dump()
+            method="POST", endpoint=f"/api/servers{path}/rate", data=request_data.model_dump()
         )
 
         result = RatingResponse(**response.json())
         logger.info(f"Server '{path}' rated successfully. New average: {result.average_rating:.2f}")
         return result
 
-    def get_server_rating(
-        self,
-        path: str
-    ) -> RatingInfoResponse:
+    def get_server_rating(self, path: str) -> RatingInfoResponse:
         """
         Get rating information for a server.
 
@@ -1547,20 +1398,15 @@ class RegistryClient:
         """
         logger.info(f"Getting ratings for server: {path}")
 
-        response = self._make_request(
-            method="GET",
-            endpoint=f"/api/servers{path}/rating"
-        )
+        response = self._make_request(method="GET", endpoint=f"/api/servers{path}/rating")
 
         result = RatingInfoResponse(**response.json())
-        logger.info(f"Retrieved ratings for '{path}': {result.num_stars:.2f} stars ({len(result.rating_details)} ratings)")
+        logger.info(
+            f"Retrieved ratings for '{path}': {result.num_stars:.2f} stars ({len(result.rating_details)} ratings)"
+        )
         return result
 
-
-    def get_security_scan(
-        self,
-        path: str
-    ) -> SecurityScanResult:
+    def get_security_scan(self, path: str) -> SecurityScanResult:
         """
         Get security scan results for a server.
 
@@ -1578,20 +1424,13 @@ class RegistryClient:
         """
         logger.info(f"Getting security scan results for server: {path}")
 
-        response = self._make_request(
-            method="GET",
-            endpoint=f"/api/servers{path}/security-scan"
-        )
+        response = self._make_request(method="GET", endpoint=f"/api/servers{path}/security-scan")
 
         result = SecurityScanResult(**response.json())
         logger.info(f"Retrieved security scan results for '{path}'")
         return result
 
-
-    def rescan_server(
-        self,
-        path: str
-    ) -> RescanResponse:
+    def rescan_server(self, path: str) -> RescanResponse:
         """
         Trigger a manual security scan for a server.
 
@@ -1609,10 +1448,7 @@ class RegistryClient:
         """
         logger.info(f"Triggering security scan for server: {path}")
 
-        response = self._make_request(
-            method="POST",
-            endpoint=f"/api/servers{path}/rescan"
-        )
+        response = self._make_request(method="POST", endpoint=f"/api/servers{path}/rescan")
 
         result = RescanResponse(**response.json())
         safety_status = "SAFE" if result.is_safe else "UNSAFE"
@@ -1625,11 +1461,7 @@ class RegistryClient:
 
     # Anthropic Registry API Methods (v0.1)
 
-    def anthropic_list_servers(
-        self,
-        cursor: Optional[str] = None,
-        limit: Optional[int] = None
-    ) -> AnthropicServerList:
+    def anthropic_list_servers(self, cursor: str | None = None, limit: int | None = None) -> AnthropicServerList:
         """
         List all MCP servers using the Anthropic Registry API format (v0.1).
 
@@ -1654,20 +1486,13 @@ class RegistryClient:
         if limit:
             params["limit"] = limit
 
-        response = self._make_request(
-            method="GET",
-            endpoint="/v0.1/servers",
-            params=params
-        )
+        response = self._make_request(method="GET", endpoint="/v0.1/servers", params=params)
 
         result = AnthropicServerList(**response.json())
         logger.info(f"Retrieved {len(result.servers)} servers via Anthropic API")
         return result
 
-    def anthropic_list_server_versions(
-        self,
-        server_name: str
-    ) -> AnthropicServerList:
+    def anthropic_list_server_versions(self, server_name: str) -> AnthropicServerList:
         """
         List all versions of a specific server using Anthropic Registry API (v0.1).
 
@@ -1687,22 +1512,15 @@ class RegistryClient:
         logger.info(f"Listing versions for server: {server_name}")
 
         # URL-encode the server name
-        encoded_name = quote(server_name, safe='')
+        encoded_name = quote(server_name, safe="")
 
-        response = self._make_request(
-            method="GET",
-            endpoint=f"/v0.1/servers/{encoded_name}/versions"
-        )
+        response = self._make_request(method="GET", endpoint=f"/v0.1/servers/{encoded_name}/versions")
 
         result = AnthropicServerList(**response.json())
         logger.info(f"Retrieved {len(result.servers)} version(s) for {server_name}")
         return result
 
-    def anthropic_get_server_version(
-        self,
-        server_name: str,
-        version: str = "latest"
-    ) -> AnthropicServerResponse:
+    def anthropic_get_server_version(self, server_name: str, version: str = "latest") -> AnthropicServerResponse:
         """
         Get detailed information about a specific server version using Anthropic Registry API (v0.1).
 
@@ -1722,27 +1540,18 @@ class RegistryClient:
         logger.info(f"Getting server {server_name} version {version}")
 
         # URL-encode both server name and version
-        encoded_name = quote(server_name, safe='')
-        encoded_version = quote(version, safe='')
+        encoded_name = quote(server_name, safe="")
+        encoded_version = quote(version, safe="")
 
-        response = self._make_request(
-            method="GET",
-            endpoint=f"/v0.1/servers/{encoded_name}/versions/{encoded_version}"
-        )
+        response = self._make_request(method="GET", endpoint=f"/v0.1/servers/{encoded_name}/versions/{encoded_version}")
 
         result = AnthropicServerResponse(**response.json())
         logger.info(f"Retrieved server details for {server_name} v{version}")
         return result
 
-
     # Management API Methods (IAM/User Management)
 
-
-    def list_users(
-        self,
-        search: Optional[str] = None,
-        limit: int = 500
-    ) -> UserListResponse:
+    def list_users(self, search: str | None = None, limit: int = 500) -> UserListResponse:
         """
         List Keycloak users (admin only).
 
@@ -1764,11 +1573,7 @@ class RegistryClient:
         if limit != 500:
             params["limit"] = limit
 
-        response = self._make_request(
-            method="GET",
-            endpoint="/api/management/iam/users",
-            params=params
-        )
+        response = self._make_request(method="GET", endpoint="/api/management/iam/users", params=params)
 
         try:
             response_data = response.json()
@@ -1789,13 +1594,7 @@ class RegistryClient:
             logger.error(f"Raw response data: {json.dumps(response_data, indent=2, default=str)}")
             raise
 
-
-    def create_m2m_account(
-        self,
-        name: str,
-        groups: List[str],
-        description: Optional[str] = None
-    ) -> M2MAccountResponse:
+    def create_m2m_account(self, name: str, groups: list[str], description: str | None = None) -> M2MAccountResponse:
         """
         Create a machine-to-machine service account.
 
@@ -1812,32 +1611,18 @@ class RegistryClient:
         """
         logger.info(f"Creating M2M service account: {name}")
 
-        data = {
-            "name": name,
-            "groups": groups
-        }
+        data = {"name": name, "groups": groups}
         if description:
             data["description"] = description
 
-        response = self._make_request(
-            method="POST",
-            endpoint="/api/management/iam/users/m2m",
-            data=data
-        )
+        response = self._make_request(method="POST", endpoint="/api/management/iam/users/m2m", data=data)
 
         result = M2MAccountResponse(**response.json())
         logger.info(f"M2M account created successfully: {name}")
         return result
 
-
     def create_human_user(
-        self,
-        username: str,
-        email: str,
-        first_name: str,
-        last_name: str,
-        groups: List[str],
-        password: Optional[str] = None
+        self, username: str, email: str, first_name: str, last_name: str, groups: list[str], password: str | None = None
     ) -> KeycloakUserSummary:
         """
         Create a human user account in Keycloak.
@@ -1858,31 +1643,17 @@ class RegistryClient:
         """
         logger.info(f"Creating human user: {username}")
 
-        data = {
-            "username": username,
-            "email": email,
-            "firstname": first_name,
-            "lastname": last_name,
-            "groups": groups
-        }
+        data = {"username": username, "email": email, "firstname": first_name, "lastname": last_name, "groups": groups}
         if password:
             data["password"] = password
 
-        response = self._make_request(
-            method="POST",
-            endpoint="/api/management/iam/users/human",
-            data=data
-        )
+        response = self._make_request(method="POST", endpoint="/api/management/iam/users/human", data=data)
 
         result = KeycloakUserSummary(**response.json())
         logger.info(f"User created successfully: {username}")
         return result
 
-
-    def delete_user(
-        self,
-        username: str
-    ) -> UserDeleteResponse:
+    def delete_user(self, username: str) -> UserDeleteResponse:
         """
         Delete a user by username.
 
@@ -1897,15 +1668,11 @@ class RegistryClient:
         """
         logger.info(f"Deleting user: {username}")
 
-        response = self._make_request(
-            method="DELETE",
-            endpoint=f"/api/management/iam/users/{username}"
-        )
+        response = self._make_request(method="DELETE", endpoint=f"/api/management/iam/users/{username}")
 
         result = UserDeleteResponse(**response.json())
         logger.info(f"User deleted successfully: {username}")
         return result
-
 
     def list_keycloak_iam_groups(self) -> GroupListResponse:
         """
@@ -1922,21 +1689,13 @@ class RegistryClient:
         """
         logger.info("Listing Keycloak IAM groups")
 
-        response = self._make_request(
-            method="GET",
-            endpoint="/api/management/iam/groups"
-        )
+        response = self._make_request(method="GET", endpoint="/api/management/iam/groups")
 
         result = GroupListResponse(**response.json())
         logger.info(f"Retrieved {result.total} Keycloak groups")
         return result
 
-
-    def create_keycloak_group(
-        self,
-        name: str,
-        description: Optional[str] = None
-    ) -> KeycloakGroupSummary:
+    def create_keycloak_group(self, name: str, description: str | None = None) -> KeycloakGroupSummary:
         """
         Create a new Keycloak group (admin only).
 
@@ -1952,27 +1711,17 @@ class RegistryClient:
         """
         logger.info(f"Creating Keycloak group: {name}")
 
-        data = {
-            "name": name
-        }
+        data = {"name": name}
         if description:
             data["description"] = description
 
-        response = self._make_request(
-            method="POST",
-            endpoint="/api/management/iam/groups",
-            data=data
-        )
+        response = self._make_request(method="POST", endpoint="/api/management/iam/groups", data=data)
 
         result = KeycloakGroupSummary(**response.json())
         logger.info(f"Group created successfully: {name}")
         return result
 
-
-    def delete_keycloak_group(
-        self,
-        name: str
-    ) -> GroupDeleteResponse:
+    def delete_keycloak_group(self, name: str) -> GroupDeleteResponse:
         """
         Delete a Keycloak group by name (admin only).
 
@@ -1987,10 +1736,7 @@ class RegistryClient:
         """
         logger.info(f"Deleting Keycloak group: {name}")
 
-        response = self._make_request(
-            method="DELETE",
-            endpoint=f"/api/management/iam/groups/{name}"
-        )
+        response = self._make_request(method="DELETE", endpoint=f"/api/management/iam/groups/{name}")
 
         result = GroupDeleteResponse(**response.json())
         logger.info(f"Group deleted successfully: {name}")

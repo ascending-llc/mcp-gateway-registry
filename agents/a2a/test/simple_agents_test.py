@@ -7,17 +7,15 @@ Usage: python simple_agents_test.py --endpoint local|live [--debug]
 import argparse
 import json
 import logging
-import requests
 import sys
 import time
 import uuid
 from typing import (
     Any,
-    Dict,
-    Optional,
 )
 
 import boto3
+import requests
 
 # Configure logging with basicConfig
 logging.basicConfig(
@@ -46,7 +44,7 @@ class AgentTester:
 
     def __init__(
         self,
-        endpoints: Dict[str, str],
+        endpoints: dict[str, str],
         is_live: bool = False,
     ) -> None:
         self.endpoints = endpoints
@@ -54,12 +52,11 @@ class AgentTester:
         if is_live:
             self.bedrock_client = boto3.client("bedrock-agentcore", region_name=AWS_REGION)
 
-
     def send_agent_message(
         self,
         agent_type: str,
         message: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Send message to agent using A2A protocol (local) or boto3 (live)."""
         endpoint = self.endpoints[agent_type]
         if not endpoint:
@@ -101,7 +98,6 @@ class AgentTester:
 
             return response_json
 
-
     def _invoke_agentcore_runtime(
         self,
         runtime_arn: str,
@@ -109,7 +105,7 @@ class AgentTester:
         request_id: str,
         message_id: str,
         timestamp: float,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Invoke AgentCore Runtime using boto3."""
         # A2A protocol requires JSON-RPC format
         payload = {
@@ -160,9 +156,7 @@ class AgentTester:
                         json_response = json.loads(all_lines[0])
 
                         logger.debug(f"[AGENTCORE RESPONSE] Time: {response_time:.3f}s")
-                        logger.debug(
-                            f"[AGENTCORE RESPONSE] Body:\n{json.dumps(json_response, indent=2, default=str)}"
-                        )
+                        logger.debug(f"[AGENTCORE RESPONSE] Body:\n{json.dumps(json_response, indent=2, default=str)}")
 
                         # Check for JSON-RPC error
                         if "error" in json_response:
@@ -183,14 +177,13 @@ class AgentTester:
             logger.error(f"AgentCore invocation failed: {e}")
             return {"error": str(e)}
 
-
     def call_api_endpoint(
         self,
         agent_type: str,
         endpoint: str,
         method: str = "POST",
         **params,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Call direct API endpoint (only works for local)."""
         if self.is_live:
             raise NotImplementedError("Direct API endpoints not available for live AgentCore Runtime")
@@ -214,7 +207,6 @@ class AgentTester:
         logger.debug(f"[API RESPONSE] Body:\n{json.dumps(response_json, indent=2, default=str)}")
 
         return response_json
-
 
     def ping_agent(
         self,
@@ -252,14 +244,12 @@ class TravelAssistantTests:
         self.tester = tester
         self.agent_type = "travel_assistant"
 
-
     def test_ping(self) -> None:
         """Test agent health check."""
         print("Testing Travel Assistant ping...")
         result = self.tester.ping_agent(self.agent_type)
         assert result, "Travel Assistant ping failed"
         print("✓ Travel Assistant is healthy")
-
 
     def test_agent_flight_search(self) -> None:
         """Test agent flight search via A2A."""
@@ -285,7 +275,6 @@ class TravelAssistantTests:
         assert "flight" in response_text.lower(), f"Response doesn't mention flights. Got: {response_text[:100]}"
         print("✓ Travel Assistant flight search working")
 
-
     def test_api_search_flights(self) -> None:
         """Test direct API endpoint (local only)."""
         if self.tester.is_live:
@@ -306,7 +295,6 @@ class TravelAssistantTests:
         assert "flights" in result_data, "No flights in API response"
         assert len(result_data["flights"]) > 0, "No flights found"
         print("✓ Travel Assistant API endpoint working")
-
 
     def test_api_recommendations(self) -> None:
         """Test recommendations API (local only)."""
@@ -339,14 +327,12 @@ class FlightBookingTests:
         self.tester = tester
         self.agent_type = "flight_booking"
 
-
     def test_ping(self) -> None:
         """Test agent health check."""
         print("Testing Flight Booking ping...")
         result = self.tester.ping_agent(self.agent_type)
         assert result, "Flight Booking ping failed"
         print("✓ Flight Booking is healthy")
-
 
     def test_agent_availability_check(self) -> None:
         """Test agent availability check via A2A."""
@@ -364,7 +350,6 @@ class FlightBookingTests:
         assert "available" in response_text.lower(), "Response doesn't mention availability"
         print("✓ Flight Booking availability check working")
 
-
     def test_agent_booking(self) -> None:
         """Test agent booking via A2A."""
         print("Testing Flight Booking reservation...")
@@ -375,11 +360,10 @@ class FlightBookingTests:
         artifacts = response["result"]["artifacts"]
         response_text = artifacts[0]["parts"][0]["text"]
 
-        assert (
-            "booking" in response_text.lower() or "reserved" in response_text.lower()
-        ), "Response doesn't mention booking/reservation"
+        assert "booking" in response_text.lower() or "reserved" in response_text.lower(), (
+            "Response doesn't mention booking/reservation"
+        )
         print("✓ Flight Booking reservation working")
-
 
     def test_api_check_availability(self) -> None:
         """Test direct API endpoint (local only)."""

@@ -1,8 +1,185 @@
-# Copilot Instructions for Code Review - MCP Gateway & Registry
+# Copilot Instructions for Code Standard - Jarvis Registry
 
 ## Project Context
 Enterprise platform for MCP (Model Context Protocol) servers with OAuth authentication.
 **Stack:** Python 3.12, FastAPI, MongoDB (Beanie), Weaviate vector DB, Keycloak auth.
+
+## Development Workflow
+
+### Rule 1: Complex Problem-Solving Approach
+**🧠 Think Before You Code**
+
+When tackling complex problems or features:
+
+1. **Present Technical Approach First**
+   - Outline your thought process and proposed solution
+   - Explain the technical approach, architecture decisions, and trade-offs
+   - Break down the problem into logical steps
+   - Identify potential risks or challenges
+
+2. **Wait for Developer Agreement**
+   - Do NOT start implementation until the developer reviews and agrees with the approach
+   - Be open to feedback and alternative suggestions
+   - Refine the approach based on discussion
+
+3. **Then Implement**
+   - Only after agreement, proceed with code implementation
+   - Follow the agreed-upon approach faithfully
+   - Communicate any deviations or unexpected issues
+
+**Example:**
+```
+Developer: "Add OAuth token refresh logic to the auth service"
+
+✅ CORRECT:
+Assistant: "Here's my proposed approach for token refresh:
+1. Create a background task in auth_service.py to check token expiration
+2. Add a refresh_token() method that calls the OAuth provider
+3. Store refresh tokens securely in MongoDB with encryption
+4. Add retry logic with exponential backoff
+
+Concerns:
+- Need to handle race conditions if multiple requests trigger refresh
+- Should we use a distributed lock (Redis) or database lock?
+
+Does this approach work for you?"
+
+❌ INCORRECT:
+Assistant: [immediately starts writing code without discussion]
+```
+
+### Rule 2: Modular Code Design
+**🔧 Break Complex Code into Testable Functions**
+
+- **Single Responsibility**: Each function should do ONE thing well
+- **Small Functions**: Aim for functions under 50 lines
+- **Extract Logic**: Pull out complex logic into separate functions
+- **Enable Testing**: Small functions are easier to unit test
+
+**Example:**
+```python
+# ❌ BAD: Complex monolithic function
+async def process_user_registration(email: str, password: str) -> User:
+    # 150 lines of validation, hashing, database operations, email sending...
+    pass
+
+# ✅ GOOD: Broken into testable functions
+async def validate_email_format(email: str) -> bool:
+    """Validate email format."""
+    pass
+
+async def hash_password(password: str) -> str:
+    """Hash password using bcrypt."""
+    pass
+
+async def create_user_record(email: str, hashed_password: str) -> User:
+    """Create user in database."""
+    pass
+
+async def send_welcome_email(user: User) -> None:
+    """Send welcome email to new user."""
+    pass
+
+async def process_user_registration(email: str, password: str) -> User:
+    """Register new user - orchestrates the process."""
+    if not await validate_email_format(email):
+        raise ValueError("Invalid email")
+
+    hashed_pwd = await hash_password(password)
+    user = await create_user_record(email, hashed_pwd)
+    await send_welcome_email(user)
+    return user
+```
+
+### Rule 3: Unit Test File Organization
+**📁 One-to-One Mapping with Source Files**
+
+- **Mirror Source Structure**: Test file paths MUST mirror source code structure
+- **Never Create Duplicates**: If a test file exists for a source file, ALWAYS use it
+- **Check Before Creating**: Always search for existing test files before creating new ones
+
+**File Mapping Rules:**
+
+| Source File | Test File |
+|-------------|-----------|
+| `registry/services/agent_service.py` | `tests/unit/services/test_agent_service.py` |
+| `registry/api/server_routes.py` | `tests/unit/api/test_server_routes.py` |
+| `auth_server/providers/keycloak_provider.py` | `auth_server/tests/unit/providers/test_keycloak_provider.py` |
+| `packages/models/agent.py` | `packages/tests/unit/models/test_agent.py` |
+
+**Workflow:**
+
+1. **Before Writing Tests**: Always check if test file exists
+   ```bash
+   # For source file: registry/services/agent_service.py
+   # Check: tests/unit/services/test_agent_service.py
+   ```
+
+2. **If Test File Exists**: Add tests to existing file, never create a new one
+
+3. **If Test File Doesn't Exist**: Create it following the naming convention
+
+4. **Never Create**: `test_agent_service_v2.py`, `test_agent_service_new.py`, etc.
+
+### Rule 4: Running Unit Tests
+**⚙️ Developer Runs Tests - Do NOT Auto-Run After Code Changes**
+
+- **NEVER automatically run tests** after making code changes unless explicitly requested
+- **Developer runs tests manually** - they will execute tests when ready
+- **Update test files when needed** - writing or updating test code is appreciated
+- **When tests ARE run** (only when explicitly requested):
+  - Use `uv run pytest` as the test runner (project uses `uv` for dependency management)
+  - Consult `pyproject.toml` for pytest configuration (test paths, markers, coverage settings)
+  - Respect the project's test configuration defined in pyproject.toml
+
+**Workflow:**
+
+1. **Code Changes**: Make production code changes and update test files as needed
+
+2. **Do NOT Run Tests Automatically**: Let the developer run tests themselves
+
+3. **If Developer Explicitly Asks to Run Tests**:
+   ```bash
+   # Use uv to run pytest (respects pyproject.toml)
+   uv run pytest tests/unit -v
+
+   # With coverage
+   uv run pytest tests/unit -v --cov=registry
+
+   # Specific test markers
+   uv run pytest -m "auth and not slow"
+   ```
+
+4. **Read pyproject.toml for Configuration**:
+   ```bash
+   # Check pytest configuration section
+   [tool.pytest.ini_options]
+   testpaths = ["tests"]
+   python_files = ["test_*.py"]
+   python_functions = ["test_*"]
+   addopts = "-v --cov=registry --cov-report=term-missing"
+   ```
+
+**Example pyproject.toml reference:**
+```toml
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --cov=registry --cov-report=term-missing"
+markers = [
+    "auth: Authentication tests",
+    "servers: Server management tests",
+    "slow: Slow-running tests"
+]
+```
+
+**Key Points:**
+- ✅ Write/update test files when making code changes
+- ✅ Explain what tests were added/updated
+- ❌ Do NOT automatically run tests after code changes
+- ✅ Use `uv run pytest` when tests are explicitly requested
+- ✅ Always check pyproject.toml for test configuration
 
 ## Code Review Rules
 
@@ -120,6 +297,8 @@ tests/                # Test suite (80% coverage required)
 - ✅ **Unit tests** for all service functions (`tests/unit/`)
 - ✅ **Integration tests** for API endpoints (`tests/integration/`)
 - ✅ **Domain markers**: Use `@pytest.mark.{domain}` (auth, servers, search, health, core)
+- ✅ **One-to-One File Mapping**: Test files MUST mirror source file structure (see Development Workflow Rule 3)
+- ✅ **Consult pyproject.toml**: Always check `pyproject.toml` for pytest CLI configuration before running tests
 
 ### Test Review Guidelines
 

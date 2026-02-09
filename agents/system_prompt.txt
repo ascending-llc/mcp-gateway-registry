@@ -24,7 +24,7 @@ When using intelligent_tool_finder and invoke_mcp_tool:
 Example:
 invoke_mcp_tool(
     mcp_registry_url="{mcp_registry_url}",
-    server_name="/currenttime", 
+    server_name="/currenttime",
     tool_name="current_time_by_timezone",
     arguments={{"tz_name": "America/New_York"}},
     supported_transports=["streamable-http"],
@@ -35,7 +35,7 @@ For Atlassian services (Jira, Confluence):
 invoke_mcp_tool(
     mcp_registry_url="{mcp_registry_url}",
     server_name="/atlassian",
-    tool_name="jira_get_issue", 
+    tool_name="jira_get_issue",
     arguments={{"issue_key": "PROJ-123"}},
     supported_transports=["streamable-http"],
     auth_provider="atlassian"
@@ -53,7 +53,7 @@ invoke_mcp_tool(
 </workflow>
 
 <guidelines>
-Always be transparent about what tools you're using. 
+Always be transparent about what tools you're using.
 When using MCP tools, explain which tool you're calling.
 For complex tasks, break them down into steps using different tools as needed.
 

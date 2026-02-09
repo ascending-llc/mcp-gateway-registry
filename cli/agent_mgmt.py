@@ -54,7 +54,7 @@ import os
 import subprocess
 import sys
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
 import requests
 
@@ -92,7 +92,7 @@ def _extract_username_from_jwt(token: str) -> str:
         return "unknown"
 
 
-def _get_token_expiration(token: str) -> Optional[int]:
+def _get_token_expiration(token: str) -> int | None:
     """Extract expiration timestamp from JWT token.
 
     Returns:
@@ -142,7 +142,7 @@ def _regenerate_token(token_file: str) -> bool:
     Returns:
         True if regeneration succeeded, False otherwise
     """
-    logger.info(f"Token expired, regenerating credentials...")
+    logger.info("Token expired, regenerating credentials...")
 
     # Extract the agent name from token file if it's a bot account
     # e.g., .oauth-tokens/bot-x-token.json -> bot-x
@@ -168,25 +168,21 @@ def _regenerate_token(token_file: str) -> bool:
                 cwd=keycloak_setup_dir,  # Run from keycloak/setup so ../../.oauth-tokens works
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=30,
             )
         else:
             # Use generate_creds.sh for ingress token
             creds_script = os.path.join(project_root, "credentials-provider/generate_creds.sh")
             logger.info(f"Running: {creds_script} --ingress-only")
             result = subprocess.run(
-                [creds_script, "--ingress-only"],
-                cwd=project_root,
-                capture_output=True,
-                text=True,
-                timeout=60
+                [creds_script, "--ingress-only"], cwd=project_root, capture_output=True, text=True, timeout=60
             )
 
         if result.returncode == 0:
-            logger.info(f"✓ Token regenerated successfully")
+            logger.info("✓ Token regenerated successfully")
             return True
         else:
-            logger.error(f"✗ Token regeneration failed")
+            logger.error("✗ Token regeneration failed")
             logger.error(f"  Error output: {result.stderr}")
             return False
 
@@ -194,7 +190,7 @@ def _regenerate_token(token_file: str) -> bool:
         logger.error(f"✗ Token regeneration script not found: {e}")
         return False
     except subprocess.TimeoutExpired:
-        logger.error(f"✗ Token regeneration script timed out")
+        logger.error("✗ Token regeneration script timed out")
         return False
     except Exception as e:
         logger.error(f"✗ Token regeneration failed: {e}")
@@ -219,7 +215,7 @@ def _load_token(token_file: str) -> tuple[str, str]:
 
             # Check if token is expired
             if _is_token_expired(token):
-                logger.warning(f"Token is expired or expiring soon, regenerating...")
+                logger.warning("Token is expired or expiring soon, regenerating...")
                 if _regenerate_token(token_file):
                     # Reload token from file after regeneration
                     with open(abs_path) as f2:
@@ -250,8 +246,8 @@ def _make_request(
     method: str,
     url: str,
     token: str,
-    data: Optional[Dict[str, Any]] = None,
-    params: Optional[Dict[str, Any]] = None,
+    data: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
     timeout: int = REQUEST_TIMEOUT,
 ) -> requests.Response:
     """Make HTTP request with Bearer token."""
@@ -262,9 +258,9 @@ def _make_request(
 
     logger.info(f"HTTP {method} Request:")
     logger.info(f"  URL: {url}")
-    logger.info(f"  Headers:")
-    logger.info(f"    Authorization: Bearer {token[:50]}..." if token else f"    Authorization: <NO_TOKEN>")
-    logger.info(f"    Content-Type: application/json")
+    logger.info("  Headers:")
+    logger.info(f"    Authorization: Bearer {token[:50]}..." if token else "    Authorization: <NO_TOKEN>")
+    logger.info("    Content-Type: application/json")
     if params:
         logger.info(f"  Query Params: {json.dumps(params, indent=2)}")
     if data:
@@ -287,11 +283,15 @@ def _make_request(
 
         # Log response details
         logger.info(f"← Received HTTP {response.status_code}")
-        logger.info(f"  Response Headers:")
+        logger.info("  Response Headers:")
         for header_name, header_value in response.headers.items():
             # Hide sensitive headers
-            if header_name.lower() in ['authorization', 'x-scopes']:
-                logger.info(f"    {header_name}: {header_value[:50]}..." if len(str(header_value)) > 50 else f"    {header_name}: {header_value}")
+            if header_name.lower() in ["authorization", "x-scopes"]:
+                logger.info(
+                    f"    {header_name}: {header_value[:50]}..."
+                    if len(str(header_value)) > 50
+                    else f"    {header_name}: {header_value}"
+                )
             else:
                 logger.info(f"    {header_name}: {header_value}")
 
@@ -492,10 +492,10 @@ def test_agent(
                 print("\nPerforming health check...")
                 health_passed, health_message = _check_agent_health(agent_url)
                 if health_passed:
-                    print(f"  Health Check: PASSED")
+                    print("  Health Check: PASSED")
                     print(f"  Details: {health_message}")
                 else:
-                    print(f"  Health Check: FAILED")
+                    print("  Health Check: FAILED")
                     print(f"  Reason: {health_message}")
             elif not is_enabled:
                 print("\nHealth Check: SKIPPED (agent is disabled)")
@@ -649,7 +649,7 @@ def register_agent(
     try:
         with open(abs_agent_file) as f:
             agent_data = json.load(f)
-        logger.info(f"✓ Agent file loaded successfully")
+        logger.info("✓ Agent file loaded successfully")
     except FileNotFoundError:
         logger.error(f"✗ Agent file not found: {abs_agent_file}")
         print(f"Error: File not found: {abs_agent_file}")
@@ -665,15 +665,15 @@ def register_agent(
     endpoint = f"{base_url}/api/agents/register"
     agent_name = agent_data.get("name", "Unknown")
 
-    logger.info(f"=" * 80)
-    logger.info(f"AGENT REGISTRATION REQUEST")
-    logger.info(f"=" * 80)
+    logger.info("=" * 80)
+    logger.info("AGENT REGISTRATION REQUEST")
+    logger.info("=" * 80)
     logger.info(f"Base URL: {base_url}")
     logger.info(f"Endpoint: {endpoint}")
     logger.info(f"Agent Name: {agent_name}")
     logger.info(f"Agent Path: {agent_data.get('path', 'N/A')}")
     logger.info(f"Agent File: {abs_agent_file}")
-    logger.info(f"=" * 80)
+    logger.info("=" * 80)
 
     try:
         response = _make_request("POST", endpoint, token, agent_data)
@@ -683,10 +683,12 @@ def register_agent(
             print(f"Agent '{agent_name}' registered successfully!")
             _print_response(response)
         elif response.status_code == 401:
-            logger.error(f"✗ Authentication failed (HTTP 401)")
+            logger.error("✗ Authentication failed (HTTP 401)")
             logger.error(f"  Token file location: {os.path.abspath('.oauth-tokens/ingress.json')}")
             logger.error(f"  Token length: {len(token) if token else 0} characters")
-            logger.error(f"  Authorization header: Bearer {token[:50]}..." if token else "  Authorization header: <NO_TOKEN>")
+            logger.error(
+                f"  Authorization header: Bearer {token[:50]}..." if token else "  Authorization header: <NO_TOKEN>"
+            )
             print("Error: Authentication failed (HTTP 401)")
             print("\nDEBUG INFORMATION:")
             print(f"  Token file: {os.path.abspath('.oauth-tokens/ingress.json')}")
@@ -705,7 +707,9 @@ def register_agent(
             _print_response(response)
         elif response.status_code == 403:
             print("Error: Permission denied. You do not have permission to register agents")
-            print("\nNote: Agent registration requires proper Keycloak authentication with 'register_service' permission.")
+            print(
+                "\nNote: Agent registration requires proper Keycloak authentication with 'register_service' permission."
+            )
             print("For testing/development, you may need to:")
             print("  1. Configure a Keycloak user with appropriate permissions")
             print("  2. Use the web UI dashboard to register agents")
@@ -737,7 +741,7 @@ def update_agent(
     try:
         with open(abs_agent_file) as f:
             agent_data = json.load(f)
-        logger.info(f"✓ Agent file loaded successfully")
+        logger.info("✓ Agent file loaded successfully")
     except FileNotFoundError:
         logger.error(f"✗ Agent file not found: {abs_agent_file}")
         print(f"Error: File not found: {abs_agent_file}")
@@ -951,7 +955,9 @@ For more information on creating agent JSON files:
     # Toggle command
     toggle_parser = subparsers.add_parser("toggle", help="Toggle agent enabled/disabled status")
     toggle_parser.add_argument("path", help="Agent path (e.g., /code-reviewer)")
-    toggle_parser.add_argument("enabled", type=lambda x: x.lower() == "true", help="Enable (true) or disable (false) the agent")
+    toggle_parser.add_argument(
+        "enabled", type=lambda x: x.lower() == "true", help="Enable (true) or disable (false) the agent"
+    )
 
     args = parser.parse_args()
 

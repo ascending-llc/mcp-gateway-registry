@@ -144,18 +144,18 @@ validate_group_exists() {
 # Function to create agent-specific M2M client
 create_agent_m2m_client() {
     echo "Creating agent-specific M2M client..."
-    
+
     # Check if client already exists
     EXISTING_CLIENT=$(curl -s -H "Authorization: Bearer $TOKEN" \
         "$ADMIN_URL/admin/realms/$REALM/clients?clientId=$AGENT_CLIENT_ID" | \
         jq -r '.[0].id // empty')
-    
+
     if [ ! -z "$EXISTING_CLIENT" ] && [ "$EXISTING_CLIENT" != "null" ]; then
         echo -e "${YELLOW}Agent M2M client already exists with ID: $EXISTING_CLIENT${NC}"
         CLIENT_ID="$EXISTING_CLIENT"
         return 0
     fi
-    
+
     # Create the M2M client
     CLIENT_JSON='{
         "clientId": "'$AGENT_CLIENT_ID'",
@@ -182,21 +182,21 @@ create_agent_m2m_client() {
             "email"
         ]
     }'
-    
+
     RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
         -X POST "$ADMIN_URL/admin/realms/$REALM/clients" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -d "$CLIENT_JSON")
-    
+
     if [ "$RESPONSE" = "201" ]; then
         echo -e "${GREEN}✓ Agent M2M client created successfully${NC}"
-        
+
         # Get the client ID
         CLIENT_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
             "$ADMIN_URL/admin/realms/$REALM/clients?clientId=$AGENT_CLIENT_ID" | \
             jq -r '.[0].id')
-        
+
         echo "Client UUID: $CLIENT_ID"
     else
         echo -e "${RED}Failed to create agent M2M client. HTTP: $RESPONSE${NC}"
@@ -210,7 +210,7 @@ check_service_account() {
     USER_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
         "$ADMIN_URL/admin/realms/$REALM/users?username=$SERVICE_ACCOUNT" | \
         jq -r '.[0].id // empty')
-    
+
     if [ -n "$USER_ID" ] && [ "$USER_ID" != "null" ]; then
         echo -e "${GREEN}✓ Service account already exists with ID: $USER_ID${NC}"
         return 0
@@ -223,7 +223,7 @@ check_service_account() {
 # Function to create service account user
 create_service_account() {
     echo "Creating service account user..."
-    
+
     USER_JSON='{
         "username": "'$SERVICE_ACCOUNT'",
         "enabled": true,
@@ -236,21 +236,21 @@ create_service_account() {
             "created_by": ["keycloak_setup_script"]
         }
     }'
-    
+
     RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
         -X POST "$ADMIN_URL/admin/realms/$REALM/users" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -d "$USER_JSON")
-    
+
     if [ "$RESPONSE" = "201" ]; then
         echo -e "${GREEN}✓ Service account user created successfully${NC}"
-        
+
         # Get the user ID
         USER_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
             "$ADMIN_URL/admin/realms/$REALM/users?username=$SERVICE_ACCOUNT" | \
             jq -r '.[0].id')
-        
+
         echo "User ID: $USER_ID"
     else
         echo -e "${RED}Failed to create user. HTTP: $RESPONSE${NC}"
@@ -264,31 +264,31 @@ ensure_target_group() {
     GROUP_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
         "$ADMIN_URL/admin/realms/$REALM/groups" | \
         jq -r ".[] | select(.name==\"$TARGET_GROUP\") | .id")
-    
+
     if [ -n "$GROUP_ID" ] && [ "$GROUP_ID" != "null" ]; then
         echo -e "${GREEN}✓ Target group '$TARGET_GROUP' exists with ID: $GROUP_ID${NC}"
     else
         echo "Creating target group '$TARGET_GROUP'..."
-        
+
         GROUP_JSON='{
             "name": "'$TARGET_GROUP'",
             "path": "/'$TARGET_GROUP'"
         }'
-        
+
         RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
             -X POST "$ADMIN_URL/admin/realms/$REALM/groups" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d "$GROUP_JSON")
-        
+
         if [ "$RESPONSE" = "201" ]; then
             echo -e "${GREEN}✓ Target group created successfully${NC}"
-            
+
             # Get the group ID
             GROUP_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
                 "$ADMIN_URL/admin/realms/$REALM/groups" | \
                 jq -r ".[] | select(.name==\"$TARGET_GROUP\") | .id")
-            
+
             echo "Group ID: $GROUP_ID"
         else
             echo -e "${RED}Failed to create group. HTTP: $RESPONSE${NC}"
@@ -300,22 +300,22 @@ ensure_target_group() {
 # Function to assign service account to group
 assign_to_group() {
     echo "Assigning service account to target group..."
-    
+
     # Check if already assigned
     CURRENT_GROUPS=$(curl -s -H "Authorization: Bearer $TOKEN" \
         "$ADMIN_URL/admin/realms/$REALM/users/$USER_ID/groups" | \
         jq -r ".[].name")
-    
+
     if echo "$CURRENT_GROUPS" | grep -q "$TARGET_GROUP"; then
         echo -e "${GREEN}✓ Service account already assigned to '$TARGET_GROUP' group${NC}"
         return 0
     fi
-    
+
     # Assign to group
     RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
         -X PUT "$ADMIN_URL/admin/realms/$REALM/users/$USER_ID/groups/$GROUP_ID" \
         -H "Authorization: Bearer $TOKEN")
-    
+
     if [ "$RESPONSE" = "204" ]; then
         echo -e "${GREEN}✓ Service account assigned to '$TARGET_GROUP' group${NC}"
     else
@@ -327,42 +327,42 @@ assign_to_group() {
 # Function to get agent M2M client secret
 get_agent_client_secret() {
     echo "Retrieving agent M2M client secret..."
-    
+
     if [ -z "$CLIENT_ID" ]; then
         echo -e "${RED}Error: CLIENT_ID not set${NC}"
         exit 1
     fi
-    
+
     # Get the client secret
     SECRET_RESPONSE=$(curl -s -H "Authorization: Bearer $TOKEN" \
         "$ADMIN_URL/admin/realms/$REALM/clients/$CLIENT_ID/client-secret")
-    
+
     AGENT_CLIENT_SECRET=$(echo "$SECRET_RESPONSE" | jq -r '.value // empty')
-    
+
     if [ -z "$AGENT_CLIENT_SECRET" ]; then
         echo -e "${RED}Failed to retrieve agent client secret${NC}"
         exit 1
     fi
-    
+
     echo -e "${GREEN}✓ Agent client secret retrieved${NC}"
 }
 
 # Function to ensure groups mapper exists
 ensure_groups_mapper() {
     echo "Checking for groups mapper on M2M client..."
-    
+
     # Check if groups mapper already exists
     EXISTING_MAPPER=$(curl -s -H "Authorization: Bearer $TOKEN" \
         "$ADMIN_URL/admin/realms/$REALM/clients/$CLIENT_ID/protocol-mappers/models" | \
         jq -r '.[] | select(.name=="groups") | .id')
-    
+
     if [ -n "$EXISTING_MAPPER" ] && [ "$EXISTING_MAPPER" != "null" ]; then
         echo -e "${GREEN}✓ Groups mapper already exists${NC}"
         return 0
     fi
-    
+
     echo "Adding groups mapper to M2M client..."
-    
+
     GROUPS_MAPPER='{
         "name": "groups",
         "protocol": "openid-connect",
@@ -376,13 +376,13 @@ ensure_groups_mapper() {
             "userinfo.token.claim": "true"
         }
     }'
-    
+
     RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
         -X POST "$ADMIN_URL/admin/realms/$REALM/clients/$CLIENT_ID/protocol-mappers/models" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -d "$GROUPS_MAPPER")
-    
+
     if [ "$RESPONSE" = "201" ]; then
         echo -e "${GREEN}✓ Groups mapper added successfully${NC}"
     elif [ "$RESPONSE" = "409" ]; then
@@ -397,26 +397,26 @@ ensure_groups_mapper() {
 verify_setup() {
     echo ""
     echo "Verifying setup..."
-    
+
     # Check service account exists and is in the right group
     GROUPS=$(curl -s -H "Authorization: Bearer $TOKEN" \
         "$ADMIN_URL/admin/realms/$REALM/users/$USER_ID/groups" | \
         jq -r '.[].name')
-    
+
     echo "Service account groups: $GROUPS"
-    
+
     if echo "$GROUPS" | grep -q "$TARGET_GROUP"; then
         echo -e "${GREEN}✓ Service account is in '$TARGET_GROUP' group${NC}"
     else
         echo -e "${RED}✗ Service account is NOT in '$TARGET_GROUP' group${NC}"
         exit 1
     fi
-    
+
     # Check groups mapper exists
     MAPPER_EXISTS=$(curl -s -H "Authorization: Bearer $TOKEN" \
         "$ADMIN_URL/admin/realms/$REALM/clients/$CLIENT_ID/protocol-mappers/models" | \
         jq -r '.[] | select(.name=="groups") | .name')
-    
+
     if [ "$MAPPER_EXISTS" = "groups" ]; then
         echo -e "${GREEN}✓ Groups mapper is configured${NC}"
     else
@@ -429,13 +429,13 @@ verify_setup() {
 generate_agent_token() {
     echo ""
     echo "Generating agent-specific token configuration..."
-    
+
     # Create agent-specific token file
     AGENT_TOKEN_DIR=".oauth-tokens"
     AGENT_TOKEN_FILE="$AGENT_TOKEN_DIR/agent-${AGENT_ID}.json"
-    
+
     mkdir -p "$AGENT_TOKEN_DIR"
-    
+
     cat > "$AGENT_TOKEN_FILE" << EOF
 {
   "provider": "keycloak_m2m",
@@ -450,7 +450,7 @@ generate_agent_token() {
   "usage_notes": "Individual M2M client credentials for agent $AGENT_ID with complete audit trails"
 }
 EOF
-    
+
     echo -e "${GREEN}✓ Agent token configuration created: $AGENT_TOKEN_FILE${NC}"
 }
 
@@ -463,30 +463,30 @@ main() {
 
     # Step 1: Create agent-specific M2M client
     create_agent_m2m_client
-    
+
     # Step 2: Get agent client secret
     get_agent_client_secret
-    
+
     # Step 3: Create service account linked to agent client
     if ! check_service_account; then
         create_service_account
     fi
-    
+
     # Step 4: Ensure target group exists
     ensure_target_group
-    
+
     # Step 5: Assign service account to group
     assign_to_group
-    
+
     # Step 6: Ensure groups mapper exists on agent client
     ensure_groups_mapper
-    
+
     # Step 7: Verify everything is set up correctly
     verify_setup
-    
+
     # Step 8: Generate agent-specific token configuration
     generate_agent_token
-    
+
     echo ""
     echo -e "${GREEN}SUCCESS! Agent service account setup complete.${NC}"
     echo ""

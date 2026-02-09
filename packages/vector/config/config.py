@@ -1,11 +1,13 @@
-from typing import Dict, Type, Optional
 from pydantic import BaseModel, Field
-from ..enum.enums import VectorStoreType, EmbeddingProvider
+
 from packages.core.config import settings
+
+from ..enum.enums import EmbeddingProvider, VectorStoreType
 
 
 class VectorStoreConfig(BaseModel):
     """Base class for vector store configuration."""
+
     type: str
 
     @classmethod
@@ -16,6 +18,7 @@ class VectorStoreConfig(BaseModel):
 
 class EmbeddingModelConfig(BaseModel):
     """Base class for embedding model configuration."""
+
     provider: str
 
     @classmethod
@@ -25,14 +28,14 @@ class EmbeddingModelConfig(BaseModel):
 
 
 # Registry for configuration classes
-_VECTOR_STORE_REGISTRY: Dict[str, Type[VectorStoreConfig]] = {}
-_EMBEDDING_MODEL_REGISTRY: Dict[str, Type[EmbeddingModelConfig]] = {}
+_VECTOR_STORE_REGISTRY: dict[str, type[VectorStoreConfig]] = {}
+_EMBEDDING_MODEL_REGISTRY: dict[str, type[EmbeddingModelConfig]] = {}
 
 
 def register_vector_store_config(name: str):
     """Decorator to register vector store config class."""
 
-    def decorator(config_class: Type[VectorStoreConfig]):
+    def decorator(config_class: type[VectorStoreConfig]):
         _VECTOR_STORE_REGISTRY[name] = config_class
         return config_class
 
@@ -42,14 +45,14 @@ def register_vector_store_config(name: str):
 def register_embedding_model_config(name: str):
     """Decorator to register embedding model config class."""
 
-    def decorator(config_class: Type[EmbeddingModelConfig]):
+    def decorator(config_class: type[EmbeddingModelConfig]):
         _EMBEDDING_MODEL_REGISTRY[name] = config_class
         return config_class
 
     return decorator
 
 
-def get_vector_store_config_class(name: str) -> Type[VectorStoreConfig]:
+def get_vector_store_config_class(name: str) -> type[VectorStoreConfig]:
     """Get vector store config class by name."""
     if name not in _VECTOR_STORE_REGISTRY:
         available = list(_VECTOR_STORE_REGISTRY.keys())
@@ -57,7 +60,7 @@ def get_vector_store_config_class(name: str) -> Type[VectorStoreConfig]:
     return _VECTOR_STORE_REGISTRY[name]
 
 
-def get_embedding_model_config_class(name: str) -> Type[EmbeddingModelConfig]:
+def get_embedding_model_config_class(name: str) -> type[EmbeddingModelConfig]:
     """Get embedding model config class by name."""
     if name not in _EMBEDDING_MODEL_REGISTRY:
         available = list(_EMBEDDING_MODEL_REGISTRY.keys())
@@ -78,10 +81,11 @@ def get_registered_embedding_models() -> list:
 @register_vector_store_config(VectorStoreType.WEAVIATE.value)
 class WeaviateConfig(VectorStoreConfig):
     """Weaviate vector store configuration."""
+
     host: str = Field(description="Weaviate host")
     port: int = Field(description="Weaviate port")
-    api_key: Optional[str] = Field(default=None, description="API key")
-    collection_prefix: Optional[str] = Field(default=None, description="Collection prefix")
+    api_key: str | None = Field(default=None, description="API key")
+    collection_prefix: str | None = Field(default=None, description="Collection prefix")
 
     @classmethod
     def from_env(cls) -> "WeaviateConfig":
@@ -115,13 +119,14 @@ class WeaviateConfig(VectorStoreConfig):
             host=host.strip(),
             port=port_int,
             api_key=settings.WEAVIATE_API_KEY,
-            collection_prefix=collection_prefix
+            collection_prefix=collection_prefix,
         )
 
 
 @register_embedding_model_config(EmbeddingProvider.OPENAI.value)
 class OpenAIEmbeddingConfig(EmbeddingModelConfig):
     """OpenAI embedding model configuration."""
+
     api_key: str = Field(description="OpenAI API key")
     model: str = Field(description="Model name")
 
@@ -143,20 +148,17 @@ class OpenAIEmbeddingConfig(EmbeddingModelConfig):
         if not model or model.strip() == "":
             model = "text-embedding-3-small"
 
-        return cls(
-            provider=EmbeddingProvider.OPENAI.value,
-            api_key=api_key.strip(),
-            model=model.strip()
-        )
+        return cls(provider=EmbeddingProvider.OPENAI.value, api_key=api_key.strip(), model=model.strip())
 
 
 @register_embedding_model_config(EmbeddingProvider.AWS_BEDROCK.value)
 class BedrockEmbeddingConfig(EmbeddingModelConfig):
     """AWS Bedrock embedding model configuration."""
+
     region: str = Field(description="AWS region")
     model: str = Field(description="Bedrock model ID")
-    access_key_id: Optional[str] = Field(default=None, description="AWS access key ID")
-    secret_access_key: Optional[str] = Field(default=None, description="AWS secret access key")
+    access_key_id: str | None = Field(default=None, description="AWS access key ID")
+    secret_access_key: str | None = Field(default=None, description="AWS secret access key")
 
     @classmethod
     def from_env(cls) -> "BedrockEmbeddingConfig":
@@ -172,8 +174,7 @@ class BedrockEmbeddingConfig(EmbeddingModelConfig):
         valid_regions = ["us-east-1", "us-west-2", "eu-west-1", "ap-southeast-1", "ap-northeast-1"]
         if region not in valid_regions:
             raise ValueError(
-                f"AWS_REGION '{region}' may not support Bedrock. "
-                f"Common regions: {', '.join(valid_regions)}"
+                f"AWS_REGION '{region}' may not support Bedrock. Common regions: {', '.join(valid_regions)}"
             )
 
         # Model validation
@@ -199,11 +200,11 @@ class BackendConfig(BaseModel):
     def from_env(cls) -> "BackendConfig":
         """
         Create unified config from environment variables with validation.
-        
+
         Required env vars:
         - VECTOR_STORE_TYPE: weaviate
         - EMBEDDING_PROVIDER: openai | aws_bedrock
-        
+
         Raises:
             ValueError: If required env vars missing or invalid
         """
@@ -243,10 +244,7 @@ class BackendConfig(BaseModel):
         vector_store_class = get_vector_store_config_class(vector_store_type)
         embedding_class = get_embedding_model_config_class(embedding_provider)
 
-        return cls(
-            vector_store_config=vector_store_class.from_env(),
-            embedding_model_config=embedding_class.from_env()
-        )
+        return cls(vector_store_config=vector_store_class.from_env(), embedding_model_config=embedding_class.from_env())
 
     @property
     def vector_store_type(self) -> str:

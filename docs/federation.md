@@ -459,7 +459,7 @@ Based on the actual ASOR API response, the agent data structure is:
 The following ASOR fields are available but not currently mapped:
 
 1. **`capabilities`** - Object with streaming, notifications, state history flags
-2. **`workdayConfig`** - Array of skill configurations 
+2. **`workdayConfig`** - Array of skill configurations
 3. **`supportsAuthenticatedExtendedCard`** - Boolean flag for extended card support
 
 ### Missing Fields from ASOR

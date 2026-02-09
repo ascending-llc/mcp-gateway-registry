@@ -2,21 +2,21 @@
 This server provides an interface to get the current time in a specified timezone using the timeapi.io API.
 """
 
-import os
 import argparse
 import logging
+import os
+from typing import Annotated
+
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
-from typing import Annotated
+
 from registry.core.config import settings
 
 # Configure logging
-logging.basicConfig(
-    level=settings.log_level,
-    format=settings.log_format
-)
+logging.basicConfig(level=settings.log_level, format=settings.log_format)
 
 logger = logging.getLogger(__name__)
+
 
 def parse_arguments():
     """Parse command line arguments with defaults matching environment variables."""
@@ -45,7 +45,9 @@ args = parse_arguments()
 
 # Log parsed arguments for debugging
 logger.info(f"Parsed arguments - port: {args.port}, transport: {args.transport}")
-logger.info(f"Environment variables - MCP_TRANSPORT: {os.environ.get('MCP_TRANSPORT', 'NOT SET')}, MCP_SERVER_LISTEN_PORT: {os.environ.get('MCP_SERVER_LISTEN_PORT', 'NOT SET')}")
+logger.info(
+    f"Environment variables - MCP_TRANSPORT: {os.environ.get('MCP_TRANSPORT', 'NOT SET')}, MCP_SERVER_LISTEN_PORT: {os.environ.get('MCP_SERVER_LISTEN_PORT', 'NOT SET')}"
+)
 
 # Initialize FastMCP server
 mcp = FastMCP("CurrentTimeAPI", host="0.0.0.0", port=int(args.port))
@@ -78,9 +80,10 @@ The user's location is: {location}
     return system_prompt
 
 
-
 from datetime import datetime
+
 import pytz
+
 
 def get_current_time_in_timezone(timezone_name):
     """
@@ -102,10 +105,10 @@ def get_current_time_in_timezone(timezone_name):
 
 @mcp.tool()
 def current_time_by_timezone(
-    tz_name: Annotated[str, Field(
-        default="America/New_York",
-        description="Name of the timezone for which to find out the current time"
-    )] = "America/New_York"
+    tz_name: Annotated[
+        str,
+        Field(default="America/New_York", description="Name of the timezone for which to find out the current time"),
+    ] = "America/New_York",
 ) -> str:
     """
     Get the current time for a specified timezone using the timeapi.io API.
@@ -123,10 +126,11 @@ def current_time_by_timezone(
     try:
         timezone = pytz.timezone(tz_name)
         current_time = datetime.now(timezone)
-        return current_time.strftime('%Y-%m-%d %H:%M:%S %Z%z')
+        return current_time.strftime("%Y-%m-%d %H:%M:%S %Z%z")
     except Exception as e:
         return f"Error: {str(e)}"
-    
+
+
 @mcp.resource("config://app")
 def get_config() -> str:
     """Static configuration data"""
@@ -138,7 +142,7 @@ def main():
     endpoint = "/mcp" if args.transport == "streamable-http" else "/sse"
     logger.info(f"Starting CurrentTime server on port {args.port} with transport {args.transport}")
     logger.info(f"Server will be available at: http://localhost:{args.port}{endpoint}")
-    
+
     # Run the server with the specified transport from command line args
     mcp.run(transport=args.transport)
 

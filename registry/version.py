@@ -4,9 +4,8 @@ Version management for MCP Gateway Registry.
 Version is determined from BUILD_VERSION environment variable.
 """
 
-import os
 import logging
-
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -20,11 +19,11 @@ def get_version() -> str:
     Returns:
         Version string from BUILD_VERSION env var or DEFAULT_VERSION
     """
-    build_version = os.getenv('BUILD_VERSION', '').strip()
+    build_version = os.getenv("BUILD_VERSION", "").strip()
     if build_version:
         logger.info(f"Version from BUILD_VERSION: {build_version}")
         return build_version
-    
+
     logger.info(f"Using default version: {DEFAULT_VERSION}")
     return DEFAULT_VERSION
 

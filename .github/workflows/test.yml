@@ -1,15 +1,15 @@
-name: 🧪 Test Suite
+name: Test Suite
 
 on:
   push:
-    branches: [ main]
+    branches: [main]
   pull_request:
-    branches: [ main]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
   test:
-    name: "🧪 Test (${{ matrix.python-version }})"
+    name: "Test (Python ${{ matrix.python-version }})"
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -17,20 +17,20 @@ jobs:
       fail-fast: false
 
     steps:
-    - name: 📥 Checkout code
+    - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: 🐍 Set up Python ${{ matrix.python-version }}
+    - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: 📦 Install uv
+    - name: Install uv
       run: |
         curl -LsSf https://astral.sh/uv/install.sh | sh
         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-    - name: 📦 Cache uv dependencies
+    - name: Cache uv dependencies
       uses: actions/cache@v3
       with:
         path: ~/.cache/uv
@@ -38,7 +38,7 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-uv-
 
-    - name: 🔧 Install dependencies with uv
+    - name: Install dependencies with uv
       run: |
         uv sync --all-groups
 
@@ -55,15 +55,15 @@ jobs:
         cd packages/models
         uv run import-schemas --tag ${{ steps.get-schema.outputs.schema-version }} --output-dir . --token ${{ secrets.JARVIS_RELEASE_ACCESS_TOKEN }}
 
-    - name: 🧪 Run all tests (registry + auth_server + packages)
+    - name: Run all tests (registry + auth_server + packages)
       run: |
         uv run poe test-all
 
-    - name: 📊 Generate coverage report
+    - name: Generate coverage report
       run: |
         uv run poe test-all-cov
 
-    - name: 📤 Upload coverage to Codecov
+    - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
       with:
         file: ./coverage.xml
@@ -71,70 +71,15 @@ jobs:
         name: codecov-umbrella
         fail_ci_if_error: false
 
-    - name: 📄 Upload coverage reports
+    - name: Upload coverage reports
       uses: actions/upload-artifact@v4
       with:
         name: coverage-report-${{ matrix.python-version }}
         path: htmlcov/
 
-    - name: 📋 Upload test reports
+    - name: Upload test reports
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: test-reports-${{ matrix.python-version }}
         path: tests/reports/
-
-  lint:
-    name: "🔍 Code Quality"
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: 📥 Checkout code
-      uses: actions/checkout@v4
-
-    - name: 🐍 Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.12"
-
-    - name: 📦 Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install bandit black isort flake8
-
-    - name: 🔒 Security check with bandit
-      run: |
-        bandit -r auth_server/ -f json -o bandit-report-auth.json || true
-        bandit -r registry/ -f json -o bandit-report.json || true
-
-    - name: 📋 Upload security report
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: bandit-reports
-        path: |
-          bandit-report.json
-          bandit-report-auth.json
-
-  
-  summary:
-    name: "📋 Test Summary"
-    runs-on: ubuntu-latest
-    needs: [test, lint]
-    if: always()
-
-    steps:
-    - name: 📋 Test Results Summary
-      run: |
-        echo "## 🧪 Test Results Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| Registry Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| Auth Server Tests | Included in Registry Tests |" >> $GITHUB_STEP_SUMMARY
-        echo "| Code Quality | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        if [[ "${{ needs.test.result }}" == "success" && "${{ needs.lint.result }}" == "success" ]]; then
-          echo "✅ All tests passed! 🎉" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "❌ Some tests failed. Please check the logs." >> $GITHUB_STEP_SUMMARY
-        fi 

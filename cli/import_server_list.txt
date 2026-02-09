@@ -22,4 +22,3 @@ ai.smithery/saidsef-mcp-github-pr-issue-analyser
 
 # Search-only commerce MCP server backed by Stripe (test)
 ai.shawndurrani/mcp-merchant
-

@@ -1,9 +1,7 @@
-import logging
 import functools
+import logging
 from pathlib import Path
 from typing import (
-    Dict,
-    Optional,
     Any,
 )
 
@@ -14,7 +12,7 @@ from opentelemetry.metrics import Counter, Histogram
 logger = logging.getLogger(__name__)
 
 
-def load_metrics_config(service_name: str, config_path: Optional[str] = None) -> Optional[dict]:
+def load_metrics_config(service_name: str, config_path: str | None = None) -> dict | None:
     """
     Load metrics configuration from YAML file for a specific service.
 
@@ -52,12 +50,14 @@ def safe_telemetry(func):
     Decorator to safely execute telemetry methods.
     Swallows exceptions and logs them as warnings to prevent application crashes.
     """
+
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
         except Exception as e:
             logger.warning(f"Telemetry error in {func.__name__}: {e}")
+
     return wrapper
 
 
@@ -79,7 +79,7 @@ class OTelMetricsClient:
     def __init__(
         self,
         service_name: str,
-        config: Optional[Dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
     ):
         """
         Initialize metrics client for a specific service.
@@ -96,8 +96,8 @@ class OTelMetricsClient:
             self.meter = metrics.get_meter(f"mcp.{service_name}")
 
             # Dynamic metric registries - all metrics loaded from config
-            self._counters: Dict[str, Counter] = {}
-            self._histograms: Dict[str, Histogram] = {}
+            self._counters: dict[str, Counter] = {}
+            self._histograms: dict[str, Histogram] = {}
 
             # Initialize from config
             if config:
@@ -106,7 +106,7 @@ class OTelMetricsClient:
         except Exception as e:
             logger.error(f"Failed to initialize OTelMetricsClient for service '{service_name}': {e}")
 
-    def _init_from_config(self, config: Dict[str, Any]) -> None:
+    def _init_from_config(self, config: dict[str, Any]) -> None:
         """
         Initialize metrics from configuration dictionary.
 
@@ -154,7 +154,7 @@ class OTelMetricsClient:
         name: str,
         description: str = "",
         unit: str = "1",
-    ) -> Optional[Counter]:
+    ) -> Counter | None:
         """
         Dynamically create and register a counter metric.
 
@@ -181,7 +181,7 @@ class OTelMetricsClient:
         name: str,
         description: str = "",
         unit: str = "s",
-    ) -> Optional[Histogram]:
+    ) -> Histogram | None:
         """
         Dynamically create and register a histogram metric.
 
@@ -207,7 +207,7 @@ class OTelMetricsClient:
         self,
         name: str,
         value: float = 1.0,
-        attributes: Optional[Dict[str, str]] = None,
+        attributes: dict[str, str] | None = None,
     ) -> None:
         """
         Record a value to a counter metric.
@@ -228,7 +228,7 @@ class OTelMetricsClient:
         self,
         name: str,
         value: float,
-        attributes: Optional[Dict[str, str]] = None,
+        attributes: dict[str, str] | None = None,
     ) -> None:
         """
         Record a value to a histogram metric.
@@ -249,7 +249,7 @@ class OTelMetricsClient:
         self,
         name: str,
         value: float = 1.0,
-        attributes: Optional[Dict[str, str]] = None,
+        attributes: dict[str, str] | None = None,
     ) -> None:
         """
         Generic method to record any metric by name.
@@ -271,18 +271,18 @@ class OTelMetricsClient:
         else:
             logger.warning(f"Metric '{name}' not registered as counter or histogram")
 
-    def get_counter(self, name: str) -> Optional[Counter]:
+    def get_counter(self, name: str) -> Counter | None:
         """Get a registered counter by name."""
         return self._counters.get(name)
 
-    def get_histogram(self, name: str) -> Optional[Histogram]:
+    def get_histogram(self, name: str) -> Histogram | None:
         """Get a registered histogram by name."""
         return self._histograms.get(name)
 
 
 def create_metrics_client(
     service_name: str,
-    config: Optional[Dict[str, Any]] = None,
+    config: dict[str, Any] | None = None,
 ) -> OTelMetricsClient:
     """
     Create a metrics client for a specific service.

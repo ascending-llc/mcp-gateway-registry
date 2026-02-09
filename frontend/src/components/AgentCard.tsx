@@ -12,9 +12,10 @@ import {
 import axios from 'axios';
 import type React from 'react';
 import { useCallback, useState } from 'react';
+
+import { useGlobal } from '@/contexts/GlobalContext';
 import HELPER from '@/helper';
 import AgentDetailsModal from './AgentDetailsModal';
-import { useToast } from '@/contexts/ToastContext';
 
 /**
  * Agent interface representing an A2A agent.
@@ -73,11 +74,12 @@ const AgentCard: React.FC<AgentCardProps> = ({
   onAgentUpdate,
   authToken,
 }) => {
+  const { showToast } = useGlobal();
   const [showDetails, setShowDetails] = useState(false);
   const [loadingRefresh, setLoadingRefresh] = useState(false);
   const [fullAgentDetails, setFullAgentDetails] = useState<any>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
-  const { showToast } = useToast();
+
   const getTrustLevelColor = () => {
     switch (agent.trust_level) {
       case 'trusted':
@@ -135,10 +137,14 @@ const AgentCard: React.FC<AgentCardProps> = ({
         onRefreshSuccess();
       }
 
-      showToast('Agent health status refreshed successfully', 'success');
+      if (showToast) {
+        showToast('Agent health status refreshed successfully', 'success');
+      }
     } catch (error: any) {
       console.error('Failed to refresh agent health:', error);
-      showToast(error.response?.data?.detail || 'Failed to refresh agent health status', 'error');
+      if (showToast) {
+        showToast(error.response?.data?.detail || 'Failed to refresh agent health status', 'error');
+      }
     } finally {
       setLoadingRefresh(false);
     }
@@ -148,10 +154,10 @@ const AgentCard: React.FC<AgentCardProps> = ({
     async (data: any) => {
       try {
         await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-        showToast('Full agent JSON copied to clipboard!', 'success');
+        showToast?.('Full agent JSON copied to clipboard!', 'success');
       } catch (error) {
         console.error('Failed to copy JSON:', error);
-        showToast('Failed to copy JSON', 'error');
+        showToast?.('Failed to copy JSON', 'error');
       }
     },
     [showToast],
@@ -233,7 +239,9 @@ const AgentCard: React.FC<AgentCardProps> = ({
                   setFullAgentDetails(response.data);
                 } catch (error) {
                   console.error('Failed to fetch agent details:', error);
-                  showToast('Failed to load full agent details', 'error');
+                  if (showToast) {
+                    showToast('Failed to load full agent details', 'error');
+                  }
                 } finally {
                   setLoadingDetails(false);
                 }

@@ -2,25 +2,21 @@
 Unit tests for Anthropic MCP Registry API endpoints for A2A agents.
 """
 
-import pytest
 from typing import (
-    Annotated,
     Any,
-    Dict,
-    List,
 )
 from unittest.mock import (
-    Mock,
     patch,
 )
+
+import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
+from registry.constants import REGISTRY_CONSTANTS
+from registry.core.config import settings
 from registry.main import app
 from registry.services.agent_service import agent_service
-from registry.constants import REGISTRY_CONSTANTS
-from registry.auth.dependencies import create_session_cookie
-from registry.core.config import settings
 
 
 @pytest.fixture
@@ -67,7 +63,7 @@ def mock_nginx_proxied_auth_user():
 
 
 @pytest.fixture
-def sample_agent_card() -> Dict[str, Any]:
+def sample_agent_card() -> dict[str, Any]:
     """Create a sample agent card for testing."""
     return {
         "protocol_version": "1.0",
@@ -98,12 +94,12 @@ def sample_agent_card() -> Dict[str, Any]:
 @pytest.fixture
 def admin_session_cookie():
     """Create a valid admin session cookie (JWT access token)."""
-    from registry.utils.crypto_utils import generate_access_token
     from registry.auth.dependencies import map_cognito_groups_to_scopes
-    
-    groups = ['registry-admins']
-    scopes = map_cognito_groups_to_scopes(groups) or ['registry-admins']
-    
+    from registry.utils.crypto_utils import generate_access_token
+
+    groups = ["registry-admins"]
+    scopes = map_cognito_groups_to_scopes(groups) or ["registry-admins"]
+
     return generate_access_token(
         user_id="test-admin-id",
         username=settings.admin_user,
@@ -112,7 +108,7 @@ def admin_session_cookie():
         scopes=scopes,
         role="admin",
         auth_method="traditional",
-        provider="local"
+        provider="local",
     )
 
 
@@ -124,8 +120,8 @@ def authenticated_client(mock_auth_middleware):
 
 @pytest.fixture
 def agents_list(
-    sample_agent_card: Dict[str, Any],
-) -> List[Dict[str, Any]]:
+    sample_agent_card: dict[str, Any],
+) -> list[dict[str, Any]]:
     """Create a list of agents for pagination testing."""
     agent1 = sample_agent_card.copy()
     agent1["path"] = "/agents/agent-alpha"
@@ -143,7 +139,7 @@ def agents_list(
 
 
 @pytest.fixture
-def user_context() -> Dict[str, Any]:
+def user_context() -> dict[str, Any]:
     """Create authenticated user context."""
     return {
         "username": "testuser",
@@ -734,9 +730,7 @@ class TestErrorHandling:
         """Test invalid agent name format returns 404."""
         from registry.auth.dependencies import nginx_proxied_auth
 
-        app.dependency_overrides[nginx_proxied_auth] = (
-            mock_nginx_proxied_auth_admin
-        )
+        app.dependency_overrides[nginx_proxied_auth] = mock_nginx_proxied_auth_admin
 
         response = authenticated_client.get(
             f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/agents/invalid-format/versions"
@@ -748,25 +742,21 @@ class TestErrorHandling:
 
     def test_error_missing_auth(
         self,
-        agents_list: List[Dict[str, Any]],
+        agents_list: list[dict[str, Any]],
     ) -> None:
         """Test missing auth returns 401 or similar error."""
-        from registry.auth.dependencies import nginx_proxied_auth
         from fastapi import HTTPException
 
+        from registry.auth.dependencies import nginx_proxied_auth
+
         def _mock_no_auth(session=None):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Unauthorized"
-            )
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
         app.dependency_overrides[nginx_proxied_auth] = _mock_no_auth
 
         # Use TestClient without auth cookie to test missing auth
         client = TestClient(app)
-        response = client.get(
-            f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/agents"
-        )
+        response = client.get(f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/agents")
 
         # Should fail due to auth dependency
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -776,24 +766,25 @@ class TestErrorHandling:
     def test_error_disabled_agent(
         self,
         mock_nginx_proxied_auth_admin: Any,
-        sample_agent_card: Dict[str, Any],
+        sample_agent_card: dict[str, Any],
         authenticated_client,
     ) -> None:
         """Test disabled agent returns 404."""
         from registry.auth.dependencies import nginx_proxied_auth
 
-        app.dependency_overrides[nginx_proxied_auth] = (
-            mock_nginx_proxied_auth_admin
-        )
+        app.dependency_overrides[nginx_proxied_auth] = mock_nginx_proxied_auth_admin
 
-        with patch.object(
-            agent_service,
-            "get_agent",
-            return_value=sample_agent_card,
-        ), patch.object(
-            agent_service,
-            "is_agent_enabled",
-            return_value=False,
+        with (
+            patch.object(
+                agent_service,
+                "get_agent",
+                return_value=sample_agent_card,
+            ),
+            patch.object(
+                agent_service,
+                "is_agent_enabled",
+                return_value=False,
+            ),
         ):
             response = authenticated_client.get(
                 f"/{REGISTRY_CONSTANTS.ANTHROPIC_API_VERSION}/agents/io.mcpgateway%2Fagents%2Fcode-reviewer/versions/latest"

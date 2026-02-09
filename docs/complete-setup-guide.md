@@ -674,7 +674,7 @@ uv run python cli/mcp_client.py call --tool intelligent_tool_finder --args '{"na
 
 # You can also run a full agent with the comprehensive agent script
 # Note: Use --mcp-registry-url to point to your local gateway
-uv run python agents/agent.py --agent-name agent-test-agent-m2m --mcp-registry-url http://localhost/mcpgw/mcp --prompt "What's the current time in New York?" 
+uv run python agents/agent.py --agent-name agent-test-agent-m2m --mcp-registry-url http://localhost/mcpgw/mcp --prompt "What's the current time in New York?"
 # Expected: Natural language response with current time
 ```
 

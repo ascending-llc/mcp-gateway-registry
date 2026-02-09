@@ -2,20 +2,15 @@
 
 import logging
 from contextlib import asynccontextmanager
-from typing import (
-    List,
-    Optional,
-)
 
 import uvicorn
-from fastapi import FastAPI
-from strands import Agent
-from strands.multiagent.a2a import A2AServer
-
 from dependencies import (
     get_db_manager,
     get_env,
 )
+from fastapi import FastAPI
+from strands import Agent
+from strands.multiagent.a2a import A2AServer
 from tools import (
     FLIGHT_BOOKING_TOOLS,
     check_availability,
@@ -94,8 +89,8 @@ def api_check_availability(
 @app.post("/api/reserve-flight")
 def api_reserve_flight(
     flight_id: int,
-    passengers: List,
-    requested_seats: Optional[List] = None,
+    passengers: list,
+    requested_seats: list | None = None,
 ):
     """Reserve flight API endpoint."""
     logger.info(f"Reserving flight_id: {flight_id} for {len(passengers)} passengers")
@@ -121,7 +116,7 @@ def api_confirm_booking(
 def api_process_payment(
     booking_number: str,
     payment_method: str,
-    amount: Optional[float] = None,
+    amount: float | None = None,
 ):
     """Process payment API endpoint."""
     logger.info(f"Processing payment for booking: {booking_number}")

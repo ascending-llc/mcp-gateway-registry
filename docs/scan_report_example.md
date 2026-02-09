@@ -69,7 +69,7 @@
 
     Raises:
         ValueError: If the Jira client is not configured or available.
-    
+
 ```
 </details>
 
@@ -108,7 +108,7 @@ Get jira agile boards by name, project key, or type.
 
     Returns:
         JSON string representing a list of board objects.
-    
+
 ```
 </details>
 

@@ -6,7 +6,7 @@ Get the MCP Gateway & Registry running in 5 minutes with this streamlined setup 
 
 By the end of this guide, you'll have:
 - ✅ MCP Gateway & Registry running locally
-- ✅ Authentication configured with Amazon Cognito  
+- ✅ Authentication configured with Amazon Cognito
 - ✅ AI coding assistant (VS Code) connected to the gateway
 - ✅ Access to curated enterprise MCP tools
 
@@ -126,7 +126,7 @@ podman compose version
 docker compose ps
 
 # You should see services like:
-# - registry (port 7860)  
+# - registry (port 7860)
 # - auth-server (port 8888)
 # - nginx (ports 80/443)
 # - Various MCP servers (ports 8000-8003)
