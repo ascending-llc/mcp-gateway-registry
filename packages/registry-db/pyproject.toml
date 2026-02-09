@@ -38,17 +38,6 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = [
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.23.0",
-    "pytest-cov>=4.1.0",
-    "pytest-mock>=3.12.0",
-    "factory-boy>=3.3.0",
-    "faker>=24.0.0",
-    "poethepoet>=0.24.0",
-    "types-pyyaml>=6.0.12.20250915",
-]
-
 # Vector search with embedded FAISS (optional, adds ~2-3GB)
 embedded-search = [
     "faiss-cpu>=1.7.4",
@@ -79,4 +68,4 @@ registry_db = ["py.typed"]
 [tool.poe.tasks]
 # Run tests
 test = { shell = "uv run pytest tests -v" }
-test-cov = { shell = "uv run pytest tests -v --cov=packages --cov-report=html --cov-report=term --cov-report=xml" }
+test-cov = { shell = "uv run pytest tests -v --cov=registry_db --cov-report=html --cov-report=term --cov-report=xml" }

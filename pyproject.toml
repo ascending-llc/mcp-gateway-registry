@@ -6,18 +6,19 @@ readme = "README.md"
 requires-python = ">=3.12,<3.13"
 # Root workspace dependencies needed for scripts
 dependencies = [
-    # root must depend on all workspace members
+    # root must depend on all workspace members, referencing them by distribution names
     "registry-db",
     "registry",
     "auth-server",
     "mcpgw",
 
+    # External direct dependencies
     "python-dotenv>=1.0.0",
 ]
 
 [tool.uv.workspace]
 members = [
-    "packages/*",
+    "packages/registry-db",
     "registry",
     "auth-server",
     "servers/mcpgw",
@@ -33,6 +34,7 @@ mcpgw = { workspace = true }
 # Data management scripts
 seed-data = "scripts.seed_mongodb:cli"
 sync-mongo-weaviate = "scripts.sync_mongo_to_weaviate:cli"
+sync-version = "scripts.sync_version:main"
 
 [build-system]
 requires = ["setuptools>=67", "wheel"]
@@ -47,28 +49,45 @@ dev = [
     "poethepoet>=0.40.0",
     "ruff>=0.15.0",
     "pre-commit>=4.0.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "pytest-xdist>=3.5.0",
+    "coverage[toml]>=7.4.0",
+    "pytest-html>=4.1.1",
+    "pytest-json-report>=1.5.0",
+    "factory-boy>=3.3.0",
+    "faker>=24.0.0",
+    "types-pyyaml>=6.0.12.20250915",
 ]
 
 [tool.poe.tasks]
 # Version management
-version = { shell = "echo '\n📦 Workspace versions:\n' && echo '  Root       →' $(grep -m1 '^version = ' pyproject.toml | cut -d'\"' -f2) && echo '  packages   →' $(grep -m1 '^version = ' packages/pyproject.toml | cut -d'\"' -f2) && echo '  registry   →' $(grep -m1 '^version = ' registry/pyproject.toml | cut -d'\"' -f2) && echo '  auth_server →' $(grep -m1 '^version = ' auth_server/pyproject.toml | cut -d'\"' -f2) && echo '  mcpgw      →' $(grep -m1 '^version = ' servers/mcpgw/pyproject.toml | cut -d'\"' -f2) && echo ''", help = "Show versions across all projects" }
+version = { shell = """
+printf "\n📦 Workspace versions:\n" && \
+printf '   Root        → %s\n' $(grep -m1 '^version = ' pyproject.toml | cut -d'\"' -f2) && \
+printf '   registry-db → %s\n' $(grep -m1 '^version = ' packages/registry-db/pyproject.toml | cut -d'\"' -f2) && \
+printf '   registry    → %s\n' $(grep -m1 '^version = ' registry/pyproject.toml | cut -d'\"' -f2) && \
+printf '   auth-server → %s\n' $(grep -m1 '^version = ' auth-server/pyproject.toml | cut -d'\"' -f2) && \
+printf '   mcpgw       → %s\n' $(grep -m1 '^version = ' servers/mcpgw/pyproject.toml | cut -d'\"' -f2)""", help = "Show versions across all projects" }
 version-sync = { script = "scripts.sync_version:main", help = "Sync version across all projects (usage: poe version-sync 0.2.0)" }
 
 # Run all tests across all projects
-test-all = { shell = "cd registry && uv run poe test && cd ../auth_server && uv run poe test && cd ../packages && uv run poe test" }
-test-all-cov = { shell = "cd registry && uv run poe test-cov && cd ../auth_server && uv run poe test-cov && cd ../packages && uv run poe test-cov" }
+test-all = { shell = "cd registry && uv run poe test && cd ../auth-server && uv run poe test && cd ../packages/registry-db && uv run poe test" }
+test-all-cov = { shell = "cd registry && uv run poe test-cov && cd ../auth-server && uv run poe test-cov && cd ../packages/registry-db && uv run poe test-cov" }
 
 # Registry tests
 test-registry = { shell = "cd registry && uv run poe test" }
 test-registry-cov = { shell = "cd registry && uv run poe test-cov" }
 
 # Auth server tests
-test-auth-server = { shell = "cd auth_server && uv run poe test" }
-test-auth-server-cov = { shell = "cd auth_server && uv run poe test-cov" }
+test-auth-server = { shell = "cd auth-server && uv run poe test" }
+test-auth-server-cov = { shell = "cd auth-server && uv run poe test-cov" }
 
 # Packages tests
-test-packages = { shell = "cd packages && uv run poe test" }
-test-packages-cov = { shell = "cd packages && uv run poe test-cov" }
+test-packages = { shell = "cd packages/registry-db && uv run poe test" }
+test-packages-cov = { shell = "cd packages/registry-db && uv run poe test-cov" }
 
 # Linting and formatting
 lint = { shell = "uv run ruff check .", help = "Run ruff linter" }
@@ -94,19 +113,19 @@ exclude = [
     "*.egg-info",
     "node_modules",
     "frontend",
-    "packages/models/_generated",
+    "packages/registry-db/src/registry_db/models/_generated",
 ]
 
 [tool.ruff.lint]
 select = [
-    "E",      # pycodestyle errors
-    "W",      # pycodestyle warnings
-    "F",      # Pyflakes
-    "I",      # isort
-    "B",      # flake8-bugbear
-    "C4",     # flake8-comprehensions
-    "UP",     # pyupgrade
-    "SIM",    # flake8-simplify
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)
@@ -122,11 +141,11 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["registry", "auth_server", "packages/*"]
+# Each value must be the import name of one of our own packages in this workspace.
+known-first-party = ["registry_db", "registry", "auth_server", "mcpgw"]
 
 [tool.ruff.lint.per-file-ignores]
-# Import order matters in __init__.py to avoid circular imports
-# NOTICE
+# Import order matters some files. Exclude them from automatic import sorting.
 "packages/registry-db/src/registry_db/vector/__init__.py" = ["I001"]
 
 [tool.ruff.format]
