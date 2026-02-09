@@ -39,23 +39,23 @@ try:
     # Read the OAuth data
     with open(oauth_file, 'r') as f:
         oauth_data = json.load(f)
-    
+
     access_token = oauth_data.get('access_token', '')
     cloud_id = oauth_data.get('cloud_id', '')
-    
+
     if not access_token:
         print("❌ No access_token found in OAuth file")
         exit(1)
-    
+
     print(f"✅ Found access_token (first 50 chars): {access_token[:50]}...")
     print(f"✅ Found cloud_id: {cloud_id}")
-    
+
     # Update function to add/update tokens in .env files
     def update_env_file(file_path, updates):
         """Update or add environment variables in a .env file"""
         lines = []
         updated_vars = set()
-        
+
         # Read existing file if it exists
         if os.path.exists(file_path):
             with open(file_path, 'r') as f:
@@ -68,10 +68,10 @@ try:
                             updated_vars.add(var_name)
                             var_updated = True
                             break
-                    
+
                     if not var_updated:
                         lines.append(line)
-        
+
         # Add any variables that weren't already in the file
         for var_name, var_value in updates.items():
             if var_name not in updated_vars:
@@ -79,30 +79,30 @@ try:
                 if lines and not lines[-1].endswith('\n'):
                     lines[-1] += '\n'
                 lines.append(f'{var_name}={var_value}\n')
-        
+
         # Write the updated file
         with open(file_path, 'w') as f:
             f.writelines(lines)
-        
+
         print(f"✅ Updated {file_path}")
-    
+
     # Prepare the updates
     env_updates = {
         'ATLASSIAN_AUTH_TOKEN': access_token,
         'ATLASSIAN_CLOUD_ID': cloud_id
     }
-    
+
     # Update both .env.agent and .env.user files
     agent_env = '/home/ubuntu/repos/mcp-gateway-registry/agents/.env.agent'
     user_env = '/home/ubuntu/repos/mcp-gateway-registry/agents/.env.user'
-    
+
     update_env_file(agent_env, env_updates)
     update_env_file(user_env, env_updates)
-    
+
     print("\n✅ Successfully updated both .env files with Atlassian OAuth tokens!")
     print("   - ATLASSIAN_AUTH_TOKEN: Set")
     print(f"   - ATLASSIAN_CLOUD_ID: {cloud_id}")
-    
+
 except Exception as e:
     print(f"❌ Error processing OAuth file: {e}")
     exit(1)

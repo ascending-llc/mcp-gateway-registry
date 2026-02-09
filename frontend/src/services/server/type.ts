@@ -1,4 +1,4 @@
-import type { ApiKeyHeaderFormat, ApiKeySource, ServerType } from '@/components/ServerFormDialog/types';
+import type { ApiKeyHeaderFormat, ApiKeySource, ServerType } from '@/pages/ServerRegistryOrEdit/types';
 import type { SERVER_CONNECTION } from '@/services/mcp/type';
 
 export type GET_VERSION_RESPONSE = {
@@ -7,7 +7,6 @@ export type GET_VERSION_RESPONSE = {
 
 export type GET_SERVERS_REQUEST = {
   query?: string;
-  scope?: string;
   status?: string;
   page?: string;
   per_page?: string;
@@ -16,9 +15,9 @@ export type GET_SERVERS_REQUEST = {
 export type OauthConfig = {
   authorization_url: string;
   token_url: string;
-  client_id: string;
-  client_secret: string;
-  scope: string;
+  client_id?: string;
+  client_secret?: string;
+  scope?: string;
 };
 export type ApiKeyConfig = {
   key: string;
@@ -27,6 +26,12 @@ export type ApiKeyConfig = {
   custom_header?: string;
 };
 export type StatusType = 'active' | 'inactive' | 'error';
+export type PermissionType = {
+  VIEW: boolean;
+  EDIT: boolean;
+  DELETE: boolean;
+  SHARE: boolean;
+};
 export type Server = {
   id: string;
   serverName: string;
@@ -39,9 +44,9 @@ export type Server = {
   capabilities: string;
   tools: string;
   author: string;
-  scope: string;
   status: StatusType;
   path: string;
+  permissions: PermissionType;
   tags: string[];
   numTools: number;
   numStars: number;

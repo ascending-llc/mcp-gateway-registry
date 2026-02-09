@@ -76,4 +76,4 @@ source .venv/bin/activate\n\
 exec python server.py --port $SERVER_PORT' > /entrypoint.sh && \
     chmod +x /entrypoint.sh
 
-ENTRYPOINT ["/entrypoint.sh"] 
+ENTRYPOINT ["/entrypoint.sh"]

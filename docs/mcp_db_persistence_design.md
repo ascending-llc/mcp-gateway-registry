@@ -152,14 +152,14 @@ classDiagram
 
 ### Data Schema
 
-### Authorization 
+### Authorization
 
 Permissions checks are contained within the server API router. It uses RBAC helpers found in `registry/auth/dependencies.py`
 
 
 ### API Endpoints
 
-Endpoints should support the following operations: 
+Endpoints should support the following operations:
 - Admin can add/update/remove server configuration for all of the users
 - Admin can add/update/remove server configuration for different groups
 - User can add/update/remove their private server configuration
@@ -211,7 +211,7 @@ All server endpoints return a **flattened response structure** for frontend conv
     "tools": "tavily_search, tavily_extract, tavily_crawl, tavily_map",
     "initDuration": 170
     }
-      
+
   },
   "scope": "shared_app",  # ← Root level
   "status": "active",  # ← Root level
@@ -353,7 +353,7 @@ All server endpoints return a **flattened response structure** for frontend conv
 - `lastError`: string (nullable, ISO 8601) - Last error timestamp *[stored at root in DB]*
 - `errorMessage`: string (nullable) - Last error message details *[stored at root in DB]*
 
-**Reference:** 
+**Reference:**
 - Database schema: [mcpServer.py](../packages/models/_generated/mcpServer.py)
 - Config schema (TypeScript): https://github.com/ascending-llc/jarvis-api/blob/e15d37b399fc186376843d77e8519545a7ead586/packages/data-provider/src/mcp.ts
 - Retrieval logic: https://github.com/ascending-llc/jarvis-api/blob/e15d37b399fc186376843d77e8519545a7ead586/packages/api/src/mcp/registry/db/ServerConfigsDB.ts
@@ -369,15 +369,15 @@ Query Parameters:
 - query (optional): Free-text search across server_name, description, tags
   * Example: query=github searches all text fields
   * Uses MongoDB text index or regex matching
-  
+
 - scope (optional): Exact filter by access level
   * Values: shared_app, shared_user, private_user
   * Example: scope=private_user shows only user's private servers
-  
+
 - status (optional): Exact filter by operational state
   * Values: active, inactive, error
   * Example: status=active shows only enabled servers
-  
+
 - page (optional): Page number for pagination (default: 1, min: 1)
 - per_page (optional): Items per page (default: 20, min: 1, max: 100)
 
@@ -1086,7 +1086,7 @@ The `docker-compose.yml` already configures a single-node replica set (`rs0`).
 
 **Problem:** The MCP server schema is already defined in Jarvis's TypeScript packages (`@jarvis`/data-schemas`). Duplicating this schema in Python would create maintenance burden and drift.
 
-**Solution:** 
+**Solution:**
 1. **Jarvis** publishes JSON schemas to GitHub Releases
 2. **mcp-gateway-registry** downloads JSON schemas and generates Python locally
 3. Generated Python code stored in `_generated/` (gitignored) - engineers run generation to browse schemas
@@ -1255,7 +1255,7 @@ Engineers run this script to browse schemas in their IDE without repo switching.
 
 Usage:
     python scripts/generate_schemas.py [--version VERSION]
-    
+
 Example:
     python scripts/generate_schemas.py --version v0.0.31
     python scripts/generate_schemas.py  # Uses version from .schema-version
@@ -1283,12 +1283,12 @@ SCHEMAS = {
 
 
 def download_schema(schema_name: str, version: str) -> dict:
-  
+
 
 
 def generate_python_model(schema_data: dict, output_file: Path):
 
-    
+
 def create_package_files(version: str):
 ```
 
@@ -1433,7 +1433,7 @@ $ python -c "from packages.models import MCPServer; print('✅ Schemas ready')"
 > **❓ Question:** Should we update `status` and `connection_state` in MongoDB every time a user connects to an MCP server?
 >
 > **✅ Answer:** **NO** - This would create excessive database writes. Instead:
-> 
+>
 > 1. **`status`** (stored in MongoDB):
 >    - User/admin controlled field (`active`, `inactive`, `error`)
 >    - Only updated when user/admin changes it
@@ -1444,9 +1444,9 @@ $ python -c "from packages.models import MCPServer; print('✅ Schemas ready')"
 >    - **Stored in-memory only** (no MongoDB writes for state transitions)
 >    - User-level state tracked in `MCPConnectionService.user_connections[user_id][server_name]`
 >    - App-level state tracked in `MCPConnectionService.app_connections[server_name]`
->    
+>
 >    **Connection Lookup Flow (when frontend requests status):**
->    1. **Check in-memory first**: 
+>    1. **Check in-memory first**:
 >       - App-level connections (for non-OAuth servers)
 >       - User-level connections (for OAuth servers)
 >    2. **If connected in-memory**: Return `connected` immediately
@@ -1455,12 +1455,12 @@ $ python -c "from packages.models import MCPServer; print('✅ Schemas ready')"
 >       - If failed, try refresh token → reconnect → store in memory
 >       - If both fail: Return `disconnected` (trigger OAuth or API key update)
 >    4. **During OAuth flow**: Return `connecting` state (tracked by reconnection manager)
->    
+>
 >    **State Resolution Priority** (matches jarvis pattern):
 >    ```python
 >    # 1. Base state from connection object
 >    base_state = connection.connection_state if connection and not connection.is_stale() else 'disconnected'
->    
+>
 >    # 2. OAuth-specific overrides (for OAuth servers only)
 >    if base_state == 'disconnected' and is_oauth_server:
 >        if reconnection_manager.is_reconnecting(user_id, server_name):
@@ -1469,11 +1469,11 @@ $ python -c "from packages.models import MCPServer; print('✅ Schemas ready')"
 >            return 'error'
 >        elif flow_state_manager.has_active_flow(user_id, server_name):
 >            return 'connecting'
->    
+>
 >    # 3. Return final state
 >    return base_state
 >    ```
->    
+>
 >    **Design Rationale:**
 >    - ✅ Avoids excessive MongoDB writes (thousands per minute avoided)
 >    - ✅ Fast lookups (in-memory dictionary access)
@@ -1518,15 +1518,15 @@ The generated Python schemas from Jarvis's TypeScript definitions will include:
 ```python
 class MCPServer(Document):
     """Generated from MCPServerDocument (TypeScript)"""
-    
+
     server_name: Indexed(str)  # Maps to serverName
     config: MCPConfig          # Nested configuration
     author: Indexed(ObjectId)  # User who created this server
-    
+
     # Timestamps (auto-managed)
     created_at: datetime       # Maps to createdAt
     updated_at: datetime       # Maps to updatedAt
-    
+
     class Settings:
         name = "mcpservers"
         indexes = [
@@ -1549,20 +1549,20 @@ class MCPServer(Document):
 ```python
 class Token(Document):
     """Generated from IToken (TypeScript)"""
-    
+
     user_id: Indexed(ObjectId)  # Reference to user (maps to userId)
     email: Optional[str] = None  # Optional email
     type: Optional[str] = None  # Token type (e.g., "oauth_access", "oauth_refresh")
     identifier: Optional[str] = None  # Token identifier/name
     token: str  # The actual token value (required) - encrypted at rest
-    
+
     # Timestamps
     created_at: Indexed(datetime)  # Creation timestamp (maps to createdAt)
     expires_at: Indexed(datetime)  # Expiration timestamp (maps to expiresAt)
-    
+
     # Flexible metadata storage
     metadata: Optional[Dict[str, Any]] = None  # Can store any data structure
-    
+
     class Settings:
         name = "tokens"
         indexes = [
@@ -1571,7 +1571,7 @@ class Token(Document):
             [("expiresAt", 1)],  # TTL index for automatic cleanup
             [("type", 1), ("identifier", 1)],  # Quick lookups by type/identifier
         ]
-        
+
     # TTL index configuration (MongoDB will auto-delete expired tokens)
     class Config:
         schema_extra = {
@@ -1805,17 +1805,17 @@ Connection state changes happen frequently (every time a user opens/closes a con
 # In-memory connection state tracking (using Redis or application cache)
 class ConnectionStateCache:
     """Track real-time connection states without DB writes"""
-    
+
     def __init__(self):
         self.cache = TTLCache(maxsize=1000, ttl=300)  # 5-minute TTL
-    
+
     async def set_state(self, server_id: str, state: str):
         """Update in-memory state only"""
         self.cache[server_id] = {
             "state": state,
             "updated_at": datetime.utcnow()
         }
-    
+
     async def get_state(self, server_id: str) -> str:
         """Get current connection state from cache"""
         cached = self.cache.get(server_id)
@@ -1824,10 +1824,10 @@ class ConnectionStateCache:
 # Only update MongoDB for meaningful events
 async def handle_connection_event(server_id: ObjectId, event: str):
     """Handle connection events with selective persistence"""
-    
+
     # Update in-memory state immediately
     await connection_cache.set_state(str(server_id), event)
-    
+
     # Only persist to MongoDB for important events:
     if event == "connected":
         # Update last_connected timestamp
@@ -1838,7 +1838,7 @@ async def handle_connection_event(server_id: ObjectId, event: str):
                 "last_error": None
             }
         })
-    
+
     elif event == "error":
         # Record error information
         server = await MCPServer.get(server_id)
@@ -1849,7 +1849,7 @@ async def handle_connection_event(server_id: ObjectId, event: str):
                 "status": "error"  # Only if repeated failures
             }
         })
-    
+
     # Don't persist "connecting" or "disconnecting" states
 ```
 
@@ -1863,18 +1863,18 @@ async def handle_connection_event(server_id: ObjectId, event: str):
 ```python
 async def get_server_with_state(server_id: ObjectId) -> dict:
     """Combine MongoDB data with real-time state"""
-    
+
     # Get persisted data from MongoDB
     server = await MCPServer.get(server_id)
-    
+
     # Get current connection state from cache
     current_state = await connection_cache.get_state(str(server_id))
-    
+
     return {
         **server.dict(),
         "connection_state": current_state,  # Real-time state
         "is_recently_active": (
-            server.last_connected and 
+            server.last_connected and
             datetime.utcnow() - server.last_connected < timedelta(minutes=5)
         )
     }
@@ -1903,14 +1903,14 @@ async def get_server_with_state(server_id: ObjectId) -> dict:
 def encrypt_value(plaintext: str) -> str:
     key = process.env.CREDS_KEY
     iv = process.env.CREDS_IV
-    
+
     # Convert plaintext to bytes
     data = plaintext.encode('utf-8')
-    
+
     # Encrypt using AES-CBC
     cipher = AES_CBC(key, iv)
     encrypted_bytes = cipher.encrypt(data)
-    
+
     # Convert to hex string for storage
     return encrypted_bytes.hex()
 
@@ -1918,14 +1918,14 @@ def encrypt_value(plaintext: str) -> str:
 def decrypt_value(encrypted_hex: str) -> str:
     key = process.env.CREDS_KEY
     iv = process.env.CREDS_IV
-    
+
     # Convert hex string back to bytes
     encrypted_bytes = bytes.fromhex(encrypted_hex)
-    
+
     # Decrypt using AES-CBC
     cipher = AES_CBC(key, iv)
     decrypted_bytes = cipher.decrypt(encrypted_bytes)
-    
+
     # Convert bytes back to string
     return decrypted_bytes.decode('utf-8')
 
@@ -1967,14 +1967,14 @@ For initial deployment to customer environments, we seed the database with sampl
 ```python
 class AuditLog(Document):
     """Audit trail for server configuration changes"""
-    
+
     action: str  # "create", "update", "delete"
     entity_type: str  # "server", "token"
     entity_id: ObjectId
     user_id: ObjectId
     changes: Dict[str, Any]  # Before/after snapshot
     timestamp: datetime = Field(default_factory=datetime.utcnow)
-    
+
     class Settings:
         name = "audit_logs"
 ```
@@ -2025,7 +2025,7 @@ from registry.models._generated import __version__ as schema_version
 def check_schema_compatibility():
     """Verify schema version compatibility on startup"""
     expected_version = "v0.0.31"  # From config or environment
-    
+
     if schema_version != expected_version:
         raise RuntimeError(
             f"Schema version mismatch! "
@@ -2080,7 +2080,7 @@ async def get_user_available_servers(user_id: ObjectId):
     servers = await MCPServer.find({
         "author": user_id  # Field name matches Jarvis
     }).to_list()
-    
+
     return servers
 
 # Jarvis (jarvis-api) can query MCP servers for tool discovery
@@ -2090,7 +2090,7 @@ async def get_user_available_tools(user_id: ObjectId):
         "author": user_id,
         "config.startup": True  # Auto-start servers
     }).to_list()
-    
+
     # Extract tools from server configs
     all_tools = []
     for server in servers:
@@ -2098,7 +2098,7 @@ async def get_user_available_tools(user_id: ObjectId):
             # Parse tools from server
             tools = await discover_mcp_tools(server)
             all_tools.extend(tools)
-    
+
     return all_tools
 ```
 
@@ -2122,24 +2122,24 @@ async def register_server(server_info, user_id):
         user_id=str(user_id),
         scope=server_info["scope"]
     )
-    
+
     try:
         server = await mongo_repo.register_server(server_info, user_id)
-        
+
         logger.info(
             "server_registered",
             server_id=str(server.id),
             server_name=server.server_name,
             user_id=str(user_id)
         )
-        
+
         mcp_server_operations.labels(
             operation="register",
             status="success"
         ).inc()
-        
+
         return server
-        
+
     except Exception as e:
         logger.error(
             "server_registration_failed",
@@ -2147,11 +2147,11 @@ async def register_server(server_info, user_id):
             error=str(e),
             user_id=str(user_id)
         )
-        
+
         mcp_server_operations.labels(
             operation="register",
             status="error"
         ).inc()
-        
+
         raise
 ```

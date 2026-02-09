@@ -24,9 +24,9 @@ def create_weaviate_adapter(config: BackendConfig, embedding) -> VectorStoreAdap
                 "port": vector_store_config.port,
                 "api_key": vector_store_config.api_key,
                 "collection_prefix": vector_store_config.collection_prefix,
-                "embedding_provider": config.embedding_provider
+                "embedding_provider": config.embedding_provider,
             },
-            "embedding_config": config.get_embedding_model_config_dict()
+            "embedding_config": config.get_embedding_model_config_dict(),
         }
 
         return WeaviateStore(**adapter_config)
@@ -34,6 +34,6 @@ def create_weaviate_adapter(config: BackendConfig, embedding) -> VectorStoreAdap
     except ImportError as e:
         raise DependencyMissingError(
             "langchain_weaviate",
-            f"Required database package 'langchain_weaviate' is not installed. "
-            f"Please install it with: pip install langchain_weaviate"
+            "Required database package 'langchain_weaviate' is not installed. "
+            "Please install it with: pip install langchain_weaviate",
         ) from e

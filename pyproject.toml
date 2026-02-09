@@ -1,7 +1,7 @@
 [project]
 name = "mcp-registry-workspace"
 version = "0.2.0"
-description = "MCP Gateway Registry - Monorepo Workspace Root"
+description = "Jarvis Registry - Monorepo Workspace Root"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 
@@ -29,17 +29,19 @@ packages = []
 members = [
     "packages",
     "registry",
-    "auth_server", 
+    "auth_server",
     "servers/mcpgw",
 ]
 
 [dependency-groups]
 dev = [
     "poethepoet>=0.40.0",
+    "ruff>=0.15.0",
+    "pre-commit>=4.0.0",
 ]
 
 [tool.poe.tasks]
-# Version management  
+# Version management
 version = { shell = "echo '\n📦 Workspace versions:\n' && echo '  Root       →' $(grep -m1 '^version = ' pyproject.toml | cut -d'\"' -f2) && echo '  packages   →' $(grep -m1 '^version = ' packages/pyproject.toml | cut -d'\"' -f2) && echo '  registry   →' $(grep -m1 '^version = ' registry/pyproject.toml | cut -d'\"' -f2) && echo '  auth_server →' $(grep -m1 '^version = ' auth_server/pyproject.toml | cut -d'\"' -f2) && echo '  mcpgw      →' $(grep -m1 '^version = ' servers/mcpgw/pyproject.toml | cut -d'\"' -f2) && echo ''", help = "Show versions across all projects" }
 version-sync = { script = "scripts.sync_version:main", help = "Sync version across all projects (usage: poe version-sync 0.2.0)" }
 
@@ -58,3 +60,75 @@ test-auth-server-cov = { shell = "cd auth_server && uv run poe test-cov" }
 # Packages tests
 test-packages = { shell = "cd packages && uv run poe test" }
 test-packages-cov = { shell = "cd packages && uv run poe test-cov" }
+
+# Linting and formatting
+lint = { shell = "uv run ruff check .", help = "Run ruff linter" }
+lint-fix = { shell = "uv run ruff check --fix .", help = "Run ruff linter with auto-fix" }
+format = { shell = "uv run ruff format .", help = "Format code with ruff" }
+format-check = { shell = "uv run ruff format --check .", help = "Check code formatting" }
+check = { shell = "uv run ruff check . && uv run ruff format --check .", help = "Run all code quality checks" }
+fix = { shell = "uv run ruff check --fix . && uv run ruff format .", help = "Fix all auto-fixable issues and format" }
+
+# Pre-commit hooks
+hooks-install = { shell = "uv run pre-commit install", help = "Install pre-commit hooks" }
+hooks-run = { shell = "uv run pre-commit run --all-files", help = "Run pre-commit on all files" }
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "*.egg-info",
+    "node_modules",
+    "frontend",
+    "packages/models/_generated",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "SIM",    # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "E402",   # module level import not at top of file (sometimes intentional)
+    "E722",   # bare except (will fix incrementally)
+    "B008",   # do not perform function calls in argument defaults (FastAPI uses this pattern)
+    "B019",   # lru_cache on methods (acceptable in this codebase)
+    "B904",   # raise-without-from-inside-except (too noisy)
+    "SIM102", # nested if statements (sometimes clearer)
+    "SIM105", # use contextlib.suppress (try-except-pass is clearer)
+    "SIM108", # use ternary operator (not always clearer)
+    "SIM117", # multiple with statements (sometimes clearer nested)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["registry", "auth_server", "packages"]
+
+[tool.ruff.lint.per-file-ignores]
+# Import order matters in __init__.py to avoid circular imports
+"packages/vector/__init__.py" = ["I001"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.bandit]
+exclude_dirs = ["tests", "frontend", ".venv", "node_modules"]
+# B101: assert warnings (used in tests)
+# B104: hardcoded bind_all_interfaces (required for containers)
+# B105: hardcoded_password_string (false positives on 'id', 'access', 'Bearer' - these are OAuth token type identifiers)
+# B106: hardcoded_password_funcarg (false positives on 'Bearer' - this is the OAuth 2.0 standard token type)
+skips = ["B101", "B104", "B105", "B106"]

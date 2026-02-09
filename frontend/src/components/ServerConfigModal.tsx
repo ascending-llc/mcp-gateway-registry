@@ -1,7 +1,9 @@
 import { ClipboardDocumentIcon } from '@heroicons/react/24/outline';
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
+
 import { getBasePath } from '@/config';
+import { useGlobal } from '@/contexts/GlobalContext';
 import type { ServerInfo } from '@/contexts/ServerContext';
 
 type IDE = 'vscode' | 'cursor' | 'cline' | 'claude-code';
@@ -10,10 +12,10 @@ interface ServerConfigModalProps {
   server: ServerInfo;
   isOpen: boolean;
   onClose: () => void;
-  onShowToast?: (message: string, type: 'success' | 'error') => void;
 }
 
-const ServerConfigModal: React.FC<ServerConfigModalProps> = ({ server, isOpen, onClose, onShowToast }) => {
+const ServerConfigModal: React.FC<ServerConfigModalProps> = ({ server, isOpen, onClose }) => {
+  const { showToast } = useGlobal();
   const [selectedIDE, setSelectedIDE] = useState<IDE>('vscode');
 
   useEffect(() => {
@@ -118,12 +120,12 @@ const ServerConfigModal: React.FC<ServerConfigModalProps> = ({ server, isOpen, o
       const configText = JSON.stringify(config, null, 2);
       await navigator.clipboard.writeText(configText);
 
-      onShowToast?.('Configuration copied to clipboard!', 'success');
+      showToast?.('Configuration copied to clipboard!', 'success');
     } catch (error) {
       console.error('Failed to copy to clipboard:', error);
-      onShowToast?.('Failed to copy configuration', 'error');
+      showToast?.('Failed to copy configuration', 'error');
     }
-  }, [generateMCPConfig, onShowToast]);
+  }, [generateMCPConfig, showToast]);
 
   if (!isOpen) {
     return null;

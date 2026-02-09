@@ -5,14 +5,14 @@ Tests for generic telemetry decorators that provide automatic timing
 and metrics collection.
 """
 
-import pytest
 import asyncio
-from unittest.mock import MagicMock, patch, AsyncMock
+
+import pytest
 
 from packages.telemetry.decorators import (
-    track_duration,
-    create_timed_context,
     _safe_extract_labels,
+    create_timed_context,
+    track_duration,
 )
 
 
@@ -28,6 +28,7 @@ class TestSafeExtractLabels:
 
     def test_extracts_labels_from_args(self):
         """Test extracts labels using provided function."""
+
         def extractor(*args, **kwargs):
             return {"arg0": args[0], "kwarg": kwargs.get("key", "default")}
 
@@ -36,6 +37,7 @@ class TestSafeExtractLabels:
 
     def test_converts_values_to_strings(self):
         """Test converts all label values to strings."""
+
         def extractor(*args, **kwargs):
             return {"int_val": 42, "bool_val": True}
 
@@ -44,6 +46,7 @@ class TestSafeExtractLabels:
 
     def test_returns_empty_dict_on_extractor_error(self):
         """Test returns empty dict when extractor raises exception."""
+
         def failing_extractor(*args, **kwargs):
             raise ValueError("Extraction failed")
 
@@ -52,6 +55,7 @@ class TestSafeExtractLabels:
 
     def test_handles_result_parameter(self):
         """Test passes result to extractor when provided."""
+
         def extractor(*args, result=None, **kwargs):
             return {"result_type": type(result).__name__}
 
@@ -60,6 +64,7 @@ class TestSafeExtractLabels:
 
     def test_handles_error_parameter(self):
         """Test passes error to extractor when provided."""
+
         def extractor(*args, error=None, **kwargs):
             return {"has_error": str(error is not None)}
 
@@ -193,6 +198,7 @@ class TestTrackDurationDecorator:
     @pytest.mark.asyncio
     async def test_handles_record_func_error_gracefully(self):
         """Test decorator handles errors in record_func gracefully."""
+
         def failing_record_func(duration, labels):
             raise RuntimeError("Recording failed")
 
@@ -206,6 +212,7 @@ class TestTrackDurationDecorator:
 
     def test_preserves_function_metadata(self):
         """Test decorator preserves function name and docstring."""
+
         def record_func(duration, labels):
             pass
 
@@ -318,6 +325,7 @@ class TestTimedContext:
     @pytest.mark.asyncio
     async def test_handles_record_func_error(self):
         """Test context manager handles record_func errors gracefully."""
+
         def failing_record_func(duration, labels):
             raise RuntimeError("Recording failed")
 

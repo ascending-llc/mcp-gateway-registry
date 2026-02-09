@@ -9,12 +9,12 @@ Based on: registry/services/server_service.py
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ..core.config import settings
-from ..schemas.agent_models import AgentCard, AgentInfo
+from ..schemas.agent_models import AgentCard
 
 # Get logger - logging is configured centrally in main.py via settings.configure_logging()
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ def _path_to_filename(
 
 def _load_agent_from_file(
     file_path: Path,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Load agent card from JSON file.
 
@@ -54,7 +54,7 @@ def _load_agent_from_file(
         Agent card dictionary or None if invalid
     """
     try:
-        with open(file_path, "r") as f:
+        with open(file_path) as f:
             agent_data = json.load(f)
 
             if not isinstance(agent_data, dict):
@@ -80,7 +80,7 @@ def _load_agent_from_file(
 
 def _load_state_file(
     state_file: Path,
-) -> Dict[str, List[str]]:
+) -> dict[str, list[str]]:
     """
     Load agent state from disk.
 
@@ -94,7 +94,7 @@ def _load_state_file(
 
     try:
         if state_file.exists():
-            with open(state_file, "r") as f:
+            with open(state_file) as f:
                 state_data = json.load(f)
 
             if not isinstance(state_data, dict):
@@ -121,7 +121,7 @@ def _load_state_file(
 
 
 def _persist_state_to_disk(
-    state_data: Dict[str, List[str]],
+    state_data: dict[str, list[str]],
     state_file: Path,
 ) -> None:
     """
@@ -185,9 +185,8 @@ class AgentService:
 
     def __init__(self):
         """Initialize agent service with empty state."""
-        self.registered_agents: Dict[str, AgentCard] = {}
-        self.agent_state: Dict[str, List[str]] = {"enabled": [], "disabled": []}
-
+        self.registered_agents: dict[str, AgentCard] = {}
+        self.agent_state: dict[str, list[str]] = {"enabled": [], "disabled": []}
 
     def load_agents_and_state(self) -> None:
         """Load agent cards and persisted state from disk."""
@@ -201,10 +200,7 @@ class AgentService:
         agent_files = list(settings.agents_dir.glob("**/*_agent.json"))
 
         # Additionally filter out agent_state.json if it somehow matches pattern
-        agent_files = [
-            f for f in agent_files
-            if f.name != settings.agent_state_file_path.name
-        ]
+        agent_files = [f for f in agent_files if f.name != settings.agent_state_file_path.name]
 
         logger.info(f"Found {len(agent_files)} agent files in {settings.agents_dir}")
 
@@ -213,8 +209,7 @@ class AgentService:
 
         if not agent_files:
             logger.warning(
-                f"No agent definition files found in {settings.agents_dir}. "
-                "Initializing empty agent registry."
+                f"No agent definition files found in {settings.agents_dir}. Initializing empty agent registry."
             )
             self.registered_agents = {}
         else:
@@ -226,8 +221,7 @@ class AgentService:
 
                     if agent_path in temp_agents:
                         logger.warning(
-                            f"Duplicate agent path in {agent_file}: {agent_path}. "
-                            "Overwriting previous definition."
+                            f"Duplicate agent path in {agent_file}: {agent_path}. Overwriting previous definition."
                         )
 
                     try:
@@ -236,9 +230,7 @@ class AgentService:
                         temp_agents[agent_path] = agent_card
 
                     except Exception as e:
-                        logger.error(
-                            f"Failed to validate agent card from {agent_file}: {e}"
-                        )
+                        logger.error(f"Failed to validate agent card from {agent_file}: {e}")
 
             self.registered_agents = temp_agents
             logger.info(f"Successfully loaded {len(self.registered_agents)} agent cards")
@@ -246,16 +238,13 @@ class AgentService:
         # Load persisted state
         self._load_agent_state()
 
-
     def _load_agent_state(self) -> None:
         """Load persisted agent state from disk."""
         state_data = _load_state_file(settings.agent_state_file_path)
 
         # Initialize state for all registered agents
-        for path in self.registered_agents.keys():
-            if path in state_data["enabled"]:
-                continue
-            elif path in state_data["disabled"]:
+        for path in self.registered_agents:
+            if path in state_data["enabled"] or path in state_data["disabled"]:
                 continue
             else:
                 # New agent not in state file - add to disabled
@@ -263,15 +252,12 @@ class AgentService:
 
         self.agent_state = state_data
         logger.info(
-            f"Agent state initialized: {len(state_data['enabled'])} enabled, "
-            f"{len(state_data['disabled'])} disabled"
+            f"Agent state initialized: {len(state_data['enabled'])} enabled, {len(state_data['disabled'])} disabled"
         )
-
 
     def _persist_state(self) -> None:
         """Persist agent state to disk."""
         _persist_state_to_disk(self.agent_state, settings.agent_state_file_path)
-
 
     def register_agent(
         self,
@@ -298,9 +284,9 @@ class AgentService:
 
         # Set registration metadata
         if not agent_card.registered_at:
-            agent_card.registered_at = datetime.now(timezone.utc)
+            agent_card.registered_at = datetime.now(UTC)
         if not agent_card.updated_at:
-            agent_card.updated_at = datetime.now(timezone.utc)
+            agent_card.updated_at = datetime.now(UTC)
 
         # Save to disk
         if not _save_agent_to_disk(agent_card, settings.agents_dir):
@@ -313,13 +299,9 @@ class AgentService:
         # Persist state
         self._persist_state()
 
-        logger.info(
-            f"New agent registered: '{agent_card.name}' at path '{path}' "
-            f"(disabled by default)"
-        )
+        logger.info(f"New agent registered: '{agent_card.name}' at path '{path}' (disabled by default)")
 
         return agent_card
-
 
     def get_agent(
         self,
@@ -353,8 +335,7 @@ class AgentService:
 
         return agent
 
-
-    def list_agents(self) -> List[AgentCard]:
+    def list_agents(self) -> list[AgentCard]:
         """
         List all registered agents.
 
@@ -404,16 +385,12 @@ class AgentService:
 
         # Update rating details using shared service
         updated_details, is_new_rating = rating_service.update_rating_details(
-            agent_dict["rating_details"],
-            username,
-            rating
+            agent_dict["rating_details"], username, rating
         )
         agent_dict["rating_details"] = updated_details
 
         # Calculate average rating using shared service
-        agent_dict["num_stars"] = rating_service.calculate_average_rating(
-            agent_dict["rating_details"]
-        )
+        agent_dict["num_stars"] = rating_service.calculate_average_rating(agent_dict["rating_details"])
 
         # Validate updated agent
         try:
@@ -439,7 +416,7 @@ class AgentService:
     def update_agent(
         self,
         path: str,
-        updates: Dict[str, Any],
+        updates: dict[str, Any],
     ) -> AgentCard:
         """
         Update an existing agent.
@@ -469,7 +446,7 @@ class AgentService:
         agent_dict["path"] = path
 
         # Update timestamp
-        agent_dict["updated_at"] = datetime.now(timezone.utc)
+        agent_dict["updated_at"] = datetime.now(UTC)
 
         # Validate updated agent
         try:
@@ -480,7 +457,7 @@ class AgentService:
 
         # Save to disk
         if not _save_agent_to_disk(updated_agent, settings.agents_dir):
-            raise ValueError(f"Failed to save updated agent to disk")
+            raise ValueError("Failed to save updated agent to disk")
 
         # Update in-memory registry
         self.registered_agents[path] = updated_agent
@@ -488,7 +465,6 @@ class AgentService:
         logger.info(f"Agent '{updated_agent.name}' ({path}) updated")
 
         return updated_agent
-
 
     def delete_agent(
         self,
@@ -541,7 +517,6 @@ class AgentService:
             logger.error(f"Failed to delete agent at path '{path}': {e}", exc_info=True)
             raise ValueError(f"Failed to delete agent: {e}")
 
-
     def enable_agent(
         self,
         path: str,
@@ -573,7 +548,6 @@ class AgentService:
 
         agent_name = self.registered_agents[path].name
         logger.info(f"Enabled agent '{agent_name}' ({path})")
-
 
     def disable_agent(
         self,
@@ -607,7 +581,6 @@ class AgentService:
         agent_name = self.registered_agents[path].name
         logger.info(f"Disabled agent '{agent_name}' ({path})")
 
-
     def is_agent_enabled(
         self,
         path: str,
@@ -633,8 +606,7 @@ class AgentService:
 
         return alternate_path in self.agent_state["enabled"]
 
-
-    def get_enabled_agents(self) -> List[str]:
+    def get_enabled_agents(self) -> list[str]:
         """
         Get list of enabled agent paths.
 
@@ -643,8 +615,7 @@ class AgentService:
         """
         return list(self.agent_state["enabled"])
 
-
-    def get_disabled_agents(self) -> List[str]:
+    def get_disabled_agents(self) -> list[str]:
         """
         Get list of disabled agent paths.
 
@@ -652,7 +623,6 @@ class AgentService:
             List of disabled agent paths
         """
         return list(self.agent_state["disabled"])
-
 
     async def index_agent(
         self,
@@ -683,11 +653,10 @@ class AgentService:
         except Exception as e:
             logger.error(f"Failed to index agent in FAISS: {e}", exc_info=True)
 
-
     def get_agent_info(
         self,
         path: str,
-    ) -> Optional[AgentCard]:
+    ) -> AgentCard | None:
         """
         Get agent by path (returns None if not found).
 
@@ -702,8 +671,7 @@ class AgentService:
         except ValueError:
             return None
 
-
-    def get_all_agents(self) -> List[AgentCard]:
+    def get_all_agents(self) -> list[AgentCard]:
         """
         Get all registered agents.
 
@@ -711,7 +679,6 @@ class AgentService:
             List of all agent cards
         """
         return self.list_agents()
-
 
     def remove_agent(
         self,
@@ -731,7 +698,6 @@ class AgentService:
             return True
         except ValueError:
             return False
-
 
     def toggle_agent(
         self,

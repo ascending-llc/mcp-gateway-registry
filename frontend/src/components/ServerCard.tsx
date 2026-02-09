@@ -10,7 +10,9 @@ import {
 } from '@heroicons/react/24/outline';
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { useGlobal } from '@/contexts/GlobalContext';
 import type { ServerInfo } from '@/contexts/ServerContext';
 import { useServer } from '@/contexts/ServerContext';
 import SERVICES from '@/services';
@@ -22,21 +24,14 @@ import ServerConfigModal from './ServerConfigModal';
 
 interface ServerCardProps {
   server: ServerInfo;
-  canModify?: boolean;
   onEdit?: (server: ServerInfo) => void;
-  onShowToast: (message: string, type: 'success' | 'error') => void;
   onServerUpdate: (id: string, updates: Partial<ServerInfo>) => void;
   onRefreshSuccess?: () => void;
 }
 
-const ServerCard: React.FC<ServerCardProps> = ({
-  server,
-  canModify,
-  onEdit,
-  onShowToast,
-  onServerUpdate,
-  onRefreshSuccess,
-}) => {
+const ServerCard: React.FC<ServerCardProps> = ({ server, onEdit, onServerUpdate, onRefreshSuccess }) => {
+  const navigate = useNavigate();
+  const { showToast } = useGlobal();
   const { cancelPolling, refreshServerData } = useServer();
   const [loading, setLoading] = useState(false);
   const [tools, setTools] = useState<Tool[]>([]);
@@ -86,13 +81,13 @@ const ServerCard: React.FC<ServerCardProps> = ({
     try {
       const result = await SERVICES.MCP.cancelAuth(server.id);
       if (result.success) {
-        onShowToast?.(result?.message || 'OAuth flow cancelled', 'success');
+        showToast?.(result?.message || 'OAuth flow cancelled', 'success');
         refreshServerData();
       } else {
-        onShowToast?.(result?.message || 'Unknown error', 'error');
+        showToast?.(result?.message || 'Unknown error', 'error');
       }
     } catch (_error) {
-      onShowToast?.('Unknown error', 'error');
+      showToast?.('Unknown error', 'error');
     }
   };
 
@@ -115,13 +110,13 @@ const ServerCard: React.FC<ServerCardProps> = ({
       setShowTools(true);
     } catch (error) {
       console.error('Failed to fetch tools:', error);
-      if (onShowToast) {
-        onShowToast('Failed to fetch tools', 'error');
+      if (showToast) {
+        showToast('Failed to fetch tools', 'error');
       }
     } finally {
       setLoadingTools(false);
     }
-  }, [server.id, loadingTools, onShowToast]);
+  }, [server.id, loadingTools, showToast]);
 
   const handleRefreshHealth = useCallback(async () => {
     if (loadingRefresh) return;
@@ -141,17 +136,17 @@ const ServerCard: React.FC<ServerCardProps> = ({
         onRefreshSuccess();
       }
 
-      if (onShowToast) {
-        onShowToast('Health status refreshed successfully', 'success');
+      if (showToast) {
+        showToast('Health status refreshed successfully', 'success');
       }
     } catch (error: any) {
-      if (onShowToast) {
-        onShowToast(error?.detail?.message || 'Failed to refresh health status', 'error');
+      if (showToast) {
+        showToast(error?.detail?.message || 'Failed to refresh health status', 'error');
       }
     } finally {
       setLoadingRefresh(false);
     }
-  }, [server.path, loadingRefresh, onRefreshSuccess, onShowToast, onServerUpdate]);
+  }, [server.path, loadingRefresh, onRefreshSuccess, showToast, onServerUpdate]);
 
   const handleToggleServer = async (id: string, enabled: boolean) => {
     try {
@@ -159,10 +154,10 @@ const ServerCard: React.FC<ServerCardProps> = ({
       await SERVICES.SERVER.refreshServerHealth(id);
       await SERVICES.SERVER.toggleServerStatus(id, { enabled });
       onServerUpdate(id, { enabled });
-      onShowToast(`Server ${enabled ? 'enabled' : 'disabled'} successfully!`, 'success');
+      showToast(`Server ${enabled ? 'enabled' : 'disabled'} successfully!`, 'success');
     } catch (error: any) {
       const errorMessage = error.detail?.message || (typeof error.detail === 'string' ? error.detail : '');
-      onShowToast(errorMessage || 'Failed to toggle server', 'error');
+      showToast(errorMessage || 'Failed to toggle server', 'error');
     } finally {
       setLoading(false);
     }
@@ -194,9 +189,19 @@ const ServerCard: React.FC<ServerCardProps> = ({
           <div className='flex items-start justify-between mb-3'>
             <div className='flex-1 min-w-0'>
               <div className='flex flex-wrap items-center gap-1.5 mb-2'>
-                <h3 className='text-base font-bold text-gray-900 dark:text-white truncate max-w-[160px]'>
-                  {server.name}
-                </h3>
+                {server.permissions?.VIEW ? (
+                  <h3
+                    className='text-base font-bold text-gray-900 dark:text-white truncate max-w-[160px] cursor-pointer hover:text-purple-600 dark:hover:text-purple-400 transition-colors'
+                    onClick={() => navigate(`/server-edit?id=${server.id}&isReadOnly=true`)}
+                  >
+                    {server.name}
+                  </h3>
+                ) : (
+                  <h3 className='text-base font-bold text-gray-900 dark:text-white truncate max-w-[160px]'>
+                    {server.name}
+                  </h3>
+                )}
+
                 {server.official && (
                   <span className='px-1.5 py-0.5 text-xs font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300 rounded-full flex-shrink-0 whitespace-nowrap'>
                     OFFICIAL
@@ -235,7 +240,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
                   {getAuthStatusIcon()}
                 </button>
               )}
-              {canModify && (
+              {server?.permissions?.EDIT && (
                 <button
                   className='p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-all duration-200 flex-shrink-0'
                   onClick={() => onEdit?.(server)}
@@ -443,14 +448,7 @@ const ServerCard: React.FC<ServerCardProps> = ({
         </div>
       )}
 
-      {showConfig && (
-        <ServerConfigModal
-          server={server}
-          isOpen={showConfig}
-          onClose={() => setShowConfig(false)}
-          onShowToast={onShowToast}
-        />
-      )}
+      {showConfig && <ServerConfigModal server={server} isOpen={showConfig} onClose={() => setShowConfig(false)} />}
 
       {showApiKeyDialog && (
         <ServerAuthorizationModal
@@ -458,7 +456,6 @@ const ServerCard: React.FC<ServerCardProps> = ({
           serverId={server.id}
           status={connection_state}
           showApiKeyDialog={showApiKeyDialog}
-          onShowToast={onShowToast}
           handleCancelAuth={handleCancelAuth}
           onCloseAuthDialog={onCloseAuthDialog}
         />

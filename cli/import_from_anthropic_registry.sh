@@ -65,11 +65,11 @@ detect_transport() {
 validate_package() {
     local package_type="$1"
     local package_name="$2"
-    
+
     if [ -z "$package_name" ] || [ "$package_name" = "null" ]; then
         return 1
     fi
-    
+
     case "$package_type" in
         "npm")
             # Check if NPM package exists (simplified check)
@@ -179,12 +179,12 @@ for server_name in "${servers[@]}"; do
     # Transform to registry format
     config_file="${TEMP_DIR}/${safe_name}-config.json"
     anthropic_json=$(cat "$anthropic_file")
-    
+
     # Extract from nested server object
     description=$(echo "$anthropic_json" | jq -r '.server.description // "Imported from Anthropic MCP Registry"')
     version=$(echo "$anthropic_json" | jq -r '.server.version // "latest"')
     repo_url=$(echo "$anthropic_json" | jq -r '.server.repository.url // ""')
-    
+
     # Detect transport type from packages or remotes
     transport_type="stdio"
     if echo "$anthropic_json" | jq -e '.server.packages[]? | .transport.type' > /dev/null 2>&1; then
@@ -192,25 +192,25 @@ for server_name in "${servers[@]}"; do
     elif echo "$anthropic_json" | jq -e '.server.remotes[]? | .type' > /dev/null 2>&1; then
         transport_type=$(echo "$anthropic_json" | jq -r '.server.remotes[]? | .type' | head -1)
     fi
-    
+
     # Detect if Python
     is_python="false"
     if echo "$anthropic_json" | jq -e '.server.packages[]? | select(.registryType == "pypi")' > /dev/null 2>&1; then
         is_python="true"
     fi
-    
+
     # Generate tags from server name
     IFS='/' read -ra name_parts <<< "$server_name"
     server_basename="${name_parts[${#name_parts[@]}-1]}"
     IFS='-' read -ra tag_parts <<< "$server_basename"
     tags_json=$(printf '%s\n' "${tag_parts[@]}" "anthropic-registry" | jq -R . | jq -s .)
-    
+
     # Generate safe path and proxy URL
     safe_path=$(echo "$server_name" | sed 's|/|-|g')
-    
+
     # For imported servers, use a placeholder URL since they're not deployed yet
         proxy_url="http://localhost:${current_port}/"
-    
+
     # Use Python transformer for complete transformation
     python3 -c "
 import json
@@ -240,9 +240,9 @@ for field in unsupported_fields:
 with open('$config_file', 'w') as f:
     json.dump(result, f, indent=2)
 "
-    
+
     print_success "Created config for $server_name (transport: $transport_type)"
-    
+
     # Register with service_mgmt.sh (if not dry run)
     if [ "$DRY_RUN" = false ]; then
         if GATEWAY_URL="$GATEWAY_URL" "$SCRIPT_DIR/service_mgmt.sh" add "$config_file" "$ANALYZERS"; then
@@ -255,7 +255,7 @@ with open('$config_file', 'w') as f:
         print_info "[DRY RUN] Would register $server_name with analyzers: $ANALYZERS"
         success_count=$((success_count + 1))
     fi
-    
+
     current_port=$((current_port + 1))
 done
 

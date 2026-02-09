@@ -1,9 +1,9 @@
 # Configure logging with file and console handlers
 import logging
-import os
 import sys
 
 from registry.core.config import settings
+
 
 def setup_logging():
     """Configure logging to write to both file and console."""
@@ -18,12 +18,10 @@ def setup_logging():
     log_level = settings.log_level
 
     # Create formatters
-    file_formatter = logging.Formatter(
-        '%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
-    )
+    file_formatter = logging.Formatter("%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s")
 
     console_formatter = logging.Formatter(
-        '%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s'
+        "%(asctime)s,p%(process)s,{%(filename)s:%(lineno)d},%(levelname)s,%(message)s"
     )
 
     # Get root logger
@@ -35,20 +33,20 @@ def setup_logging():
         root_logger.removeHandler(handler)
 
     # File handler with UTF-8 encoding
-    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
     file_handler.setLevel(log_level)
     file_handler.setFormatter(file_formatter)
 
     # Console handler with UTF-8 encoding for Windows compatibility
     # Reconfigure stdout to use UTF-8 encoding to handle emoji characters
-    if sys.platform == 'win32':
+    if sys.platform == "win32":
         try:
             # Try to reconfigure stdout to use UTF-8
-            sys.stdout.reconfigure(encoding='utf-8')
+            sys.stdout.reconfigure(encoding="utf-8")
         except AttributeError:
             # Python < 3.7 doesn't have reconfigure, ignore
             pass
-    
+
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(log_level)
     console_handler.setFormatter(console_formatter)
@@ -58,5 +56,6 @@ def setup_logging():
     root_logger.addHandler(console_handler)
 
     return root_logger
+
 
 logger = setup_logging()

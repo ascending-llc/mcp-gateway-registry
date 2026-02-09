@@ -336,7 +336,7 @@ Support for multiple OAuth provider configurations using numbered suffixes (`_1`
 ### Supported Providers
 
 - **Atlassian**: Confluence, Jira integration
-- **Google**: Gmail, Drive, Calendar services  
+- **Google**: Gmail, Drive, Calendar services
 - **GitHub**: Repository and issue management
 - **Microsoft**: Office 365, Teams integration
 - **Bedrock AgentCore**: AWS AgentCore services

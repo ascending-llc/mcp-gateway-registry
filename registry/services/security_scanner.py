@@ -12,13 +12,11 @@ import logging
 import os
 import re
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 from ..core.config import settings
-from ..schemas.security import SecurityScanResult, SecurityScanConfig
-
+from ..schemas.security import SecurityScanConfig, SecurityScanResult
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +25,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 OUTPUT_DIR = PROJECT_ROOT / "security_scans"
 
 
-def _extract_bearer_token_from_headers(headers: str) -> Optional[str]:
+def _extract_bearer_token_from_headers(headers: str) -> str | None:
     """
     Extract bearer token from headers JSON string.
 
@@ -50,9 +48,7 @@ def _extract_bearer_token_from_headers(headers: str) -> Optional[str]:
             logger.info("Using bearer token authentication")
             return bearer_token
         else:
-            logger.warning(
-                "Headers provided but no Bearer token found in X-Authorization header"
-            )
+            logger.warning("Headers provided but no Bearer token found in X-Authorization header")
             return None
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse headers JSON: {e}")
@@ -154,18 +150,17 @@ class SecurityScannerService:
             block_unsafe_servers=settings.security_block_unsafe_servers,
             analyzers=settings.security_analyzers,
             scan_timeout_seconds=settings.security_scan_timeout,
-            llm_api_key=settings.mcp_scanner_llm_api_key
-            or os.getenv("MCP_SCANNER_LLM_API_KEY"),
+            llm_api_key=settings.mcp_scanner_llm_api_key or os.getenv("MCP_SCANNER_LLM_API_KEY"),
             add_security_pending_tag=settings.security_add_pending_tag,
         )
 
     async def scan_server(
         self,
         server_url: str,
-        analyzers: Optional[str] = None,
-        api_key: Optional[str] = None,
-        headers: Optional[str] = None,
-        timeout: Optional[int] = None,
+        analyzers: str | None = None,
+        api_key: str | None = None,
+        headers: str | None = None,
+        timeout: int | None = None,
     ) -> SecurityScanResult:
         """
         Scan an MCP server for security vulnerabilities.
@@ -200,9 +195,7 @@ class SecurityScannerService:
         if not server_url.endswith("/mcp"):
             server_url = f"{server_url}/mcp"
 
-        logger.info(
-            f"Starting security scan for {server_url} with analyzers: {analyzers}"
-        )
+        logger.info(f"Starting security scan for {server_url} with analyzers: {analyzers}")
 
         try:
             # Run the scan in a thread pool to avoid blocking
@@ -216,9 +209,7 @@ class SecurityScannerService:
             )
 
             # Analyze results
-            is_safe, critical, high, medium, low = self._analyze_scan_results(
-                raw_output
-            )
+            is_safe, critical, high, medium, low = self._analyze_scan_results(raw_output)
 
             # Save detailed output
             output_file = self._save_scan_output(server_url, raw_output)
@@ -226,9 +217,7 @@ class SecurityScannerService:
             # Create result object
             result = SecurityScanResult(
                 server_url=server_url,
-                scan_timestamp=datetime.now(timezone.utc)
-                .isoformat()
-                .replace("+00:00", "Z"),
+                scan_timestamp=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                 is_safe=is_safe,
                 critical_issues=critical,
                 high_severity=high,
@@ -269,9 +258,7 @@ class SecurityScannerService:
             # Return error result
             return SecurityScanResult(
                 server_url=server_url,
-                scan_timestamp=datetime.now(timezone.utc)
-                .isoformat()
-                .replace("+00:00", "Z"),
+                scan_timestamp=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                 is_safe=False,  # Treat scanner failures as unsafe
                 critical_issues=0,
                 high_severity=0,
@@ -300,9 +287,7 @@ class SecurityScannerService:
             # Return error result
             return SecurityScanResult(
                 server_url=server_url,
-                scan_timestamp=datetime.now(timezone.utc)
-                .isoformat()
-                .replace("+00:00", "Z"),
+                scan_timestamp=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                 is_safe=False,  # Treat scanner failures as unsafe
                 critical_issues=0,
                 high_severity=0,
@@ -319,9 +304,9 @@ class SecurityScannerService:
         self,
         server_url: str,
         analyzers: str,
-        api_key: Optional[str] = None,
-        headers: Optional[str] = None,
-        timeout: Optional[int] = None,
+        api_key: str | None = None,
+        headers: str | None = None,
+        timeout: int | None = None,
     ) -> dict:
         """
         Run mcp-scanner command and return raw output.
@@ -391,20 +376,14 @@ class SecurityScannerService:
             raw_output = {"analysis_results": {}, "tool_results": tool_results}
 
             # Extract findings from tool results and organize by analyzer
-            raw_output["analysis_results"] = _organize_findings_by_analyzer(
-                tool_results
-            )
+            raw_output["analysis_results"] = _organize_findings_by_analyzer(tool_results)
 
-            logger.debug(
-                f"Scanner output:\n{json.dumps(raw_output, indent=2, default=str)}"
-            )
+            logger.debug(f"Scanner output:\n{json.dumps(raw_output, indent=2, default=str)}")
             return raw_output
 
         except subprocess.TimeoutExpired as e:
             logger.error(f"Scanner command timed out after {timeout} seconds")
-            raise RuntimeError(
-                f"Security scan timed out after {timeout} seconds"
-            ) from e
+            raise RuntimeError(f"Security scan timed out after {timeout} seconds") from e
         except subprocess.CalledProcessError as e:
             logger.error(f"Scanner command failed with exit code {e.returncode}")
             logger.error(f"stderr: {e.stderr}")
@@ -414,9 +393,7 @@ class SecurityScannerService:
             logger.error(f"Raw stdout: {result.stdout[:1000]}")
             raise RuntimeError("Failed to parse security scanner output") from e
 
-    def _analyze_scan_results(
-        self, raw_output: dict
-    ) -> tuple[bool, int, int, int, int]:
+    def _analyze_scan_results(self, raw_output: dict) -> tuple[bool, int, int, int, int]:
         """
         Analyze scan results and extract severity counts.
 
@@ -478,12 +455,10 @@ class SecurityScannerService:
         output_dir = self._ensure_output_directory()
 
         # Generate safe filename from server URL
-        safe_url = (
-            server_url.replace("https://", "").replace("http://", "").replace("/", "_")
-        )
+        safe_url = server_url.replace("https://", "").replace("http://", "").replace("/", "_")
 
         # Create date-based subdirectory for archival
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         date_folder = timestamp.strftime("%Y-%m-%d")
         archive_dir = output_dir / date_folder
         archive_dir.mkdir(exist_ok=True)
@@ -526,15 +501,11 @@ class SecurityScannerService:
             normalized_url = f"{normalized_url}/mcp"
 
         # Generate safe filename from server URL (same logic as _save_scan_output)
-        safe_url = (
-            normalized_url.replace("https://", "")
-            .replace("http://", "")
-            .replace("/", "_")
-        )
+        safe_url = normalized_url.replace("https://", "").replace("http://", "").replace("/", "_")
         server_name = safe_url.replace("localhost_", "")
         return f"{server_name}.json"
 
-    def get_scan_result(self, server_path: str) -> Optional[dict]:
+    def get_scan_result(self, server_path: str) -> dict | None:
         """
         Get the latest scan result for a server.
 
@@ -575,19 +546,15 @@ class SecurityScannerService:
             return None
 
         try:
-            with open(scan_file, "r") as f:
+            with open(scan_file) as f:
                 scan_data = json.load(f)
             logger.info(f"Loaded security scan results for {server_path} from {scan_file}")
             return scan_data
         except json.JSONDecodeError as e:
-            logger.error(
-                f"Failed to parse security scan results for {server_path}: {e}"
-            )
+            logger.error(f"Failed to parse security scan results for {server_path}: {e}")
             return None
-        except Exception as e:
-            logger.exception(
-                f"Unexpected error loading security scan results for {server_path}"
-            )
+        except Exception:
+            logger.exception(f"Unexpected error loading security scan results for {server_path}")
             return None
 
 

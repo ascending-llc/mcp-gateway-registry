@@ -1,16 +1,18 @@
-from enum import Enum
+from enum import StrEnum
 
 
-class OAuthFlowStatus(str, Enum):
+class OAuthFlowStatus(StrEnum):
     """OAuth flow status"""
+
     PENDING = "pending"
     COMPLETED = "completed"
     FAILED = "failed"
     EXPIRED = "expired"
 
 
-class ConnectionState(str, Enum):
+class ConnectionState(StrEnum):
     """Connection state enumeration"""
+
     CONNECTED = "connected"
     DISCONNECTED = "disconnected"
     CONNECTING = "connecting"

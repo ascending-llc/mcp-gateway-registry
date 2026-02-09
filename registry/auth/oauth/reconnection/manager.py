@@ -1,12 +1,14 @@
 import asyncio
 import time
-from typing import Dict, Any, Optional, List, Set
-from registry.utils.log import logger
+from typing import Any, Optional
+
+from registry.auth.oauth.flow_state_manager import get_flow_state_manager
 from registry.models.oauth_models import OAuthTokens
-from .tracker import OAuthReconnectionTracker
 from registry.schemas.enums import ConnectionState
 from registry.services.server_service import server_service_v1
-from registry.auth.oauth.flow_state_manager import get_flow_state_manager
+from registry.utils.log import logger
+
+from .tracker import OAuthReconnectionTracker
 
 
 class OAuthReconnectionManager:
@@ -20,15 +22,15 @@ class OAuthReconnectionManager:
     DEFAULT_CONNECTION_TIMEOUT_MS = 10_000
 
     def __init__(
-            self,
-            mcp_service: Any,  # MCPService instance
-            oauth_service: Any,  # OAuthService instance
-            tracker: Optional[OAuthReconnectionTracker] = None,
-            connection_timeout_ms: Optional[int] = None
+        self,
+        mcp_service: Any,  # MCPService instance
+        oauth_service: Any,  # OAuthService instance
+        tracker: OAuthReconnectionTracker | None = None,
+        connection_timeout_ms: int | None = None,
     ):
         """
         Initialize reconnection manager
-        
+
         Args:
             mcp_service: MCP service instance providing connection methods
             oauth_service: OAuth service instance providing token methods
@@ -45,19 +47,19 @@ class OAuthReconnectionManager:
     def is_reconnecting(self, user_id: str, server_id: str) -> bool:
         """
         Check if server is currently reconnecting
-        
+
         Notes: isReconnecting()
         """
         # Clean up if timed out, then return whether still reconnecting
         self.tracker.cleanup_if_timed_out(user_id, server_id)
         return self.tracker.is_still_reconnecting(user_id, server_id)
 
-    async def reconnect_servers(self, user_id: str) -> Dict[str, bool]:
+    async def reconnect_servers(self, user_id: str) -> dict[str, bool]:
         """
         Reconnect all OAuth servers for user
-        
+
         Notes: reconnectServers()
-        
+
         Returns:
             Dict[str, bool]: server_id -> reconnection success status
         """
@@ -70,8 +72,7 @@ class OAuthReconnectionManager:
             logger.info(f"No servers to reconnect for user: {user_id}")
             return {}
 
-        logger.info(f"Found {len(servers_to_reconnect)} servers to reconnect: "
-                    f"{list(servers_to_reconnect)}")
+        logger.info(f"Found {len(servers_to_reconnect)} servers to reconnect: {list(servers_to_reconnect)}")
 
         # 2. Mark servers as actively reconnecting
         for server_id in servers_to_reconnect:
@@ -83,27 +84,24 @@ class OAuthReconnectionManager:
             success = await self.try_reconnect_server(user_id, server_id)
             results[server_id] = success
 
-        logger.info(f"Reconnection completed for user: {user_id}, "
-                    f"successful: {sum(1 for r in results.values() if r)}, "
-                    f"failed: {sum(1 for r in results.values() if not r)}")
+        logger.info(
+            f"Reconnection completed for user: {user_id}, "
+            f"successful: {sum(1 for r in results.values() if r)}, "
+            f"failed: {sum(1 for r in results.values() if not r)}"
+        )
         return results
 
-    async def try_reconnect_server(
-            self,
-            user_id: str,
-            server_id: str,
-            force_new: bool = False
-    ) -> bool:
+    async def try_reconnect_server(self, user_id: str, server_id: str, force_new: bool = False) -> bool:
         """
         Try to reconnect single server
-        
+
         Notes: tryReconnect()
-        
+
         Args:
             user_id: User ID
             server_id: Server name
             force_new: Whether to force new connection
-            
+
         Returns:
             bool: Whether reconnection was successful
         """
@@ -126,13 +124,10 @@ class OAuthReconnectionManager:
                 return False
 
             # Get connection timeout from config
-            connection_timeout = config.get("init_timeout", self.connection_timeout_ms)
+            config.get("init_timeout", self.connection_timeout_ms)
 
             # Try to get user connection (this will use existing tokens and refresh if needed)
-            connection = await self.mcp_service.connection_service.get_connection(
-                user_id=user_id,
-                server_id=server_id
-            )
+            connection = await self.mcp_service.connection_service.get_connection(user_id=user_id, server_id=server_id)
 
             # Check if connection is valid
             if connection and await self._is_connection_valid(connection):
@@ -152,7 +147,7 @@ class OAuthReconnectionManager:
     def clear_reconnection(self, user_id: str, server_id: str) -> None:
         """
         Clear reconnection status
-        
+
         Notes: clearReconnection()
         """
         self.tracker.remove_failed(user_id, server_id)
@@ -162,51 +157,43 @@ class OAuthReconnectionManager:
     async def can_reconnect(self, user_id: str, server_id: str) -> bool:
         """
         Check if server can be reconnected
-        
+
         Notes: canReconnect()
         """
         # 1. If server is marked as failed, don't reconnect
         if self.tracker.is_failed(user_id, server_id):
-            logger.info(f"Server marked as failed: "
-                        f"user={user_id}, server={server_id}")
+            logger.info(f"Server marked as failed: user={user_id}, server={server_id}")
             return False
 
         # 2. If server is actively reconnecting, don't reconnect
         if self.tracker.is_active(user_id, server_id):
-            logger.info(f"Server already reconnecting: "
-                        f"user={user_id}, server={server_id}")
+            logger.info(f"Server already reconnecting: user={user_id}, server={server_id}")
             return False
 
         # 3. If server is already connected, don't reconnect
         if await self._is_server_connected(user_id, server_id):
-            logger.info(f"Server already connected: "
-                        f"user={user_id}, server={server_id}")
+            logger.info(f"Server already connected: user={user_id}, server={server_id}")
             return False
 
         # 4. If server has no tokens, don't reconnect
         tokens = await self._get_user_tokens(user_id, server_id)
         if not tokens:
-            logger.info(f"No tokens found: "
-                        f"user={user_id}, server={server_id}")
+            logger.info(f"No tokens found: user={user_id}, server={server_id}")
             return False
 
         # 5. If token has expired, don't reconnect
         if self._is_token_expired(tokens):
-            logger.info(f"Token expired: "
-                        f"user={user_id}, server={server_id}")
+            logger.info(f"Token expired: user={user_id}, server={server_id}")
             return False
 
         # 6. Can reconnect
         logger.info(f"Can reconnect: user={user_id}, server={server_id}")
         return True
 
-    async def get_reconnection_status(
-            self,
-            user_id: str
-    ) -> Dict[str, Dict[str, Any]]:
+    async def get_reconnection_status(self, user_id: str) -> dict[str, dict[str, Any]]:
         """
         Get reconnection status for user
-        
+
         Python-specific: TypeScript doesn't have this method
         """
         status = {}
@@ -228,11 +215,7 @@ class OAuthReconnectionManager:
 
         return status
 
-    async def get_oauth_state_override(
-            self,
-            user_id: str,
-            server_id: str
-    ) -> Optional[str]:
+    async def get_oauth_state_override(self, user_id: str, server_id: str) -> str | None:
         """
         Get OAuth flow state override
 
@@ -262,8 +245,7 @@ class OAuthReconnectionManager:
                 was_cancelled = flow_state.error and "cancelled" in flow_state.error.lower()
                 if not was_cancelled:
                     logger.debug(
-                        f"OAuth flow failed for {server_id}: "
-                        f"status={flow_state.status}, age={flow_age_seconds}s"
+                        f"OAuth flow failed for {server_id}: status={flow_state.status}, age={flow_age_seconds}s"
                     )
                     return "failed"
                 return None
@@ -302,8 +284,7 @@ class OAuthReconnectionManager:
             flow_ttl_seconds = flow_manager._flow_ttl
 
             # Active condition: status is pending and not timed out
-            return (flow_state.status == "pending" and
-                    flow_age_seconds <= flow_ttl_seconds)
+            return flow_state.status == "pending" and flow_age_seconds <= flow_ttl_seconds
 
         except Exception as e:
             logger.error(f"Error checking if flow is active: {e}")
@@ -344,7 +325,7 @@ class OAuthReconnectionManager:
 
     # Private methods
 
-    async def _get_servers_to_reconnect(self, user_id: str) -> Set[str]:
+    async def _get_servers_to_reconnect(self, user_id: str) -> set[str]:
         """Get servers that need reconnection"""
         servers_to_reconnect = set()
 
@@ -364,28 +345,16 @@ class OAuthReconnectionManager:
 
         # Disconnect user connection
         try:
-            asyncio.create_task(
-                self.mcp_service.connection_service.disconnect_user_connection(
-                    user_id, server_id
-                )
-            )
+            asyncio.create_task(self.mcp_service.connection_service.disconnect_user_connection(user_id, server_id))
         except Exception as e:
             logger.error(f"Failed to disconnect user connection: {e}")
 
-    async def _get_oauth_servers(self) -> List[str]:
+    async def _get_oauth_servers(self) -> list[str]:
         """Get all OAuth servers"""
         try:
-            servers, _ = await server_service_v1.list_servers(
-                page=1,
-                per_page=1000,
-                status="active"
-            )
+            servers, _ = await server_service_v1.list_servers(page=1, per_page=1000, status="active")
 
-            oauth_servers = [
-                server.serverName
-                for server in servers
-                if server.config.get("requires_oauth", False)
-            ]
+            oauth_servers = [server.serverName for server in servers if server.config.get("requires_oauth", False)]
             return oauth_servers
         except Exception as e:
             logger.error(f"Failed to get OAuth servers: {e}")
@@ -394,9 +363,7 @@ class OAuthReconnectionManager:
     async def _is_server_connected(self, user_id: str, server_id: str) -> bool:
         """Check if server is connected"""
         try:
-            connection = await self.mcp_service.connection_service.get_connection(
-                user_id, server_id
-            )
+            connection = await self.mcp_service.connection_service.get_connection(user_id, server_id)
             if not connection:
                 return False
             return await self._is_connection_valid(connection)
@@ -413,11 +380,7 @@ class OAuthReconnectionManager:
             logger.info(f"_is_connection_valid: {e}")
             return False
 
-    async def _get_user_tokens(
-            self,
-            user_id: str,
-            server_id: str
-    ) -> Optional[OAuthTokens]:
+    async def _get_user_tokens(self, user_id: str, server_id: str) -> OAuthTokens | None:
         """Get user tokens"""
         server = await server_service_v1.get_server_by_id(server_id)
         if not server:
@@ -426,8 +389,7 @@ class OAuthReconnectionManager:
             tokens = await self.oauth_service.get_tokens(user_id, server.serverName)
             return tokens
         except Exception as e:
-            logger.error(f"Failed to get user tokens: "
-                         f"user={user_id}, server={server_id}, error={e}")
+            logger.error(f"Failed to get user tokens: user={user_id}, server={server_id}, error={e}")
             return None
 
     def _is_token_expired(self, tokens: OAuthTokens) -> bool:
@@ -447,13 +409,10 @@ class OAuthReconnectionManager:
 _reconnection_manager_instance: Optional = None
 
 
-def get_reconnection_manager(
-        mcp_service: Any = None,
-        oauth_service: Any = None
-) -> OAuthReconnectionManager:
+def get_reconnection_manager(mcp_service: Any = None, oauth_service: Any = None) -> OAuthReconnectionManager:
     """
     Get reconnection manager instance
-    
+
     Note: This is a simplified singleton pattern for compatibility
     In production, consider using dependency injection
     """
@@ -462,13 +421,9 @@ def get_reconnection_manager(
     if _reconnection_manager_instance is None:
         if mcp_service is None or oauth_service is None:
             raise RuntimeError(
-                "OAuthReconnectionManager not initialized. "
-                "Call with mcp_service and oauth_service first."
+                "OAuthReconnectionManager not initialized. Call with mcp_service and oauth_service first."
             )
-        _reconnection_manager_instance = OAuthReconnectionManager(
-            mcp_service=mcp_service,
-            oauth_service=oauth_service
-        )
+        _reconnection_manager_instance = OAuthReconnectionManager(mcp_service=mcp_service, oauth_service=oauth_service)
         logger.info("Initialized global OAuthReconnectionManager singleton")
 
     return _reconnection_manager_instance

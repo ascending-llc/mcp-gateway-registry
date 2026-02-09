@@ -26,7 +26,7 @@ cd cli && npm install && npm run build
 2. Directly configured via execution role
 3. Set an anthropic API key
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-xxx      
+export ANTHROPIC_API_KEY=sk-ant-xxx
 ```
 
 ### Run (OAuth tokens auto-generated on first start)

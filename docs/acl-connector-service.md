@@ -28,7 +28,7 @@
 
 The MCP Gateway Registry requires fine-grained Access Control List (ACL) capabilities to support secure environments for MCP servers and A2A agents. Currently, all end users have access to the same set of connectors, which does not meet customer requirements for object-level permissions. To address this, we will introduce an ACL service in the MCP registry project that enables:
 
-- Object-level permissions for servers and agents 
+- Object-level permissions for servers and agents
 - Control over visibility and access for individual users, user groups, and public (everyone)
 - Integration with a MongoDB-backed persistence layer for scalable, transactional storage
 
@@ -50,7 +50,7 @@ An ACLService is already implemented in the Jarvis project. Prior to defining th
 
 ### Terminology
 - **Principals**: Entities that can be granted permissions (individual users, groups, public, and roles)
-- **Roles**: Predefined sets of permissions. Each role is associated with a resource type  and maps to permission bits (permBits) 
+- **Roles**: Predefined sets of permissions. Each role is associated with a resource type  and maps to permission bits (permBits)
 - **Resources**: Items that require access control (mcp servers, agents), identified by resourceType and resourceId.
 - **Permissions**: Numeric bitmasks that define allowed actions (view, edit).
 
@@ -115,16 +115,16 @@ sequenceDiagram
 
 #### Field Definitions
 
-Required Fields: 
+Required Fields:
 - `principalType`: String - The type of principal (user, group, or public)
 - `principalId?`: Mixed - The ID of the principal (objectId for user/group, null for "public")
 - `resourceType`: String - The type of resource (MCP Server, Agent)
 - `resourceId`: ObjectId - The ID of the resource
-- `permBits`: Number - The permission bits 
+- `permBits`: Number - The permission bits
 
 Optional Fields:
-- `principalModel?`: String - The MongoDB model, null for "public". Can be used to support bulk updates 
-- `roleId?:` ObjectId - The ID of the role whose permissions are being inherited 
+- `principalModel?`: String - The MongoDB model, null for "public". Can be used to support bulk updates
+- `roleId?:` ObjectId - The ID of the role whose permissions are being inherited
 - `inheritedFrom?`: ObjectId - ID of the resource this permission is inherited from
 - `grantedBy?`: ObjectId - ID of the user who granted this permission
 - `grantedAt?`: String (ISO 8601) -  When this permission was granted
@@ -158,7 +158,7 @@ The `ACLEntry` relies on the following enums/constants exported by `librechat-da
 - **PermBits**
 - **AccessRoleIds**
 
-These enums are not currently imported via `import-schema`. Updates to the `import-schema` tool or an additional import tool will be needed to keep the supporting models in-line with jarvis-api. 
+These enums are not currently imported via `import-schema`. Updates to the `import-schema` tool or an additional import tool will be needed to keep the supporting models in-line with jarvis-api.
 
 
 ### Service Design

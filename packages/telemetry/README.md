@@ -187,9 +187,9 @@ class RequestMetricsContext:
             self._success = False
         duration = time.perf_counter() - self._start_time
         record_request(
-            self._endpoint, 
-            self._method, 
-            self._success, 
+            self._endpoint,
+            self._method,
+            self._success,
             duration
         )
 

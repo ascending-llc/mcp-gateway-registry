@@ -2,21 +2,21 @@
 Unit tests for rate_agent endpoint in agent_routes.py
 """
 
-import pytest
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import patch
+
+import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
 
-from registry.main import app
-from registry.services.agent_service import agent_service
-from registry.schemas.agent_models import AgentCard
-from registry.auth.dependencies import create_session_cookie
 from registry.core.config import settings
+from registry.main import app
+from registry.schemas.agent_models import AgentCard
+from registry.services.agent_service import agent_service
 
 
 @pytest.fixture
-def mock_user_context() -> Dict[str, Any]:
+def mock_user_context() -> dict[str, Any]:
     """Mock authenticated user context."""
     return {
         "username": "testuser",
@@ -28,7 +28,7 @@ def mock_user_context() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def mock_admin_context() -> Dict[str, Any]:
+def mock_admin_context() -> dict[str, Any]:
     """Mock admin user context."""
     return {
         "username": "admin",
@@ -42,12 +42,12 @@ def mock_admin_context() -> Dict[str, Any]:
 @pytest.fixture
 def admin_session_cookie():
     """Create a valid admin session cookie (JWT access token)."""
-    from registry.utils.crypto_utils import generate_access_token
     from registry.auth.dependencies import map_cognito_groups_to_scopes
-    
-    groups = ['registry-admins']
-    scopes = map_cognito_groups_to_scopes(groups) or ['registry-admins']
-    
+    from registry.utils.crypto_utils import generate_access_token
+
+    groups = ["registry-admins"]
+    scopes = map_cognito_groups_to_scopes(groups) or ["registry-admins"]
+
     return generate_access_token(
         user_id="test-admin-id",
         username=settings.admin_user,
@@ -56,19 +56,19 @@ def admin_session_cookie():
         scopes=scopes,
         role="admin",
         auth_method="traditional",
-        provider="local"
+        provider="local",
     )
 
 
 @pytest.fixture
 def user_session_cookie():
     """Create a valid user session cookie (JWT access token)."""
-    from registry.utils.crypto_utils import generate_access_token
     from registry.auth.dependencies import map_cognito_groups_to_scopes
-    
+    from registry.utils.crypto_utils import generate_access_token
+
     groups = ["users"]
     scopes = map_cognito_groups_to_scopes(groups) or []
-    
+
     return generate_access_token(
         user_id="test-user-id",
         username="testuser",
@@ -77,7 +77,7 @@ def user_session_cookie():
         scopes=scopes,
         role="user",
         auth_method="oauth2",
-        provider="cognito"
+        provider="cognito",
     )
 
 
@@ -104,7 +104,7 @@ def sample_agent_card() -> AgentCard:
         version="1.0.0",
         tags=["test"],
         skills=[],
-        visibility="public"
+        visibility="public",
     )
 
 
@@ -114,7 +114,7 @@ class TestRateAgent:
 
     def test_rate_agent_success(
         self,
-        mock_user_context: Dict[str, Any],
+        mock_user_context: dict[str, Any],
         sample_agent_card: AgentCard,
         authenticated_client,
     ) -> None:
@@ -126,14 +126,17 @@ class TestRateAgent:
 
         app.dependency_overrides[nginx_proxied_auth] = _mock_auth
 
-        with patch.object(
-            agent_service,
-            "get_agent_info",
-            return_value=sample_agent_card,
-        ), patch.object(
-            agent_service,
-            "update_rating",
-            return_value=4.5,
+        with (
+            patch.object(
+                agent_service,
+                "get_agent_info",
+                return_value=sample_agent_card,
+            ),
+            patch.object(
+                agent_service,
+                "update_rating",
+                return_value=4.5,
+            ),
         ):
             response = authenticated_client.post(
                 "/api/agents/test-agent/rate",
@@ -148,7 +151,7 @@ class TestRateAgent:
 
     def test_rate_agent_not_found(
         self,
-        mock_user_context: Dict[str, Any],
+        mock_user_context: dict[str, Any],
         authenticated_client,
     ) -> None:
         """Test rating a non-existent agent returns 404."""
@@ -180,8 +183,9 @@ class TestRateAgent:
         authenticated_client,
     ) -> None:
         """Test rating an agent without access returns 403."""
-        from registry.auth.dependencies import get_current_user_by_mid
         from fastapi import Request
+
+        from registry.auth.dependencies import get_current_user_by_mid
 
         # User with restricted access - accessible_agents doesn't include /test-agent
         restricted_context = {
@@ -217,7 +221,7 @@ class TestRateAgent:
 
     def test_rate_agent_invalid_rating_type(
         self,
-        mock_user_context: Dict[str, Any],
+        mock_user_context: dict[str, Any],
         sample_agent_card: AgentCard,
         authenticated_client,
     ) -> None:
@@ -245,7 +249,7 @@ class TestRateAgent:
 
     def test_rate_agent_missing_rating(
         self,
-        mock_user_context: Dict[str, Any],
+        mock_user_context: dict[str, Any],
         sample_agent_card: AgentCard,
         authenticated_client,
     ) -> None:
@@ -273,7 +277,7 @@ class TestRateAgent:
 
     def test_rate_agent_update_rating_fails(
         self,
-        mock_user_context: Dict[str, Any],
+        mock_user_context: dict[str, Any],
         sample_agent_card: AgentCard,
         authenticated_client,
     ) -> None:
@@ -285,14 +289,17 @@ class TestRateAgent:
 
         app.dependency_overrides[nginx_proxied_auth] = _mock_auth
 
-        with patch.object(
-            agent_service,
-            "get_agent_info",
-            return_value=sample_agent_card,
-        ), patch.object(
-            agent_service,
-            "update_rating",
-            side_effect=ValueError("Failed to save rating"),
+        with (
+            patch.object(
+                agent_service,
+                "get_agent_info",
+                return_value=sample_agent_card,
+            ),
+            patch.object(
+                agent_service,
+                "update_rating",
+                side_effect=ValueError("Failed to save rating"),
+            ),
         ):
             response = authenticated_client.post(
                 "/api/agents/test-agent/rate",
@@ -307,7 +314,7 @@ class TestRateAgent:
 
     def test_rate_agent_with_different_ratings(
         self,
-        mock_user_context: Dict[str, Any],
+        mock_user_context: dict[str, Any],
         sample_agent_card: AgentCard,
         authenticated_client,
     ) -> None:
@@ -320,14 +327,17 @@ class TestRateAgent:
         app.dependency_overrides[nginx_proxied_auth] = _mock_auth
 
         for rating_value in [1, 2, 3, 4, 5]:
-            with patch.object(
-                agent_service,
-                "get_agent_info",
-                return_value=sample_agent_card,
-            ), patch.object(
-                agent_service,
-                "update_rating",
-                return_value=float(rating_value),
+            with (
+                patch.object(
+                    agent_service,
+                    "get_agent_info",
+                    return_value=sample_agent_card,
+                ),
+                patch.object(
+                    agent_service,
+                    "update_rating",
+                    return_value=float(rating_value),
+                ),
             ):
                 response = authenticated_client.post(
                     "/api/agents/test-agent/rate",
@@ -341,7 +351,7 @@ class TestRateAgent:
 
     def test_rate_agent_path_normalization(
         self,
-        mock_user_context: Dict[str, Any],
+        mock_user_context: dict[str, Any],
         sample_agent_card: AgentCard,
         authenticated_client,
     ) -> None:
@@ -353,15 +363,18 @@ class TestRateAgent:
 
         app.dependency_overrides[nginx_proxied_auth] = _mock_auth
 
-        with patch.object(
-            agent_service,
-            "get_agent_info",
-            return_value=sample_agent_card,
-        ) as mock_get_agent, patch.object(
-            agent_service,
-            "update_rating",
-            return_value=5.0,
-        ) as mock_update:
+        with (
+            patch.object(
+                agent_service,
+                "get_agent_info",
+                return_value=sample_agent_card,
+            ) as mock_get_agent,
+            patch.object(
+                agent_service,
+                "update_rating",
+                return_value=5.0,
+            ) as mock_update,
+        ):
             # Test with path - the URL already has the correct format
             response = authenticated_client.post(
                 "/api/agents/test-agent/rate",
@@ -384,7 +397,7 @@ class TestRateAgent:
 
     def test_rate_agent_private_agent_by_owner(
         self,
-        mock_user_context: Dict[str, Any],
+        mock_user_context: dict[str, Any],
         authenticated_client,
     ) -> None:
         """Test that agent owner can rate their private agent."""
@@ -411,14 +424,17 @@ class TestRateAgent:
 
         app.dependency_overrides[nginx_proxied_auth] = _mock_auth
 
-        with patch.object(
-            agent_service,
-            "get_agent_info",
-            return_value=private_agent,
-        ), patch.object(
-            agent_service,
-            "update_rating",
-            return_value=5.0,
+        with (
+            patch.object(
+                agent_service,
+                "get_agent_info",
+                return_value=private_agent,
+            ),
+            patch.object(
+                agent_service,
+                "update_rating",
+                return_value=5.0,
+            ),
         ):
             response = authenticated_client.post(
                 "/api/agents/private-agent/rate",
@@ -467,14 +483,17 @@ class TestRateAgent:
 
         app.dependency_overrides[nginx_proxied_auth] = _mock_auth
 
-        with patch.object(
-            agent_service,
-            "get_agent_info",
-            return_value=group_agent,
-        ), patch.object(
-            agent_service,
-            "update_rating",
-            return_value=4.0,
+        with (
+            patch.object(
+                agent_service,
+                "get_agent_info",
+                return_value=group_agent,
+            ),
+            patch.object(
+                agent_service,
+                "update_rating",
+                return_value=4.0,
+            ),
         ):
             response = authenticated_client.post(
                 "/api/agents/group-agent/rate",

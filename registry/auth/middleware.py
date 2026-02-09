@@ -1,20 +1,27 @@
 import base64
 import os
+from typing import Any
+
 import jwt
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from itsdangerous import SignatureExpired, BadSignature
+from itsdangerous import BadSignature, SignatureExpired
 from starlette.middleware.base import BaseHTTPMiddleware
-from typing import Optional, Dict, Any, List, Tuple
 from starlette.routing import compile_path
-from registry.utils.log import logger
 
-from registry.auth.dependencies import (map_cognito_groups_to_scopes, signer, get_ui_permissions_for_user,
-                                        get_user_accessible_servers, get_accessible_services_for_user,
-                                        get_accessible_agents_for_user, user_can_modify_servers,
-                                        user_has_wildcard_access)
+from registry.auth.dependencies import (
+    get_accessible_agents_for_user,
+    get_accessible_services_for_user,
+    get_ui_permissions_for_user,
+    get_user_accessible_servers,
+    signer,
+    user_can_modify_servers,
+    user_has_wildcard_access,
+)
 from registry.core.config import settings
 from registry.core.telemetry_decorators import AuthMetricsContext
+from registry.utils.log import logger
+
 
 class UnifiedAuthMiddleware(BaseHTTPMiddleware):
     """
@@ -52,34 +59,38 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
         #     "/api/{versions}/mcp/{path:path}",
         #     "/api/search/{path:path}",
         # ])
-        self.public_paths_compiled = self._compile_patterns([
-            "/",
-            "/health",
-            "/docs",
-            "/openapi.json",
-            "/static/{path:path}",
-            "/redirect",
-            "/redirect/{provider}",
-            "/api/auth/providers",
-            "/api/auth/config",
-            f"/api/{settings.API_VERSION}/mcp/{{server_name}}/oauth/callback",  # OAuth callback is public
-            "/.well-known/{path:path}",  # OAuth discovery endpoints must be public
-        ])
-        
+        self.public_paths_compiled = self._compile_patterns(
+            [
+                "/",
+                "/health",
+                "/docs",
+                "/openapi.json",
+                "/static/{path:path}",
+                "/redirect",
+                "/redirect/{provider}",
+                "/api/auth/providers",
+                "/api/auth/config",
+                f"/api/{settings.API_VERSION}/mcp/{{server_name}}/oauth/callback",  # OAuth callback is public
+                "/.well-known/{path:path}",  # OAuth discovery endpoints must be public
+            ]
+        )
+
         # =====================================================================
         # INTERNAL PATHS (Admin/Internal - Require Basic Auth)
         # =====================================================================
         # Define patterns for internal/admin endpoints that use Basic authentication.
-        self.internal_paths_compiled = self._compile_patterns([
-            "/api/internal/{path:path}",                   # Internal admin endpoints
-        ])
+        self.internal_paths_compiled = self._compile_patterns(
+            [
+                "/api/internal/{path:path}",  # Internal admin endpoints
+            ]
+        )
         logger.info(
             f"Auth middleware initialized with Starlette routing: "
             f"{len(self.public_paths_compiled)} public, "
             f"{len(self.internal_paths_compiled)} internal, "
         )
 
-    def _compile_patterns(self, patterns: List[str]) -> List[Tuple]:
+    def _compile_patterns(self, patterns: list[str]) -> list[tuple]:
         """
         Compile path patterns into Starlette route matchers
         """
@@ -147,21 +158,21 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 logger.error(f"Auth error for {path}: {e}")
                 return JSONResponse(status_code=500, content={"detail": "Authentication error"})
 
-    def _match_path(self, path: str, compiled_patterns: List[Tuple]) -> bool:
+    def _match_path(self, path: str, compiled_patterns: list[tuple]) -> bool:
         """
         Match path using Starlette route matcher
         """
-        for original_pattern, path_regex, path_format, param_convertors in compiled_patterns:
+        for original_pattern, path_regex, _path_format, _param_convertors in compiled_patterns:
             match = path_regex.match(path)
             if match:
                 logger.debug(f"Path '{path}' matched pattern '{original_pattern}'")
                 return True
         return False
 
-    async def _authenticate(self, request: Request) -> Dict[str, Any]:
+    async def _authenticate(self, request: Request) -> dict[str, Any]:
         """
         Unified authentication logic (simple and efficient)
-        
+
         1. Internal paths (/api/internal/*) → Basic Auth
         2. Authenticated paths (including /api/auth/me, /api/servers/*, /proxy/*, /api/mcp/*) → JWT or Session Auth
         3. Other paths → Session Auth
@@ -182,7 +193,7 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             return user_context
         raise AuthenticationError("JWT or session authentication required")
 
-    def _try_basic_auth(self, request: Request) -> Optional[Dict[str, Any]]:
+    def _try_basic_auth(self, request: Request) -> dict[str, Any] | None:
         """Basic authentication for internal endpoints"""
         try:
             # Get Authorization header
@@ -213,18 +224,18 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             # Return user context for admin user
             return self._build_user_context(
                 username=username,
-                groups=['mcp-registry-admin'],
-                scopes=['mcp-registry-admin', 'mcp-servers-unrestricted/read', 'mcp-servers-unrestricted/execute'],
-                auth_method='basic',
-                provider='basic',
-                auth_source="basic_auth"
+                groups=["mcp-registry-admin"],
+                scopes=["mcp-registry-admin", "mcp-servers-unrestricted/read", "mcp-servers-unrestricted/execute"],
+                auth_method="basic",
+                provider="basic",
+                auth_source="basic_auth",
             )
 
         except Exception as e:
             logger.debug(f"Basic auth failed: {e}")
             return None
 
-    def _try_jwt_auth(self, request: Request) -> Optional[Dict[str, Any]]:
+    def _try_jwt_auth(self, request: Request) -> dict[str, Any] | None:
         """JWT token authentication for /api/servers endpoints"""
         try:
             # Get Authorization header
@@ -232,18 +243,18 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             if not auth_header:
                 logger.debug("Missing Authorization header for JWT auth")
                 return None
-                        
+
             access_token = auth_header.split(" ")[1]
             if not access_token:
                 logger.debug("Empty JWT token after split")
                 return None
-        
+
             # JWT validation parameters from auth_server/server.py
             # Extract kid from header first
             kid = None
             try:
                 unverified_header = jwt.get_unverified_header(access_token)
-                kid = unverified_header.get('kid')
+                kid = unverified_header.get("kid")
 
                 # Check if this is our self-signed token
                 if kid and kid != settings.JWT_SELF_SIGNED_KID:
@@ -259,34 +270,32 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 # because the audience is now the resource URL (RFC 8707 Resource Indicators)
                 # which varies per endpoint (/proxy/mcpgw, /proxy/server2, etc.)
                 # Issuer validation provides sufficient security for self-signed tokens
-                is_self_signed = (kid == settings.JWT_SELF_SIGNED_KID)
-                
+                is_self_signed = kid == settings.JWT_SELF_SIGNED_KID
+
                 decode_options = {
                     "verify_exp": True,
                     "verify_iat": True,
                     "verify_iss": True,
-                    "verify_aud": not is_self_signed  # Skip aud check for self-signed tokens
+                    "verify_aud": not is_self_signed,  # Skip aud check for self-signed tokens
                 }
-                
+
                 decode_kwargs = {
-                    "algorithms": ['HS256'],
+                    "algorithms": ["HS256"],
                     "issuer": settings.JWT_ISSUER,
                     "options": decode_options,
-                    "leeway": 30  # 30 second leeway for clock skew
+                    "leeway": 30,  # 30 second leeway for clock skew
                 }
-                
+
                 # Only validate audience for provider tokens (not self-signed)
                 if not is_self_signed:
                     decode_kwargs["audience"] = settings.JWT_AUDIENCE
                 else:
                     logger.info("Skipping audience validation for self-signed token (RFC 8707 Resource Indicators)")
-                
-                claims = jwt.decode(
-                    access_token,
-                    settings.secret_key,
-                    **decode_kwargs
+
+                claims = jwt.decode(access_token, settings.secret_key, **decode_kwargs)
+                logger.info(
+                    f"JWT claims validated: sub={claims.get('sub')}, aud={claims.get('aud')}, scope={claims.get('scope')}"
                 )
-                logger.info(f"JWT claims validated: sub={claims.get('sub')}, aud={claims.get('aud')}, scope={claims.get('scope')}")
             except jwt.ExpiredSignatureError:
                 logger.debug("JWT token has expired")
                 return None
@@ -298,41 +307,42 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 return None
 
             # Extract user information from claims
-            username = claims.get('sub', '')
+            username = claims.get("sub", "")
             if not username:
                 logger.debug("JWT token missing 'sub' claim")
                 return None
 
             # Extract groups first
-            groups = claims.get('groups', [])
-            
+            groups = claims.get("groups", [])
+
             # Extract scopes from space-separated string
-            scope_string = claims.get('scope', '')
+            scope_string = claims.get("scope", "")
             scopes = scope_string.split() if scope_string else []
-            
+
             # If no scopes but has groups, map groups to scopes
             if not scopes and groups:
-                from auth_server.utils.security_mask import map_groups_to_scopes
                 from auth_server.core.config import settings as auth_settings
+                from auth_server.utils.security_mask import map_groups_to_scopes
+
                 scopes = map_groups_to_scopes(groups, auth_settings.scopes_config)
                 logger.info(f"Mapped JWT groups {groups} to scopes: {scopes}")
-            
+
             # Verify we have at least some scopes
             if not scopes:
                 logger.debug(f"JWT token has no scopes and groups mapping failed. Groups: {groups}")
                 return None
             # Optional: Verify client_id if present
-            client_id = claims.get('client_id')
-            if client_id and client_id != 'user-generated':
+            client_id = claims.get("client_id")
+            if client_id and client_id != "user-generated":
                 logger.debug(f"JWT token has unexpected client_id: {client_id}")
 
             # Log token validation success with additional details
-            token_type = claims.get('token_type', 'unknown')
-            description = claims.get('description', '')
+            token_type = claims.get("token_type", "unknown")
+            description = claims.get("description", "")
             logger.info(f"JWT token validated for user: {username}, type: {token_type}, scopes: {scopes}")
             if description:
                 logger.debug(f"Token description: {description}")
-            user_id = claims.get('user_id')
+            user_id = claims.get("user_id")
             logger.debug(f"jwt enhencement user id {user_id}")
             # Return user context similar to _try_basic_auth
             return self._build_user_context(
@@ -340,100 +350,104 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                 username=username,
                 groups=groups,
                 scopes=scopes,
-                auth_method='jwt',
-                provider='jwt',
-                auth_source="jwt_auth"
+                auth_method="jwt",
+                provider="jwt",
+                auth_source="jwt_auth",
             )
         except Exception as e:
             logger.debug(f"JWT auth failed: {e}")
             return None
 
-    async def _try_session_auth(self, request: Request) -> Optional[Dict[str, Any]]:
+    async def _try_session_auth(self, request: Request) -> dict[str, Any] | None:
         """JWT-based session authentication from httpOnly cookie with auto-refresh"""
         try:
             session_cookie = request.cookies.get(settings.session_cookie_name)
             if not session_cookie:
                 return None
-            
+
             # Try to verify JWT access token
             from registry.utils.crypto_utils import verify_access_token, verify_refresh_token
+
             claims = verify_access_token(session_cookie)
-            
+
             if claims:
                 # Valid access token - extract user info and build context
-                username = claims.get('sub')
-                user_id = claims.get('user_id')
-                groups = claims.get('groups', [])
-                auth_method = claims.get('auth_method', 'traditional')
-                
+                username = claims.get("sub")
+                user_id = claims.get("user_id")
+                groups = claims.get("groups", [])
+                auth_method = claims.get("auth_method", "traditional")
+
                 # Extract scopes from JWT (space-separated string)
-                scope_string = claims.get('scope', '')
+                scope_string = claims.get("scope", "")
                 scopes = scope_string.split() if scope_string else []
-                
+
                 # If no scopes but has groups, map groups to scopes
                 if not scopes and groups:
-                    from auth_server.utils.security_mask import map_groups_to_scopes
                     from auth_server.core.config import settings as auth_settings
+                    from auth_server.utils.security_mask import map_groups_to_scopes
+
                     scopes = map_groups_to_scopes(groups, auth_settings.scopes_config)
                     logger.info(f"Mapped session groups {groups} to scopes: {scopes}")
-                
+
                 logger.debug(f"JWT access token valid for user {username} (user_id: {user_id})")
-                
+
                 return self._build_user_context(
                     username=username,
                     groups=groups,
                     scopes=scopes,
                     auth_method=auth_method,
-                    provider=claims.get('provider', 'local'),
-                    auth_source='jwt_session_auth',
-                    user_id=user_id
+                    provider=claims.get("provider", "local"),
+                    auth_source="jwt_session_auth",
+                    user_id=user_id,
                 )
-            
+
             # Access token invalid/expired - try refresh token
             logger.debug("Access token expired or invalid, attempting refresh")
             refresh_token = request.cookies.get("jarvis_registry_refresh")
-            
+
             if not refresh_token:
                 logger.debug("No refresh token available")
                 return None
-            
+
             # Verify refresh token
             refresh_claims = verify_refresh_token(refresh_token)
             if not refresh_claims:
                 logger.debug("Refresh token invalid or expired")
                 return None
-            
+
             # Refresh token valid - extract user info from refresh token claims
-            user_id = refresh_claims.get('user_id')
-            username = refresh_claims.get('sub')
-            auth_method = refresh_claims.get('auth_method')
-            provider = refresh_claims.get('provider')
-            
+            user_id = refresh_claims.get("user_id")
+            username = refresh_claims.get("sub")
+            auth_method = refresh_claims.get("auth_method")
+            provider = refresh_claims.get("provider")
+
             # Extract groups and scopes from refresh token
-            groups = refresh_claims.get('groups', [])
-            scope_string = refresh_claims.get('scope', '')
+            groups = refresh_claims.get("groups", [])
+            scope_string = refresh_claims.get("scope", "")
             scopes = scope_string.split() if scope_string else []
-            
+
             # If no scopes but has groups, map groups to scopes
             if not scopes and groups:
-                from auth_server.utils.security_mask import map_groups_to_scopes
                 from auth_server.core.config import settings as auth_settings
+                from auth_server.utils.security_mask import map_groups_to_scopes
+
                 scopes = map_groups_to_scopes(groups, auth_settings.scopes_config)
                 logger.info(f"Mapped refresh token groups {groups} to scopes: {scopes}")
-            
-            role = refresh_claims.get('role', 'user')
-            email = refresh_claims.get('email', f"{username}@local")
-            
+
+            role = refresh_claims.get("role", "user")
+            email = refresh_claims.get("email", f"{username}@local")
+
             logger.info(f"Refresh token valid for user {username} ({auth_method}), generating new access token")
             logger.debug(f"User groups from refresh token: {groups}, scopes: {scopes}")
-            
+
             # Validate that we have the required information
             if not scopes:
                 logger.warning(f"Refresh token for user {username} has no scopes (groups: {groups}), cannot refresh")
                 return None
-            
+
             # Generate new access token using information from refresh token
             from registry.utils.crypto_utils import generate_access_token
+
             try:
                 new_access_token = generate_access_token(
                     user_id=user_id,
@@ -443,22 +457,22 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
                     scopes=scopes,
                     role=role,
                     auth_method=auth_method,
-                    provider=provider
+                    provider=provider,
                 )
-                
+
                 # Store new access token in request state for response modification
                 request.state.new_access_token = new_access_token
-                
+
                 logger.info(f"Successfully refreshed access token for user {username}")
-                
+
                 return self._build_user_context(
                     username=username,
                     groups=groups,
                     scopes=scopes,
                     auth_method=auth_method,
                     provider=provider,
-                    auth_source='jwt_session_auth_refreshed',
-                    user_id=user_id
+                    auth_source="jwt_session_auth_refreshed",
+                    user_id=user_id,
                 )
             except Exception as e:
                 logger.error(f"Error generating new access token during refresh: {e}")
@@ -468,16 +482,15 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.debug(f"JWT session auth failed: {e}")
             return None
 
-    def _parse_session_data(self, session_cookie: str) -> Optional[Dict[str, Any]]:
+    def _parse_session_data(self, session_cookie: str) -> dict[str, Any] | None:
         try:
             data = signer.loads(session_cookie, max_age=settings.session_max_age_seconds)
-            if not data.get('username'):
+            if not data.get("username"):
                 return None
             # Sets the default value for traditionally authenticated users (from the original get_user_session_data).
-            if data.get('auth_method') != 'oauth2':
-                data.setdefault('groups', ['mcp-registry-admin'])
-                data.setdefault('scopes', ['mcp-servers-unrestricted/read',
-                                           'mcp-servers-unrestricted/execute'])
+            if data.get("auth_method") != "oauth2":
+                data.setdefault("groups", ["mcp-registry-admin"])
+                data.setdefault("scopes", ["mcp-servers-unrestricted/read", "mcp-servers-unrestricted/execute"])
             return data
 
         except SignatureExpired as e:
@@ -490,11 +503,18 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
             logger.warning(f"Session cookie parse error: {e}")
             return None
 
-    def _build_user_context(self, username: str, groups: list, scopes: list,
-                            auth_method: str, provider: str,
-                            auth_source: str = None, user_id: str = None) -> Dict[str, Any]:
+    def _build_user_context(
+        self,
+        username: str,
+        groups: list,
+        scopes: list,
+        auth_method: str,
+        provider: str,
+        auth_source: str = None,
+        user_id: str = None,
+    ) -> dict[str, Any]:
         """
-            Construct the complete user context (from the original enhanced_auth logic).
+        Construct the complete user context (from the original enhanced_auth logic).
         """
         ui_permissions = get_ui_permissions_for_user(scopes)
         accessible_servers = get_user_accessible_servers(scopes)
@@ -504,17 +524,17 @@ class UnifiedAuthMiddleware(BaseHTTPMiddleware):
 
         user_context = {
             "user_id": user_id,
-            'username': username,
-            'groups': groups,
-            'scopes': scopes,
-            'auth_method': auth_method,
-            'provider': provider,
-            'accessible_servers': accessible_servers,
-            'accessible_services': accessible_services,
-            'accessible_agents': accessible_agents,
-            'ui_permissions': ui_permissions,
-            'can_modify_servers': can_modify,
-            'is_admin': user_has_wildcard_access(scopes),
+            "username": username,
+            "groups": groups,
+            "scopes": scopes,
+            "auth_method": auth_method,
+            "provider": provider,
+            "accessible_servers": accessible_servers,
+            "accessible_services": accessible_services,
+            "accessible_agents": accessible_agents,
+            "ui_permissions": ui_permissions,
+            "can_modify_servers": can_modify,
+            "is_admin": user_has_wildcard_access(scopes),
             "auth_source": auth_source,
         }
         logger.debug(f"User context for {username}: {user_context}")

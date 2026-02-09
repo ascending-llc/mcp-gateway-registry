@@ -9,27 +9,35 @@ from typing import Optional
 from pymongo import AsyncMongoClient
 from beanie import init_beanie
 from urllib.parse import quote_plus
+
+from beanie import init_beanie
+from motor.motor_asyncio import AsyncIOMotorClient
+
+from packages.core.config import settings
 from packages.models._generated import (
     IAccessRole,
     IAction,
     IGroup,
     IUser,
+    Key,
     Token,
-    Key
 )
-from packages.models.extended_mcp_server import ExtendedMCPServer as MCPServerDocument
+from packages.models.a2a_agent import A2AAgent
 from packages.models.extended_acl_entry import ExtendedAclEntry as IAclEntry
-from packages.core.config import settings
+from packages.models.extended_mcp_server import (
+    ExtendedMCPServer as MCPServerDocument,
+)
+
 
 class MongoDB:
     """MongoDB connection manager with connection pooling."""
     client: Optional[AsyncMongoClient] = None
 
     @classmethod
-    async def connect_db(cls, db_name: Optional[str] = None):
+    async def connect_db(cls, db_name: str | None = None):
         """
         Initialize MongoDB connection with connection pooling.
-        
+
         Args:
             db_name: Database name. If not provided, uses default or MONGODB_DB_NAME env var.
         """
@@ -42,7 +50,7 @@ class MongoDB:
         mongo_password = settings.MONGODB_PASSWORD
         # Parse MONGO_URI to extract db_name if present
         # Extract database name from URI
-        uri_parts = mongo_uri.rsplit('/', 1)
+        uri_parts = mongo_uri.rsplit("/", 1)
         base_uri = uri_parts[0]
         extracted_db = uri_parts[1] if len(uri_parts) > 1 else None
         if extracted_db and not db_name:
@@ -52,7 +60,7 @@ class MongoDB:
             escaped_username = quote_plus(mongo_username)
             escaped_password = quote_plus(mongo_password)
             # Insert credentials after mongodb://
-            protocol, rest = base_uri.split('://', 1)
+            protocol, rest = base_uri.split("://", 1)
             mongodb_url = f"{protocol}://{escaped_username}:{escaped_password}@{rest}"
         else:
             mongodb_url = base_uri
@@ -72,7 +80,7 @@ class MongoDB:
                 retryReads=True,  # Retry read operations
             )
             # Verify connection
-            await cls.client.admin.command('ping')
+            await cls.client.admin.command("ping")
             # Get database
             db = cls.client[db_name]
             # Pass the namespace containing all model classes so forward references can be resolved
@@ -85,12 +93,14 @@ class MongoDB:
                 "Token": Token,
                 "IAction": IAction,
                 "Key": Key,
+                "A2AAgent": A2AAgent,
             }
             MCPServerDocument.model_rebuild(_types_namespace=rebuild_namespace)
             Token.model_rebuild(_types_namespace=rebuild_namespace)
             IAclEntry.model_rebuild(_types_namespace=rebuild_namespace)
             IAction.model_rebuild(_types_namespace=rebuild_namespace)
             Key.model_rebuild(_types_namespace=rebuild_namespace)
+            A2AAgent.model_rebuild(_types_namespace=rebuild_namespace)
 
             # Initialize Beanie with all document models
             await init_beanie(
@@ -104,9 +114,10 @@ class MongoDB:
                     Token,
                     IAction,
                     Key,
-                ]
+                    A2AAgent,
+                ],
             )
-        except Exception as e:
+        except Exception:
             raise
 
     @classmethod
@@ -118,14 +129,14 @@ class MongoDB:
         try:
             await cls.client.close()
             cls.client = None
-        except Exception as e:
+        except Exception:
             raise
 
     @classmethod
     def get_client(cls) -> AsyncMongoClient:
         """
         Get the MongoDB client instance.
-        
+
         Returns:
             AsyncMongoClient: The Mongo client instance.
             
@@ -133,17 +144,14 @@ class MongoDB:
             RuntimeError: If the database connection is not initialized.
         """
         if cls.client is None:
-            raise RuntimeError(
-                "Database connection is not initialized. "
-                "Call MongoDB.connect_db() first."
-            )
+            raise RuntimeError("Database connection is not initialized. Call MongoDB.connect_db() first.")
         return cls.client
 
     @classmethod
     def get_database(cls):
         """
         Get the MongoDB database instance.
-        
+
         Returns:
             Database: The PyMongo async database instance.
             
@@ -151,18 +159,15 @@ class MongoDB:
             RuntimeError: If the database connection is not initialized.
         """
         if cls.client is None:
-            raise RuntimeError(
-                "Database connection is not initialized. "
-                "Call MongoDB.connect_db() first."
-            )
+            raise RuntimeError("Database connection is not initialized. Call MongoDB.connect_db() first.")
         return cls.client[cls.database_name]
 
 
 # Convenience functions for FastAPI lifespan events
-async def init_mongodb(db_name: Optional[str] = None):
+async def init_mongodb(db_name: str | None = None):
     """
     Initialize MongoDB connection. To be called during FastAPI startup.
-    
+
     Args:
         mongodb_url: MongoDB connection URL
         db_name: Database name

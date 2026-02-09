@@ -3,18 +3,13 @@ Pydantic models for auth server.
 """
 
 from .device_flow import (
+    DeviceApprovalRequest,
     DeviceCodeRequest,
     DeviceCodeResponse,
-    DeviceApprovalRequest,
     DeviceTokenRequest,
-    DeviceTokenResponse
+    DeviceTokenResponse,
 )
-
-from .tokens import (
-    TokenValidationResponse,
-    GenerateTokenRequest,
-    GenerateTokenResponse
-)
+from .tokens import GenerateTokenRequest, GenerateTokenResponse, TokenValidationResponse
 
 __all__ = [
     "DeviceCodeRequest",

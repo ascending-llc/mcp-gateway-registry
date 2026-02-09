@@ -19,12 +19,12 @@ graph TB
     A[Token Refresher Service] --> B[OAuth Token Monitor]
     A --> C[No-Auth Service Scanner]
     A --> D[MCP Config Generator]
-    
+
     B --> E[.oauth-tokens/*.json]
     C --> F[registry/servers/*.json]
     D --> G[.oauth-tokens/mcp.json]
     D --> H[.oauth-tokens/vscode_mcp.json]
-    
+
     E --> I[External OAuth Services]
     F --> J[Local MCP Servers]
     G --> K[Roocode/Claude Code]
@@ -145,7 +145,7 @@ The service automatically generates two MCP configuration files:
 }
 ```
 
-#### VS Code Extension Configuration  
+#### VS Code Extension Configuration
 **File**: `.oauth-tokens/vscode_mcp.json`
 ```json
 {
@@ -189,11 +189,11 @@ sequenceDiagram
     participant Refresher as Token Refresh Service
     participant External as External Service
     participant MCP as MCP Client
-    
+
     User->>Vending: Request JWT token
     Vending->>User: Return token + refresh token
     Vending->>Refresher: Save tokens to .oauth-tokens/
-    
+
     loop Every 5 minutes
         Refresher->>Refresher: Check token expiration
         alt Token expires within buffer time
@@ -203,7 +203,7 @@ sequenceDiagram
             Refresher->>Refresher: Regenerate MCP configs
         end
     end
-    
+
     MCP->>Refresher: Read latest MCP config
     MCP->>External: Use refreshed token
 ```
@@ -240,7 +240,7 @@ sequenceDiagram
 #### Service Won't Start
 
 **Symptoms**: Service exits immediately or fails to start
-**Causes**: 
+**Causes**:
 - Missing dependencies
 - Invalid OAuth token files
 - Permission issues
@@ -412,7 +412,7 @@ The token refresher service provides these internal methods:
 ```json
 {
   "access_token": "eyJ...",
-  "refresh_token": "eyJ...", 
+  "refresh_token": "eyJ...",
   "expires_at": 1725634800,
   "token_type": "Bearer",
   "scope": "read write"
@@ -432,7 +432,7 @@ The token refresher service provides these internal methods:
 ## Related Documentation
 
 - [Authentication Guide](auth.md) - OAuth setup and configuration
-- [JWT Token Vending](jwt-token-vending.md) - Token generation and management  
+- [JWT Token Vending](jwt-token-vending.md) - Token generation and management
 - [AI Coding Assistants Setup](ai-coding-assistants-setup.md) - Client configuration
 - [Configuration Reference](configuration.md) - Environment variables and settings
 

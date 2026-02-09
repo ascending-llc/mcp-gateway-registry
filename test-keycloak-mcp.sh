@@ -64,7 +64,7 @@ SESSION_ID=$(curl -s -v \
 
 if [ -n "$SESSION_ID" ]; then
     echo "✓ Session established with ID: $SESSION_ID"
-    
+
     # Send initialized notification to complete handshake
     echo "Completing initialization handshake..."
     curl -s \
@@ -100,7 +100,7 @@ if [ -n "$SESSION_ID" ]; then
         -H "mcp-session-id: $SESSION_ID" \
         -d '{"jsonrpc":"2.0","id":2,"method":"ping"}' \
         https://mcpgateway.ddns.net/currenttime/mcp)
-    
+
     echo "Ping response:"
     echo "$RESPONSE3" | head -5
 else
@@ -118,7 +118,7 @@ if [ -n "$SESSION_ID" ]; then
         -H "mcp-session-id: $SESSION_ID" \
         -d '{"jsonrpc":"2.0","id":3,"method":"tools/list"}' \
         https://mcpgateway.ddns.net/currenttime/mcp)
-    
+
     echo "List tools response:"
     echo "$RESPONSE4" | head -10
 else

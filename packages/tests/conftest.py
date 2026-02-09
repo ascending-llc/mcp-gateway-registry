@@ -1,9 +1,9 @@
 """Pytest configuration and fixtures for packages tests."""
 
-import pytest
-from datetime import datetime, UTC
-from beanie import PydanticObjectId
+from datetime import UTC, datetime
 
+import pytest
+from beanie import PydanticObjectId
 
 # Import factories for use in tests
 pytest_plugins = ["packages.tests.fixtures.factories"]
@@ -34,7 +34,7 @@ def sample_server_data():
                         "name": "test_tool1",
                         "description": "Test tool 1",
                         "parameters": {"type": "object", "properties": {}},
-                    }
+                    },
                 }
             },
             "initDuration": 150,
@@ -42,7 +42,6 @@ def sample_server_data():
         "author": PydanticObjectId(),
         "path": "/mcp/test",
         "tags": ["test", "demo"],
-        "scope": "private_user",
         "status": "active",
         "numTools": 2,
         "numStars": 0,
@@ -74,7 +73,6 @@ def sample_oauth_server_data():
         "author": PydanticObjectId(),
         "path": "/mcp/oauth-test",
         "tags": ["oauth", "test"],
-        "scope": "shared_app",
         "status": "active",
         "numTools": 1,
         "numStars": 5,

@@ -10,17 +10,10 @@ Based on: docs/design/a2a-protocol-integration.md
 
 import logging
 import re
-from typing import (
-    Dict,
-    List,
-    Optional,
-    Tuple,
-)
 
 import httpx
 from pydantic import BaseModel
 
-from registry.core.config import settings
 from registry.schemas.agent_models import (
     AgentCard,
     SecurityScheme,
@@ -35,8 +28,8 @@ class ValidationResult(BaseModel):
     """Result of agent card validation."""
 
     is_valid: bool
-    errors: List[str]
-    warnings: List[str]
+    errors: list[str]
+    warnings: list[str]
 
 
 def _validate_agent_url(
@@ -72,8 +65,8 @@ def _validate_agent_url(
 
 
 def _validate_skills(
-    skills: List[Skill],
-) -> List[str]:
+    skills: list[Skill],
+) -> list[str]:
     """
     Validate agent skills.
 
@@ -85,7 +78,7 @@ def _validate_skills(
     Returns:
         List of error messages (empty if valid)
     """
-    errors: List[str] = []
+    errors: list[str] = []
 
     if not isinstance(skills, list):
         errors.append("Skills must be a list")
@@ -105,8 +98,8 @@ def _validate_skills(
 
 
 def _validate_security_schemes(
-    security_schemes: Dict[str, SecurityScheme],
-) -> List[str]:
+    security_schemes: dict[str, SecurityScheme],
+) -> list[str]:
     """
     Validate security schemes configuration.
 
@@ -118,7 +111,7 @@ def _validate_security_schemes(
     Returns:
         List of error messages (empty if valid)
     """
-    errors: List[str] = []
+    errors: list[str] = []
 
     if not isinstance(security_schemes, dict):
         errors.append("Security schemes must be a dictionary")
@@ -133,43 +126,30 @@ def _validate_security_schemes(
 
         valid_types = ["apiKey", "http", "oauth2", "openIdConnect"]
         if scheme.type not in valid_types:
-            errors.append(
-                f"Scheme '{scheme_name}': invalid type '{scheme.type}'"
-            )
+            errors.append(f"Scheme '{scheme_name}': invalid type '{scheme.type}'")
 
         if scheme.type == "apiKey":
             if not scheme.in_:
                 errors.append(f"Scheme '{scheme_name}': 'in' is required for apiKey")
 
             if not scheme.name:
-                errors.append(
-                    f"Scheme '{scheme_name}': 'name' is required for apiKey"
-                )
+                errors.append(f"Scheme '{scheme_name}': 'name' is required for apiKey")
 
-        if scheme.type == "http":
-            if not scheme.scheme:
-                errors.append(
-                    f"Scheme '{scheme_name}': 'scheme' is required for http"
-                )
+        if scheme.type == "http" and not scheme.scheme:
+            errors.append(f"Scheme '{scheme_name}': 'scheme' is required for http")
 
-        if scheme.type == "oauth2":
-            if not scheme.flows:
-                errors.append(
-                    f"Scheme '{scheme_name}': 'flows' is required for oauth2"
-                )
+        if scheme.type == "oauth2" and not scheme.flows:
+            errors.append(f"Scheme '{scheme_name}': 'flows' is required for oauth2")
 
-        if scheme.type == "openIdConnect":
-            if not scheme.openid_connect_url:
-                errors.append(
-                    f"Scheme '{scheme_name}': openIdConnect URL required"
-                )
+        if scheme.type == "openIdConnect" and not scheme.openid_connect_url:
+            errors.append(f"Scheme '{scheme_name}': openIdConnect URL required")
 
     return errors
 
 
 def _validate_tags(
-    tags: List[str],
-) -> List[str]:
+    tags: list[str],
+) -> list[str]:
     """
     Validate agent tags.
 
@@ -181,7 +161,7 @@ def _validate_tags(
     Returns:
         List of error messages (empty if valid)
     """
-    errors: List[str] = []
+    errors: list[str] = []
 
     if not isinstance(tags, list):
         errors.append("Tags must be a list")
@@ -199,7 +179,7 @@ def _validate_tags(
 
 def _check_endpoint_reachability(
     url: str,
-) -> Tuple[bool, Optional[str]]:
+) -> tuple[bool, str | None]:
     """
     Check if agent endpoint is reachable.
 
@@ -236,7 +216,7 @@ def _check_endpoint_reachability(
 
 def _validate_agent_card(
     agent_card: AgentCard,
-) -> Tuple[bool, List[str]]:
+) -> tuple[bool, list[str]]:
     """
     Validate agent card structure and content.
 
@@ -248,7 +228,7 @@ def _validate_agent_card(
     Returns:
         Tuple of (is_valid, error_messages)
     """
-    errors: List[str] = []
+    errors: list[str] = []
 
     if not agent_card.name or not agent_card.name.strip():
         errors.append("Agent name cannot be empty")
@@ -263,9 +243,8 @@ def _validate_agent_card(
     if not _validate_agent_url(str(agent_card.url)):
         errors.append("Agent URL must be HTTP or HTTPS and properly formatted")
 
-    if agent_card.protocol_version:
-        if not re.match(r"^\d+\.\d+(\.\d+)?$", agent_card.protocol_version):
-            errors.append("Protocol version must be in format X.Y or X.Y.Z")
+    if agent_card.protocol_version and not re.match(r"^\d+\.\d+(\.\d+)?$", agent_card.protocol_version):
+        errors.append("Protocol version must be in format X.Y or X.Y.Z")
 
     if agent_card.visibility not in ["public", "private", "group-restricted"]:
         errors.append(f"Invalid visibility: {agent_card.visibility}")
@@ -310,16 +289,14 @@ def validate_agent_card(
     """
     is_valid, errors = _validate_agent_card(agent_card)
 
-    warnings: List[str] = []
+    warnings: list[str] = []
 
     if check_reachability and agent_card.url:
         reachable, error_msg = _check_endpoint_reachability(str(agent_card.url))
 
         if not reachable:
             warnings.append(f"Agent endpoint unreachable: {error_msg}")
-            logger.warning(
-                f"Agent {agent_card.name} endpoint unreachable: {error_msg}"
-            )
+            logger.warning(f"Agent {agent_card.name} endpoint unreachable: {error_msg}")
 
     if errors:
         logger.error(f"Agent card validation failed: {errors}")

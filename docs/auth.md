@@ -218,11 +218,11 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 def load_mcp_config_from_file():
     """Load MCP configuration from VS Code config file."""
     config_path = Path.home() / ".vscode" / "mcp.json"
-    
+
     if not config_path.exists():
         # Fallback to oauth-tokens directory if VS Code config doesn't exist
         config_path = Path.cwd() / ".oauth-tokens" / "vscode_mcp.json"
-    
+
     if config_path.exists():
         with open(config_path, 'r') as f:
             config = json.load(f)
@@ -240,7 +240,7 @@ def create_mcp_client_direct(auth_token, user_pool_id, client_id, region):
         'X-Client-Id': client_id,
         'X-Region': region
     }
-    
+
     return MultiServerMCPClient({
         "mcp_gateway": {
             "url": "https://mcpgateway.ddns.net/mcpgw/mcp",
@@ -253,10 +253,10 @@ def create_mcp_client_direct(auth_token, user_pool_id, client_id, region):
 async def connect_with_config_file():
     # Load configuration from file
     servers_config = load_mcp_config_from_file()
-    
+
     # Initialize MCP client with loaded configuration
     mcp_client = MultiServerMCPClient(servers_config)
-    
+
     # Discover available tools (filtered by your permissions)
     tools = await mcp_client.get_tools()
     return tools
@@ -265,7 +265,7 @@ async def connect_with_config_file():
 async def connect_with_params(token, pool_id, client_id, region="us-east-1"):
     # Create client with parameters
     mcp_client = create_mcp_client_direct(token, pool_id, client_id, region)
-    
+
     # Discover available tools
     tools = await mcp_client.get_tools()
     return tools
@@ -346,20 +346,20 @@ sequenceDiagram
     participant ExtIdP as External IdP<br/>(e.g., Atlassian)
     participant Gateway as MCP Gateway
     participant MCPServer as MCP Server
-    
+
     Note over User,MCPServer: One-Time Setup
-    
+
     User->>Cognito: 1. Authenticate (2LO)
     Cognito->>User: Ingress Token
-    
+
     User->>ExtIdP: 2. Authenticate & Approve (3LO)
     Note right of User: "Allow AI agent to<br/>act on my behalf"
     ExtIdP->>User: Egress Token
-    
+
     User->>Agent: 3. Configure with both tokens
-    
+
     Note over Agent,MCPServer: Runtime (Every Request)
-    
+
     Agent->>Gateway: 4. Request with dual tokens<br/>(Ingress + Egress headers)
     Gateway->>Cognito: 5. Validate ingress auth
     Gateway->>Gateway: 6. Apply FGAC
@@ -380,16 +380,16 @@ sequenceDiagram
     participant Gateway as MCP Gateway
     participant AuthServer as Auth Server<br/>(in Gateway)
     participant MCPServer as MCP Server
-    
+
     Note over User,MCPServer: PHASE 1: One-Time Setup & Authentication
-    
+
     rect rgb(240, 248, 255)
         Note over User,Cognito: Step 1: Ingress Authentication (2LO/M2M)
         User->>Cognito: 1. Client Credentials Grant<br/>(client_id + client_secret)
         Cognito->>User: 2. JWT Token with scopes
         User->>User: 3. Store ingress token locally
     end
-    
+
     rect rgb(255, 248, 220)
         Note over User,ExtIdP: Step 2: Egress Authentication (3LO)
         User->>Browser: 4. Initiate OAuth flow
@@ -402,31 +402,31 @@ sequenceDiagram
         ExtIdP->>User: 11. Access & refresh tokens
         User->>User: 12. Store egress tokens locally
     end
-    
+
     rect rgb(240, 255, 240)
         Note over User: Step 3: Configure AI Agent
         User->>User: 13. Create configuration with:<br/>- Server URLs<br/>- Ingress headers (X-Authorization, etc.)<br/>- Egress headers (Authorization, etc.)
     end
-    
+
     Note over Agent,MCPServer: PHASE 2: Runtime - AI Agent Uses Tokens
-    
+
     rect rgb(255, 240, 245)
         Note over Agent,MCPServer: Every MCP Request
         Agent->>Gateway: 14. MCP Request with headers:<br/>X-Authorization: Bearer {ingress_jwt}<br/>Authorization: Bearer {egress_jwt}<br/>X-User-Pool-Id, X-Client-Id, X-Region
-        
+
         Gateway->>AuthServer: 15. Extract & validate ingress token
         AuthServer->>Cognito: 16. Verify JWT signature & claims
         Cognito->>AuthServer: 17. Token valid + user scopes
-        
+
         AuthServer->>AuthServer: 18. Apply FGAC rules<br/>(Check tool/method permissions)
-        
+
         Gateway->>MCPServer: 19. Forward request with egress headers:<br/>Authorization: Bearer {egress_jwt}
-        
+
         MCPServer->>ExtIdP: 20. Validate egress token
         ExtIdP->>MCPServer: 21. Token valid + permissions
-        
+
         MCPServer->>MCPServer: 22. Execute requested action<br/>(within approved scope)
-        
+
         MCPServer->>Gateway: 23. Response
         Gateway->>Agent: 24. Response
         Agent->>User: 25. Display result
@@ -441,7 +441,7 @@ sequenceDiagram
 - **Use Case**: M2M authentication for AI agents
 - **Token Type**: JWT with embedded scopes
 
-#### Three-Legged OAuth (3LO) - Egress  
+#### Three-Legged OAuth (3LO) - Egress
 - **Purpose**: Authenticate FROM the Gateway to external services
 - **Providers**: Atlassian, Google, GitHub, others
 - **Use Case**: Access external APIs on behalf of users
@@ -549,7 +549,7 @@ The FGAC system provides granular permissions for MCP servers, methods, and indi
 - **UI Scopes**: Registry management permissions
   - `mcp-registry-admin`: Full administrative access
   - `mcp-registry-user`: Limited user access
-  
+
 - **Server Scopes**: MCP server access
   - `mcp-servers-unrestricted/read`: Read all servers
   - `mcp-servers-unrestricted/execute`: Execute all tools
@@ -641,7 +641,7 @@ Headers are automatically managed by the OAuth scripts, but here's what gets sen
 The Configuration Reference provides comprehensive documentation for all configuration files including:
 
 - **Environment Variables**: `.env` files with complete parameter documentation
-- **YAML Configurations**: All `.yml` and `.yaml` files with field descriptions  
+- **YAML Configurations**: All `.yml` and `.yaml` files with field descriptions
 - **Example Files**: `.env.example` and `config.yaml.example` templates
 - **Security Best Practices**: Credential management and file permissions
 - **Troubleshooting**: Common configuration issues and solutions

@@ -1,13 +1,13 @@
-from datetime import timezone, datetime
-from typing import Optional, List
+from datetime import UTC, datetime
+
 from beanie import PydanticObjectId
+
 from packages.models import IUser
 from registry.utils.log import logger
 
 
 class UserService:
-
-    async def find_by_source_id(self, source_id: str) -> Optional[IUser]:
+    async def find_by_source_id(self, source_id: str) -> IUser | None:
         """Find a user by idOnTheSource (Entra ID or similar)."""
         if not source_id:
             logger.warning("No source_id provided to find_by_source_id.")
@@ -19,14 +19,14 @@ class UserService:
             logger.error(f"Error finding user by source_id '{source_id}': {e}")
             return None
 
-    async def get_user_by_user_id(self, user_id: str) -> Optional[IUser]:
+    async def get_user_by_user_id(self, user_id: str) -> IUser | None:
         """
         Find a user by user_id
         """
         try:
             try:
                 obj_id = PydanticObjectId(user_id)
-            except Exception as e:
+            except Exception:
                 logger.warning(f"Invalid user ID format: {user_id}")
                 return None
             user = await IUser.get(obj_id)
@@ -35,14 +35,14 @@ class UserService:
             logger.error(f"Error finding user by user_id '{user_id}': {e}")
             return None
 
-    async def get_or_create_user(self, email: str) -> Optional[IUser]:
+    async def get_or_create_user(self, email: str) -> IUser | None:
         """
         Get or create an user
             :param email: email of the user
         """
         user = await IUser.find_one({"email": email})
         if not user:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             # Create user
             user_data = {
                 "email": email,
@@ -50,7 +50,7 @@ class UserService:
                 "role": "USER",
                 "provider": "local",
                 "createdAt": now,
-                "updatedAt": now
+                "updatedAt": now,
             }
             collection = IUser.get_pymongo_collection()
             await collection.insert_one(user_data)
@@ -58,16 +58,16 @@ class UserService:
             user = await IUser.find_one({"email": email})
         return user
 
-    async def search_users(self, query: str) -> List[IUser]:
+    async def search_users(self, query: str) -> list[IUser]:
         """
         Search users by name, email, or username. Returns IUser model objects.
         """
         try:
-            search_query =  {
+            search_query = {
                 "$or": [
                     {"email": {"$regex": query, "$options": "i"}},
                     {"name": {"$regex": query, "$options": "i"}},
-                    {"username": {"$regex": query, "$options": "i"}}
+                    {"username": {"$regex": query, "$options": "i"}},
                 ]
             }
             results = await IUser.find(search_query).to_list()
@@ -75,5 +75,6 @@ class UserService:
         except Exception as e:
             logger.error(f"Error searching users with query '{search_query}': {e}")
             return []
+
 
 user_service = UserService()

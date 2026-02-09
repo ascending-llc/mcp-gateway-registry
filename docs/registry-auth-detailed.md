@@ -45,26 +45,26 @@ graph TB
         LoginForm[Login Interface]
         Dashboard[Dashboard UI]
     end
-    
+
     subgraph "Registry Application"
         AuthRoutes[Auth Routes<br/>registry/auth/routes.py]
         AuthDeps[Auth Dependencies<br/>registry/auth/dependencies.py]
         ServerRoutes[Protected API Routes<br/>registry/api/server_routes.py]
         Templates[Jinja2 Templates<br/>registry/templates/]
     end
-    
+
     subgraph "Session Management"
         Cookies[HTTP Session Cookies<br/>mcp_gateway_session]
         SessionSigner[URLSafeTimedSerializer<br/>itsdangerous]
         SessionStore[Session Data Store]
     end
-    
+
     subgraph "External Auth Systems"
         AuthServer[Auth Server<br/>localhost:8888]
         Cognito[Amazon Cognito]
         LocalAuth[Local Credentials]
     end
-    
+
     UI --> AuthRoutes
     LoginForm --> AuthRoutes
     Dashboard --> ServerRoutes
@@ -74,16 +74,16 @@ graph TB
     AuthDeps --> Cookies
     Cookies --> SessionSigner
     SessionSigner --> SessionStore
-    
+
     AuthRoutes -.-> AuthServer
     AuthServer -.-> Cognito
     AuthRoutes -.-> LocalAuth
-    
+
     classDef browser fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
     classDef registry fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
     classDef session fill:#fff3e0,stroke:#f57c00,stroke-width:2px
     classDef external fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
-    
+
     class UI,LoginForm,Dashboard browser
     class AuthRoutes,AuthDeps,ServerRoutes,Templates registry
     class Cookies,SessionSigner,SessionStore session
@@ -98,26 +98,26 @@ sequenceDiagram
     participant R as Registry App
     participant AS as Auth Server
     participant IdP as Identity Provider
-    
+
     Note over U,IdP: Phase 1: Initial Access (Unauthenticated)
     U->>R: GET / (no session cookie)
     R->>R: enhanced_auth() dependency check
     R->>U: 302 Redirect to /login
-    
+
     Note over U,IdP: Phase 2: Authentication Method Selection
     U->>R: GET /login
     R->>AS: GET /oauth2/providers (fetch available providers)
     AS-->>R: List of OAuth2 providers
     R->>R: Render login form with options
     R->>U: Login page with Traditional + OAuth2 options
-    
+
     Note over U,IdP: Phase 3a: Traditional Authentication Flow
     alt Traditional Login
         U->>R: POST /login (username/password)
         R->>R: validate_login_credentials()
         R->>R: create_session_cookie(username)
         R->>U: Set-Cookie mcp_gateway_session + 302 redirect to /
-    
+
     Note over U,IdP: Phase 3b: OAuth2 Authentication Flow
     else OAuth2 Login
         U->>R: GET /auth/{provider}
@@ -133,7 +133,7 @@ sequenceDiagram
         R->>R: Validate existing session cookie
         R->>U: 302 Redirect to / (authenticated)
     end
-    
+
     Note over U,IdP: Phase 4: Authenticated Dashboard Access
     U->>R: GET / (with valid session cookie)
     R->>R: enhanced_auth() extracts & validates session
@@ -180,44 +180,44 @@ sequenceDiagram
 ```mermaid
 flowchart TD
     Start([HTTP Request]) --> HasSession{Has Valid<br/>Session Cookie?}
-    
+
     HasSession -->|Yes| ValidateSession[Validate Session<br/>Signature & Expiration]
     HasSession -->|No| RedirectLogin[Redirect to /login]
-    
+
     ValidateSession --> SessionValid{Session<br/>Valid?}
     SessionValid -->|Yes| ExtractUserContext[Extract User Context<br/>Groups, Scopes, Permissions]
     SessionValid -->|No| RedirectLogin
-    
+
     RedirectLogin --> LoginPage[Display Login Page<br/>with Available Providers]
-    
+
     LoginPage --> UserChoice{User Authentication<br/>Method Choice}
-    
+
     UserChoice -->|Traditional| TraditionalAuth[Username/Password<br/>Form Submission]
     UserChoice -->|OAuth2| OAuth2Auth[Redirect to<br/>External Provider]
-    
+
     TraditionalAuth --> ValidateCreds{Valid<br/>Credentials?}
     ValidateCreds -->|Yes| CreateTraditionalSession[Create Session Cookie<br/>with Admin Permissions]
     ValidateCreds -->|No| LoginError[Display Login Error]
-    
+
     OAuth2Auth --> ExternalProvider[External OAuth2 Flow<br/>User Authentication]
     ExternalProvider --> OAuth2Callback[OAuth2 Callback<br/>with User Info]
     OAuth2Callback --> CreateOAuth2Session[Create Session Cookie<br/>with Mapped Permissions]
-    
+
     CreateTraditionalSession --> SetSessionCookie[Set HTTP Cookie<br/>mcp_gateway_session]
     CreateOAuth2Session --> SetSessionCookie
-    
+
     SetSessionCookie --> RedirectDashboard[Redirect to Dashboard]
     RedirectDashboard --> ExtractUserContext
-    
+
     ExtractUserContext --> RenderUI[Render Permission-Based UI]
-    
+
     LoginError --> LoginPage
-    
+
     classDef startEnd fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
     classDef decision fill:#fff3e0,stroke:#ff9800,stroke-width:2px
     classDef process fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
     classDef error fill:#ffebee,stroke:#f44336,stroke-width:2px
-    
+
     class Start,RenderUI startEnd
     class HasSession,SessionValid,UserChoice,ValidateCreds decision
     class ValidateSession,ExtractUserContext,LoginPage,TraditionalAuth,OAuth2Auth,ExternalProvider,OAuth2Callback,CreateTraditionalSession,CreateOAuth2Session,SetSessionCookie,RedirectDashboard process
@@ -235,18 +235,18 @@ graph LR
     subgraph "Login Page (/login)"
         LoginHeader[Header with Logo & Branding]
         ErrorDisplay[Error Message Display]
-        
+
         subgraph "Authentication Methods"
             TraditionalSection[Traditional Login Section]
             OAuth2Section[OAuth2 Providers Section]
         end
-        
+
         subgraph "Traditional Login Form"
             UsernameField[Username Input Field]
             PasswordField[Password Input Field]
             LoginButton[Submit Button]
         end
-        
+
         subgraph "OAuth2 Provider Buttons"
             ProviderButtons[Dynamic Provider Buttons]
             CognitoBtn[Amazon Cognito Button]
@@ -254,7 +254,7 @@ graph LR
             CustomBtn[Custom OAuth2 Button]
         end
     end
-    
+
     LoginHeader --> ErrorDisplay
     ErrorDisplay --> TraditionalSection
     ErrorDisplay --> OAuth2Section
@@ -265,12 +265,12 @@ graph LR
     ProviderButtons --> CognitoBtn
     ProviderButtons --> SAMLBtn
     ProviderButtons --> CustomBtn
-    
+
     classDef header fill:#e8eaf6,stroke:#3f51b5,stroke-width:2px
     classDef auth fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
     classDef form fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
     classDef oauth fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    
+
     class LoginHeader,ErrorDisplay header
     class TraditionalSection,OAuth2Section auth
     class UsernameField,PasswordField,LoginButton form
@@ -288,7 +288,7 @@ async def get_oauth2_providers():
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{settings.auth_server_url}/oauth2/providers", 
+                f"{settings.auth_server_url}/oauth2/providers",
                 timeout=5.0
             )
             if response.status_code == 200:
@@ -303,7 +303,7 @@ async def login_form(request: Request, error: str | None = None):
     """Show login form with OAuth2 providers"""
     oauth_providers = await get_oauth2_providers()
     return templates.TemplateResponse("login.html", {
-        "request": request, 
+        "request": request,
         "error": error,
         "oauth_providers": oauth_providers
     })
@@ -318,11 +318,11 @@ async def login_form(request: Request, error: str | None = None):
         <img src="/static/logo.png" alt="MCP Gateway Registry" class="logo">
         <h2>MCP Gateway Registry</h2>
     </div>
-    
+
     {% if error %}
         <div class="error-message">{{ error }}</div>
     {% endif %}
-    
+
     <!-- Traditional Authentication Form -->
     <form method="post" action="/login" class="login-form">
         <div class="form-group">
@@ -335,7 +335,7 @@ async def login_form(request: Request, error: str | None = None):
         </div>
         <button type="submit">Login</button>
     </form>
-    
+
     <!-- OAuth2 Providers Section -->
     {% if oauth_providers %}
         <div class="oauth2-section">
@@ -362,30 +362,30 @@ graph TB
     subgraph "Dashboard Layout"
         HeaderSection[Header Section]
         MainContainer[Main Container]
-        
+
         subgraph "Header Components"
             Logo[Registry Logo]
             UserInfo[User Information Display]
             LogoutControls[Logout Controls]
         end
-        
+
         subgraph "Main Content Area"
             Sidebar[Navigation Sidebar]
             ContentArea[Primary Content Area]
         end
-        
+
         subgraph "Sidebar Elements"
             ServerList[Server Navigation]
             AdminTools[Admin Tools Panel]
             HealthStatus[Health Status Display]
         end
-        
+
         subgraph "Content Elements"
             ServiceGrid[Service Cards Grid]
             SearchFilters[Search & Filter Controls]
             ManagementControls[Management Actions]
         end
-        
+
         subgraph "Permission-Based Elements"
             ToggleSwitches[Enable/Disable Toggles]
             EditButtons[Edit Server Buttons]
@@ -393,7 +393,7 @@ graph TB
             AdminPanels[Admin-Only Panels]
         end
     end
-    
+
     HeaderSection --> Logo
     HeaderSection --> UserInfo
     HeaderSection --> LogoutControls
@@ -409,12 +409,12 @@ graph TB
     ManagementControls --> EditButtons
     ManagementControls --> CreateButtons
     ManagementControls --> AdminPanels
-    
+
     classDef header fill:#e8eaf6,stroke:#3f51b5,stroke-width:2px
     classDef sidebar fill:#e0f2f1,stroke:#4caf50,stroke-width:2px
     classDef content fill:#fff3e0,stroke:#ff9800,stroke-width:2px
     classDef permissions fill:#fce4ec,stroke:#e91e63,stroke-width:2px
-    
+
     class HeaderSection,Logo,UserInfo,LogoutControls header
     class Sidebar,ServerList,AdminTools,HealthStatus sidebar
     class ContentArea,ServiceGrid,SearchFilters,ManagementControls content
@@ -432,7 +432,7 @@ The UI template conditionally renders elements based on user permissions:
         <img src="/static/mcp_gateway_horizontal_white_logo.png" alt="MCP Gateway">
         <span>Registry</span>
     </div>
-    
+
     <div class="header-right">
         <div class="user-display">
             <span>{{ username }}</span>
@@ -462,16 +462,16 @@ The UI template conditionally renders elements based on user permissions:
                 </div>
             {% endif %}
         </div>
-        
+
         <div class="card-body">
             <p class="description">{{ service.description or "No description available." }}</p>
-            
+
             <div class="badges">
                 {% for tag in service.tags %}
                     <span class="badge">{{ tag }}</span>
                 {% endfor %}
             </div>
-            
+
             <div class="metadata">
                 <span class="tool-count">{{ service.num_tools }} tools</span>
                 <span class="health-status {{ service.health_status }}">
@@ -484,13 +484,13 @@ The UI template conditionally renders elements based on user permissions:
                 {% endif %}
             </div>
         </div>
-        
+
         <div class="card-footer">
             {% if user_context.can_modify_servers %}
                 <!-- Interactive toggle for users with modify permissions -->
                 <form method="post" action="/toggle/{{ service.path[1:] }}" class="toggle-form">
                     <label class="switch">
-                        <input type="checkbox" name="enabled" 
+                        <input type="checkbox" name="enabled"
                                {% if service.is_enabled %}checked{% endif %}
                                onchange="this.form.submit()">
                         <span class="slider round"></span>
@@ -535,25 +535,25 @@ sequenceDiagram
     participant WS as WebSocket Connection
     participant HMS as Health Monitoring Service
     participant SS as Server Service
-    
+
     Note over UI,SS: WebSocket Initialization
     UI->>WS: Connect to /ws/health_status
     WS->>HMS: Register new connection
     HMS->>UI: Send initial health status data
-    
+
     Note over UI,SS: Real-Time Health Updates
     loop Background Health Checks
         HMS->>SS: Check server health status
         SS-->>HMS: Updated health data
         HMS->>HMS: Compare with previous status
-        
+
         alt Status Changed
             HMS->>WS: Broadcast health update
             WS->>UI: Send updated status
             UI->>UI: Update service card UI
         end
     end
-    
+
     Note over UI,SS: User-Triggered Actions
     UI->>SS: Toggle server state
     SS->>HMS: Immediate health check
@@ -573,18 +573,18 @@ class HealthStatusManager {
         this.maxReconnectAttempts = 10;
         this.reconnectAttempts = 0;
     }
-    
+
     connect() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/ws/health_status`;
-        
+
         this.ws = new WebSocket(wsUrl);
-        
+
         this.ws.onopen = () => {
             console.log('Health status WebSocket connected');
             this.reconnectAttempts = 0;
         };
-        
+
         this.ws.onmessage = (event) => {
             try {
                 const healthData = JSON.parse(event.data);
@@ -593,17 +593,17 @@ class HealthStatusManager {
                 console.error('Error parsing health status data:', error);
             }
         };
-        
+
         this.ws.onclose = () => {
             console.log('Health status WebSocket disconnected');
             this.attemptReconnect();
         };
-        
+
         this.ws.onerror = (error) => {
             console.error('WebSocket error:', error);
         };
     }
-    
+
     updateHealthStatusUI(healthData) {
         for (const [servicePath, status] of Object.entries(healthData)) {
             const serviceCard = document.querySelector(`[data-service-path="${servicePath}"]`);
@@ -614,13 +614,13 @@ class HealthStatusManager {
                     statusElement.textContent = status.status;
                     statusElement.className = `health-status ${status.status.replace(/[^a-zA-Z0-9]/g, '-')}`;
                 }
-                
+
                 // Update tool count
                 const toolCountElement = serviceCard.querySelector('.tool-count');
                 if (toolCountElement) {
                     toolCountElement.textContent = `${status.num_tools} tools`;
                 }
-                
+
                 // Update timestamp
                 const timestampElement = serviceCard.querySelector('.timestamp');
                 if (timestampElement && status.last_checked_iso) {
@@ -629,7 +629,7 @@ class HealthStatusManager {
             }
         }
     }
-    
+
     attemptReconnect() {
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
             this.reconnectAttempts++;
@@ -659,11 +659,11 @@ sequenceDiagram
     participant R as Registry Backend
     participant HMS as Health Monitoring
     participant WS as WebSocket
-    
+
     U->>UI: Click toggle switch
     UI->>UI: Disable toggle (show loading)
     UI->>R: POST /toggle/{service_path}
-    
+
     R->>R: Check user permissions
     alt Insufficient Permissions
         R->>UI: 403 Forbidden
@@ -675,7 +675,7 @@ sequenceDiagram
         HMS->>HMS: Perform health check
         R->>UI: 200 OK with new state
         UI->>UI: Update toggle state
-        
+
         HMS->>WS: Broadcast health update
         WS->>UI: Real-time status update
         UI->>UI: Update status indicators
@@ -687,37 +687,37 @@ sequenceDiagram
 ```mermaid
 flowchart TD
     Start([User clicks "Add Server"]) --> CheckPerms{User has<br/>modify permissions?}
-    
+
     CheckPerms -->|No| ShowError[Show permission error]
     CheckPerms -->|Yes| ShowForm[Display server creation form]
-    
+
     ShowForm --> UserFillsForm[User fills server details]
     UserFillsForm --> ValidateForm{Form validation<br/>passes?}
-    
+
     ValidateForm -->|No| ShowValidationErrors[Show validation errors]
     ValidateForm -->|Yes| SubmitForm[Submit form to backend]
-    
+
     SubmitForm --> BackendValidation[Backend validates data]
     BackendValidation --> ServerExists{Server path<br/>already exists?}
-    
+
     ServerExists -->|Yes| ShowConflictError[Show conflict error]
     ServerExists -->|No| CreateServer[Create server entry]
-    
+
     CreateServer --> UpdateFAISS[Update FAISS index]
     UpdateFAISS --> UpdateNginx[Regenerate Nginx config]
     UpdateNginx --> BroadcastUpdate[Broadcast health update]
     BroadcastUpdate --> Success[Redirect to dashboard]
-    
+
     ShowError --> End([End])
     ShowValidationErrors --> ShowForm
     ShowConflictError --> ShowForm
     Success --> End
-    
+
     classDef success fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
     classDef error fill:#ffebee,stroke:#f44336,stroke-width:2px
     classDef process fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
     classDef decision fill:#fff3e0,stroke:#ff9800,stroke-width:2px
-    
+
     class Success success
     class ShowError,ShowValidationErrors,ShowConflictError error
     class ShowForm,UserFillsForm,SubmitForm,BackendValidation,CreateServer,UpdateFAISS,UpdateNginx,BroadcastUpdate process
@@ -737,48 +737,48 @@ graph TB
         Groups[User Groups<br/>from IdP]
         AuthMethod[Authentication Method]
     end
-    
+
     subgraph "Permission Mapping Layer"
         ScopeMapping[Group → Scope Mapping<br/>auth_server/scopes.yml]
         Scopes[MCP Scopes]
         ServerAccess[Accessible Server List]
     end
-    
+
     subgraph "Capability Layer"
         ReadAccess[Read Access<br/>View servers & tools]
         ModifyAccess[Modify Access<br/>Toggle, edit servers]
         AdminAccess[Admin Access<br/>Full system control]
         ServerSpecific[Server-Specific Access<br/>Fine-grained permissions]
     end
-    
+
     subgraph "UI Rendering Layer"
         AdminUI[Admin Interface Elements]
         ModifyUI[Modification Controls]
         ReadOnlyUI[Read-Only Displays]
         FilteredContent[Filtered Server Lists]
     end
-    
+
     User --> Groups
     User --> AuthMethod
     Groups --> ScopeMapping
     ScopeMapping --> Scopes
     Scopes --> ServerAccess
-    
+
     ServerAccess --> ReadAccess
     ServerAccess --> ModifyAccess
     ServerAccess --> AdminAccess
     ServerAccess --> ServerSpecific
-    
+
     ReadAccess --> FilteredContent
     ModifyAccess --> ModifyUI
     AdminAccess --> AdminUI
     ServerSpecific --> FilteredContent
-    
+
     classDef identity fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
     classDef mapping fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
     classDef capability fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
     classDef ui fill:#fff3e0,stroke:#f57c00,stroke-width:2px
-    
+
     class User,Groups,AuthMethod identity
     class ScopeMapping,Scopes,ServerAccess mapping
     class ReadAccess,ModifyAccess,AdminAccess,ServerSpecific capability
@@ -850,16 +850,16 @@ group_mappings:
   mcp-admin:
     - "mcp-servers-unrestricted/read"
     - "mcp-servers-unrestricted/execute"
-  
+
   # Regular user - restricted read-only access
   mcp-user:
     - "mcp-servers-restricted/read"
-  
+
   # Server-specific access groups
   mcp-server-fininfo:
     - "mcp-servers-fininfo/read"
     - "mcp-servers-fininfo/execute"
-  
+
   mcp-server-currenttime:
     - "mcp-servers-currenttime/read"
     - "mcp-servers-currenttime/execute"
@@ -884,7 +884,7 @@ mcp-servers-currenttime/execute:
 # Unrestricted scopes (for admins)
 mcp-servers-unrestricted/read:
   # Grants access to all servers
-  
+
 mcp-servers-unrestricted/execute:
   # Grants execute access to all servers
 ```
@@ -898,13 +898,13 @@ mcp-servers-unrestricted/execute:
 def enhanced_auth(session: str = Cookie(alias="mcp_gateway_session")) -> Dict[str, Any]:
     """Enhanced authentication dependency with full permission context"""
     session_data = get_user_session_data(session)
-    
+
     username = session_data['username']
     groups = session_data.get('groups', [])
     auth_method = session_data.get('auth_method', 'traditional')
-    
+
     logger.info(f"Enhanced auth for {username}: groups={groups}, auth_method={auth_method}")
-    
+
     # Map groups to scopes based on authentication method
     if auth_method == 'oauth2':
         # OAuth2 users get scopes based on Cognito group mappings
@@ -915,16 +915,16 @@ def enhanced_auth(session: str = Cookie(alias="mcp_gateway_session")) -> Dict[st
         scopes = ['mcp-servers-unrestricted/read', 'mcp-servers-unrestricted/execute']
         if not groups:
             groups = ['mcp-admin']
-    
+
     # Calculate accessible servers from scopes
     accessible_servers = get_user_accessible_servers(scopes)
-    
+
     # Determine modification permissions
     can_modify = user_can_modify_servers(groups, scopes)
-    
+
     # Check for admin privileges
     is_admin = 'mcp-admin' in groups
-    
+
     user_context = {
         'username': username,
         'groups': groups,
@@ -935,7 +935,7 @@ def enhanced_auth(session: str = Cookie(alias="mcp_gateway_session")) -> Dict[st
         'can_modify_servers': can_modify,
         'is_admin': is_admin
     }
-    
+
     logger.debug(f"Final user context for {username}: {user_context}")
     return user_context
 ```
@@ -948,7 +948,7 @@ def map_cognito_groups_to_scopes(groups: List[str]) -> List[str]:
     """Map Cognito groups to MCP scopes using scopes.yml configuration"""
     scopes = []
     group_mappings = SCOPES_CONFIG.get('group_mappings', {})
-    
+
     for group in groups:
         if group in group_mappings:
             group_scopes = group_mappings[group]
@@ -956,7 +956,7 @@ def map_cognito_groups_to_scopes(groups: List[str]) -> List[str]:
             logger.debug(f"Mapped group '{group}' to scopes: {group_scopes}")
         else:
             logger.debug(f"No scope mapping found for group: {group}")
-    
+
     # Remove duplicates while preserving order
     unique_scopes = list(dict.fromkeys(scopes))
     logger.info(f"Final mapped scopes: {unique_scopes}")
@@ -965,16 +965,16 @@ def map_cognito_groups_to_scopes(groups: List[str]) -> List[str]:
 def get_user_accessible_servers(user_scopes: List[str]) -> List[str]:
     """Get list of all servers the user has access to based on their scopes"""
     accessible_servers = set()
-    
+
     for scope in user_scopes:
         # Check for unrestricted access
         if scope in ['mcp-servers-unrestricted/read', 'mcp-servers-unrestricted/execute']:
             return ['*']  # Special marker for all servers
-        
+
         # Get servers for specific scopes
         server_names = get_servers_for_scope(scope)
         accessible_servers.update(server_names)
-    
+
     return list(accessible_servers)
 
 def user_can_modify_servers(user_groups: List[str], user_scopes: List[str]) -> bool:
@@ -982,11 +982,11 @@ def user_can_modify_servers(user_groups: List[str], user_scopes: List[str]) -> b
     # Admin users can always modify
     if 'mcp-admin' in user_groups:
         return True
-    
+
     # Users with unrestricted execute access can modify
     if 'mcp-servers-unrestricted/execute' in user_scopes:
         return True
-    
+
     # Check for any execute permissions
     execute_scopes = [scope for scope in user_scopes if '/execute' in scope]
     return len(execute_scopes) > 0
@@ -1001,12 +1001,12 @@ def user_can_modify_servers(user_groups: List[str], user_scopes: List[str]) -> b
 def get_all_servers_with_permissions(self, accessible_servers: Optional[List[str]] = None) -> Dict[str, Dict[str, Any]]:
     """Get servers filtered by user permissions"""
     all_servers = self.get_all_servers()
-    
+
     # Admin users or users with unrestricted access see all servers
     if accessible_servers is None or '*' in accessible_servers:
         logger.info("User has unrestricted server access")
         return all_servers
-    
+
     # Filter servers based on accessible server names
     filtered_servers = {}
     for path, server_info in all_servers.items():
@@ -1016,7 +1016,7 @@ def get_all_servers_with_permissions(self, accessible_servers: Optional[List[str
             logger.debug(f"Server '{server_name}' accessible to user")
         else:
             logger.debug(f"Server '{server_name}' filtered out for user")
-    
+
     logger.info(f"Filtered server list: {len(filtered_servers)} of {len(all_servers)} servers accessible")
     return filtered_servers
 
@@ -1024,11 +1024,11 @@ def user_can_access_server_path(self, path: str, accessible_servers: List[str]) 
     """Check if user can access a specific server path"""
     if '*' in accessible_servers:
         return True  # Unrestricted access
-    
+
     server_info = self.get_server_info(path)
     if not server_info:
         return False
-    
+
     server_name = server_info.get("server_name", "")
     return server_name in accessible_servers
 ```
@@ -1041,7 +1041,7 @@ def user_can_access_server_path(self, path: str, accessible_servers: List[str]) 
 # registry/api/server_routes.py
 
 @router.get("/", response_class=HTMLResponse)
-async def read_root(request: Request, 
+async def read_root(request: Request,
                    user_context: Annotated[dict, Depends(enhanced_auth)]):
     """Main dashboard with permission-based server filtering"""
     # Filter servers based on user permissions
@@ -1053,11 +1053,11 @@ async def read_root(request: Request,
             user_context['accessible_servers']
         )
         logger.info(f"User accessing {len(all_servers)} permitted servers")
-    
+
     # Render dashboard with filtered content
     return templates.TemplateResponse("index.html", {
-        "request": request, 
-        "services": service_data, 
+        "request": request,
+        "services": service_data,
         "username": user_context['username'],
         "user_context": user_context
     })
@@ -1069,9 +1069,9 @@ async def toggle_service_route(service_path: str,
     # Check global modification permission
     if not user_context['can_modify_servers']:
         logger.warning(f"User {user_context['username']} attempted toggle without modify permissions")
-        raise HTTPException(status_code=403, 
+        raise HTTPException(status_code=403,
                           detail="You do not have permission to modify servers")
-    
+
     # For non-admin users, check specific server access
     if not user_context['is_admin']:
         if not server_service.user_can_access_server_path(
@@ -1079,7 +1079,7 @@ async def toggle_service_route(service_path: str,
             logger.warning(f"User {user_context['username']} attempted to access {service_path} without permission")
             raise HTTPException(status_code=403,
                               detail="You do not have access to this server")
-    
+
     # Proceed with toggle operation
     return perform_toggle_operation(service_path, user_context)
 
@@ -1095,18 +1095,18 @@ async def get_server_details(service_path: str,
             return server_service.get_all_servers_with_permissions(
                 user_context['accessible_servers']
             )
-    
+
     # Check individual server access
     server_info = server_service.get_server_info(service_path)
     if not server_info:
         raise HTTPException(status_code=404, detail="Service not found")
-    
+
     if not user_context['is_admin']:
         if not server_service.user_can_access_server_path(
             service_path, user_context['accessible_servers']):
-            raise HTTPException(status_code=403, 
+            raise HTTPException(status_code=403,
                               detail="Access denied to this server")
-    
+
     return server_info
 ```
 
@@ -1116,39 +1116,39 @@ async def get_server_details(service_path: str,
 flowchart TD
     RequestStart([HTTP Request]) --> ExtractSession[Extract Session Cookie]
     ExtractSession --> ValidateSession{Session Valid?}
-    
+
     ValidateSession -->|No| Unauthorized[Return 401 Unauthorized]
     ValidateSession -->|Yes| ExtractUserContext[Extract User Context]
-    
+
     ExtractUserContext --> LoadGroups[Load User Groups]
     LoadGroups --> MapScopes[Map Groups to Scopes]
     MapScopes --> CalculateServers[Calculate Accessible Servers]
     CalculateServers --> CheckModifyPermission[Check Modify Permissions]
-    
+
     CheckModifyPermission --> RouteSpecificCheck{Route Requires<br/>Specific Permissions?}
-    
+
     RouteSpecificCheck -->|Global Access| AllowAccess[Allow Request]
     RouteSpecificCheck -->|Server-Specific| CheckServerAccess{User Can Access<br/>Specific Server?}
     RouteSpecificCheck -->|Modify Required| CheckModifyCapability{User Can<br/>Modify Servers?}
-    
+
     CheckServerAccess -->|Yes| AllowAccess
     CheckServerAccess -->|No| Forbidden[Return 403 Forbidden]
-    
+
     CheckModifyCapability -->|Yes| CheckServerAccess
     CheckModifyCapability -->|No| Forbidden
-    
+
     AllowAccess --> FilterContent[Filter Content by Permissions]
     FilterContent --> RenderResponse[Render Response]
-    
+
     Unauthorized --> End([End])
     Forbidden --> End
     RenderResponse --> End
-    
+
     classDef success fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
     classDef error fill:#ffebee,stroke:#f44336,stroke-width:2px
     classDef process fill:#e3f2fd,stroke:#2196f3,stroke-width:2px
     classDef decision fill:#fff3e0,stroke:#ff9800,stroke-width:2px
-    
+
     class AllowAccess,RenderResponse success
     class Unauthorized,Forbidden error
     class ExtractSession,ExtractUserContext,LoadGroups,MapScopes,CalculateServers,CheckModifyPermission,FilterContent process
@@ -1170,7 +1170,7 @@ from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 # Initialize session signer with secret key
 signer = URLSafeTimedSerializer(settings.secret_key)
 
-def create_session_cookie(username: str, auth_method: str = "traditional", 
+def create_session_cookie(username: str, auth_method: str = "traditional",
                          provider: str = "local") -> str:
     """Create a secure session cookie for a user"""
     session_data = {
@@ -1181,7 +1181,7 @@ def create_session_cookie(username: str, auth_method: str = "traditional",
         "groups": [],               # Populated during OAuth2 flow
         "scopes": []                # Calculated from groups
     }
-    
+
     # Create signed, time-limited cookie
     return signer.dumps(session_data)
 ```
@@ -1193,24 +1193,24 @@ def get_user_session_data(session: str = Cookie(alias="mcp_gateway_session")) ->
     """Extract and validate session data from cookie"""
     if not session:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     try:
         # Validate signature and expiration
         data = signer.loads(session, max_age=settings.session_max_age_seconds)
-        
+
         if not data.get('username'):
             raise HTTPException(status_code=401, detail="Invalid session data")
-        
+
         # Set defaults for traditional auth users
         if data.get('auth_method') != 'oauth2':
             data.setdefault('groups', ['mcp-admin'])
             data.setdefault('scopes', [
-                'mcp-servers-unrestricted/read', 
+                'mcp-servers-unrestricted/read',
                 'mcp-servers-unrestricted/execute'
             ])
-        
+
         return data
-        
+
     except SignatureExpired:
         raise HTTPException(status_code=401, detail="Session has expired")
     except BadSignature:
@@ -1229,16 +1229,16 @@ sequenceDiagram
     participant Registry as Registry App
     participant AuthServer as Auth Server<br/>(:8888)
     participant IdP as Identity Provider<br/>(Cognito/SAML)
-    
+
     Note over Registry,IdP: Provider Discovery
     Registry->>AuthServer: GET /oauth2/providers
     AuthServer->>Registry: Available provider list
-    
+
     Note over Registry,IdP: OAuth2 Login Initiation
     Registry->>AuthServer: GET /oauth2/login/{provider}?redirect_uri=...
     AuthServer->>IdP: OAuth2 PKCE flow initiation
     IdP->>AuthServer: Authorization code
-    
+
     Note over Registry,IdP: Token Exchange & Session Creation
     AuthServer->>IdP: Exchange code for tokens
     IdP->>AuthServer: Access token + user info
@@ -1246,7 +1246,7 @@ sequenceDiagram
     AuthServer->>AuthServer: Map groups to MCP scopes
     AuthServer->>AuthServer: Create registry-compatible session cookie
     AuthServer->>Registry: Set session cookie + redirect
-    
+
     Note over Registry,IdP: Session Validation
     Registry->>Registry: Validate session cookie signature
     Registry->>Registry: Extract user context & permissions
@@ -1262,7 +1262,7 @@ async def get_oauth2_providers():
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{settings.auth_server_url}/oauth2/providers", 
+                f"{settings.auth_server_url}/oauth2/providers",
                 timeout=5.0
             )
             if response.status_code == 200:
@@ -1276,7 +1276,7 @@ async def get_oauth2_providers():
         logger.warning("Cannot connect to auth server for provider discovery")
     except Exception as e:
         logger.warning(f"Failed to fetch OAuth2 providers: {e}")
-    
+
     return []  # Fallback to traditional auth only
 ```
 
@@ -1291,23 +1291,23 @@ graph TB
         SessionAuth[get_user_session_data<br/>Returns: full session data]
         EnhancedAuth[enhanced_auth<br/>Returns: permissions + context]
     end
-    
+
     subgraph "Usage Patterns"
         SimpleRoutes[Simple Routes<br/>Basic user identification]
         DataRoutes[Data Routes<br/>Need session info]
         ProtectedRoutes[Protected Routes<br/>Permission-based access]
     end
-    
+
     BasicAuth --> SimpleRoutes
     SessionAuth --> DataRoutes
     EnhancedAuth --> ProtectedRoutes
-    
+
     BasicAuth -.-> SessionAuth
     SessionAuth -.-> EnhancedAuth
-    
+
     classDef dependency fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
     classDef usage fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    
+
     class BasicAuth,SessionAuth,EnhancedAuth dependency
     class SimpleRoutes,DataRoutes,ProtectedRoutes usage
 ```
@@ -1322,7 +1322,7 @@ def get_current_user(session: str = Cookie(alias="mcp_gateway_session")) -> str:
     """Basic authentication - returns username only"""
     if not session:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
     try:
         data = signer.loads(session, max_age=settings.session_max_age_seconds)
         username = data.get('username')
@@ -1332,7 +1332,7 @@ def get_current_user(session: str = Cookie(alias="mcp_gateway_session")) -> str:
     except (SignatureExpired, BadSignature):
         raise HTTPException(status_code=401, detail="Invalid or expired session")
 
-# Level 2: Session Data Extraction  
+# Level 2: Session Data Extraction
 def get_user_session_data(session: str = Cookie(alias="mcp_gateway_session")) -> Dict[str, Any]:
     """Full session data extraction with validation"""
     # Implementation shown above
@@ -1342,7 +1342,7 @@ def get_user_session_data(session: str = Cookie(alias="mcp_gateway_session")) ->
 def enhanced_auth(session: str = Cookie(alias="mcp_gateway_session")) -> Dict[str, Any]:
     """Complete user context with permissions and authorization"""
     session_data = get_user_session_data(session)
-    
+
     # Calculate permissions and accessible servers
     # Implementation shown in Authorization section
     return user_context
@@ -1366,12 +1366,12 @@ async def websocket_endpoint(websocket: WebSocket):
             if cookie.name == settings.session_cookie_name:
                 session_cookie = cookie.value
                 break
-        
+
         if session_cookie:
             try:
                 # Validate session
                 session_data = signer.loads(
-                    session_cookie, 
+                    session_cookie,
                     max_age=settings.session_max_age_seconds
                 )
                 username = session_data.get('username')
@@ -1387,19 +1387,19 @@ async def websocket_endpoint(websocket: WebSocket):
             logger.warning("WebSocket connection without valid session cookie")
             await websocket.close(code=1008, reason="Authentication required")
             return
-        
+
         # Accept connection after successful authentication
         connection_added = await health_service.add_websocket_connection(websocket)
         if not connection_added:
             return  # Connection rejected (server at capacity)
-        
+
         # Keep connection alive
         while True:
             try:
                 await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
             except asyncio.TimeoutError:
                 await websocket.ping()  # Keep-alive ping
-            
+
     except WebSocketDisconnect:
         logger.debug(f"WebSocket client disconnected")
     except Exception as e:
@@ -1419,11 +1419,11 @@ The registry implements a **stateless, file-based architecture** that doesn't re
 # registry/services/server_service.py
 class ServerService:
     """File-based server management service"""
-    
+
     def __init__(self):
         self.servers: Dict[str, Dict[str, Any]] = {}
         self.enabled_services: Set[str] = set()
-    
+
     def load_servers_and_state(self):
         """Load server definitions from JSON files and state from state file"""
         # Load individual server definitions
@@ -1431,7 +1431,7 @@ class ServerService:
         for json_file in servers_dir.glob("*.json"):
             if json_file.name == "server_state.json":
                 continue  # Skip state file
-            
+
             try:
                 with open(json_file, "r") as f:
                     server_data = json.load(f)
@@ -1441,10 +1441,10 @@ class ServerService:
                         logger.info(f"Loaded server definition: {path}")
             except Exception as e:
                 logger.error(f"Error loading {json_file}: {e}")
-        
+
         # Load service state
         self._load_service_state()
-    
+
     def _load_service_state(self):
         """Load enabled/disabled state from server_state.json"""
         state_file = settings.state_file_path
@@ -1458,13 +1458,13 @@ class ServerService:
                 logger.info(f"Loaded service state for {len(state_data)} services")
             except Exception as e:
                 logger.error(f"Error loading service state: {e}")
-    
+
     def save_service_state(self):
         """Save current enabled/disabled state to file"""
         state_data = {}
         for path in self.servers:
             state_data[path] = path in self.enabled_services
-        
+
         try:
             with open(settings.state_file_path, "w") as f:
                 json.dump(state_data, f, indent=2)
@@ -1479,20 +1479,20 @@ class ServerService:
 # registry/core/config.py
 class Settings(BaseSettings):
     """Centralized configuration with environment variable support"""
-    
+
     # Development vs Production path detection
     @property
     def is_local_dev(self) -> bool:
         """Detect if running in local development mode"""
         return not Path("/app").exists()
-    
+
     @property
     def servers_dir(self) -> Path:
         """Dynamic path resolution for server definitions"""
         if self.is_local_dev:
             return Path.cwd() / "registry" / "servers"
         return self.container_registry_dir / "servers"
-    
+
     @property
     def templates_dir(self) -> Path:
         """Dynamic path resolution for templates"""
@@ -1581,7 +1581,7 @@ else:
 # registry/auth/dependencies.py
 def validate_login_credentials(username: str, password: str) -> bool:
     """Validate traditional login credentials against environment variables"""
-    return (username == settings.admin_user and 
+    return (username == settings.admin_user and
             password == settings.admin_password)
 ```
 
@@ -1595,7 +1595,7 @@ def validate_login_credentials(username: str, password: str) -> bool:
        domain: your-cognito-domain
        client_id: your-client-id
        region: us-east-1
-       
+
      saml:
        endpoint: https://your-saml-provider.com/saml
        entity_id: your-entity-id
@@ -1658,7 +1658,7 @@ services:
       - ./logs:/app/logs
     ports:
       - "7860:7860"
-  
+
   auth-server:
     build: ./auth_server
     environment:
@@ -1703,7 +1703,7 @@ COGNITO_REGION=us-east-1
 # Add debug logging to session validation
 def get_user_session_data(session: str = None) -> Dict[str, Any]:
     logger.info(f"Session cookie received: {session[:20] if session else 'None'}...")
-    
+
     try:
         data = signer.loads(session, max_age=settings.session_max_age_seconds)
         logger.info(f"Session data valid for user: {data.get('username')}")
@@ -1732,15 +1732,15 @@ def get_user_session_data(session: str = None) -> Dict[str, Any]:
 @router.get("/auth/callback")
 async def oauth2_callback(request: Request, error: str = None, details: str = None):
     logger.info(f"OAuth2 callback received - Error: {error}, Details: {details}")
-    
+
     if error:
         logger.error(f"OAuth2 authentication error: {error} - {details}")
         return RedirectResponse(url=f"/login?error={urllib.parse.quote(error)}")
-    
+
     # Check session cookie from auth server
     session_cookie = request.cookies.get(settings.session_cookie_name)
     logger.info(f"OAuth2 callback session cookie: {'Present' if session_cookie else 'Missing'}")
-    
+
     if session_cookie:
         try:
             session_data = signer.loads(session_cookie, max_age=settings.session_max_age_seconds)
@@ -1748,7 +1748,7 @@ async def oauth2_callback(request: Request, error: str = None, details: str = No
             return RedirectResponse(url="/", status_code=302)
         except Exception as e:
             logger.error(f"OAuth2 session validation failed: {e}")
-    
+
     return RedirectResponse(url="/login?error=oauth2_session_invalid", status_code=302)
 ```
 
@@ -1779,11 +1779,11 @@ def debug_user_permissions(user_context: dict):
 # Add to enhanced_auth function
 def enhanced_auth(session: str = None) -> Dict[str, Any]:
     # ... existing code ...
-    
+
     user_context = {
         # ... context building ...
     }
-    
+
     debug_user_permissions(user_context)  # Add this line
     return user_context
 ```
@@ -1804,21 +1804,21 @@ def enhanced_auth(session: str = None) -> Dict[str, Any]:
 @router.websocket("/ws/health_status")
 async def websocket_endpoint(websocket: WebSocket):
     logger.info(f"WebSocket connection attempt from: {websocket.client}")
-    
+
     # Debug cookie extraction
     session_cookie = None
     logger.info(f"WebSocket cookies: {list(websocket.cookies.keys())}")
-    
+
     for cookie_name, cookie_value in websocket.cookies.items():
         logger.info(f"Cookie: {cookie_name} = {cookie_value[:20]}...")
         if cookie_name == settings.session_cookie_name:
             session_cookie = cookie_value
-    
+
     if not session_cookie:
         logger.warning("WebSocket connection without session cookie")
         await websocket.close(code=1008, reason="No session cookie")
         return
-    
+
     try:
         session_data = signer.loads(session_cookie, max_age=settings.session_max_age_seconds)
         username = session_data.get('username')
@@ -1853,7 +1853,7 @@ async def auth_health_check():
             "scope_config": "unknown"
         }
     }
-    
+
     # Test session signer
     try:
         test_data = {"test": "data"}
@@ -1865,14 +1865,14 @@ async def auth_health_check():
             health_status["components"]["session_signer"] = "error: data mismatch"
     except Exception as e:
         health_status["components"]["session_signer"] = f"error: {e}"
-    
+
     # Test auth server connectivity
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(f"{settings.auth_server_url}/health")
             if response.status_code == 200:
                 health_status["components"]["auth_server"] = "ok"
-                
+
                 # Test OAuth2 providers endpoint
                 providers_response = await client.get(f"{settings.auth_server_url}/oauth2/providers")
                 if providers_response.status_code == 200:
@@ -1888,7 +1888,7 @@ async def auth_health_check():
         health_status["components"]["auth_server"] = "error: connection failed"
     except Exception as e:
         health_status["components"]["auth_server"] = f"error: {e}"
-    
+
     # Test scope configuration
     try:
         from .auth.dependencies import SCOPES_CONFIG
@@ -1899,7 +1899,7 @@ async def auth_health_check():
             health_status["components"]["scope_config"] = "warning: no scope configuration loaded"
     except Exception as e:
         health_status["components"]["scope_config"] = f"error: {e}"
-    
+
     # Overall health determination
     error_components = [k for k, v in health_status["components"].items() if str(v).startswith("error")]
     if error_components:
@@ -1907,7 +1907,7 @@ async def auth_health_check():
         health_status["errors"] = error_components
     else:
         health_status["status"] = "healthy"
-    
+
     return health_status
 ```
 
@@ -1915,7 +1915,7 @@ async def auth_health_check():
 
 ```python
 # Enhanced logging for authentication events
-def log_auth_event(event_type: str, username: str = None, details: dict = None, 
+def log_auth_event(event_type: str, username: str = None, details: dict = None,
                    request: Request = None):
     """Comprehensive authentication event logging"""
     log_data = {
@@ -1924,7 +1924,7 @@ def log_auth_event(event_type: str, username: str = None, details: dict = None,
         'timestamp': datetime.utcnow().isoformat(),
         'details': details or {}
     }
-    
+
     if request:
         log_data.update({
             'client_ip': request.client.host if request.client else 'unknown',
@@ -1932,18 +1932,18 @@ def log_auth_event(event_type: str, username: str = None, details: dict = None,
             'request_path': str(request.url.path),
             'request_method': request.method
         })
-    
+
     logger.info(f"AUTH_EVENT: {event_type}", extra=log_data)
 
 # Usage examples throughout the application
 log_auth_event('LOGIN_SUCCESS', username='admin', request=request)
 log_auth_event('LOGIN_FAILED', details={'reason': 'invalid_credentials'}, request=request)
-log_auth_event('PERMISSION_DENIED', username='user', 
-               details={'resource': '/toggle/fininfo', 'required_permission': 'modify'}, 
+log_auth_event('PERMISSION_DENIED', username='user',
+               details={'resource': '/toggle/fininfo', 'required_permission': 'modify'},
                request=request)
 log_auth_event('SESSION_EXPIRED', username='user', request=request)
 log_auth_event('OAUTH2_LOGIN_START', details={'provider': 'cognito'}, request=request)
-log_auth_event('OAUTH2_LOGIN_SUCCESS', username='user@example.com', 
+log_auth_event('OAUTH2_LOGIN_SUCCESS', username='user@example.com',
                details={'provider': 'cognito', 'groups': ['mcp-user']}, request=request)
 ```
 
@@ -1979,4 +1979,4 @@ AUTH_SERVER_URL=http://auth-server:8888          # Internal Docker communication
 AUTH_SERVER_EXTERNAL_URL=http://localhost:8888   # Browser-accessible URL
 ```
 
-This comprehensive documentation provides complete coverage of the registry's authentication and authorization system, from high-level architecture to specific implementation details and troubleshooting guidance. 
+This comprehensive documentation provides complete coverage of the registry's authentication and authorization system, from high-level architecture to specific implementation details and troubleshooting guidance.

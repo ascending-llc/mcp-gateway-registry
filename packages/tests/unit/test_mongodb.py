@@ -1,8 +1,10 @@
 """Tests for MongoDB connection management and Beanie initialization."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from packages.database.mongodb import MongoDB, init_mongodb, close_mongodb
+
+import pytest
+
+from packages.database.mongodb import MongoDB, close_mongodb, init_mongodb
 
 
 class TestMongoDBConnection:
@@ -23,7 +25,7 @@ class TestMongoDBConnection:
         # We'll test the actual connection flow in integration tests
         # Here we test the class state management
         assert MongoDB.client is None
-        
+
         # Mock the entire connect flow
         with patch('packages.database.mongodb.AsyncMongoClient') as MockClient, \
              patch('packages.database.mongodb.init_beanie', new_callable=AsyncMock):
@@ -35,7 +37,7 @@ class TestMongoDBConnection:
             MockClient.return_value = mock_instance
 
             await MongoDB.connect_db("test_db")
-            
+
             # Verify client was created
             assert MongoDB.client is not None
             assert MongoDB.database_name == "test_db"
@@ -48,22 +50,22 @@ class TestMongoDBConnection:
              patch('packages.database.mongodb.init_beanie', new_callable=AsyncMock):
             
             # Configure mock settings
-            mock_settings.MONGO_URI = 'mongodb://testhost:27017/testdb'
-            mock_settings.MONGODB_USERNAME = 'testuser'
-            mock_settings.MONGODB_PASSWORD = 'testpass'
-            
+            mock_settings.MONGO_URI = "mongodb://testhost:27017/testdb"
+            mock_settings.MONGODB_USERNAME = "testuser"
+            mock_settings.MONGODB_PASSWORD = "testpass"
+
             mock_instance = MagicMock()
             mock_instance.admin = MagicMock()
             mock_instance.admin.command = AsyncMock(return_value={"ok": 1})
             mock_instance.__getitem__ = MagicMock(return_value=MagicMock())
             MockClient.return_value = mock_instance
-            
+
             await MongoDB.connect_db()
-            
+
             # Verify URI construction included credentials
             call_args = MockClient.call_args[0]
-            assert 'testuser' in call_args[0]
-            assert 'testpass' in call_args[0]
+            assert "testuser" in call_args[0]
+            assert "testpass" in call_args[0]
 
     @pytest.mark.asyncio
     async def test_connect_db_extracts_dbname_from_uri(self):
@@ -73,10 +75,10 @@ class TestMongoDBConnection:
              patch('packages.database.mongodb.init_beanie', new_callable=AsyncMock):
             
             # Configure mock settings
-            mock_settings.MONGO_URI = 'mongodb://localhost:27017/extracted_db'
+            mock_settings.MONGO_URI = "mongodb://localhost:27017/extracted_db"
             mock_settings.MONGODB_USERNAME = None
             mock_settings.MONGODB_PASSWORD = None
-            
+
             mock_instance = MagicMock()
             mock_instance.admin = MagicMock()
             mock_instance.admin.command = AsyncMock(return_value={"ok": 1})
@@ -98,28 +100,28 @@ class TestMongoDBConnection:
             mock_db = MagicMock()
             mock_instance.__getitem__ = MagicMock(return_value=mock_db)
             MockClient.return_value = mock_instance
-            
+
             await MongoDB.connect_db("test_db")
-            
+
             # Verify Beanie was initialized
             assert mock_init_beanie.called
             call_kwargs = mock_init_beanie.call_args[1]
-            
+
             # Verify database was passed
-            assert call_kwargs['database'] == mock_db
-            
+            assert call_kwargs["database"] == mock_db
+
             # Verify all document models are included
-            document_models = call_kwargs['document_models']
+            document_models = call_kwargs["document_models"]
             model_names = [model.__name__ for model in document_models]
-            
-            assert 'IUser' in model_names
-            assert ('MCPServerDocument' in model_names or 'ExtendedMCPServer' in model_names)
-            assert 'IAccessRole' in model_names
-            assert ('IAclEntry' in model_names or 'ExtendedAclEntry' in model_names)
-            assert 'IGroup' in model_names
-            assert 'Token' in model_names
-            assert 'IAction' in model_names
-            assert 'Key' in model_names
+
+            assert "IUser" in model_names
+            assert "MCPServerDocument" in model_names or "ExtendedMCPServer" in model_names
+            assert "IAccessRole" in model_names
+            assert "IAclEntry" in model_names or "ExtendedAclEntry" in model_names
+            assert "IGroup" in model_names
+            assert "Token" in model_names
+            assert "IAction" in model_names
+            assert "Key" in model_names
 
     @pytest.mark.asyncio
     async def test_connect_db_only_once(self):
@@ -168,14 +170,14 @@ class TestMongoDBConnection:
         """Test get_client returns client when connected."""
         mock_client = MagicMock()
         MongoDB.client = mock_client
-        
+
         client = MongoDB.get_client()
         assert client is mock_client
 
     def test_get_client_when_not_connected(self):
         """Test get_client raises RuntimeError when not connected."""
         MongoDB.client = None
-        
+
         with pytest.raises(RuntimeError, match="Database connection is not initialized"):
             MongoDB.get_client()
 
@@ -184,10 +186,10 @@ class TestMongoDBConnection:
         mock_client = MagicMock()
         mock_db = MagicMock()
         mock_client.__getitem__ = MagicMock(return_value=mock_db)
-        
+
         MongoDB.client = mock_client
         MongoDB.database_name = "test_db"
-        
+
         db = MongoDB.get_database()
         assert db is mock_db
         mock_client.__getitem__.assert_called_once_with("test_db")
@@ -195,7 +197,7 @@ class TestMongoDBConnection:
     def test_get_database_when_not_connected(self):
         """Test get_database raises RuntimeError when not connected."""
         MongoDB.client = None
-        
+
         with pytest.raises(RuntimeError, match="Database connection is not initialized"):
             MongoDB.get_database()
 
@@ -215,13 +217,13 @@ class TestConvenienceFunctions:
     @pytest.mark.asyncio
     async def test_init_mongodb(self):
         """Test init_mongodb convenience function."""
-        with patch.object(MongoDB, 'connect_db', new_callable=AsyncMock) as mock_connect:
+        with patch.object(MongoDB, "connect_db", new_callable=AsyncMock) as mock_connect:
             await init_mongodb("test_db")
             mock_connect.assert_called_once_with("test_db")
 
     @pytest.mark.asyncio
     async def test_close_mongodb(self):
         """Test close_mongodb convenience function."""
-        with patch.object(MongoDB, 'close_db', new_callable=AsyncMock) as mock_close:
+        with patch.object(MongoDB, "close_db", new_callable=AsyncMock) as mock_close:
             await close_mongodb()
             mock_close.assert_called_once()

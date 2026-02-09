@@ -7,9 +7,6 @@ import uuid
 from datetime import datetime
 from typing import (
     Any,
-    Dict,
-    List,
-    Optional,
 )
 
 # Configure logging with basicConfig
@@ -213,7 +210,6 @@ class BookingDatabaseManager:
         logger.info(f"Initializing BookingDatabaseManager with db_path: {db_path}")
         self.init_database()
 
-
     def init_database(self) -> None:
         """Initialize the database with tables and seed data."""
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
@@ -222,16 +218,14 @@ class BookingDatabaseManager:
             _create_tables(conn)
             _insert_seed_data(conn)
 
-
     def get_connection(self) -> sqlite3.Connection:
         """Get a database connection."""
         return sqlite3.connect(self.db_path)
 
-
     def get_flight_availability(
         self,
         flight_id: int,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Get availability information for a specific flight."""
         logger.info(f"Checking availability for flight_id: {flight_id}")
         with self.get_connection() as conn:
@@ -263,13 +257,12 @@ class BookingDatabaseManager:
                 "availability_status": "Available" if row[5] > 0 else "Sold Out",
             }
 
-
     def create_reservation(
         self,
         flight_id: int,
-        passengers: List[Dict[str, str]],
-        requested_seats: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        passengers: list[dict[str, str]],
+        requested_seats: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Create a new flight reservation."""
         logger.info(f"Creating reservation for flight_id: {flight_id}, passengers: {len(passengers)}")
         with self.get_connection() as conn:
@@ -285,7 +278,9 @@ class BookingDatabaseManager:
 
             if available_seats < num_passengers:
                 logger.warning(f"Insufficient seats: requested={num_passengers}, available={available_seats}")
-                raise ValueError(f"Not enough seats available. Requested: {num_passengers}, Available: {available_seats}")
+                raise ValueError(
+                    f"Not enough seats available. Requested: {num_passengers}, Available: {available_seats}"
+                )
 
             booking_number = f"BK{uuid.uuid4().hex[:6].upper()}"
             total_price = float(price_per_seat) * num_passengers
@@ -303,7 +298,7 @@ class BookingDatabaseManager:
 
             assigned_seats = []
             for i, passenger in enumerate(passengers):
-                seat_number = requested_seats[i] if requested_seats and i < len(requested_seats) else f"AUTO{i+1}"
+                seat_number = requested_seats[i] if requested_seats and i < len(requested_seats) else f"AUTO{i + 1}"
 
                 conn.execute(
                     """
@@ -339,11 +334,10 @@ class BookingDatabaseManager:
                 "next_steps": ["Confirm booking", "Process payment"],
             }
 
-
     def confirm_booking(
         self,
         booking_number: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Confirm a pending booking."""
         logger.info(f"Confirming booking: {booking_number}")
         with self.get_connection() as conn:
@@ -394,13 +388,12 @@ class BookingDatabaseManager:
                 "next_steps": ["Process payment to complete booking"],
             }
 
-
     def process_payment(
         self,
         booking_number: str,
         payment_method: str,
-        amount: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        amount: float | None = None,
+    ) -> dict[str, Any]:
         """Process payment for a booking."""
         logger.info(f"Processing payment for booking: {booking_number}, method: {payment_method}")
         with self.get_connection() as conn:
@@ -460,11 +453,10 @@ class BookingDatabaseManager:
                 "message": "Payment processed successfully. Booking is now complete.",
             }
 
-
     def get_booking_details(
         self,
         booking_number: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get detailed information about a booking."""
         with self.get_connection() as conn:
             # Get complete booking details
@@ -515,12 +507,11 @@ class BookingDatabaseManager:
                 "passengers": passengers,
             }
 
-
     def cancel_booking(
         self,
         booking_number: str,
         reason: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Cancel an existing booking."""
         logger.info(f"Cancelling booking: {booking_number}, reason: {reason}")
         with self.get_connection() as conn:
@@ -587,7 +578,9 @@ class BookingDatabaseManager:
             )
 
             conn.commit()
-            logger.info(f"Booking cancelled: {booking_number}, refund_amount: {refund_amount}, seats_freed: {num_seats}")
+            logger.info(
+                f"Booking cancelled: {booking_number}, refund_amount: {refund_amount}, seats_freed: {num_seats}"
+            )
 
             return {
                 "booking_number": booking_number,

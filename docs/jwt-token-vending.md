@@ -26,7 +26,7 @@ graph TB
         TokenUI[Token Generation<br/>Web Interface]
         User -->|Authenticated Session| TokenUI
     end
-    
+
     %% Core Infrastructure
     subgraph Infrastructure["MCP Gateway & Registry Infrastructure"]
         direction TB
@@ -35,7 +35,7 @@ graph TB
         Registry["Registry<br/>Web UI + Token Generation"]
         RegistryMCP["Registry<br/>MCP Server"]
     end
-    
+
     %% Generated Token Usage
     subgraph TokenUsage["Token Usage"]
         direction TB
@@ -43,10 +43,10 @@ graph TB
         Script[Automation Script<br/>with Generated Token]
         Pipeline[CI/CD Pipeline<br/>with Generated Token]
     end
-    
+
     %% Identity Provider
     IdP[Identity Provider<br/>Amazon Cognito]
-    
+
     %% MCP Server Farm
     subgraph MCPFarm["MCP Server Farm"]
         direction TB
@@ -55,18 +55,18 @@ graph TB
         MCP3[MCP Server 3<br/>Custom]
         MCPn[MCP Server n<br/>...]
     end
-    
+
     %% Token Generation Flow
     TokenUI -->|POST /api/tokens/generate<br/>with user context| Registry
     Registry -->|POST /internal/tokens<br/>with user scopes| AuthServer
     AuthServer -->|Self-signed JWT<br/>with HMAC-SHA256| Registry
     Registry -->|Display token<br/>to user| TokenUI
-    
+
     %% Token Usage Flow
     Agent -->|MCP requests<br/>with Bearer token| Nginx
     Script -->|API calls<br/>with Bearer token| Nginx
     Pipeline -->|Automated access<br/>with Bearer token| Nginx
-    
+
     %% Internal routing and validation
     Nginx -->|Route /mcpgw/*<br/>Auth validation| AuthServer
     Nginx -->|Route /mcpgw/*<br/>Tool discovery| RegistryMCP
@@ -75,11 +75,11 @@ graph TB
     Nginx -->|Route /server2/*<br/>Proxy to MCP servers| MCP2
     Nginx -->|Route /serverN/*<br/>Proxy to MCP servers| MCP3
     Nginx -->|Route /serverN/*<br/>Proxy to MCP servers| MCPn
-    
+
     %% Auth flows
     IdP -.->|User session validation<br/>Group/scope mapping| AuthServer
     AuthServer -.->|Self-signed JWT validation<br/>Scope enforcement| AuthServer
-    
+
     %% Styling
     classDef userStyle fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
     classDef tokenStyle fill:#fff3e0,stroke:#e65100,stroke-width:2px
@@ -89,7 +89,7 @@ graph TB
     classDef authStyle fill:#ffebee,stroke:#c62828,stroke-width:2px
     classDef registryStyle fill:#fff8e1,stroke:#f57f17,stroke-width:2px
     classDef mcpStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
-    
+
     class UserFlow userStyle
     class User userStyle
     class TokenUI tokenStyle
@@ -146,7 +146,7 @@ sequenceDiagram
     Browser->>Registry: POST /api/tokens/generate
     Registry->>Registry: Validate requested scopes ⊆ user scopes
     Registry->>AuthServer: POST /internal/tokens with user context
-    
+
     AuthServer->>AuthServer: Rate limit check (10/hour/user)
     AuthServer->>AuthServer: Generate JWT with HMAC-SHA256
     AuthServer->>Registry: Return signed JWT token
@@ -158,7 +158,7 @@ sequenceDiagram
     User->>Agent: Provide generated JWT token
     Agent->>Gateway: MCP request with Bearer token
     Gateway->>AuthServer: Validate token + extract scopes
-    
+
     alt Self-Signed Token
         AuthServer->>AuthServer: Detect issuer: "mcp-auth-server"
         AuthServer->>AuthServer: Validate HMAC-SHA256 signature
@@ -166,7 +166,7 @@ sequenceDiagram
     else Cognito Token (Fallback)
         AuthServer->>AuthServer: Standard Cognito validation
     end
-    
+
     alt Sufficient Permissions
         AuthServer->>Gateway: 200 OK + allowed scopes
         Gateway->>MCP: Forward MCP request
@@ -282,7 +282,7 @@ jobs:
 # Token generation process
 payload = {
     "iss": "mcp-auth-server",
-    "aud": "mcp-registry", 
+    "aud": "mcp-registry",
     "sub": username,
     "scope": " ".join(requested_scopes),
     "exp": current_time + (expires_in_hours * 3600),
@@ -305,7 +305,7 @@ try:
     unverified_claims = jwt.decode(token, options={"verify_signature": False})
     if unverified_claims.get('iss') == 'mcp-auth-server':
         # Validate self-signed token
-        claims = jwt.decode(token, SECRET_KEY, algorithms=['HS256'], 
+        claims = jwt.decode(token, SECRET_KEY, algorithms=['HS256'],
                           issuer='mcp-auth-server', audience='mcp-registry')
         scopes = claims.get('scope', '').split()
         return {'valid': True, 'scopes': scopes, 'method': 'self_signed'}
@@ -375,7 +375,7 @@ mcp-servers-time/read:
     methods: ["initialize", "tools/list", "tools/call"]
     tools: ["current_time_by_timezone", "current_time_utc"]
 
-# Example scope for financial data access  
+# Example scope for financial data access
 mcp-servers-finance/read:
   - server: "fininfo"
     methods: ["initialize", "tools/list", "tools/call"]
@@ -444,4 +444,4 @@ The combination of both services provides:
 3. **Client Integration** - MCP clients automatically use refreshed tokens
 4. **Continuous Operation** - No manual intervention required for token management
 
-For detailed setup and configuration of the token refresh service, see the [Token Refresh Service Documentation](token-refresh-service.md). 
+For detailed setup and configuration of the token refresh service, see the [Token Refresh Service Documentation](token-refresh-service.md).
