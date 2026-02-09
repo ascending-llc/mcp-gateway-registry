@@ -3,6 +3,7 @@ User service for auth server - handles user lookups from MongoDB.
 """
 
 import logging
+from datetime import UTC, datetime
 
 from packages.models import IUser
 
@@ -44,9 +45,31 @@ class UserService:
                 if user:
                     logger.debug(f"✓ Resolved user_id from MongoDB by email: {user.id} for email: {email}")
                     return str(user.id)
-                logger.warning(f"User not found in MongoDB for username: {username}, email: {email}")
+            
+            # If not found create new user
+            logger.warning(f"User not found in MongoDB for username: {username}, email: {email}. Creating new user record.")
+            user_count = await IUser.count()
+            new_user = IUser(
+                name=user_info.get("name"),
+                username=username,
+                email=email or username,
+                emailVerified=False,
+                role="ADMIN" if user_count == 0 else "USER",
+                provider="openid",
+                openidId=user_info.get("idp_id"),
+                idOnTheSource=user_info.get("idp_id"),
+                plugins=[],
+                termsAccepted=False,
+                backupCodes=[],
+                refreshToken=[],
+                favorites=[],
+                createdAt=datetime.now(UTC),
+                updatedAt=datetime.now(UTC),
+            )
 
-            return None
+            created_user = await new_user.create()
+            logger.info(f"Created new user record in MongoDB with id: {created_user.id} for username: {username}, email: {email}")
+            return str(created_user.id)
         except Exception as e:
             logger.error(f"Error resolving user_id from MongoDB: {type(e).__name__}: {e}")
             return None
