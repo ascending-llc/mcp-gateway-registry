@@ -29,9 +29,9 @@ load_dotenv()
 # Add packages to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from packages.database.mongodb import MongoDB
-from packages.models.extended_mcp_server import ExtendedMCPServer
-from packages.vector.repositories.mcp_server_repository import get_mcp_server_repo
+from registry_db.database.mongodb import MongoDB
+from registry_db.models.extended_mcp_server import ExtendedMCPServer
+from registry_db.vector.repositories.mcp_server_repository import get_mcp_server_repo
 
 from registry.services.server_service import server_service_v1
 
