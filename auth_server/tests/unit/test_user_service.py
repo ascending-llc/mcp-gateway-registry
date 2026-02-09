@@ -63,54 +63,22 @@ class TestUserService:
             mock_find.assert_any_call({"email": "test@example.com"})
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        "user_count, expected_role",
-        [
-            (0, "ADMIN"),  # First user should be ADMIN
-            (1, "USER"),  # Subsequent users should be USER
-        ],
-    )
-    async def test_resolve_user_id_user_not_found(self, user_count, expected_role):
-        """Test resolving user_id when user doesn't exist - creates new user with appropriate role."""
-        mock_user = MagicMock()
-        mock_user.id = ObjectId("507f1f77bcf86cd799439015")
-        mock_user.create = AsyncMock(return_value=mock_user)
+    async def test_resolve_user_id_user_not_found(self):
+        """Test resolving user_id when user doesn't exist."""
+        with patch("auth_server.services.user_service.IUser.find_one", new_callable=AsyncMock) as mock_find:
+            # Both username and email lookups return None
+            mock_find.return_value = None
 
-        with patch("auth_server.services.user_service.IUser") as mock_iuser_class:
-            # Setup find_one to handle three calls:
-            # 1. Username lookup - returns None (user not found)
-            # 2. Email lookup - returns None (user not found)
-            # 3. Existence check - returns None if first user (user_count=0), else returns mock_user
-            existing_user = None if user_count == 0 else mock_user
-            mock_iuser_class.find_one = AsyncMock(side_effect=[None, None, existing_user])
-            mock_iuser_class.return_value = mock_user
-
-            user_info = {
-                "username": "newuser",
-                "email": "newuser@example.com",
-                "name": "newuser",
-                "idp_id": "idp123",
-            }
+            user_info = {"username": "nonexistent", "email": "nonexistent@example.com"}
 
             service = UserService()
             result = await service.resolve_user_id(user_info)
 
-            # Should have called find_one three times: username lookup, email lookup, existence check
-            assert mock_iuser_class.find_one.call_count == 3
-            mock_iuser_class.find_one.assert_any_call({"username": "newuser"})
-            mock_iuser_class.find_one.assert_any_call({"email": "newuser@example.com"})
-            mock_iuser_class.find_one.assert_any_call()
+            # Should return None when user not found
+            assert result is None
 
-            # Should instantiate IUser and call create()
-            mock_iuser_class.assert_called_once()
-            mock_user.create.assert_called_once()
-
-            # Verify the kwargs passed to IUser()
-            call_kwargs = mock_iuser_class.call_args.kwargs
-            assert call_kwargs["username"] == "newuser"
-            assert call_kwargs["email"] == "newuser@example.com"
-            assert call_kwargs["role"] == expected_role
-            assert result == "507f1f77bcf86cd799439015"
+            # Should have tried both username and email
+            assert mock_find.call_count == 2
 
     @pytest.mark.asyncio
     async def test_resolve_user_id_no_username_only_email(self):
@@ -131,39 +99,6 @@ class TestUserService:
 
             # Should only call find_one with email (no username to try)
             mock_find.assert_called_once_with({"email": "test@example.com"})
-
-    @pytest.mark.asyncio
-    async def test_resolve_user_id_user_not_found_email_fallback_to_username(self):
-        """Test user creation when email is absent - should use username as email fallback."""
-        mock_user = MagicMock()
-        mock_user.id = ObjectId("507f1f77bcf86cd799439017")
-        mock_user.create = AsyncMock(return_value=mock_user)
-
-        with patch("auth_server.services.user_service.IUser") as mock_iuser_class:
-            mock_iuser_class.find_one = AsyncMock(side_effect=[None, None])
-            mock_iuser_class.return_value = mock_user
-
-            # Only provide username, no email
-            user_info = {
-                "username": "testuser@example.com",
-                "name": "Test User",
-                "idp_id": "idp456",
-            }
-
-            service = UserService()
-            result = await service.resolve_user_id(user_info)
-
-            # Should instantiate IUser with username used as email fallback
-            mock_iuser_class.assert_called_once()
-            call_kwargs = mock_iuser_class.call_args.kwargs
-
-            # Verify email defaults to username when not provided
-            assert call_kwargs["username"] == "testuser@example.com"
-            assert call_kwargs["email"] == "testuser@example.com"  # Email should equal username
-            assert call_kwargs["role"] == "ADMIN"  # First user should be ADMIN
-
-            mock_user.create.assert_called_once()
-            assert result == "507f1f77bcf86cd799439017"
 
     @pytest.mark.asyncio
     async def test_resolve_user_id_no_username_no_email(self):
@@ -244,3 +179,98 @@ class TestUserService:
 
             # Should only call find_one once (username lookup succeeded)
             mock_find.assert_called_once_with({"username": "testuser"})
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "user_count, expected_role",
+        [
+            (0, "ADMIN"),  # First user should be ADMIN
+            (1, "USER"),  # Subsequent users should be USER
+        ],
+    )
+    async def test_create_user(self, user_count, expected_role):
+        """Test creating a new user in MongoDB."""
+        mock_created_user = MagicMock()
+        mock_created_user.id = ObjectId("507f1f77bcf86cd799439017")
+
+        with patch("auth_server.services.user_service.IUser") as mock_iuser_class:
+            # Mock find_one for existence check
+            mock_iuser_class.find_one = AsyncMock(return_value=None if user_count == 0 else AsyncMock())
+
+            # Mock the instance creation and create() method
+            mock_new_user = MagicMock()
+            mock_new_user.create = AsyncMock(return_value=mock_created_user)
+            mock_iuser_class.return_value = mock_new_user
+
+            user_info = {
+                "name": "New User",
+                "username": "newuser",
+                "email": "newuser@example.com",
+                "idp_id": "idp123",
+            }
+
+            service = UserService()
+            result = await service.create_user(user_info)
+
+            # Should return created user_id
+            assert result == "507f1f77bcf86cd799439017"
+
+            # Should have checked for existing users (to determine role)
+            mock_iuser_class.find_one.assert_called_once()
+
+            # Should have instantiated IUser with correct parameters
+            mock_iuser_class.assert_called_once()
+            call_kwargs = mock_iuser_class.call_args.kwargs
+            assert call_kwargs["username"] == "newuser"
+            assert call_kwargs["email"] == "newuser@example.com"
+            assert call_kwargs["role"] == expected_role
+
+            # Should have called create() on the new user
+            mock_new_user.create.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_create_user_with_email_fallback(self):
+        """Test creating user when email is missing - uses username as email."""
+        mock_created_user = MagicMock()
+        mock_created_user.id = ObjectId("507f1f77bcf86cd799439018")
+
+        with patch("auth_server.services.user_service.IUser") as mock_iuser_class:
+            # Mock find_one - returns existing user so new user gets USER role
+            existing_user = MagicMock()
+            mock_iuser_class.find_one = AsyncMock(return_value=existing_user)
+
+            mock_new_user = MagicMock()
+            mock_new_user.create = AsyncMock(return_value=mock_created_user)
+            mock_iuser_class.return_value = mock_new_user
+
+            user_info = {
+                "name": "Another User",
+                "username": "anotheruser",
+                # No email provided
+                "idp_id": "idp456",
+            }
+
+            service = UserService()
+            result = await service.create_user(user_info)
+
+            assert result == "507f1f77bcf86cd799439018"
+
+            # Verify email defaulted to username
+            call_kwargs = mock_iuser_class.call_args.kwargs
+            assert call_kwargs["email"] == "anotheruser"  # Email should equal username
+            assert call_kwargs["role"] == "USER"  # Not first user
+
+    @pytest.mark.asyncio
+    async def test_create_user_error_handling(self):
+        """Test create_user returns None on error."""
+        with patch("auth_server.services.user_service.IUser") as mock_iuser_class:
+            # Simulate error during user creation
+            mock_iuser_class.find_one = AsyncMock(side_effect=Exception("Database error"))
+
+            user_info = {"username": "testuser", "email": "test@example.com"}
+
+            service = UserService()
+            result = await service.create_user(user_info)
+
+            # Should return None on error
+            assert result is None

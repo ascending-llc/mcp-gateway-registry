@@ -657,10 +657,12 @@ async def oauth2_callback(
 
         # Resolve user_id from MongoDB and add to mapped_user
         user_id = await user_service.resolve_user_id(mapped_user)
-        if user_id:
-            mapped_user["user_id"] = user_id
-            logger.debug(f"Added user_id {user_id} to mapped_user")
+        if not user_id:
+            logger.info(f"Could not resolve user_id for username: {mapped_user.get('username')}. Creating new user.")
+            user_id = await user_service.create_user(mapped_user)
 
+        mapped_user["user_id"] = user_id
+        logger.debug(f"Added user_id {user_id} to mapped_user")
         # Always use OAuth client flow (both external clients and registry)
         client_id = temp_session_data.get("client_id") or settings.registry_app_name
         code_challenge = temp_session_data.get("code_challenge")

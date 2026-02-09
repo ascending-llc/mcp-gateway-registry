@@ -15,13 +15,13 @@ class UserService:
 
     async def resolve_user_id(self, user_info: dict) -> str | None:
         """
-        Resolve user_id from MongoDB by looking up user by username first, then email. If not found, create new user.
+        Resolve user_id from MongoDB by looking up user by username first, then email.
 
         Args:
             user_info: Dictionary containing user information with 'username' and/or 'email' fields
 
         Returns:
-            user_id as string, None on exception
+            user_id as string if found, None otherwise
         """
         try:
             username = user_info.get("username")
@@ -46,17 +46,30 @@ class UserService:
                     logger.debug(f"✓ Resolved user_id from MongoDB by email: {user.id} for email: {email}")
                     return str(user.id)
 
-            # If not found create new user
-            logger.warning(
-                f"User not found in MongoDB for username: {username}, email: {email}. Creating new user record."
-            )
+            logger.warning(f"User not found in MongoDB for username: {username}, email: {email}")
+            return None
+        except Exception as e:
+            logger.error(f"Error resolving user_id from MongoDB: {type(e).__name__}: {e}")
+            return None
+
+    async def create_user(self, user_info: dict) -> str | None:
+        """
+        Create a new user in MongoDB.
+
+        Args:
+            user_info: Dictionary containing user information (name, username, email, idp_id)
+
+        Returns:
+            user_id as string if created, None on error
+        """
+        try:
             existing_user = await IUser.find_one()
             new_user = IUser(
                 name=user_info.get("name"),
-                username=username,
-                email=email or username,
+                username=user_info.get("username"),
+                email=user_info.get("email") or user_info.get("username"),
                 emailVerified=False,
-                role="USER" if existing_user else "ADMIN",
+                role="ADMIN" if not existing_user else "USER",
                 provider="openid",
                 openidId=user_info.get("idp_id"),
                 idOnTheSource=user_info.get("idp_id"),
@@ -71,11 +84,11 @@ class UserService:
 
             created_user = await new_user.create()
             logger.info(
-                f"Created new user record in MongoDB with id: {created_user.id} for username: {username}, email: {email}"
+                f"Created new user record in MongoDB with id: {created_user.id} for username: {user_info.get('username')}"
             )
             return str(created_user.id)
         except Exception as e:
-            logger.error(f"Error resolving user_id from MongoDB: {type(e).__name__}: {e}")
+            logger.error(f"Error creating new user for username: {user_info.get('username')}: {e}")
             return None
 
 
