@@ -1,4 +1,4 @@
-# MCP Gateway Registry - Packages
+# MCP Gateway Registry - the registry-db package
 
 Unified vector database interface with three-layer architecture and model generation tools.
 
@@ -25,6 +25,7 @@ Generate Beanie ODM models from JSON schemas stored in GitHub releases.
 ### Prerequisites
 
 Install GitHub CLI (optional but recommended for private repositories):
+
 ```bash
 # macOS
 brew install gh
@@ -33,38 +34,35 @@ brew install gh
 gh auth login
 ```
 
-### Installation
+### Setup
 
-Install the packages module in editable mode:
-```bash
-cd packages
-uv pip install -e .
-```
+Run `uv sync` from project root, NOT this workspace member folder (`packages/registry-db`).
 
 ### Generate Models
 
-Download schemas from a GitHub release and generate Python models:
+Run the following command **from project root** to download schemas from a GitHub release and generate Python models,
+using GitHub CLI for authentication.
+
 ```bash
-# Using GitHub CLI authentication (recommended for private repos)
-uv run import-schemas --tag asc0.4.0 \
-  --files user.json token.json \
-  --output-dir ./models \
-  --token $(gh auth token)
+uv run --package registry-db import-schemas \
+--tag asc0.4.2 \
+--output-dir ./packages/registry-db/src/registry_db/models \
+--token $(gh auth token)
+```
 
 **Available options:**
 - `--tag`: GitHub release version/tag (required)
 - `--files`: Space-separated list of JSON schema files (required)
-- `--output-dir`: Output directory for generated models (default: ./models)
-- `--repo`: GitHub repository (default: ascending-llc/jarvis-api)
+- `--output-dir`: Output directory for generated models (default: `./models)
+- `--repo`: GitHub repository (default: `ascending-llc/jarvis-api`)
 - `--token`: GitHub Personal Access Token for private repos
 
 ## Structure
 
 ```
-packages/
+packages/registry-db/src/registry_db
 ├── models/                # Data models and schemas
 │   ├── __init__.py        # Exports all models
-│   ├── ..(models).py      # project specific models
 │   ├── enums.py           # Enums (ToolDiscoveryMode, etc.)
 │   ├── import_schemas.py  # Schema import tool
 │   └── _generated/        # Auto-generated models (gitignored)
@@ -107,18 +105,14 @@ OPENAI_MODEL=text-embedding-3-small
 
 ## Testing
 
+If running from project root, use the following.
+
 ```bash
-uv run pytest tests/ -v
+uv run --package registry-db pytest packages/registry-db/tests/
 ```
 
-## Documentation
+If running form the workspace member directory `package/registry-db`, use the following.
 
-- [db/README.md](./db/README.md) - Complete API reference
-- [db/ARCHITECTURE.md](./db/ARCHITECTURE.md) - Design details (if exists)
-- [db/FILTERS.md](./db/FILTERS.md) - Filter guide (if exists)
-
-## Extending
-
-See [db/README.md#extending-the-system](./db/README.md#extending-the-system) for:
-- Adding new vector stores
-- Adding new embedding providers
+```bash
+uv run poe test
+```

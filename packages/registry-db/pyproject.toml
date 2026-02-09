@@ -75,7 +75,8 @@ where = ["src"]
 [tool.setuptools.package-data]
 registry_db = ["py.typed"]
 
+# Tasks of this specific workspace member should be run from the member directory, i.e. `packages/registry-db`.
 [tool.poe.tasks]
 # Run tests
-test = { shell = "cd .. && uv run pytest packages/tests/ -v" }
-test-cov = { shell = "cd .. && uv run pytest packages/tests/ -v --cov=packages --cov-report=html --cov-report=term --cov-report=xml" }
+test = { shell = "uv run pytest tests -v" }
+test-cov = { shell = "uv run pytest tests -v --cov=packages --cov-report=html --cov-report=term --cov-report=xml" }
