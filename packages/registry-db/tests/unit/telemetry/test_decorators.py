@@ -9,7 +9,7 @@ import asyncio
 
 import pytest
 
-from packages.telemetry.decorators import (
+from registry_db.telemetry.decorators import (
     _safe_extract_labels,
     create_timed_context,
     track_duration,

@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from packages.telemetry import setup_metrics
+from registry_db.telemetry import setup_metrics
 
 
 @pytest.mark.unit
@@ -32,7 +32,7 @@ class TestTelemetrySetup:
         Fixture to mock all OpenTelemetry dependencies to prevent actual
         network calls, port binding, or global state modification.
         """
-        module_path = "packages.telemetry"
+        module_path = "registry_db.telemetry"
 
         with (
             patch(f"{module_path}.metrics") as mock_metrics,
@@ -126,7 +126,7 @@ class TestSafeOTLPMetricExporter:
 
     def test_safe_exporter_suppresses_export_errors(self):
         """Test that export errors are suppressed."""
-        from packages.telemetry import SafeOTLPMetricExporter
+        from registry_db.telemetry import SafeOTLPMetricExporter
 
         with patch("opentelemetry.exporter.otlp.proto.http.metric_exporter.OTLPMetricExporter") as mock_exporter_class:
             mock_exporter = MagicMock()
@@ -141,7 +141,7 @@ class TestSafeOTLPMetricExporter:
 
     def test_safe_exporter_returns_value_on_success(self):
         """Test that export returns value when successful."""
-        from packages.telemetry import SafeOTLPMetricExporter
+        from registry_db.telemetry import SafeOTLPMetricExporter
 
         with patch("opentelemetry.exporter.otlp.proto.http.metric_exporter.OTLPMetricExporter") as mock_exporter_class:
             mock_exporter = MagicMock()
@@ -155,7 +155,7 @@ class TestSafeOTLPMetricExporter:
 
     def test_safe_exporter_handles_creation_failure(self):
         """Test that exporter creation failure is handled gracefully."""
-        from packages.telemetry import SafeOTLPMetricExporter
+        from registry_db.telemetry import SafeOTLPMetricExporter
 
         with patch("opentelemetry.exporter.otlp.proto.http.metric_exporter.OTLPMetricExporter") as mock_exporter_class:
             mock_exporter_class.side_effect = Exception("Connection refused")
@@ -168,7 +168,7 @@ class TestSafeOTLPMetricExporter:
 
     def test_safe_exporter_shutdown_suppresses_errors(self):
         """Test that shutdown errors are suppressed."""
-        from packages.telemetry import SafeOTLPMetricExporter
+        from registry_db.telemetry import SafeOTLPMetricExporter
 
         with patch("opentelemetry.exporter.otlp.proto.http.metric_exporter.OTLPMetricExporter") as mock_exporter_class:
             mock_exporter = MagicMock()
@@ -188,9 +188,9 @@ class TestShutdownTelemetry:
 
     def test_shutdown_telemetry_calls_provider_shutdown(self):
         """Test that shutdown calls the meter provider's shutdown method."""
-        from packages.telemetry import shutdown_telemetry
+        from registry_db.telemetry import shutdown_telemetry
 
-        with patch("packages.telemetry.metrics.get_meter_provider") as mock_get_provider:
+        with patch("registry_db.telemetry.metrics.get_meter_provider") as mock_get_provider:
             mock_provider = MagicMock()
             mock_get_provider.return_value = mock_provider
 
@@ -200,9 +200,9 @@ class TestShutdownTelemetry:
 
     def test_shutdown_telemetry_handles_missing_shutdown(self):
         """Test that shutdown handles providers without shutdown method."""
-        from packages.telemetry import shutdown_telemetry
+        from registry_db.telemetry import shutdown_telemetry
 
-        with patch("packages.telemetry.metrics.get_meter_provider") as mock_get_provider:
+        with patch("registry_db.telemetry.metrics.get_meter_provider") as mock_get_provider:
             mock_provider = MagicMock(spec=[])  # No shutdown method
             mock_get_provider.return_value = mock_provider
 
@@ -211,9 +211,9 @@ class TestShutdownTelemetry:
 
     def test_shutdown_telemetry_suppresses_errors(self):
         """Test that shutdown errors are suppressed."""
-        from packages.telemetry import shutdown_telemetry
+        from registry_db.telemetry import shutdown_telemetry
 
-        with patch("packages.telemetry.metrics.get_meter_provider") as mock_get_provider:
+        with patch("registry_db.telemetry.metrics.get_meter_provider") as mock_get_provider:
             mock_provider = MagicMock()
             mock_provider.shutdown.side_effect = Exception("Shutdown error")
             mock_get_provider.return_value = mock_provider

@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from packages.telemetry.metrics_client import (
+from registry_db.telemetry.metrics_client import (
     OTelMetricsClient,
     create_metrics_client,
     safe_telemetry,
@@ -17,7 +17,7 @@ class TestOTelMetricsClient:
     @pytest.fixture
     def mock_meter(self):
         """Fixture to mock the OpenTelemetry meter and its instruments."""
-        with patch("packages.telemetry.metrics_client.metrics.get_meter") as mock_get_meter:
+        with patch("registry_db.telemetry.metrics_client.metrics.get_meter") as mock_get_meter:
             meter_instance = MagicMock()
             mock_get_meter.return_value = meter_instance
 
@@ -82,7 +82,7 @@ class TestOTelMetricsClient:
         mock_get_meter, _ = mock_meter
         mock_get_meter.side_effect = Exception("Meter creation failed")
 
-        with patch("packages.telemetry.metrics_client.logger") as mock_logger:
+        with patch("registry_db.telemetry.metrics_client.logger") as mock_logger:
             OTelMetricsClient("test-service")
             mock_logger.error.assert_called_once()
 
@@ -120,7 +120,7 @@ class TestSafeTelemetryDecorator:
         def failing_function():
             raise ValueError("Test error")
 
-        with patch("packages.telemetry.metrics_client.logger") as mock_logger:
+        with patch("registry_db.telemetry.metrics_client.logger") as mock_logger:
             failing_function()
             mock_logger.warning.assert_called_once()
             assert "Test error" in str(mock_logger.warning.call_args)
@@ -144,14 +144,14 @@ class TestCreateMetricsClient:
 
     def test_create_metrics_client_returns_client(self):
         """Test that factory function returns OTelMetricsClient instance."""
-        with patch("packages.telemetry.metrics_client.metrics.get_meter"):
+        with patch("registry_db.telemetry.metrics_client.metrics.get_meter"):
             client = create_metrics_client("api")
             assert isinstance(client, OTelMetricsClient)
             assert client.service_name == "api"
 
     def test_create_metrics_client_uses_service_name(self):
         """Test that factory function passes service_name to client."""
-        with patch("packages.telemetry.metrics_client.metrics.get_meter") as mock_get_meter:
+        with patch("registry_db.telemetry.metrics_client.metrics.get_meter") as mock_get_meter:
             create_metrics_client("worker")
             mock_get_meter.assert_called_once_with("mcp.worker")
 
@@ -161,7 +161,7 @@ class TestCreateMetricsClient:
             "counters": [{"name": "custom_counter", "description": "Custom counter", "unit": "1"}],
             "histograms": [{"name": "custom_histogram", "description": "Custom histogram", "unit": "s"}],
         }
-        with patch("packages.telemetry.metrics_client.metrics.get_meter") as mock_get_meter:
+        with patch("registry_db.telemetry.metrics_client.metrics.get_meter") as mock_get_meter:
             meter_instance = MagicMock()
             mock_get_meter.return_value = meter_instance
             meter_instance.create_counter.return_value = MagicMock()
@@ -183,7 +183,7 @@ class TestGenericMetricMethods:
     @pytest.fixture
     def mock_meter(self):
         """Fixture to mock the OpenTelemetry meter and its instruments."""
-        with patch("packages.telemetry.metrics_client.metrics.get_meter") as mock_get_meter:
+        with patch("registry_db.telemetry.metrics_client.metrics.get_meter") as mock_get_meter:
             meter_instance = MagicMock()
             mock_get_meter.return_value = meter_instance
 
@@ -249,7 +249,7 @@ class TestGenericMetricMethods:
         _, meter_instance = mock_meter
         client = OTelMetricsClient("test-service")
 
-        with patch("packages.telemetry.metrics_client.logger") as mock_logger:
+        with patch("registry_db.telemetry.metrics_client.logger") as mock_logger:
             client.record_counter("nonexistent_counter", 1.0)
             mock_logger.warning.assert_called_once()
             assert "nonexistent_counter" in str(mock_logger.warning.call_args)
@@ -294,7 +294,7 @@ class TestGenericMetricMethods:
         _, meter_instance = mock_meter
         client = OTelMetricsClient("test-service")
 
-        with patch("packages.telemetry.metrics_client.logger") as mock_logger:
+        with patch("registry_db.telemetry.metrics_client.logger") as mock_logger:
             client.record_histogram("nonexistent_histogram", 1.0)
             mock_logger.warning.assert_called_once()
             assert "nonexistent_histogram" in str(mock_logger.warning.call_args)
@@ -328,7 +328,7 @@ class TestGenericMetricMethods:
         _, meter_instance = mock_meter
         client = OTelMetricsClient("test-service")
 
-        with patch("packages.telemetry.metrics_client.logger") as mock_logger:
+        with patch("registry_db.telemetry.metrics_client.logger") as mock_logger:
             client.record_metric("unknown_metric", 1.0)
             mock_logger.warning.assert_called_once()
             assert "unknown_metric" in str(mock_logger.warning.call_args)
